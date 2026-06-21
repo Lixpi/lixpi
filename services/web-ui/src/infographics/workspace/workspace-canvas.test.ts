@@ -290,7 +290,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		const activeBlock = extractBlock(infoButtonBlock, '&.is-active')
 
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl, pendingBranchMarkerOverlayEl],')
 		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
 		expectSourceToContain(ts, 'getCanvasChromeScreenLayout({')
 		expectSourceToContain(ts, 'baseGap: settings.mediaNode.generatedMediaChrome.topGap,')
@@ -657,7 +657,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const panelPosition = ts.slice(panelPositionStart, panelPositionEnd)
 
 		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl = createGeneratedMediaInfoPanelLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl, pendingBranchMarkerOverlayEl],')
 		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
 		expectSourceToContain(ts, 'function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode)')
 		expectSourceToContain(ts, "panel.setAttribute('data-media-info-panel-node-id', node.nodeId)")

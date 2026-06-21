@@ -70,7 +70,7 @@ import {
 } from '$src/components/proseMirror/readOnlyAiChatThreadRenderer.ts'
 import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, atomIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, atomIcon, imageIcon, videoPlayGlyphIcon, promptIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasMediaNodeLifecycleTracker } from '$src/infographics/workspace/canvasMediaNodeLifecycle.ts'
 import { shouldAcceptGeneratedMediaEvent as shouldAcceptGeneratedMediaEventForState } from '$src/infographics/workspace/generatedMediaEventWorkspaceGuard.ts'
@@ -209,68 +209,73 @@ type PendingBranchMarkerRecord = {
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
-const BRANCH_MARKER_WIDTH_MULTIPLIER = 3.2
-const BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS = 60
-const BRANCH_MARKER_PROMPT_TWO_LINE_CHAR_COUNT = 42
+// The marker is a pill that hugs the user message by default. Its width grows
+// with the message length from a comfortable minimum up to three times that
+// minimum, after which the preview text wraps to a second line and truncates.
+const BRANCH_MARKER_MIN_WIDTH_MULTIPLIER = 2.6
+const BRANCH_MARKER_MAX_WIDTH_GROWTH = 3
+const BRANCH_MARKER_APPROX_CHAR_WIDTH = 8
+// Wrapping kicks in before the naive char-width estimate predicts (real glyphs
+// average wider than the width-sizing approximation). Use a larger per-char width
+// when deciding line count so a prompt that visually wraps to two lines is sized
+// for two lines instead of being crammed into a one-line pill.
+const BRANCH_MARKER_LINE_WRAP_CHAR_WIDTH = 10
+const BRANCH_MARKER_HORIZONTAL_PADDING = 60
+const BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS = 120
+const BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS = 50
 const BRANCH_MARKER_VERTICAL_PADDING = 21
 const BRANCH_MARKER_MESSAGE_LINE_HEIGHT = 17
-const BRANCH_MARKER_MODEL_ROW_HEIGHT = 12
-const BRANCH_MARKER_MODEL_ROW_GAP = 2
 const BRANCH_MARKER_SEPARATOR_HEIGHT = 13
-const BRANCH_MARKER_MIN_HEIGHT = 64
-const BRANCH_MARKER_DEFAULT_MODEL_ROW_COUNT = 1
+const BRANCH_MARKER_RESPONSE_LINE_HEIGHT = 16
+// Match the natural single-line height (vertical padding + one message line) so a
+// one-line marker isn't inflated relative to a wrapped two-line one — otherwise
+// `justify-content: center` pads the single-line case more than the multi-line case.
+const BRANCH_MARKER_MIN_HEIGHT = BRANCH_MARKER_VERTICAL_PADDING + BRANCH_MARKER_MESSAGE_LINE_HEIGHT
 const BRANCH_MARKER_PENDING_STACK_GAP = 8
 const BRANCH_ORIGIN_OUTPUT_GAP_MULTIPLIER = 0.5
 type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 
-function getBranchMarkerWidth(): number {
-    return Math.round(settings.imageBranchLineage.branchOrigin.size * BRANCH_MARKER_WIDTH_MULTIPLIER)
+function getBranchMarkerMinWidth(): number {
+    return Math.round(settings.imageBranchLineage.branchOrigin.size * BRANCH_MARKER_MIN_WIDTH_MULTIPLIER)
 }
 
-function getBranchMarkerContentDimensions(promptText: string, modelRowCount: number): { width: number; height: number } {
+function getBranchMarkerWidthForText(promptText: string): number {
+    const minWidth = getBranchMarkerMinWidth()
+    const maxWidth = minWidth * BRANCH_MARKER_MAX_WIDTH_GROWTH
     const promptPreview = getBranchMarkerPromptPreview(promptText)
-    const promptLineCount = promptPreview.length > BRANCH_MARKER_PROMPT_TWO_LINE_CHAR_COUNT ? 2 : 1
-    const modelRowsHeight = modelRowCount > 0
-        ? BRANCH_MARKER_SEPARATOR_HEIGHT
-            + modelRowCount * BRANCH_MARKER_MODEL_ROW_HEIGHT
-            + Math.max(0, modelRowCount - 1) * BRANCH_MARKER_MODEL_ROW_GAP
+    // Target a single line; longer messages keep growing until they hit the
+    // ceiling, then wrap to (and truncate at) two lines.
+    const desiredWidth = BRANCH_MARKER_HORIZONTAL_PADDING + promptPreview.length * BRANCH_MARKER_APPROX_CHAR_WIDTH
+    return Math.round(Math.max(minWidth, Math.min(maxWidth, desiredWidth)))
+}
+
+function getBranchMarkerPromptLineCount(promptText: string, width: number): number {
+    const promptPreview = getBranchMarkerPromptPreview(promptText)
+    const charsPerLine = Math.max(1, Math.floor((width - BRANCH_MARKER_HORIZONTAL_PADDING) / BRANCH_MARKER_LINE_WRAP_CHAR_WIDTH))
+    return promptPreview.length > charsPerLine ? 2 : 1
+}
+
+function getBranchMarkerContentDimensions(promptText: string, options: { responseLine?: boolean } = {}): { width: number; height: number } {
+    const width = getBranchMarkerWidthForText(promptText)
+    const promptLineCount = getBranchMarkerPromptLineCount(promptText, width)
+    const responseHeight = options.responseLine
+        ? BRANCH_MARKER_SEPARATOR_HEIGHT + BRANCH_MARKER_RESPONSE_LINE_HEIGHT
         : 0
     return {
-        width: getBranchMarkerWidth(),
+        width,
         height: Math.max(
             BRANCH_MARKER_MIN_HEIGHT,
             Math.ceil(
                 BRANCH_MARKER_VERTICAL_PADDING
                 + promptLineCount * BRANCH_MARKER_MESSAGE_LINE_HEIGHT
-                + modelRowsHeight
+                + responseHeight
             )
         ),
     }
 }
 
-function getPendingBranchMarkerModelRowCount(pendingState: BranchMarkerNode['pendingState'] | undefined): number {
-    if (!pendingState) return 0
-    let count = 0
-    if (pendingState.imageModelIds.length > 0) count += 1
-    if (pendingState.videoModelIds.length > 0) count += 1
-    return count
-}
-
-function getBranchMarkerModelRowCount(node: BranchMarkerNode): number {
-    const labels = new Set<string>()
-    if (node.pendingState?.imageModelIds.length) labels.add('Image')
-    if (node.pendingState?.videoModelIds.length) labels.add('Video')
-    if (node.type === 'branchOrigin' && !node.pendingState) {
-        return BRANCH_MARKER_DEFAULT_MODEL_ROW_COUNT
-    }
-    if (node.type === 'branchLine' && (node.mediaType || node.mediaModelId)) {
-        labels.add(node.mediaType === 'video' ? 'Video' : 'Image')
-    }
-    return labels.size
-}
-
 function getBranchMarkerNodeDimensions(node: BranchMarkerNode): { width: number; height: number } {
-    return getBranchMarkerContentDimensions(getBranchMarkerPromptText(node), getBranchMarkerModelRowCount(node))
+    return getBranchMarkerContentDimensions(getBranchMarkerPromptText(node))
 }
 
 function getBranchOriginOutputGap(): number {
@@ -327,6 +332,14 @@ function getBranchMarkerPromptPreview(promptText: string): string {
     if (promptText.length <= BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS) return promptText
 
     return `${promptText.slice(0, BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS)}...`
+}
+
+// Streaming reasoning text scrolls past the marker as a tail: only the last N
+// characters are shown, normalized to a single line, updated on every chunk.
+function getBranchMarkerResponsePreview(responseText: string): string {
+    const normalized = responseText.replace(/\s+/g, ' ').trim()
+    if (normalized.length <= BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS) return normalized
+    return `…${normalized.slice(-BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS)}`
 }
 
 function normalizeBranchMarkerModelValue(value: string | null | undefined): string {
@@ -577,6 +590,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let generatedMediaChromeLayerEl: HTMLDivElement | null = null
     let pendingGeneratedMediaIconLayerEl: HTMLDivElement | null = null
     let generatedMediaInfoPanelLayerEl: HTMLDivElement | null = null
+    // Screen-fixed pending markers live here, not in viewportEl: the viewport is a
+    // low z-index stacking context beneath the PIXI media / chrome layers, so a
+    // marker parented there is overlapped by generated media. This overlay shares
+    // the viewport transform (registered with the viewport bridge) but sits above
+    // every canvas layer, so the marker overlaps media and the composer context tray.
+    let pendingBranchMarkerOverlayEl: HTMLDivElement | null = null
     let generatedMediaChromeSyncRaf: number | null = null
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
@@ -594,6 +613,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
     const branchMarkerReasoningTooltips: Map<string, HelpTooltipInstance> = new Map()
+    const branchMarkerMediaModelTooltips: Map<string, HelpTooltipInstance[]> = new Map()
+    // Live reasoning-stream state per pending marker node. While a generation run
+    // streams, the marker shows the model's response text below a separator: the
+    // preamble first, then the prompt-enhancement block, finishing on a prompt icon.
+    type BranchMarkerStreamPhase = 'preamble' | 'enhancement' | 'done'
+    type BranchMarkerStreamState = { responseText: string; phase: BranchMarkerStreamPhase; streaming: boolean }
+    const branchMarkerStreamStates: Map<string, BranchMarkerStreamState> = new Map()
     const VIDEO_CONTROLS_HEIGHT = settings.videoControls.height
     const VIDEO_CONTROLS_HORIZONTAL_INSET = settings.videoControls.canvas.horizontalInset
     const VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET = settings.videoControls.canvas.compactHorizontalInset
@@ -703,9 +729,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()
     pendingGeneratedMediaIconLayerEl = createPendingGeneratedMediaIconLayer()
     generatedMediaInfoPanelLayerEl = createGeneratedMediaInfoPanelLayer()
+    pendingBranchMarkerOverlayEl = createPendingBranchMarkerOverlay()
     viewportBridge = createViewportBridge({
         viewportEl,
-        viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],
+        viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl, pendingBranchMarkerOverlayEl],
         getPixiLayers: () => [pixiMediaLayer],
     })
     if (currentCanvasState?.viewport) {
@@ -1200,17 +1227,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodesById = getCanvasNodesById(nodes)
         for (const node of nodes) {
             const position = getNodeWorldPosition(node, nodesById)
+            const dimensions = liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions
             const nodeEl = viewportEl.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
             if (nodeEl) {
                 applyStyle(nodeEl, {
                     left: `${position.x}px`,
                     top: `${position.y}px`,
-                    width: `${node.dimensions.width}px`,
-                    height: `${node.dimensions.height}px`,
+                    width: `${dimensions.width}px`,
+                    height: `${dimensions.height}px`,
                 })
                 updatePendingGeneratedMediaBeforeFrameClass(nodeEl, node.nodeId)
             }
-            updateGeneratedMediaChromeLiveTransform(node.nodeId, position, node.dimensions, getLiveViewport())
+            updateGeneratedMediaChromeLiveTransform(node.nodeId, position, dimensions, getLiveViewport())
         }
 
         updateSelectionGroupOverlayElement()
@@ -1230,6 +1258,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const chromeViewport = html`<div className="workspace-media-chrome-viewport" style=${chromeViewportStyle}></div>` as HTMLDivElement
         paneEl.appendChild(chromeViewport)
         return chromeViewport
+    }
+
+    function createPendingBranchMarkerOverlay(): HTMLDivElement {
+        const overlayStyle = {
+            position: 'absolute' as const,
+            top: '0',
+            left: '0',
+            transformOrigin: '0 0',
+            willChange: 'transform',
+            pointerEvents: 'none' as const,
+            // Above the canvas content/media layers and the composer host (9990)
+            // so context items added to the prompt slide behind the marker.
+            zIndex: '9991',
+        }
+        const overlay = html`<div className="workspace-pending-branch-marker-overlay" style=${overlayStyle}></div>` as HTMLDivElement
+        paneEl.appendChild(overlay)
+        return overlay
+    }
+
+    function findBranchMarkerNodeEl(nodeId: string): HTMLElement | null {
+        return (pendingBranchMarkerOverlayEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null)
+            ?? (viewportEl.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null)
     }
 
     function createGeneratedMediaChromeLayer(): HTMLDivElement {
@@ -2220,6 +2270,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function destroyBranchMarkerReasoningTooltip(nodeId: string): void {
         branchMarkerReasoningTooltips.get(nodeId)?.destroy()
         branchMarkerReasoningTooltips.delete(nodeId)
+        for (const tooltip of branchMarkerMediaModelTooltips.get(nodeId) ?? []) {
+            tooltip.destroy()
+        }
+        branchMarkerMediaModelTooltips.delete(nodeId)
     }
 
     function destroyBranchMarkerReasoningTooltips(): void {
@@ -2227,6 +2281,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             tooltip.destroy()
         }
         branchMarkerReasoningTooltips.clear()
+        for (const tooltips of branchMarkerMediaModelTooltips.values()) {
+            for (const tooltip of tooltips) tooltip.destroy()
+        }
+        branchMarkerMediaModelTooltips.clear()
+        branchMarkerStreamStates.clear()
     }
 
     function scheduleGeneratedMediaChromeSync(): void {
@@ -4868,6 +4927,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     handleCanvasRunError(event)
                     return
                 }
+                applyBranchMarkerStreamEvent(event.threadId || event.aiChatThreadId || generationRunId, event)
                 routeSegmentEventToCanvas(event)
                 if (event.type === 'media_lineage_planned') {
                     registerPlannedMediaRuns(event)
@@ -5241,7 +5301,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     ): { position: { x: number; y: number }; visualScale: number } {
         const zoom = getSafeViewportZoom(viewport)
         const paneBounds = paneRect ?? paneEl.getBoundingClientRect()
-        const composerBounds = globalCanvasComposerHostEl?.getBoundingClientRect()
+        // Anchor to the input row itself, not the composer host: the host grows
+        // upward as context items are added above the input, and we don't want
+        // those items to push the marker. The marker stays pinned just above the
+        // input and overlaps the context tray instead.
+        const composerBounds = (globalCanvasComposer?.element ?? globalCanvasComposerHostEl)?.getBoundingClientRect()
         const gap = settings.imageBranchLineage.pendingMarkerInputGap
         if (!composerBounds) {
             const screenRight = paneBounds.width / 2 + dimensions.width / 2
@@ -5272,8 +5336,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewport: Viewport = getLiveViewport(),
         stackOffsetY = 0,
     ): void {
-        const nodeEl = viewportEl.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
+        const nodeEl = findBranchMarkerNodeEl(nodeId)
         if (!nodeEl) return
+
+        // Lift the screen-fixed marker out of the viewport stacking context into
+        // the high z-index overlay so generated media never paints over it.
+        if (pendingBranchMarkerOverlayEl && nodeEl.parentElement !== pendingBranchMarkerOverlayEl) {
+            pendingBranchMarkerOverlayEl.appendChild(nodeEl)
+        }
 
         const projection = getPendingBranchMarkerScreenProjection(dimensions, viewport, stackOffsetY)
         nodeEl.classList.add('workspace-branch-marker-screen-fixed')
@@ -5284,6 +5354,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             height: `${dimensions.height}px`,
             transform: `scale(${projection.visualScale})`,
             transformOrigin: 'top right',
+            // Overlap the composer's context tray (host z-index 9990) so added
+            // context items render behind the marker instead of shifting it.
+            zIndex: '9991',
         })
     }
 
@@ -5317,7 +5390,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const pendingNodes: BranchLineCanvasNode[] = []
         let stackOffsetY = 0
         pendingStates.forEach((pendingState, index) => {
-            const dimensions = getBranchMarkerContentDimensions(promptText, getPendingBranchMarkerModelRowCount(pendingState))
+            const dimensions = getBranchMarkerContentDimensions(promptText)
             const projection = getPendingBranchMarkerScreenProjection(dimensions, getLiveViewport(), stackOffsetY)
             const nodeId = `pending-branch-${uuidv4()}`
             const pendingNode: BranchLineCanvasNode = {
@@ -5367,6 +5440,99 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ?? (placementKey !== threadId ? pendingBranchMarkers.get(threadId) : undefined)
     }
 
+    // Re-render a pending marker after its stream state changes, regrowing the
+    // pill to fit the newly revealed response line and restacking the markers.
+    function refreshPendingBranchMarkerStreamRender(nodeId: string): void {
+        if (!currentCanvasState) return
+        const node = currentCanvasState.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+        if (!node || !isBranchMarkerNode(node) || !node.pendingState) return
+        const streamState = branchMarkerStreamStates.get(nodeId)
+        const dimensions = getBranchMarkerContentDimensions(
+            getBranchMarkerPromptText(node),
+            { responseLine: Boolean(streamState?.streaming) },
+        )
+        node.dimensions = dimensions
+        // Canvas-state commits during the run replace this node object (losing the
+        // in-place dimension growth), so also pin the streamed height as a live
+        // override keyed by nodeId — geometry sync reads that first, keeping the
+        // response line from being clipped after a re-render.
+        liveNodeOverrides.set(nodeId, { ...liveNodeOverrides.get(nodeId), dimensions })
+        syncBranchMarkerNodeContent(node)
+        // A preflight marker is screen-fixed in the overlay; a planned one has
+        // already been promoted into the canvas viewport (media lineage can be
+        // planned before the reasoning text streams). Resize whichever layer owns it
+        // so the response line is never clipped by a stale pill height.
+        if (node.pendingState.phase === 'preflight') {
+            syncPendingBranchMarkerScreenPlacements()
+        } else {
+            syncCanvasNodeDomGeometry([node])
+        }
+    }
+
+    function preserveBranchMarkerStreamStateAcrossPromotion(
+        pendingNodeId: string,
+        plannedNode: BranchMarkerNode,
+    ): BranchMarkerNode {
+        const streamState = branchMarkerStreamStates.get(pendingNodeId)
+        const previousOverride = liveNodeOverrides.get(pendingNodeId)
+        if (pendingNodeId !== plannedNode.nodeId) {
+            if (streamState) {
+                branchMarkerStreamStates.set(plannedNode.nodeId, streamState)
+                branchMarkerStreamStates.delete(pendingNodeId)
+            }
+            if (previousOverride) {
+                liveNodeOverrides.set(plannedNode.nodeId, previousOverride)
+                liveNodeOverrides.delete(pendingNodeId)
+            }
+        }
+        if (!streamState?.streaming) return plannedNode
+
+        const dimensions = getBranchMarkerContentDimensions(
+            getBranchMarkerPromptText(plannedNode),
+            { responseLine: true },
+        )
+        liveNodeOverrides.set(plannedNode.nodeId, {
+            ...liveNodeOverrides.get(plannedNode.nodeId),
+            dimensions,
+        })
+        return {
+            ...plannedNode,
+            dimensions,
+        } as BranchMarkerNode
+    }
+
+    // Map a streamed reasoning segment onto its pending marker: accumulate the
+    // response tail, advance preamble → enhancement → done, and re-render.
+    function applyBranchMarkerStreamEvent(threadId: string, event: SegmentEvent): void {
+        const isStreamTextEvent = (event.status === 'STREAMING' && Boolean(event.segment?.segment))
+            || event.type === 'collapsible_start'
+            || event.type === 'collapsible_end'
+            || (event.status === 'END_STREAM')
+        if (!isStreamTextEvent) return
+        const record = getPendingBranchMarkerRecord(threadId, event.generationRun)
+        if (!record) return
+        const nodeId = record.nodeId
+        const streamState = branchMarkerStreamStates.get(nodeId)
+            ?? { responseText: '', phase: 'preamble' as BranchMarkerStreamPhase, streaming: false }
+        let changed = false
+        if (event.type === 'collapsible_start') {
+            if (streamState.phase !== 'enhancement') { streamState.phase = 'enhancement'; changed = true }
+            if (!streamState.streaming) { streamState.streaming = true; changed = true }
+        } else if (event.type === 'collapsible_end') {
+            if (streamState.phase !== 'done') { streamState.phase = 'done'; changed = true }
+        } else if (event.status === 'STREAMING' && event.segment?.segment) {
+            streamState.responseText += event.segment.segment
+            streamState.streaming = true
+            changed = true
+        } else if (event.status === 'END_STREAM' && streamState.streaming && streamState.phase !== 'done') {
+            streamState.phase = 'done'
+            changed = true
+        }
+        if (!changed) return
+        branchMarkerStreamStates.set(nodeId, streamState)
+        refreshPendingBranchMarkerStreamRender(nodeId)
+    }
+
     function ensurePendingBranchMarkerRecordForApiRun(
         threadId: string,
         generationRun?: MediaGenerationRunMeta,
@@ -5405,7 +5571,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function promotePendingBranchMarkerElement(pendingNodeId: string, node: BranchMarkerNode): HTMLElement | null {
-        const pendingEl = viewportEl.querySelector(`[data-node-id="${pendingNodeId}"]`) as HTMLElement | null
+        const pendingEl = findBranchMarkerNodeEl(pendingNodeId)
         if (!pendingEl) return null
 
         let nodeEl: HTMLElement
@@ -5422,7 +5588,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             transform: pendingEl.style.transform,
             transformOrigin: pendingEl.style.transformOrigin || 'top right',
         })
-        pendingEl.replaceWith(nodeEl)
+        // The marker now becomes a real canvas node: it must live in viewportEl so
+        // node layering and geometry sync own it. The overlay shares the viewport
+        // transform, so copying the same coordinates keeps it visually in place.
+        pendingEl.remove()
+        viewportEl.appendChild(nodeEl)
         connectionManager?.registerNodeElement(node.nodeId, nodeEl as HTMLDivElement)
         return nodeEl
     }
@@ -5569,7 +5739,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const plannedNode = plannedResolution.primaryNode
         if (!plannedNode) return
 
-        const plannedNodeWithPending = applyPendingStateToPlannedBranchMarker(plannedNode, pendingNode.pendingState)
+        let plannedNodeWithPending = applyPendingStateToPlannedBranchMarker(plannedNode, pendingNode.pendingState)
+        plannedNodeWithPending = preserveBranchMarkerStreamStateAcrossPromotion(record.nodeId, plannedNodeWithPending)
         const promotedEl = promotePendingBranchMarkerElement(record.nodeId, plannedNodeWithPending)
         if (promotedEl) markBranchMarkerPlacementAnimating(promotedEl)
 
@@ -5650,6 +5821,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
         if (!updatedMarker) return
 
+        branchMarkerStreamStates.delete(record.nodeId)
+        liveNodeOverrides.delete(record.nodeId)
         commitCanvasStatePreservingEditors({
             ...currentCanvasState,
             nodes,
@@ -5693,8 +5866,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
             for (const nodeId of removableNodeIds) {
                 destroyBranchMarkerReasoningTooltip(nodeId)
-                const nodeEl = viewportEl.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
-                nodeEl?.remove()
+                branchMarkerStreamStates.delete(nodeId)
+                liveNodeOverrides.delete(nodeId)
+                findBranchMarkerNodeEl(nodeId)?.remove()
             }
             return
         }
@@ -5711,8 +5885,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ),
         })
         destroyBranchMarkerReasoningTooltip(record.nodeId)
-        const nodeEl = viewportEl.querySelector(`[data-node-id="${record.nodeId}"]`) as HTMLElement | null
-        nodeEl?.remove()
+        branchMarkerStreamStates.delete(record.nodeId)
+        liveNodeOverrides.delete(record.nodeId)
+        findBranchMarkerNodeEl(record.nodeId)?.remove()
     }
 
     function getLineageAssignmentReasoningIndex(
@@ -5998,10 +6173,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (existing?.type === 'branchOrigin') return existing as BranchOriginCanvasNode
 
         const nodeId = plannedBranchOriginNodeId
-        const dimensions = getBranchMarkerContentDimensions(
-            branchOriginPlan.provenance?.promptText ?? '',
-            BRANCH_MARKER_DEFAULT_MODEL_ROW_COUNT
-        )
+        const dimensions = getBranchMarkerContentDimensions(branchOriginPlan.provenance?.promptText ?? '')
         const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)
             ?? getCenteredInsertionPosition({ width: getGeneratedImageInsertionSize(), height: mediaHeight })
         const position = {
@@ -6041,7 +6213,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const nodeId = branchForkNodeId
         const parentNode = getBranchForkParentNode(threadId, generationRun, branchOriginNode)
-        const dimensions = getBranchMarkerContentDimensions(branchForkPlan.provenance?.promptText ?? '', 0)
+        const dimensions = getBranchMarkerContentDimensions(branchForkPlan.provenance?.promptText ?? '')
         if (!parentNode) return undefined
         const parentRect = getNodeWorldRect(parentNode)
         const position = computeLineageContinuationPositionToRightOfRect(
@@ -6099,8 +6271,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!parentBranchNodeId) return undefined
         const parentNode = findCanvasNodeById(parentBranchNodeId)
             ?? (branchOriginNode?.nodeId === parentBranchNodeId ? branchOriginNode : undefined)
-        const branchLineModelRows = branchLinePlan.mediaType || branchLinePlan.mediaModelId ? 1 : 0
-        const dimensions = getBranchMarkerContentDimensions(branchLinePlan.provenance?.promptText ?? '', branchLineModelRows)
+        const dimensions = getBranchMarkerContentDimensions(branchLinePlan.provenance?.promptText ?? '')
         if (!parentNode) return undefined
         const parentRect = getNodeWorldRect(parentNode)
         const position = computeLineageContinuationPositionToRightOfRect(
@@ -6764,7 +6935,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function appendBranchOriginNodeToDOM(branchOriginNode: BranchOriginCanvasNode): void {
-        if (viewportEl.querySelector(`[data-node-id="${branchOriginNode.nodeId}"]`)) {
+        if (findBranchMarkerNodeEl(branchOriginNode.nodeId)) {
             syncBranchMarkerNodeContent(branchOriginNode)
             syncConnectionsAfterManualNodeAppend()
             return
@@ -6777,7 +6948,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function appendBranchForkNodeToDOM(branchForkNode: BranchForkCanvasNode): void {
-        if (viewportEl.querySelector(`[data-node-id="${branchForkNode.nodeId}"]`)) {
+        if (findBranchMarkerNodeEl(branchForkNode.nodeId)) {
             syncBranchMarkerNodeContent(branchForkNode)
             syncConnectionsAfterManualNodeAppend()
             return
@@ -6790,7 +6961,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function appendBranchLineNodeToDOM(branchLineNode: BranchLineCanvasNode): void {
-        if (viewportEl.querySelector(`[data-node-id="${branchLineNode.nodeId}"]`)) {
+        if (findBranchMarkerNodeEl(branchLineNode.nodeId)) {
             syncBranchMarkerNodeContent(branchLineNode)
             syncConnectionsAfterManualNodeAppend()
             return
@@ -8746,15 +8917,38 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .join(' · ')
     }
 
-    function createBranchMarkerModelRow(detail: BranchMarkerModelDetail): HTMLDivElement {
-        const icon = detail.entries.find(entry => entry.icon)?.icon ?? null
-        const models = detail.entries.map(entry => entry.title).join(', ')
-        return html`
-            <div className="workspace-branch-marker-model-row">
-                ${icon ? html`<span className="workspace-branch-marker-model-icon" innerHTML=${icon}></span>` : null}
-                <span className="workspace-branch-marker-model-text">${detail.label}: ${models}</span>
-            </div>
-        ` as HTMLDivElement
+    function getBranchMarkerMediaModelTooltipEntries(
+        details: BranchMarkerModelDetail[],
+    ): Array<{ label: string; entry: BranchMarkerModelEntry }> {
+        return details.flatMap(detail => detail.entries.map(entry => ({ label: detail.label, entry })))
+    }
+
+    function getBranchMarkerMediaModelFallbackIcon(label: string): string {
+        return label === 'Video' ? videoPlayGlyphIcon : imageIcon
+    }
+
+    function createBranchMarkerMediaModelTooltip(nodeId: string, label: string, entry: BranchMarkerModelEntry): HTMLElement {
+        const icon = entry.icon ?? getBranchMarkerMediaModelFallbackIcon(label)
+        const triggerContent = html`
+            <span
+                className="workspace-branch-marker-message-icon workspace-branch-marker-media-model-icon"
+                innerHTML=${icon}
+                aria-hidden="true"
+            ></span>
+        ` as HTMLElement
+        const tooltip = createHelpTooltip({
+            label: `${label} model: ${entry.title}`,
+            text: `${label}: ${entry.title}`,
+            triggerContent,
+            preferredPlacement: 'left',
+            className: 'workspace-branch-marker-reasoning-tooltip nopan',
+            triggerClassName: 'workspace-branch-marker-reasoning-tooltip-trigger',
+            contentClassName: 'workspace-branch-marker-reasoning-tooltip-content',
+        })
+        const tooltips = branchMarkerMediaModelTooltips.get(nodeId) ?? []
+        tooltips.push(tooltip)
+        branchMarkerMediaModelTooltips.set(nodeId, tooltips)
+        return tooltip.dom
     }
 
     function createBranchMarkerReasoningTooltip(nodeId: string, modelTitle: string, icon: string): HTMLElement {
@@ -8788,28 +8982,56 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }): HTMLDivElement {
         const promptText = getBranchMarkerPromptText(node)
         const promptPreview = getBranchMarkerPromptPreview(promptText)
-        const modelDetails = getBranchMarkerModelDetails(node)
+        // In-flight (pending) markers show only the user message. Resolved branch
+        // lineage markers surface the media models that were actually used as a
+        // stacked column of hover-labeled icons on the right side.
+        const modelDetails = node.pendingState ? [] : getBranchMarkerModelDetails(node)
+        const mediaModelEntries = getBranchMarkerMediaModelTooltipEntries(modelDetails)
         const modelSummary = getBranchMarkerModelSummary(modelDetails)
         const reasoningModelEntry = getBranchMarkerReasoningModelEntry(node)
         const reasoningModelIcon = reasoningModelEntry ? reasoningModelEntry.icon ?? atomIcon : null
         const reasoningModelSummary = reasoningModelEntry?.title ? `Reasoning: ${reasoningModelEntry.title}` : ''
-        const accessibleLabel = [promptPreview, label, reasoningModelSummary, modelSummary].filter(Boolean).join(' · ')
+        // Live reasoning stream (pending markers only). Phase drives where the
+        // progress spinner lives: the user-message line during the preamble, then
+        // the response line during the prompt-enhancement block, finally swapped
+        // for the prompt icon once enhancement finishes.
+        const streamState = node.pendingState ? branchMarkerStreamStates.get(node.nodeId) : undefined
+        const showResponseLine = Boolean(streamState?.streaming)
+        const responsePreview = streamState ? getBranchMarkerResponsePreview(streamState.responseText) : ''
+        const spinnerOnUserLine = Boolean(node.pendingState) && (!streamState || streamState.phase === 'preamble')
+        const spinnerOnResponseLine = streamState?.phase === 'enhancement'
+        const responseDone = streamState?.phase === 'done'
+        const responseSummary = responsePreview ? `Response: ${responsePreview}` : ''
+        const accessibleLabel = [promptPreview, label, reasoningModelSummary, responseSummary, modelSummary].filter(Boolean).join(' · ')
         const messageClassName = `workspace-branch-marker-message${node.pendingState ? ' is-pending' : ''}`
+        const responseClassName = `workspace-branch-marker-response${spinnerOnResponseLine ? ' is-enhancing' : ''}`
         return html`
             <div className="workspace-branch-marker-content" aria-label=${accessibleLabel}>
-                <div className=${messageClassName}>
-                    ${reasoningModelEntry && reasoningModelIcon
-                        ? createBranchMarkerReasoningTooltip(node.nodeId, reasoningModelEntry.title, reasoningModelIcon)
-                        : null}
-                    ${node.pendingState
-                        ? html`<span className="workspace-branch-marker-spinner workspace-branch-marker-message-progress" aria-hidden="true"></span>`
-                        : null}
-                    <span className="workspace-branch-marker-message-text">${promptPreview}</span>
+                <div className="workspace-branch-marker-main">
+                    <div className=${messageClassName}>
+                        ${reasoningModelEntry && reasoningModelIcon
+                            ? createBranchMarkerReasoningTooltip(node.nodeId, reasoningModelEntry.title, reasoningModelIcon)
+                            : null}
+                        ${spinnerOnUserLine
+                            ? html`<span className="workspace-branch-marker-spinner workspace-branch-marker-message-progress" aria-hidden="true"></span>`
+                            : null}
+                        <span className="workspace-branch-marker-message-text">${promptPreview}</span>
+                    </div>
+                    ${showResponseLine ? html`
+                        <div className="workspace-branch-marker-separator"></div>
+                        <div className=${responseClassName}>
+                            ${spinnerOnResponseLine
+                                ? html`<span className="workspace-branch-marker-spinner workspace-branch-marker-response-spinner" aria-hidden="true"></span>`
+                                : responseDone
+                                    ? html`<span className="workspace-branch-marker-response-icon" innerHTML=${promptIcon} aria-hidden="true"></span>`
+                                    : null}
+                            <span className="workspace-branch-marker-response-text">${responsePreview}</span>
+                        </div>
+                    ` : null}
                 </div>
-                ${modelDetails.length > 0 ? html`
-                    <div className="workspace-branch-marker-separator"></div>
-                    <div className="workspace-branch-marker-model-list">
-                        ${modelDetails.map(detail => createBranchMarkerModelRow(detail))}
+                ${mediaModelEntries.length > 0 ? html`
+                    <div className="workspace-branch-marker-media-models">
+                        ${mediaModelEntries.map(({ label: mediaLabel, entry }) => createBranchMarkerMediaModelTooltip(node.nodeId, mediaLabel, entry))}
                     </div>
                 ` : null}
             </div>
@@ -8833,7 +9055,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function syncBranchMarkerNodeContent(node: BranchMarkerNode): void {
-        const nodeEl = viewportEl.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
+        const nodeEl = findBranchMarkerNodeEl(node.nodeId)
         if (!nodeEl) return
 
         const currentContent = nodeEl.querySelector('.workspace-branch-marker-content')
@@ -9137,6 +9359,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         scheduleEdgesRender()
 
         renderActiveAiChatPanel()
+
+        // A full re-render (including initial page load) appends pending markers at
+        // their stale stored world position inside viewportEl. Project them onto the
+        // screen-fixed overlay now so they don't appear mispositioned until the next
+        // pan/zoom. A deferred pass re-runs once the composer has been laid out and
+        // its bounds are measurable (first paint may report a zero rect).
+        syncPendingBranchMarkerScreenPlacements()
+        requestAnimationFrame(() => syncPendingBranchMarkerScreenPlacements())
 
         lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
 
@@ -9572,6 +9802,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             pendingGeneratedMediaIconLayerEl = null
             generatedMediaInfoPanelLayerEl?.remove()
             generatedMediaInfoPanelLayerEl = null
+            pendingBranchMarkerOverlayEl?.remove()
+            pendingBranchMarkerOverlayEl = null
             expandedGeneratedMediaInfoNodeIds.clear()
             expandedBranchOriginInfoNodeIds.clear()
             expandedBranchForkInfoNodeIds.clear()

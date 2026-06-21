@@ -1019,7 +1019,7 @@ export const settings: Settings = {
         // Canvas-unit extra horizontal gap added for each child after the first when a generated-media node forks. Increasing it gives large branch fans more curve room.
         branchFanoutDepthGap: 96,
         // Screen-pixel vertical gap between the global prompt input and the pending branch marker shown immediately after canvas prompt submit.
-        pendingMarkerInputGap: 32,
+        pendingMarkerInputGap: 8,
         // Milliseconds for moving and scaling a pending branch marker from the global prompt input to its API-planned canvas position.
         pendingMarkerMoveDurationMs: 420,
         // Temporary root marker used when a fresh multi-model branch has no real source node.
