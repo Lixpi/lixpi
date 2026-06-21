@@ -1657,63 +1657,23 @@
 }
 
 .workspace-branch-marker-content {
+    position: relative;
+    z-index: 16;
     display: flex;
     flex-direction: column;
     justify-content: center;
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    padding: 10px 34px;
+    padding: 11px 30px 10px;
     pointer-events: none;
-}
-
-.workspace-branch-marker-header {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 0;
-    gap: 10px;
-}
-
-.workspace-branch-marker-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 calc(var(--workspace-branch-origin-icon-size) * 0.55);
-    width: calc(var(--workspace-branch-origin-icon-size) * 0.55);
-    height: calc(var(--workspace-branch-origin-icon-size) * 0.55);
-    pointer-events: none;
-
-    svg {
-        display: block;
-        width: 100%;
-        height: 100%;
-        fill: currentColor;
-        transform-origin: center;
-    }
-}
-
-.workspace-branch-origin-icon svg {
-    transform: translate(1px, 1px);
-}
-
-.workspace-branch-fork-icon svg {
-    transform: translate(1px, 1px);
-}
-
-.workspace-branch-marker-label {
-    min-width: 0;
-    color: currentColor;
-    font-size: 18px;
-    font-weight: 700;
-    line-height: 1;
-    white-space: nowrap;
 }
 
 .workspace-branch-marker-spinner {
     flex: 0 0 14px;
     width: 14px;
     height: 14px;
+    box-sizing: border-box;
     border: 2px solid rgba(255, 255, 255, 0.2);
     border-top-color: rgba(255, 255, 255, 0.86);
     border-radius: 50%;
@@ -1794,32 +1754,32 @@
     border-radius: 999px;
 }
 
-.workspace-branch-marker-title-separator {
-    margin: 6px auto 4px;
-}
-
 .workspace-branch-marker-message {
     display: flex;
     align-items: flex-start;
     box-sizing: border-box;
     color: currentColor;
-    font-size: 13px;
-    font-weight: 500;
-    gap: 5px;
-    line-height: 1.12;
-    opacity: 0.82;
+    font-size: 15px;
+    font-weight: 700;
+    gap: 8px;
+    line-height: 1.14;
+    opacity: 0.94;
     overflow: hidden;
-    padding: 0 5px;
+    padding: 0 3px;
     text-align: left;
+}
+
+.workspace-branch-marker-message.is-pending {
+    opacity: 0.96;
 }
 
 .workspace-branch-marker-message-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 12px;
-    width: 12px;
-    height: 12px;
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
     margin-top: 2px;
     color: currentColor;
     overflow: hidden;
@@ -1834,6 +1794,56 @@
     svg * {
         fill: currentColor;
     }
+}
+
+.workspace-branch-marker-reasoning-icon {
+    pointer-events: none;
+}
+
+.workspace-branch-marker-reasoning-tooltip {
+    --help-tooltip-width: max-content;
+    --help-tooltip-max-width: min(220px, calc(100vw - 48px));
+    --help-tooltip-padding: 4px 8px;
+    --help-tooltip-background: rgba(46, 51, 56, 0.96);
+    --help-tooltip-border: 1px solid rgba(255, 255, 255, 0.14);
+    --help-tooltip-border-radius: 5px;
+    --help-tooltip-box-shadow: 0 8px 24px rgba(17, 24, 31, 0.22);
+    --help-tooltip-color: #f7f9fb;
+    --help-tooltip-font-size: 11px;
+    --help-tooltip-font-weight: 600;
+    --help-tooltip-line-height: 1.2;
+    --help-tooltip-offset: 7px;
+    --help-tooltip-trigger-focus-outline: 1px solid rgba(255, 255, 255, 0.72);
+    --help-tooltip-trigger-focus-outline-offset: 2px;
+    --help-tooltip-content-z-index: 10150;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    pointer-events: auto;
+
+    .workspace-branch-marker-message-icon {
+        margin-top: 0;
+    }
+}
+
+.workspace-branch-marker-reasoning-tooltip-trigger {
+    width: 14px;
+    height: 14px;
+    color: currentColor;
+    pointer-events: auto;
+}
+
+.workspace-branch-marker-reasoning-tooltip-content {
+    white-space: nowrap;
+}
+
+.workspace-branch-marker-message-progress {
+    margin-top: 1px;
 }
 
 .workspace-branch-marker-message-text {

@@ -338,6 +338,8 @@ export type BranchMarkerPendingState = {
     phase: 'preflight' | 'planned'
     promptText: string
     reasoningModelIds: AiModelId[]
+    reasoningModelId?: AiModelId
+    reasoningIndex?: number
     imageModelIds: AiModelId[]
     videoModelIds: AiModelId[]
 }

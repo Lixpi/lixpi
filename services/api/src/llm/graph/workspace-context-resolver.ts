@@ -66,6 +66,7 @@ type ProseMirrorDoc = {
 
 const SUPPORTED_RESOLVER_PROVIDERS = new Set<ProviderName>(['Anthropic', 'OpenAI', 'Google'])
 const RESOLVER_VERSION = 'workspace-context-v1'
+const RESOLVER_MAX_TOKENS = 4096
 
 const RESOLUTION_SCHEMA: VlmJsonSchema = {
     name: 'resolve_workspace_context',
@@ -721,7 +722,7 @@ export const resolveWorkspaceContext = async (
                 schema: RESOLUTION_SCHEMA,
                 natsService: deps.natsService,
                 temperature: 0,
-                maxTokens: Math.min(rankState.aiModelMetaInfo.maxCompletionSize ?? 2048, 2048),
+                maxTokens: RESOLVER_MAX_TOKENS,
                 abortSignal: deps.abortSignal,
             })
             const rankSnapshot = rankState.workspaceContextSnapshot
