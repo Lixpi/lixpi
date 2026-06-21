@@ -90,6 +90,7 @@ aiGeneratedImage: {
     branchId: {default: ''},          // API lineage id for branch-tree reconstruction
     branchOriginNodeId: {default: ''},
     branchForkNodeId: {default: ''},
+    branchLineNodeId: {default: ''},
     parentMediaNodeId: {default: ''},
     lineageParentNodeId: {default: ''},
     width: {default: null},           // Percentage string

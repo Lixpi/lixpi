@@ -4,16 +4,15 @@
 // A "branch tree" is a connected component of top-level generated-media nodes
 // (image/video carrying generatedBy.branchId, no parentId) and temporary
 // branch-origin / branch-fork markers linked by lineage. A generated member's
-// in-tree parent is its generatedBy.branchForkNodeId when that points at
-// another member, then its generatedBy.parentMediaNodeId, then the legacy
-// generatedBy.parentImageNodeId alias, then its generatedBy.branchOriginNodeId,
-// otherwise the source of its incoming lineage edge when that source is a
-// member; if neither, the member is a tree root.
+// in-tree parent is its generatedBy.parentMediaNodeId, then its
+// generatedBy.branchOriginNodeId, then its API-assigned branchFork/branchLine
+// marker when that marker is the only visible lineage parent; otherwise the
+// member is a tree root.
 //
-// This module is pure: it reads node positions/sizes + lineage edges and returns
-// new node arrays. It never touches PIXI, the DOM, or canvas closures — it reuses
-// the geometry-agnostic pure helpers (layoutTree, resolveCollisions,
-// computeWorldPosition) so it stays testable and reusable.
+// This module is pure: it reads node positions/sizes + API-assigned lineage
+// fields and returns new node arrays. It never touches PIXI, the DOM, or canvas
+// closures — it reuses the geometry-agnostic pure helpers (layoutTree,
+// resolveCollisions, computeWorldPosition) so it stays testable and reusable.
 
 import type {
     CanvasNode,
@@ -74,10 +73,13 @@ function isBranchTreeMember(node: CanvasNode): node is BranchTreeMemberNode {
     return isGeneratedMediaBranchMember(node) || isBranchOriginMember(node) || isBranchForkMember(node) || isBranchLineMember(node)
 }
 
-// A branchFork (split) and a branchLine (continuation) are both mid-connector
-// markers, never depth parents: the child keeps the original parent media / branch
+// A branchFork (split) and a branchLine (continuation) are normally
+// mid-connector markers: the child keeps the original parent media / branch
 // origin as its in-tree parent so it stays one normal gap away, and the marker is
 // positioned at the midpoint of that single connector (see positionLineageMarkers).
+// If the API marker is the only visible branch-tree parent, the marker becomes
+// the layout root for those generated children so the tree still moves as one
+// API-declared lineage group.
 function isMidpointMarker(node: CanvasNode | undefined): node is BranchForkCanvasNode | BranchLineCanvasNode {
     return Boolean(node) && (node!.type === 'branchFork' || node!.type === 'branchLine')
 }
@@ -85,8 +87,9 @@ function isMidpointMarker(node: CanvasNode | undefined): node is BranchForkCanva
 function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<string | undefined> {
     return [
         node.generatedBy?.parentMediaNodeId,
-        node.generatedBy?.parentImageNodeId,
         node.generatedBy?.branchOriginNodeId,
+        node.generatedBy?.branchForkNodeId,
+        node.generatedBy?.branchLineNodeId,
     ]
 }
 
@@ -102,31 +105,21 @@ function firstExistingMemberId(candidates: Array<string | undefined>, memberIds:
     return null
 }
 
-// Build the generated-media forest from canvas nodes + lineage edges. Trees are
-// derived from API lineage fields and legacy lineage edges, never by grouping on
-// branchId, so a forked branchId is still one correct tree.
-export function buildBranchTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): BranchTree[] {
+// Build the generated-media forest from API-assigned lineage fields, never by
+// grouping on branchId or inferring parents from connector edges, so a forked
+// branchId is still one correct tree.
+export function buildBranchTrees(nodes: CanvasNode[], _edges: WorkspaceEdge[]): BranchTree[] {
     const members = nodes.filter(isBranchTreeMember)
     if (members.length === 0) return []
 
     const memberIds = new Set(members.map((node: BranchTreeMemberNode) => node.nodeId))
 
-    // First incoming lineage-edge source per node — the fallback parent used for
-    // older persisted nodes without API-assigned parent media fields.
-    const edgeSourceByTarget = new Map<string, string>()
-    for (const edge of edges) {
-        if (!edgeSourceByTarget.has(edge.targetNodeId)) {
-            edgeSourceByTarget.set(edge.targetNodeId, edge.sourceNodeId)
-        }
-    }
-
     const inTreeParentById = new Map<string, string | null>()
     for (const node of members) {
-        const edgeParent = edgeSourceByTarget.get(node.nodeId)
         const parentCandidates = isGeneratedMediaBranchMember(node)
             ? getGeneratedMediaParentCandidates(node)
             : getBranchMarkerParentCandidates(node)
-        const parentId = firstExistingMemberId([...parentCandidates, edgeParent], memberIds)
+        const parentId = firstExistingMemberId(parentCandidates, memberIds)
         inTreeParentById.set(node.nodeId, parentId)
     }
 
@@ -226,16 +219,19 @@ export function applyBranchTreeLayout(
     for (const tree of trees) {
         if (tree.memberIds.length <= 1) continue // single node: root stays put
 
-        const memberSet = new Set(tree.memberIds)
         const parentByChild = parentByChildOf(tree)
-        const layoutNodes: TreeLayoutNode[] = tree.memberIds
-            .filter((id: string) => !isMidpointMarker(nodesById.get(id)))
+        const layoutMemberIds = new Set(tree.memberIds
+            .filter((id: string) => {
+                const node = nodesById.get(id)
+                return !isMidpointMarker(node) || tree.childrenByParentId.has(id)
+            }))
+        const layoutNodes: TreeLayoutNode[] = [...layoutMemberIds]
             .map((id: string) => {
                 const node = nodesById.get(id) as BranchTreeMemberNode
                 const parentId = parentByChild.get(id)
                 return {
                     id,
-                    parentId: parentId && memberSet.has(parentId) ? parentId : null,
+                    parentId: parentId && layoutMemberIds.has(parentId) ? parentId : null,
                     width: node.dimensions.width,
                     height: node.dimensions.height,
                 }
@@ -284,11 +280,14 @@ function positionLineageMarkers(
     nodesById: Map<string, CanvasNode>,
     nextPositionById: Map<string, Point>,
 ): void {
-    const childByMarkerId = new Map<string, GeneratedMediaNode>()
+    const childrenByMarkerId = new Map<string, GeneratedMediaNode[]>()
     for (const node of nodes) {
         if (node.type !== 'image' && node.type !== 'video') continue
         const markerId = node.generatedBy?.branchForkNodeId ?? node.generatedBy?.branchLineNodeId
-        if (markerId) childByMarkerId.set(markerId, node as GeneratedMediaNode)
+        if (!markerId) continue
+        const children = childrenByMarkerId.get(markerId) ?? []
+        children.push(node as GeneratedMediaNode)
+        childrenByMarkerId.set(markerId, children)
     }
 
     const worldOf = (id: string): Point => {
@@ -301,18 +300,25 @@ function positionLineageMarkers(
     for (const node of nodes) {
         if (!isMidpointMarker(node)) continue
         const parentId = node.parentBranchNodeId
-        const child = childByMarkerId.get(node.nodeId)
-        if (!parentId || !child) continue
+        const children = childrenByMarkerId.get(node.nodeId)
+        if (!parentId || !children?.length) continue
         const parent = nodesById.get(parentId)
         if (!parent) continue
 
-        // Midpoint of the connector: parent right-edge anchor → child left-edge anchor.
+        // Midpoint of the connector group: parent right-edge anchor → average
+        // left-edge anchor for every generated child sharing this marker.
         const parentPos = worldOf(parentId)
-        const childPos = worldOf(child.nodeId)
         const parentAnchorX = parentPos.x + parent.dimensions.width
         const parentAnchorY = parentPos.y + parent.dimensions.height / 2
-        const childAnchorX = childPos.x
-        const childAnchorY = childPos.y + child.dimensions.height / 2
+        let childAnchorX = 0
+        let childAnchorY = 0
+        for (const child of children) {
+            const childPos = worldOf(child.nodeId)
+            childAnchorX += childPos.x
+            childAnchorY += childPos.y + child.dimensions.height / 2
+        }
+        childAnchorX /= children.length
+        childAnchorY /= children.length
         nextPositionById.set(node.nodeId, {
             x: (parentAnchorX + childAnchorX) / 2 - node.dimensions.width / 2,
             y: (parentAnchorY + childAnchorY) / 2 - node.dimensions.height / 2,

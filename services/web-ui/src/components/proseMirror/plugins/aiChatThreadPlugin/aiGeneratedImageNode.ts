@@ -36,6 +36,7 @@ export const aiGeneratedImageNodeSpec = {
         parentMediaNodeId: { default: '' },
         branchOriginNodeId: { default: '' },
         branchForkNodeId: { default: '' },
+        branchLineNodeId: { default: '' },
         lineageParentNodeId: { default: '' },
         // Image display attributes (same as regular image node)
         width: { default: null },
@@ -69,6 +70,7 @@ export const aiGeneratedImageNodeSpec = {
                     parentMediaNodeId: dom.getAttribute('data-parent-media-node-id') || '',
                     branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
                     branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
+                    branchLineNodeId: dom.getAttribute('data-branch-line-node-id') || '',
                     lineageParentNodeId: dom.getAttribute('data-lineage-parent-node-id') || '',
                     width: dom.getAttribute('data-width') || null,
                     alignment: dom.getAttribute('data-alignment') || 'left',
@@ -99,6 +101,7 @@ export const aiGeneratedImageNodeSpec = {
             'data-parent-media-node-id': node.attrs.parentMediaNodeId,
             'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
             'data-branch-fork-node-id': node.attrs.branchForkNodeId,
+            'data-branch-line-node-id': node.attrs.branchLineNodeId,
             'data-lineage-parent-node-id': node.attrs.lineageParentNodeId,
             'data-width': node.attrs.width || '',
             'data-alignment': node.attrs.alignment || 'left',

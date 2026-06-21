@@ -315,11 +315,6 @@ export type BranchForkProvenance = {
     reasoningRunId: string
     reasoningModelId: AiModelId
     reasoningIndex: number
-    // Present when the fork is created on the media-generation axis (one fork per
-    // concrete media run) rather than purely per reasoning model.
-    mediaRunId?: string
-    mediaModelId?: AiModelId
-    mediaType?: 'image' | 'video'
 }
 
 // A branchLine marks a plain (non-split) branch continuation: exactly one media
@@ -355,9 +350,6 @@ export type BranchForkLineagePlan = {
     reasoningRunId: string
     reasoningModelId: AiModelId
     reasoningIndex: number
-    mediaRunId?: string
-    mediaModelId?: AiModelId
-    mediaType?: 'image' | 'video'
     promptFingerprint?: string
     provenance: BranchForkProvenance
 }

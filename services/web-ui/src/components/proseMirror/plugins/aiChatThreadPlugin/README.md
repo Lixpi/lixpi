@@ -131,13 +131,13 @@ Per-model section inside one `aiResponseMessage` for media-generation matrix req
 
 ### `aiLineageEvent`
 
-Atom block for a materialized workflow event in a projected chat transcript.
+Atom block for a materialized workflow event in chat history or a projected chat transcript.
 
 - Spec and NodeView live in `aiLineageEventNode.ts`; event labels and icon rendering live in `aiLineageEvents.ts`.
 - Marker CSS mirrors the canvas branch-marker glyph ratio and per-shape SVG offsets so the same icon family stays optically centered at chat size.
-- Attrs: `kind`, `branchOriginNodeId`, `branchForkNodeId`
-- `kind: 'branch-origin'` renders `Branch started`; `kind: 'branch-fork'` renders `Branch fork created`.
-- Used when the projection itself is a workflow node, such as a branch root panel. Durable streamed responses keep lineage ids on `aiReasoningSection` and generated media attrs; projections decide whether to render standalone events or section-local markers.
+- Attrs: `kind`, `branchOriginNodeId`, `branchForkNodeId`, `branchLineNodeId`
+- `kind: 'branch-origin'` renders `Branch started`; `kind: 'branch-fork'` renders `Branch fork created`; `kind: 'branch-line'` renders `Branch continued`.
+- Live streamed responses materialize these nodes directly from API `generationRun.lineageAssignment` when the response is not split into `aiReasoningSection` nodes. Matrix responses keep lineage ids on each `aiReasoningSection`; projections decide whether to render standalone events or section-local markers.
 
 ### `aiGeneratedImage`
 
@@ -147,7 +147,7 @@ Atom node for compact generated-image references in the thread log.
 - Generated-image rendering is owned by `imageSelectionPlugin`.
 - `imageSelectionPlugin` owns the active `ImageNodeView` path so regular image selection, bubble-menu alignment, wrap controls, and the shared generated-media provider badge stay on the same visible surface.
 - Complete nodes render an authenticated image URL and the provider badge below the image.
-- Nodes keep `branchId`, `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, and `lineageParentNodeId` from `generationRun.lineageAssignment`; the provider badge row remains model/provider-only.
+- Nodes keep `branchId`, `branchOriginNodeId`, `branchForkNodeId`, `branchLineNodeId`, `parentMediaNodeId`, and `lineageParentNodeId` from `generationRun.lineageAssignment`; the provider badge row remains model/provider-only.
 - Generated media nodes share the same in-thread media width contract: full available width up to the chat media cap.
 - Partial and complete stream events are matched primarily with `mediaRunId` when available, then by file, response, or partial identifiers.
 
@@ -289,7 +289,7 @@ Generated-image rendering is handled by `imageSelectionPlugin`.
 
 `readOnlyAiChatThreadRenderer.ts` mounts a `ProseMirrorEditor` with `documentType: 'aiChatThread'`, `readOnly: true`, and an optional trace-details render context. `aiChatThreadContentUtils.ts` builds a scoped `doc` JSON projection for generated image/video provenance by cloning the producing `aiUserMessage` and `aiResponseMessage` from `AiChatThread.content`. Matrix media responses keep only the matching `aiReasoningSection`, selected by `responseMessageId`, `reasoningRunId`, `mediaRunId`, or `reasoningModelId`. Per-image/per-video provenance can additionally prune generated-media atom nodes to the exact `mediaRunId`, `fileId`, and `variantIndex`; branch-fork provenance leaves sibling media visible.
 
-Lineage rendering is projection-scoped instead of panel-specific. `conversation` preserves the full live-thread view, `branch-origin` materializes a standalone `aiLineageEvent` for the branch root, `branch-fork` keeps only fork-local markers on the selected reasoning section, and `media-run` keeps run-local fork markers for generated-media panels. This keeps branch-root and branch-fork workflow nodes independently reconstructable from the same stored message pieces without copying ancestor events into child projections.
+Lineage rendering is projection-scoped instead of panel-specific. `conversation` preserves the full live-thread view, `branch-origin` materializes a standalone `aiLineageEvent` for the branch root, `branch-fork` keeps only fork-local markers on the selected reasoning section, and `media-run` keeps run-local fork or continuation markers for generated-media panels. This keeps branch-root, branch-fork, and branch-line workflow nodes independently reconstructable from the same stored message pieces without copying ancestor events into child projections.
 
 Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread persistence callbacks, and reject document-changing transactions. NodeViews that own local controls guard direct dispatches with `view.editable`, so collapsible toggles, image resize, image/video selection, and focus writebacks do not mutate the projected document.
 

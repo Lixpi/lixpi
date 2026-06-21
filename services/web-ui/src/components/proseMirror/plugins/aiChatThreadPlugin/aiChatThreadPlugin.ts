@@ -21,6 +21,10 @@ import { aiUserMessageNodeType, aiUserMessageNodeView, type AiUserMessageContext
 import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
 import { aiReasoningSectionNodeType, aiReasoningSectionNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
 import { aiLineageEventNodeType, aiLineageEventNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEventNode.ts'
+import {
+    getAiLineageEventsForProjection,
+    type AiLineageEventDescriptor,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
@@ -149,6 +153,7 @@ type GeneratedMediaRunAttrs = GeneratedRunAttrs & {
     parentMediaNodeId: string
     branchOriginNodeId: string
     branchForkNodeId: string
+    branchLineNodeId: string
     lineageParentNodeId: string
 }
 type ImageReference = { fileId: string; workspaceId: string }
@@ -212,12 +217,38 @@ function buildGeneratedMediaRunAttrs(
     const lineageAssignment = generationRun?.lineageAssignment
     return {
         ...buildGeneratedRunAttrs(generationRun, previousAttrs),
-        branchId: lineageAssignment?.branchId || previousAttrs.branchId || '',
-        parentMediaNodeId: lineageAssignment?.parentMediaNodeId || previousAttrs.parentMediaNodeId || '',
-        branchOriginNodeId: lineageAssignment?.branchOriginNodeId || previousAttrs.branchOriginNodeId || '',
-        branchForkNodeId: lineageAssignment?.branchForkNodeId || previousAttrs.branchForkNodeId || '',
-        lineageParentNodeId: lineageAssignment?.lineageParentNodeId || previousAttrs.lineageParentNodeId || '',
+        branchId: lineageAssignment?.branchId || '',
+        parentMediaNodeId: lineageAssignment?.parentMediaNodeId || '',
+        branchOriginNodeId: lineageAssignment?.branchOriginNodeId || '',
+        branchForkNodeId: lineageAssignment?.branchForkNodeId || '',
+        branchLineNodeId: lineageAssignment?.branchLineNodeId || '',
+        lineageParentNodeId: lineageAssignment?.lineageParentNodeId || '',
     }
+}
+
+function buildAiLineageEventNode(schema: ProseMirrorSchema, event: AiLineageEventDescriptor): ProseMirrorNode | null {
+    const nodeType = schema.nodes[aiLineageEventNodeType]
+    if (!nodeType) return null
+
+    return nodeType.create({
+        kind: event.kind,
+        branchOriginNodeId: event.branchOriginNodeId ?? '',
+        branchForkNodeId: event.branchForkNodeId ?? '',
+        branchLineNodeId: event.branchLineNodeId ?? '',
+    })
+}
+
+function getLineageEventIdentity(event: AiLineageEventDescriptor): string {
+    return `${event.kind}:${event.branchOriginNodeId ?? event.branchForkNodeId ?? event.branchLineNodeId ?? ''}`
+}
+
+function getLineageEventNodeIdentity(node: ProseMirrorNode): string {
+    return getLineageEventIdentity({
+        kind: node.attrs.kind,
+        branchOriginNodeId: node.attrs.branchOriginNodeId || '',
+        branchForkNodeId: node.attrs.branchForkNodeId || '',
+        branchLineNodeId: node.attrs.branchLineNodeId || '',
+    })
 }
 
 function buildMediaModelId(provider?: string, model?: string): string {
@@ -282,8 +313,8 @@ function buildReasoningSectionAttrs(
         reasoningRunId: generationRun.reasoningRunId || previousAttrs.reasoningRunId || '',
         reasoningModelId: generationRun.reasoningModelId || previousAttrs.reasoningModelId || '',
         reasoningIndex: generationRun.reasoningIndex ?? previousAttrs.reasoningIndex ?? null,
-        branchOriginNodeId: generationRun.lineageAssignment?.branchOriginNodeId || previousAttrs.branchOriginNodeId || '',
-        branchForkNodeId: generationRun.lineageAssignment?.branchForkNodeId || previousAttrs.branchForkNodeId || '',
+        branchOriginNodeId: generationRun.lineageAssignment?.branchOriginNodeId || '',
+        branchForkNodeId: generationRun.lineageAssignment?.branchForkNodeId || '',
         isReceivingAnimation,
     }
 }
@@ -1134,6 +1165,59 @@ class AiChatThreadPluginClass {
         tr.setNodeMarkup(responseContext.responseStartPos, undefined, nextAttrs)
     }
 
+    private applyGenerationRunLineageToResponseMessage(
+        tr: Transaction,
+        responseContext: ResponseContext,
+        generationRun?: MediaGenerationRunMeta
+    ): void {
+        if (!generationRun?.lineageAssignment) return
+        if (responseContext.responseNode.type.name !== aiResponseMessageNodeType) return
+
+        const events = getAiLineageEventsForProjection({
+            branchOriginNodeId: generationRun.lineageAssignment.branchOriginNodeId,
+            branchForkNodeId: generationRun.lineageAssignment.branchForkNodeId,
+            branchLineNodeId: generationRun.lineageAssignment.branchLineNodeId,
+            reasoningIndex: generationRun.reasoningIndex,
+        }, 'conversation')
+        if (events.length === 0) return
+
+        const existingEventIds = new Set<string>()
+        let insertAfterLeadingLineageEventsPos = responseContext.responseMessagePos + 1
+        let hasSeenNonLineageEventNode = false
+
+        responseContext.responseMessageNode.forEach((child: ProseMirrorNode, offset: number) => {
+            if (child.type.name === aiLineageEventNodeType) {
+                existingEventIds.add(getLineageEventNodeIdentity(child))
+                if (!hasSeenNonLineageEventNode) {
+                    insertAfterLeadingLineageEventsPos = responseContext.responseMessagePos + 1 + offset + child.nodeSize
+                }
+                return
+            }
+
+            hasSeenNonLineageEventNode = true
+        })
+
+        let insertPos = tr.mapping.map(insertAfterLeadingLineageEventsPos, 1)
+        for (const event of events) {
+            if (existingEventIds.has(getLineageEventIdentity(event))) continue
+
+            const eventNode = buildAiLineageEventNode(tr.doc.type.schema, event)
+            if (!eventNode) continue
+
+            tr.insert(insertPos, eventNode)
+            insertPos += eventNode.nodeSize
+        }
+    }
+
+    private applyGenerationRunLineageToChat(
+        tr: Transaction,
+        responseContext: ResponseContext,
+        generationRun?: MediaGenerationRunMeta
+    ): void {
+        this.applyGenerationRunLineageToResponseSection(tr, responseContext, generationRun)
+        this.applyGenerationRunLineageToResponseMessage(tr, responseContext, generationRun)
+    }
+
     private findGeneratedImageInResponse(
         responseContext: ResponseContext,
         options: {
@@ -1241,12 +1325,14 @@ class AiChatThreadPluginClass {
         })
         const imageAttrs = this.buildGeneratedImageAttrs(event, true, partialIndex, existingImage?.node.attrs)
         const tr = state.tr
-        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
+        this.applyGenerationRunLineageToChat(tr, responseContext, event.generationRun)
+        const imageNodePos = existingImage ? tr.mapping.map(existingImage.nodePos, 1) : undefined
+        const insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
 
-        if (existingImage) {
-            tr.setNodeMarkup(existingImage.nodePos, undefined, imageAttrs)
+        if (imageNodePos !== undefined) {
+            tr.setNodeMarkup(imageNodePos, undefined, imageAttrs)
         } else {
-            tr.insert(responseContext.responseEndPos - 1, imageNodeType.create(imageAttrs))
+            tr.insert(insertionPos, imageNodeType.create(imageAttrs))
         }
 
         if (tr.docChanged) {
@@ -1318,9 +1404,9 @@ class AiChatThreadPluginClass {
             tr.delete(range.from, range.to)
         }
 
+        this.applyGenerationRunLineageToChat(tr, responseContext, event.generationRun)
         const imageNodePos = existingImage ? tr.mapping.map(existingImage.nodePos, 1) : undefined
         const insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
-        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         if (imageNodeType) {
             const imageAttrs = this.buildGeneratedImageAttrs(event, false, partialIndex, existingImage?.node.attrs)
@@ -1427,12 +1513,14 @@ class AiChatThreadPluginClass {
         })
         const videoAttrs = this.buildGeneratedVideoAttrs(event, true, '', existingVideo?.node.attrs)
         const tr = state.tr
-        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
+        this.applyGenerationRunLineageToChat(tr, responseContext, event.generationRun)
+        const videoNodePos = existingVideo ? tr.mapping.map(existingVideo.nodePos, 1) : undefined
+        const insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
 
-        if (existingVideo) {
-            tr.setNodeMarkup(existingVideo.nodePos, undefined, videoAttrs)
+        if (videoNodePos !== undefined) {
+            tr.setNodeMarkup(videoNodePos, undefined, videoAttrs)
         } else {
-            tr.insert(responseContext.responseEndPos - 1, videoNodeType.create(videoAttrs))
+            tr.insert(insertionPos, videoNodeType.create(videoAttrs))
         }
 
         if (tr.docChanged) {
@@ -1460,9 +1548,9 @@ class AiChatThreadPluginClass {
             responseId: event.responseId,
         })
         const tr = state.tr
+        this.applyGenerationRunLineageToChat(tr, responseContext, event.generationRun)
         const videoNodePos = existingVideo ? tr.mapping.map(existingVideo.nodePos, 1) : undefined
         const insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
-        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         const videoAttrs = this.buildGeneratedVideoAttrs(event, false, '', existingVideo?.node.attrs)
         if (videoNodePos !== undefined) {
@@ -1499,12 +1587,14 @@ class AiChatThreadPluginClass {
             existingVideo?.node.attrs
         )
         const tr = state.tr
-        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
+        this.applyGenerationRunLineageToChat(tr, responseContext, event.generationRun)
+        const videoNodePos = existingVideo ? tr.mapping.map(existingVideo.nodePos, 1) : undefined
+        const insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
 
-        if (existingVideo) {
-            tr.setNodeMarkup(existingVideo.nodePos, undefined, videoAttrs)
+        if (videoNodePos !== undefined) {
+            tr.setNodeMarkup(videoNodePos, undefined, videoAttrs)
         } else {
-            tr.insert(responseContext.responseEndPos - 1, videoNodeType.create(videoAttrs))
+            tr.insert(insertionPos, videoNodeType.create(videoAttrs))
         }
 
         if (tr.docChanged) {
@@ -1594,8 +1684,18 @@ class AiChatThreadPluginClass {
             }
 
             if (type === 'media_lineage_planned') {
-                if (event.generationRun) {
+                if (event.generationRun && effectiveThreadId) {
                     this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
+
+                    const lineageState = view.state
+                    const responseContext = this.getCurrentResponseContext(lineageState, effectiveThreadId, event.generationRun)
+                    if (responseContext) {
+                        const tr = lineageState.tr
+                        this.applyGenerationRunLineageToChat(tr, responseContext, event.generationRun)
+                        if (tr.docChanged) {
+                            view.dispatch(tr)
+                        }
+                    }
                 }
                 const callbacks = getAiGeneratedImageCallbacks()
                 if (effectiveThreadId && event.mediaBranchLineagePlan) {
@@ -1873,11 +1973,16 @@ class AiChatThreadPluginClass {
         const reasoningGenerationRun = getReasoningOnlyGenerationRun(generationRun)
         const runAttrs = buildGeneratedRunAttrs(reasoningGenerationRun)
         const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId, reasoningGenerationRun)
+        const responseContext = this.getCurrentResponseContext(state, threadId, generationRun)
+        if (responseContext) {
+            this.applyGenerationRunLineageToChat(tr, responseContext, generationRun)
+        }
 
         if (collapsibleInfo.found && collapsibleInfo.nodePos !== undefined) {
-            const collapsibleNode = state.doc.nodeAt(collapsibleInfo.nodePos)
+            const collapsibleNodePos = tr.mapping.map(collapsibleInfo.nodePos, 1)
+            const collapsibleNode = tr.doc.nodeAt(collapsibleNodePos)
             if (collapsibleNode?.type.name === aiCollapsibleBlockNodeType) {
-                tr.setNodeMarkup(collapsibleInfo.nodePos, undefined, {
+                tr.setNodeMarkup(collapsibleNodePos, undefined, {
                     ...collapsibleNode.attrs,
                     ...attrs,
                     ...runAttrs,
@@ -1890,7 +1995,7 @@ class AiChatThreadPluginClass {
                 ...attrs,
                 ...runAttrs,
             })
-            tr.insert(responseInfo.endOfNodePos - 1, collapsibleNode)
+            tr.insert(tr.mapping.map(responseInfo.endOfNodePos - 1, -1), collapsibleNode)
         }
 
         if (tr.docChanged) {

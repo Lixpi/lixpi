@@ -327,6 +327,7 @@ function createLineageEventNode(event: AiLineageEventDescriptor): ProseMirrorJso
             kind: event.kind,
             branchOriginNodeId: event.branchOriginNodeId ?? '',
             branchForkNodeId: event.branchForkNodeId ?? '',
+            branchLineNodeId: event.branchLineNodeId ?? '',
         },
     }
 }
