@@ -354,7 +354,7 @@ Dragging any selected draggable node moves the entire selection together. During
 Single-target canvas UI stays single-target:
 
 - The image bubble menu appears only when exactly one image node is selected
-- The detached prompt input is deprecated; the active composer lives in the AI Chat panel
+- The detached prompt input is deprecated; active composers live in the AI Chat panel and the screen-fixed canvas composer
 - Legacy per-thread floating inputs remain attached only to old AI chat thread nodes if those nodes are ever rendered again
 
 Selection colors (marquee border/background, overlay border/background, thread-input outline) are configurable via `settings.selection.styles` and applied as CSS custom properties on the pane element. Clicking outside the selected range clears the selection.
@@ -377,7 +377,7 @@ Edges are stored in `canvasState.edges` and rendered by the PIXI edge renderer. 
 
 ### AI Chat Context Extraction
 
-Standalone chat tabs use the composer context previews as explicit forced context for the next submitted message. Preview node ids are resolved through the existing extraction service, each submit snapshots then clears the explicit set, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags plus generated-media thread ownership for the API relevance stage. Media-generation submits also send the current-thread branch candidate snapshot, even when the candidate list is empty, so workspace-wide auto relevance cannot pull an unrelated branch into the image-branch VLM. When the API streams `CONTEXT_RELEVANCE_RESOLVED`, the canvas uses those submitted-turn selections for generation placement/reference bookkeeping and commits any `improvedDescriptors` through the canvas metadata persistence path so descriptor chrome updates without a reload and survives refresh. Resolver-selected context never writes back into the draft composer.
+Standalone chat tabs and the screen-fixed canvas composer use composer context previews as explicit forced context for the next submitted message. The panel renders those previews inside its composer; the screen-fixed canvas composer renders them in a separate tray above the input pill. Preview node ids are resolved through the existing extraction service, each submit snapshots then clears the explicit set, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags plus generated-media thread ownership for the API relevance stage. Media-generation submits also send the relevant branch candidate snapshot, even when the candidate list is empty, so workspace-wide auto relevance cannot pull an unrelated branch into the image-branch VLM. When the API streams `CONTEXT_RELEVANCE_RESOLVED`, the canvas uses those submitted-turn selections for generation placement/reference bookkeeping and commits any `improvedDescriptors` through the canvas metadata persistence path so descriptor chrome updates without a reload and survives refresh. Resolver-selected context never writes back into the draft composer.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%

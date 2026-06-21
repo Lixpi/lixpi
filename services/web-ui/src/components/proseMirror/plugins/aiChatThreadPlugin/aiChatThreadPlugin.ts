@@ -48,8 +48,9 @@ import type {
 } from '@lixpi/constants'
 
 import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
-import { setAiGeneratedVideoCallbacks, getAiGeneratedVideoCallbacks, aiGeneratedVideoNodeType, aiGeneratedVideoNodeView, type AiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
+import { setAiGeneratedVideoCallbacks, aiGeneratedVideoNodeType, aiGeneratedVideoNodeView, type AiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
+import { routeSegmentEventToCanvas } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedMediaCanvasRouter.ts'
 
 // dispatchSendAiChatFromUserInput has been removed — messages are now injected by AiPromptInputController
 // findUserInputInThread is no longer needed — aiUserInput has been removed from the schema
@@ -100,7 +101,7 @@ type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' 
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'
 type MediaLineageSegmentType = 'media_lineage_planned'
-type SegmentEvent = {
+export type SegmentEvent = {
     status?: StreamStatus
     type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType | MediaLineageSegmentType
     aiProvider?: string
@@ -1672,14 +1673,7 @@ class AiChatThreadPluginClass {
 
             if (type === 'image_branch_resolved') {
                 this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
-                const callbacks = getAiGeneratedImageCallbacks()
-                if (effectiveThreadId && event.imageBranchResolution) {
-                    callbacks.onImageBranchResolvedToCanvas?.({
-                        threadId: effectiveThreadId,
-                        resolution: event.imageBranchResolution,
-                        generationRun: event.generationRun,
-                    })
-                }
+                routeSegmentEventToCanvas(event)
                 return
             }
 
@@ -1697,27 +1691,13 @@ class AiChatThreadPluginClass {
                         }
                     }
                 }
-                const callbacks = getAiGeneratedImageCallbacks()
-                if (effectiveThreadId && event.mediaBranchLineagePlan) {
-                    callbacks.onMediaLineagePlannedToCanvas?.({
-                        threadId: effectiveThreadId,
-                        lineagePlan: event.mediaBranchLineagePlan,
-                        generationRun: event.generationRun,
-                    })
-                }
+                routeSegmentEventToCanvas(event)
                 return
             }
 
             if (type === 'context_relevance_resolved') {
                 this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
-                const callbacks = getAiGeneratedImageCallbacks()
-                if (effectiveThreadId && event.workspaceContextResolution) {
-                    callbacks.onWorkspaceContextResolvedToCanvas?.({
-                        threadId: effectiveThreadId,
-                        resolution: event.workspaceContextResolution,
-                        generationRun: event.generationRun,
-                    })
-                }
+                routeSegmentEventToCanvas(event)
                 return
             }
 
@@ -1726,19 +1706,7 @@ class AiChatThreadPluginClass {
             }
 
             if (type === 'image_branch_resolution_error') {
-                const callbacks = getAiGeneratedImageCallbacks()
-                if (effectiveThreadId) {
-                    callbacks.onImageBranchResolutionErrorToCanvas?.({
-                        threadId: effectiveThreadId,
-                        error: event.error || 'Image branch resolution failed',
-                        generationRun: event.generationRun,
-                    })
-                    callbacks.onImageErrorToCanvas?.({
-                        threadId: effectiveThreadId,
-                        error: event.error || 'Image branch resolution failed',
-                        generationRun: event.generationRun,
-                    })
-                }
+                routeSegmentEventToCanvas(event)
                 this.handleStreamError(view, effectiveThreadId, event.generationRun)
                 return
             }
@@ -1795,18 +1763,13 @@ class AiChatThreadPluginClass {
         if (!threadId) return
 
         this.removePartialImagesInChat(view, threadId, event.generationRun)
-        const callbacks = getAiGeneratedImageCallbacks()
-        callbacks.onImageErrorToCanvas?.({
-            threadId,
-            error: event.error || 'Image generation failed',
-            generationRun: event.generationRun,
-        })
+        routeSegmentEventToCanvas(event)
         this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), threadId, event.generationRun)
     }
 
     private handleImagePartial(view: EditorView, event: SegmentEvent): void {
         try {
-            const { imageUrl, fileId, workspaceId, partialIndex, aiChatThreadId, aiProvider } = event
+            const { aiChatThreadId } = event
             if (!aiChatThreadId) return
 
             const { state } = view
@@ -1818,23 +1781,14 @@ class AiChatThreadPluginClass {
             this.upsertImagePartialInChat(view, event)
 
             // Delegate to canvas-side handler so the same generation appears on the canvas.
-            const callbacks = getAiGeneratedImageCallbacks()
-            callbacks.onImagePartialToCanvas?.({
-                threadId: aiChatThreadId,
-                imageUrl: imageUrl || '',
-                fileId: fileId || '',
-                workspaceId: workspaceId || '',
-                partialIndex: partialIndex || 0,
-                aiProvider: aiProvider || '',
-                generationRun: event.generationRun,
-            })
+            routeSegmentEventToCanvas(event)
         } catch (error) {
             console.error('[aiChatThreadPlugin] handleImagePartial failed', { event }, error)
         }
     }
 
     private handleImageComplete(view: EditorView, event: SegmentEvent): void {
-        const { imageUrl, fileId, workspaceId, responseId, revisedPrompt, aiChatThreadId, aiProvider, imageModelProvider, imageModelId } = event
+        const { imageUrl, aiChatThreadId } = event
         if (!imageUrl || !aiChatThreadId) return
 
         const { state } = view
@@ -1845,100 +1799,38 @@ class AiChatThreadPluginClass {
 
         const responseMessageId = this.upsertImageCompleteInChat(view, event)
 
-        // Delegate image placement to the canvas
-        const callbacks = getAiGeneratedImageCallbacks()
-        callbacks.onImageCompleteToCanvas?.({
-            threadId: aiChatThreadId,
-            imageUrl,
-            fileId: fileId || '',
-            workspaceId: workspaceId || '',
-            responseId: responseId || '',
-            revisedPrompt: revisedPrompt || '',
-            aiModel: aiProvider || '',
-            imageModelProvider: imageModelProvider || '',
-            imageModelId: imageModelId || '',
-            responseMessageId,
-            generationRun: event.generationRun,
-        })
+        // Delegate image placement to the canvas (chat-doc message id is passed
+        // through so the canvas node can cross-reference the chat message).
+        routeSegmentEventToCanvas(event, { responseMessageId })
     }
 
     // Video segment handlers. Chat history gets a compact aiGeneratedVideo node
     // keyed by mediaRunId, while the canvas owns the full-size generated output.
     private handleVideoPending(view: EditorView, event: SegmentEvent): void {
-        const { aiChatThreadId, aiProvider } = event
+        const { aiChatThreadId } = event
         if (!aiChatThreadId) return
         this.upsertVideoPendingInChat(view, event)
-        const callbacks = getAiGeneratedVideoCallbacks()
-        callbacks.onVideoPendingToCanvas?.({
-            threadId: aiChatThreadId,
-            aiProvider: aiProvider || '',
-            generationRun: event.generationRun,
-        })
+        routeSegmentEventToCanvas(event)
     }
 
     private handleVideoGenerating(_view: EditorView, event: SegmentEvent): void {
-        const { aiChatThreadId, aiProvider } = event
+        const { aiChatThreadId } = event
         if (!aiChatThreadId) return
-        const callbacks = getAiGeneratedVideoCallbacks()
-        callbacks.onVideoGeneratingToCanvas?.({
-            threadId: aiChatThreadId,
-            aiProvider: aiProvider || '',
-            generationRun: event.generationRun,
-        })
+        routeSegmentEventToCanvas(event)
     }
 
     private handleVideoComplete(view: EditorView, event: SegmentEvent): void {
-        const {
-            aiChatThreadId,
-            videoUrl,
-            fileId,
-            workspaceId,
-            posterUrl,
-            posterFileId,
-            frameUrl,
-            frameFileId,
-            durationSeconds,
-            aspectRatio,
-            hasAudio,
-            responseId,
-            revisedPrompt,
-            videoModel,
-            videoModelProvider,
-        } = event
+        const { aiChatThreadId, videoUrl } = event
         if (!aiChatThreadId || !videoUrl) return
         const responseMessageId = this.upsertVideoCompleteInChat(view, event)
-        const callbacks = getAiGeneratedVideoCallbacks()
-        callbacks.onVideoCompleteToCanvas?.({
-            threadId: aiChatThreadId,
-            videoUrl,
-            fileId: fileId || '',
-            workspaceId: workspaceId || '',
-            posterUrl: posterUrl || '',
-            posterFileId: posterFileId || '',
-            frameUrl: frameUrl || '',
-            frameFileId: frameFileId || '',
-            durationSeconds: durationSeconds || 0,
-            aspectRatio: aspectRatio || 1.777,
-            hasAudio: hasAudio ?? true,
-            responseId: responseId || '',
-            revisedPrompt: revisedPrompt || '',
-            videoModel: videoModel || '',
-            videoModelProvider: videoModelProvider || '',
-            responseMessageId,
-            generationRun: event.generationRun,
-        })
+        routeSegmentEventToCanvas(event, { responseMessageId })
     }
 
     private handleVideoError(view: EditorView, event: SegmentEvent): void {
-        const { aiChatThreadId, error } = event
+        const { aiChatThreadId } = event
         if (!aiChatThreadId) return
         this.upsertVideoErrorInChat(view, event)
-        const callbacks = getAiGeneratedVideoCallbacks()
-        callbacks.onVideoErrorToCanvas?.({
-            threadId: aiChatThreadId,
-            error: error || 'Video generation failed',
-            generationRun: event.generationRun,
-        })
+        routeSegmentEventToCanvas(event)
     }
 
     // Enrich (or insert) the response's collapsible block with a generation
@@ -2007,10 +1899,7 @@ class AiChatThreadPluginClass {
     private handleVideoGenerationTrace(view: EditorView, event: SegmentEvent): void {
         const { aiChatThreadId: threadId, videoGenerationTrace } = event
         if (!threadId || !videoGenerationTrace) return
-        getAiGeneratedVideoCallbacks().onVideoGenerationTraceToCanvas?.({
-            threadId,
-            generationRun: event.generationRun,
-        })
+        routeSegmentEventToCanvas(event)
         this.applyGenerationTraceCollapsible(view, threadId, {
             title: 'Video generation details',
             isOpen: false,
@@ -2022,10 +1911,7 @@ class AiChatThreadPluginClass {
     private handleImageGenerationTrace(view: EditorView, event: SegmentEvent): void {
         const { aiChatThreadId: threadId, imageGenerationTrace } = event
         if (!threadId || !imageGenerationTrace) return
-        getAiGeneratedImageCallbacks().onImageGenerationTraceToCanvas?.({
-            threadId,
-            generationRun: event.generationRun,
-        })
+        routeSegmentEventToCanvas(event)
         this.applyGenerationTraceCollapsible(view, threadId, {
             title: 'Image generation details',
             isOpen: false,

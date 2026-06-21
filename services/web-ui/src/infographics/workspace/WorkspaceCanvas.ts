@@ -45,7 +45,16 @@ import {
     MEDIA_DESCRIPTOR_VERSION,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
+import {
+    createAiPromptComposer,
+    createDefaultPromptControlFactories,
+    type AiPromptComposerInstance,
+    type AiPromptComposerSubmitData,
+} from '$src/components/aiPromptComposer/index.ts'
 import { setAiGeneratedImageCallbacks, setAiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
+import { routeSegmentEventToCanvas } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedMediaCanvasRouter.ts'
+import type { SegmentEvent } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
+import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import {
     buildBranchOriginPromptProjection,
     buildGeneratedMediaTurnProjectionFromThreadContent,
@@ -99,6 +108,7 @@ import { describeMedia, describeText } from '$src/services/media-descriptor-serv
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     buildImageBranchCandidateSnapshot,
+    buildCanvasWideCandidateSnapshot,
     buildWorkspaceContextSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
     getPromptTextFromMessages,
@@ -319,10 +329,6 @@ function createBranchMarkerModelDetail(label: string, descriptors: BranchMarkerM
         .map(descriptor => getBranchMarkerModelEntry(descriptor.modelId, descriptor.modelProvider ?? ''))
         .filter((entry): entry is BranchMarkerModelEntry => Boolean(entry)))
     return entries.length > 0 ? { label, entries } : null
-}
-
-function applyAiPromptInputStyleSettings(promptEl: HTMLElement): void {
-    promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)
 }
 
 function applyAiChatPanelSessionHistorySettings(panelEl: HTMLElement): void {
@@ -553,12 +559,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPanelEl: HTMLDivElement | null = null
     let activeAiChatBackdropEl: HTMLDivElement | null = null
     let activeAiChatPanelTabsSwitch: SlidingTabsSwitchInstance<string> | null = null
-    let activeAiChatPromptEditor: any = null
-    let activeAiChatPromptGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
+    let activeAiChatPromptEditor: AiPromptComposerInstance | null = null
     let activeAiChatPromptResizeObserver: ResizeObserver | null = null
+    // Screen-fixed, canvas-wide composer mounted at the bottom-center of the
+    // viewport. Not bound to any chat thread — submitting runs a canvas-wide
+    // generation whose results land in spatial branch lineage nodes.
+    let globalCanvasComposer: AiPromptComposerInstance | null = null
+    let globalCanvasComposerHostEl: HTMLDivElement | null = null
+    // In-flight thread-less canvas generation run ids. The generated-media event
+    // guard accepts these (they have no chat thread to match against), so streamed
+    // media is placed on the canvas.
+    const activeCanvasRunIds: Set<string> = new Set()
+    const activeCanvasRunServices: Map<string, AiInteractionService> = new Map()
+    const activeCanvasRunTeardowns: Set<() => void> = new Set()
     let activeAiChatPanelRailHeightFrame: number | null = null
-    let activeContextChipTrayEl: HTMLDivElement | null = null
-    const activeContextPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
+    const activeContextChipTrayEls: Set<HTMLDivElement> = new Set()
+    const contextPreviewTilesByTray: Map<HTMLDivElement, Set<ContextPreviewTileInstance>> = new Map()
     let contextPreviewRefreshVersion = 0
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
     const mediaLibraryService = new MediaLibraryService()
@@ -632,6 +648,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewportBridge.applyViewport(currentCanvasState.viewport)
     }
     syncPixiMediaLayer(currentCanvasState)
+    createGlobalCanvasComposer()
 
     // Canvas bubble menu for image nodes (delete, create variant)
     let canvasBubbleMenu: BubbleMenu | null = null
@@ -1132,7 +1149,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             updateGeneratedMediaChromeLiveTransform(node.nodeId, position, node.dimensions, getLiveViewport())
         }
 
-        repositionAllThreadFloatingInputs()
         updateSelectionGroupOverlayElement()
         repositionCanvasBubbleMenu()
     }
@@ -1650,7 +1666,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!paneEl.contains(target)) return false
         if (target.closest('.canvas-generated-media-info-panel')) return false
         if (target.closest('.workspace-branch-origin-node, .workspace-branch-fork-node, .workspace-branch-line-node')) return false
-        if (target.closest('.workspace-ai-chat-floating-panel, .ai-prompt-input-floating, .bubble-menu, .workspace-video-controls-host')) return false
+        if (target.closest([
+            '.workspace-ai-chat-floating-panel',
+            '.workspace-canvas-global-composer-host',
+            '.ai-prompt-input-floating',
+            '.bubble-menu',
+            '.workspace-video-controls-host',
+        ].join(', '))) return false
         return true
     }
 
@@ -2662,29 +2684,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const position = override?.position ?? getNodeWorldPosition(node)
         const dimensions = override?.dimensions ?? node.dimensions
 
-        let left = position.x
-        let top = position.y
-        let right = position.x + dimensions.width
-        let bottom = position.y + dimensions.height
-
-        if (node.type === 'aiChatThread') {
-            const isHidden = hiddenEmptyThreadNodeIds.has(node.nodeId)
-            const threadFloatingInput = threadFloatingInputs.get(node.nodeId)
-            if (threadFloatingInput) {
-                const inputTop = position.y + getThreadTopOffset(node.nodeId, dimensions.height)
-                const inputWidth = threadFloatingInput.el.offsetWidth || dimensions.width
-                const inputHeight = threadFloatingInput.el.offsetHeight
-
-                if (isHidden) {
-                    // Hidden empty threads: use only the floating input bounds
-                    right = position.x + inputWidth
-                    bottom = inputTop + inputHeight
-                } else {
-                    right = Math.max(right, position.x + inputWidth)
-                    bottom = Math.max(bottom, inputTop + inputHeight)
-                }
-            }
-        }
+        const left = position.x
+        const top = position.y
+        const right = position.x + dimensions.width
+        const bottom = position.y + dimensions.height
 
         return {
             x: left,
@@ -2880,7 +2883,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (nextSelectedNodeIds.has(nodeId)) continue
             const prevNode = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
             prevNode?.classList.remove('is-selected')
-            threadFloatingInputs.get(nodeId)?.el.classList.remove('is-selected')
             threadRails.get(nodeId)?.classList.remove('is-selected')
         }
 
@@ -2888,7 +2890,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (prevSelectedNodeIds.has(nodeId)) continue
             const nextNode = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
             nextNode?.classList.add('is-selected')
-            threadFloatingInputs.get(nodeId)?.el.classList.add('is-selected')
             if (nextNode) nodeLayerManager.bringToFront(nextNode)
 
             threadRails.get(nodeId)?.classList.add('is-selected')
@@ -2900,7 +2901,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (!singleSelectedNodeId) {
             hideCanvasBubbleMenu()
-            hideFloatingInput()
             return
         }
 
@@ -2912,14 +2912,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const node = currentCanvasState?.nodes.find((item: CanvasNode) => item.nodeId === singleSelectedNodeId)
         if (!node) {
             hideCanvasBubbleMenu()
-            hideFloatingInput()
             return
         }
-
-        // The detached prompt input that used to appear below a selected node is
-        // deprecated — the docked AI chat panel is the only composer. It must
-        // NEVER render under any node type (documents, threads, images, video).
-        hideFloatingInput()
     }
 
     function clearSelectedEdgeSelection(force = false): void {
@@ -2940,10 +2934,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         updateSelectionDrivenUi()
         pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
         scheduleEdgesRender()
-        // Selecting canvas nodes while the panel is open force-includes them as
-        // explicit composer previews. Only newly-selected ids are added so a
-        // removed preview whose node stays selected isn't immediately re-added.
-        if (currentCanvasState && aiChatPanelState.isOpen) {
+        // Selecting canvas nodes force-includes them as explicit composer previews.
+        // Only newly-selected ids are added so a removed preview whose node stays
+        // selected isn't immediately re-added.
+        if (currentCanvasState) {
             addContextChips(Array.from(selectedNodeIds).filter((nodeId) => !prevSelectedNodeIds.has(nodeId)))
         }
     }
@@ -2961,7 +2955,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function clearNodeSelection(): void {
         if (selectedNodeIds.size === 0) {
             hideCanvasBubbleMenu()
-            hideFloatingInput()
             updateSelectionGroupOverlayElement()
             return
         }
@@ -2977,6 +2970,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             '[data-node-id]',
             '.workspace-thread-rail',
             '.workspace-ai-chat-floating-panel',
+            '.workspace-canvas-global-composer-host',
             '.ai-prompt-input-floating',
             '.workspace-edge-node',
             '.workspace-handle',
@@ -3068,23 +3062,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!targetRect) return
         canvasBubbleMenu.reposition({ targetRect, placement: 'below' })
     }
-
-    // ========== FLOATING AI PROMPT INPUT ==========
-
-    // Single floating input for non-thread nodes (selection-based show/hide)
-    let floatingInputEl: HTMLDivElement | null = null
-    let floatingInputEditor: any = null
-    let floatingInputGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
-
-    // Per-thread floating inputs: always visible below each aiChatThread node
-    type ThreadFloatingInputEntry = {
-        nodeId: string
-        threadId: string
-        el: HTMLDivElement
-        editor: any
-        gradient: { destroy: () => void; triggerAnimation: () => void } | null
-    }
-    const threadFloatingInputs: Map<string, ThreadFloatingInputEntry> = new Map()
 
     // Vertical rail elements — one per AI chat thread, spanning thread + floating input
     const RAIL_OFFSET = settings.aiChatThread.rail.offset
@@ -3417,15 +3394,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        activeAiChatPromptEditor?.destroy?.()
-        activeAiChatPromptGradient?.destroy()
+        activeAiChatPromptEditor?.destroy()
         activeAiChatPromptResizeObserver?.disconnect()
         if (activeAiChatPanelRailHeightFrame !== null) {
             cancelAnimationFrame(activeAiChatPanelRailHeightFrame)
             activeAiChatPanelRailHeightFrame = null
         }
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch?.destroy()
-        destroyContextPreviewTiles()
         activeAiChatPanelEl?.remove()
         activeAiChatBackdropEl?.remove()
         activeAiChatPanelThreadId = null
@@ -3435,9 +3410,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatBackdropEl = null
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch = null
         activeAiChatPromptEditor = null
-        activeAiChatPromptGradient = null
         activeAiChatPromptResizeObserver = null
-        activeContextChipTrayEl = null
+        refreshContextChipTray()
 
         if (clearActive) {
             activeAiChatThreadId = null
@@ -3525,23 +3499,55 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function destroyContextPreviewTiles(): void {
-        for (const tile of activeContextPreviewTiles) {
+    function destroyContextPreviewTilesForTray(trayEl: HTMLDivElement): void {
+        const tiles = contextPreviewTilesByTray.get(trayEl)
+        if (!tiles) return
+        for (const tile of tiles) {
             tile.destroy()
         }
-        activeContextPreviewTiles.clear()
+        contextPreviewTilesByTray.delete(trayEl)
+    }
+
+    function destroyContextPreviewTiles(): void {
+        for (const trayEl of Array.from(contextPreviewTilesByTray.keys())) {
+            destroyContextPreviewTilesForTray(trayEl)
+        }
+    }
+
+    function getConnectedContextChipTrays(): HTMLDivElement[] {
+        const connectedTrays: HTMLDivElement[] = []
+        for (const trayEl of activeContextChipTrayEls) {
+            if (trayEl.isConnected) {
+                connectedTrays.push(trayEl)
+            } else {
+                activeContextChipTrayEls.delete(trayEl)
+                destroyContextPreviewTilesForTray(trayEl)
+            }
+        }
+        return connectedTrays
+    }
+
+    function createContextTrayElement(className: string, ariaLabel: string): HTMLDivElement {
+        const trayEl = html`<div
+            className=${`workspace-ai-chat-panel-context-chips ${className}`}
+            role="list"
+            aria-label=${ariaLabel}
+            contenteditable="false"
+        ></div>` as HTMLDivElement
+        trayEl.hidden = true
+        activeContextChipTrayEls.add(trayEl)
+        requestAnimationFrame(() => {
+            if (trayEl.isConnected) refreshContextChipTray()
+        })
+        return trayEl
     }
 
     function createAiChatPanelContextTrayElement(): HTMLDivElement {
-        const trayEl = html`<div
-            className="workspace-ai-chat-panel-context-chips"
-            role="list"
-            aria-label="Chat context previews"
-            contenteditable="false"
-        ></div>` as HTMLDivElement
-        activeContextChipTrayEl = trayEl
-        refreshContextChipTray()
-        return trayEl
+        return createContextTrayElement('workspace-ai-chat-panel-context-chips-panel', 'Chat context previews')
+    }
+
+    function createCanvasGlobalContextTrayElement(): HTMLDivElement {
+        return createContextTrayElement('workspace-canvas-global-context-chips', 'Canvas prompt context previews')
     }
 
     function addContextChips(nodeIds: Iterable<string>): void {
@@ -3607,9 +3613,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function renderContextChip({
         nodeId,
         node,
+        trayEl,
     }: {
         nodeId: string
         node: CanvasNode
+        trayEl: HTMLDivElement
     }): HTMLDivElement {
         const environment = getContextPreviewEnvironment()
         const previewTile = createContextPreviewTile({
@@ -3619,7 +3627,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
         const accessibleLabel = getContextPreviewAccessibleLabel(node, environment)
         const removeLabel = `Remove ${accessibleLabel} from context`
-        activeContextPreviewTiles.add(previewTile)
+        const trayTiles = contextPreviewTilesByTray.get(trayEl) ?? new Set<ContextPreviewTileInstance>()
+        trayTiles.add(previewTile)
+        contextPreviewTilesByTray.set(trayEl, trayTiles)
         const chipEl = html`<div
             className="workspace-ai-chat-panel-context-chip workspace-ai-chat-panel-context-chip-explicit"
             data=${{ nodeId, contextKind: 'explicit', contextRole: 'forced-chip' }}
@@ -3641,15 +3651,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Re-render just the composer preview strip in place so adding or removing
     // draft context never tears down the ProseMirror composer or its draft.
     function refreshContextChipTray(): void {
-        const trayEl = activeContextChipTrayEl
-        if (!trayEl) return
+        const trayEls = getConnectedContextChipTrays()
+        if (trayEls.length === 0) return
         const historyScrollerEl = activeAiChatPanelEl?.querySelector<HTMLElement>(
             '.workspace-ai-chat-panel-body-pane:not(.workspace-ai-chat-panel-body-pane-hidden)'
         )
         const previousScrollTop = historyScrollerEl?.scrollTop ?? null
         const refreshVersion = ++contextPreviewRefreshVersion
-        destroyContextPreviewTiles()
-        trayEl.replaceChildren()
         const explicitChipNodeIds = aiChatPanelState.contextChips
         const nodesById = new Map(currentCanvasState?.nodes.map((node): [string, CanvasNode] => [node.nodeId, node]) ?? [])
         const explicitChipNodes: CanvasNode[] = []
@@ -3657,15 +3665,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const node = nodesById.get(nodeId)
             if (node) explicitChipNodes.push(node)
         }
-        if (explicitChipNodes.length === 0) {
-            trayEl.hidden = true
-            restoreAiChatPanelHistoryScroll(historyScrollerEl, previousScrollTop, refreshVersion)
-            updateActiveAiChatPanelRailHeight()
-            return
-        }
-        trayEl.hidden = false
-        for (const node of explicitChipNodes) {
-            trayEl.appendChild(renderContextChip({ nodeId: node.nodeId, node }))
+        for (const trayEl of trayEls) {
+            destroyContextPreviewTilesForTray(trayEl)
+            trayEl.replaceChildren()
+            if (explicitChipNodes.length === 0) {
+                trayEl.hidden = true
+                continue
+            }
+            trayEl.hidden = false
+            for (const node of explicitChipNodes) {
+                trayEl.appendChild(renderContextChip({ nodeId: node.nodeId, node, trayEl }))
+            }
         }
         restoreAiChatPanelHistoryScroll(historyScrollerEl, previousScrollTop, refreshVersion)
         updateActiveAiChatPanelRailHeight()
@@ -3789,7 +3799,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             tr = tr.setSelection(TextSelection.create(tr.doc, Math.min(afterChip + 1, tr.doc.content.size))).scrollIntoView()
             view.dispatch(tr)
             view.focus()
-            activeAiChatPromptGradient?.triggerAnimation()
+            activeAiChatPromptEditor?.triggerGradientAnimation()
             return true
         } catch (error) {
             console.error('Failed to insert feature reference into prompt:', error)
@@ -4322,7 +4332,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     referencedFeatureIds
                 }: any) => {
                     gradient?.triggerAnimation()
-                    activeAiChatPromptGradient?.triggerAnimation()
+                    activeAiChatPromptEditor?.triggerGradientAnimation()
 
                     try {
                         const aiChatThreadService = servicesStore.getData('aiChatThreadService')
@@ -4442,44 +4452,29 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 gradientCleanup: gradient?.destroy,
                 triggerGradientAnimation: () => {
                     gradient?.triggerAnimation()
-                    activeAiChatPromptGradient?.triggerAnimation()
+                    activeAiChatPromptEditor?.triggerGradientAnimation()
                 },
             })
             promptInputController.registerThreadEditor(panelThreadId, {
                 editorView: editor.editorView,
                 triggerGradientAnimation: () => {
                     gradient?.triggerAnimation()
-                    activeAiChatPromptGradient?.triggerAnimation()
+                    activeAiChatPromptEditor?.triggerGradientAnimation()
                 },
             })
         }
 
-        const promptEl = html`<div className="ai-prompt-input-floating workspace-ai-chat-floating-panel-prompt nopan"></div>` as HTMLDivElement
-        applyAiPromptInputStyleSettings(promptEl)
-        if (settings.aiPromptInput.useShiftingGradientBackground) {
-            activeAiChatPromptGradient = createShiftingGradientBackground(promptEl)
-        }
-
-        const promptEditorContainer = html`<div className="floating-input-editor nopan"></div>` as HTMLDivElement
-        promptEl.appendChild(promptEditorContainer)
-        panelEl.appendChild(promptEl)
-
         const promptDraftKey = activeSidebarTab?.tabId ?? NEW_CHAT_DRAFT_KEY
-        activeAiChatPromptEditor = new ProseMirrorEditor({
-            editorMountElement: promptEditorContainer,
-            content: html`<div></div>` as HTMLDivElement,
-            initialVal: aiChatPanelState.drafts?.[promptDraftKey]?.content ?? {},
-            isDisabled: false,
-            documentType: 'aiPromptInput',
+        activeAiChatPromptEditor = createAiPromptComposer({
+            className: 'workspace-ai-chat-floating-panel-prompt',
+            initialContent: aiChatPanelState.drafts?.[promptDraftKey]?.content ?? {},
             threadId: panelThreadId ?? NEW_CHAT_DRAFT_KEY,
-            onEditorChange: (value: object) => {
+            controlFactories: promptControlFactories,
+            onContentChange: (value: object) => {
                 persistAiChatPromptDraft(promptDraftKey, value)
                 scheduleActiveAiChatPanelRailHeightUpdate()
             },
-            onProjectTitleChange: () => {},
-            onAiChatSubmit: () => {},
-            onAiChatStop: () => {},
-            onPromptSubmit: (data: any) => {
+            onSubmit: (data) => {
                 const currentTab = getActiveAiChatSidebarTab()
                 if (currentTab?.type === 'extraction') {
                     const userText = extractPromptTextFromContentJSON(data.contentJSON)
@@ -4517,15 +4512,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     referenceNodeIds: aiChatPanelState.contextChips.slice(),
                 })
             },
-            onPromptStop: () => {
+            onStop: () => {
                 if (panelThreadId) {
                     activeAiService?.stopChatMessage()
                 }
             },
-            isPromptReceiving: () => promptInputController.isReceiving(panelThreadId ?? undefined),
-            promptControlFactories,
-            onReceivingStateChange: () => {},
+            isReceiving: () => promptInputController.isReceiving(panelThreadId ?? undefined),
         })
+        const promptEl = activeAiChatPromptEditor.element
+        panelEl.appendChild(promptEl)
 
         const railStyle = {
             position: 'absolute' as const,
@@ -4577,246 +4572,270 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    // ---- Single floating input (for non-thread nodes) ----
+    // Screen-fixed, canvas-wide composer at the bottom-center of the viewport.
+    // Reuses the shared aiPromptComposer component (same one the chat panel uses)
+    // but submits a thread-less, canvas-wide generation run instead of posting to
+    // a chat thread.
+    function createGlobalCanvasComposer(): void {
+        if (globalCanvasComposer || globalCanvasComposerHostEl) return
 
-    function createFloatingInput(): void {
-        if (floatingInputEl) return
-
-        const floatingInputStyle = { position: 'absolute' as const, display: 'none', zIndex: '9999', width: '400px' }
-        floatingInputEl = html`<div className="ai-prompt-input-floating nopan" style=${floatingInputStyle}></div>` as HTMLDivElement
-
-        // Add gradient background (controlled by settings flag)
-        if (settings.aiPromptInput.useShiftingGradientBackground) {
-            floatingInputGradient = createShiftingGradientBackground(floatingInputEl)
+        // The composer's draft (text + selected models) is persisted to
+        // localStorage — NOT canvas state. Routing it through canvas state would
+        // call the host's persist path, which overwrites the saved viewport with
+        // the host's current (default, at init) viewport and clobber the zoom.
+        // localStorage is fully decoupled from canvas state, so it can never do that.
+        const globalComposerDraftKey = `lixpi:canvas-global-composer-draft:${workspaceId}`
+        const readGlobalComposerDraft = (): object => {
+            try {
+                const raw = localStorage.getItem(globalComposerDraftKey)
+                return raw ? JSON.parse(raw) : {}
+            } catch {
+                return {}
+            }
         }
-
-        const editorContainer = html`<div className="floating-input-editor nopan"></div>` as HTMLDivElement
-        floatingInputEl.appendChild(editorContainer)
-
-        const controlFactories = {
-            createModelDropdown: createGenericAiModelDropdown,
-            createModelMultiSelect: createGenericAiModelMultiSelect,
-            createImageModelDropdown: createGenericImageModelDropdown,
-            createImageModelMultiSelect: createGenericImageModelMultiSelect,
-            createImageSizeDropdown: createGenericImageSizeDropdown,
-            createVideoModelDropdown: createGenericVideoModelDropdown,
-            createVideoModelMultiSelect: createGenericVideoModelMultiSelect,
-            createVideoAspectDropdown: createGenericVideoAspectDropdown,
-            createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
-            createVideoDurationDropdown: createGenericVideoDurationDropdown,
-            createSubmitButton: createGenericSubmitButton,
-        }
-
-        floatingInputEditor = new ProseMirrorEditor({
-            editorMountElement: editorContainer,
-            content: html`<div></div>` as HTMLDivElement,
-            initialVal: {},
-            isDisabled: false,
-            documentType: 'aiPromptInput',
-            threadId: null,
-            onEditorChange: () => {},
-            onProjectTitleChange: () => {},
-            onAiChatSubmit: () => {},
-            onAiChatStop: () => {},
-            onPromptSubmit: (data: any) => {
-                promptInputController.submitMessage({
-                    contentJSON: data.contentJSON,
-                    aiModel: data.aiModel,
-                    aiModels: data.aiModels,
-                    useMultipleModels: data.useMultipleModels,
-                    useMultipleReasoningModels: data.useMultipleReasoningModels,
-                    useMultipleImageModels: data.useMultipleImageModels,
-                    useMultipleVideoModels: data.useMultipleVideoModels,
-                    imageOptions: data.imageOptions,
-                    videoOptions: data.videoOptions,
-                })
+        const hostEl = html`<div className="workspace-canvas-global-composer-host nopan"></div>` as HTMLDivElement
+        const contextTrayEl = createCanvasGlobalContextTrayElement()
+        globalCanvasComposer = createAiPromptComposer({
+            className: 'workspace-canvas-global-composer',
+            controlFactories: createDefaultPromptControlFactories(),
+            initialContent: readGlobalComposerDraft(),
+            onContentChange: (value: object) => {
+                try {
+                    localStorage.setItem(globalComposerDraftKey, JSON.stringify(value))
+                } catch {
+                    // Ignore quota/availability errors — draft persistence is best-effort.
+                }
             },
-            onPromptStop: () => {
-                promptInputController.stopStreaming()
+            onSubmit: (data) => { void submitCanvasGenerationRun(data) },
+            onStop: () => {
+                for (const aiService of activeCanvasRunServices.values()) {
+                    void aiService.stopChatMessage()
+                }
             },
-            isPromptReceiving: () => promptInputController.isReceiving(),
-            promptControlFactories: controlFactories,
-            onReceivingStateChange: () => {},
+            isReceiving: () => activeCanvasRunIds.size > 0,
         })
 
-        viewportEl.appendChild(floatingInputEl)
+        const hostStyle = {
+            position: 'absolute' as const,
+            left: '50%',
+            bottom: '24px',
+            transform: 'translateX(-50%)',
+            width: '760px',
+            maxWidth: 'calc(100% - 48px)',
+            zIndex: '9990',
+        }
+        applyStyle(hostEl, hostStyle)
+        hostEl.appendChild(contextTrayEl)
+        hostEl.appendChild(globalCanvasComposer.element)
+        globalCanvasComposerHostEl = hostEl
+        paneEl.appendChild(hostEl)
+        refreshContextChipTray()
     }
 
-    function showFloatingInput(nodeId: string): void {
-        if (!floatingInputEl) createFloatingInput()
-        if (!floatingInputEl || !currentCanvasState) return
-
-        const targetCanvasNode = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
-        if (!targetCanvasNode) return
-
-        const refId = (targetCanvasNode as any).referenceId || nodeId
-        promptInputController.setTarget({
-            nodeId,
-            type: targetCanvasNode.type,
-            referenceId: refId,
-        })
-
-        positionFloatingInput(targetCanvasNode)
-        applyStyle(floatingInputEl, { display: 'block' })
-    }
-
-    function hideFloatingInput(): void {
-        if (floatingInputEl) {
-            applyStyle(floatingInputEl, { display: 'none' })
+    // Runs a thread-less, canvas-wide generation. The VLM resolves references
+    // over EVERY media node on the canvas (candidate snapshot below); branch
+    // topology, fork/origin markers, and lineage parentage remain API-owned and
+    // arrive back through the streamed response keyed by the generation-run id.
+    async function submitCanvasGenerationRun(data: AiPromptComposerSubmitData): Promise<void> {
+        if (!data.aiModel) {
+            alert('Please select an AI model from the dropdown before submitting.')
+            return
         }
-        promptInputController.setTarget(null)
-    }
+        const promptText = extractPromptTextFromContentJSON(data.contentJSON)
+        if (!promptText) return
 
-    function positionFloatingInput(targetNode: CanvasNode): void {
-        if (!floatingInputEl) return
+        const generationRunId = `canvas-${uuidv4()}`
+        activeCanvasRunIds.add(generationRunId)
+        const nodes = currentCanvasState?.nodes ?? []
+        const explicitContextNodeIds = aiChatPanelState.contextChips.slice()
+        const explicitMediaReferenceNodeIds = getExistingMediaNodeIds(explicitContextNodeIds)
 
-        const inputX = targetNode.position.x
-        const inputY = targetNode.position.y + (targetNode.dimensions?.height ?? 400) + 16
+        // Reference snapshot is shared by image and video generation: VEO
+        // image-to-video / reference inputs come from the same VLM resolution.
+        const hasMediaModel = Boolean(
+            data.imageOptions?.aiImageModel
+            || data.imageOptions?.aiImageModels?.length
+            || data.videoOptions?.aiVideoModel
+            || data.videoOptions?.aiVideoModels?.length
+        )
 
-        applyStyle(floatingInputEl, {
-            left: `${inputX}px`,
-            top: `${inputY}px`,
-            width: `${targetNode.dimensions?.width ?? 400}px`,
-        })
-    }
-
-    // ---- Per-thread floating inputs (always visible for aiChatThread nodes) ----
-
-    function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiModels?: string; useMultipleModels?: boolean | string; useMultipleReasoningModels?: boolean | string; useMultipleImageModels?: boolean | string; useMultipleVideoModels?: boolean | string; aiImageModel?: string; aiImageModels?: string; imageGenerationSize?: string; imageGenerationConfigGroups?: string; aiVideoModel?: string; aiVideoModels?: string; videoAspectRatio?: string; videoResolution?: string; videoDuration?: string; videoGenerationConfigGroups?: string }): void {
-        if (threadFloatingInputs.has(node.nodeId)) return
-
-        const threadInputStyle = { position: 'absolute' as const, display: 'block', zIndex: '9999' }
-        const el = html`<div
-            className="ai-prompt-input-floating ai-prompt-input-thread-persistent nopan"
-            style=${threadInputStyle}
-            data=${{ threadNodeId: node.nodeId }}
-        ></div>` as HTMLDivElement
-
-        const gradient = settings.aiPromptInput.useShiftingGradientBackground
-            ? createShiftingGradientBackground(el)
-            : null
-
-        const editorContainer = html`<div className="floating-input-editor nopan"></div>` as HTMLDivElement
-        el.appendChild(editorContainer)
-
-        const controlFactories = {
-            createModelDropdown: createGenericAiModelDropdown,
-            createModelMultiSelect: createGenericAiModelMultiSelect,
-            createImageModelDropdown: createGenericImageModelDropdown,
-            createImageModelMultiSelect: createGenericImageModelMultiSelect,
-            createImageSizeDropdown: createGenericImageSizeDropdown,
-            createVideoModelDropdown: createGenericVideoModelDropdown,
-            createVideoModelMultiSelect: createGenericVideoModelMultiSelect,
-            createVideoAspectDropdown: createGenericVideoAspectDropdown,
-            createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
-            createVideoDurationDropdown: createGenericVideoDurationDropdown,
-            createSubmitButton: createGenericSubmitButton,
-        }
-
-        const threadId = node.referenceId
-        const nodeId = node.nodeId
-
-        const editor = new ProseMirrorEditor({
-            editorMountElement: editorContainer,
-            content: html`<div></div>` as HTMLDivElement,
-            initialVal: {},
-            isDisabled: false,
-            documentType: 'aiPromptInput',
-            threadId,
-            onEditorChange: () => {},
-            onProjectTitleChange: () => {},
-            onAiChatSubmit: () => {},
-            onAiChatStop: () => {},
-            onPromptSubmit: (data: any) => {
-                promptInputController.setTarget({
-                    nodeId,
-                    type: 'aiChatThread',
-                    referenceId: threadId,
-                })
-                promptInputController.submitMessage({
-                    contentJSON: data.contentJSON,
-                    aiModel: data.aiModel,
-                    aiModels: data.aiModels,
-                    useMultipleModels: data.useMultipleModels,
-                    useMultipleReasoningModels: data.useMultipleReasoningModels,
-                    useMultipleImageModels: data.useMultipleImageModels,
-                    useMultipleVideoModels: data.useMultipleVideoModels,
-                    imageOptions: data.imageOptions,
-                    videoOptions: data.videoOptions,
-                })
-            },
-            onPromptStop: () => {
-                promptInputController.setTarget({
-                    nodeId,
-                    type: 'aiChatThread',
-                    referenceId: threadId,
-                })
-                promptInputController.stopStreaming()
-            },
-            isPromptReceiving: () => promptInputController.isReceiving(threadId),
-            promptControlFactories: controlFactories,
-            onReceivingStateChange: () => {},
-        })
-
-        positionElementBelowNode(el, node)
-
-        // Add bottom resize handles to the floating input (they control the thread node's height)
-        el.appendChild(createResizeHandle(nodeId, 'bottom-left'))
-        el.appendChild(createResizeHandle(nodeId, 'bottom-right'))
-
-        viewportEl.appendChild(el)
-
-        threadFloatingInputs.set(nodeId, {
-            nodeId,
-            threadId,
-            el,
-            editor,
-            gradient,
-        })
-
-        // Restore saved dropdown attrs from the thread content
-        if (savedAttrs) {
-            const view = editor.editorView
-            let inputPos: number | undefined
-            view.state.doc.descendants((n: any, pos: number) => {
-                if (n.type.name === 'aiPromptInput' && inputPos === undefined) inputPos = pos
+        const imageBranchCandidateSnapshot = hasMediaModel
+            ? buildCanvasWideCandidateSnapshot({
+                generationRunId,
+                nodes,
+                prompt: promptText,
+                referenceNodeIds: explicitMediaReferenceNodeIds,
             })
-            if (inputPos !== undefined) {
-                const node = view.state.doc.nodeAt(inputPos)
-                if (node) {
-                    const tr = view.state.tr.setNodeMarkup(inputPos, undefined, {
-                        ...node.attrs,
-                        ...savedAttrs,
-                    })
-                    tr.setMeta('skipDispatch', true)
-                    view.dispatch(tr)
+            : undefined
+
+        const workspaceContextSnapshot = currentCanvasState
+            ? buildWorkspaceContextSnapshot({
+                workspaceId,
+                threadId: generationRunId,
+                prompt: promptText,
+                nodes,
+                edges: currentCanvasState.edges,
+                contextChipNodeIds: explicitContextNodeIds,
+                titlesByNodeId: buildWorkspaceContextTitlesByNodeId(nodes),
+            })
+            : undefined
+
+        // Register where streamed media for this run should land. No anchor node:
+        // a fresh canvas run roots at the viewport center (the placement layer
+        // falls back to a default anchor when none is supplied), or near the
+        // VLM-selected references once the API resolves them.
+        if (imageBranchCandidateSnapshot) {
+            const candidateNodeIds = explicitMediaReferenceNodeIds.length > 0
+                ? explicitMediaReferenceNodeIds
+                : imageBranchCandidateSnapshot.candidates.map((candidate) => candidate.nodeId)
+            pendingGeneratedImagePlacements.set(generationRunId, {
+                referenceNodeIds: candidateNodeIds,
+                promptText,
+                imageBranchCandidateSnapshot,
+                createdAt: Date.now(),
+            })
+            setGeneratingReferenceNodeIds(generationRunId, candidateNodeIds)
+        }
+
+        const aiService = new AiInteractionService({ workspaceId, aiChatThreadId: generationRunId })
+
+        // A thread-less run has no aiChatThread plugin to consume the media stream,
+        // so subscribe at the canvas level and route every segment through the same
+        // shared canvas placement router the chat plugin uses. Media events can be
+        // separated by a long provider call, so cleanup waits for terminal media
+        // events instead of short idle gaps.
+        const canvasRunFailsafeMs = 30 * 60 * 1000
+        const terminalTeardownDelayMs = 1500
+        const activeMediaRunKeys: Set<string> = new Set()
+        let teardownTimer: ReturnType<typeof setTimeout> | null = null
+        let failsafeTimer: ReturnType<typeof setTimeout> | null = null
+        let unsubscribeFromSegments: () => void = () => {}
+        let isCanvasRunTornDown = false
+        const teardownCanvasRun = (): void => {
+            if (isCanvasRunTornDown) return
+            isCanvasRunTornDown = true
+            if (teardownTimer) {
+                clearTimeout(teardownTimer)
+                teardownTimer = null
+            }
+            if (failsafeTimer) {
+                clearTimeout(failsafeTimer)
+                failsafeTimer = null
+            }
+            unsubscribeFromSegments()
+            aiService.destroy()
+            activeCanvasRunIds.delete(generationRunId)
+            activeCanvasRunServices.delete(generationRunId)
+            activeCanvasRunTeardowns.delete(teardownCanvasRun)
+        }
+        const scheduleTeardown = (delayMs: number): void => {
+            if (teardownTimer) clearTimeout(teardownTimer)
+            teardownTimer = setTimeout(teardownCanvasRun, delayMs)
+        }
+        const getSegmentMediaRunKey = (event: SegmentEvent): string | undefined =>
+            event.generationRun?.mediaRunId ?? event.generationRun?.reasoningRunId
+        const registerSegmentMediaRun = (event: SegmentEvent): void => {
+            const mediaRunKey = getSegmentMediaRunKey(event)
+            if (!mediaRunKey) return
+            if (event.generationRun?.mediaRunId && event.generationRun.reasoningRunId) {
+                activeMediaRunKeys.delete(event.generationRun.reasoningRunId)
+            }
+            activeMediaRunKeys.add(mediaRunKey)
+        }
+        const registerPlannedMediaRuns = (event: SegmentEvent): void => {
+            for (const assignment of event.mediaBranchLineagePlan?.runAssignments ?? []) {
+                const mediaRunKey = assignment.mediaRunId ?? assignment.reasoningRunId
+                if (mediaRunKey) activeMediaRunKeys.add(mediaRunKey)
+            }
+        }
+        const finishSegmentMediaRun = (event: SegmentEvent): void => {
+            registerSegmentMediaRun(event)
+            const mediaRunKey = getSegmentMediaRunKey(event)
+            if (mediaRunKey) activeMediaRunKeys.delete(mediaRunKey)
+            if (activeMediaRunKeys.size === 0) scheduleTeardown(terminalTeardownDelayMs)
+        }
+        const isMediaProgressEvent = (event: SegmentEvent): boolean =>
+            event.type === 'image_generation_trace'
+            || event.type === 'image_partial'
+            || event.type === 'video_generation_trace'
+            || event.type === 'video_pending'
+            || event.type === 'video_generating'
+        const isTerminalMediaEvent = (event: SegmentEvent): boolean =>
+            event.type === 'image_complete'
+            || event.type === 'image_error'
+            || event.type === 'image_branch_resolution_error'
+            || event.type === 'video_complete'
+            || event.type === 'video_error'
+        const handleCanvasRunError = (event: SegmentEvent): void => {
+            const mediaType = event.generationRun?.mediaType
+            if (mediaType === 'image' || mediaType === 'video') {
+                const terminalEvent: SegmentEvent = {
+                    ...event,
+                    type: mediaType === 'video' ? 'video_error' : 'image_error',
+                }
+                routeSegmentEventToCanvas(terminalEvent)
+                finishSegmentMediaRun(terminalEvent)
+                return
+            }
+            scheduleTeardown(terminalTeardownDelayMs)
+        }
+
+        activeCanvasRunServices.set(generationRunId, aiService)
+        activeCanvasRunTeardowns.add(teardownCanvasRun)
+        failsafeTimer = setTimeout(teardownCanvasRun, canvasRunFailsafeMs)
+        unsubscribeFromSegments = SegmentsReceiver.subscribeForThread(
+            generationRunId,
+            (event: SegmentEvent) => {
+                console.info('[CANVAS-RUN] segment', { runId: generationRunId, type: event.type, status: event.status })
+                if (event.status === 'ERROR') {
+                    handleCanvasRunError(event)
+                    return
+                }
+                routeSegmentEventToCanvas(event)
+                if (event.type === 'media_lineage_planned') {
+                    registerPlannedMediaRuns(event)
+                    return
+                }
+                if (isMediaProgressEvent(event)) {
+                    registerSegmentMediaRun(event)
+                    return
+                }
+                if (isTerminalMediaEvent(event)) {
+                    finishSegmentMediaRun(event)
+                    return
+                }
+                if (!hasMediaModel && event.status === 'END_STREAM') {
+                    scheduleTeardown(terminalTeardownDelayMs)
                 }
             }
-        }
-    }
+        )
 
-    // Returns the vertical offset from a thread node's top to where the floating
-    // input should be placed. Hidden (empty) threads contribute 0 height.
-    function getThreadTopOffset(nodeId: string, threadHeight: number): number {
-        return hiddenEmptyThreadNodeIds.has(nodeId) ? 0 : threadHeight + 16
-    }
-
-    function positionElementBelowNode(el: HTMLElement, node: CanvasNode): void {
-        applyStyle(el, {
-            left: `${node.position.x}px`,
-            top: `${node.position.y + getThreadTopOffset(node.nodeId, node.dimensions?.height ?? 400)}px`,
-            width: `${node.dimensions?.width ?? 400}px`,
-        })
-    }
-
-    function repositionAllThreadFloatingInputs(): void {
-        if (!currentCanvasState) return
-        for (const [nodeId, entry] of threadFloatingInputs) {
-            const node = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
-            if (node) {
-                positionElementBelowNode(entry.el, node)
-                repositionThreadRail(nodeId, node)
-            }
+        try {
+            await aiService.sendChatMessage({
+                messages: [{ role: 'user', content: promptText }],
+                aiModel: data.aiModel,
+                aiModels: data.aiModels,
+                useMultipleModels: data.useMultipleModels,
+                useMultipleReasoningModels: data.useMultipleReasoningModels,
+                useMultipleImageModels: data.useMultipleImageModels,
+                useMultipleVideoModels: data.useMultipleVideoModels,
+                aiImageModel: data.imageOptions?.aiImageModel,
+                aiImageModels: data.imageOptions?.aiImageModels,
+                imageSize: data.imageOptions?.imageGenerationSize,
+                imageConfigGroups: data.imageOptions?.configGroups,
+                aiVideoModel: data.videoOptions?.aiVideoModel,
+                aiVideoModels: data.videoOptions?.aiVideoModels,
+                videoAspectRatio: data.videoOptions?.videoAspectRatio,
+                videoResolution: data.videoOptions?.videoResolution,
+                videoDuration: data.videoOptions?.videoDuration,
+                videoConfigGroups: data.videoOptions?.configGroups,
+                imageBranchCandidateSnapshot,
+                workspaceContextSnapshot,
+            })
+            clearExplicitContextChips()
+        } catch (error) {
+            console.error('[CANVAS-RUN] failed to send canvas generation request', error)
+            teardownCanvasRun()
         }
     }
 
@@ -4866,9 +4885,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const isHidden = hiddenEmptyThreadNodeIds.has(nodeId)
         const threadHeight = isHidden ? 0 : (node.dimensions?.height ?? 400)
         const gap = isHidden ? 0 : 16
-        const floatingEntry = threadFloatingInputs.get(nodeId)
-        const floatingHeight = floatingEntry ? floatingEntry.el.offsetHeight : 0
-        const totalHeight = threadHeight + gap + floatingHeight
+        const totalHeight = threadHeight + gap
 
         applyStyle(rail, {
             left: `${node.position.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`,
@@ -4931,11 +4948,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (hasMessages && wasHidden) {
             showThreadNode(threadNodeEl, nodeId)
-            repositionAllThreadFloatingInputs()
             scheduleThreadAutoGrow(nodeId)
         } else if (!hasMessages && !wasHidden) {
             hideThreadNode(threadNodeEl, nodeId)
-            repositionAllThreadFloatingInputs()
         }
     }
 
@@ -4946,15 +4961,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function scheduleThreadAutoGrow(threadNodeId: string): void {
         // Disabled
-    }
-
-    function destroyAllThreadFloatingInputs(): void {
-        for (const [, entry] of threadFloatingInputs) {
-            entry.editor?.destroy?.()
-            entry.gradient?.destroy()
-            entry.el.remove()
-        }
-        threadFloatingInputs.clear()
     }
 
     // Set up callbacks for AI-generated images
@@ -6028,6 +6034,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function shouldAcceptGeneratedMediaEvent(threadId: string, eventWorkspaceId?: string): boolean {
+        // Thread-less canvas runs have no chat thread to match; accept them by run id.
+        if (activeCanvasRunIds.has(threadId)) {
+            return !eventWorkspaceId || eventWorkspaceId === workspaceId
+        }
         return shouldAcceptGeneratedMediaEventForState({
             threadId,
             eventWorkspaceId,
@@ -7388,23 +7398,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 pixiMediaLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
                 updateGeneratedMediaChromeLiveTransform(draggedNodeId, currentPos, currentDims, getLiveViewport())
 
-                if (floatingInputEl && floatingInputEl.style.display !== 'none' && draggedNodeId === singleSelectedNodeId) {
-                    applyStyle(floatingInputEl, {
-                        left: `${currentPos.x}px`,
-                        top: `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`,
-                        width: `${currentDims.width}px`,
-                    })
-                }
-
-                const threadEntry = threadFloatingInputs.get(draggedNodeId)
-                if (threadEntry) {
-                    applyStyle(threadEntry.el, {
-                        left: `${currentPos.x}px`,
-                        top: `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`,
-                        width: `${currentDims.width}px`,
-                    })
-                }
-
                 const dragRail = threadRails.get(draggedNodeId)
                 if (dragRail) {
                     applyStyle(dragRail, { left: `${currentPos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`, top: `${currentPos.y}px` })
@@ -7556,7 +7549,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             // Final reposition after collision resolution may have moved the node
             repositionCanvasBubbleMenu()
-            repositionAllThreadFloatingInputs()
             updateSelectionGroupOverlayElement()
         }
 
@@ -7707,21 +7699,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             scheduleEdgesRender()
             repositionCanvasBubbleMenu()
 
-            // Reposition per-thread floating input during resize
-            const threadEntry = threadFloatingInputs.get(nodeId)
-            if (threadEntry) {
-                const pos = { x: parseFloat(nodeEl.style.left), y: parseFloat(nodeEl.style.top) }
-                applyStyle(threadEntry.el, { left: `${pos.x}px`, top: `${pos.y + getThreadTopOffset(nodeId, newHeight)}px`, width: `${newWidth}px` })
-            }
-
             // Reposition the vertical rail during resize
             const resizeRail = threadRails.get(nodeId)
             if (resizeRail) {
                 const pos = { x: parseFloat(nodeEl.style.left), y: parseFloat(nodeEl.style.top) }
                 const threadH = hiddenEmptyThreadNodeIds.has(nodeId) ? 0 : newHeight
-                const floatingH = threadEntry ? threadEntry.el.offsetHeight : 0
                 const gap = hiddenEmptyThreadNodeIds.has(nodeId) ? 0 : 16
-                const totalH = threadH + gap + floatingH
+                const totalH = threadH + gap
                 applyStyle(resizeRail, { left: `${pos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`, top: `${pos.y}px`, height: `${totalH}px` })
                 resizeRail.style.setProperty('--rail-thread-height', `${threadH}px`)
                 connectionManager?.setRailHeight(nodeId, totalH)
@@ -7777,7 +7761,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             // Final reposition at new size
             repositionCanvasBubbleMenu()
-            repositionAllThreadFloatingInputs()
         }
 
         document.addEventListener('mousemove', handleMouseMove)
@@ -8266,9 +8249,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             promptInputController.unregisterThreadEditor(threadId)
         }
         threadEditors.clear()
-
-        // Clean up per-thread floating inputs (will be recreated for each thread node)
-        destroyAllThreadFloatingInputs()
 
         // Clean up per-thread vertical rails (will be recreated for each thread node)
         destroyAllThreadRails()
@@ -8788,26 +8768,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             canvasBubbleMenu?.destroy()
             canvasBubbleMenu = null
 
-            // Clean up floating input
-            if (floatingInputEditor?.destroy) floatingInputEditor.destroy()
-            floatingInputGradient?.destroy()
-            floatingInputEl?.remove()
-            floatingInputEl = null
-            floatingInputEditor = null
-            floatingInputGradient = null
             selectionRectEl?.remove()
             selectionRectEl = null
             selectionGroupOverlayEl?.remove()
             selectionGroupOverlayEl = null
             marqueeSelection = null
 
-            // Clean up per-thread floating inputs
-            destroyAllThreadFloatingInputs()
-
             // Clean up per-thread vertical rails
             destroyAllThreadRails()
 
+            for (const teardownCanvasRun of Array.from(activeCanvasRunTeardowns)) {
+                teardownCanvasRun()
+            }
+            activeCanvasRunTeardowns.clear()
+            activeCanvasRunServices.clear()
+            activeCanvasRunIds.clear()
+
+            globalCanvasComposer?.destroy()
+            globalCanvasComposer = null
+            globalCanvasComposerHostEl?.remove()
+            globalCanvasComposerHostEl = null
+
             destroyActiveAiChatPanel(true)
+            destroyContextPreviewTiles()
+            activeContextChipTrayEls.clear()
 
             promptInputController.destroy()
         }

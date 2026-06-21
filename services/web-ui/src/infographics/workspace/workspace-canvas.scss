@@ -1407,6 +1407,65 @@
     cursor: default;
 }
 
+// Screen-fixed, canvas-wide composer at the bottom-center of the viewport.
+// The context tray is outside the input pill so selected references do not
+// consume text-field space.
+.workspace-canvas-global-composer-host {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    pointer-events: auto;
+
+    .workspace-canvas-global-context-chips {
+        flex: 0 0 auto;
+        flex-wrap: wrap;
+        align-items: center;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        padding: 0 34px 0 28px;
+        overflow: visible;
+        box-sizing: border-box;
+    }
+}
+
+// Single compact row: input on the left, model selector + send on the right,
+// with fully rounded (pill) corners. Scoped so the docked panel prompt — which
+// stays a stacked, square-cornered composer — is unaffected.
+.ai-prompt-input-floating.workspace-canvas-global-composer {
+    position: relative;
+    display: block;
+    width: 100%;
+    border-radius: 9999px;
+
+    .ai-prompt-input-wrapper {
+        flex-direction: row;
+        align-items: center;
+        min-height: 0;
+        border-radius: 9999px;
+        padding: 0;
+
+        // Vertically center the placeholder in the single row.
+        &[data-empty="true"] .ai-prompt-input-content::before {
+            top: 50%;
+            left: 24px;
+            transform: translateY(-50%);
+        }
+    }
+
+    .ai-prompt-input-content {
+        padding: 12px 12px 12px 24px;
+        max-height: 120px;
+    }
+
+    .ai-prompt-input-controls {
+        flex: 0 0 auto;
+        margin-top: 0;
+        padding-right: 18px;
+    }
+}
+
 /* Hide the document title (h1) inside AI chat thread nodes on the canvas (controlled by showHeaderOnAiChatThreadNodes) */
 .workspace-ai-chat-thread-node-hide-title .document-title {
     display: none;
