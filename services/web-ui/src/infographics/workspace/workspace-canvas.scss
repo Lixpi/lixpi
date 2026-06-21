@@ -1648,6 +1648,14 @@
     padding: 0;
 }
 
+.workspace-branch-marker-moving {
+    transition:
+        left var(--workspace-branch-marker-move-duration, 420ms) cubic-bezier(0.22, 1, 0.36, 1),
+        top var(--workspace-branch-marker-move-duration, 420ms) cubic-bezier(0.22, 1, 0.36, 1),
+        transform var(--workspace-branch-marker-move-duration, 420ms) cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: left, top, transform;
+}
+
 .workspace-branch-marker-content {
     display: flex;
     flex-direction: column;
@@ -1700,6 +1708,27 @@
     font-weight: 700;
     line-height: 1;
     white-space: nowrap;
+}
+
+.workspace-branch-marker-spinner {
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-top-color: rgba(255, 255, 255, 0.86);
+    border-radius: 50%;
+    animation: workspace-branch-marker-spin 0.8s linear infinite;
+    pointer-events: none;
+}
+
+@keyframes workspace-branch-marker-spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .workspace-branch-marker-model-list {

@@ -334,6 +334,14 @@ export type BranchLineProvenance = {
     mediaType?: 'image' | 'video'
 }
 
+export type BranchMarkerPendingState = {
+    phase: 'preflight' | 'planned'
+    promptText: string
+    reasoningModelIds: AiModelId[]
+    imageModelIds: AiModelId[]
+    videoModelIds: AiModelId[]
+}
+
 export type BranchOriginLineagePlan = {
     nodeId: string
     generationRequestId: string
@@ -751,6 +759,7 @@ export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     generationRequestId: string
     promptFingerprint?: string
     provenance?: BranchOriginProvenance
+    pendingState?: BranchMarkerPendingState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     temporary: true
@@ -767,6 +776,7 @@ export type BranchForkCanvasNode = CanvasNodeParentingFields & {
     parentBranchNodeId?: string
     promptFingerprint?: string
     provenance?: BranchForkProvenance
+    pendingState?: BranchMarkerPendingState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     temporary: true
@@ -786,6 +796,7 @@ export type BranchLineCanvasNode = CanvasNodeParentingFields & {
     parentBranchNodeId?: string
     promptFingerprint?: string
     provenance?: BranchLineProvenance
+    pendingState?: BranchMarkerPendingState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     temporary: true
