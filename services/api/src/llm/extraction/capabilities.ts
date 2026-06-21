@@ -42,10 +42,6 @@ export type ModelCapabilities = {
     // True for chat-completion / responses-API models that accept a `system`
     // role or top-level instruction.
     supportsSystemPrompt: boolean
-    // OpenAI GPT-5 family and o-series reasoning models reject the legacy
-    // `max_tokens` param on chat/completions and require `max_completion_tokens`.
-    // Only consumed on the OpenAI chat/completions path; false elsewhere.
-    usesMaxCompletionTokens: boolean
 }
 
 const matchAny = (modelVersion: string, patterns: RegExp[]): boolean =>
@@ -75,15 +71,6 @@ const OPENAI_REASONING = [
     /^gpt-5-?(o[134]|reasoning)/i,
 ]
 
-// The modern OpenAI family — the whole GPT-5 lineup and all o-series. These
-// models have two chat/completions quirks vs GPT-4.x: they reject the legacy
-// `max_tokens` (require `max_completion_tokens`), and they reject a custom
-// `temperature` (only the default value 1 is allowed).
-const OPENAI_GPT5_OR_OSERIES = [
-    /^gpt-5/i,
-    /^o[0-9]/i,
-]
-
 // Google thinking-capable families.
 const GOOGLE_THINKING = [
     /^gemini-3\./i,
@@ -96,28 +83,25 @@ export const detectCapabilities = (provider: ProviderName, modelVersion: string)
     if (provider === 'Anthropic') {
         const supportsTemperature = !matchAny(mv, ANTHROPIC_NO_TEMPERATURE)
         if (matchAny(mv, ANTHROPIC_ADAPTIVE_ONLY)) {
-            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, usesMaxCompletionTokens: false }
+            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true }
         }
         if (matchAny(mv, ANTHROPIC_ADAPTIVE_OR_MANUAL)) {
-            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, usesMaxCompletionTokens: false }
+            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true }
         }
         if (matchAny(mv, ANTHROPIC_MANUAL_ONLY)) {
-            return { provider, modelVersion: mv, thinkingMode: 'manual', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, usesMaxCompletionTokens: false }
+            return { provider, modelVersion: mv, thinkingMode: 'manual', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true }
         }
-        return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature, supportsSystemPrompt: true, usesMaxCompletionTokens: false }
+        return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature, supportsSystemPrompt: true }
     }
 
     if (provider === 'OpenAI') {
-        const isGpt5OrOSeries = matchAny(mv, OPENAI_GPT5_OR_OSERIES)
-        // o-series reasoning models and the GPT-5 family only accept the default temperature.
         const isReasoning = matchAny(mv, OPENAI_REASONING)
         return {
             provider, modelVersion: mv,
             thinkingMode: 'none',
             requiresAutoToolChoiceWithThinking: false,
-            supportsTemperature: !isReasoning && !isGpt5OrOSeries,
+            supportsTemperature: !isReasoning,
             supportsSystemPrompt: true,
-            usesMaxCompletionTokens: isGpt5OrOSeries,
         }
     }
 
@@ -129,9 +113,8 @@ export const detectCapabilities = (provider: ProviderName, modelVersion: string)
             requiresAutoToolChoiceWithThinking: false,
             supportsTemperature: true,
             supportsSystemPrompt: true,
-            usesMaxCompletionTokens: false,
         }
     }
 
-    return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature: true, supportsSystemPrompt: true, usesMaxCompletionTokens: false }
+    return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature: true, supportsSystemPrompt: true }
 }
