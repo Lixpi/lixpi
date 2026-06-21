@@ -449,6 +449,7 @@ flowchart LR
 
 - Svelte: `ProseMirror.svelte`
 - Editor driver: `components/editor.js`
+- Prompt composer wrapper: `aiPromptComposer.ts`
 - Schema base: `components/schema.ts`
 - Bubble menu: `plugins/bubbleMenuPlugin/*`
 - Keymap & rules: `components/keyMap.js`, `components/inputRules.js`, `components/prompt.js`, `components/commands.js`
@@ -488,6 +489,7 @@ The document structure uses a single AI chat thread container:
 User input is handled by a separate `aiPromptInputPlugin` which renders as a floating canvas element:
 - Appears below the currently selected canvas node
 - Has its own `ProseMirrorEditor` with `documentType: 'aiPromptInput'`
+- `aiPromptComposer.ts` wraps that editor for hosts that mount a reusable prompt surface
 - `AiPromptInputController` coordinates message injection into thread editors
 - Controls (model selector, image toggle, submit button) are generic reusable factories in `primitives/aiControls/`
 - Can target any canvas node type — auto-creates a new AI chat thread when targeting non-thread nodes

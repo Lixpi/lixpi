@@ -50,7 +50,7 @@ import {
     createDefaultPromptControlFactories,
     type AiPromptComposerInstance,
     type AiPromptComposerSubmitData,
-} from '$src/components/aiPromptComposer/index.ts'
+} from '$src/components/proseMirror/aiPromptComposer.ts'
 import { setAiGeneratedImageCallbacks, setAiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
 import { routeSegmentEventToCanvas } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedMediaCanvasRouter.ts'
 import type { SegmentEvent } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
