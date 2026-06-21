@@ -300,11 +300,10 @@ describe('MediaBranchLineagePlanner', () => {
         // Two image models under one reasoning model = two generations -> a split,
         // so each generation gets its own branchFork flat under the branch origin.
         expect(plan.branchLines).toEqual([])
-        expect(plan.branchForks).toHaveLength(2)
+        expect(plan.branchForks).toHaveLength(1)
         expect(plan.branchOrigin).toBeDefined()
         expect(plan.branchForks.map((fork) => fork.nodeId)).toEqual([
-            'branch-fork-request-5-r0-image-0',
-            'branch-fork-request-5-r0-image-1',
+            'branch-fork-request-5-reasoning-0',
         ])
         expect(plan.branchForks.every((fork) => fork.parentBranchNodeId === plan.branchOrigin?.nodeId)).toBe(true)
 
@@ -313,14 +312,14 @@ describe('MediaBranchLineagePlanner', () => {
             mediaRunId: 'request-5:reasoning:0:image:0',
             mediaModelId: 'OpenAI:gpt-image-1-mini',
             mediaType: 'image',
-            branchForkNodeId: 'branch-fork-request-5-r0-image-0',
-            lineageParentNodeId: 'branch-fork-request-5-r0-image-0',
+            branchForkNodeId: 'branch-fork-request-5-reasoning-0',
+            lineageParentNodeId: 'branch-fork-request-5-reasoning-0',
         })
         expect(plan.runAssignments[1]).toMatchObject({
             mediaRunId: 'request-5:reasoning:0:image:1',
             mediaModelId: 'Google:gemini-2.5-flash-image',
             mediaType: 'image',
-            branchForkNodeId: 'branch-fork-request-5-r0-image-1',
+            branchForkNodeId: 'branch-fork-request-5-reasoning-0',
         })
     })
 })

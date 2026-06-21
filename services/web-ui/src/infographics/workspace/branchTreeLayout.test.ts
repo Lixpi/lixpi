@@ -18,7 +18,7 @@ const FANOUT_OPTS = { ...OPTS, branchFanoutDepthGap: 96 }
 
 type GenOpts = {
     branchId?: string
-    parentImageNodeId?: string
+    parentMediaNodeId?: string
     createdAt?: number
     type?: 'image' | 'video'
     width?: number
@@ -34,7 +34,7 @@ const genMedia = (id: string, x: number, y: number, opts: GenOpts = {}): CanvasN
         responseId: '',
         revisedPrompt: '',
         branchId: opts.branchId ?? 'branch-A',
-        parentImageNodeId: opts.parentImageNodeId,
+        parentMediaNodeId: opts.parentMediaNodeId,
         createdAt: opts.createdAt ?? 0,
     }
     if (opts.type === 'video') {
@@ -74,11 +74,11 @@ describe('buildBranchTrees', () => {
         expect(buildBranchTrees([loose('u1', 0, 0)], [])).toEqual([])
     })
 
-    it('detects a fork from parentImageNodeId (mixed image + video)', () => {
+    it('builds children from parentMediaNodeId (mixed image + video)', () => {
         const nodes = [
             genMedia('R', 0, 0, { createdAt: 1 }),
-            genMedia('A', 0, 0, { parentImageNodeId: 'R', createdAt: 2 }),
-            genMedia('B', 0, 0, { parentImageNodeId: 'R', createdAt: 3, type: 'video' }),
+            genMedia('A', 0, 0, { parentMediaNodeId: 'R', createdAt: 2 }),
+            genMedia('B', 0, 0, { parentMediaNodeId: 'R', createdAt: 3, type: 'video' }),
         ]
         const trees = buildBranchTrees(nodes, [])
         expect(trees).toHaveLength(1)
@@ -87,12 +87,12 @@ describe('buildBranchTrees', () => {
         expect(trees[0].childrenByParentId.get('R')).toEqual(['A', 'B'])
     })
 
-    it('falls back to the lineage edge when parentImageNodeId is absent', () => {
+    it('does not infer generation trees from workspace lineage edges', () => {
         const nodes = [genMedia('R', 0, 0), genMedia('A', 0, 0)]
         const trees = buildBranchTrees(nodes, [edge('R', 'A')])
-        expect(trees).toHaveLength(1)
-        expect(trees[0].rootId).toBe('R')
-        expect(trees[0].childrenByParentId.get('R')).toEqual(['A'])
+        expect(trees).toHaveLength(2)
+        expect(new Set(trees.map((tree) => tree.rootId))).toEqual(new Set(['R', 'A']))
+        expect(trees.every((tree) => tree.childrenByParentId.size === 0)).toBe(true)
     })
 
     it('keeps separate roots as separate trees and excludes loose/parented nodes', () => {
@@ -109,8 +109,8 @@ describe('buildBranchTrees', () => {
     it('orders forked siblings deterministically by createdAt', () => {
         const nodes = [
             genMedia('R', 0, 0, { createdAt: 1 }),
-            genMedia('late', 0, 0, { parentImageNodeId: 'R', createdAt: 30 }),
-            genMedia('early', 0, 0, { parentImageNodeId: 'R', createdAt: 10 }),
+            genMedia('late', 0, 0, { parentMediaNodeId: 'R', createdAt: 30 }),
+            genMedia('early', 0, 0, { parentMediaNodeId: 'R', createdAt: 10 }),
         ]
         const trees = buildBranchTrees(nodes, [])
         expect(trees[0].childrenByParentId.get('R')).toEqual(['early', 'late'])
@@ -119,8 +119,8 @@ describe('buildBranchTrees', () => {
     it('orders children by variantIndex before createdAt when available', () => {
         const nodes = [
             genMedia('R', 0, 0, { createdAt: 1, branchId: 'v' }),
-            genMedia('v2', 0, 0, { parentImageNodeId: 'R', createdAt: 30, branchId: 'v' }),
-            genMedia('v1', 0, 0, { parentImageNodeId: 'R', createdAt: 20, branchId: 'v' }),
+            genMedia('v2', 0, 0, { parentMediaNodeId: 'R', createdAt: 30, branchId: 'v' }),
+            genMedia('v1', 0, 0, { parentMediaNodeId: 'R', createdAt: 20, branchId: 'v' }),
         ]
         nodes[1].generatedBy.variantIndex = 2
         nodes[2].generatedBy.variantIndex = 1
@@ -129,7 +129,7 @@ describe('buildBranchTrees', () => {
         expect(trees[0].childrenByParentId.get('R')).toEqual(['v1', 'v2'])
     })
 
-    it('resolves branch members via branchOrigin fallback before lineage edge', () => {
+    it('resolves branch members to branchOrigin before connector edges', () => {
         const nodes = [
             {
                 nodeId: 'branch-origin',
@@ -145,7 +145,7 @@ describe('buildBranchTrees', () => {
             genMedia('child', 60, 70, {
                 branchId: 'branch-1',
                 createdAt: 2,
-                parentImageNodeId: undefined,
+                parentMediaNodeId: undefined,
             }),
         ] as any
         nodes[2].generatedBy.branchOriginNodeId = 'branch-origin'
@@ -153,10 +153,63 @@ describe('buildBranchTrees', () => {
         nodesWithEdge.push(edge('orphan', 'child'))
 
         const trees = buildBranchTrees(nodesWithEdge, [edge('parent', 'branch-origin')])
+        expect(trees).toHaveLength(2)
+        expect(new Set(trees.map((tree) => tree.rootId))).toEqual(new Set(['parent', 'branch-origin']))
+        const branchOriginTree = trees.find((tree) => tree.rootId === 'branch-origin')
+        expect(branchOriginTree).toBeDefined()
+        expect(branchOriginTree?.childrenByParentId.get('branch-origin')).toEqual(['child'])
+    })
+
+    it('prefers branchFork over branchLine when both lineage markers are declared on a generated node', () => {
+        const branchOrigin = {
+            nodeId: 'branch-origin',
+            type: 'branchOrigin',
+            workspaceId: 'w',
+            dimensions: { width: SIZE, height: SIZE },
+            position: { x: 10, y: 20 },
+            fileId: 'branch-origin',
+            branchId: 'branch-1',
+            src: '',
+        }
+        const branchFork = {
+            nodeId: 'branch-fork',
+            type: 'branchFork',
+            workspaceId: 'w',
+            dimensions: { width: SIZE, height: SIZE },
+            position: { x: 40, y: 50 },
+            fileId: 'branch-fork',
+            branchId: 'branch-1',
+            parentBranchNodeId: 'branch-origin',
+            generationRequestId: 'req-1',
+            temporary: true,
+        }
+        const branchLine = {
+            nodeId: 'branch-line',
+            type: 'branchLine',
+            workspaceId: 'w',
+            dimensions: { width: SIZE, height: SIZE },
+            position: { x: 70, y: 80 },
+            fileId: 'branch-line',
+            branchId: 'branch-1',
+            parentBranchNodeId: 'branch-origin',
+            generationRequestId: 'req-1',
+            temporary: true,
+        }
+        const nodes = [
+            branchOrigin,
+            branchFork,
+            branchLine,
+            genMedia('child', 90, 100, { branchId: 'branch-1', createdAt: 2 }),
+        ] as any
+        nodes[3].generatedBy.branchForkNodeId = 'branch-fork'
+        nodes[3].generatedBy.branchLineNodeId = 'branch-line'
+
+        const trees = buildBranchTrees(nodes, [])
         expect(trees).toHaveLength(1)
-        expect(trees[0].rootId).toBe('parent')
-        expect(trees[0].childrenByParentId.get('parent')).toEqual(['branch-origin'])
-        expect(trees[0].childrenByParentId.get('branch-origin')).toEqual(['child'])
+        expect(trees[0].rootId).toBe('branch-origin')
+        expect(trees[0].childrenByParentId.get('branch-origin')).toBeUndefined()
+        expect(trees[0].childrenByParentId.get('branch-fork')).toEqual(['child'])
+        expect(trees[0].childrenByParentId.has('branch-line')).toBe(false)
     })
 
     it('keeps a branchLine continuation as one normal-gap chain with the marker off the depth path', () => {
@@ -173,10 +226,10 @@ describe('buildBranchTrees', () => {
             temporary: true,
         }
         const nodes = [
-            genMedia('parent', 0, 0, { branchId: 'branch-1', createdAt: 1 }),
-            branchLineMarker,
-            genMedia('child', 0, 0, { branchId: 'branch-1', createdAt: 2 }),
-        ] as any
+        genMedia('parent', 0, 0, { branchId: 'branch-1', createdAt: 1 }),
+        branchLineMarker,
+        genMedia('child', 0, 0, { branchId: 'branch-1', createdAt: 2 }),
+    ] as any
         nodes[2].generatedBy.parentMediaNodeId = 'parent'
         nodes[2].generatedBy.branchLineNodeId = 'branch-line'
 
@@ -228,7 +281,7 @@ describe('applyBranchTreeLayout', () => {
     it('preserves the root anchor and lays a chain out to its right', () => {
         const nodes = [
             genMedia('R', 500, 300, { createdAt: 1 }),
-            genMedia('A', 9999, 9999, { parentImageNodeId: 'R', createdAt: 2 }),
+            genMedia('A', 9999, 9999, { parentMediaNodeId: 'R', createdAt: 2 }),
         ]
         const out = applyBranchTreeLayout(nodes, [], OPTS)
         // Root stays exactly where it was anchored.
@@ -240,8 +293,8 @@ describe('applyBranchTreeLayout', () => {
     it('fans a two-child fork symmetrically around the anchored root', () => {
         const nodes = [
             genMedia('R', 0, 0, { createdAt: 1 }),
-            genMedia('A', 1, 1, { parentImageNodeId: 'R', createdAt: 2 }),
-            genMedia('B', 2, 2, { parentImageNodeId: 'R', createdAt: 3 }),
+            genMedia('A', 1, 1, { parentMediaNodeId: 'R', createdAt: 2 }),
+            genMedia('B', 2, 2, { parentMediaNodeId: 'R', createdAt: 3 }),
         ]
         const out = applyBranchTreeLayout(nodes, [], OPTS)
         expect(posOf(out, 'R')).toEqual({ x: 0, y: 0 })
@@ -259,14 +312,14 @@ describe('applyBranchTreeLayout', () => {
     it('pushes a whole child column farther right when a parent has a large fork', () => {
         const children = Array.from({ length: 10 }, (_, index) =>
             genMedia(`C${index + 1}`, index + 1, index + 1, {
-                parentImageNodeId: 'R',
+                parentMediaNodeId: 'R',
                 createdAt: index + 2,
             })
         )
         const nodes = [
             genMedia('R', 0, 0, { createdAt: 1 }),
             ...children,
-            genMedia('C1A', 20, 20, { parentImageNodeId: 'C1', createdAt: 20 }),
+            genMedia('C1A', 20, 20, { parentMediaNodeId: 'C1', createdAt: 20 }),
         ]
         const out = applyBranchTreeLayout(nodes, [], FANOUT_OPTS)
         const forkGap = FANOUT_OPTS.depthGap + FANOUT_OPTS.branchFanoutDepthGap * (children.length - 1)
@@ -278,8 +331,8 @@ describe('applyBranchTreeLayout', () => {
     it('keeps a fork balanced after children resolve to non-square final frames', () => {
         const nodes = [
             genMedia('R', 0, 0, { createdAt: 1 }),
-            genMedia('A', 1, 1, { parentImageNodeId: 'R', createdAt: 2, height: 450 }),
-            genMedia('B', 2, 2, { parentImageNodeId: 'R', createdAt: 3, height: 450 }),
+            genMedia('A', 1, 1, { parentMediaNodeId: 'R', createdAt: 2, height: 450 }),
+            genMedia('B', 2, 2, { parentMediaNodeId: 'R', createdAt: 3, height: 450 }),
         ]
         const out = applyBranchTreeLayout(nodes, [], OPTS)
         const rCenter = posOf(out, 'R').y + SIZE / 2
@@ -298,8 +351,8 @@ describe('rebalanceBranchTreesAndResolve', () => {
         // Loose node sits on top of where the fork's lower child lands.
         const nodes: CanvasNode[] = [
             genMedia('R', 0, 0, { createdAt: 1 }),
-            genMedia('A', 1, 1, { parentImageNodeId: 'R', createdAt: 2 }),
-            genMedia('B', 2, 2, { parentImageNodeId: 'R', createdAt: 3 }),
+            genMedia('A', 1, 1, { parentMediaNodeId: 'R', createdAt: 2 }),
+            genMedia('B', 2, 2, { parentMediaNodeId: 'R', createdAt: 3 }),
             loose('u1', SIZE + OPTS.depthGap, SIZE), // overlaps child column
         ]
         const tidied = applyBranchTreeLayout(nodes, [], OPTS)
@@ -323,9 +376,9 @@ describe('rebalanceBranchTreesAndResolve', () => {
     it('separates two overlapping trees without un-tidying either', () => {
         const nodes: CanvasNode[] = [
             genMedia('R1', 0, 0, { branchId: 'b1', createdAt: 1 }),
-            genMedia('A1', 0, 0, { branchId: 'b1', parentImageNodeId: 'R1', createdAt: 2 }),
+            genMedia('A1', 0, 0, { branchId: 'b1', parentMediaNodeId: 'R1', createdAt: 2 }),
             genMedia('R2', 0, 0, { branchId: 'b2', createdAt: 1 }),
-            genMedia('A2', 0, 0, { branchId: 'b2', parentImageNodeId: 'R2', createdAt: 2 }),
+            genMedia('A2', 0, 0, { branchId: 'b2', parentMediaNodeId: 'R2', createdAt: 2 }),
         ]
         const out = rebalanceBranchTreesAndResolve(nodes, [], OPTS)
         const byId = new Map(out.map(n => [n.nodeId, n]))

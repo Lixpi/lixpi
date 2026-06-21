@@ -96,7 +96,7 @@ function loadAiGeneratedMediaCanvasRouter(): string {
 }
 
 function loadAiPromptComposer(): string {
-	return readSourceFile('../../components/aiPromptComposer/aiPromptComposer.ts', 'components/aiPromptComposer/aiPromptComposer.ts')
+	return readSourceFile('../../components/proseMirror/aiPromptComposer.ts', 'components/proseMirror/aiPromptComposer.ts')
 }
 
 function loadLayout(): string {
@@ -1595,13 +1595,14 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-remove')
 		expectSourceToContain(ts, 'function refreshContextChipTray(): void')
 		expectSourceToContain(ts, 'function destroyContextPreviewTiles(): void')
-		expectSourceToContain(ts, 'activeContextPreviewTiles.clear()')
+		expectSourceToContain(ts, 'contextPreviewTilesByTray: Map<HTMLDivElement, Set<ContextPreviewTileInstance>>')
+		expectSourceToContain(ts, 'for (const trayEl of Array.from(contextPreviewTilesByTray.keys()))')
 		expectSourceToContain(ts, 'function addContextChips(nodeIds: Iterable<string>): void')
 		expectSourceToContain(ts, 'function removeContextChip(nodeId: string): void')
 		expectSourceToContain(ts, 'function clearExplicitContextChips(): void')
 		expectSourceToContain(ts, 'function createAiChatPanelContextTrayElement(): HTMLDivElement')
 		expectSourceToContain(ts, 'removeContextChip(nodeId)')
-		expectSourceToContain(ts, 'activeContextPreviewTiles.add(previewTile)')
+		expectSourceToContain(ts, 'trayTiles.add(previewTile)')
 		expectSourceToContain(ts, 'const previewTile = createContextPreviewTile({')
 		// Submitting a standalone chat force-includes the explicit chips.
 		expectSourceToContain(ts, 'const chipNodeIds = aiChatPanelState.contextChips')
@@ -1718,17 +1719,17 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, '...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),')
 		expectSourceToContain(ts, 'referenceNodeIds: candidateNodeIds,')
 		expectSourceToContain(ts, ': rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)')
-		expectSourceToContain(ts, 'const placementNode = getGeneratedMediaPlacementNode(threadId, generationRun)')
-			expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode')
+		expectSourceToContain(ts, 'const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)')
+		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(generationRun, [branchOriginNode, branchForkNode, branchLineNode])')
 		expectSourceToContain(ts, 'partialImageTracker.set(runKey, {')
 		expectSourceToContain(ts, 'nodeId,')
 		expectSourceToContain(ts, 'fileId: fileId || \'\',')
 		expectSourceToContain(ts, 'placementKey,')
 		expectSourceToContain(ts, 'hasReceivedFrame: Boolean(imageUrl),')
-		expectSourceToContain(ts, '(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}),')
+		expectSourceToContain(ts, 'sourceNodeId: edgeSourceNode.nodeId,')
 		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution, generationRun)')
 		expectSourceToContain(ts, 'placementAnchorNodeId: placement.placementAnchorNodeId ?? referenceNodeIds[0]')
-		expectSourceToContain(ts, 'branchId: resolution.branchId ?? placement.branchId')
+		expectSourceToContain(ts, 'imageBranchResolution: resolution')
 		expectSourceToContain(ts, 'imageBranchResolution: resolution')
 		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds([')
 		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds(resolution.referenceImageNodeIds)')
@@ -1739,7 +1740,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string, generationRun?: MediaGenerationRunMeta): Rect | undefined')
 		expectSourceToContain(ts, 'function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number, generationRun?: MediaGenerationRunMeta): { x: number; y: number } | undefined')
 		expectSourceToContain(ts, 'settings.imageBranchLineage.rootOutputGap')
-		expectSourceToContain(ts, 'const position = getGeneratedMediaInsertionPosition(threadId, imageHeight, generationRun)')
+		expectSourceToContain(ts, 'const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)')
 		expectSourceNotToContain(ts, 'if (!sourceThread) return\n            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)')
 	})
 

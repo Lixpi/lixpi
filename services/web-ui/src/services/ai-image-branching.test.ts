@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
     getPromptTextFromMessages,
     buildImageBranchCandidateSnapshot,
+    buildCanvasWideCandidateSnapshot,
     buildWorkspaceContextSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
     isChatRootNode,
@@ -309,6 +310,82 @@ describe('buildImageBranchCandidateSnapshot', () => {
         })
     })
 
+    it('inherits a parent branchId when a generated candidate omits it', () => {
+        const parentImage = {
+            ...personGeneratedNode,
+            nodeId: 'parent-branch-node',
+            generatedBy: {
+                ...personGeneratedNode.generatedBy,
+                branchId: 'parent-branch',
+            },
+        } satisfies CanvasNode
+
+        const childImage = {
+            ...goatGeneratedNode,
+            nodeId: 'child-branch-node',
+            generatedBy: {
+                ...goatGeneratedNode.generatedBy,
+                responseId: 'response-child-branch',
+                branchId: undefined,
+                parentImageNodeId: 'parent-branch-node',
+                sourceContextNodeIds: ['portrait-source'],
+                parentMediaNodeId: undefined,
+            },
+        } satisfies CanvasNode
+
+        const snapshot = buildImageBranchCandidateSnapshot({
+            regionNodeId: 'thread-node-1',
+            threadId: 'thread-1',
+            nodes: [rootNode, portraitSourceNode, parentImage, childImage],
+            edges: [{
+                edgeId: 'edge-parent-child',
+                sourceNodeId: 'parent-branch-node',
+                targetNodeId: 'child-branch-node',
+            }],
+            prompt: 'continue the chain',
+        })
+
+        const child = snapshot.candidates.find((candidate) => candidate.nodeId === 'child-branch-node')
+
+        expect(child?.branchId).toBe('parent-branch')
+        expect(child?.ancestorNodeIds).toContain('parent-branch-node')
+        expect(child?.sourceContextNodeIds).toContain('portrait-source')
+    })
+
+    it('merges base and generated prompt contributions for the same generated media node', () => {
+        const generatedImageTextByNodeId = {
+            'person-generated': 'a response message with extra constraints',
+        }
+
+        const snapshot = buildImageBranchCandidateSnapshot({
+            regionNodeId: 'thread-node-1',
+            threadId: 'thread-1',
+            nodes: [rootNode, portraitSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
+            edges: [{
+                edgeId: 'edge-person-refined',
+                sourceNodeId: 'person-generated',
+                targetNodeId: 'person-refined',
+            }],
+            prompt: 'make this more cinematic',
+            generatedImageTextByNodeId,
+        })
+        const personCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'person-generated')
+
+        expect(personCandidate?.promptText).toContain('make that guy more expressive')
+        expect(personCandidate?.promptText).toContain('a response message with extra constraints')
+        expect(personCandidate?.promptText).toContain('front-facing male portrait with glasses')
+    })
+
+    it('handles malformed thread content gracefully when extracting generated message text', () => {
+        const generatedImageTextByNodeId = getGeneratedImageTextByNodeIdFromThreadContent(
+            null,
+            [personGeneratedNode],
+            'thread-1',
+        )
+
+        expect(generatedImageTextByNodeId).toEqual({})
+    })
+
     it('does not crash when a generated branch is connected through a non-media branch origin', () => {
         const snapshot = buildImageBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
@@ -367,9 +444,56 @@ describe('buildImageBranchCandidateSnapshot', () => {
         expect(branchLeaf?.promptText).toContain('thread image prompt text')
         expect(branchLeaf?.visualEntitySummary).toBe('orange monochrome portrait of the same man with glasses')
     })
+
+    it('injects explicit context media IDs even when they are not in the thread graph', () => {
+        const disconnectedContextNode = {
+            nodeId: 'disconnected-source',
+            type: 'image',
+            fileId: 'disconnected-source-file',
+            workspaceId: 'workspace-1',
+            src: '/api/images/workspace-1/disconnected-source-file',
+            aspectRatio: 1,
+            position: { x: 900, y: 0 },
+            dimensions: { width: 100, height: 100 },
+        } satisfies CanvasNode
+
+        const snapshot = buildImageBranchCandidateSnapshot({
+            regionNodeId: 'thread-node-1',
+            threadId: 'thread-1',
+            nodes: [rootNode, portraitSourceNode, disconnectedContextNode],
+            edges: [],
+            contextMediaNodeIds: ['disconnected-source'],
+            prompt: 'focus only this disconnected context',
+        })
+
+        const candidateIds = snapshot.candidates.map((candidate) => candidate.nodeId).sort()
+        expect(candidateIds).toEqual(['disconnected-source', 'portrait-source'])
+        expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'disconnected-source')?.roleHints).toEqual(['base-context'])
+        expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'portrait-source')?.roleHints).toEqual(['base-context'])
+    })
 })
 
 describe('getPromptTextFromMessages', () => {
+    it('returns latest plain-string user content', () => {
+        expect(
+            getPromptTextFromMessages([
+                { role: 'assistant', content: 'ignore this' },
+                { role: 'user', content: 'first message' },
+                { role: 'user', content: 'latest plain prompt' },
+            ]),
+        ).toBe('latest plain prompt')
+    })
+
+    it('ignores malformed content blocks and still collects latest user prompt', () => {
+        expect(
+            getPromptTextFromMessages([
+                { role: 'user', content: [{ type: 'image', text: 'ignore' }, null, { type: 'input_text', text: 'valid prompt' }] },
+                { role: 'user', content: [{ type: 'text', text: 'later prompt' }, 'literal'],
+                },
+            ]),
+        ).toBe('later prompt\nliteral')
+    })
+
     it('returns the latest user prompt from mixed message content formats', () => {
         expect(
             getPromptTextFromMessages([
@@ -377,12 +501,128 @@ describe('getPromptTextFromMessages', () => {
                 { role: 'user', content: [{ type: 'text', text: 'older prompt' }] },
                 { role: 'user', content: [{ type: 'input_text', text: 'newest prompt' }, { type: 'text', text: 'with details' }] },
             ]),
-            'newest prompt\nwith details',
         ).toBe('newest prompt\nwith details')
     })
 
     it('returns an empty string when no user message content is available', () => {
         expect(getPromptTextFromMessages([{ role: 'assistant', content: 'hello' }])).toBe('')
+    })
+})
+
+describe('getGeneratedImageTextByNodeIdFromThreadContent', () => {
+    it('returns response text only for nodes generated in the target thread', () => {
+        const otherThreadGeneratedNode = {
+            ...goatGeneratedNode,
+            nodeId: 'other-thread-goat',
+            generatedBy: {
+                ...goatGeneratedNode.generatedBy,
+                aiChatThreadId: 'thread-other',
+                responseMessageId: 'other-response-id',
+            },
+        } satisfies CanvasNode
+        const personGeneratedNodeWithResponseMessage = {
+            ...personGeneratedNode,
+            nodeId: 'person-generated-with-response-message',
+            generatedBy: {
+                ...personGeneratedNode.generatedBy,
+                responseMessageId: 'response-person',
+            },
+        } satisfies CanvasNode
+        const goatGeneratedNodeWithResponseMessage = {
+            ...goatGeneratedNode,
+            nodeId: 'goat-generated-with-response-message',
+            generatedBy: {
+                ...goatGeneratedNode.generatedBy,
+                responseMessageId: 'response-goat',
+            },
+        } satisfies CanvasNode
+
+        const threadContent = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'aiUserMessage',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'a painterly village' }] },
+                    ],
+                },
+                {
+                    type: 'aiResponseMessage',
+                    attrs: { id: 'response-person' },
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'person response text' }] }],
+                },
+                {
+                    type: 'aiUserMessage',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'goat setup prompt' }] }],
+                },
+                {
+                    type: 'aiResponseMessage',
+                    attrs: { id: 'response-goat' },
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'goat response text' }] }],
+                },
+            ],
+        }
+
+        const generatedImageTextByNodeId = getGeneratedImageTextByNodeIdFromThreadContent(
+            threadContent,
+            [personGeneratedNodeWithResponseMessage, goatGeneratedNodeWithResponseMessage, otherThreadGeneratedNode, portraitSourceNode],
+            'thread-1',
+        )
+
+        expect(generatedImageTextByNodeId['person-generated-with-response-message']).toBe('a painterly village\nperson response text')
+        expect(generatedImageTextByNodeId['goat-generated-with-response-message']).toBe('goat setup prompt\ngoat response text')
+        expect(generatedImageTextByNodeId['other-thread-goat']).toBeUndefined()
+    })
+})
+
+describe('buildCanvasWideCandidateSnapshot', () => {
+    it('includes only media nodes and excludes thread/document entries', () => {
+        const snapshot = buildCanvasWideCandidateSnapshot({
+            generationRunId: 'run-wide-1',
+            nodes: [
+                rootNode,
+                threadContextNode,
+                cubistDocNode,
+                portraitSourceNode,
+                personGeneratedNode,
+                videoGeneratedNode,
+            ],
+            prompt: 'compose globally',
+        })
+
+        expect(snapshot.resolverVersion).toBe('image-branch-vlm-v1')
+        expect(snapshot.threadId).toBe('run-wide-1')
+        expect(snapshot.regionNodeId).toBe('standalone:run-wide-1')
+        expect(snapshot.candidates.map((candidate) => candidate.nodeId).sort()).toEqual([
+            'person-generated',
+            'portrait-source',
+            'video-generated',
+        ])
+    })
+
+    it('marks the only referenced node as active target', () => {
+        const snapshot = buildCanvasWideCandidateSnapshot({
+            generationRunId: 'run-wide-2',
+            nodes: [portraitSourceNode, personGeneratedNode],
+            prompt: 'compose globally',
+            referenceNodeIds: ['person-generated'],
+        })
+
+        expect(snapshot.activeTargetNodeId).toBe('person-generated')
+        expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'person-generated')?.roleHints).toContain(
+            'active-target',
+        )
+    })
+
+    it('does not force active target when multiple references are supplied', () => {
+        const snapshot = buildCanvasWideCandidateSnapshot({
+            generationRunId: 'run-wide-3',
+            nodes: [portraitSourceNode, landscapeSourceNode],
+            prompt: 'compose globally',
+            referenceNodeIds: ['portrait-source', 'landscape-source'],
+        })
+
+        expect(snapshot.activeTargetNodeId).toBeUndefined()
+        expect(snapshot.candidates.some((candidate) => candidate.roleHints.includes('active-target'))).toBe(false)
     })
 })
 
