@@ -388,8 +388,8 @@ export type MediaRunLineageAssignment = {
     mediaType?: 'image' | 'video'
     branchId: string
     parentMediaNodeId?: string
-    // Legacy alias retained for older image-named consumers. New lineage code
-    // must use parentMediaNodeId so image/video/future media share one contract.
+    // Image-named schema alias. Lineage code uses parentMediaNodeId so
+    // image/video/future media share one contract.
     parentImageNodeId?: string
     branchOriginNodeId?: string
     branchForkNodeId?: string
@@ -617,7 +617,7 @@ export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     revisedPrompt: string
     responseMessageId?: string
     branchId?: string
-    // Legacy alias for parentMediaNodeId.
+    // Image-named schema alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]
@@ -699,7 +699,7 @@ export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     sourceVideoNodeId?: string    // set for extend/edit continuations (Phase 6)
     // reused branch-lineage audit fields (identical names to images)
     branchId?: string
-    // Legacy alias for parentMediaNodeId.
+    // Image-named schema alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]
@@ -759,6 +759,7 @@ export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     type: 'branchOrigin'
     branchId: string
     generationRequestId: string
+    aiChatThreadId?: string
     promptFingerprint?: string
     provenance?: BranchOriginProvenance
     pendingState?: BranchMarkerPendingState
@@ -772,6 +773,7 @@ export type BranchForkCanvasNode = CanvasNodeParentingFields & {
     type: 'branchFork'
     branchId: string
     generationRequestId: string
+    aiChatThreadId?: string
     reasoningRunId?: string
     reasoningModelId?: AiModelId
     reasoningIndex?: number
@@ -789,6 +791,7 @@ export type BranchLineCanvasNode = CanvasNodeParentingFields & {
     type: 'branchLine'
     branchId: string
     generationRequestId: string
+    aiChatThreadId?: string
     reasoningRunId?: string
     reasoningModelId?: AiModelId
     reasoningIndex?: number

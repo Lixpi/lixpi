@@ -54,20 +54,20 @@ export const aiChatThreadNodeSpec = {
         {
             tag: 'div.ai-chat-thread-wrapper',
             getAttrs: (dom) => {
-                const legacyUseMultipleModels = dom.getAttribute('data-use-multiple-models') === 'true'
+                const combinedMultiModelFlag = dom.getAttribute('data-use-multiple-models') === 'true'
                 const hasSectionModeAttrs = dom.hasAttribute('data-use-multiple-reasoning-models')
                     || dom.hasAttribute('data-use-multiple-image-models')
                     || dom.hasAttribute('data-use-multiple-video-models')
-                const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionModeAttrs
+                const shouldExpandCombinedModelFlag = combinedMultiModelFlag && !hasSectionModeAttrs
                 return {
                     threadId: dom.getAttribute('data-thread-id'),
                     status: dom.getAttribute('data-status') || 'active',
                     aiModel: dom.getAttribute('data-ai-model') || '',
                     aiModels: dom.getAttribute('data-ai-models') || '',
-                    useMultipleModels: legacyUseMultipleModels,
-                    useMultipleReasoningModels: dom.getAttribute('data-use-multiple-reasoning-models') === 'true' || useLegacyModeFallback,
-                    useMultipleImageModels: dom.getAttribute('data-use-multiple-image-models') === 'true' || useLegacyModeFallback,
-                    useMultipleVideoModels: dom.getAttribute('data-use-multiple-video-models') === 'true' || useLegacyModeFallback,
+                    useMultipleModels: combinedMultiModelFlag,
+                    useMultipleReasoningModels: dom.getAttribute('data-use-multiple-reasoning-models') === 'true' || shouldExpandCombinedModelFlag,
+                    useMultipleImageModels: dom.getAttribute('data-use-multiple-image-models') === 'true' || shouldExpandCombinedModelFlag,
+                    useMultipleVideoModels: dom.getAttribute('data-use-multiple-video-models') === 'true' || shouldExpandCombinedModelFlag,
                     aiImageModel: dom.getAttribute('data-ai-image-model') || '',
                     aiImageModels: dom.getAttribute('data-ai-image-models') || '',
                     imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
@@ -86,23 +86,23 @@ export const aiChatThreadNodeSpec = {
         }
     ],
     toDOM: (node) => {
-        const legacyUseMultipleModels = node.attrs.useMultipleModels === true || node.attrs.useMultipleModels === 'true'
+        const combinedMultiModelFlag = node.attrs.useMultipleModels === true || node.attrs.useMultipleModels === 'true'
         const hasSectionMode = node.attrs.useMultipleReasoningModels === true
             || node.attrs.useMultipleReasoningModels === 'true'
             || node.attrs.useMultipleImageModels === true
             || node.attrs.useMultipleImageModels === 'true'
             || node.attrs.useMultipleVideoModels === true
             || node.attrs.useMultipleVideoModels === 'true'
-        const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionMode
+        const shouldExpandCombinedModelFlag = combinedMultiModelFlag && !hasSectionMode
         const useMultipleReasoningModels = node.attrs.useMultipleReasoningModels === true
             || node.attrs.useMultipleReasoningModels === 'true'
-            || useLegacyModeFallback
+            || shouldExpandCombinedModelFlag
         const useMultipleImageModels = node.attrs.useMultipleImageModels === true
             || node.attrs.useMultipleImageModels === 'true'
-            || useLegacyModeFallback
+            || shouldExpandCombinedModelFlag
         const useMultipleVideoModels = node.attrs.useMultipleVideoModels === true
             || node.attrs.useMultipleVideoModels === 'true'
-            || useLegacyModeFallback
+            || shouldExpandCombinedModelFlag
         return [
             'div',
             {

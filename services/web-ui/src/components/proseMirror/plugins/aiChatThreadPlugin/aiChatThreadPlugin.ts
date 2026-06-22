@@ -14,8 +14,7 @@ import { documentTitleNodeType } from '$src/components/proseMirror/customNodes/d
 import { aiChatThreadNodeType, aiChatThreadNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
 import { AI_CHAT_THREAD_PLUGIN_KEY, USE_AI_CHAT_META, STOP_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import { aiResponseMessageNodeType, aiResponseMessageNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponseMessageNode.ts'
-// aiUserInput has been removed — the composer is now a separate floating canvas element
-// The aiUserInputNodeType is still imported for legacy content migration
+// aiUserInput has been removed; imported content is normalized in appendTransaction().
 import { aiUserInputNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
 import { aiUserMessageNodeType, aiUserMessageNodeView, type AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
@@ -264,7 +263,7 @@ function usesReasoningSection(
 }
 
 function getReasoningRunKey(generationRun?: MediaGenerationRunMeta): string {
-    return usesReasoningSection(generationRun) ? generationRun?.reasoningRunId || 'legacy' : 'legacy'
+    return usesReasoningSection(generationRun) ? generationRun?.reasoningRunId || 'unsectioned' : 'unsectioned'
 }
 
 function getReasoningOnlyGenerationRun(generationRun?: MediaGenerationRunMeta): MediaGenerationRunMeta | undefined {
@@ -314,8 +313,9 @@ function buildReasoningSectionAttrs(
         reasoningRunId: generationRun.reasoningRunId || previousAttrs.reasoningRunId || '',
         reasoningModelId: generationRun.reasoningModelId || previousAttrs.reasoningModelId || '',
         reasoningIndex: generationRun.reasoningIndex ?? previousAttrs.reasoningIndex ?? null,
-        branchOriginNodeId: generationRun.lineageAssignment?.branchOriginNodeId || '',
-        branchForkNodeId: generationRun.lineageAssignment?.branchForkNodeId || '',
+        branchOriginNodeId: generationRun.lineageAssignment?.branchOriginNodeId || previousAttrs.branchOriginNodeId || '',
+        branchForkNodeId: generationRun.lineageAssignment?.branchForkNodeId || previousAttrs.branchForkNodeId || '',
+        branchLineNodeId: generationRun.lineageAssignment?.branchLineNodeId || previousAttrs.branchLineNodeId || '',
         isReceivingAnimation,
     }
 }
@@ -511,7 +511,7 @@ class ContentExtractor {
             return ContentExtractor.getSelectedThreadsContent(state, currentThreadId)
         }
 
-        // Find thread node - prefer explicit position, fallback to selection
+        // Find thread node from explicit position when provided, otherwise from selection.
         const thread = nodePos !== undefined
             ? ContentExtractor.findThreadByPosition(state, nodePos)
             : ContentExtractor.findThreadBySelection(state)
@@ -723,7 +723,7 @@ class PositionFinder {
 
     // The content target for a run. A matrix run (with a reasoningRunId)
     // streams into its per-reasoning-run aiReasoningSection inside the single
-    // shared response message; a legacy text/single-model run streams into the
+    // shared response message; an unsectioned single-model run streams into the
     // aiResponseMessage itself. Callers (streaming, collapsible, media placement)
     // insert at endOfNodePos, so this resolves to whichever node owns the content.
     static findResponseNode(state: EditorState, threadId?: string, generationRun?: MediaGenerationRunMeta): {
@@ -746,7 +746,7 @@ class PositionFinder {
             attrs?.isReceivingAnimation ? 2 : (attrs?.isInitialRenderAnimation ? 1 : 0)
 
         if (threadId) {
-            // Search within specific thread only - no fallback
+            // Search within the specific thread only.
             state.doc.descendants((node: ProseMirrorNode, pos: number) => {
                 if (node.type.name !== aiChatThreadNodeType || node.attrs?.threadId !== threadId) return
 
@@ -1117,7 +1117,7 @@ class AiChatThreadPluginClass {
 
         const $endPos = state.doc.resolve(responseNodeInfo.endOfNodePos)
         const responseNode = $endPos.nodeBefore
-        // The content owner is the per-run section (matrix) or the message (legacy);
+        // The content owner is the per-run section (matrix) or the message (unsectioned);
         // generated media lands inside it, keeping each run's media to its own section.
         if (!responseNode || (responseNode.type.name !== aiResponseMessageNodeType && responseNode.type.name !== aiReasoningSectionNodeType)) return null
 
@@ -1156,6 +1156,7 @@ class AiChatThreadPluginClass {
         )
         const hasLineageAttrChange = currentAttrs.branchOriginNodeId !== nextAttrs.branchOriginNodeId
             || currentAttrs.branchForkNodeId !== nextAttrs.branchForkNodeId
+            || currentAttrs.branchLineNodeId !== nextAttrs.branchLineNodeId
             || currentAttrs.generationRequestId !== nextAttrs.generationRequestId
             || currentAttrs.reasoningRunId !== nextAttrs.reasoningRunId
             || currentAttrs.reasoningModelId !== nextAttrs.reasoningModelId
@@ -1227,11 +1228,9 @@ class AiChatThreadPluginClass {
             responseId?: string
             mediaRunId?: string
             partialOnly?: boolean
-            fallbackToLastPartial?: boolean
         }
     ): ResponseImageNodeInfo | null {
         let matchedImage: ResponseImageNodeInfo | null = null
-        let latestPartialImage: ResponseImageNodeInfo | null = null
 
         responseContext.responseNode.forEach((child: ProseMirrorNode, offset: number) => {
             if (child.type.name !== aiGeneratedImageNodeType) return
@@ -1241,10 +1240,6 @@ class AiChatThreadPluginClass {
             const nodeInfo = {
                 node: child,
                 nodePos: responseContext.responseStartPos + 1 + offset,
-            }
-
-            if (child.attrs.isPartial) {
-                latestPartialImage = nodeInfo
             }
 
             if (options.fileId && child.attrs.fileId === options.fileId) {
@@ -1269,7 +1264,7 @@ class AiChatThreadPluginClass {
 
         if (options.mediaRunId) return matchedImage
 
-        return matchedImage ?? (options.fallbackToLastPartial ? latestPartialImage : null)
+        return matchedImage
     }
 
     private buildGeneratedImageAttrs(
@@ -1322,7 +1317,6 @@ class AiChatThreadPluginClass {
             mediaRunId: event.generationRun?.mediaRunId,
             partialIndex,
             partialOnly: true,
-            fallbackToLastPartial: true,
         })
         const imageAttrs = this.buildGeneratedImageAttrs(event, true, partialIndex, existingImage?.node.attrs)
         const tr = state.tr
@@ -1385,7 +1379,6 @@ class AiChatThreadPluginClass {
             fileId: event.fileId,
             responseId: event.responseId,
             partialOnly: true,
-            fallbackToLastPartial: true,
         })
         const partialIndex = existingImage?.node.attrs.partialIndex ?? 0
         const tr = state.tr
@@ -2141,8 +2134,8 @@ class AiChatThreadPluginClass {
             // Insert into the collapsible node
             targetInfo = PositionFinder.findCollapsibleNode(state, threadId, reasoningGenerationRun)
             if (!targetInfo.found) {
-                // Fallback to response node if collapsible not found
-                targetInfo = PositionFinder.findResponseNode(state, threadId, reasoningGenerationRun)
+                console.warn('[aiChatThreadPlugin] active collapsible stream has no target', { threadId })
+                return
             }
         } else {
             targetInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
@@ -2233,7 +2226,7 @@ class AiChatThreadPluginClass {
 
         const node = state.doc.nodeAt(responseInfo.nodePos)
         // findResponseNode resolves to the per-run section for matrix runs and to
-        // the message itself for legacy runs; clear the receiving flag on whichever.
+        // the message itself for unsectioned runs; clear the receiving flag on whichever.
         if (!node || (node.type.name !== aiResponseMessageNodeType && node.type.name !== aiReasoningSectionNodeType)) {
             if (!IS_RECEIVING_TEMP_DEBUG_STATE && threadId) {
                 dispatch(state.tr.setMeta('setReceiving', { threadId, receiving: false, runKey: getReasoningRunKey(generationRun) }))
@@ -2336,20 +2329,6 @@ class AiChatThreadPluginClass {
             tr.setMeta('skipDispatch', true)
             dispatch(tr)
         }
-    }
-
-    private createResponseFallback(state: EditorState, dispatch: (tr: Transaction) => void, threadId?: string, aiProvider?: string): void {
-        const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
-        if (!threadInfo) return
-
-        const { insertPos } = threadInfo
-        const responseNode = state.schema.nodes[aiResponseMessageNodeType].create({
-            isInitialRenderAnimation: true,
-            isReceivingAnimation: true,
-            aiProvider: aiProvider || 'Anthropic'
-        })
-
-        dispatch(state.tr.insert(insertPos, responseNode).setMeta('skipDispatch', true))
     }
 
     private createMark(schema: ProseMirrorSchema, style: string): any {
@@ -2535,7 +2514,7 @@ class AiChatThreadPluginClass {
         const meta = transaction.getMeta(USE_AI_CHAT_META)
         const { threadId: threadIdFromMeta, nodePos } = meta || {}
 
-        // Find thread: prefer explicit position from button, fallback to selection
+        // Find thread from the button's explicit position when provided, otherwise from selection.
         const threadNode = nodePos !== undefined
             ? ContentExtractor.findThreadByPosition(newState, nodePos)
             : ContentExtractor.findThreadBySelection(newState)
@@ -2569,7 +2548,7 @@ class AiChatThreadPluginClass {
         } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
 
-        const legacyUseMultipleModels = useMultipleModels === true || useMultipleModels === 'true'
+        const combinedMultiModelFlag = useMultipleModels === true || useMultipleModels === 'true'
         const rawReasoningModelsEnabled = useMultipleReasoningModels === true
             || useMultipleReasoningModels === 'true'
         const rawImageModelsEnabled = useMultipleImageModels === true
@@ -2577,10 +2556,10 @@ class AiChatThreadPluginClass {
         const rawVideoModelsEnabled = useMultipleVideoModels === true
             || useMultipleVideoModels === 'true'
         const hasSectionModelMode = rawReasoningModelsEnabled || rawImageModelsEnabled || rawVideoModelsEnabled
-        const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionModelMode
-        const reasoningModelsEnabled = rawReasoningModelsEnabled || useLegacyModeFallback
-        const imageModelsEnabled = rawImageModelsEnabled || useLegacyModeFallback
-        const videoModelsEnabled = rawVideoModelsEnabled || useLegacyModeFallback
+        const shouldExpandCombinedModelFlag = combinedMultiModelFlag && !hasSectionModelMode
+        const reasoningModelsEnabled = rawReasoningModelsEnabled || shouldExpandCombinedModelFlag
+        const imageModelsEnabled = rawImageModelsEnabled || shouldExpandCombinedModelFlag
+        const videoModelsEnabled = rawVideoModelsEnabled || shouldExpandCombinedModelFlag
         const rawReasoningModelIds = parseAiModelSelectionAttr(aiModels)
         const rawImageModelIds = parseAiModelSelectionAttr(aiImageModels)
         const rawVideoModelIds = parseAiModelSelectionAttr(aiVideoModels)
@@ -2736,7 +2715,7 @@ class AiChatThreadPluginClass {
                     // Handle receiving state toggle per thread
                     const receivingMeta = tr.getMeta('setReceiving')
                     if (receivingMeta !== undefined) {
-                        const { threadId, receiving, runKey = 'legacy' } = receivingMeta
+                        const { threadId, receiving, runKey = 'unsectioned' } = receivingMeta
                         if (threadId) {
                             const previousThreadReceiving = prev.receivingThreadIds.has(threadId)
                             const nextRunKeysByThread = new Map(prev.receivingRunKeysByThread)
@@ -2777,7 +2756,7 @@ class AiChatThreadPluginClass {
                     // Handle collapsible state toggle per thread
                     const collapsibleMeta = tr.getMeta('setCollapsible')
                     if (collapsibleMeta !== undefined) {
-                        const { threadId, active, runKey = 'legacy' } = collapsibleMeta
+                        const { threadId, active, runKey = 'unsectioned' } = collapsibleMeta
                         if (threadId) {
                             const scopedRunKey = `${threadId}:${runKey}`
                             const nextRunKeys = new Set(prev.collapsibleRunKeys)
@@ -2817,14 +2796,14 @@ class AiChatThreadPluginClass {
             },
 
             appendTransaction: (transactions: Transaction[], _oldState: EditorState, newState: EditorState) => {
-                // Strip legacy aiUserInput nodes from threads if present (data migration)
+                // Strip imported aiUserInput nodes from threads if present.
                 const paragraphType = newState.schema.nodes.paragraph
                 if (paragraphType) {
                     let tr: Transaction | null = null
                     newState.doc.descendants((node: ProseMirrorNode, pos: number) => {
                         if (node.type.name !== aiChatThreadNodeType) return
 
-                        // Remove any aiUserInput children (legacy content)
+                        // Remove any aiUserInput children.
                         node.forEach((child: ProseMirrorNode, offset: number) => {
                             if (child.type.name === aiUserInputNodeType) {
                                 const childPos = pos + 1 + offset

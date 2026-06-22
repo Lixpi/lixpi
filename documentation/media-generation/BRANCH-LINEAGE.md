@@ -239,7 +239,7 @@ export type ImageBranchCandidateImage = {
 export type ImageBranchCandidateSnapshot = {
     resolverVersion: string
     threadId: string
-    regionNodeId: string // legacy field name: current root/request anchor node id
+    regionNodeId: string // current root/request anchor node id
     promptText: string
     promptFingerprint: string
     candidates: ImageBranchCandidateImage[]
@@ -292,7 +292,7 @@ The plan assigns:
 - branch-origin marker ID and neutral root provenance when a fresh standalone request needs a visible root,
 - branchFork marker IDs, parent marker/source IDs, and reasoning-run provenance,
 - per-run `MediaRunLineageAssignment` entries copied into `generationRun.lineageAssignment`,
-- generated-media `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, legacy `parentImageNodeId`, selected references, operation kind, prompt text, prompt fingerprint, and created-at ordering.
+- generated-media `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, `parentImageNodeId` schema alias, selected references, operation kind, prompt text, prompt fingerprint, and created-at ordering.
 
 The browser must not derive `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, lineage parent selection, or marker provenance from model counts, prompt text, selected nodes, local canvas state, existing connector edges, existing generated nodes, persisted alias fields, or DOM state. Branch forks are assigned per reasoning run by the API; media-model fanout under a reasoning run shares that fork. The browser may compute marker/media positions from the plan and the visible canvas.
 
@@ -440,9 +440,9 @@ The finalized generated node also gets canvas provenance chrome rendered in a de
 
 - The **provider badge** and **info button** render in the media chrome overlay.
 - The **info panel** opens at the exact media-node width and expands to its full content height without cropping long prompts or reference metadata. It uses `generatedBy.responseMessageId` plus the persisted chat thread to reconstruct the original user prompt, the producing AI response, and the same generation-trace metadata shown in chat history. It reuses the same chat message shells and the `ImageGenerationTrace` / generation-trace detail renderer used by the AI chat history.
-- Fresh multi-model branch origins open a neutral provenance panel below the temporary `branchOrigin` marker. The panel uses API-authored origin provenance and shows only the user's prompt, provided references, and the decision to fork the request. It does not reconstruct a reasoning-model response from a generated child.
+- Fresh multi-model branch origins show the stored user prompt on the marker itself from the hidden AI chat thread's ProseMirror content. The neutral provenance panel below the temporary `branchOrigin` marker uses API-authored origin provenance for provided references and the decision to fork the request. It does not reconstruct a prompt or reasoning-model response from generated-child metadata.
 - Multi-reasoning `branchFork` markers open that same provenance/details panel below the fork marker. The marker chooses a generated child with `generatedBy.branchForkNodeId` equal to the fork node id, so chat reconstruction is filtered by that child's `reasoningRunId` / `reasoningModelId` and shows only the relevant reasoning model response.
-- AI chat history mirrors the same fork provenance as decomposable message pieces. A matrix reasoning run stores the API-assigned `branchOriginNodeId` and `branchForkNodeId` on its `aiReasoningSection`, plus the same lineage ids on generated image/video nodes. Read-only canvas projections apply a lineage scope when they reassemble those pieces: branch roots materialize only `Branch started`, branch forks and generated-media runs render only fork-local `Branch fork created`, and the live chat can show the full conversation context. Generated-media provider rows stay model/provider-only while retaining lineage attrs for reconstruction.
+- AI chat history mirrors the same fork provenance as decomposable message pieces. A matrix reasoning run stores the API-assigned `branchOriginNodeId`, `branchForkNodeId`, and `branchLineNodeId` on its `aiReasoningSection`, plus the same lineage ids on generated image/video nodes. Read-only canvas projections apply a lineage scope when they reassemble stored thread pieces: branch forks and generated-media runs render only scope-local workflow markers, and the live chat can show the full conversation context. Generated-media provider rows stay model/provider-only while retaining lineage attrs for reconstruction.
 
 (The DOM-overlay-vs-PIXI ownership split is owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md); the post-placement de-overlap pass is owned by [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).)
 

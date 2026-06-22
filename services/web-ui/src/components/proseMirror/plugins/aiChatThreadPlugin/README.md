@@ -124,8 +124,8 @@ Assistant response node created as the request is submitted, then filled by stre
 Per-model section inside one `aiResponseMessage` for media-generation matrix requests.
 
 - Content: `(paragraph | block)*`
-- Attrs: `generationRequestId`, `reasoningRunId`, `reasoningModelId`, `reasoningIndex`, `branchOriginNodeId`, `branchForkNodeId`, `lineageProjectionScope`, `isReceivingAnimation`
-- `branchOriginNodeId` and `branchForkNodeId` are persisted from the API lineage assignment. The NodeView asks the shared lineage-event projector which markers belong in the current scope. The live conversation scope can show `Branch started` on the first origin section and `Branch fork created` on forked sections; read-only branch-fork and media-run projections show only fork-local lineage events.
+- Attrs: `generationRequestId`, `reasoningRunId`, `reasoningModelId`, `reasoningIndex`, `branchOriginNodeId`, `branchForkNodeId`, `branchLineNodeId`, `lineageProjectionScope`, `isReceivingAnimation`
+- `branchOriginNodeId`, `branchForkNodeId`, and `branchLineNodeId` are persisted from the API lineage assignment. The NodeView asks the shared lineage-event projector which markers belong in the current scope. The live conversation scope can show `Branch started` on the first origin section, `Branch fork created` on forked sections, and `Branch continued` on branch-line sections; read-only branch-fork and media-run projections show only scope-local lineage events.
 - Created as local placeholders on submit when the request includes image/video generation, then adopted by streamed `generationRun` metadata.
 - Owns only that reasoning run's prose, generation-details collapsible, and generated media thumbnail, so canvas provenance/details can resolve by `reasoningRunId` or `mediaRunId`.
 
@@ -251,7 +251,7 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 
 1. exact `reasoningRunId` section matches
 2. provisional local section templates matching `reasoningModelId` and `reasoningIndex`
-3. legacy receiving/initial-render responses, with newest winning ties
+3. receiving/initial-render responses, with newest winning ties
 
 That scoping keeps concurrent streams routed to the correct thread and model variant.
 
@@ -287,7 +287,7 @@ Generated-image rendering is handled by `imageSelectionPlugin`.
 
 ## Read-Only Provenance Projections
 
-`readOnlyAiChatThreadRenderer.ts` mounts a `ProseMirrorEditor` with `documentType: 'aiChatThread'`, `readOnly: true`, and an optional trace-details render context. `aiChatThreadContentUtils.ts` builds a scoped `doc` JSON projection for generated image/video provenance by cloning the producing `aiUserMessage` and `aiResponseMessage` from `AiChatThread.content`. Matrix media responses keep only the matching `aiReasoningSection`, selected by `responseMessageId`, `reasoningRunId`, `mediaRunId`, or `reasoningModelId`. Per-image/per-video provenance can additionally prune generated-media atom nodes to the exact `mediaRunId`, `fileId`, and `variantIndex`; branch-fork provenance leaves sibling media visible.
+`readOnlyAiChatThreadRenderer.ts` mounts a `ProseMirrorEditor` with `documentType: 'aiChatThread'`, `readOnly: true`, and an optional trace-details render context. `aiChatThreadContentUtils.ts` builds a scoped `doc` JSON projection for generated image/video provenance by cloning the producing `aiUserMessage` and `aiResponseMessage` from `AiChatThread.content`. It returns no projection when the stored thread content or a matching response cannot be found. Matrix media responses keep only the matching `aiReasoningSection`, selected by `responseMessageId`, `reasoningRunId`, generated-media `mediaRunId` / `fileId`, or `reasoningModelId`. Per-image/per-video provenance can additionally prune generated-media atom nodes to the exact `mediaRunId`, `fileId`, and `variantIndex`; branch-fork provenance leaves sibling media visible.
 
 Lineage rendering is projection-scoped instead of panel-specific. `conversation` preserves the full live-thread view, `branch-origin` materializes a standalone `aiLineageEvent` for the branch root, `branch-fork` keeps only fork-local markers on the selected reasoning section, and `media-run` keeps run-local fork or continuation markers for generated-media panels. This keeps branch-root, branch-fork, and branch-line workflow nodes independently reconstructable from the same stored message pieces without copying ancestor events into child projections.
 
