@@ -211,6 +211,11 @@ const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
 // minimum, after which the preview text wraps to a second line and truncates.
 const BRANCH_MARKER_MIN_WIDTH_MULTIPLIER = 2.6
 const BRANCH_MARKER_MAX_WIDTH_GROWTH = 3
+// While the marker is still docked above the composer (its "screen-fixed" pose,
+// before a canvas destination is computed) it stays a single, compact line that
+// matches the prompt input's type size. To keep long prompts on one line it may
+// grow up to twice the on-canvas ceiling before truncating with an ellipsis.
+const BRANCH_MARKER_SCREEN_FIXED_MAX_WIDTH_GROWTH = BRANCH_MARKER_MAX_WIDTH_GROWTH * 2
 const BRANCH_MARKER_APPROX_CHAR_WIDTH = 8
 // Wrapping kicks in before the naive char-width estimate predicts (real glyphs
 // average wider than the width-sizing approximation). Use a larger per-char width
@@ -270,6 +275,20 @@ function getBranchMarkerContentDimensions(promptText: string, options: { respons
                 + responseHeight
             )
         ),
+    }
+}
+
+// Sizing for the docked, above-the-composer pose: always a single line, sized so
+// the prompt fits on that line up to a wider ceiling (then truncates). Shorter and
+// wider than the on-canvas pill so the marker visibly grows once it lands.
+function getBranchMarkerScreenFixedDimensions(promptText: string): { width: number; height: number } {
+    const minWidth = getBranchMarkerMinWidth()
+    const maxWidth = minWidth * BRANCH_MARKER_SCREEN_FIXED_MAX_WIDTH_GROWTH
+    const promptPreview = getBranchMarkerPromptPreview(promptText)
+    const desiredWidth = BRANCH_MARKER_HORIZONTAL_PADDING + promptPreview.length * BRANCH_MARKER_APPROX_CHAR_WIDTH
+    return {
+        width: Math.round(Math.max(minWidth, Math.min(maxWidth, desiredWidth))),
+        height: BRANCH_MARKER_MIN_HEIGHT,
     }
 }
 
@@ -5618,8 +5637,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
         let stackOffsetY = 0
         for (const node of pendingNodes) {
-            applyPendingBranchMarkerScreenProjection(node.nodeId, node.dimensions, viewport, stackOffsetY)
-            stackOffsetY += node.dimensions.height + BRANCH_MARKER_PENDING_STACK_GAP
+            // The docked pose is laid out at its own compact, single-line size — not
+            // the (taller, possibly wrapped) on-canvas dimensions the node carries.
+            const dimensions = getBranchMarkerScreenFixedDimensions(getBranchMarkerPromptText(node))
+            applyPendingBranchMarkerScreenProjection(node.nodeId, dimensions, viewport, stackOffsetY)
+            stackOffsetY += dimensions.height + BRANCH_MARKER_PENDING_STACK_GAP
         }
     }
 
@@ -5635,7 +5657,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         let stackOffsetY = 0
         pendingStates.forEach((pendingState, index) => {
             const dimensions = getBranchMarkerContentDimensions(promptText)
-            const projection = getPendingBranchMarkerScreenProjection(dimensions, getLiveViewport(), stackOffsetY)
+            // The node carries on-canvas dimensions, but its initial docked pose is
+            // projected from the compact single-line screen-fixed size.
+            const screenFixedDimensions = getBranchMarkerScreenFixedDimensions(promptText)
+            const projection = getPendingBranchMarkerScreenProjection(screenFixedDimensions, getLiveViewport(), stackOffsetY)
             const nodeId = `pending-branch-${uuidv4()}`
             const basePendingNode: BranchLineCanvasNode = {
                 nodeId,
@@ -5663,7 +5688,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             if (pendingStates.length === 1) pendingBranchMarkers.set(placementKey, record)
             pendingNodes.push(pendingNode)
-            stackOffsetY += pendingNode.dimensions.height + BRANCH_MARKER_PENDING_STACK_GAP
+            stackOffsetY += screenFixedDimensions.height + BRANCH_MARKER_PENDING_STACK_GAP
         })
         commitCanvasStatePreservingEditors({
             ...currentCanvasState,
@@ -5755,6 +5780,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         applyStyle(nodeEl, {
             left: pendingEl.style.left,
             top: pendingEl.style.top,
+            // Start at the docked pose's compact size so the move animation grows the
+            // pill into its (larger) on-canvas dimensions instead of snapping.
+            width: pendingEl.style.width,
+            height: pendingEl.style.height,
             transform: pendingEl.style.transform,
             transformOrigin: pendingEl.style.transformOrigin || 'top right',
         })
