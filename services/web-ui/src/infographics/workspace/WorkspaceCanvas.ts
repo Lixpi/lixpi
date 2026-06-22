@@ -207,15 +207,10 @@ const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 
 const NODE_DRAG_START_THRESHOLD_PX = 6
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
 // The marker is a pill that hugs the user message by default. Its width grows
-// with the message length from a comfortable minimum up to three times that
-// minimum, after which the preview text wraps to a second line and truncates.
-const BRANCH_MARKER_MIN_WIDTH_MULTIPLIER = 2.6
-const BRANCH_MARKER_MAX_WIDTH_GROWTH = 3
-// While the marker is still docked above the composer (its "screen-fixed" pose,
-// before a canvas destination is computed) it stays a single, compact line that
-// matches the prompt input's type size. To keep long prompts on one line it may
-// grow up to twice the on-canvas ceiling before truncating with an ellipsis.
-const BRANCH_MARKER_SCREEN_FIXED_MAX_WIDTH_GROWTH = BRANCH_MARKER_MAX_WIDTH_GROWTH * 2
+// with the message length from a comfortable minimum up to a ceiling, after which
+// the preview text wraps to a second line and truncates. Width-sizing multipliers
+// (min width, on-canvas ceiling, docked-pose ceiling) are configurable in
+// settings.ts under `mediaBranchLineage.marker`.
 const BRANCH_MARKER_APPROX_CHAR_WIDTH = 8
 // Wrapping kicks in before the naive char-width estimate predicts (real glyphs
 // average wider than the width-sizing approximation). Use a larger per-char width
@@ -244,12 +239,12 @@ type CanvasGeometry = { position: { x: number; y: number }; dimensions: { width:
 type PendingGeneratedMediaLayoutProxy = { offset: { x: number; y: number }; dimensions: { width: number; height: number } }
 
 function getBranchMarkerMinWidth(): number {
-    return Math.round(settings.mediaBranchLineage.branchOrigin.size * BRANCH_MARKER_MIN_WIDTH_MULTIPLIER)
+    return Math.round(settings.mediaBranchLineage.branchOrigin.size * settings.mediaBranchLineage.marker.minWidthMultiplier)
 }
 
 function getBranchMarkerWidthForText(promptText: string): number {
     const minWidth = getBranchMarkerMinWidth()
-    const maxWidth = minWidth * BRANCH_MARKER_MAX_WIDTH_GROWTH
+    const maxWidth = minWidth * settings.mediaBranchLineage.marker.maxWidthGrowth
     const promptPreview = getBranchMarkerPromptPreview(promptText)
     // Target a single line; longer messages keep growing until they hit the
     // ceiling, then wrap to (and truncate at) two lines.
@@ -287,7 +282,7 @@ function getBranchMarkerContentDimensions(promptText: string, options: { respons
 // wider than the on-canvas pill so the marker visibly grows once it lands.
 function getBranchMarkerScreenFixedDimensions(promptText: string): { width: number; height: number } {
     const minWidth = getBranchMarkerMinWidth()
-    const maxWidth = minWidth * BRANCH_MARKER_SCREEN_FIXED_MAX_WIDTH_GROWTH
+    const maxWidth = minWidth * settings.mediaBranchLineage.marker.screenFixedMaxWidthGrowth
     const promptPreview = getBranchMarkerPromptPreview(promptText)
     const desiredWidth = BRANCH_MARKER_HORIZONTAL_PADDING + promptPreview.length * BRANCH_MARKER_APPROX_CHAR_WIDTH
     return {

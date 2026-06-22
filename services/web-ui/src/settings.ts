@@ -422,6 +422,11 @@ export type MediaBranchLineageSettings = {
             separatorGradient: string
         }
     }
+    marker: {
+        minWidthMultiplier: number
+        maxWidthGrowth: number
+        screenFixedMaxWidthGrowth: number
+    }
 }
 
 export type MediaLibrarySettings = {
@@ -1038,6 +1043,15 @@ export const settings: Settings = {
                 boxShadow: '0 8px 24px rgba(42, 48, 57, 0.22)',
                 separatorGradient: 'linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.18) 10%, rgba(255, 255, 255, 0.34) 26%, rgba(255, 255, 255, 0.62) 50%, rgba(255, 255, 255, 0.34) 74%, rgba(255, 255, 255, 0.18) 90%, rgba(255, 255, 255, 0) 100%)',
             },
+        },
+        // Width sizing for the branch marker pill that hugs a user message.
+        marker: {
+            // Multiplier on branchOrigin.size for the marker's comfortable minimum width (the pill never shrinks below this).
+            minWidthMultiplier: 2.6,
+            // Multiplier on the minimum width capping how wide an on-canvas (already-placed) marker may grow before its preview wraps to a second line and truncates. Lower it to keep long placed messages more compact.
+            maxWidthGrowth: 1.5,
+            // Multiplier on the minimum width capping the docked, above-the-composer pose (single line). Kept wider than maxWidthGrowth so long prompts stay on one line while still being assessed; once the marker lands on the canvas it tightens to maxWidthGrowth.
+            screenFixedMaxWidthGrowth: 6,
         },
     },
 
