@@ -358,8 +358,17 @@
     class="workspace-canvas"
     class:workspace-canvas-chat-panel-open={isAiChatPanelOpen}
 >
-    <div class="workspace-floating-toolbar">
-        <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument}>
+    <button
+        class="workspace-ai-chat-launcher"
+        onclick={handleToggleAiChatPanel}
+        aria-label={isAiChatPanelOpen ? 'Collapse AI Chat' : 'Open AI Chat'}
+    >
+        {@html aiChatPanelCollapseIcon}
+    </button>
+
+    <!-- Left action panel — flanks the composer. Two icons render it as an oval. -->
+    <div class="workspace-canvas-action-panel workspace-canvas-action-panel-left">
+        <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument} aria-label="New Document">
             {@html createNewFileIcon}
             <span class="workspace-floating-toolbar-tooltip">New Document</span>
         </button>
@@ -368,6 +377,7 @@
                 class="workspace-floating-toolbar-button"
                 class:active={imageSubmenuOpen}
                 onclick={toggleImageSubmenu}
+                aria-label="Add Image"
             >
                 {@html imageIcon}
                 {#if !imageSubmenuOpen}
@@ -405,26 +415,23 @@
                 </div>
             {/if}
         </div>
-        <input
-            type="file"
-            accept="image/*"
-            style="display: none"
-            bind:this={fileInputEl}
-            onchange={handleFileInputChange}
-        />
-        <div class="workspace-floating-toolbar-divider"></div>
     </div>
-    <button
-        class="workspace-ai-chat-launcher"
-        onclick={handleToggleAiChatPanel}
-        aria-label={isAiChatPanelOpen ? 'Collapse AI Chat' : 'Open AI Chat'}
-    >
-        {@html aiChatPanelCollapseIcon}
-    </button>
-    <button class="workspace-media-library-launcher" onclick={handleToggleMediaLibrary} aria-label="Media Library">
-        {@html mediaFoloderIcon}
-        <span class="workspace-media-library-launcher-tooltip">Media Library</span>
-    </button>
+
+    <!-- Right action panel — a single icon renders it as a circle. -->
+    <div class="workspace-canvas-action-panel workspace-canvas-action-panel-right workspace-canvas-action-panel-single">
+        <button class="workspace-floating-toolbar-button" onclick={handleToggleMediaLibrary} aria-label="Media Library">
+            {@html mediaFoloderIcon}
+            <span class="workspace-floating-toolbar-tooltip">Media Library</span>
+        </button>
+    </div>
+
+    <input
+        type="file"
+        accept="image/*"
+        style="display: none"
+        bind:this={fileInputEl}
+        onchange={handleFileInputChange}
+    />
     <span class="workspace-zoom-indicator">{Math.round(viewport.zoom * 100)}%</span>
     <div class="workspace-pane" bind:this={paneEl}>
         <div class="workspace-viewport" bind:this={viewportEl}></div>

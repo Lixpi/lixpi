@@ -63,15 +63,15 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(panelStyles, '.media-library-panel-feature-selected .media-library-inspector')
     })
 
-    it('places an independent Media Library trigger above the standalone zoom indicator', () => {
-        expectSourceToContain(workspaceSvelteSource, 'workspace-media-library-launcher')
+    it('places the Media Library trigger in the right-side circular action panel', () => {
+        expectSourceToContain(workspaceSvelteSource, 'workspace-canvas-action-panel-right workspace-canvas-action-panel-single')
         expectSourceToContain(workspaceSvelteSource, 'workspace-zoom-indicator')
         expectSourceNotToContain(workspaceSvelteSource, 'workspace-canvas-utility-capsule')
-        const leftToolbar = workspaceSvelteSource.slice(
-            workspaceSvelteSource.indexOf('<div class="workspace-floating-toolbar">'),
-            workspaceSvelteSource.indexOf('<button class="workspace-media-library-launcher"'),
+        const leftPanel = workspaceSvelteSource.slice(
+            workspaceSvelteSource.indexOf('workspace-canvas-action-panel-left'),
+            workspaceSvelteSource.indexOf('workspace-canvas-action-panel-right'),
         )
-        expectSourceNotToContain(leftToolbar, 'handleToggleMediaLibrary')
+        expectSourceNotToContain(leftPanel, 'handleToggleMediaLibrary')
     })
 
     it('restores saved images through materialization and the existing centered insertion path', () => {
