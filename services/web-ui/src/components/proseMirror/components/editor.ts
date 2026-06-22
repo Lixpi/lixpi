@@ -124,6 +124,7 @@ export class ProseMirrorEditor {
         documentType = DOCUMENT_TYPE.DOCUMENT,
         threadId,
         onEditorChange,
+        onStreamingUpdate,
         onProjectTitleChange,
         onAiChatSubmit,
         onAiChatStop,
@@ -136,6 +137,7 @@ export class ProseMirrorEditor {
         aiChatThreadRenderContext
     }) {
         this.onEditorChange = onEditorChange
+        this.onStreamingUpdate = onStreamingUpdate
         this.onProjectTitleChange = onProjectTitleChange
         this.onAiChatSubmit = onAiChatSubmit
         this.onAiChatStop = onAiChatStop
@@ -249,7 +251,7 @@ export class ProseMirrorEditor {
 
     createPlugins(initialValue, isDisabled) {
         const basePlugins = [
-            statePlugin(initialValue, this.dispatchStateChange.bind(this), this.onProjectTitleChange.bind(this)),
+            statePlugin(initialValue, this.dispatchStateChange.bind(this), this.onProjectTitleChange.bind(this), this.dispatchStreamingUpdate.bind(this)),
             focusPlugin(this.updateEditorFocusState.bind(this)), // Allows to enable editor if it was disabled and user clicks on the editor area
             bubbleMenuPlugin(),
             linkTooltipPlugin(),
@@ -323,6 +325,10 @@ export class ProseMirrorEditor {
 
     dispatchStateChange(json) {
         this.onEditorChange?.(json)
+    }
+
+    dispatchStreamingUpdate(json) {
+        this.onStreamingUpdate?.(json)
     }
 
     destroy() {

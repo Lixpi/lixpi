@@ -234,6 +234,10 @@ const BRANCH_MARKER_RESPONSE_LINE_HEIGHT = 16
 // `justify-content: center` pads the single-line case more than the multi-line case.
 const BRANCH_MARKER_MIN_HEIGHT = BRANCH_MARKER_VERTICAL_PADDING + BRANCH_MARKER_MESSAGE_LINE_HEIGHT
 const BRANCH_MARKER_PENDING_STACK_GAP = 8
+// Must match the `workspace-branch-marker-spin` animation duration in
+// workspace-canvas.scss (0.8s). Used to phase-align recreated spinners to a
+// shared rotation clock so the spinner never visibly restarts.
+const BRANCH_MARKER_SPINNER_PERIOD_MS = 800
 const BRANCH_MARKER_VISIBLE_VIEWPORT_PADDING_SCREEN = 24
 type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 type CanvasGeometry = { position: { x: number; y: number }; dimensions: { width: number; height: number } }
@@ -636,6 +640,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     const branchMarkerProjectionOverrideNodeIds: Set<string> = new Set()
+    // Streamed AI tokens are dispatched with `skipDispatch`, so the aiChatThreads
+    // store lags behind the live editor doc until the stream settles. Branch
+    // lineage markers read their preview text from this override while a thread is
+    // actively streaming so the response line tracks the doc token-by-token; it is
+    // cleared once the store catches up via onEditorChange.
+    const liveAiChatThreadContentOverrides: Map<string, object> = new Map()
     let edgesRaf: number | null = null
     let transformSideEffectsRaf: number | null = null
     let pendingHandleZoom: number | null = null
@@ -4628,11 +4638,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     contextPreview: getAiUserMessageContextPreviewRenderer(),
                 },
                 onEditorChange: (value: any) => {
+                    liveAiChatThreadContentOverrides.delete(panelThreadId)
                     onAiChatThreadContentChange?.({ workspaceId, threadId: panelThreadId, content: value })
                     refreshBranchMarkersForAiChatThread(panelThreadId)
                     // The descriptor lives on the canvas thread node (if this thread
                     // has one); standalone panel-only sessions have no node to patch.
                     if (rootNode) scheduleTextNodeDescriptor(rootNode.nodeId, value)
+                },
+                // Streamed AI tokens are dispatched with skipDispatch, so they never
+                // reach onEditorChange or the store. Mirror the live doc into the
+                // override and refresh so the marker's response preview tracks the
+                // sliced tail token-by-token instead of only updating once finished.
+                onStreamingUpdate: (value: any) => {
+                    liveAiChatThreadContentOverrides.set(panelThreadId, value)
+                    refreshBranchMarkersForAiChatThread(panelThreadId)
                 },
                 onProjectTitleChange: () => {},
                 onAiChatSubmit: async ({
@@ -5027,7 +5046,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 contextPreview: getAiUserMessageContextPreviewRenderer(),
             },
             onEditorChange: (value: any) => {
+                liveAiChatThreadContentOverrides.delete(threadId)
                 onAiChatThreadContentChange?.({ workspaceId, threadId, content: value })
+                refreshBranchMarkersForAiChatThread(threadId)
+            },
+            // Streamed AI tokens are dispatched with skipDispatch, so they never
+            // reach onEditorChange or the store. Mirror the live doc into the
+            // override and refresh so the marker's response preview tracks the
+            // sliced tail token-by-token instead of only updating once finished.
+            onStreamingUpdate: (value: any) => {
+                liveAiChatThreadContentOverrides.set(threadId, value)
                 refreshBranchMarkersForAiChatThread(threadId)
             },
             onProjectTitleChange: () => {},
@@ -6577,7 +6605,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function getAiChatThreadContentForBranchMarker(threadId: string): object | undefined {
-        return aiChatThreadsStore.getThread(threadId)?.content
+        return liveAiChatThreadContentOverrides.get(threadId) ?? aiChatThreadsStore.getThread(threadId)?.content
     }
 
     function getBranchMarkerThreadId(node: BranchMarkerNode): string {
@@ -6766,6 +6794,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const nextNode = resizeBranchMarkerNodeFromProseMirror(node)
             markersToSync.push(nextNode)
 
+            // Preflight markers are docked over the prompt input via screen
+            // projection at a compact, single-line size — their on-canvas dimensions
+            // and position are not in play yet. Writing a liveNodeOverride here (from
+            // the still-screen-projected node) corrupts the eventual canvas placement,
+            // making the marker fly off when it commits. Skip the geometry/override
+            // path entirely for preflight; they only need their preview text synced.
+            if (node.pendingState?.phase === 'preflight') continue
+
             const existingOverride = liveNodeOverrides.get(node.nodeId)
             const ownsProjectionOverride = branchMarkerProjectionOverrideNodeIds.has(node.nodeId)
             const needsOverride =
@@ -6798,15 +6834,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             geometryMarkersToSync.push(nextNode)
         }
 
+        // Preflight markers are skipped above, so everything here is an on-canvas
+        // (planned/committed) marker positioned through canvas geometry.
         if (geometryMarkersToSync.length > 0) {
-            const preflightMarkers = geometryMarkersToSync.filter((marker) => marker.pendingState?.phase === 'preflight')
-            const canvasMarkers = geometryMarkersToSync.filter((marker) => marker.pendingState?.phase !== 'preflight')
-            if (preflightMarkers.length > 0) syncPendingBranchMarkerScreenPlacements()
-            if (canvasMarkers.length > 0) {
-                syncCanvasNodeDomGeometry(canvasMarkers)
-                connectionManager?.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
-                scheduleEdgesRender()
-            }
+            syncCanvasNodeDomGeometry(geometryMarkersToSync)
+            connectionManager?.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
+            scheduleEdgesRender()
         }
         for (const marker of markersToSync) syncBranchMarkerNodeContent(marker)
     }
@@ -9486,6 +9519,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const accessibleLabel = [promptPreview, label, reasoningModelSummary, responseSummary, modelSummary].filter(Boolean).join(' · ')
         const messageClassName = `workspace-branch-marker-message${node.pendingState ? ' is-pending' : ''}`
         const responseClassName = `workspace-branch-marker-response${responseIsEnhancing ? ' is-enhancing' : ''}`
+        // The marker DOM is rebuilt as it streams and as it travels through pending
+        // states (preflight → planned → committed). A fresh spinner element would
+        // restart its CSS rotation each time. Anchoring `animation-delay` to a
+        // negative offset into the global 800ms rotation phase-aligns every newly
+        // created spinner with the shared clock, so the spin looks continuous and
+        // never visibly restarts no matter how often the element is recreated.
+        const spinnerStyle = { animationDelay: `${-(performance.now() % BRANCH_MARKER_SPINNER_PERIOD_MS)}ms` }
         return html`
             <div className="workspace-branch-marker-content" aria-label=${accessibleLabel}>
                 <div className="workspace-branch-marker-main">
@@ -9494,7 +9534,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             ? createBranchMarkerReasoningTooltip(node.nodeId, reasoningModelEntry.title, reasoningModelIcon)
                             : null}
                         ${spinnerOnUserLine
-                            ? html`<span className="workspace-branch-marker-spinner workspace-branch-marker-message-progress" aria-hidden="true"></span>`
+                            ? html`<span className="workspace-branch-marker-spinner workspace-branch-marker-message-progress" style=${spinnerStyle} aria-hidden="true"></span>`
                             : null}
                         <span className="workspace-branch-marker-message-text">${promptPreview}</span>
                     </div>
@@ -9502,7 +9542,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         <div className="workspace-branch-marker-separator"></div>
                         <div className=${responseClassName}>
                             ${spinnerOnResponseLine
-                                ? html`<span className="workspace-branch-marker-spinner workspace-branch-marker-response-spinner" aria-hidden="true"></span>`
+                                ? html`<span className="workspace-branch-marker-spinner workspace-branch-marker-response-spinner" style=${spinnerStyle} aria-hidden="true"></span>`
                                 : responseDone
                                     ? html`<span className="workspace-branch-marker-response-icon" innerHTML=${promptIcon} aria-hidden="true"></span>`
                                     : null}
@@ -9547,6 +9587,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             label: getBranchMarkerTypeLabel(node),
         })
         if (currentContent) {
+            // The content is rebuilt on every streamed segment / state change, which
+            // would restart a fresh spinner's CSS rotation. Continuity is handled by
+            // phase-aligning each spinner to a shared clock (see createBranchMarkerContent),
+            // so a plain replace is safe here.
             currentContent.replaceWith(nextContent)
             return
         }
