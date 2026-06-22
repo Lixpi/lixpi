@@ -9731,12 +9731,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function renderNodes() {
         if (!viewportEl || !currentCanvasState) return
 
-        // [MARKER-DEBUG]
-        console.warn('[MARKER-DEBUG] renderNodes() running — will wipe viewportEl.innerHTML', {
-            nodeIds: currentCanvasState.nodes.map((n: CanvasNode) => `${n.nodeId}:${n.type}`),
-            stack: new Error().stack,
-        })
-
         destroyGeneratedMediaInfoRenderers()
         destroyBranchMarkerReasoningTooltips()
         viewportEl.innerHTML = ''
@@ -10047,44 +10041,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     initializePanZoom()
     initCanvasBubbleMenu()
     syncActiveAiChatPanelFromState()
-    // [MARKER-DEBUG] fix under test: create the connection manager even when the
-    // canvas mounts empty, so first-branch connector edges render without a reload.
+    // Create the connection manager up front so connector edges render even when
+    // the canvas mounts empty. renderNodes() only calls ensureConnectionManager()
+    // after an early-return guard on currentCanvasState, so a workspace that starts
+    // with no nodes (e.g. the first branch from the canvas-wide composer) would
+    // otherwise never get a connection manager — edges get committed to state but
+    // never drawn until a reload runs renderNodes() with a non-null state.
     ensureConnectionManager()
     renderNodes()
     syncPixiMediaLayer(currentCanvasState)
-
-    // [MARKER-DEBUG] Observe removals of branch-marker elements (the gray branch
-    // root pill). Logs the removed node id + a stack so we can see exactly what
-    // detaches it (innerHTML wipe vs explicit .remove() vs reconciliation).
-    {
-        const logMarkerRemoval = (el: Element, via: string) => {
-            const markerEls = el.matches?.('[data-node-id]')
-                ? [el]
-                : Array.from(el.querySelectorAll?.('[data-node-id]') ?? [])
-            for (const markerEl of markerEls) {
-                const cls = (markerEl as HTMLElement).className || ''
-                if (!/branch-(origin|fork|line)|branch-marker/.test(String(cls))) continue
-                console.warn('[MARKER-DEBUG] branch-marker element removed', {
-                    via,
-                    nodeId: markerEl.getAttribute('data-node-id'),
-                    className: String(cls),
-                    parentWas: (el === markerEl ? 'self' : el.className),
-                    stack: new Error().stack,
-                })
-            }
-        }
-        const observer = new MutationObserver((mutations) => {
-            for (const m of mutations) {
-                for (const removed of Array.from(m.removedNodes)) {
-                    if (removed instanceof Element) logMarkerRemoval(removed, 'mutation')
-                }
-            }
-        })
-        const observeTarget = (node: Node | null) => node && observer.observe(node, { childList: true, subtree: true })
-        observeTarget(viewportEl)
-        observeTarget(pendingBranchMarkerOverlayEl)
-        observeTarget(paneEl)
-    }
 
     let hasObservedInitialAiModelsStore = false
     const unsubscribeAiModelsStore = aiModelsStore.subscribe(() => {
