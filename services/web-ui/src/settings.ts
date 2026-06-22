@@ -148,7 +148,6 @@ export type AiChatThreadSettings = {
     contextPreview: AiChatThreadContextPreviewSettings
     rail: AiChatThreadRailSettings
     styles: {
-        responseMessageBubbleColor: string
         nodeBoxShadow: string
         nodeBorder: string
         panelSectionDividerBorder: string
@@ -279,6 +278,24 @@ export type MediaNodeSettings = {
             modelBadgeNameLineHeight: number
             infoButtonColor: string
             infoButtonHoverColor: string
+        }
+    }
+    generatedMediaInfoPanel: {
+        widthMultiplier: number
+        minWidth: number
+        maxWidth: number | null
+        horizontalOffset: number
+        mediaTopOffset: number
+        branchMarkerTopOffset: number
+        layerZIndex: number
+        styles: {
+            background: string
+            border: string
+            borderRadius: string
+            boxShadow: string
+            color: string
+            overflow: string
+            padding: string
         }
     }
     useZoomCompensatedResizeHandleScaling: boolean
@@ -626,8 +643,6 @@ export const settings: Settings = {
         },
 
         styles: {
-            // Background color for AI response message bubbles and their pigtail.
-            responseMessageBubbleColor: '#f7f7fd',
             // Box shadow around the AI chat thread canvas node. Use `none` for a flat panel surface.
             nodeBoxShadow: 'none',
             // Border around the AI chat thread canvas node. Use `none` to remove the browser-default border.
@@ -771,6 +786,33 @@ export const settings: Settings = {
                 // Info button: muted by default, full color on hover.
                 infoButtonColor: '#81878d',
                 infoButtonHoverColor: '#4d5963',
+            },
+        },
+
+        // Expanded provenance/descriptor panel opened from generated-media chrome and branch-lineage markers.
+        generatedMediaInfoPanel: {
+            // Panel width as a proportion of the media/lineage width that anchors it.
+            widthMultiplier: 1,
+            // Minimum canvas-unit panel width after widthMultiplier is applied. Use 0 to keep the anchor width as the floor.
+            minWidth: 0,
+            // Optional maximum canvas-unit panel width after widthMultiplier is applied. Use null for no cap.
+            maxWidth: null,
+            // Canvas-unit horizontal offset from the anchor's left edge.
+            horizontalOffset: 0,
+            // Additional screen-pixel vertical offset below the generated-media icon strip.
+            mediaTopOffset: 0,
+            // Canvas-unit vertical offset below a branch-lineage marker.
+            branchMarkerTopOffset: 10,
+            // Stacking level for the viewport-transformed info panel layer.
+            layerZIndex: 5,
+            styles: {
+                background: '#fff',
+                border: '1px solid rgba(34, 40, 49, 0.08)',
+                borderRadius: '20px',
+                boxShadow: '0 10px 28px rgba(20, 24, 30, 0.14)',
+                color: '#252b33',
+                overflow: 'visible',
+                padding: '0',
             },
         },
 

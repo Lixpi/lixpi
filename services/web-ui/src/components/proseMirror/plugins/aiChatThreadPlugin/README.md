@@ -116,7 +116,7 @@ Assistant response node created as the request is submitted, then filled by stre
 - Content: `(paragraph | block)*`; multi-model media requests store one `aiReasoningSection` child per reasoning run.
 - Attrs: `id`, `style`, `isInitialRenderAnimation`, `isReceivingAnimation`, `aiProvider`
 - Request metadata attrs: `generationRequestId`
-- Empty receiving responses show the shell ring loading indicator until the first content arrives; the empty content container keeps only a small bottom pad so the waiting bubble stays compact without clipping the spinner.
+- Empty receiving responses show the shell ring loading indicator until the first content arrives; the empty content container keeps only a small bottom pad so the waiting response stays compact without clipping the spinner.
 - Response nodes in the chat thread do not render an assistant avatar; model attribution lives on each generation-details collapsible.
 
 ### `aiReasoningSection`
@@ -298,7 +298,7 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 - `aiChatThreadPlugin.ts`: orchestration, stream handling, request construction, decorations, plugin state, NodeView registration.
 - `aiChatThreadNode.ts`: thread schema and minimal wrapper NodeView.
 - `aiUserMessageNode.ts`: sent-user-message schema and shell NodeView.
-- `aiResponseMessageNode.ts`: assistant response schema, shell NodeView, and response-level metadata.
+- `aiResponseMessageNode.ts`: assistant response schema and shell NodeView.
 - `aiReasoningSectionNode.ts`: per-reasoning-run section schema and NodeView for one shared media response message.
 - `aiLineageEvents.ts`: shared lineage-event projection, labels, and icon marker rendering.
 - `aiLineageEventNode.ts`: standalone projected workflow event node.

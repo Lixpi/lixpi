@@ -594,6 +594,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const connectorStyles = settings.connector.styles
     const selectionStyles = settings.selection.styles
     const mediaNodeStyles = settings.mediaNode.styles
+    const generatedMediaInfoPanelSettings = settings.mediaNode.generatedMediaInfoPanel
+    const generatedMediaInfoPanelStyles = generatedMediaInfoPanelSettings.styles
     const branchOriginSettings = settings.mediaBranchLineage.branchOrigin
 
     paneEl.style.setProperty('--connector-line-default-color', connectorStyles.lineDefaultColor)
@@ -606,6 +608,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-media-node-default-box-shadow', mediaNodeStyles.defaultBoxShadow)
     paneEl.style.setProperty('--workspace-media-node-selected-box-shadow', mediaNodeStyles.selectedBoxShadow)
     paneEl.style.setProperty('--workspace-media-node-border-radius', `${mediaNodeStyles.borderRadius}px`)
+    paneEl.style.setProperty('--workspace-generated-media-info-panel-background', generatedMediaInfoPanelStyles.background)
+    paneEl.style.setProperty('--workspace-generated-media-info-panel-border', generatedMediaInfoPanelStyles.border)
+    paneEl.style.setProperty('--workspace-generated-media-info-panel-border-radius', generatedMediaInfoPanelStyles.borderRadius)
+    paneEl.style.setProperty('--workspace-generated-media-info-panel-box-shadow', generatedMediaInfoPanelStyles.boxShadow)
+    paneEl.style.setProperty('--workspace-generated-media-info-panel-color', generatedMediaInfoPanelStyles.color)
+    paneEl.style.setProperty('--workspace-generated-media-info-panel-overflow', generatedMediaInfoPanelStyles.overflow)
+    paneEl.style.setProperty('--workspace-generated-media-info-panel-padding', generatedMediaInfoPanelStyles.padding)
     applyMediaModelBadgeStyleProperties(paneEl)
     paneEl.style.setProperty('--workspace-branch-origin-icon-size', `${branchOriginSettings.iconSize}px`)
     paneEl.style.setProperty('--workspace-branch-origin-background-color', branchOriginSettings.styles.backgroundColor)
@@ -1368,7 +1377,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             transformOrigin: '0 0',
             willChange: 'transform',
             pointerEvents: 'none' as const,
-            zIndex: '5',
+            zIndex: String(settings.mediaNode.generatedMediaInfoPanel.layerZIndex),
         }
         const panelLayer = html`<div className="workspace-generated-media-info-panel-layer" style=${panelLayerStyle}></div>` as HTMLDivElement
         paneEl.appendChild(panelLayer)
@@ -1433,6 +1442,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewport: Viewport,
         extraTopOffsetScreen = 0,
     ): void {
+        const panelSettings = settings.mediaNode.generatedMediaInfoPanel
         const zoom = Number.isFinite(viewport.zoom) ? Math.max(viewport.zoom, 0.01) : 1
         const iconStripScreenGap = scaleCanvasChromeToScreenForZoom(
             settings.mediaNode.generatedMediaChrome.topGap,
@@ -1448,17 +1458,34 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // so its top coordinate must be converted back to world units. The strip
         // gap and icon height are computed in final screen pixels, then divided
         // by zoom before being added to the media node's world-space bottom.
-        const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize) / zoom
-        const panelWidth = Number.isFinite(dimensions.width) && dimensions.width > 0
+        const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize + panelSettings.mediaTopOffset) / zoom
+        const anchorWidth = Number.isFinite(dimensions.width) && dimensions.width > 0
             ? dimensions.width
             : settings.mediaBranchLineage.generatedMediaSize
+        const panelWidth = getConfiguredGeneratedMediaInfoPanelWidth(anchorWidth)
 
         applyStyle(panel, {
-            left: `${position.x}px`,
+            left: `${position.x + panelSettings.horizontalOffset}px`,
             top: `${panelTop}px`,
             width: `${panelWidth}px`,
             transform: 'none',
         })
+    }
+
+    function getConfiguredGeneratedMediaInfoPanelWidth(anchorWidth: number): number {
+        const panelSettings = settings.mediaNode.generatedMediaInfoPanel
+        const widthMultiplier = Number.isFinite(panelSettings.widthMultiplier) && panelSettings.widthMultiplier > 0
+            ? panelSettings.widthMultiplier
+            : 1
+        const scaledWidth = Math.max(1, anchorWidth * widthMultiplier)
+        const minWidth = Number.isFinite(panelSettings.minWidth) && panelSettings.minWidth > 0
+            ? panelSettings.minWidth
+            : 0
+        const maxWidth = panelSettings.maxWidth == null || !Number.isFinite(panelSettings.maxWidth) || panelSettings.maxWidth <= 0
+            ? Number.POSITIVE_INFINITY
+            : panelSettings.maxWidth
+
+        return Math.max(minWidth, Math.min(maxWidth, scaledWidth))
     }
 
     function getGeneratedMediaInfoPanelWidth(generatedMediaNodes: Array<ImageCanvasNode | VideoCanvasNode>): number {
@@ -1466,7 +1493,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             0,
             ...generatedMediaNodes.map((node: ImageCanvasNode | VideoCanvasNode) => node.dimensions.width)
         )
-        return generatedMediaWidth || settings.mediaBranchLineage.generatedMediaSize
+        return getConfiguredGeneratedMediaInfoPanelWidth(generatedMediaWidth || settings.mediaBranchLineage.generatedMediaSize)
     }
 
     function getBranchOriginInfoPanelWidth(branchOriginNodeId: string): number {
@@ -1483,15 +1510,71 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function applyBranchOriginInfoChromeGeometry(
         chromeEl: HTMLElement,
+        nodeId: string,
         position: { x: number; y: number },
         dimensions: { width: number; height: number },
-        panelWidth: number
+        panelWidth: number,
+        viewport: Viewport = getLiveViewport(),
     ): void {
+        const anchor = getBranchMarkerInfoPanelAnchor(nodeId, position, dimensions, viewport)
+        const panelSettings = settings.mediaNode.generatedMediaInfoPanel
         applyStyle(chromeEl, {
-            left: `${position.x}px`,
-            top: `${position.y + dimensions.height + 10}px`,
+            left: `${anchor.x + panelSettings.horizontalOffset}px`,
+            top: `${anchor.y + anchor.height + panelSettings.branchMarkerTopOffset}px`,
             width: `${panelWidth}px`,
         })
+    }
+
+    function getBranchMarkerInfoPanelAnchor(
+        nodeId: string,
+        fallbackPosition: { x: number; y: number },
+        fallbackDimensions: { width: number; height: number },
+        viewport: Viewport,
+    ): { x: number; y: number; width: number; height: number } {
+        const fallback = {
+            x: fallbackPosition.x,
+            y: fallbackPosition.y,
+            width: fallbackDimensions.width,
+            height: fallbackDimensions.height,
+        }
+        const nodeEl = findBranchMarkerNodeEl(nodeId)
+        if (!nodeEl) return fallback
+
+        const measuredEls = [
+            nodeEl,
+            ...Array.from(nodeEl.querySelectorAll<HTMLElement>([
+                '.workspace-branch-marker-content',
+                '.workspace-branch-marker-main',
+                '.workspace-branch-marker-message',
+                '.workspace-branch-marker-separator',
+                '.workspace-branch-marker-response',
+                '.workspace-branch-marker-media-models',
+            ].join(', '))),
+        ]
+        const rects = measuredEls
+            .map((el: HTMLElement) => el.getBoundingClientRect())
+            .filter((rect: DOMRect) =>
+                rect.width > 0
+                && rect.height > 0
+                && Number.isFinite(rect.left)
+                && Number.isFinite(rect.top)
+                && Number.isFinite(rect.right)
+                && Number.isFinite(rect.bottom))
+        if (rects.length === 0) return fallback
+
+        const paneRect = paneEl.getBoundingClientRect()
+        const zoom = getSafeViewportZoom(viewport)
+        const left = Math.min(...rects.map((rect: DOMRect) => rect.left))
+        const top = Math.min(...rects.map((rect: DOMRect) => rect.top))
+        const right = Math.max(...rects.map((rect: DOMRect) => rect.right))
+        const bottom = Math.max(...rects.map((rect: DOMRect) => rect.bottom))
+
+        return {
+            x: (left - paneRect.left - viewport.x) / zoom,
+            y: (top - paneRect.top - viewport.y) / zoom,
+            width: (right - left) / zoom,
+            height: (bottom - top) / zoom,
+        }
     }
 
     function getVideoControlsZoomScalingOptions() {
@@ -1633,23 +1716,29 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const branchOriginChromeEl = mediaChromeViewportEl?.querySelector(`[data-branch-origin-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (branchOriginChromeEl) applyBranchOriginInfoChromeGeometry(
             branchOriginChromeEl,
+            nodeId,
             position,
             dimensions,
             getBranchOriginInfoPanelWidth(nodeId),
+            viewport,
         )
         const branchForkChromeEl = mediaChromeViewportEl?.querySelector(`[data-branch-fork-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (branchForkChromeEl) applyBranchOriginInfoChromeGeometry(
             branchForkChromeEl,
+            nodeId,
             position,
             dimensions,
             getBranchForkInfoPanelWidth(nodeId),
+            viewport,
         )
         const branchLineChromeEl = mediaChromeViewportEl?.querySelector(`[data-branch-line-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (branchLineChromeEl) applyBranchOriginInfoChromeGeometry(
             branchLineChromeEl,
+            nodeId,
             position,
             dimensions,
             getBranchLineInfoPanelWidth(nodeId),
+            viewport,
         )
     }
 
@@ -1969,6 +2058,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ` as HTMLElement
         applyBranchOriginInfoChromeGeometry(
             chromeEl,
+            branchOriginNode.nodeId,
             getNodeWorldPosition(branchOriginNode),
             branchOriginNode.dimensions,
             getBranchOriginInfoPanelWidth(branchOriginNode.nodeId),
@@ -2001,6 +2091,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ` as HTMLElement
         applyBranchOriginInfoChromeGeometry(
             chromeEl,
+            branchForkNode.nodeId,
             getNodeWorldPosition(branchForkNode),
             branchForkNode.dimensions,
             getBranchForkInfoPanelWidth(branchForkNode.nodeId),
@@ -2033,6 +2124,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ` as HTMLElement
         applyBranchOriginInfoChromeGeometry(
             chromeEl,
+            branchLineNode.nodeId,
             getNodeWorldPosition(branchLineNode),
             branchLineNode.dimensions,
             getBranchLineInfoPanelWidth(branchLineNode.nodeId),

@@ -1,6 +1,4 @@
 import {
-    gptAvatarIcon,
-    microphoneIcon,
     trashBinIcon,
     checkMarkIcon
 } from '$src/svgIcons/index.ts'
@@ -47,13 +45,6 @@ export const aiUserMessageNodeView = (node, view, getPos, user) => {
     parentWrapper.appendChild(childDiv);
 
 
-    const userAvatarContainer = document.createElement('div');
-    const userAvatar = new Image();   // Create new img element
-    userAvatarContainer.className = 'user-avatar';
-    userAvatar.src = user?.picture
-    userAvatarContainer.appendChild(userAvatar); // Append the img to body
-    childDiv.appendChild(userAvatarContainer);
-
     // Create a ProseMirror view for the node's content
     const contentDOM = document.createElement('div');
     contentDOM.className = 'ai-user-message-content';
@@ -77,4 +68,3 @@ export const aiUserMessageNodeView = (node, view, getPos, user) => {
         contentDOM,
     };
 }
-

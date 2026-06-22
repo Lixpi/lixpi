@@ -409,7 +409,7 @@ flowchart LR
 ## Styling hooks (non-exhaustive)
 
 - Bubble menu: `.bubble-menu`, `.bubble-menu-content`, `.bubble-menu-button`, `.bubble-menu-dropdown`, `.bubble-menu-separator`.
-- AI nodes: `.ai-chat-thread-wrapper`, `.ai-user-input-wrapper`, `.ai-user-input-content`, `.ai-user-message-wrapper`, `.ai-response-message(-wrapper)`, `.user-avatar`, `.node-render-animation`, `.node-receiving-animation`.
+- AI nodes: `.ai-chat-thread-wrapper`, `.ai-user-input-wrapper`, `.ai-user-input-content`, `.ai-user-message-wrapper`, `.ai-response-message(-wrapper)`, `.node-render-animation`.
 - Code blocks: `.code-block-wrapper`; selection decorations apply `inline.selected` class.
 - Placeholders: `.empty-node-placeholder[data-placeholder]` is applied as a node decoration.
 

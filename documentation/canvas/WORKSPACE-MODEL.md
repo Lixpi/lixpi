@@ -167,7 +167,7 @@ The `sourceMessageId` property enables precise per-response-message tracking for
 
 ### Connection Routing
 
-Edges are planned by `WorkspaceConnectionManager` and drawn by the PIXI edge renderer. The current default routing style is `horizontal-bezier`, with auto-alignment to straight lines where possible, message-level anchoring to a specific AI response bubble, dashed drag previews, and selection/deletion behavior documented in [Edges & Connections](./EDGES-AND-CONNECTIONS.md).
+Edges are planned by `WorkspaceConnectionManager` and drawn by the PIXI edge renderer. The current default routing style is `horizontal-bezier`, with auto-alignment to straight lines where possible, message-level anchoring to a specific AI response message, dashed drag previews, and selection/deletion behavior documented in [Edges & Connections](./EDGES-AND-CONNECTIONS.md).
 
 ### AI Generated Content Layout
 
