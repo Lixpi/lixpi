@@ -229,11 +229,13 @@ const BRANCH_MARKER_RESPONSE_LINE_HEIGHT = 16
 // `justify-content: center` pads the single-line case more than the multi-line case.
 const BRANCH_MARKER_MIN_HEIGHT = BRANCH_MARKER_VERTICAL_PADDING + BRANCH_MARKER_MESSAGE_LINE_HEIGHT
 const BRANCH_MARKER_PENDING_STACK_GAP = 8
-const BRANCH_ORIGIN_OUTPUT_GAP_MULTIPLIER = 0.5
+const BRANCH_MARKER_VISIBLE_VIEWPORT_PADDING_SCREEN = 24
 type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
+type CanvasGeometry = { position: { x: number; y: number }; dimensions: { width: number; height: number } }
+type PendingGeneratedMediaLayoutProxy = { offset: { x: number; y: number }; dimensions: { width: number; height: number } }
 
 function getBranchMarkerMinWidth(): number {
-    return Math.round(settings.imageBranchLineage.branchOrigin.size * BRANCH_MARKER_MIN_WIDTH_MULTIPLIER)
+    return Math.round(settings.mediaBranchLineage.branchOrigin.size * BRANCH_MARKER_MIN_WIDTH_MULTIPLIER)
 }
 
 function getBranchMarkerWidthForText(promptText: string): number {
@@ -282,7 +284,7 @@ function getBranchMarkerNodeDimensions(
 }
 
 function getBranchOriginOutputGap(): number {
-    return settings.imageBranchLineage.imageToImageGap * BRANCH_ORIGIN_OUTPUT_GAP_MULTIPLIER
+    return settings.mediaBranchLineage.branchOriginToFirstMediaGap
 }
 
 function getExpectedBranchMarkerDimensions(node: CanvasNode): { width: number; height: number } | undefined {
@@ -297,12 +299,20 @@ function resizeBranchMarkerNodeToDimensions<T extends BranchMarkerNode>(
     dimensions: { width: number; height: number },
 ): T {
     if (node.dimensions.width === dimensions.width && node.dimensions.height === dimensions.height) return node
+    const widthDelta = dimensions.width - node.dimensions.width
+    const heightDelta = dimensions.height - node.dimensions.height
+    const position = node.type === 'branchOrigin'
+        ? {
+            x: node.position.x,
+            y: node.position.y - heightDelta / 2,
+        }
+        : {
+            x: node.position.x - widthDelta / 2,
+            y: node.position.y - heightDelta / 2,
+        }
     return {
         ...node,
-        position: {
-            x: node.position.x - (dimensions.width - node.dimensions.width) / 2,
-            y: node.position.y - (dimensions.height - node.dimensions.height) / 2,
-        },
+        position,
         dimensions,
     } as T
 }
@@ -322,14 +332,7 @@ function normalizeBranchMarkerDimensions(canvasState: CanvasState): CanvasState 
         if (node.dimensions.width === dimensions.width && node.dimensions.height === dimensions.height) return node
 
         changed = true
-        return {
-            ...node,
-            position: {
-                x: node.position.x - (dimensions.width - node.dimensions.width) / 2,
-                y: node.position.y - (dimensions.height - node.dimensions.height) / 2,
-            },
-            dimensions,
-        } as CanvasNode
+        return resizeBranchMarkerNodeToDimensions(node as BranchMarkerNode, dimensions) as CanvasNode
     })
     return changed ? { ...canvasState, nodes } : canvasState
 }
@@ -346,12 +349,14 @@ function getBranchMarkerPromptPreview(promptText: string): string {
     return `${promptText.slice(0, BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS)}...`
 }
 
-// Streaming reasoning text scrolls past the marker as a tail: only the last N
-// characters are shown, normalized to a single line, updated on every chunk.
-function getBranchMarkerResponsePreview(responseText: string): string {
+// Streaming reasoning text scrolls past the marker as a tail while receiving.
+// Completed markers settle on the start of the response so the lineage marker
+// previews the answer's topic instead of its trailing fragment.
+function getBranchMarkerResponsePreview(responseText: string, options: { isReceiving?: boolean } = {}): string {
     const normalized = responseText.replace(/\s+/g, ' ').trim()
     if (normalized.length <= BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS) return normalized
-    return `…${normalized.slice(-BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS)}`
+    if (options.isReceiving) return `…${normalized.slice(-BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS)}`
+    return `${normalized.slice(0, BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS)}...`
 }
 
 function normalizeBranchMarkerModelValue(value: string | null | undefined): string {
@@ -566,7 +571,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const connectorStyles = settings.connector.styles
     const selectionStyles = settings.selection.styles
     const mediaNodeStyles = settings.mediaNode.styles
-    const branchOriginSettings = settings.imageBranchLineage.branchOrigin
+    const branchOriginSettings = settings.mediaBranchLineage.branchOrigin
 
     paneEl.style.setProperty('--connector-line-default-color', connectorStyles.lineDefaultColor)
     paneEl.style.setProperty('--connector-line-focus-color', connectorStyles.lineFocusColor)
@@ -585,7 +590,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-branch-origin-icon-color', branchOriginSettings.styles.iconColor)
     paneEl.style.setProperty('--workspace-branch-origin-box-shadow', branchOriginSettings.styles.boxShadow)
     paneEl.style.setProperty('--workspace-branch-marker-separator-gradient', branchOriginSettings.styles.separatorGradient)
-    paneEl.style.setProperty('--workspace-branch-marker-move-duration', `${settings.imageBranchLineage.pendingMarkerMoveDurationMs}ms`)
+    paneEl.style.setProperty('--workspace-branch-marker-move-duration', `${settings.mediaBranchLineage.pendingMarkerMoveDurationMs}ms`)
 
     let currentCanvasState: CanvasState | null = options.canvasState
         ? normalizeBranchMarkerDimensions(options.canvasState)
@@ -1417,7 +1422,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize) / zoom
         const panelWidth = Number.isFinite(dimensions.width) && dimensions.width > 0
             ? dimensions.width
-            : settings.imageBranchLineage.generatedImageSize
+            : settings.mediaBranchLineage.generatedMediaSize
 
         applyStyle(panel, {
             left: `${position.x}px`,
@@ -1432,7 +1437,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             0,
             ...generatedMediaNodes.map((node: ImageCanvasNode | VideoCanvasNode) => node.dimensions.width)
         )
-        return generatedMediaWidth || settings.imageBranchLineage.generatedImageSize
+        return generatedMediaWidth || settings.mediaBranchLineage.generatedMediaSize
     }
 
     function getBranchOriginInfoPanelWidth(branchOriginNodeId: string): number {
@@ -2459,7 +2464,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // reports the MP4's intrinsic width/height via loadedmetadata. Re-fits the
     // canvas node dimensions to the real aspect, preserves the node's current
     // center, then lets branch-tree layout re-tidy generated lineages. This
-    // prevents final aspect-ratio updates from collapsing forked children back
+    // prevents final aspect-ratio updates from collapsing forked media back
     // onto the old predecessor center line.
     function handleVideoIntrinsicSize(size: { nodeId: string; width: number; height: number }): void {
         if (!currentCanvasState) return
@@ -2623,21 +2628,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function getGeneratedImageInsertionSize(): number {
-        return settings.imageBranchLineage.generatedImageSize
+    function getGeneratedMediaInsertionSize(): number {
+        return settings.mediaBranchLineage.generatedMediaSize
     }
 
-    function getNextChatRootOutputPosition(rootNode: ChatRootNode, childHeight: number, nodes: CanvasNode[]): { x: number; y: number } {
+    function getNextChatRootOutputPosition(rootNode: ChatRootNode, outputHeight: number, nodes: CanvasNode[]): { x: number; y: number } {
         const nodesById = getCanvasNodesById(nodes)
         const rootBounds = getSelectionBoundsForNode(rootNode)
-        const horizontalGap = settings.imageBranchLineage.rootOutputGap
-        const verticalGap = settings.imageBranchLineage.branchToBranchGap
-        const existingBranchRoots = getGeneratedChildOutputs(rootNode, nodes, currentCanvasState?.edges ?? [])
+        const horizontalGap = settings.mediaBranchLineage.rootToFirstMediaGap
+        const verticalGap = settings.mediaBranchLineage.branchRowGap
+        const existingBranchRoots = getGeneratedMediaOutputs(rootNode, nodes, currentCanvasState?.edges ?? [])
             .filter((node: ImageCanvasNode | VideoCanvasNode) => node.generatedBy?.aiChatThreadId === rootNode.referenceId)
-        const previousBranchRoot = getMostRecentGeneratedChildOutput(existingBranchRoots)
+        const previousBranchRoot = getMostRecentGeneratedMediaOutput(existingBranchRoots)
         const previousBranchRect = previousBranchRoot ? getNodeWorldRect(previousBranchRoot, nodesById) : undefined
 
-        return computeNextBranchRowPositionToRightOfRect(rootBounds, previousBranchRect, childHeight, horizontalGap, verticalGap)
+        return computeNextBranchRowPositionToRightOfRect(rootBounds, previousBranchRect, outputHeight, horizontalGap, verticalGap)
     }
 
     function getInsertionPaneSize(): { width: number; height: number } {
@@ -2647,6 +2652,41 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getCenteredInsertionPosition(dimensions: { width: number; height: number }): { x: number; y: number } {
         return computeViewportCenterInsertionPosition(dimensions, getLiveViewport(), getInsertionPaneSize())
+    }
+
+    function clampBranchOriginPositionToVisibleViewport(
+        position: { x: number; y: number },
+        dimensions: { width: number; height: number },
+    ): { x: number; y: number } {
+        const viewport = getLiveViewport()
+        const paneSize = getInsertionPaneSize()
+        const zoom = Number.isFinite(viewport.zoom) && viewport.zoom > 0 ? viewport.zoom : 1
+        const padding = BRANCH_MARKER_VISIBLE_VIEWPORT_PADDING_SCREEN / zoom
+        const minX = (0 - viewport.x) / zoom + padding
+        const maxX = (paneSize.width - viewport.x) / zoom - dimensions.width - padding
+        const minY = (0 - viewport.y) / zoom + padding
+        const maxY = (paneSize.height - viewport.y) / zoom - dimensions.height - padding
+
+        return {
+            x: clampInsideRange(position.x, minX, maxX),
+            y: clampInsideRange(position.y, minY, maxY),
+        }
+    }
+
+    function getCenteredFreshBranchOriginPosition(
+        dimensions: { width: number; height: number },
+        mediaHeight: number,
+    ): { x: number; y: number } {
+        const mediaWidth = getGeneratedMediaInsertionSize()
+        const groupDimensions = {
+            width: dimensions.width + getBranchOriginOutputGap() + mediaWidth,
+            height: Math.max(dimensions.height, mediaHeight),
+        }
+        const groupPosition = getCenteredInsertionPosition(groupDimensions)
+        return clampBranchOriginPositionToVisibleViewport({
+            x: groupPosition.x,
+            y: groupPosition.y + (groupDimensions.height - dimensions.height) / 2,
+        }, dimensions)
     }
 
     function getResolvedNodePositionFromCollisionBox(node: CanvasNode, box: { x: number; y: number }, entries: Map<string, CollisionEntry>): { x: number; y: number } {
@@ -2702,14 +2742,157 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Single entry point for the generated-media add/remove paths: re-tidy every
     // branch-lineage tree and rigid-separate trees + loose nodes through the
-    // unchanged resolver. Depth/sibling gaps come from imageBranchLineage so
+    // unchanged resolver. Depth/sibling gaps come from mediaBranchLineage so
     // spacing matches the rest of the lineage placement.
     function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[] {
-        return rebalanceBranchTreesAndResolve(nodes, edges, {
-            depthGap: settings.imageBranchLineage.imageToImageGap,
+        const layoutProxyPlan = createPendingGeneratedMediaLayoutProxyPlan(nodes)
+        const resolvedNodes = rebalanceBranchTreesAndResolve(layoutProxyPlan.nodes, edges, {
+            depthGap: settings.mediaBranchLineage.mediaToMediaGap,
             branchOriginDepthGap: getBranchOriginOutputGap(),
-            siblingGap: settings.imageBranchLineage.branchToBranchGap,
-            branchFanoutDepthGap: settings.imageBranchLineage.branchFanoutDepthGap,
+            siblingGap: settings.mediaBranchLineage.branchRowGap,
+            branchFanoutExtraGap: settings.mediaBranchLineage.branchFanoutExtraGap,
+        })
+        return restorePendingGeneratedMediaLayoutProxyPlan(resolvedNodes, layoutProxyPlan.proxiesByNodeId)
+    }
+
+    function getPendingGeneratedMediaBeforeFrameCircleGeometry(
+        nodeId: string,
+        position: { x: number; y: number },
+        dimensions: { width: number; height: number },
+    ): CanvasGeometry | null {
+        if (!isPendingGeneratedMediaBeforeFirstFrame(nodeId)) return null
+        const inset = getPendingGeneratedMediaBeforeFrameCircleInset(dimensions)
+        return {
+            position: {
+                x: position.x + inset.x,
+                y: position.y + inset.y,
+            },
+            dimensions: { width: inset.size, height: inset.size },
+        }
+    }
+
+    function getPendingGeneratedMediaBeforeFrameCircleInset(dimensions: { width: number; height: number }): { x: number; y: number; size: number } {
+        const configuredScale = Number(settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale)
+        const scale = Number.isFinite(configuredScale) && configuredScale > 0
+            ? Math.min(1, configuredScale)
+            : 1 / 3
+        const size = Math.max(1, Math.min(dimensions.width, dimensions.height) * scale)
+        return {
+            x: (dimensions.width - size) / 2,
+            y: (dimensions.height - size) / 2,
+            size,
+        }
+    }
+
+    function getPendingGeneratedMediaBeforeFrameInsertionPosition(
+        nodeId: string,
+        finalPosition: { x: number; y: number },
+        dimensions: { width: number; height: number },
+    ): { x: number; y: number } {
+        if (!isPendingGeneratedMediaBeforeFirstFrame(nodeId)) return finalPosition
+        const inset = getPendingGeneratedMediaBeforeFrameCircleInset(dimensions)
+        return {
+            x: finalPosition.x - inset.x,
+            y: finalPosition.y,
+        }
+    }
+
+    function getFullFramePositionFromPendingGeneratedMediaPosition(
+        pendingPosition: { x: number; y: number },
+        dimensions: { width: number; height: number },
+    ): { x: number; y: number } {
+        const inset = getPendingGeneratedMediaBeforeFrameCircleInset(dimensions)
+        return {
+            x: pendingPosition.x + inset.x,
+            y: pendingPosition.y,
+        }
+    }
+
+    function getPendingBranchMarkerPositionBeforeGeneratedMedia(
+        parentNode: CanvasNode,
+        markerDimensions: { width: number; height: number },
+    ): { x: number; y: number } {
+        const parentRect = getNodeWorldRect(parentNode)
+        const mediaSize = getGeneratedMediaInsertionSize()
+        const mediaDimensions = { width: mediaSize, height: mediaSize }
+        const mediaGap = parentNode.type === 'branchOrigin'
+            ? getBranchOriginOutputGap()
+            : settings.mediaBranchLineage.mediaToMediaGap
+        const futureMediaPosition = computeLineageContinuationPositionToRightOfRect(
+            parentRect,
+            mediaDimensions.height,
+            mediaGap,
+        )
+        const futureCircleInset = getPendingGeneratedMediaBeforeFrameCircleInset(mediaDimensions)
+        const futureCircleLeft = futureMediaPosition.x
+        const futureCircleCenterY = futureMediaPosition.y + futureCircleInset.y + futureCircleInset.size / 2
+        const parentAnchorX = parentRect.x + parentRect.width
+        const parentAnchorY = parentRect.y + parentRect.height / 2
+
+        return {
+            x: (parentAnchorX + futureCircleLeft) / 2 - markerDimensions.width / 2,
+            y: (parentAnchorY + futureCircleCenterY) / 2 - markerDimensions.height / 2,
+        }
+    }
+
+    function positionPendingBranchMarkerBeforeGeneratedMedia(
+        markerNode: BranchMarkerNode,
+        supportNodes: BranchMarkerNode[] = [],
+    ): BranchMarkerNode {
+        if (markerNode.type !== 'branchFork' && markerNode.type !== 'branchLine') return markerNode
+        const parentBranchNodeId = markerNode.parentBranchNodeId
+        if (!parentBranchNodeId) return markerNode
+        const parentNode = findCanvasNodeById(parentBranchNodeId)
+            ?? supportNodes.find((node: BranchMarkerNode) => node.nodeId === parentBranchNodeId)
+        if (!parentNode) return markerNode
+        return {
+            ...markerNode,
+            position: getPendingBranchMarkerPositionBeforeGeneratedMedia(parentNode, markerNode.dimensions),
+        }
+    }
+
+    function createPendingGeneratedMediaLayoutProxyPlan(nodes: CanvasNode[]): {
+        nodes: CanvasNode[]
+        proxiesByNodeId: Map<string, PendingGeneratedMediaLayoutProxy>
+    } {
+        const proxiesByNodeId = new Map<string, PendingGeneratedMediaLayoutProxy>()
+        const proxyNodes = nodes.map((node: CanvasNode) => {
+            if (node.type !== 'image' && node.type !== 'video') return node
+            const proxyGeometry = getPendingGeneratedMediaBeforeFrameCircleGeometry(node.nodeId, node.position, node.dimensions)
+            if (!proxyGeometry) return node
+
+            proxiesByNodeId.set(node.nodeId, {
+                offset: {
+                    x: proxyGeometry.position.x - node.position.x,
+                    y: proxyGeometry.position.y - node.position.y,
+                },
+                dimensions: node.dimensions,
+            })
+            return {
+                ...node,
+                position: proxyGeometry.position,
+                dimensions: proxyGeometry.dimensions,
+            }
+        })
+        return { nodes: proxyNodes, proxiesByNodeId }
+    }
+
+    function restorePendingGeneratedMediaLayoutProxyPlan(
+        nodes: CanvasNode[],
+        proxiesByNodeId: Map<string, PendingGeneratedMediaLayoutProxy>,
+    ): CanvasNode[] {
+        if (proxiesByNodeId.size === 0) return nodes
+        return nodes.map((node: CanvasNode) => {
+            const proxy = proxiesByNodeId.get(node.nodeId)
+            if (!proxy) return node
+            return {
+                ...node,
+                position: {
+                    x: node.position.x - proxy.offset.x,
+                    y: node.position.y - proxy.offset.y,
+                },
+                dimensions: proxy.dimensions,
+            }
         })
     }
 
@@ -2717,13 +2900,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         nodeId: string,
         position: { x: number; y: number },
         dimensions: { width: number; height: number },
-    ): { position: { x: number; y: number }; dimensions: { width: number; height: number } } | null {
-        if (!isPendingGeneratedMediaBeforeFirstFrame(nodeId)) return null
-        const configuredScale = Number(settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale)
-        const scale = Number.isFinite(configuredScale) && configuredScale > 0
-            ? Math.min(1, configuredScale)
-            : 1 / 3
-        const size = Math.max(1, Math.min(dimensions.width, dimensions.height) * scale)
+    ): CanvasGeometry | null {
+        const circleGeometry = getPendingGeneratedMediaBeforeFrameCircleGeometry(nodeId, position, dimensions)
+        if (!circleGeometry) return null
         const animation = settings.mediaNode.inProgressOutlineAnimation
         const outlineStrokeScale = scaleCanvasChromeWorldSizeForZoom(
             1,
@@ -2735,12 +2914,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const outlineOutset = (outlineGap + outlineWidth) * outlineStrokeScale
         return {
             position: {
-                x: position.x + (dimensions.width - size) / 2 - outlineOutset,
-                y: position.y + (dimensions.height - size) / 2 - outlineOutset,
+                x: circleGeometry.position.x - outlineOutset,
+                y: circleGeometry.position.y - outlineOutset,
             },
             dimensions: {
-                width: size + outlineOutset * 2,
-                height: size + outlineOutset * 2,
+                width: circleGeometry.dimensions.width + outlineOutset * 2,
+                height: circleGeometry.dimensions.height + outlineOutset * 2,
             },
         }
     }
@@ -5371,7 +5550,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // those items to push the marker. The marker stays pinned just above the
         // input and overlaps the context tray instead.
         const composerBounds = (globalCanvasComposer?.element ?? globalCanvasComposerHostEl)?.getBoundingClientRect()
-        const gap = settings.imageBranchLineage.pendingMarkerInputGap
+        const gap = settings.mediaBranchLineage.pendingMarkerInputGap
         if (!composerBounds) {
             const screenRight = paneBounds.width / 2 + dimensions.width / 2
             const screenBottom = paneBounds.height - 24 - gap - stackOffsetY
@@ -5514,25 +5693,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         pendingNodeId: string,
         plannedNode: BranchMarkerNode,
     ): BranchMarkerNode {
-        const previousOverride = liveNodeOverrides.get(pendingNodeId)
         if (pendingNodeId !== plannedNode.nodeId) {
-            if (previousOverride) {
-                liveNodeOverrides.set(plannedNode.nodeId, previousOverride)
-                liveNodeOverrides.delete(pendingNodeId)
-                if (branchMarkerProjectionOverrideNodeIds.delete(pendingNodeId)) {
-                    branchMarkerProjectionOverrideNodeIds.add(plannedNode.nodeId)
-                }
-            }
+            liveNodeOverrides.delete(pendingNodeId)
+            branchMarkerProjectionOverrideNodeIds.delete(pendingNodeId)
         }
         const nodeWithProjection = resizeBranchMarkerNodeFromProseMirror(plannedNode)
-        const preview = getBranchMarkerConversationPreview(nodeWithProjection)
-        if (!preview?.responseText) return nodeWithProjection
-
-        liveNodeOverrides.set(nodeWithProjection.nodeId, {
-            ...liveNodeOverrides.get(nodeWithProjection.nodeId),
-            dimensions: nodeWithProjection.dimensions,
-        })
-        branchMarkerProjectionOverrideNodeIds.add(nodeWithProjection.nodeId)
+        liveNodeOverrides.delete(nodeWithProjection.nodeId)
+        branchMarkerProjectionOverrideNodeIds.delete(nodeWithProjection.nodeId)
         return nodeWithProjection
     }
 
@@ -5608,14 +5775,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             nodeEl.classList.remove('workspace-branch-marker-screen-fixed')
             nodeEl.style.removeProperty('transform')
             nodeEl.style.removeProperty('transform-origin')
-        }, settings.imageBranchLineage.pendingMarkerMoveDurationMs + 60)
+        }, settings.mediaBranchLineage.pendingMarkerMoveDurationMs + 60)
     }
 
     function moveBranchMarkerIntoCanvasViewport(nodeEl: HTMLElement, node: BranchMarkerNode): void {
-        const nodeWorldPosition = getNodeWorldPosition(node)
         applyStyle(nodeEl, {
-            left: `${nodeWorldPosition.x}px`,
-            top: `${nodeWorldPosition.y}px`,
+            left: `${node.position.x}px`,
+            top: `${node.position.y}px`,
             width: `${node.dimensions.width}px`,
             height: `${node.dimensions.height}px`,
             transform: 'scale(1)',
@@ -5707,7 +5873,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         branchLineNode: BranchLineCanvasNode | undefined
         primaryNode: BranchMarkerNode | undefined
     } {
-        const mediaHeight = getGeneratedImageInsertionSize()
+        const mediaHeight = getGeneratedMediaInsertionSize()
         const branchOriginNode = ensureBranchOriginForGeneratedMedia(threadId, generationRun, mediaHeight)
         const { branchForkNode, branchLineNode, markerNode } = ensureBranchMarkerForGeneratedMedia(threadId, generationRun, branchOriginNode)
         return {
@@ -5747,18 +5913,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const plannedNode = plannedResolution.primaryNode
         if (!plannedNode) return
 
-        let plannedNodeWithPending = applyPendingStateToPlannedBranchMarker(plannedNode, pendingNode)
-        plannedNodeWithPending = preserveBranchMarkerPreviewStateAcrossPromotion(record.nodeId, plannedNodeWithPending)
-        const promotedEl = promotePendingBranchMarkerElement(record.nodeId, plannedNodeWithPending)
-        if (promotedEl) markBranchMarkerPlacementAnimating(promotedEl)
-
         const supportNodes = [
             plannedResolution.branchOriginNode,
             plannedResolution.branchForkNode,
             plannedResolution.branchLineNode,
         ].filter((node): node is BranchMarkerNode =>
-            Boolean(node && node.nodeId !== plannedNodeWithPending.nodeId)
+            Boolean(node && node.nodeId !== plannedNode.nodeId)
         )
+        let plannedNodeWithPending = applyPendingStateToPlannedBranchMarker(plannedNode, pendingNode)
+        plannedNodeWithPending = preserveBranchMarkerPreviewStateAcrossPromotion(record.nodeId, plannedNodeWithPending)
+        plannedNodeWithPending = positionPendingBranchMarkerBeforeGeneratedMedia(plannedNodeWithPending, supportNodes)
+        const promotedEl = promotePendingBranchMarkerElement(record.nodeId, plannedNodeWithPending)
+        if (promotedEl) markBranchMarkerPlacementAnimating(promotedEl)
+
         const supportNodesById = new Map<string, BranchMarkerNode>(supportNodes.map(node => [node.nodeId, node]))
         const insertedSupportNodeIds = new Set<string>()
         let insertedPlannedNode = false
@@ -6185,11 +6352,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodeId = plannedBranchOriginNodeId
         const dimensions = getBranchMarkerContentDimensions(branchOriginPlan.provenance?.promptText ?? '')
         const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)
-            ?? getCenteredInsertionPosition({ width: getGeneratedImageInsertionSize(), height: mediaHeight })
-        const position = {
-            x: referencePosition.x - getBranchOriginOutputGap() - dimensions.width,
-            y: referencePosition.y + (mediaHeight - dimensions.height) / 2,
-        }
+        const position = referencePosition
+            ? {
+                x: referencePosition.x - getBranchOriginOutputGap() - dimensions.width,
+                y: referencePosition.y + (mediaHeight - dimensions.height) / 2,
+            }
+            : getCenteredFreshBranchOriginPosition(dimensions, mediaHeight)
 
         const branchOriginNode: BranchOriginCanvasNode = {
             nodeId,
@@ -6226,12 +6394,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const parentNode = getBranchForkParentNode(threadId, generationRun, branchOriginNode)
         const dimensions = getBranchMarkerContentDimensions(branchForkPlan.provenance?.promptText ?? '')
         if (!parentNode) return undefined
-        const parentRect = getNodeWorldRect(parentNode)
-        const position = computeLineageContinuationPositionToRightOfRect(
-            parentRect,
-            dimensions.height,
-            settings.imageBranchLineage.imageToImageGap
-        )
+        const position = getPendingBranchMarkerPositionBeforeGeneratedMedia(parentNode, dimensions)
 
         const branchForkNode: BranchForkCanvasNode = {
             nodeId,
@@ -6285,12 +6448,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ?? (branchOriginNode?.nodeId === parentBranchNodeId ? branchOriginNode : undefined)
         const dimensions = getBranchMarkerContentDimensions(branchLinePlan.provenance?.promptText ?? '')
         if (!parentNode) return undefined
-        const parentRect = getNodeWorldRect(parentNode)
-        const position = computeLineageContinuationPositionToRightOfRect(
-            parentRect,
-            dimensions.height,
-            settings.imageBranchLineage.imageToImageGap
-        )
+        const position = getPendingBranchMarkerPositionBeforeGeneratedMedia(parentNode, dimensions)
 
         const branchLineNode: BranchLineCanvasNode = {
             nodeId,
@@ -6454,6 +6612,54 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function getBranchMarkerPlacementKeys(node: BranchMarkerNode): string[] {
+        const threadId = getBranchMarkerThreadId(node)
+        if (!threadId) return []
+
+        const keys = [threadId]
+        if (node.generationRequestId && node.generationRequestId !== threadId) {
+            keys.push(`${threadId}:${node.generationRequestId}`)
+        }
+        return Array.from(new Set(keys))
+    }
+
+    function assignmentMatchesBranchMarker(assignment: MediaRunLineageAssignment, node: BranchMarkerNode): boolean {
+        if (assignment.branchOriginNodeId === node.nodeId) return true
+        if (assignment.branchForkNodeId === node.nodeId) return true
+        if (assignment.branchLineNodeId === node.nodeId) return true
+        if (node.type === 'branchFork' && node.reasoningRunId && assignment.reasoningRunId === node.reasoningRunId) return true
+        if (node.type === 'branchLine' && node.reasoningRunId && assignment.reasoningRunId === node.reasoningRunId) return true
+        if (node.type === 'branchLine' && node.mediaRunId && assignment.mediaRunId === node.mediaRunId) return true
+        return false
+    }
+
+    function isLineageAssignmentActive(assignment: MediaRunLineageAssignment, activeRunKeys: Set<string>): boolean {
+        return Boolean(
+            (assignment.mediaRunId && activeRunKeys.has(assignment.mediaRunId))
+            || (assignment.reasoningRunId && activeRunKeys.has(assignment.reasoningRunId))
+        )
+    }
+
+    function isBranchMarkerGenerationActive(node: BranchMarkerNode): boolean {
+        if (node.pendingState) return true
+
+        for (const placementKey of getBranchMarkerPlacementKeys(node)) {
+            const placement = pendingGeneratedImagePlacements.get(placementKey)
+            const activeRunKeys = placement?.activeRunKeys
+            if (!activeRunKeys?.size) continue
+
+            const assignments = placement.lineagePlan?.runAssignments ?? []
+            if (assignments.length === 0) return true
+
+            const matchingAssignments = assignments.filter(assignment => assignmentMatchesBranchMarker(assignment, node))
+            if (matchingAssignments.length === 0) continue
+
+            if (matchingAssignments.some(assignment => isLineageAssignmentActive(assignment, activeRunKeys))) return true
+        }
+
+        return false
+    }
+
     function getBranchMarkerConversationPreview(node: BranchMarkerNode): BranchMarkerConversationPreview | null {
         const threadId = getBranchMarkerThreadId(node)
         if (!threadId) return null
@@ -6506,7 +6712,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 excludedNodeTypes: ['aiGeneratedImage', 'aiGeneratedVideo', 'aiLineageEvent'],
             }).trim(),
             phase,
-            isReceiving,
+            isReceiving: isReceiving || isBranchMarkerGenerationActive(node),
         }
     }
 
@@ -6595,7 +6801,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // generated video cannot "see" a previously generated video and the two
     // stack on the same spot. Both node types expose the shared fields used
     // below (generatedBy.createdAt, position).
-    function getGeneratedChildOutputs(sourceNode: CanvasNode, nodes: CanvasNode[], edges: WorkspaceEdge[]): (ImageCanvasNode | VideoCanvasNode)[] {
+    function getGeneratedMediaOutputs(sourceNode: CanvasNode, nodes: CanvasNode[], edges: WorkspaceEdge[]): (ImageCanvasNode | VideoCanvasNode)[] {
         return nodes.filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode => {
             if ((node.type !== 'image' && node.type !== 'video') || node.parentId) return false
             if (!node.generatedBy) return false
@@ -6603,7 +6809,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function getMostRecentGeneratedChildOutput(outputs: (ImageCanvasNode | VideoCanvasNode)[]): ImageCanvasNode | VideoCanvasNode | undefined {
+    function getMostRecentGeneratedMediaOutput(outputs: (ImageCanvasNode | VideoCanvasNode)[]): ImageCanvasNode | VideoCanvasNode | undefined {
         return [...outputs].sort((a: ImageCanvasNode | VideoCanvasNode, b: ImageCanvasNode | VideoCanvasNode) => {
             const createdAtDelta = (a.generatedBy?.createdAt ?? 0) - (b.generatedBy?.createdAt ?? 0)
             if (createdAtDelta !== 0) return createdAtDelta
@@ -6636,25 +6842,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return computeLineageContinuationPositionToRightOfRect(
             referenceGroupRect,
             mediaHeight,
-            settings.imageBranchLineage.rootOutputGap
+            settings.mediaBranchLineage.rootToFirstMediaGap
         )
     }
 
-    function getNextGeneratedImagePosition(sourceNode: CanvasNode, imageHeight: number): { x: number; y: number } {
+    function getNextGeneratedMediaPosition(sourceNode: CanvasNode, mediaHeight: number): { x: number; y: number } {
         const nodes = currentCanvasState?.nodes || []
         if (sourceNode.type === 'aiChatThread') {
-            return getNextChatRootOutputPosition(sourceNode, imageHeight, nodes)
+            return getNextChatRootOutputPosition(sourceNode, mediaHeight, nodes)
         }
 
         const edges = currentCanvasState?.edges ?? []
-        const existingChildOutputs = getGeneratedChildOutputs(sourceNode, nodes, edges)
-        const previousOutput = getMostRecentGeneratedChildOutput(existingChildOutputs)
+        const existingMediaOutputs = getGeneratedMediaOutputs(sourceNode, nodes, edges)
+        const previousOutput = getMostRecentGeneratedMediaOutput(existingMediaOutputs)
         const anchorRect = previousOutput ? getNodeWorldRect(previousOutput) : getNodeWorldRect(sourceNode)
 
         return computeLineageContinuationPositionToRightOfRect(
             anchorRect,
-            imageHeight,
-            settings.imageBranchLineage.imageToImageGap
+            mediaHeight,
+            settings.mediaBranchLineage.mediaToMediaGap
         )
     }
 
@@ -7117,12 +7323,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Append an image node to the DOM directly without a full renderNodes() cycle.
     // This preserves active editors and their streaming state.
-    function syncConnectionsAfterManualNodeAppend(): void {
+    function syncConnectionManagerForCurrentCanvasState(options: { flushPixi?: boolean } = {}): void {
         if (!connectionManager || !currentCanvasState) return
         connectionManager.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
         connectionManager.syncEdges(currentCanvasState.edges)
         connectionManager.render()
-        pixiMediaLayer?.renderNow()
+        if (options.flushPixi) pixiMediaLayer?.renderNow()
+    }
+
+    function syncConnectionsAfterManualNodeAppend(): void {
+        syncConnectionManagerForCurrentCanvasState({ flushPixi: true })
     }
 
     function appendImageNodeToDOM(imageNode: ImageCanvasNode): void {
@@ -7226,7 +7436,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             }
 
-            const width = getGeneratedImageInsertionSize()
+            const width = getGeneratedMediaInsertionSize()
             const height = width
             const position = sourceThreadNode
                 ? getNextChatRootOutputPosition(sourceThreadNode, height, existingNodes)
@@ -7374,6 +7584,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const existing = partialImageTracker.get(runKey)
 
             if (existing) {
+                const receivedFirstFrame = !existing.hasReceivedFrame && Boolean(imageUrl)
                 const updatedTracker = {
                     ...existing,
                     fileId: fileId || existing.fileId,
@@ -7387,6 +7598,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const updatedNodes = currentCanvasState.nodes.map((node: CanvasNode) => {
                         if (node.nodeId !== existing.nodeId) return node
                         const imageNode = node as ImageCanvasNode
+                        const position = receivedFirstFrame
+                            ? getFullFramePositionFromPendingGeneratedMediaPosition(imageNode.position, imageNode.dimensions)
+                            : imageNode.position
                         const generatedBy = imageNode.generatedBy && generationRun?.mediaModelId
                             ? { ...imageNode.generatedBy, mediaModelId: generationRun.mediaModelId as any }
                             : imageNode.generatedBy
@@ -7395,16 +7609,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             fileId: fileId || imageNode.fileId,
                             workspaceId: imgWorkspaceId || imageNode.workspaceId,
                             src: imageSrc,
+                            position,
                             generatedBy,
                         } satisfies ImageCanvasNode
                     })
 
-                    commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: updatedNodes })
+                    const resolvedNodes = receivedFirstFrame
+                        ? rebalanceGeneratedMediaTrees(updatedNodes, currentCanvasState.edges)
+                        : updatedNodes
+
+                    commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: resolvedNodes })
                 }
                 return
             }
 
-            const imageWidth = getGeneratedImageInsertionSize()
+            const imageWidth = getGeneratedMediaInsertionSize()
             const imageHeight = imageWidth
             const lineageAssignment = getApiMediaRunLineageAssignment(generationRun)
             if (!lineageAssignment) {
@@ -7438,7 +7657,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             const imageSrc = buildImageSrc(imageUrl, '', false)
 
-            const position = getNextGeneratedImagePosition(edgeSourceNode, imageHeight)
+            const finalPosition = getNextGeneratedMediaPosition(edgeSourceNode, imageHeight)
+            const position = getPendingGeneratedMediaBeforeFrameInsertionPosition(
+                nodeId,
+                finalPosition,
+                { width: imageWidth, height: imageHeight },
+            )
 
             const imageNode: ImageCanvasNode = {
                 nodeId,
@@ -7503,6 +7727,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const imageSrc = buildImageSrc(imageUrl, '', false)
 
             if (partial) {
+                const receivedFirstFrame = !partial.hasReceivedFrame
                 if (!getApiMediaRunLineageAssignment(generationRun)) {
                     console.error('[CANVAS] Missing API media lineage assignment for image completion', { threadId, generationRun })
                     finishGeneratedMediaRun(threadId, generationRun)
@@ -7513,6 +7738,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const nodes = (currentCanvasState?.nodes || []).map((n: CanvasNode) => {
                     if (n.nodeId !== partial.nodeId) return n
                     const imgNode = n as ImageCanvasNode
+                    const position = receivedFirstFrame
+                        ? getFullFramePositionFromPendingGeneratedMediaPosition(imgNode.position, imgNode.dimensions)
+                        : imgNode.position
                     const generatedBy: ImageCanvasNode['generatedBy'] = {
                         aiChatThreadId: threadId,
                         responseId,
@@ -7528,6 +7756,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         fileId: fileId || imgNode.fileId,
                         workspaceId: imgWorkspaceId || imgNode.workspaceId,
                         src: imageSrc,
+                        position,
                         generatedBy,
                         descriptor: buildDescriptorFromGeneratedBy(generatedBy) ?? imgNode.descriptor,
                     } satisfies ImageCanvasNode
@@ -7568,7 +7797,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     return
                 }
 
-                const imageWidth = getGeneratedImageInsertionSize()
+                const imageWidth = getGeneratedMediaInsertionSize()
                 const imageHeight = imageWidth
                 const lineageAssignment = getApiMediaRunLineageAssignment(generationRun)
                 if (!lineageAssignment) {
@@ -7595,7 +7824,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 clearPendingBranchMarkerStateForRun(threadId, generationRun)
                 const nodeId = `node-${fileId || uuidv4()}`
 
-                const position = getNextGeneratedImagePosition(edgeSourceNode, imageHeight)
+                const position = getNextGeneratedMediaPosition(edgeSourceNode, imageHeight)
 
                 const generatedBy: ImageCanvasNode['generatedBy'] = {
                     aiChatThreadId: threadId,
@@ -7790,7 +8019,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Placeholder is square until the attached <video> reports the MP4's
             // intrinsic dimensions; handleVideoIntrinsicSize re-fits the node,
             // then re-tidies the generated-media tree around the final frame.
-            const placeholderWidth = getGeneratedImageInsertionSize()
+            const placeholderWidth = getGeneratedMediaInsertionSize()
             const placeholderHeight = placeholderWidth
             const lineageAssignment = getApiMediaRunLineageAssignment(generationRun)
             if (!lineageAssignment) {
@@ -7822,7 +8051,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 sourceNodeId: edgeSourceNode.nodeId,
             })
 
-            const position = getNextGeneratedImagePosition(edgeSourceNode, placeholderHeight)
+            const finalPosition = getNextGeneratedMediaPosition(edgeSourceNode, placeholderHeight)
+            const position = getPendingGeneratedMediaBeforeFrameInsertionPosition(
+                nodeId,
+                finalPosition,
+                { width: placeholderWidth, height: placeholderHeight },
+            )
 
             const videoNode: VideoCanvasNode = {
                 nodeId,
@@ -7919,6 +8153,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 finishGeneratedMediaRun(threadId, generationRun)
                 return
             }
+            const receivedFirstFrame = !existing.hasReceivedFrame
 
             const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
             if (!getApiMediaRunLineageAssignment(generationRun)) {
@@ -7931,6 +8166,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const nodes = currentCanvasState.nodes.map((n: CanvasNode) => {
                 if (n.nodeId !== existing.nodeId || n.type !== 'video') return n
                 const videoNode = n as VideoCanvasNode
+                const position = receivedFirstFrame
+                    ? getFullFramePositionFromPendingGeneratedMediaPosition(videoNode.position, videoNode.dimensions)
+                    : videoNode.position
                 const fittedAspect = Number.isFinite(aspectRatio) && aspectRatio > 0
                     ? aspectRatio
                     : videoNode.aspectRatio
@@ -7953,6 +8191,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     workspaceId: videoWorkspaceId || videoNode.workspaceId,
                     src: videoUrl || videoNode.src,
                     posterSrc: posterUrl || videoNode.posterSrc,
+                    position,
                     aspectRatio: fittedAspect,
                     durationSeconds: durationSeconds || videoNode.durationSeconds,
                     hasAudio: hasAudio ?? videoNode.hasAudio,
@@ -8258,10 +8497,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         onCanvasStateChange?.(nextState)
 
         syncCanvasNodeDomGeometry(nextState.nodes)
-        connectionManager?.syncEdges(nextState.edges)
-        connectionManager?.syncNodes(getNodesForConnectionManager(nextState.nodes))
-        scheduleEdgesRender()
         syncPixiMediaLayer(nextState)
+        syncConnectionManagerForCurrentCanvasState()
+        pixiMediaLayer?.renderNow()
         lastVisualSyncKey = getCanvasVisualSyncKey(nextState)
     }
 
@@ -9210,7 +9448,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const responsePhase = threadPreview?.phase ?? 'preamble'
         const responseIsReceiving = Boolean(threadPreview?.isReceiving)
         const showResponseLine = Boolean(responseText)
-        const responsePreview = responseText ? getBranchMarkerResponsePreview(responseText) : ''
+        const responsePreview = responseText ? getBranchMarkerResponsePreview(responseText, { isReceiving: responseIsReceiving }) : ''
         const spinnerOnUserLine = Boolean(node.pendingState) && !showResponseLine
         const spinnerOnResponseLine = Boolean(node.pendingState) && showResponseLine && responseIsReceiving
         const responseIsEnhancing = responseIsReceiving && responsePhase === 'enhancement'

@@ -33,6 +33,37 @@ function getEdgeStructureKey(edges: WorkspaceEdge[]): string {
     ].join(':')).join('|')
 }
 
+function getNodeStructureSignature(node: CanvasNode): string {
+    return [node.type, node.parentId ?? ''].join(':')
+}
+
+function getEdgeStructureSignature(edge: WorkspaceEdge): string {
+    return [
+        edge.sourceNodeId,
+        edge.targetNodeId,
+        edge.sourceHandle ?? '',
+        edge.targetHandle ?? '',
+    ].join(':')
+}
+
+function isIncomingVisualStructureCoveredByPendingCommit(incomingState: CanvasState, pendingState: CanvasState): boolean {
+    const pendingNodeStructures = new Map(
+        pendingState.nodes.map((node: CanvasNode) => [node.nodeId, getNodeStructureSignature(node)]),
+    )
+    for (const node of incomingState.nodes) {
+        if (pendingNodeStructures.get(node.nodeId) !== getNodeStructureSignature(node)) return false
+    }
+
+    const pendingEdgeStructures = new Map(
+        pendingState.edges.map((edge: WorkspaceEdge) => [edge.edgeId, getEdgeStructureSignature(edge)]),
+    )
+    for (const edge of incomingState.edges) {
+        if (pendingEdgeStructures.get(edge.edgeId) !== getEdgeStructureSignature(edge)) return false
+    }
+
+    return true
+}
+
 export function getNodeStructureKey(canvasState: CanvasStateVisualFields | null): string {
     if (!canvasState) return ''
     return canvasState.nodes.map((node: CanvasNode) => `${node.nodeId}:${node.type}:${node.parentId ?? ''}`).join(',')
@@ -111,8 +142,11 @@ export function mergeIncomingCanvasStateWithPendingVisualCommit(input: RenderSta
         }
     }
 
-    const sameVisualStructure = getCanvasVisualStructureKey(incomingState) === getCanvasVisualStructureKey(pendingVisualCommit.state)
-    if (!sameVisualStructure) {
+    const incomingStructureCoveredByPendingCommit = isIncomingVisualStructureCoveredByPendingCommit(
+        incomingState,
+        pendingVisualCommit.state,
+    )
+    if (!incomingStructureCoveredByPendingCommit) {
         return {
             state: incomingState,
             pendingVisualCommit: null,

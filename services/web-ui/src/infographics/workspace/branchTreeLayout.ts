@@ -42,10 +42,10 @@ export type BranchTree = {
 }
 
 export type BranchTreeLayoutOptions = {
-    depthGap: number                  // LR horizontal gap — imageBranchLineage.imageToImageGap
-    branchOriginDepthGap?: number     // LR horizontal gap from a branchOrigin marker to its first generated child
-    siblingGap: number                // LR vertical gap — imageBranchLineage.branchToBranchGap
-    branchFanoutDepthGap?: number     // LR extra depth gap for each child after the first
+    depthGap: number                  // LR horizontal gap — mediaBranchLineage.mediaToMediaGap
+    branchOriginDepthGap?: number     // LR horizontal gap from a branchOrigin marker to its first generated media node
+    siblingGap: number                // LR vertical gap — mediaBranchLineage.branchRowGap
+    branchFanoutExtraGap?: number     // LR extra depth gap for forked generated media nodes
     collisionMargin?: number          // resolver breathing room; defaults to the resolver's own 20
 }
 
@@ -78,7 +78,7 @@ function isBranchTreeMember(node: CanvasNode): node is BranchTreeMemberNode {
 // origin as its in-tree parent so it stays one normal gap away, and the marker is
 // positioned at the midpoint of that single connector (see positionLineageMarkers).
 // If the API marker is the only visible branch-tree parent, the marker becomes
-// the layout root for those generated children so the tree still moves as one
+// the layout root for those generated media nodes so the tree still moves as one
 // API-declared lineage group.
 function isMidpointMarker(node: CanvasNode | undefined): node is BranchForkCanvasNode | BranchLineCanvasNode {
     return Boolean(node) && (node!.type === 'branchFork' || node!.type === 'branchLine')
@@ -240,7 +240,7 @@ export function applyBranchTreeLayout(
         const result = layoutTree(layoutNodes, {
             depthGap: options.depthGap,
             siblingGap: options.siblingGap,
-            branchFanoutDepthGap: options.branchFanoutDepthGap,
+            branchFanoutDepthGap: options.branchFanoutExtraGap,
         })
 
         // Anchor the relative layout (root at 0,0) onto the root's current world
@@ -270,7 +270,7 @@ export function applyBranchTreeLayout(
 }
 
 // Fork (split) and line (continuation) markers are one regular connector broken
-// in half: the parent media / branch origin and each generated child are laid out
+// in half: the parent media / branch origin and each generated media node is laid out
 // one normal gap apart, and the marker sits at the midpoint of the connector
 // between the parent's right edge and the child's left edge — on the parent's
 // center line for a continuation, on the diagonal for a split. This keeps splits
@@ -306,7 +306,7 @@ function positionLineageMarkers(
         if (!parent) continue
 
         // Midpoint of the connector group: parent right-edge anchor → average
-        // left-edge anchor for every generated child sharing this marker.
+        // left-edge anchor for every generated media node sharing this marker.
         const parentPos = worldOf(parentId)
         const parentAnchorX = parentPos.x + parent.dimensions.width
         const parentAnchorY = parentPos.y + parent.dimensions.height / 2

@@ -402,12 +402,13 @@ export type VideoControlsSettings = {
     }
 }
 
-export type ImageBranchLineageSettings = {
-    generatedImageSize: number
-    rootOutputGap: number
-    branchToBranchGap: number
-    imageToImageGap: number
-    branchFanoutDepthGap: number
+export type MediaBranchLineageSettings = {
+    generatedMediaSize: number
+    rootToFirstMediaGap: number
+    branchRowGap: number
+    mediaToMediaGap: number
+    branchOriginToFirstMediaGap: number
+    branchFanoutExtraGap: number
     pendingMarkerInputGap: number
     pendingMarkerMoveDurationMs: number
     branchOrigin: {
@@ -455,7 +456,7 @@ export type Settings = {
 
     videoControls: VideoControlsSettings
 
-    imageBranchLineage: ImageBranchLineageSettings
+    mediaBranchLineage: MediaBranchLineageSettings
 
     mediaLibrary: MediaLibrarySettings
 
@@ -1006,18 +1007,20 @@ export const settings: Settings = {
         panelWidthFraction: 2 / 3,
     },
 
-    // Image branch lineage placement settings. These values control where newly generated image nodes appear in relation to their chat root and previous branch images.
-    imageBranchLineage: {
-        // Canvas-unit width and height for new generated image nodes. Increasing it makes each generated branch image larger when inserted.
-        generatedImageSize: 800,
-        // Canvas-unit horizontal gap between a chat root and the first generated image in that branch. Increasing it moves first outputs farther right.
-        rootOutputGap: 384,
+    // Generated media branch-lineage placement settings for image and video nodes.
+    mediaBranchLineage: {
+        // Canvas-unit base width and height for new generated media nodes. Increasing it makes each generated branch artifact larger when inserted.
+        generatedMediaSize: 800,
+        // Canvas-unit horizontal gap between a chat root or reference group and the first generated media node in that branch.
+        rootToFirstMediaGap: 384,
         // Canvas-unit vertical gap between separate branch rows spawned from the same chat root. Increasing it moves new branches farther below the previous branch.
-        branchToBranchGap: 160,
-        // Canvas-unit base horizontal gap between consecutive generated images in the same branch lineage. Increasing it stretches every image-to-image branch step.
-        imageToImageGap: 512,
-        // Canvas-unit extra horizontal gap added for each child after the first when a generated-media node forks. Increasing it gives large branch fans more curve room.
-        branchFanoutDepthGap: 96,
+        branchRowGap: 160,
+        // Canvas-unit base horizontal gap between consecutive generated media nodes in the same branch lineage.
+        mediaToMediaGap: 712,
+        // Canvas-unit horizontal gap from a temporary branchOrigin marker to its first generated media node.
+        branchOriginToFirstMediaGap: 512,
+        // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
+        branchFanoutExtraGap: 96,
         // Screen-pixel vertical gap between the global prompt input and the pending branch marker shown immediately after canvas prompt submit.
         pendingMarkerInputGap: 8,
         // Milliseconds for moving and scaling a pending branch marker from the global prompt input to its API-planned canvas position.

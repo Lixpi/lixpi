@@ -421,7 +421,7 @@ For images, an empty `IMAGE_PARTIAL` creates a transparent placeholder canvas no
 2. The node's `generatedBy` metadata includes the API `MediaRunLineageAssignment` plus resolver metadata.
 3. **Placement geometry:**
    - If placement continues from a generated media node, the placeholder is **vertically centered** on that preceding artifact.
-   - **Fresh / reference-only** generations place to the **right of the combined bounds of all reference media**, with `settings.imageBranchLineage.rootOutputGap` breathing room. If no source/thread node exists, the temporary `branchOrigin` marker is placed to the left of the generated sibling group. If the run splits by reasoning model, the `branchFork` marker appears between the branch origin/current lineage source and that reasoning run's generated media.
+   - **Fresh / reference-only** generations place to the **right of the combined bounds of all reference media**, with `settings.mediaBranchLineage.rootToFirstMediaGap` breathing room. If no source/thread node or reference group exists, the temporary `branchOrigin` marker and first generated-media slot are centered as one group so the marker does not start outside the visible viewport. If the run splits by reasoning model, the `branchFork` marker appears between the branch origin/current lineage source and that reasoning run's generated media.
 4. Reference media animate with the same PIXI traveling outline as the generated placeholder while the reasoning model prepares the media prompt (see [Progress Outlines](#progress-outlines)).
 
 PIXI reports intrinsic dimensions whenever placeholder, partial, or final pixels load. For generated media-to-media continuations, each intrinsic-size correction recomputes the node's vertical position from its lineage-anchor center — so a square placeholder, a landscape partial, and a portrait final all stay on one branch center line even as their rectangles change size.
@@ -440,8 +440,8 @@ The finalized generated node also gets canvas provenance chrome rendered in a de
 
 - The **provider badge** and **info button** render in the media chrome overlay.
 - The **info panel** opens at the exact media-node width and expands to its full content height without cropping long prompts or reference metadata. It uses `generatedBy.responseMessageId` plus the persisted chat thread to reconstruct the original user prompt, the producing AI response, and the same generation-trace metadata shown in chat history. It reuses the same chat message shells and the `ImageGenerationTrace` / generation-trace detail renderer used by the AI chat history.
-- Fresh multi-model branch origins show the stored user prompt on the marker itself from the hidden AI chat thread's ProseMirror content. The neutral provenance panel below the temporary `branchOrigin` marker uses API-authored origin provenance for provided references and the decision to fork the request. It does not reconstruct a prompt or reasoning-model response from generated-child metadata.
-- Multi-reasoning `branchFork` markers open that same provenance/details panel below the fork marker. The marker chooses a generated child with `generatedBy.branchForkNodeId` equal to the fork node id, so chat reconstruction is filtered by that child's `reasoningRunId` / `reasoningModelId` and shows only the relevant reasoning model response.
+- Fresh multi-model branch origins show the stored user prompt on the marker itself from the hidden AI chat thread's ProseMirror content. The neutral provenance panel below the temporary `branchOrigin` marker uses API-authored origin provenance for provided references and the decision to fork the request. It does not reconstruct a prompt or reasoning-model response from generated media metadata.
+- Multi-reasoning `branchFork` markers open that same provenance/details panel below the fork marker. The marker chooses a generated media node with `generatedBy.branchForkNodeId` equal to the fork node id, so chat reconstruction is filtered by that node's `reasoningRunId` / `reasoningModelId` and shows only the relevant reasoning model response.
 - AI chat history mirrors the same fork provenance as decomposable message pieces. A matrix reasoning run stores the API-assigned `branchOriginNodeId`, `branchForkNodeId`, and `branchLineNodeId` on its `aiReasoningSection`, plus the same lineage ids on generated image/video nodes. Read-only canvas projections apply a lineage scope when they reassemble stored thread pieces: branch forks and generated-media runs render only scope-local workflow markers, and the live chat can show the full conversation context. Generated-media provider rows stay model/provider-only while retaining lineage attrs for reconstruction.
 
 (The DOM-overlay-vs-PIXI ownership split is owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md); the post-placement de-overlap pass is owned by [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).)
@@ -460,13 +460,13 @@ flowchart TB
 
 ## Balanced Branch-Tree Layout
 
-A branch lineage is a **tree** of generated media: the first generated image/video is normally the root, and each later edit/variant descends from a parent via API-assigned `generatedBy.parentMediaNodeId` or marker IDs. Fresh multi-model requests with no source/thread node use an API-planned temporary `branchOrigin` marker as the root so every sibling has the same explicit graph parent; the generated children still carry prompt, references, and visual summaries on `generatedBy`. When a request has multiple reasoning models, each reasoning run gets an API-planned `branchFork` child marker and the generated media for that run descend from that fork, so model lineage stays visible even when every run targets the same image/video models.
+A branch lineage is a **tree** of generated media: the first generated image/video is normally the root, and each later edit/variant descends from a parent via API-assigned `generatedBy.parentMediaNodeId` or marker IDs. Fresh multi-model requests with no source/thread node use an API-planned temporary `branchOrigin` marker as the root so every sibling has the same explicit graph parent; the generated media nodes still carry prompt, references, and visual summaries on `generatedBy`. When a request has multiple reasoning models, each reasoning run gets an API-planned `branchFork` marker and the generated media for that run descend from that fork, so model lineage stays visible even when every run targets the same image/video models.
 
 On every generated-media add/remove the affected tree is laid out deterministically and then rigid-separated from its neighbors:
 
-- [`utils/layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) is a pure, geometry-agnostic block-allocation **tidy-tree** algorithm (left-to-right). The root keeps its anchor; children fan out symmetrically around the parent's vertical center; linear chains stay collinear; branching parents add horizontal fanout gap before their child column; sibling subtrees occupy disjoint vertical bands, so the layout is provably overlap-free.
+- [`utils/layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) is a pure, geometry-agnostic block-allocation **tidy-tree** algorithm (left-to-right). The root keeps its anchor; generated media fan out symmetrically around the parent's vertical center; linear chains stay collinear; branching parents add horizontal fanout gap before the generated-media column; sibling subtrees occupy disjoint vertical bands, so the layout is provably overlap-free.
 - [`workspace/branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts) builds the generated-media forest from API-assigned lineage fields on canvas nodes, runs the tidy layout per tree, then feeds **one rigid bounding box per tree** (plus one box per loose node) into the **unchanged** `resolveCollisions`. A pushed tree translates as a single block, so it never loses its internal balance because an unrelated node moved nearby.
-- Depth spacing starts with `settings.imageBranchLineage.imageToImageGap`, except the first segment from a temporary `branchOrigin` marker uses half that gap. Branches then add `branchFanoutDepthGap` for every child after the first when a parent forks; sibling spacing reuses `branchToBranchGap`. Final image/video aspect-ratio updates preserve the node center and re-run the branch-tree layout, so a resolved frame cannot collapse forked children back onto the old predecessor center line.
+- Depth spacing starts with `settings.mediaBranchLineage.mediaToMediaGap`, except the first segment from a temporary `branchOrigin` marker uses `settings.mediaBranchLineage.branchOriginToFirstMediaGap`. Branches then add `branchFanoutExtraGap` for every extra generated media node when a lineage forks; sibling spacing reuses `branchRowGap`. Pending media with no received frame is laid out through a temporary proxy sized from `settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale`, while connector anchors still use the rendered outline bounds with the configured outline gap, stroke width, and zoom scaling. Final image/video aspect-ratio updates preserve the node center and re-run the branch-tree layout, so a resolved frame cannot collapse forked media back onto the old predecessor center line.
 
 ### What Counts as a Branch Tree
 
@@ -492,10 +492,11 @@ export type TreeLayoutNode = {
     height: number
 }
 
-export type LayoutTreeOptions = {
+export type BranchTreeLayoutOptions = {
     depthGap: number
+    branchOriginDepthGap?: number
     siblingGap: number
-    branchFanoutDepthGap?: number
+    branchFanoutExtraGap?: number
 }
 
 export type LayoutTreeResult = {
@@ -505,13 +506,13 @@ export type LayoutTreeResult = {
 }
 ```
 
-The workspace adapter supplies `depthGap` from `settings.imageBranchLineage.imageToImageGap`, `branchOriginDepthGap` as half that value for the temporary origin marker's first segment, `siblingGap` from `branchToBranchGap`, and `branchFanoutDepthGap` from the same settings group. The pure utility never reads settings, canvas nodes, Svelte state, PIXI state, or `branchId`.
+The workspace adapter supplies `depthGap` from `settings.mediaBranchLineage.mediaToMediaGap`, `branchOriginDepthGap` from `branchOriginToFirstMediaGap` for the temporary origin marker's first segment, `siblingGap` from `branchRowGap`, and `branchFanoutExtraGap` from the same settings group. The lower-level layout utility never reads settings, canvas nodes, Svelte state, PIXI state, or `branchId`.
 
 ### Algorithm
 
 The layout is a left-to-right block-allocation tidy tree:
 
-- **X by depth and fanout:** `x(child) = x(parent) + width(parent) + depthGap + branchFanoutDepthGap * max(0, childCount(parent) - 1)`. A child of a temporary `branchOrigin` uses `branchOriginDepthGap` for that first segment, then the whole descendant subtree keeps the normal downstream depth spacing. A two-child fork gets extra curve room. A large fork pushes the whole child column and its descendants farther right during the same deterministic rebalance.
+- **X by depth and fanout:** `x(node) = x(parent) + width(parent) + depthGap + branchFanoutExtraGap * max(0, childCount(parent) - 1)`. A generated media node under a temporary `branchOrigin` uses `branchOriginDepthGap` for that first segment, then the whole descendant subtree keeps the normal downstream depth spacing. A two-output fork gets extra curve room. A large fork pushes the whole generated-media column and its descendants farther right during the same deterministic rebalance.
 - **Y by subtree bands:** each subtree reserves a vertical band equal to the larger of its own height and its stacked child bands plus sibling gaps. Children are stacked into disjoint bands, and the parent center is placed at the midpoint between the first and last child centers. Single-child nodes inherit the child's center, so chains stay perfectly horizontal.
 
 This is deliberately simpler than full Walker/Buchheim contour merging. The canvas is infinite, generated-media nodes are large, and the configured gaps are generous, so tighter contour packing is not worth the extra complexity right now. The module boundary can still support a future contour implementation because callers only depend on `TreeLayoutNode[] -> positions`.
@@ -523,7 +524,7 @@ This is deliberately simpler than full Walker/Buchheim contour merging. The canv
 | `R` | Single-node tree is a no-op; the root stays at its anchor. |
 | `R -> A -> B -> C` | All nodes stay on one horizontal center line. |
 | `R -> {A, B}` | `A` is above-right and `B` below-right, symmetric around `R`'s vertical center. |
-| `R -> {A, B, C}` | `B` aligns with `R`; `A` and `C` sit above/below with `branchToBranchGap`. |
+| `R -> {A, B, C}` | `B` aligns with `R`; `A` and `C` sit above/below with `branchRowGap`. |
 | `R -> {A -> {A1, A2, A3}, B}` | `A`'s subtree gets its own vertical band; `B` sits clear of it. |
 | `R(image) -> {A(video), B(image) -> B1(video)}` | Media kind does not affect geometry; images and videos share the same tree. |
 
