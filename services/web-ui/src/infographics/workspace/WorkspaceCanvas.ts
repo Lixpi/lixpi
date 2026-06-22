@@ -5631,12 +5631,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             pendingBranchMarkerOverlayEl.appendChild(nodeEl)
         }
 
-        const projection = getPendingBranchMarkerScreenProjection(dimensions, viewport, stackOffsetY)
         nodeEl.classList.add('workspace-branch-marker-screen-fixed')
+
+        // The docked pill hugs its single-line content (no trailing dead space):
+        // measure the intrinsic content width instead of a char-count heuristic, then
+        // cap it so its on-screen width never exceeds 80% of the prompt input field —
+        // beyond that the message truncates with an ellipsis.
+        const zoom = getSafeViewportZoom(viewport)
+        const composerBounds = (globalCanvasComposer?.element ?? globalCanvasComposerHostEl)?.getBoundingClientRect()
+        applyStyle(nodeEl, { width: 'max-content', height: `${dimensions.height}px` })
+        let dockedWidth = Math.max(getBranchMarkerMinWidth(), nodeEl.scrollWidth || dimensions.width)
+        if (composerBounds) {
+            // On-screen width = canvas width * visualScale (1 / zoom); keep it ≤ 80% of
+            // the input field, so the canvas-unit cap is (0.8 * inputWidth) * zoom.
+            const screenFixedMaxScreenWidth = composerBounds.width * settings.mediaBranchLineage.marker.screenFixedMaxWidthFraction
+            dockedWidth = Math.min(dockedWidth, screenFixedMaxScreenWidth * zoom)
+        }
+        dockedWidth = Math.round(dockedWidth)
+
+        const dockedDimensions = { width: dockedWidth, height: dimensions.height }
+        const projection = getPendingBranchMarkerScreenProjection(dockedDimensions, viewport, stackOffsetY)
         applyStyle(nodeEl, {
             left: `${projection.position.x}px`,
             top: `${projection.position.y}px`,
-            width: `${dimensions.width}px`,
+            width: `${dockedWidth}px`,
             height: `${dimensions.height}px`,
             transform: `scale(${projection.visualScale})`,
             transformOrigin: 'top right',

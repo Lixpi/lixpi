@@ -426,6 +426,7 @@ export type MediaBranchLineageSettings = {
         minWidthMultiplier: number
         maxWidthGrowth: number
         screenFixedMaxWidthGrowth: number
+        screenFixedMaxWidthFraction: number
     }
 }
 
@@ -1052,6 +1053,8 @@ export const settings: Settings = {
             maxWidthGrowth: 1.5,
             // Multiplier on the minimum width capping the docked, above-the-composer pose (single line). Kept wider than maxWidthGrowth so long prompts stay on one line while still being assessed; once the marker lands on the canvas it tightens to maxWidthGrowth.
             screenFixedMaxWidthGrowth: 6,
+            // Hard cap on the docked pose's on-screen width as a fraction of the prompt input field width. The pill hugs its content but never grows past this share of the input; longer messages truncate with an ellipsis.
+            screenFixedMaxWidthFraction: 0.8,
         },
     },
 
