@@ -1857,7 +1857,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     contextPreview: getAiUserMessageContextPreviewRenderer(),
                     traceDetailsOptions: {
                         className: 'canvas-generated-media-trace-details',
-                        renderReferencesWhenClosed: true,
                         getAdditionalReferenceImageSources: getCanvasTraceReferenceImageSources,
                     },
                 }))

@@ -252,6 +252,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     }
     const wrapper = html`
         <div className="ai-generated-video-wrapper ai-generated-media-node">
+            <div className="ai-generated-media-section-title">Final generated video</div>
             <div className="ai-generated-video-container" style=${containerStyle}>
                 <div className="ai-generated-video-placeholder">
                     <span className="placeholder-text">Generating video…</span>
@@ -264,6 +265,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     `
 
     const container = wrapper.querySelector('.ai-generated-video-container') as HTMLElement
+    const titleElement = wrapper.querySelector('.ai-generated-media-section-title') as HTMLElement
     const placeholderElement = wrapper.querySelector('.ai-generated-video-placeholder') as HTMLElement
     const placeholderText = wrapper.querySelector('.ai-generated-video-placeholder .placeholder-text') as HTMLElement
     const videoElement = wrapper.querySelector('.ai-generated-video-content') as HTMLVideoElement
@@ -276,6 +278,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     let resizeObserver: ResizeObserver | null = null
     let unsubscribeAiModelsStore: (() => void) | null = null
 
+    titleElement.hidden = true
     applyStyle(videoElement, { display: 'none' })
 
     const syncContainerGeometry = (): void => {
@@ -378,6 +381,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         const { videoUrl, posterUrl, isPending, errorMessage } = node.attrs
 
         if (errorMessage) {
+            titleElement.hidden = true
             clearErrorPlaceholder()
             applyStyle(videoElement, { display: 'none' })
             applyStyle(controlsHost, { display: 'none' })
@@ -390,6 +394,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         }
 
         if (isPending || !videoUrl) {
+            titleElement.hidden = true
             clearErrorPlaceholder()
             applyStyle(videoElement, { display: 'none' })
             applyStyle(controlsHost, { display: 'none' })
@@ -400,6 +405,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         }
 
         clearErrorPlaceholder()
+        titleElement.hidden = false
         placeholderElement.classList.remove('is-active')
         applyStyle(videoElement, { display: 'block' })
         applyStyle(controlsHost, { display: 'block' })
@@ -417,6 +423,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     }
 
     videoElement.onerror = () => {
+        titleElement.hidden = true
         clearErrorPlaceholder()
         applyStyle(videoElement, { display: 'none' })
         applyStyle(controlsHost, { display: 'none' })

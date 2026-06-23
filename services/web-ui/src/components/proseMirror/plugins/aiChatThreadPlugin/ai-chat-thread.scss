@@ -495,7 +495,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 
             // Per-reasoning-model slice of a multi-model response. Consecutive
             // sections are separated by a hairline so each model's reply + its
-            // generation collapsible + its image read as one grouped block.
+            // generation trace + its media read as one grouped block.
             .ai-reasoning-section {
                 position: relative;
 
@@ -736,105 +736,33 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     color: var(--workspace-media-model-badge-model-color, #181e23);
 }
 
+.ai-generated-media-section-title {
+    margin: 0 0 0.45rem;
+    color: rgba(0, 0, 0, 0.45);
+    font-size: 0.68rem;
+    font-style: normal;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
 @keyframes spin {
     to {
         transform: rotate(360deg);
     }
 }
 
-// ========== AI COLLAPSIBLE BLOCK ==========
-.ai-collapsible-block {
-    margin: 0.5rem 0;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 8px;
-    overflow: hidden;
+// ========== AI GENERATION TRACE BLOCK ==========
+.ai-generation-trace-block {
+    margin: 0.75rem 0;
     font-size: 0.875rem;
 
-    > summary {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.5rem 0.75rem;
-        cursor: pointer;
-        user-select: none;
-        color: rgba(0, 0, 0, 0.55);
-        font-weight: 500;
-        font-size: 0.8rem;
-        background: rgba(0, 0, 0, 0.02);
-        list-style: none;
-        transition: background 0.15s ease;
-
-        &::-webkit-details-marker {
-            display: none;
-        }
-
-        &::before {
-            content: '';
-            display: inline-block;
-            width: 0;
-            height: 0;
-            border-style: solid;
-            border-width: 4px 0 4px 6px;
-            border-color: transparent transparent transparent rgba(0, 0, 0, 0.35);
-            transition: transform 0.15s ease;
-            flex-shrink: 0;
-        }
-
-        &:hover {
-            background: rgba(0, 0, 0, 0.04);
-        }
-
-        .ai-collapsible-block-summary-title {
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .ai-collapsible-block-summary-meta {
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-            margin-left: auto;
-            color: rgba(0, 0, 0, 0.38);
-            font-size: 0.72rem;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        .ai-image-generation-summary-model-tag,
-        .ai-image-generation-summary-model-tag-svg {
-            flex: 0 0 auto;
-        }
-
-        .ai-image-generation-summary-model-tag {
-            display: inline-flex;
-            line-height: 0;
-        }
-
-        .ai-image-generation-summary-model-tag-svg {
-            display: block;
-            overflow: visible;
-        }
-
-        .ai-collapsible-block-summary-reference-meta {
-            color: rgba(0, 0, 0, 0.38);
-            font-size: 0.72rem;
-            font-weight: 600;
-            line-height: 1;
-        }
+    .ai-generation-trace-body {
+        padding: 0;
     }
 
-    &[open] > summary::before {
-        transform: rotate(90deg);
-    }
-
-    .ai-collapsible-block-body {
-        padding: 0.5rem 0.75rem;
-        border-top: 1px solid rgba(0, 0, 0, 0.06);
-    }
-
-    .ai-collapsible-block-content {
+    .ai-generation-trace-content {
         color: rgba(0, 0, 0, 0.5);
         font-size: 0.78rem;
         font-style: italic;
@@ -849,7 +777,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         }
     }
 
-    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content:not(:empty),
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content:not(:empty),
     .ai-image-generation-tool-prompt-fallback,
     .ai-image-generation-final-prompt {
         margin: 0;
@@ -869,19 +797,19 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         overflow-wrap: anywhere;
     }
 
-    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content:empty {
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content:empty {
         display: none;
     }
 
-    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content p,
-    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h1,
-    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h2,
-    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h3,
-    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h4,
-    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h5,
-    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h6,
-    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content span,
-    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content div {
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content p,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h1,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h2,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h3,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h4,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h5,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h6,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content span,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content div {
         color: inherit;
         font-size: 0.76rem !important;
         font-style: normal;
@@ -912,7 +840,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         }
     }
 
-    .ai-image-generation-tool-prompt-section.has-trace .ai-image-generation-section-label,
+    .ai-image-generation-tool-prompt-section.has-content .ai-image-generation-section-label,
     .ai-image-generation-final-prompt-section .ai-image-generation-section-label,
     .ai-image-generation-reference-section .ai-image-generation-section-label,
     .ai-image-generation-resolver-section .ai-image-generation-section-label {
@@ -1043,18 +971,5 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         color: rgba(0, 0, 0, 0.52);
         font-size: 0.7rem;
         line-height: 1.35;
-    }
-
-    &.is-streaming > summary::after {
-        content: '';
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border: 2px solid rgba(0, 0, 0, 0.1);
-        border-top-color: rgba(0, 0, 0, 0.4);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-        margin-left: auto;
-        flex-shrink: 0;
     }
 }

@@ -2,7 +2,7 @@
 // A single reasoning model's slice of a multi-model response. One user prompt
 // produces ONE aiResponseMessage; inside it, each selected reasoning model gets
 // its own aiReasoningSection holding that model's reply text, its image/video
-// generation collapsible, and its generated media — kept separate so the
+// generation trace, and its generated media — kept separate so the
 // concurrently-streaming models never interleave their content.
 import { html } from '$src/utils/domTemplates.ts'
 import {
