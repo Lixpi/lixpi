@@ -1,0 +1,70 @@
+// SidePanel — reusable resizable side panel. The "rail" is the internal term
+// for the vertical drag handle that resizes the panel.
+//
+// Both the .side-panel-rail hit target and the visible .side-panel-rail-line
+// span the full height of the panel as a single unbroken line. Callers can
+// target an additional class passed via `className` to style a specific rail
+// separately.
+
+.side-panel-rail {
+    position: absolute;
+    z-index: 10;
+    pointer-events: auto;
+    cursor: ew-resize;
+    touch-action: none;
+    height: 100%;
+}
+
+// Translucent glass backdrop that sits behind the panel and blurs the canvas
+// behind it. It is right/left-anchored and sized to the panel width, so its
+// inner edge sits flush with the panel edge.
+.side-panel-backdrop {
+    position: absolute;
+    z-index: 90;
+    top: 0;
+    bottom: calc(0px - var(--workspace-canvas-padding-bottom, 0px));
+    width: var(--side-panel-backdrop-width, var(--workspace-ai-chat-sidebar-width));
+    pointer-events: none;
+    background: var(--side-panel-backdrop-fill, rgba(248, 250, 253, 0.84));
+    backdrop-filter: blur(24px) saturate(145%);
+    -webkit-backdrop-filter: blur(24px) saturate(145%);
+}
+
+.side-panel-backdrop-right {
+    right: calc(0px - var(--workspace-canvas-padding-inline, 0px));
+}
+
+.side-panel-backdrop-left {
+    left: calc(0px - var(--workspace-canvas-padding-inline, 0px));
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .side-panel-backdrop {
+        background: var(--side-panel-backdrop-fill-opaque, #f8fafd);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
+
+.side-panel-rail-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: var(--side-panel-rail-width, 3px);
+        background-image: var(--side-panel-rail-gradient, linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%));
+        border-radius: 2px;
+    }
+}

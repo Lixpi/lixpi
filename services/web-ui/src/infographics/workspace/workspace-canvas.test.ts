@@ -99,6 +99,14 @@ function loadAiPromptComposer(): string {
 	return readSourceFile('../../components/proseMirror/aiPromptComposer.ts', 'components/proseMirror/aiPromptComposer.ts')
 }
 
+function loadSidePanel(): string {
+	return readSourceFile('../../components/sidePanel/sidePanel.ts', 'components/sidePanel/sidePanel.ts')
+}
+
+function loadSidePanelScss(): string {
+	return readSourceFile('../../components/sidePanel/side-panel.scss', 'components/sidePanel/side-panel.scss')
+}
+
 function loadLayout(): string {
 	return readSourceFile('../../views/layouts/layout.svelte', 'views/layouts/layout.svelte')
 }
@@ -1395,9 +1403,13 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(ts).toMatch(/const\s+threadRails:\s*Map<string,\s*HTMLElement>/)
 	})
 
-	it('defines active AI chat panel resize width state', () => {
+	it('delegates active AI chat panel resize width state to the SidePanel component', () => {
+		// The SidePanel instance owns the width state, clamping, and persistence;
+		// the host passes constraints in and reflects the reported width into DOM.
 		expectSourceToContain(ts, 'const AI_CHAT_PANEL_MIN_WIDTH = 320')
-		expectSourceToContain(ts, 'let activeAiChatPanelWidth: number | null = null')
+		expectSourceToContain(ts, 'minWidth: AI_CHAT_PANEL_MIN_WIDTH')
+		expectSourceToContain(ts, 'getMaxWidth: getActiveAiChatPanelMaxWidth')
+		expectSourceToContain(ts, 'function reflectActiveAiChatPanelWidth(width: number)')
 		expectSourceToContain(ts, "style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)")
 	})
 
@@ -1557,11 +1569,11 @@ describe('Vertical rail — TS infrastructure', () => {
 
 		expectExcerptToContain(fnBody, 'workspace-ai-chat-floating-panel workspace-ai-chat-thread-node')
 		expectExcerptToContain(fnBody, 'new ProseMirrorEditor')
-		expectExcerptToContain(fnBody, 'workspace-thread-rail workspace-ai-chat-floating-panel-rail')
-		expectExcerptToContain(fnBody, 'const backdropEl = html`<div className="workspace-ai-chat-panel-backdrop"')
-		expectExcerptToContain(fnBody, 'paneEl.appendChild(backdropEl)')
+		expectExcerptToContain(fnBody, 'createSidePanel({')
+		expectExcerptToContain(fnBody, "className: 'workspace-ai-chat-floating-panel-rail'")
+		// The glass backdrop element is owned by the SidePanel component.
+		expectExcerptToContain(fnBody, 'paneEl.appendChild(activeAiChatPanelRail.backdropElement)')
 		expectExcerptToContain(fnBody, 'handleActiveAiChatPanelResizeStart')
-		expectExcerptToContain(fnBody, 'aiChatThreadRailBoundaryCircle')
 		// The panel's prompt input reuses the shared, decoupled composer component.
 		expectExcerptToContain(fnBody, 'createAiPromptComposer({')
 		expectExcerptToContain(fnBody, "className: 'workspace-ai-chat-floating-panel-prompt'")
@@ -1786,13 +1798,14 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectExcerptToContain(deleteExtractionBody, 'removeAiChatPanelDraft(`extraction:${extractionRunId}`)', 'delete-extraction handler')
 	})
 
-	it('uses the floating panel rail as the horizontal resize handle', () => {
-		const scss = loadScss()
+	it('uses the reusable SidePanel component as the horizontal resize handle', () => {
+		const sidePanel = loadSidePanel()
 
 		expectSourceToContain(ts, 'function handleActiveAiChatPanelResizeStart(')
-		expectSourceToContain(ts, "applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })")
-		expectSourceToContain(scss, '.workspace-thread-rail.workspace-ai-chat-floating-panel-rail')
-		expectSourceToContain(scss, 'cursor: ew-resize')
+		expectSourceToContain(ts, 'createSidePanel({')
+		expectSourceToContain(ts, "side: 'right'")
+		expectSourceToContain(sidePanel, "applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })")
+		expectSourceToContain(sidePanel, 'side-panel-rail')
 	})
 
 	it('uses a full-height right-edge chat panel with zoom and avatar offsets', () => {
@@ -1801,15 +1814,16 @@ describe('Vertical rail — TS infrastructure', () => {
 		const layout = loadLayout()
 		const sidebar = loadSidebar()
 
+		const sidePanelScss = loadSidePanelScss()
 		expectSourceToContain(scss, '--workspace-ai-chat-sidebar-width')
 		expectSourceToContain(scss, '--workspace-ai-chat-sidebar-edge-gap: 15px')
-		expectSourceToContain(scss, '.workspace-ai-chat-panel-backdrop')
-		expectSourceToContain(scss, 'z-index: 90')
-		expectSourceToContain(scss, 'width: var(--workspace-ai-chat-sidebar-width)')
-		expectSourceToContain(scss, 'backdrop-filter: blur(24px) saturate(145%)')
-		expectSourceToContain(scss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
-		expectSourceToContain(scss, 'mask-image: linear-gradient')
-		expectSourceToContain(scss, '@media (prefers-reduced-transparency: reduce)')
+		// The glass backdrop is owned by the SidePanel component.
+		expectSourceToContain(sidePanelScss, '.side-panel-backdrop')
+		expectSourceToContain(sidePanelScss, 'z-index: 90')
+		expectSourceToContain(sidePanelScss, '--workspace-ai-chat-sidebar-width')
+		expectSourceToContain(sidePanelScss, 'backdrop-filter: blur(24px) saturate(145%)')
+		expectSourceToContain(sidePanelScss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
+		expectSourceToContain(sidePanelScss, '@media (prefers-reduced-transparency: reduce)')
 		expectSourceToContain(svelte, 'class:workspace-canvas-chat-panel-open')
 		expectSourceToContain(svelte, 'workspace-canvas-action-panel-right workspace-canvas-action-panel-single')
 		expectSourceToContain(svelte, 'workspace-ai-chat-launcher')

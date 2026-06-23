@@ -21,6 +21,7 @@
     import AuthService from '$src/services/auth-service.ts'
     import { settings } from '$src/settings.ts'
     import { createNewFileIcon, imageIcon, aiChatPanelCollapseIcon, mediaFoloderIcon } from '$src/svgIcons/index.ts'
+    import '$src/components/sidePanel/side-panel.scss'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
 

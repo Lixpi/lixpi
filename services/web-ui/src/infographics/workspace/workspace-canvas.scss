@@ -8,8 +8,6 @@
     --workspace-ai-chat-sidebar-edge-gap: 15px;
     --workspace-ai-chat-sidebar-padding: 15px;
     --workspace-ai-chat-panel-content-inset: 10px;
-    --workspace-ai-chat-panel-backdrop-edge-guard: 180px;
-    --workspace-ai-chat-panel-backdrop-feather: 112px;
     --workspace-ai-chat-sidebar-zoom-gap: 15px;
     --workspace-canvas-padding-top: 32px;
     --workspace-canvas-padding-inline: 0px;
@@ -950,56 +948,9 @@
     }
 }
 
-.workspace-ai-chat-panel-backdrop {
-    position: absolute;
-    z-index: 90;
-    top: 0;
-    right: calc(0px - var(--workspace-canvas-padding-inline));
-    bottom: calc(0px - var(--workspace-canvas-padding-bottom));
-    width: calc(
-        var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-panel-backdrop-edge-guard) + var(--workspace-ai-chat-panel-backdrop-feather)
-    );
-    pointer-events: none;
-    border-radius: 0;
-    background: linear-gradient(
-        to right,
-        rgba(248, 250, 253, 0) 0,
-        rgba(248, 250, 253, 0) var(--workspace-ai-chat-panel-backdrop-edge-guard),
-        rgba(248, 250, 253, 0.012) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 18px),
-        rgba(248, 250, 253, 0.04) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 38px),
-        rgba(248, 250, 253, 0.11) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 60px),
-        rgba(248, 250, 253, 0.24) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 82px),
-        rgba(248, 250, 253, 0.48) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 100px),
-        rgba(248, 250, 253, 0.84) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + var(--workspace-ai-chat-panel-backdrop-feather)),
-        rgba(248, 250, 253, 0.84) 100%
-    );
-    backdrop-filter: blur(24px) saturate(145%);
-    -webkit-backdrop-filter: blur(24px) saturate(145%);
-    mask-image: linear-gradient(
-        to right,
-        transparent 0,
-        transparent var(--workspace-ai-chat-panel-backdrop-edge-guard),
-        rgba(0, 0, 0, 0.012) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 18px),
-        rgba(0, 0, 0, 0.04) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 38px),
-        rgba(0, 0, 0, 0.11) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 60px),
-        rgba(0, 0, 0, 0.24) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 82px),
-        rgba(0, 0, 0, 0.48) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 100px),
-        #000 calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + var(--workspace-ai-chat-panel-backdrop-feather)),
-        #000 100%
-    );
-    -webkit-mask-image: linear-gradient(
-        to right,
-        transparent 0,
-        transparent var(--workspace-ai-chat-panel-backdrop-edge-guard),
-        rgba(0, 0, 0, 0.012) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 18px),
-        rgba(0, 0, 0, 0.04) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 38px),
-        rgba(0, 0, 0, 0.11) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 60px),
-        rgba(0, 0, 0, 0.24) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 82px),
-        rgba(0, 0, 0, 0.48) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 100px),
-        #000 calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + var(--workspace-ai-chat-panel-backdrop-feather)),
-        #000 100%
-    );
-}
+// The translucent glass backdrop behind the AI chat panel is owned by the
+// reusable SidePanel component (see components/sidePanel) — its element and all
+// glass styling live there, under .side-panel-backdrop.
 
 .workspace-ai-chat-panel-tabs {
     position: relative;
@@ -1442,10 +1393,6 @@
     }
 }
 
-.workspace-ai-chat-floating-panel-rail {
-    cursor: default;
-}
-
 // Screen-fixed, canvas-wide composer at the bottom-center of the viewport.
 // The context tray is outside the input pill so selected references do not
 // consume text-field space.
@@ -1562,32 +1509,16 @@
     }
 }
 
-.workspace-thread-rail.workspace-ai-chat-floating-panel-rail {
-    cursor: ew-resize;
-    touch-action: none;
-    height: 100%;
-}
+// The resizable AI chat panel is rendered by the reusable SidePanel component
+// (see components/sidePanel). Its base presentation lives in side-panel.scss;
+// add panel-specific overrides under .workspace-ai-chat-floating-panel-rail
+// here when needed.
 
 .workspace-ai-chat-floating-panel.is-resizing {
     user-select: none;
 }
 
 @media (prefers-reduced-transparency: reduce) {
-    .workspace-ai-chat-panel-backdrop {
-        background: linear-gradient(
-            to right,
-            transparent 0,
-            transparent var(--workspace-ai-chat-panel-backdrop-edge-guard),
-            rgba(248, 250, 253, 0.035) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 38px),
-            rgba(248, 250, 253, 0.18) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 72px),
-            rgba(248, 250, 253, 0.48) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 100px),
-            #f8fafd calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + var(--workspace-ai-chat-panel-backdrop-feather)),
-            #f8fafd 100%
-        );
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
-    }
-
     .workspace-video-controls-host {
         background: var(--video-controls-host-reduced-transparency-background, rgba(24, 28, 34, 0.88));
         backdrop-filter: none !important;
