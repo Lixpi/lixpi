@@ -585,8 +585,11 @@
     // Compact media descriptor (summary + tags), shown for every media object —
     // generated and uploaded alike. For uploads with no generation context this
     // is the only section in the panel.
+    // The info panel container is intentionally padding-free (the AI chat thread
+    // projection manages its own insets), so the descriptor — the only child in
+    // the info (i) panel — carries its own inset margin to clear the rounded edges.
     .canvas-media-descriptor {
-        margin: 0.65rem 0 0;
+        margin: 1rem;
 
         &.is-analyzing .canvas-media-descriptor-summary {
             color: rgba(0, 0, 0, 0.46);
@@ -753,7 +756,35 @@
 }
 
 .canvas-generated-media-projection-editor .canvas-generated-media-trace-details {
-    margin: 0.65rem 0 0;
+    margin: 0.95rem 0 0;
+}
+
+// Fading gradient separator above the final generated image, matching the section
+// dividers in the trace block and the branch lineage node marker separator.
+.canvas-generated-media-projection-editor .ai-generated-media-section-title {
+    position: relative;
+    margin-top: 0.85rem;
+    padding-top: 0.85rem;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.04) 10%, rgba(0, 0, 0, 0.08) 26%, rgba(0, 0, 0, 0.14) 50%, rgba(0, 0, 0, 0.08) 74%, rgba(0, 0, 0, 0.04) 90%, rgba(0, 0, 0, 0) 100%);
+    }
+}
+
+// Canvas reference tiles use the context-preview component (thumbnail + hover card),
+// which carries its own sizing — so the grid lays them out compactly side by side
+// instead of stretching each thumbnail across a full 1fr column.
+.canvas-generated-media-trace-details .ai-image-generation-reference-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
 }
 
 .canvas-generated-media-projection-editor .ai-image-generation-tool-prompt-fallback,

@@ -216,7 +216,7 @@ export class ImageNodeView implements NodeView {
     }
 
     // Generated images carry a "Final generated image" heading so the media reads as
-    // the produced output (distinct from the reference images sent to the model). The
+    // the produced output (distinct from the reference items sent to the model). The
     // title only shows once a fully-generated image exists — never during the partial
     // streaming phase or when there is no image yet.
     private syncGeneratedImageTitle(): void {

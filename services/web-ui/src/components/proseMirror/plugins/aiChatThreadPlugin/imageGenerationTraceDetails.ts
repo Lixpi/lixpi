@@ -34,6 +34,10 @@ type RenderImageGenerationTraceDetailsParams = {
 export type ImageGenerationTraceDetailsOptions = {
     className?: string
     getAdditionalReferenceImageSources?: (reference: ImageGenerationTraceReference) => string[]
+    // Lets the host render its own reference tile (e.g. the canvas context-preview
+    // tile: thumbnail-only with a rich hover card). When it returns an element that
+    // element replaces the default captioned tile; returning null falls back.
+    renderReferenceTile?: (reference: ImageGenerationTraceReference) => HTMLElement | null
 }
 
 export type ImageGenerationTraceDetails = {
@@ -288,7 +292,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
                     <pre className="ai-image-generation-final-prompt"></pre>
                 </section>
                 <section className="ai-image-generation-reference-section">
-                    <div className="ai-image-generation-section-label">Reference images sent to the media generation model</div>
+                    <div className="ai-image-generation-section-label">Reference items sent to the media generation model</div>
                     <div className="ai-image-generation-reference-grid"></div>
                 </section>
                 <section className="ai-image-generation-resolver-section">
@@ -321,7 +325,8 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         if (renderedReferenceTrace === trace) return
 
         if (trace.referenceImages.length > 0) {
-            referenceGrid.replaceChildren(...trace.referenceImages.map((reference) => createReferenceTile(reference, options)))
+            referenceGrid.replaceChildren(...trace.referenceImages.map((reference) =>
+                options.renderReferenceTile?.(reference) ?? createReferenceTile(reference, options)))
         } else {
             referenceGrid.replaceChildren(html`
                 <div className="ai-image-generation-empty-references">No reference images were sent.</div>

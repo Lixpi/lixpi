@@ -833,10 +833,35 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     .ai-image-generation-resolver-section {
         margin: 0;
 
+        // Fading gradient separator between sections — mirrors the branch lineage
+        // node marker separator, tuned dark for the light info-panel background.
         & + section {
+            position: relative;
             margin-top: 0.85rem;
             padding-top: 0.85rem;
-            border-top: 1px solid rgba(0, 0, 0, 0.06);
+
+            &::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 1px;
+                border-radius: 999px;
+                background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.04) 10%, rgba(0, 0, 0, 0.08) 26%, rgba(0, 0, 0, 0.14) 50%, rgba(0, 0, 0, 0.08) 74%, rgba(0, 0, 0, 0.04) 90%, rgba(0, 0, 0, 0) 100%);
+            }
+        }
+
+        // The reference section follows the prompt box, which is already a visually
+        // bounded block — a divider between them reads as clutter, so drop it and
+        // tighten the gap since the box edge already provides separation.
+        & + .ai-image-generation-reference-section {
+            margin-top: 0.95rem;
+            padding-top: 0;
+
+            &::before {
+                content: none;
+            }
         }
     }
 

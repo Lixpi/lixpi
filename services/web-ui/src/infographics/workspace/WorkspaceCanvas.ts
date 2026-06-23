@@ -175,6 +175,10 @@ type GeneratedMediaInfoPanelOptions = {
     rendererKey?: string
     limitProjectionToSelectedMedia?: boolean
     lineageProjectionScope?: AiLineageProjectionScope
+    // When true the panel only renders the media descriptor (summary + tags) and
+    // never the AI chat thread projection — used by the media info (i) button,
+    // which must always show media meta info, not the generating conversation.
+    descriptorOnly?: boolean
 }
 type BranchMarkerModelDescriptor = {
     modelId: string
@@ -1796,6 +1800,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return []
     }
 
+    // Renders a trace reference as the canvas context-preview tile — a thumbnail-only
+    // tile with the same rich hover card used when media is attached to the AI chat
+    // input. Looked up by the reference's canvas nodeId; falls back (null) to the
+    // default captioned tile when the referenced node is no longer on the canvas.
+    function renderCanvasTraceReferenceTile(reference: ImageGenerationTraceReference): HTMLElement | null {
+        if (!reference.nodeId) return null
+        const node = findCanvasNodeById(reference.nodeId)
+        if (!node) return null
+        const tile = createContextPreviewTile({
+            node,
+            getNode: () => findCanvasNodeById(reference.nodeId as string) ?? node,
+            environment: getContextPreviewEnvironment(),
+            preferredPlacement: 'bottom',
+            inlinePopover: true,
+        })
+        generatedMediaInfoPreviewTiles.add(tile)
+        return tile.dom
+    }
+
     // The node's compact descriptor (summary + tags) — shown for ALL media,
     // including uploads with no generation metadata. Returns null when there is
     // nothing useful to show (no descriptor, or analysis failed).
@@ -1837,10 +1860,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         options: GeneratedMediaInfoPanelOptions = {}
     ): HTMLElement {
         const generatedBy = node.generatedBy
+        const showChatThread = Boolean(generatedBy) && !options.descriptorOnly
         const panelClassName = ['canvas-generated-media-info-panel', options.className, 'nopan'].filter(Boolean).join(' ')
         const panel = html`<div className=${panelClassName}></div>` as HTMLElement
 
-        if (generatedBy) {
+        if (generatedBy && showChatThread) {
             // Header naming the reasoning model that drove this whole turn, anchored at
             // the very top of the modal so the provenance is the first thing read.
             const reasoningModelBadge = generatedBy.reasoningModelId
@@ -1888,12 +1912,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     traceDetailsOptions: {
                         className: 'canvas-generated-media-trace-details',
                         getAdditionalReferenceImageSources: getCanvasTraceReferenceImageSources,
+                        renderReferenceTile: renderCanvasTraceReferenceTile,
                     },
                 }))
             }
         }
 
-        if (!generatedBy && options.includeDescriptor !== false) {
+        if (!showChatThread && options.includeDescriptor !== false) {
             const descriptorSection = buildMediaDescriptorSection(node.descriptor)
             if (descriptorSection) panel.appendChild(descriptorSection)
         }
@@ -2005,73 +2030,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncGeneratedMediaChrome(currentCanvasState)
     }
 
-    function createBranchOriginReferencesSection(referenceNodeIds: string[]): HTMLElement {
-        const section = html`
-            <div className="canvas-branch-origin-provenance-section">
-                <span className="canvas-branch-origin-provenance-label">Provided references</span>
-            </div>
-        ` as HTMLElement
-        const uniqueReferenceNodeIds = uniqueStringValues(referenceNodeIds)
-        if (uniqueReferenceNodeIds.length === 0) {
-            section.appendChild(html`<p className="canvas-generated-media-info-empty">No provided references.</p>` as HTMLElement)
-            return section
-        }
-
-        const list = html`<div className="canvas-branch-origin-reference-preview-list"></div>` as HTMLElement
-        const environment = getContextPreviewEnvironment()
-        for (const nodeId of uniqueReferenceNodeIds) {
-            const node = findCanvasNodeById(nodeId)
-            if (!node) continue
-            const tile = createContextPreviewTile({
-                node,
-                getNode: () => findCanvasNodeById(nodeId) ?? node,
-                environment,
-                preferredPlacement: 'bottom',
-            })
-            generatedMediaInfoPreviewTiles.add(tile)
-            list.appendChild(tile.dom)
-        }
-        if (!list.childElementCount) {
-            section.appendChild(html`<p className="canvas-generated-media-info-empty">Provided references are no longer on this canvas.</p>` as HTMLElement)
-            return section
-        }
-        section.appendChild(list)
-        return section
-    }
-
-    function createBranchOriginDecisionSection(
-        branchOriginNode: BranchOriginCanvasNode,
-        generatedMediaNodes: Array<ImageCanvasNode | VideoCanvasNode>,
-    ): HTMLElement {
-        const forkNodeIds = uniqueStringValues(generatedMediaNodes
-            .map(node => node.generatedBy?.branchForkNodeId)
-            .filter((nodeId): nodeId is string => Boolean(nodeId)))
-        const provenance = branchOriginNode.provenance
-        const forkCount = provenance?.forkCount ?? forkNodeIds.length
-        const forked = provenance?.forked ?? forkCount > 0
-        const decisionText = forked
-            ? `Forked this request into ${forkCount} reasoning ${forkCount === 1 ? 'branch' : 'branches'}.`
-            : 'Created one branch root for this generation request.'
-        const section = html`
-            <div className="canvas-branch-origin-provenance-section">
-                <span className="canvas-branch-origin-provenance-label">Branch decision</span>
-                <p className="canvas-generated-media-info-text">${decisionText}</p>
-            </div>
-        ` as HTMLElement
-        return section
-    }
-
     function createBranchOriginInfoPanel(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
-        const generatedMediaNodes = getBranchOriginGeneratedMediaNodes(branchOriginNode.nodeId)
-        const referenceNodeIds = branchOriginNode.provenance?.providedReferenceNodeIds
-            ?? branchOriginNode.provenance?.referenceNodeIds
-            ?? []
-        if (referenceNodeIds.length === 0 && generatedMediaNodes.length === 0) return null
-
-        const panel = html`<div className="canvas-generated-media-info-panel canvas-branch-origin-info-panel nopan"></div>` as HTMLElement
-        panel.appendChild(createBranchOriginReferencesSection(referenceNodeIds))
-        panel.appendChild(createBranchOriginDecisionSection(branchOriginNode, generatedMediaNodes))
-        return panel
+        const generatedMediaNode = getBranchOriginGeneratedMediaNodes(branchOriginNode.nodeId)[0]
+        if (!generatedMediaNode) return null
+        return createGeneratedMediaInfoPanel(generatedMediaNode, {
+            className: 'canvas-branch-origin-info-panel',
+            includeDescriptor: false,
+            rendererKey: `branch-origin:${branchOriginNode.nodeId}`,
+            limitProjectionToSelectedMedia: false,
+            lineageProjectionScope: 'branch-origin',
+        })
     }
 
     function createBranchOriginInfoChrome(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
@@ -2269,7 +2237,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // uses normal viewport-transformed canvas coordinates, so zooming the canvas
     // changes the panel and text naturally instead of applying bounded icon scaling.
     function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
-        const panel = createGeneratedMediaInfoPanel(node)
+        const panel = createGeneratedMediaInfoPanel(node, { descriptorOnly: true })
         panel.setAttribute('data-media-info-panel-node-id', node.nodeId)
         applyStyle(panel, { position: 'absolute', top: '0', left: '0' })
         return panel

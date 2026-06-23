@@ -39,6 +39,11 @@ export type CreateContextPreviewTileOptions = {
     getNode?: () => CanvasNode | undefined
     environment: ContextPreviewEnvironment
     preferredPlacement?: 'top' | 'bottom' | 'left' | 'right'
+    // When true the hover card is kept as a DOM descendant of the tile (shown via a
+    // CSS class on hover) instead of being portaled to document.body. This makes the
+    // card live inside its surrounding context and scale with any CSS zoom transform
+    // applied to an ancestor (e.g. the zoomable canvas AI chat thread projection).
+    inlinePopover?: boolean
 }
 
 type ContextPreviewPopoverOrientation = 'landscape' | 'portrait'
@@ -320,12 +325,81 @@ function getContextPreviewPopoverClassName(node: CanvasNode, hasPopoverMeta: boo
     return `${baseClassName} ${baseClassName}-${getContextPreviewPopoverOrientation(node)}`
 }
 
+// Inline variant: the hover card stays a DOM descendant of the tile so it inherits
+// any ancestor CSS zoom transform and lives inside its context (used on the zoomable
+// canvas). Shown by toggling `is-open` on hover/focus instead of body-portaling.
+function createInlineContextPreviewTile({
+    node,
+    getNode,
+    environment,
+}: CreateContextPreviewTileOptions): ContextPreviewTileInstance {
+    const resolveNode = (): CanvasNode => getNode?.() ?? node
+    const renderState = () => {
+        const latestNode = resolveNode()
+        const title = getContextPreviewTitle(latestNode, environment)
+        const text = getContextPreviewText(latestNode, environment)
+        const accessibleLabel = getContextPreviewAccessibleLabel(latestNode, environment)
+        return { latestNode, title, text, accessibleLabel }
+    }
+
+    const { latestNode, title, text, accessibleLabel } = renderState()
+    const trigger = html`<div
+        className="workspace-ai-chat-panel-context-preview-trigger context-preview-inline-trigger"
+        tabindex="0"
+        aria-label=${accessibleLabel}
+    >${renderContextPreviewVisual(latestNode, accessibleLabel, text, environment, 'mini')}</div>` as HTMLElement
+    const popover = html`<div className=${`${getContextPreviewPopoverClassName(latestNode, Boolean(title || text))} context-preview-inline-popover`} role="tooltip">
+        ${renderContextPreviewPopoverContent(latestNode, title, text, accessibleLabel, environment)}
+    </div>` as HTMLElement
+    const dom = html`<div className="workspace-ai-chat-panel-context-preview-main context-preview-inline">
+        ${trigger}
+        ${popover}
+    </div>` as HTMLElement
+
+    const syncLatestContent = (): void => {
+        const next = renderState()
+        popover.className = `${getContextPreviewPopoverClassName(next.latestNode, Boolean(next.title || next.text))} context-preview-inline-popover${dom.classList.contains('is-open') ? ' is-open' : ''}`
+        popover.replaceChildren(renderContextPreviewPopoverContent(next.latestNode, next.title, next.text, next.accessibleLabel, environment))
+        trigger.setAttribute('aria-label', next.accessibleLabel)
+    }
+    const open = (): void => {
+        syncLatestContent()
+        dom.classList.add('is-open')
+        popover.classList.add('is-open')
+    }
+    const close = (): void => {
+        dom.classList.remove('is-open')
+        popover.classList.remove('is-open')
+    }
+
+    dom.addEventListener('pointerenter', open)
+    dom.addEventListener('pointerleave', close)
+    dom.addEventListener('focusin', open)
+    dom.addEventListener('focusout', close)
+
+    return {
+        dom,
+        destroy: () => {
+            dom.removeEventListener('pointerenter', open)
+            dom.removeEventListener('pointerleave', close)
+            dom.removeEventListener('focusin', open)
+            dom.removeEventListener('focusout', close)
+            dom.remove()
+        },
+    }
+}
+
 export function createContextPreviewTile({
     node,
     getNode,
     environment,
     preferredPlacement = 'top',
+    inlinePopover = false,
 }: CreateContextPreviewTileOptions): ContextPreviewTileInstance {
+    if (inlinePopover) {
+        return createInlineContextPreviewTile({ node, getNode, environment })
+    }
+
     const resolveNode = (): CanvasNode => getNode?.() ?? node
     const currentNode = resolveNode()
     const title = getContextPreviewTitle(currentNode, environment)
