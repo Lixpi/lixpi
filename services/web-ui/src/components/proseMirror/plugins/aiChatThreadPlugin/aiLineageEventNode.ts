@@ -21,6 +21,7 @@ export const aiLineageEventNodeSpec = {
         branchOriginNodeId: { default: '' },
         branchForkNodeId: { default: '' },
         branchLineNodeId: { default: '' },
+        reasoningModelId: { default: '' },
     },
     group: 'block',
     atom: true,
@@ -35,6 +36,7 @@ export const aiLineageEventNodeSpec = {
                     branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
                     branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
                     branchLineNodeId: dom.getAttribute('data-branch-line-node-id') || '',
+                    reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
                 }
             },
         },
@@ -51,30 +53,29 @@ export const aiLineageEventNodeSpec = {
                 'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
                 'data-branch-fork-node-id': node.attrs.branchForkNodeId,
                 'data-branch-line-node-id': node.attrs.branchLineNodeId,
+                'data-reasoning-model-id': node.attrs.reasoningModelId,
             },
         ]
     },
 }
 
 export const aiLineageEventNodeView = (node) => {
-    let dom = createAiLineageEventMarker({
+    const buildMarker = () => createAiLineageEventMarker({
         kind: normalizeLineageEventKind(node.attrs.kind),
         branchOriginNodeId: node.attrs.branchOriginNodeId || '',
         branchForkNodeId: node.attrs.branchForkNodeId || '',
         branchLineNodeId: node.attrs.branchLineNodeId || '',
+        reasoningModelId: node.attrs.reasoningModelId || '',
     })
+
+    let dom = buildMarker()
 
     return {
         dom,
         update: (updatedNode) => {
             if (updatedNode.type.name !== aiLineageEventNodeType) return false
             node = updatedNode
-            const nextDom = createAiLineageEventMarker({
-                kind: normalizeLineageEventKind(node.attrs.kind),
-                branchOriginNodeId: node.attrs.branchOriginNodeId || '',
-                branchForkNodeId: node.attrs.branchForkNodeId || '',
-                branchLineNodeId: node.attrs.branchLineNodeId || '',
-            })
+            const nextDom = buildMarker()
             dom.replaceWith(nextDom)
             dom = nextDom
             return true

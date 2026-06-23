@@ -226,7 +226,11 @@ function buildGeneratedMediaRunAttrs(
     }
 }
 
-function buildAiLineageEventNode(schema: ProseMirrorSchema, event: AiLineageEventDescriptor): ProseMirrorNode | null {
+function buildAiLineageEventNode(
+    schema: ProseMirrorSchema,
+    event: AiLineageEventDescriptor,
+    reasoningModelId = '',
+): ProseMirrorNode | null {
     const nodeType = schema.nodes[aiLineageEventNodeType]
     if (!nodeType) return null
 
@@ -235,6 +239,7 @@ function buildAiLineageEventNode(schema: ProseMirrorSchema, event: AiLineageEven
         branchOriginNodeId: event.branchOriginNodeId ?? '',
         branchForkNodeId: event.branchForkNodeId ?? '',
         branchLineNodeId: event.branchLineNodeId ?? '',
+        reasoningModelId,
     })
 }
 
@@ -1206,7 +1211,7 @@ class AiChatThreadPluginClass {
         for (const event of events) {
             if (existingEventIds.has(getLineageEventIdentity(event))) continue
 
-            const eventNode = buildAiLineageEventNode(tr.doc.type.schema, event)
+            const eventNode = buildAiLineageEventNode(tr.doc.type.schema, event, generationRun.reasoningModelId || '')
             if (!eventNode) continue
 
             tr.insert(insertPos, eventNode)

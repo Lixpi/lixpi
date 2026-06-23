@@ -292,6 +292,7 @@ function cloneProjectionNodeTree(
     node: ProseMirrorJsonNode,
     forceGenerationDetailsOpen: boolean,
     shouldKeepNode?: ProjectionNodeFilter,
+    reasoningModelId?: string,
 ): ProseMirrorJsonNode | null {
     if (shouldKeepNode && !shouldKeepNode(node)) return null
 
@@ -302,9 +303,18 @@ function cloneProjectionNodeTree(
             isOpen: true,
         }
     }
+    // Single-run streams materialize lineage as standalone aiLineageEvent nodes that
+    // predate the reasoningModelId attr. Backfill it from the projection locator so the
+    // marker can name the reasoning model even for already-persisted branches.
+    if (reasoningModelId && cloned.type === 'aiLineageEvent' && !cloned.attrs?.reasoningModelId) {
+        cloned.attrs = {
+            ...(cloned.attrs ?? {}),
+            reasoningModelId,
+        }
+    }
     if (cloned.content) {
         cloned.content = cloned.content
-            .map((child) => cloneProjectionNodeTree(child, forceGenerationDetailsOpen, shouldKeepNode))
+            .map((child) => cloneProjectionNodeTree(child, forceGenerationDetailsOpen, shouldKeepNode, reasoningModelId))
             .filter((child): child is ProseMirrorJsonNode => Boolean(child))
     }
     return cloned
@@ -314,8 +324,9 @@ function cloneProjectionNode(
     node: ProseMirrorJsonNode,
     forceGenerationDetailsOpen: boolean,
     shouldKeepNode?: ProjectionNodeFilter,
+    reasoningModelId?: string,
 ): ProseMirrorJsonNode {
-    return cloneProjectionNodeTree(node, forceGenerationDetailsOpen, shouldKeepNode) ?? cloneProseMirrorJsonNode(node)
+    return cloneProjectionNodeTree(node, forceGenerationDetailsOpen, shouldKeepNode, reasoningModelId) ?? cloneProseMirrorJsonNode(node)
 }
 
 function createDocumentTitleNode(text: string): ProseMirrorJsonNode {
@@ -342,6 +353,25 @@ function createProjectionDocument(threadId: string, threadAttrs: Record<string, 
     }
 }
 
+// In the detail modal the lineage outcome ("Branch continued") reads best as the
+// conclusion of the resolver audit, not as a heading above the response text. So
+// within each container we relocate standalone aiLineageEvent nodes to sit directly
+// before the generated media (which is rendered right after the resolver audit),
+// reflecting the flow: resolver decides → branch continued → generated result.
+function relocateLineageEventsBeforeGeneratedMedia(node: ProseMirrorJsonNode): void {
+    if (!node.content) return
+
+    const lineageEvents = node.content.filter((child) => child.type === 'aiLineageEvent')
+    if (lineageEvents.length > 0) {
+        const rest = node.content.filter((child) => child.type !== 'aiLineageEvent')
+        const firstMediaIndex = rest.findIndex(isGeneratedMediaProjectionNode)
+        const insertAt = firstMediaIndex === -1 ? rest.length : firstMediaIndex
+        node.content = [...rest.slice(0, insertAt), ...lineageEvents, ...rest.slice(insertAt)]
+    }
+
+    for (const child of node.content) relocateLineageEventsBeforeGeneratedMedia(child)
+}
+
 function cloneResponseForProjection(
     responseNode: ProseMirrorJsonNode,
     locator: GeneratedMediaTurnLocator,
@@ -352,22 +382,27 @@ function cloneResponseForProjection(
     const sections = (responseNode.content ?? []).filter((child) => child.type === 'aiReasoningSection')
     if (sections.length === 0) {
         const shouldKeepNode = createProjectionNodeFilter(responseNode, locator, limitToLocatorMedia)
-        return cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode)
+        const cloned = cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode, locator.reasoningModelId)
+        relocateLineageEventsBeforeGeneratedMedia(cloned)
+        return cloned
     }
 
     const selectedSection = getReasoningContainer(responseNode, locator)
     if (!selectedSection) return null
     if (selectedSection === responseNode) {
         const shouldKeepNode = createProjectionNodeFilter(responseNode, locator, limitToLocatorMedia)
-        return cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode)
+        const cloned = cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode, locator.reasoningModelId)
+        relocateLineageEventsBeforeGeneratedMedia(cloned)
+        return cloned
     }
 
     const shouldKeepNode = createProjectionNodeFilter(selectedSection, locator, limitToLocatorMedia)
-    const clonedSection = cloneProjectionNode(selectedSection, forceGenerationDetailsOpen, shouldKeepNode)
+    const clonedSection = cloneProjectionNode(selectedSection, forceGenerationDetailsOpen, shouldKeepNode, locator.reasoningModelId)
     clonedSection.attrs = {
         ...(clonedSection.attrs ?? {}),
         lineageProjectionScope,
     }
+    relocateLineageEventsBeforeGeneratedMedia(clonedSection)
     return {
         ...cloneProseMirrorJsonNode(responseNode),
         content: selectedSection.type === 'aiReasoningSection'

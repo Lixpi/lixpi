@@ -550,6 +550,25 @@
     color: var(--workspace-generated-media-info-panel-color, #252b33);
     box-sizing: border-box;
 
+    // Top provenance header: which reasoning model produced this turn.
+    .canvas-generated-media-reasoning-model {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+        margin: 0 0 0.2rem;
+        padding: 1rem 1rem 0;
+    }
+
+    .canvas-generated-media-reasoning-model-caption {
+        color: rgba(0, 0, 0, 0.5);
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        line-height: 1.2;
+        text-transform: uppercase;
+    }
+
     .canvas-generated-media-info-text,
     .canvas-generated-media-info-empty {
         margin: 0;

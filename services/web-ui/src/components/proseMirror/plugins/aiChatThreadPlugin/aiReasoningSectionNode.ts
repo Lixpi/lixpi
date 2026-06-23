@@ -101,6 +101,7 @@ export const aiReasoningSectionNodeView = (node) => {
         const branchOriginNodeId = current.attrs.branchOriginNodeId || ''
         const branchForkNodeId = current.attrs.branchForkNodeId || ''
         const branchLineNodeId = current.attrs.branchLineNodeId || ''
+        const reasoningModelId = current.attrs.reasoningModelId || ''
         const lineageProjectionScope = normalizeAiLineageProjectionScope(current.attrs.lineageProjectionScope)
         const lineageEvents = getReasoningSectionLineageEvents(current.attrs, lineageProjectionScope)
         dom.classList.toggle('is-empty', isWaiting)
@@ -111,7 +112,12 @@ export const aiReasoningSectionNodeView = (node) => {
         dom.dataset.branchForkNodeId = branchForkNodeId
         dom.dataset.branchLineNodeId = branchLineNodeId
         dom.dataset.lineageProjectionScope = lineageProjectionScope
-        lineageMarkers.replaceChildren(...lineageEvents.map(createAiLineageEventMarker))
+        // Attribute the reasoning model on each marker so the "Branch continued" row
+        // shows which reasoning model drove the branch (matrix streams carry lineage
+        // on the section; single-run streams use standalone aiLineageEvent nodes).
+        lineageMarkers.replaceChildren(
+            ...lineageEvents.map((event) => createAiLineageEventMarker({ ...event, reasoningModelId })),
+        )
         lineageMarkers.hidden = lineageEvents.length === 0
         spinner.classList.toggle('is-active', isWaiting)
     }

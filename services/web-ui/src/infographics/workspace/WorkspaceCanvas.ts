@@ -1841,6 +1841,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const panel = html`<div className=${panelClassName}></div>` as HTMLElement
 
         if (generatedBy) {
+            // Header naming the reasoning model that drove this whole turn, anchored at
+            // the very top of the modal so the provenance is the first thing read.
+            const reasoningModelBadge = generatedBy.reasoningModelId
+                ? createMediaModelBadge({ modelId: generatedBy.reasoningModelId, monochromeIcon: true })
+                : null
+            if (reasoningModelBadge) {
+                const reasoningModelHeader = html`<div className="canvas-generated-media-reasoning-model">
+                    <span className="canvas-generated-media-reasoning-model-caption">Reasoning model:</span>
+                    ${reasoningModelBadge}
+                </div>` as HTMLElement
+                applyMediaModelBadgeStyleProperties(reasoningModelHeader, { scale: settings.mediaNode.generatedMediaChrome.chatScale })
+                panel.appendChild(reasoningModelHeader)
+            }
+
             const threadContent = getAiChatThreadContentForProjection(generatedBy.aiChatThreadId)
             const locator = {
                 responseMessageId: generatedBy.responseMessageId,

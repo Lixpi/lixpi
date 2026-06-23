@@ -14,6 +14,9 @@ export type AiLineageEventDescriptor = {
     branchOriginNodeId?: string
     branchForkNodeId?: string
     branchLineNodeId?: string
+    // The reasoning model that drove this branch. When present, its badge renders
+    // right after the event label so the lineage row names the model used.
+    reasoningModelId?: string
 }
 
 export type AiLineageEventSourceAttrs = {

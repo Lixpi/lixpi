@@ -58,6 +58,22 @@ export const formatImageGenerationTraceRole = (role: string): string => {
     return role.split(/[-_]/).map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join(' ')
 }
 
+// Human-readable provenance for a reference image. The raw `label` is the prompt
+// that produced the source image, which reads like a stray user prompt — so the
+// caption names where the image actually came from instead.
+export const formatImageGenerationTraceReferenceSource = (source: string): string => {
+    switch (source) {
+        case 'branch-candidate':
+            return 'Image from this branch'
+        case 'feature-reference':
+            return 'Feature reference image'
+        case 'message-reference':
+            return 'Attached to chat message'
+        default:
+            return 'Reference image'
+    }
+}
+
 export const formatTraceModelLabel = (modelId?: string | null): string => {
     if (!modelId) return ''
     const parts = String(modelId).split(':')
@@ -161,6 +177,7 @@ const createReferenceTile = (
     options: ImageGenerationTraceDetailsOptions,
 ): HTMLElement => {
     const role = formatImageGenerationTraceRole(reference.role)
+    const sourceLabel = formatImageGenerationTraceReferenceSource(reference.source)
     // The tile starts hidden and reveals itself in `onload` (so the multi-source
     // retry chain never flashes a broken image). `loading="lazy"` must NOT be used
     // here: a hidden image is `display:none`, never intersects the viewport, so a
@@ -169,13 +186,17 @@ const createReferenceTile = (
     const image = html`<img className="ai-image-generation-reference-image" alt=${reference.label} />` as HTMLImageElement
     const unavailable = html`<span className="ai-image-generation-reference-unavailable">Unavailable</span>` as HTMLSpanElement
     const tile = html`
-        <figure className="ai-image-generation-reference" data=${{ source: reference.source, role: reference.role }}>
+        <figure
+            className="ai-image-generation-reference"
+            title=${reference.label}
+            data=${{ source: reference.source, role: reference.role }}
+        >
             <div className="ai-image-generation-reference-thumb">
                 ${image}
                 ${unavailable}
             </div>
             <figcaption>
-                <span className="ai-image-generation-reference-label">${reference.label}</span>
+                <span className="ai-image-generation-reference-label">${sourceLabel}</span>
                 <span className="ai-image-generation-reference-role">${role}</span>
             </figcaption>
         </figure>
@@ -258,16 +279,16 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         <div className=${className}>
             <div className="ai-generation-trace-body">
                 <section className="ai-image-generation-tool-prompt-section">
-                    <div className="ai-image-generation-section-label">Prompt written by chat model</div>
+                    <div className="ai-image-generation-section-label">Prompt for media generation model written by reasoning model</div>
                     <div className="ai-generation-trace-content"></div>
                     <pre className="ai-image-generation-tool-prompt-fallback"></pre>
                 </section>
                 <section className="ai-image-generation-final-prompt-section">
-                    <div className="ai-image-generation-section-label">Final prompt sent to the model</div>
+                    <div className="ai-image-generation-section-label">Final prompt sent to the media generation model</div>
                     <pre className="ai-image-generation-final-prompt"></pre>
                 </section>
                 <section className="ai-image-generation-reference-section">
-                    <div className="ai-image-generation-section-label">Reference images sent to the model</div>
+                    <div className="ai-image-generation-section-label">Reference images sent to the media generation model</div>
                     <div className="ai-image-generation-reference-grid"></div>
                 </section>
                 <section className="ai-image-generation-resolver-section">

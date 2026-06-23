@@ -63,6 +63,7 @@ export class ImageNodeView implements NodeView {
     private node: ProseMirrorNode
 
     private figure: HTMLElement
+    private titleElement: HTMLElement | null = null
     private mediaFrame: HTMLElement
     private img: HTMLImageElement
     private partialPlaceholder: HTMLElement | null = null
@@ -116,6 +117,7 @@ export class ImageNodeView implements NodeView {
         // Assemble DOM
         this.mediaFrame.appendChild(this.img)
         this.figure.appendChild(this.mediaFrame)
+        this.syncGeneratedImageTitle()
         this.syncPartialPlaceholder()
         this.syncGeneratedImageModelChrome()
 
@@ -210,6 +212,29 @@ export class ImageNodeView implements NodeView {
         }
         if (!this.partialPlaceholder.parentElement) {
             this.mediaFrame.appendChild(this.partialPlaceholder)
+        }
+    }
+
+    // Generated images carry a "Final generated image" heading so the media reads as
+    // the produced output (distinct from the reference images sent to the model). The
+    // title only shows once a fully-generated image exists — never during the partial
+    // streaming phase or when there is no image yet.
+    private syncGeneratedImageTitle(): void {
+        if (!this.isGeneratedImage) return
+
+        const shouldShowTitle = Boolean(getImageSrcAttr(this.node)) && !this.node.attrs.isPartial
+
+        if (!shouldShowTitle) {
+            this.titleElement?.remove()
+            this.titleElement = null
+            return
+        }
+
+        if (!this.titleElement) {
+            this.titleElement = html`<div className="ai-generated-media-section-title">Final generated image</div>` as HTMLElement
+        }
+        if (this.figure.firstChild !== this.titleElement) {
+            this.figure.insertBefore(this.titleElement, this.figure.firstChild)
         }
     }
 
@@ -363,6 +388,7 @@ export class ImageNodeView implements NodeView {
 
         // Update image src asynchronously to handle auth token
         this.updateImageSrc(getImageSrcAttr(node))
+        this.syncGeneratedImageTitle()
         this.syncPartialPlaceholder()
         this.syncGeneratedImageModelChrome()
 

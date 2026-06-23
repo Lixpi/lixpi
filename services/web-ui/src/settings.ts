@@ -822,7 +822,8 @@ export const settings: Settings = {
                 background: '#fff',
                 border: '1px solid rgba(34, 40, 49, 0.08)',
                 borderRadius: '20px',
-                boxShadow: '0 10px 28px rgba(20, 24, 30, 0.14)',
+                // Twice the prior intensity (alpha doubled 0.14 → 0.28, with a deeper spread) so the floating detail modal reads as clearly lifted above the canvas.
+                boxShadow: '0 16px 44px rgba(20, 24, 30, 0.28)',
                 color: '#252b33',
                 overflow: 'visible',
                 padding: '0',
