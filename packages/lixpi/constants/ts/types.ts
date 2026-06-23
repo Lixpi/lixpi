@@ -1215,13 +1215,9 @@ export type ExtractionRun = {
 
 export type CanvasAiChatSidebarTab = {
     tabId: string
-    type: 'thread' | 'extraction' | 'draft'
+    type: 'thread' | 'extraction'
     refId: string
     title: string
-}
-
-export type CanvasAiChatPromptDraft = {
-    content?: object
 }
 
 export type CanvasAiChatPanelState = {
@@ -1229,12 +1225,11 @@ export type CanvasAiChatPanelState = {
     isSessionHistoryOpen: boolean
     tabs: CanvasAiChatSidebarTab[]
     activeTabId?: string
-    // Explicit force-included canvas node ids, shown as removable chips in the
-    // panel's context tray. The workspace relevance engine (later phases) unions
+    // Explicit force-included canvas node ids, fed to the bottom-center composer
+    // as context chips. The workspace relevance engine (later phases) unions
     // these with its automatic picks — it may add, never drop them.
     contextChips: string[]
     width?: number
-    drafts?: Record<string, CanvasAiChatPromptDraft>
 }
 
 export type CanvasFeatureExtractionState = {

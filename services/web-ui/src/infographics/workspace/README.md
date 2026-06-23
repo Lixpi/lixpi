@@ -1,6 +1,6 @@
 # Workspace Canvas
 
-This module renders the main workspace view: a zoomable, pannable canvas where documents, images, and videos appear as draggable, resizable canvas nodes. AI chat sessions live in the right-side panel; older workspaces may still contain `aiChatThread` canvas data, but the current renderer does not draw those nodes.
+This module renders the main workspace view: a zoomable, pannable canvas where documents, images, and videos appear as draggable, resizable canvas nodes. The only AI prompt input is the screen-fixed composer at the bottom-center of the canvas; the right-side panel is a view-only surface for browsing and reopening past sessions (chat transcripts and feature-extraction runs). Older workspaces may still contain `aiChatThread` canvas data, but the current renderer does not draw those nodes.
 
 > **Where to look first.**
 >
@@ -25,13 +25,14 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Drag selected groups** as a rigid set while preserving relative spacing
 - **Resize** nodes from any corner by hovering that corner handle (images preserve aspect ratio)
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
-- **Chat with AI** in the right-side panel; it can open with no region and creates a standalone session only on first submit
+- **Chat with AI** from the bottom-center composer; each submit creates a standalone session. The right-side panel opens as a view-only transcript of past sessions
 - **Add images** via the toolbar button which opens an upload modal
 - **Open the Media Library** from the independent bottom-right icon above the original zoom badge to browse Features, explicitly saved Images, or explicitly saved Videos; the canvas-owned full-height drawer shifts left when AI chat is open and covers its launcher while open
 - **Save media for reuse** from an image or video bubble menu; saved Media Library items are independent Object Store copies that survive removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same source media reuses the existing item instead of duplicating it
 - **Connect nodes** by dragging from a handle, then use AI Chat composer context previews and workspace relevance to decide what the next prompt sees
 - **Provide AI context** from explicit composer previews while also sending a compact workspace descriptor snapshot with each chat turn
-- **Use the AI Chat panel composer** to send prompts with per-message context previews and workspace relevance
+- **Use the bottom-center canvas composer** to send prompts with context previews and workspace relevance
+- **Extract a feature** from an image via the "Ask AI" bubble action: it opens the extraction session in the view-only panel and arms the bottom-center composer (shown by an "Extracting from image" badge), so the next submit there runs the extraction
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 
@@ -85,11 +86,9 @@ All of this happens without the Svelte component knowing the details. It just pa
 
 ### AI Chat Panel And Sessions
 
-The canvas owns a singleton right side panel that currently hosts AI Chat. Its `SidePanel` instance owns the outside top-right toggle, using the panel collapse icon in both states; the closed state rotates it 180 degrees, and the open state moves it with the panel. It opens the panel with zero tabs if needed, without creating an `AiChatThread`. The first prompt creates a standalone history record. Open/closed panel state, ordered tabs, active tab, width, prompt drafts, and draft context previews are stored in `canvasState.aiChatPanel`. When a draft tab is submitted into a new standalone thread, the submitted model settings are copied into the new thread tab's empty composer draft so reopening the model menu preserves multi-model toggles and selections. When more than one tab is open, tabs render through the shared SVG `components/slidingTabsSwitch` primitive, with geometry and slide timing configured by `settings.aiChatThread.panelTabs` and active-tab theming under `settings.aiChatThread.panelTabs.styles`; a single open tab renders only a section divider at the tab strip's top edge. The context previews render inside the ProseMirror composer, snapshot forced node ids on submit, persist those ids on the submitted `aiUserMessage`, clear after submit, and can update without tearing down the ProseMirror draft. Composer chips, sent user-message reference previews, and branch-origin provided-reference previews all use the shared `components/contextPreview` tile renderer and stylesheet. Context preview hover cards use the shared `components/helpTooltip` primitive so placement stays clamped to the visible viewport while image and video previews fill their media container with normal sizing; portrait media places text beside the preview, and taller cards scroll after their bounded natural height. Their color, radius, border, and shadow tokens live in `settings.aiChatThread.contextPreview.styles`; canvas-only chip controls stay in `workspace-canvas.scss`.
+The canvas owns a singleton right side panel that hosts the view-only AI Chat surface — it has no prompt input of its own; all prompting happens in the bottom-center canvas composer. Its `SidePanel` instance owns the outside top-right toggle, using the panel collapse icon in both states; the closed state rotates it 180 degrees, and the open state moves it with the panel. It opens the panel with zero tabs if needed, without creating an `AiChatThread`. Open/closed panel state, ordered tabs, active tab, width, and explicit context chips are stored in `canvasState.aiChatPanel`. Opening a thread or extraction session mounts it as a tab. When more than one tab is open, tabs render through the shared SVG `components/slidingTabsSwitch` primitive, with geometry and slide timing configured by `settings.aiChatThread.panelTabs` and active-tab theming under `settings.aiChatThread.panelTabs.styles`; a single open tab renders only a section divider at the tab strip's top edge. The opened thread renders as a read-only ProseMirror transcript (`isDisabled`). Sent user-message reference previews and branch-origin provided-reference previews use the shared `components/contextPreview` tile renderer and stylesheet. Context preview hover cards use the shared `components/helpTooltip` primitive so placement stays clamped to the visible viewport while image and video previews fill their media container with normal sizing; portrait media places text beside the preview, and taller cards scroll after their bounded natural height. Their color, radius, border, and shadow tokens live in `settings.aiChatThread.contextPreview.styles`; canvas-only chip controls stay in `workspace-canvas.scss`.
 
-The side panel remeasures after prompt draft mutations and observes the active composer size so multi-line input and context-preview height changes keep the resize handle aligned with the panel.
-
-The Sessions surface includes standalone chats and feature-extraction sessions. It is collapsed by default and toggled from the history icon in the panel control row; when expanded it renders directly under that row and above the tab strip when multiple tabs are open. The plus control beside the history toggle closes Sessions and starts a fresh draft with no context chips; if another tab is already open, the draft gets its own tab and the existing session remains open. The durable chat is still created only when the user submits. Closing the active tab selects the tab to its right, or the new rightmost tab when the closed tab was already rightmost. Closing the last open tab uses that same blank-draft path so stale context chips, active thread ids, and the saved last-active-thread field cannot carry into the next prompt. Each history row shows a title, absolute update date plus relative recency, and session metadata such as chat message count, status, extraction provider, or source count. Extraction assistant messages show a provider avatar only when the provider is known. Its expanded state is persisted in `canvasState.aiChatPanel`. Closing any tab leaves its session reopenable. Standalone chats and extraction sessions can be deleted explicitly; deleting an extraction session does not delete a separately saved Feature.
+The Sessions surface includes standalone chats and feature-extraction sessions. It is collapsed by default and toggled from the history icon in the panel control row; when expanded it renders directly under that row and above the tab strip when multiple tabs are open. Closing the active tab selects the tab to its right, or the new rightmost tab when the closed tab was already rightmost. Closing the last open tab clears the active tab and leaves the panel on its empty "reopen a session" state. Each history row shows a title, absolute update date plus relative recency, and session metadata such as chat message count, status, extraction provider, or source count. Extraction assistant messages show a provider avatar only when the provider is known. Its expanded state is persisted in `canvasState.aiChatPanel`. Closing any tab leaves its session reopenable. Standalone chats and extraction sessions can be deleted explicitly; deleting an extraction session does not delete a separately saved Feature.
 
 Session history colors, row hover gradient, and thread marker colors live under `settings.aiChatThread.sessionHistory.styles`; the shared panel divider border lives under `settings.aiChatThread.styles`. Fixed control sizing stays in `workspace-canvas.scss`.
 
@@ -355,7 +354,7 @@ Dragging any selected draggable node moves the entire selection together. During
 Single-target canvas UI stays single-target:
 
 - The image bubble menu appears only when exactly one image node is selected
-- The detached prompt input is not used for new sessions; active composers live in the right side panel and the screen-fixed canvas composer
+- The only interactive composer is the screen-fixed bottom-center canvas composer; the right side panel is view-only
 - Per-thread floating inputs remain attached only to persisted AI chat thread canvas nodes if those nodes are rendered
 
 Selection colors (marquee border/background, overlay border/background, thread-input outline) are configurable via `settings.selection.styles` and applied as CSS custom properties on the pane element. Clicking outside the selected range clears the selection.
@@ -442,7 +441,6 @@ When an image node, video node, or edge is selected on the canvas, a bubble menu
 - **Download** — downloads the stored MP4 through the Range-capable video route with `download=true`
 - **Add to Media Library** — saves a completed stored video and poster as independent library copies
 - **Connect to node** — starts the same menu-driven graph connection flow as images
-- **Extend video in new thread** — creates a new AI chat thread seeded with the selected video as VEO extension input
 - **Delete** — removes the node and its associated edges from canvas state
 
 The bubble menu automatically hides during drag and resize operations, and repositions itself when the selected image or video moves. Media menus anchor to the canvas node box, not the inner pixel or video element, so the toolbar remains below the node while dragging or resizing.
@@ -518,9 +516,9 @@ The gradient uses 4 color points with inverse distance weighting and a subtle sw
 
 During thread resizing, the gradient canvas keeps the existing bitmap visible while its CSS box changes. When the backing-store size really changes, the renderer redraws immediately; unchanged `ResizeObserver` callbacks are ignored so the canvas is not cleared unnecessarily.
 
-The thread node gradient and the panel composer gradient are controlled by feature flags in `settings.ts`:
+The thread node gradient and the bottom-center composer gradient are controlled by feature flags in `settings.ts`:
 
 - `settings.aiChatThread.useShiftingGradientBackground` (default `false`) — gradient on AI chat thread canvas nodes.
-- `settings.aiPromptInput.useShiftingGradientBackground` (default `true`) — gradient on AI prompt input surfaces, including the AI Chat panel composer.
+- `settings.aiPromptInput.useShiftingGradientBackground` (default `true`) — gradient on AI prompt input surfaces, including the bottom-center canvas composer.
 
 For the shared freeform/SVG gradient architecture, shifting-background technical details, color customization, and the color analysis tool, see [Visual Effects](../../../../../documentation/canvas/VISUAL-EFFECTS.md).

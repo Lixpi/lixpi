@@ -133,14 +133,9 @@ import { createViewportBridge, type ViewportBridge } from '$src/infographics/wor
 import { createMediaLibraryPanel } from '$src/infographics/workspace/mediaLibraryPanel.ts'
 import { setPendingExtractionContext, getPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
 import {
-    NEW_CHAT_DRAFT_KEY,
     getAiChatPanelState,
     setAiChatPanelState,
 } from '$src/infographics/workspace/aiChatPanelState.ts'
-import {
-    buildAiPromptDraftAttrsFromSubmitData,
-    buildAiPromptDraftFromText,
-} from '$src/infographics/workspace/aiPromptDraft.ts'
 import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
 import {
     createSlidingTabsSwitch,
@@ -210,7 +205,6 @@ type PendingBranchMarkerRecord = {
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
-const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
 // The marker is a pill that hugs the user message by default. Its width grows
 // with the message length from a comfortable minimum up to a ceiling, after which
 // the preview text wraps to a second line and truncates. Width-sizing multipliers
@@ -730,13 +724,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPanelHadContent = false
     let activeAiChatPanelEl: HTMLDivElement | null = null
     let activeAiChatPanelTabsSwitch: SlidingTabsSwitchInstance<string> | null = null
-    let activeAiChatPromptEditor: AiPromptComposerInstance | null = null
     let activeRightSidePanel: SidePanelInstance | null = null
     // Screen-fixed, canvas-wide composer mounted at the bottom-center of the
     // viewport. Each submission creates one hidden ProseMirror-backed message
     // instance whose visible projection is the spatial branch lineage marker.
     let globalCanvasComposer: AiPromptComposerInstance | null = null
     let globalCanvasComposerHostEl: HTMLDivElement | null = null
+    // Feature extraction is triggered from the bottom-center global composer.
+    // "Ask AI" on an image arms the composer with the target extraction run;
+    // the next submit routes to the extraction request instead of a generation.
+    let armedExtractionRunId: string | null = null
+    let armedExtractionBadgeEl: HTMLDivElement | null = null
     // In-flight detached canvas message ids for composer receiving state and
     // delayed editor teardown. Generated-media event routing uses normal thread
     // and workspace state.
@@ -1075,7 +1073,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         updatedAt: Date.now(),
                     })
 
+                    // Show the extraction session in the (view-only) panel, then
+                    // arm the bottom-center composer so the next submit runs the extraction.
                     openFeatureExtractionTab(extractionRunId)
+                    armExtractionFromImage(extractionRunId)
                 } catch (error) {
                     console.error('Failed to open extraction tab from image:', error)
                 }
@@ -1084,120 +1085,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (!connectionManager) return
 
                 connectionManager.startConnectionFromMenu(nodeId)
-            },
-            onExtendVideoInNewThread: async (nodeId) => {
-                // Mirrors onEditInNewThread (image edit) but seeds the new
-                // thread with `sourceVideoNodeId` so the VEO extension input
-                // resolves at submit time. Carry video model + generation
-                // params across so the user does not have to re-pick.
-                const aiChatThreadService = servicesStore.getData('aiChatThreadService')
-                if (!aiChatThreadService) {
-                    console.error('AI Chat Thread service not available')
-                    return
-                }
-
-                const sourceVideoNode = currentCanvasState?.nodes.find(
-                    (n: CanvasNode) => n.nodeId === nodeId && n.type === 'video'
-                ) as VideoCanvasNode | undefined
-                if (!sourceVideoNode) return
-
-                try {
-                    const threadId = uuidv4()
-                    const rawVideoModel = String(sourceVideoNode.generatedBy?.videoModel ?? '')
-                    const videoModelProvider = String(sourceVideoNode.generatedBy?.videoModelProvider ?? '')
-                    const inheritedVideoModel = rawVideoModel
-                        ? (rawVideoModel.includes(':')
-                            ? rawVideoModel
-                            : (videoModelProvider ? `${videoModelProvider}:${rawVideoModel}` : rawVideoModel))
-                        : ''
-                    const inheritedAspectRatio = sourceVideoNode.generatedBy?.aspectRatio ?? ''
-                    const inheritedResolution = sourceVideoNode.generatedBy?.resolution ?? ''
-                    const inheritedDuration = sourceVideoNode.generatedBy?.durationSeconds != null
-                        ? String(sourceVideoNode.generatedBy.durationSeconds)
-                        : ''
-
-                    const initialContent = {
-                        type: 'doc',
-                        content: [
-                            {
-                                type: 'documentTitle',
-                                content: [{ type: 'text', text: 'Extend Video' }]
-                            },
-                            {
-                                type: 'aiChatThread',
-                                attrs: {
-                                    threadId,
-                                    sourceVideoNodeId: nodeId,
-                                    aiVideoModel: inheritedVideoModel,
-                                    videoAspectRatio: inheritedAspectRatio,
-                                    videoResolution: inheritedResolution,
-                                    videoDuration: inheritedDuration,
-                                },
-                                content: [
-                                    {
-                                        type: 'aiUserMessage',
-                                        attrs: { id: uuidv4(), createdAt: Date.now() },
-                                        content: [
-                                            {
-                                                type: 'paragraph',
-                                                content: [{ type: 'text', text: 'Describe how you want to extend this video...' }]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-
-                    const thread = await aiChatThreadService.createAiChatThread({
-                        workspaceId,
-                        threadId,
-                        content: initialContent,
-                        aiModel: 'openai:gpt-4o'
-                    })
-
-                    if (!thread) return
-
-                    const existingNodes = currentCanvasState?.nodes || []
-                    const threadDimensions = { ...settings.aiChatThread.defaultDimensions }
-                    const centeredPosition = getCenteredInsertionPosition(threadDimensions)
-                    const sourceVideoRect = getNodeWorldRect(sourceVideoNode)
-                    const threadPosition = sourceVideoRect
-                        ? { x: sourceVideoRect.x + sourceVideoRect.width + settings.aiChatThread.adjacentNodeGap, y: sourceVideoRect.y }
-                        : centeredPosition
-
-                    const threadNode: AiChatThreadCanvasNode = {
-                        nodeId: `node-${thread.threadId}`,
-                        type: 'aiChatThread',
-                        referenceId: thread.threadId,
-                        position: threadPosition,
-                        dimensions: threadDimensions,
-                    }
-
-                    const newCanvasState: CanvasState = {
-                        viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                        edges: currentCanvasState?.edges ?? [],
-                        nodes: resolveTopLevelNodeCollisions([...existingNodes, threadNode])
-                    }
-
-                    const newEdge: WorkspaceEdge = {
-                        edgeId: `edge-${sourceVideoNode.nodeId}-${threadNode.nodeId}`,
-                        sourceNodeId: sourceVideoNode.nodeId,
-                        targetNodeId: threadNode.nodeId,
-                        sourceHandle: 'right',
-                        targetHandle: 'left'
-                    }
-                    newCanvasState.edges = [...(newCanvasState.edges || []), newEdge]
-
-                    onCanvasStateChange?.(newCanvasState)
-                    activeAiChatThreadId = thread.threadId
-                    activeAiChatRootNodeId = threadNode.nodeId
-                    requestAnimationFrame(() => {
-                        renderActiveAiChatPanel(threadNode, thread)
-                    })
-                } catch (error) {
-                    console.error('Failed to create extend video thread:', error)
-                }
             },
             onHide: () => {
                 canvasBubbleMenu?.forceHide()
@@ -4049,7 +3936,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        activeAiChatPromptEditor?.destroy()
         if (activeOpeningRightSidePanel === activeRightSidePanel) activeOpeningRightSidePanel = null
         if (activeClosingRightSidePanel === activeRightSidePanel) activeClosingRightSidePanel = null
         if (destroySidePanel) {
@@ -4066,7 +3952,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatPanelHadContent = false
         activeAiChatPanelEl = null
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch = null
-        activeAiChatPromptEditor = null
         refreshContextChipTray()
 
         if (clearActive) {
@@ -4091,27 +3976,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return { tabId: `thread:${threadId}`, type: 'thread', refId: threadId, title: 'AI Chat' }
     }
 
-    function createAiChatDraftSidebarTab(): CanvasAiChatSidebarTab {
-        const draftId = uuidv4()
-        return { tabId: `${AI_CHAT_DRAFT_TAB_PREFIX}${draftId}`, type: 'draft', refId: draftId, title: 'AI Chat' }
-    }
-
-    function replaceAiChatDraftSidebarTab(draftTabId: string, threadId: string): void {
-        const threadTab = createAiChatThreadSidebarTab(threadId)
-        let replacedDraftTab = false
-        aiChatSidebarTabs = aiChatSidebarTabs.map((tab) => {
-            if (tab.tabId !== draftTabId) return tab
-            replacedDraftTab = true
-            return threadTab
-        })
-        if (!replacedDraftTab && !aiChatSidebarTabs.some((tab) => tab.tabId === threadTab.tabId)) {
-            aiChatSidebarTabs.unshift(threadTab)
-        }
-
-        const drafts = { ...(aiChatPanelState.drafts ?? {}) }
-        delete drafts[draftTabId]
-        aiChatPanelState = { ...aiChatPanelState, drafts }
-    }
 
     function persistAiChatSidebarState(): void {
         if (!currentCanvasState) return
@@ -4370,57 +4234,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return aiChatSidebarTabs.find((tab) => tab.tabId === activeAiChatSidebarTabId) ?? aiChatSidebarTabs[0]
     }
 
-    function persistAiChatPromptDraft(draftKey: string, content: object): void {
-        aiChatPanelState = {
-            ...aiChatPanelState,
-            drafts: {
-                ...(aiChatPanelState.drafts ?? {}),
-                [draftKey]: { content },
-            },
-        }
-        persistAiChatSidebarState()
-    }
-
-    function getActiveAiPromptInputAttrs(): Record<string, any> {
-        const view = activeAiChatPromptEditor?.editorView
-        const attrs: Record<string, any> = {}
-        view?.state.doc.descendants((node: any) => {
-            if (node.type.name !== 'aiPromptInput') return true
-            Object.assign(attrs, node.attrs)
-            return false
-        })
-        return attrs
-    }
-
-    function replaceActiveAiChatPromptDraft(promptText: string): void {
-        const draftKey = getActiveAiChatSidebarTab()?.tabId ?? NEW_CHAT_DRAFT_KEY
-        const view = activeAiChatPromptEditor?.editorView
-        const draft = buildAiPromptDraftFromText(promptText, getActiveAiPromptInputAttrs())
-        persistAiChatPromptDraft(draftKey, draft)
-        if (!view || !activeAiChatPromptEditor?.editorSchema) return
-
-        try {
-            const nextDoc = activeAiChatPromptEditor.editorSchema.nodeFromJSON(draft)
-            let tr = view.state.tr.replaceWith(0, view.state.doc.content.size, nextDoc.content)
-            let inputPos = -1
-            tr.doc.descendants((node: any, pos: number) => {
-                if (node.type.name !== 'aiPromptInput') return true
-                inputPos = pos
-                return false
-            })
-            if (inputPos >= 0) {
-                const cursorPos = Math.max(1, Math.min(inputPos + 2 + promptText.trim().length, tr.doc.content.size))
-                tr = tr.setSelection(TextSelection.create(tr.doc, cursorPos))
-            }
-            view.dispatch(tr.scrollIntoView())
-            view.focus()
-        } catch (error) {
-            console.error('Failed to seed AI prompt draft:', error)
-        }
-    }
-
+    // Insert a media-library feature reference into the bottom-center global
+    // composer (the only AI input). Triggered by the Media Library `/use` command.
     function insertFeatureIntoActivePrompt(feature: FeatureMeta): boolean {
-        const view = activeAiChatPromptEditor?.editorView
+        const view = globalCanvasComposer?.editorView
         const featureRefType = view?.state.schema.nodes.feature_reference
         if (!view || !featureRefType) return false
 
@@ -4442,7 +4259,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             tr = tr.setSelection(TextSelection.create(tr.doc, Math.min(afterChip + 1, tr.doc.content.size))).scrollIntoView()
             view.dispatch(tr)
             view.focus()
-            activeAiChatPromptEditor?.triggerGradientAnimation()
+            globalCanvasComposer?.triggerGradientAnimation()
             return true
         } catch (error) {
             console.error('Failed to insert feature reference into prompt:', error)
@@ -4509,40 +4326,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (activeOpeningRightSidePanel === sidePanel) activeOpeningRightSidePanel = null
     }
 
-    function startNewAiChatDraft({
-        preserveOpenTabs = true,
-        syncFromState = true,
-    }: {
-        preserveOpenTabs?: boolean
-        syncFromState?: boolean
-    } = {}): void {
-        if (syncFromState) syncActiveAiChatPanelFromState()
-        const drafts = { ...(aiChatPanelState.drafts ?? {}) }
-        delete drafts[NEW_CHAT_DRAFT_KEY]
-        if (preserveOpenTabs && aiChatSidebarTabs.length > 0) {
-            const draftTab = createAiChatDraftSidebarTab()
-            aiChatSidebarTabs = [...aiChatSidebarTabs, draftTab]
-            activeAiChatSidebarTabId = draftTab.tabId
-        } else {
-            aiChatSidebarTabs = []
-            activeAiChatSidebarTabId = null
-        }
-        activeAiChatSidebarThreadId = null
-        activeAiChatThreadId = null
-        activeAiChatRootNodeId = null
-        aiChatPanelState = {
-            ...aiChatPanelState,
-            isOpen: true,
-            isSessionHistoryOpen: false,
-            contextChips: [],
-            drafts,
-        }
-        promptInputController.setTarget(null)
-        persistAiChatSidebarState()
-        syncActiveAiChatPanelFromState()
-        renderActiveAiChatPanel()
-    }
-
     async function closeAiChatPanel(): Promise<void> {
         if (activeClosingRightSidePanel) return
         const closingSidePanel = activeRightSidePanel
@@ -4567,15 +4350,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function closeAiChatSidebarTab(tabId: string): void {
         const closedTabIndex = aiChatSidebarTabs.findIndex((tab) => tab.tabId === tabId)
-        const closedTab = aiChatSidebarTabs.find((tab) => tab.tabId === tabId)
         aiChatSidebarTabs = aiChatSidebarTabs.filter((tab) => tab.tabId !== tabId)
-        if (closedTab?.type === 'draft') {
-            const drafts = { ...(aiChatPanelState.drafts ?? {}) }
-            delete drafts[closedTab.tabId]
-            aiChatPanelState = { ...aiChatPanelState, drafts }
-        }
         if (aiChatSidebarTabs.length === 0) {
-            startNewAiChatDraft({ preserveOpenTabs: false, syncFromState: false })
+            // No tabs left — leave the (view-only) panel open on its empty
+            // "reopen a session" state instead of starting a new draft.
+            activeAiChatSidebarTabId = null
+            activeAiChatSidebarThreadId = null
+            activeAiChatThreadId = null
+            activeAiChatRootNodeId = null
+            persistAiChatSidebarState()
+            syncActiveAiChatPanelFromState()
+            renderActiveAiChatPanel()
             return
         }
         if (activeAiChatSidebarTabId === tabId) {
@@ -4589,19 +4374,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         renderActiveAiChatPanel()
     }
 
-    function removeAiChatPanelDraft(tabId: string): void {
-        if (!aiChatPanelState.drafts?.[tabId]) return
-        const drafts = { ...aiChatPanelState.drafts }
-        delete drafts[tabId]
-        aiChatPanelState = { ...aiChatPanelState, drafts }
-    }
-
     async function deleteAiChatSession(threadId: string): Promise<void> {
         const aiChatThreadService = servicesStore.getData('aiChatThreadService')
         if (!aiChatThreadService) return
         const deleted = await aiChatThreadService.deleteAiChatThread({ workspaceId, threadId })
         if (!deleted) return
-        removeAiChatPanelDraft(`thread:${threadId}`)
         closeAiChatSidebarTab(`thread:${threadId}`)
     }
 
@@ -4616,7 +4393,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const featureExtractionRuns = { ...(currentCanvasState.featureExtractionRuns ?? {}) }
         delete featureExtractionRuns[extractionRunId]
         currentCanvasState = { ...currentCanvasState, featureExtractionRuns }
-        removeAiChatPanelDraft(`extraction:${extractionRunId}`)
         closeAiChatSidebarTab(`extraction:${extractionRunId}`)
         commitCanvasStatePreservingEditors(currentCanvasState)
     }
@@ -4655,70 +4431,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             extractionSessionHistoryLoaded = false
             console.error('Failed to load feature extraction sessions:', error)
         }
-    }
-
-    async function createStandaloneThreadAndSubmit(data: any): Promise<void> {
-        const aiChatThreadService = servicesStore.getData('aiChatThreadService')
-        if (!aiChatThreadService) return
-
-        const submittedTab = getActiveAiChatSidebarTab()
-        const submittedDraftTabId = submittedTab?.type === 'draft' ? submittedTab.tabId : null
-        const threadId = uuidv4()
-        const initialContent = {
-            type: 'doc',
-            content: [
-                { type: 'documentTitle', content: [{ type: 'text', text: 'AI Chat' }] },
-                { type: 'aiChatThread', attrs: { threadId }, content: [] },
-            ],
-        }
-        const thread = await aiChatThreadService.createAiChatThread({
-            workspaceId,
-            threadId,
-            content: initialContent,
-            aiModel: data.aiModel,
-            title: 'AI Chat',
-            owner: { type: 'standalone' },
-        })
-        if (!thread) return
-
-        if (submittedDraftTabId) {
-            replaceAiChatDraftSidebarTab(submittedDraftTabId, threadId)
-            activeAiChatSidebarThreadId = threadId
-        } else {
-            ensureAiChatSidebarThreadTab(threadId)
-        }
-        activeAiChatSidebarTabId = `thread:${threadId}`
-        activeAiChatThreadId = threadId
-        activeAiChatRootNodeId = null
-        const submittedThreadDraftKey = `thread:${threadId}`
-        const submittedThreadDraft = buildAiPromptDraftFromText('', buildAiPromptDraftAttrsFromSubmitData(data))
-        aiChatPanelState = {
-            ...aiChatPanelState,
-            isOpen: true,
-            drafts: {
-                ...(aiChatPanelState.drafts ?? {}),
-                [submittedThreadDraftKey]: { content: submittedThreadDraft },
-            },
-        }
-        persistAiChatSidebarState()
-        renderActiveAiChatPanel(undefined, thread)
-        promptInputController.setTarget({
-            nodeId: `standalone:${threadId}`,
-            type: 'aiChatThread',
-            referenceId: threadId,
-        })
-        await promptInputController.submitMessage({
-            contentJSON: data.contentJSON,
-            aiModel: data.aiModel,
-            aiModels: data.aiModels,
-            useMultipleModels: data.useMultipleModels,
-            useMultipleReasoningModels: data.useMultipleReasoningModels,
-            useMultipleImageModels: data.useMultipleImageModels,
-            useMultipleVideoModels: data.useMultipleVideoModels,
-            imageOptions: data.imageOptions,
-            videoOptions: data.videoOptions,
-            referenceNodeIds: aiChatPanelState.contextChips.slice(),
-        })
     }
 
     function renderActiveAiChatPanel(
@@ -4786,12 +4498,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 <div className="workspace-ai-chat-panel-history-control">
                     <button
                         type="button"
-                        className="workspace-ai-chat-panel-new-chat"
-                        aria-label="Start new chat"
-                        innerHTML=${xCircleIcon}
-                    ></button>
-                    <button
-                        type="button"
                         className=${`workspace-ai-chat-panel-history-toggle${aiChatPanelState.isSessionHistoryOpen ? ' workspace-ai-chat-panel-history-toggle-active' : ''}`}
                         aria-label="Toggle session history"
                         aria-controls="workspace-ai-chat-panel-sessions"
@@ -4802,8 +4508,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             </div>
         </div>` as HTMLDivElement
         panelEl.appendChild(controlsEl)
-        const newChatEl = controlsEl.querySelector<HTMLButtonElement>('.workspace-ai-chat-panel-new-chat')!
-        newChatEl.addEventListener('click', () => startNewAiChatDraft())
         const historyToggleEl = controlsEl.querySelector<HTMLButtonElement>('.workspace-ai-chat-panel-history-toggle')!
 
         const tabsEl = shouldRenderTabs
@@ -4931,7 +4635,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const bodyHost = html`<div className="workspace-ai-chat-panel-body"></div>` as HTMLDivElement
         const showingThread = activeSidebarTab?.type === 'thread'
         const showingExtraction = activeSidebarTab?.type === 'extraction'
-        const emptyBodyText = activeSidebarTab?.type === 'draft' ? '' : 'Start a new chat or reopen a session.'
+        const emptyBodyText = 'Reopen a session from the history, or start a new chat from the prompt below the canvas.'
         const editorContainer = html`<div className=${`ai-chat-thread-node-editor workspace-ai-chat-panel-body-pane nopan${showingThread ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
         const extractionBodyEl = html`<div className=${`workspace-ai-chat-panel-extraction workspace-ai-chat-panel-body-pane nopan${showingExtraction ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
         const emptyBodyEl = html`<div className=${`workspace-ai-chat-panel-empty workspace-ai-chat-panel-body-pane nopan${showingThread || showingExtraction ? ' workspace-ai-chat-panel-body-pane-hidden' : ''}`}>${emptyBodyText}</div>` as HTMLDivElement
@@ -4969,7 +4673,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 editorMountElement: editorContainer,
                 content: html`<div></div>` as HTMLDivElement,
                 initialVal: editorContent,
-                isDisabled: false,
+                isDisabled: true,
                 documentType: 'aiChatThread',
                 threadId: panelThreadId,
                 aiChatThreadRenderContext: {
@@ -5008,7 +4712,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     referencedFeatureIds
                 }: any) => {
                     gradient?.triggerAnimation()
-                    activeAiChatPromptEditor?.triggerGradientAnimation()
 
                     try {
                         const aiChatThreadService = servicesStore.getData('aiChatThreadService')
@@ -5128,74 +4831,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 gradientCleanup: gradient?.destroy,
                 triggerGradientAnimation: () => {
                     gradient?.triggerAnimation()
-                    activeAiChatPromptEditor?.triggerGradientAnimation()
                 },
             })
             promptInputController.registerThreadEditor(panelThreadId, {
                 editorView: editor.editorView,
                 triggerGradientAnimation: () => {
                     gradient?.triggerAnimation()
-                    activeAiChatPromptEditor?.triggerGradientAnimation()
                 },
             })
         }
-
-        const promptDraftKey = activeSidebarTab?.tabId ?? NEW_CHAT_DRAFT_KEY
-        activeAiChatPromptEditor = createAiPromptComposer({
-            className: 'workspace-ai-chat-floating-panel-prompt',
-            initialContent: aiChatPanelState.drafts?.[promptDraftKey]?.content ?? {},
-            threadId: panelThreadId ?? NEW_CHAT_DRAFT_KEY,
-            controlFactories: promptControlFactories,
-            onContentChange: (value: object) => {
-                persistAiChatPromptDraft(promptDraftKey, value)
-            },
-            onSubmit: (data) => {
-                const currentTab = getActiveAiChatSidebarTab()
-                if (currentTab?.type === 'extraction') {
-                    const userText = extractPromptTextFromContentJSON(data.contentJSON)
-                    if (!userText) return
-                    const ctx = {
-                        ...(getPendingExtractionContext(currentTab.refId) ?? {}),
-                        aiModel: data.aiModel,
-                        aiImageModel: data.imageOptions?.aiImageModel,
-                    }
-                    submitExtractionRequest(extractionBodyEl, currentTab.refId, workspaceId, userText, ctx, {
-                        getState: getPersistedFeatureExtractionState,
-                        saveState: persistFeatureExtractionState,
-                    })
-                    clearExplicitContextChips()
-                    return
-                }
-
-                if (!panelThreadId) {
-                    void createStandaloneThreadAndSubmit(data)
-                    return
-                }
-                promptInputController.setTarget(rootNode
-                    ? { nodeId: rootNode.nodeId, type: rootNode.type, referenceId: panelThreadId }
-                    : { nodeId: `standalone:${panelThreadId}`, type: 'aiChatThread', referenceId: panelThreadId })
-                void promptInputController.submitMessage({
-                    contentJSON: data.contentJSON,
-                    aiModel: data.aiModel,
-                    aiModels: data.aiModels,
-                    useMultipleModels: data.useMultipleModels,
-                    useMultipleReasoningModels: data.useMultipleReasoningModels,
-                    useMultipleImageModels: data.useMultipleImageModels,
-                    useMultipleVideoModels: data.useMultipleVideoModels,
-                    imageOptions: data.imageOptions,
-                    videoOptions: data.videoOptions,
-                    referenceNodeIds: aiChatPanelState.contextChips.slice(),
-                })
-            },
-            onStop: () => {
-                if (panelThreadId) {
-                    activeAiService?.stopChatMessage()
-                }
-            },
-            isReceiving: () => promptInputController.isReceiving(panelThreadId ?? undefined),
-        })
-        const promptEl = activeAiChatPromptEditor.element
-        panelEl.appendChild(promptEl)
 
         activeRightSidePanel = ensureActiveRightSidePanel()
         const resizeHandle = activeRightSidePanel.element
@@ -5227,6 +4871,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             resizeActiveAiChatPanelTabsSwitch()
             if (tabsEl) tabsEl.scrollLeft = tabsInitialScrollLeft
         })
+    }
+
+    // Arm the global composer for a feature-extraction run: the extraction
+    // results render in the right side panel's extraction tab, while the next
+    // submit from the bottom-center composer carries the typed request.
+    function armExtractionFromImage(extractionRunId: string): void {
+        armedExtractionRunId = extractionRunId
+        if (!globalCanvasComposerHostEl) return
+        armedExtractionBadgeEl?.remove()
+        const badgeEl = html`<div className="workspace-canvas-global-extraction-badge">
+            <span className="workspace-canvas-global-extraction-badge-label">Extracting from image — type your request below</span>
+            <button type="button" className="workspace-canvas-global-extraction-badge-cancel" aria-label="Cancel feature extraction">×</button>
+        </div>` as HTMLDivElement
+        badgeEl.querySelector('.workspace-canvas-global-extraction-badge-cancel')
+            ?.addEventListener('click', () => disarmExtraction())
+        globalCanvasComposerHostEl.insertBefore(badgeEl, globalCanvasComposerHostEl.firstChild)
+        armedExtractionBadgeEl = badgeEl
+        globalCanvasComposer?.editorView?.focus()
+    }
+
+    function disarmExtraction(): void {
+        armedExtractionRunId = null
+        armedExtractionBadgeEl?.remove()
+        armedExtractionBadgeEl = null
     }
 
     // Screen-fixed, canvas-wide composer at the bottom-center of the viewport.
@@ -5527,6 +5195,31 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // visible projection, but storage/stream parsing/persistence stays on the same
     // aiChatThreadPlugin path as the panel.
     async function submitCanvasGenerationRun(data: AiPromptComposerSubmitData): Promise<void> {
+        // When armed by "Ask AI", the composer drives a feature-extraction run
+        // whose results render in the right side panel's extraction tab.
+        if (armedExtractionRunId) {
+            const runId = armedExtractionRunId
+            const userText = extractPromptTextFromContentJSON(data.contentJSON)
+            if (!userText) return
+            // Make sure the extraction tab is the active, rendered panel body, then
+            // submit into its live DOM container (renderActiveAiChatPanel is synchronous).
+            openFeatureExtractionTab(runId)
+            const extractionBodyEl = activeAiChatPanelEl?.querySelector<HTMLDivElement>('.workspace-ai-chat-panel-extraction') ?? null
+            if (!extractionBodyEl) return
+            const ctx = {
+                ...(getPendingExtractionContext(runId) ?? {}),
+                aiModel: data.aiModel,
+                aiImageModel: data.imageOptions?.aiImageModel,
+            }
+            submitExtractionRequest(extractionBodyEl, runId, workspaceId, userText, ctx, {
+                getState: getPersistedFeatureExtractionState,
+                saveState: persistFeatureExtractionState,
+            })
+            clearExplicitContextChips()
+            disarmExtraction()
+            return
+        }
+
         if (!data.aiModel) {
             alert('Please select an AI model from the dropdown before submitting.')
             return
@@ -8401,120 +8094,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         },
 
-        onEditInNewThread: async (responseId) => {
-            // Create a new AI chat thread specifically for editing this image
-            const aiChatThreadService = servicesStore.getData('aiChatThreadService')
-            if (!aiChatThreadService) {
-                console.error('AI Chat Thread service not available')
-                return
-            }
-
-            try {
-                // Generate threadId on frontend to ensure content and DB record match
-                const threadId = uuidv4()
-
-                // Create empty AI chat thread with reference to the source image
-                const initialContent = {
-                    type: 'doc',
-                    content: [
-                        {
-                            type: 'documentTitle',
-                            content: [{ type: 'text', text: 'Edit Image' }]
-                        },
-                        {
-                            type: 'aiChatThread',
-                            attrs: {
-                                threadId,
-                                // Store the previous response ID for multi-turn editing
-                                previousResponseId: responseId
-                            },
-                            content: [
-                                {
-                                    type: 'aiUserMessage',
-                                    attrs: { id: uuidv4(), createdAt: Date.now() },
-                                    content: [
-                                        {
-                                            type: 'paragraph',
-                                            content: [{ type: 'text', text: 'Describe how you want to edit this image...' }]
-                                        }
-                                    ]
-                                }
-                            ]
-                        }
-                    ]
-                }
-
-                const thread = await aiChatThreadService.createAiChatThread({
-                    workspaceId,
-                    threadId,
-                    content: initialContent,
-                    aiModel: 'openai:gpt-4o', // Default to OpenAI for image editing
-                    title: 'Edit Image',
-                    owner: { type: 'standalone' },
-                })
-
-                if (thread) {
-                    // Find the source image node to position the new thread next to it
-                    const existingNodes = currentCanvasState?.nodes || []
-                    let sourceImageNode: CanvasNode | undefined
-                    for (const n of existingNodes) {
-                        if (n.type === 'image' && (n as ImageCanvasNode).generatedBy?.responseId === responseId) {
-                            sourceImageNode = n
-                            break
-                        }
-                    }
-
-                    const threadDimensions = { ...settings.aiChatThread.defaultDimensions }
-                    const centeredPosition = getCenteredInsertionPosition(threadDimensions)
-                    const sourceImageRect = sourceImageNode ? getNodeWorldRect(sourceImageNode) : null
-                    const threadPosition = sourceImageRect
-                        ? { x: sourceImageRect.x + sourceImageRect.width + settings.aiChatThread.adjacentNodeGap, y: sourceImageRect.y }
-                        : centeredPosition
-
-                    const threadNode: AiChatThreadCanvasNode = {
-                        nodeId: `node-${thread.threadId}`,
-                        type: 'aiChatThread',
-                        referenceId: thread.threadId,
-                        position: threadPosition,
-                        dimensions: threadDimensions,
-                    }
-
-                    const newCanvasState: CanvasState = {
-                        ...(currentCanvasState ?? {}),
-                        viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                        edges: currentCanvasState?.edges ?? [],
-                        nodes: resolveTopLevelNodeCollisions([...existingNodes, threadNode])
-                    }
-
-                    // Create edge from source image to edit thread if we found the source
-                    if (sourceImageNode) {
-                        const newEdge: WorkspaceEdge = {
-                            edgeId: `edge-${sourceImageNode.nodeId}-${threadNode.nodeId}`,
-                            sourceNodeId: sourceImageNode.nodeId,
-                            targetNodeId: threadNode.nodeId,
-                            sourceHandle: 'right',
-                            targetHandle: 'left'
-                        }
-                        newCanvasState.edges = [...(newCanvasState.edges || []), newEdge]
-                    }
-
-                    onCanvasStateChange?.(newCanvasState)
-                    currentCanvasState = newCanvasState
-                    aiChatPanelState = { ...aiChatPanelState, isOpen: true }
-                    activeAiChatThreadId = thread.threadId
-                    activeAiChatRootNodeId = threadNode.nodeId
-                    ensureAiChatSidebarThreadTab(thread.threadId)
-                    activeAiChatSidebarTabId = `thread:${thread.threadId}`
-                    persistAiChatSidebarState()
-                    requestAnimationFrame(() => {
-                        renderActiveAiChatPanel(threadNode, thread)
-                    })
-
-                }
-            } catch (error) {
-                console.error('Failed to create edit thread:', error)
-            }
-        }
     })
 
     // VideoCanvasNode lifecycle callbacks, fired from the AI chat thread plugin
@@ -10853,6 +10432,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             activeCanvasRunServices.clear()
             activeCanvasRunIds.clear()
 
+            disarmExtraction()
             globalCanvasComposer?.destroy()
             globalCanvasComposer = null
             globalCanvasComposerHostEl?.remove()

@@ -118,7 +118,6 @@ export type AiGeneratedImageCallbacks = {
         revisedPrompt: string
         aiModel: string
     }) => void
-    onEditInNewThread?: (responseId: string) => void
     onImagePartialToCanvas?: (data: {
         threadId: string
         imageUrl: string

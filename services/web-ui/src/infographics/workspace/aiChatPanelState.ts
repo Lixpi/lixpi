@@ -5,12 +5,6 @@ import type {
     CanvasState,
 } from '@lixpi/constants'
 
-export const NEW_CHAT_DRAFT_KEY = 'new-chat'
-
-// Draft key for the screen-fixed, canvas-wide composer (bottom-center). Stored
-// alongside chat drafts so its text + selected models survive a refresh.
-export const CANVAS_GLOBAL_DRAFT_KEY = 'canvas-global'
-
 export function createDefaultAiChatPanelState(): CanvasAiChatPanelState {
     return {
         isOpen: false,
@@ -26,7 +20,7 @@ function sanitizeTabs(tabs: CanvasAiChatSidebarTab[] | undefined): CanvasAiChatS
 
     for (const tab of tabs ?? []) {
         if (!tab?.tabId || !tab.refId || seen.has(tab.tabId)) continue
-        if (tab.type !== 'thread' && tab.type !== 'extraction' && tab.type !== 'draft') continue
+        if (tab.type !== 'thread' && tab.type !== 'extraction') continue
         seen.add(tab.tabId)
         sanitizedTabs.push(tab)
     }
@@ -59,7 +53,6 @@ export function getAiChatPanelState(canvasState: CanvasState | null | undefined)
         ...(activeTabId ? { activeTabId } : {}),
         contextChips: sanitizeContextChips(persisted?.contextChips, canvasState.nodes),
         ...(persisted?.width !== undefined ? { width: persisted.width } : {}),
-        ...(persisted?.drafts ? { drafts: persisted.drafts } : {}),
     }
 }
 

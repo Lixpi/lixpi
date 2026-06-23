@@ -1037,11 +1037,12 @@
     margin-left: auto;
 }
 
-.workspace-ai-chat-panel-history-toggle,
-.workspace-ai-chat-panel-new-chat {
+.workspace-ai-chat-panel-history-toggle {
     display: grid;
     place-items: center;
     flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
     padding: 0;
     border: 0;
     border-radius: 99px;
@@ -1051,16 +1052,6 @@
     transition: hoverTransition(background, 150ms), hoverTransition(color, 150ms);
 }
 
-.workspace-ai-chat-panel-history-toggle {
-    width: 20px;
-    height: 20px;
-}
-
-.workspace-ai-chat-panel-new-chat {
-    width: 20px;
-    height: 20px;
-}
-
 .workspace-ai-chat-panel-history-toggle:hover,
 .workspace-ai-chat-panel-history-toggle:focus-visible {
     background: var(--workspace-ai-chat-panel-session-history-toggle-hover-background, rgba(105, 115, 136, 0.1));
@@ -1068,30 +1059,14 @@
     outline: none;
 }
 
-.workspace-ai-chat-panel-new-chat:hover,
-.workspace-ai-chat-panel-new-chat:focus-visible {
-    color: var(--workspace-ai-chat-panel-session-action-hover-background, #{$steelBlue});
-    outline: none;
-}
-
 .workspace-ai-chat-panel-history-toggle-active {
     color: var(--workspace-ai-chat-panel-session-control-hover-color, #39455d);
 }
 
-.workspace-ai-chat-panel-history-toggle svg,
-.workspace-ai-chat-panel-new-chat svg {
-    fill: currentColor;
-}
-
 .workspace-ai-chat-panel-history-toggle svg {
+    fill: currentColor;
     width: 15px;
     height: 15px;
-}
-
-.workspace-ai-chat-panel-new-chat svg {
-    width: 20px;
-    height: 20px;
-    transform: rotate(45deg);
 }
 
 .workspace-ai-chat-panel-sessions {
@@ -1291,33 +1266,6 @@
     color: #1a2744;
 }
 
-.workspace-ai-chat-floating-panel-prompt {
-    position: relative !important;
-    display: block !important;
-    left: auto !important;
-    top: auto !important;
-    width: calc(
-        100% + var(--workspace-right-side-panel-content-inset) + var(--workspace-right-side-panel-content-inset) - var(--workspace-right-side-panel-edge-gap)
-    ) !important;
-    flex: 0 0 auto;
-    margin-top: 12px;
-    margin-left: calc(0px - var(--workspace-right-side-panel-content-inset));
-    z-index: 4;
-    box-shadow: var(--dropdown-popover-box-shadow) !important;
-
-    .ai-prompt-input-wrapper {
-        box-shadow: none;
-    }
-
-    &:has(.info-bubble-wrapper.static-position .bubble-wrapper.visible) {
-        z-index: 10000;
-    }
-
-    &:has(.ai-prompt-model-menu-info-bubble.is-visible) {
-        z-index: var(--ai-prompt-model-menu-open-prompt-z-index, 10000);
-    }
-}
-
 // Screen-fixed, canvas-wide composer at the bottom-center of the viewport.
 // The context tray is outside the input pill so selected references do not
 // consume text-field space.
@@ -1338,6 +1286,49 @@
         padding: 0 34px 0 28px;
         overflow: visible;
         box-sizing: border-box;
+    }
+
+    // Active feature-extraction indicator: shown when "Ask AI" arms the composer.
+    .workspace-canvas-global-extraction-badge {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        align-self: flex-start;
+        max-width: 100%;
+        margin: 0 28px;
+        padding: 4px 8px 4px 12px;
+        border-radius: 9999px;
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--text-color, #1a1a1a);
+        background: var(--dropdown-popover-bg, rgba(255, 255, 255, 0.9));
+        box-shadow: var(--dropdown-popover-box-shadow);
+        box-sizing: border-box;
+
+        .workspace-canvas-global-extraction-badge-label {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .workspace-canvas-global-extraction-badge-cancel {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border: none;
+            border-radius: 50%;
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+            color: inherit;
+            background: transparent;
+
+            &:hover {
+                background: rgba(0, 0, 0, 0.08);
+            }
+        }
     }
 }
 
