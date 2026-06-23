@@ -671,7 +671,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let edgesRaf: number | null = null
     let transformSideEffectsRaf: number | null = null
     let pendingHandleZoom: number | null = null
-    let autoGrowRaf: number | null = null
     let selectedNodeIds: Set<string> = new Set()
     let selectedEdgeId: string | null = null
     const expandedGeneratedMediaInfoNodeIds: Set<string> = new Set()
@@ -706,7 +705,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let selectionIsFromMarquee = false
     let suppressNextPaneClick = false
     let suppressNextNodeClick = false
-    const pendingAutoGrowThreadNodeIds: Set<string> = new Set()
     const nodeLayerManager = createNodeLayerManager()
     const documentEditors: Map<string, DocumentEditorEntry> = new Map()
     const threadEditors: Map<string, AiChatThreadEditorEntry> = new Map()
@@ -2574,59 +2572,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             x: worldPosition.x - parentPosition.x,
             y: worldPosition.y - parentPosition.y,
         }
-    }
-
-    function expandParentContainersToFitChildren(nodes: CanvasNode[]): CanvasNode[] {
-        const inset = 48
-        const childrenByParentId = new Map<string, CanvasNode[]>()
-        for (const node of nodes) {
-            if (!node.parentId) continue
-            // Only consider image or document child nodes for bounding box.
-            // Ignore anything like bubble menus or floating inputs if they ever crept in.
-            const children = childrenByParentId.get(node.parentId) ?? []
-            children.push(node)
-            childrenByParentId.set(node.parentId, children)
-        }
-
-        return nodes.map((node: CanvasNode) => {
-            if (node.type !== 'aiChatThread') return node
-            const children = childrenByParentId.get(node.nodeId)
-
-            // Empty parent containers keep their persisted size so manual resize is stable.
-            // Only repair invalid persisted dimensions that cannot render usefully.
-            if (!children?.length) {
-                if (node.dimensions.width <= 0 || node.dimensions.height <= 0) {
-                    const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
-                    if (nodeEl) {
-                        applyStyle(nodeEl, { width: '300px', height: '200px' })
-                    }
-                    return { ...node, dimensions: { ...node.dimensions, width: 300, height: 200 } }
-                }
-                return node
-            }
-
-            // Parent containers grow to fit children, but never shrink below the user's
-            // current size. Dropping a small image into a manually enlarged
-            // empty container must preserve the larger dimensions.
-            let width = Math.max(200, node.dimensions.width)
-            let height = Math.max(120, node.dimensions.height)
-            for (const child of children) {
-                width = Math.max(width, child.position.x + child.dimensions.width + inset)
-                height = Math.max(height, child.position.y + child.dimensions.height + inset)
-            }
-
-            if (width === node.dimensions.width && height === node.dimensions.height) return node
-
-            const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
-            if (nodeEl) {
-                applyStyle(nodeEl, { width: `${width}px`, height: `${height}px` })
-            }
-
-            return {
-                ...node,
-                dimensions: { ...node.dimensions, width, height },
-            }
-        })
     }
 
     function getGeneratedMediaInsertionSize(): number {
@@ -5208,59 +5153,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             console.error('[CANVAS-RUN] failed to submit detached canvas generation request', error)
             teardownDetachedCanvasRun(threadId)
         }
-    }
-
-    const AI_CHAT_THREAD_MIN_HEIGHT = 150
-
-    function threadContentHasMessages(content: any): boolean {
-        if (!content || typeof content !== 'object') return false
-        const nodes = content.content
-        if (!Array.isArray(nodes)) return false
-        for (const node of nodes) {
-            if (node.type === 'aiChatThread') {
-                const children = node.content
-                if (Array.isArray(children) && children.length > 0) return true
-            }
-        }
-        return false
-    }
-
-    // Tracks thread nodes that are hidden because they have no messages yet
-    const hiddenEmptyThreadNodeIds: Set<string> = new Set()
-
-    function hideThreadNode(nodeEl: HTMLElement, nodeId: string): void {
-        nodeEl.dataset.threadEmpty = 'true'
-        hiddenEmptyThreadNodeIds.add(nodeId)
-    }
-
-    function showThreadNode(nodeEl: HTMLElement, nodeId: string): void {
-        delete nodeEl.dataset.threadEmpty
-        hiddenEmptyThreadNodeIds.delete(nodeId)
-    }
-
-    function updateThreadNodeVisibility(nodeId: string, threadNodeEl: HTMLElement, contentJSON?: any): void {
-        // Check ProseMirror state (contentJSON) when available — the DOM isn't updated yet
-        // during statePlugin.apply, so querying NodeViews would return stale results.
-        const hasMessages = contentJSON
-            ? threadContentHasMessages(contentJSON)
-            : threadNodeEl.querySelector('.ai-user-message-wrapper, .ai-response-message-wrapper') !== null
-        const wasHidden = hiddenEmptyThreadNodeIds.has(nodeId)
-
-        if (hasMessages && wasHidden) {
-            showThreadNode(threadNodeEl, nodeId)
-            scheduleThreadAutoGrow(nodeId)
-        } else if (!hasMessages && !wasHidden) {
-            hideThreadNode(threadNodeEl, nodeId)
-        }
-    }
-
-    function autoGrowThreadNode(threadNodeId: string): void {
-        // Disabled. The canvas keeps thread node dimensions explicit so drag,
-        // resize, connector, and floating-input geometry stay stable.
-    }
-
-    function scheduleThreadAutoGrow(threadNodeId: string): void {
-        // Disabled
     }
 
     // Set up callbacks for AI-generated images
@@ -8755,8 +8647,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return releasedNode
             })
 
-            updatedNodes = expandParentContainersToFitChildren(updatedNodes)
-
             if (dragPlan.allowCollisionResolution) {
                 const collisionExclusions = new Set<string>()
 
@@ -8794,8 +8684,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         }
                         return n
                     })
-
-                    updatedNodes = expandParentContainersToFitChildren(updatedNodes)
                 }
             }
 
@@ -8995,11 +8883,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ? toParentRelativePosition(newWorldPosition, resizingNode.parentId, getCanvasNodesById())
                 : newWorldPosition
 
-            let updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) =>
+            const updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) =>
                 n.nodeId === nodeId ? { ...n, dimensions: newDimensions, position: newPosition } : n
             )
-
-            updatedNodes = expandParentContainersToFitChildren(updatedNodes)
 
             currentCanvasState = { ...currentCanvasState, nodes: updatedNodes }
 
@@ -9597,7 +9483,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         // Clear loaded node tracking on full re-render
         loadedNodeIds.clear()
-        hiddenEmptyThreadNodeIds.clear()
 
         const documentMap = new Map<string, Document>(currentDocuments.map((d) => [d.documentId, d]))
         for (const node of currentCanvasState.nodes) {
@@ -10084,12 +9969,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 cancelAnimationFrame(transformSideEffectsRaf)
                 transformSideEffectsRaf = null
             }
-            if (autoGrowRaf !== null) {
-                cancelAnimationFrame(autoGrowRaf)
-                autoGrowRaf = null
-            }
-            pendingAutoGrowThreadNodeIds.clear()
-            hiddenEmptyThreadNodeIds.clear()
             for (const timer of textDescriptorTimers.values()) clearTimeout(timer)
             textDescriptorTimers.clear()
             connectionManager?.destroy()

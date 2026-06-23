@@ -1,8 +1,3 @@
-import type {
-    CanvasNode,
-    ImageCanvasNode,
-} from '@lixpi/constants'
-
 const MIN_INSERTION_ZOOM = 0.01
 
 type ViewportLike = { x: number; y: number; zoom: number }
@@ -118,14 +113,4 @@ export function computeLineageContinuationPositionToRightOfRect(
         x: rect.x + rect.width + horizontalGap,
         y: computeVerticallyCenteredY(rect, itemHeight),
     }
-}
-
-export function countExistingImagesForThread(
-    nodes: CanvasNode[],
-    threadId: string
-): number {
-    return nodes.filter(
-        (n): n is ImageCanvasNode =>
-            n.type === 'image' && n.generatedBy?.aiChatThreadId === threadId
-    ).length
 }
