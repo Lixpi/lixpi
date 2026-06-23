@@ -70,7 +70,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin' | 'branchFork' | 'branchLine'
+export type CanvasNodeType = 'document' | 'image' | 'video' | 'branchOrigin' | 'branchFork' | 'branchLine'
 
 type CanvasNodePosition = {
     x: number
@@ -744,16 +744,6 @@ export type VideoCanvasNode = CanvasNodeParentingFields & {
     descriptor?: MediaDescriptor
 }
 
-export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {
-    nodeId: string
-    type: 'aiChatThread'
-    referenceId: string
-    position: CanvasNodePosition
-    dimensions: CanvasNodeDimensions
-    // Text summary of the thread transcript for the workspace relevance engine.
-    descriptor?: ContentDescriptor
-}
-
 export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'branchOrigin'
@@ -807,7 +797,7 @@ export type BranchLineCanvasNode = CanvasNodeParentingFields & {
     temporary: true
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | VideoCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 
 export type CanvasViewport = {
     x: number

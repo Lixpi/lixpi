@@ -1,7 +1,6 @@
 'use strict'
 
 import type {
-    AiChatThreadCanvasNode,
     CanvasNode,
     DocumentCanvasNode,
     ImageBranchCandidateImage,
@@ -25,9 +24,7 @@ const RESOLVER_VERSION = 'image-branch-vlm-v1'
 // parent and vice versa. The snapshot grounds every media object by a single
 // still — an image's file, or a video's representative frame — never the MP4.
 type MediaCanvasNode = ImageCanvasNode | VideoCanvasNode
-type WorkspaceContextCanvasNode = MediaCanvasNode | DocumentCanvasNode | AiChatThreadCanvasNode
-
-type ChatRootNode = AiChatThreadCanvasNode
+type WorkspaceContextCanvasNode = MediaCanvasNode | DocumentCanvasNode
 
 type BuildImageBranchCandidateSnapshotParams = {
     regionNodeId: string
@@ -50,7 +47,7 @@ function isMediaCanvasNode(node: CanvasNode): node is MediaCanvasNode {
 }
 
 function isWorkspaceContextCanvasNode(node: CanvasNode): node is WorkspaceContextCanvasNode {
-    return node.type === 'image' || node.type === 'video' || node.type === 'document' || node.type === 'aiChatThread'
+    return node.type === 'image' || node.type === 'video' || node.type === 'document'
 }
 
 function isGeneratedMediaForThread(node: CanvasNode, threadId: string): node is MediaCanvasNode {
@@ -505,7 +502,7 @@ function toWorkspaceContextNode(
         isEdgeForced: edgeForcedNodeIds.has(node.nodeId),
     }
 
-    if (node.type === 'document' || node.type === 'aiChatThread') {
+    if (node.type === 'document') {
         contextNode.referenceId = node.referenceId
     }
 
@@ -569,8 +566,4 @@ export function buildWorkspaceContextSnapshot({
             .filter(isWorkspaceContextCanvasNode)
             .map((node) => toWorkspaceContextNode(node, threadId, chipNodeIds, edgeForcedNodeIds, titlesByNodeId)),
     }
-}
-
-export function isChatRootNode(node: CanvasNode): node is ChatRootNode {
-    return node.type === 'aiChatThread'
 }

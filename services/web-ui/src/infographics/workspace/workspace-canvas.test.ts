@@ -786,13 +786,11 @@ describe('Workspace canvas — content descriptors (documents & threads)', () =>
 		expectSourceToContain(ts, 'settings.contentDescriptor.editDebounceMs')
 	})
 
-	it('triggers a descriptor refresh on document and thread edits, and on node creation', () => {
-		// Edit triggers: document editor + AI chat panel thread editor.
+	it('triggers a descriptor refresh on document edits and on node creation', () => {
+		// Edit trigger: document editor.
 		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(node.nodeId, value, doc.title)')
-		expectSourceToContain(ts, 'if (rootNode) scheduleTextNodeDescriptor(rootNode.nodeId, value)')
-		// Create trigger: a newly inserted document/thread node with existing content.
+		// Create trigger: a newly inserted document node with existing content.
 		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(positionedNode.nodeId, doc.content, doc.title)')
-		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(positionedNode.nodeId, thread.content)')
 	})
 
 	it('clears pending descriptor timers on destroy', () => {
@@ -874,7 +872,7 @@ describe('Workspace canvas — AI panel reload stability', () => {
 	it('refreshes only the active panel when deferred thread content arrives', () => {
 		expectSourceToContain(ts, 'function refreshActiveAiChatPanelWhenContentLoads(): void')
 		expectSourceToContain(ts, 'if (activeAiChatPanelHadContent) return')
-		expectSourceToContain(ts, 'renderActiveAiChatPanel(undefined, thread)')
+		expectSourceToContain(ts, 'renderActiveAiChatPanel(thread)')
 		expectSourceToContain(ts, 'refreshActiveAiChatPanelWhenContentLoads()')
 		expectSourceToContain(ts, 'if (aiChatPanelState.isOpen && !activeAiChatPanelEl) renderActiveAiChatPanel()')
 	})
@@ -1297,16 +1295,6 @@ describe('Resize handles - corner-hover visibility', () => {
 		expectExcerptNotToContain(block, '&.thread-hovered .document-resize-handle')
 	})
 
-	it('does not create bottom resize handles for AI chat thread nodes', () => {
-		const fnMatch = ts.match(/function\s+createBaseNodeElement[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		sourceFileNames.set(fnBody, 'createBaseNodeElement')
-
-		expectSourceToContain(fnBody, "if (node.type === 'aiChatThread' && corner.startsWith('bottom')) continue")
-		expectSourceToContain(fnBody, 'nodeEl.appendChild(createResizeHandle(node.nodeId, corner))')
-	})
-
 	it('compares completed-video resize hitboxes in screen pixels', () => {
 		const fnBody = extractFunctionBody(ts, 'getVideoChromeResizeHandle')
 		sourceFileNames.set(fnBody, 'getVideoChromeResizeHandle')
@@ -1353,58 +1341,11 @@ describe('AI chat thread sizing', () => {
 })
 
 // =============================================================================
-// Vertical rail — CSS styling
+// Right side panel — TypeScript infrastructure
 // =============================================================================
 
-describe('Vertical rail — CSS styling', () => {
-	const scss = loadScss()
-
-	it('defines .workspace-thread-rail with absolute positioning', () => {
-		const block = extractBlock(scss, '.workspace-thread-rail')
-		expect(block).toMatch(/position:\s*absolute/)
-	})
-
-	it('sets cursor: move on rail', () => {
-		const block = extractBlock(scss, '.workspace-thread-rail')
-		expect(block).toMatch(/cursor:\s*move/)
-	})
-
-	it('has line child with ::before pseudo-element for the visible line', () => {
-		expect(scss).toMatch(/\.workspace-thread-rail-line\s*\{/)
-		expect(scss).toMatch(/&::before/)
-		expect(scss).toMatch(/--rail-width/)
-		expect(scss).toMatch(/--rail-gradient/)
-		expect(scss).toMatch(/--rail-thread-height/)
-	})
-
-	it('has no .is-selected visual change on line::before (rail always looks the same)', () => {
-		expect(scss).not.toMatch(/\.is-selected\s+\.workspace-thread-rail-line::before/)
-	})
-
-	it('defines boundary-circle positioned at bottom of line', () => {
-		expect(scss).toMatch(/\.workspace-thread-rail-boundary-circle\s*\{/)
-		expect(scss).toMatch(/bottom:\s*-6px/)
-	})
-})
-
-// =============================================================================
-// Vertical rail — TypeScript infrastructure
-// =============================================================================
-
-describe('Vertical rail — TS infrastructure', () => {
+describe('Right side panel — TS infrastructure', () => {
 	const ts = loadTs()
-
-	it('defines thread rail offset from settings', () => {
-		expect(ts).toMatch(/const\s+THREAD_RAIL_OFFSET\s*=\s*settings\.aiChatThread\.rail\.offset/)
-	})
-
-	it('defines thread rail grab width from settings', () => {
-		expect(ts).toMatch(/const\s+THREAD_RAIL_GRAB_WIDTH\s*=\s*settings\.aiChatThread\.rail\.dragGrabWidth/)
-	})
-
-	it('defines threadRails Map', () => {
-		expect(ts).toMatch(/const\s+threadRails:\s*Map<string,\s*HTMLElement>/)
-	})
 
 	it('delegates right side panel state to SidePanel with content-agnostic settings', () => {
 		expectSourceToContain(ts, 'const RIGHT_SIDE_PANEL_SETTINGS = settings.rightSidePanel')
@@ -1419,110 +1360,6 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceNotToContain(ts, 'settings.aiChatThread.rightSidePanel')
 		expectSourceNotToContain(ts, 'AI_CHAT_PANEL_MIN_WIDTH')
 		expectSourceNotToContain(ts, 'workspace-ai-chat-sidebar')
-	})
-
-	it('defines createThreadRail function', () => {
-		expectSourceToContain(ts, 'function createThreadRail(')
-	})
-
-	it('defines repositionThreadRail function', () => {
-		expectSourceToContain(ts, 'function repositionThreadRail(')
-	})
-
-	it('defines destroyAllThreadRails function', () => {
-		expectSourceToContain(ts, 'function destroyAllThreadRails(')
-	})
-
-	it('drag mousemove handler repositions the rail', () => {
-		expectSourceToContain(ts, 'dragRail')
-		expectSourceToContain(ts, 'applyStyle(dragRail, { left:')
-	})
-
-	it('resize mousemove handler repositions the rail', () => {
-		expectSourceToContain(ts, 'resizeRail')
-		expectSourceToContain(ts, 'applyStyle(resizeRail, { left:')
-		expectSourceToContain(ts, 'height: `${totalH}px`')
-	})
-
-	it('updateNodeSelectionClasses toggles is-selected on the rail', () => {
-		const fnMatch = ts.match(/function\s+updateNodeSelectionClasses[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, "threadRails.get(nodeId)?.classList.add('is-selected')")
-		expectExcerptToContain(fnBody, "threadRails.get(nodeId)?.classList.remove('is-selected')")
-	})
-
-	it('renderNodes calls destroyAllThreadRails', () => {
-		const fnMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'destroyAllThreadRails()')
-	})
-
-	it('destroy() calls destroyAllThreadRails', () => {
-		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
-		expect(destroyMatch).not.toBeNull()
-		expectExcerptToContain(destroyMatch![0], 'destroyAllThreadRails()')
-	})
-
-	it('passes railOffset to WorkspaceConnectionManager', () => {
-		expect(ts).toMatch(/railOffset:\s*THREAD_RAIL_OFFSET/)
-	})
-
-	it('createThreadRail creates line child element', () => {
-		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'workspace-thread-rail-line')
-	})
-
-	it('createThreadRail sets z-index above all nodes to prevent overlap', () => {
-		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], "zIndex: '9990'")
-	})
-
-	it('createThreadRail appends boundary circle to line', () => {
-		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'workspace-thread-rail-boundary-circle')
-		expectExcerptToContain(fnMatch![0], 'aiChatThreadRailBoundaryCircle')
-	})
-
-	it('createThreadRail applies configured colors to boundary circle SVG paths', () => {
-		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'settings.aiChatThread.rail.styles.boundaryCircleColors')
-		expectExcerptToContain(fnBody, "setAttribute('fill'")
-	})
-
-	it('repositionThreadRail sets --rail-thread-height CSS var', () => {
-		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], '--rail-thread-height')
-	})
-
-	it('repositionThreadRail hides boundary circle when thread is hidden', () => {
-		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'workspace-thread-rail-boundary-circle')
-		expectExcerptToContain(fnBody, "isHidden ? 'none' : ''")
-	})
-
-	it('resize handler updates --rail-thread-height CSS var', () => {
-		expect(ts).toMatch(/resizeRail\.style\.setProperty\('--rail-thread-height'/)
-	})
-
-	it('repositionThreadRail calls connectionManager.setRailHeight', () => {
-		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'connectionManager?.setRailHeight(')
-	})
-
-	it('destroyAllThreadRails calls connectionManager.clearRailHeights', () => {
-		const fnMatch = ts.match(/function\s+destroyAllThreadRails[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'connectionManager?.clearRailHeights()')
 	})
 
 	it('updateSelectionDrivenUi never references a detached floating input under any node', () => {
@@ -1666,7 +1503,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'const preservedTabsEl = options.preserveTabsSwitch')
 		expectSourceToContain(ts, 'const preservedTabsScrollLeft = preservedTabsEl?.scrollLeft ?? 0')
 		expectSourceToContain(ts, 'preservedTabsEl?.remove()')
-		expectSourceToContain(ts, 'renderActiveAiChatPanel(undefined, undefined, { preserveTabsSwitch: true })')
+		expectSourceToContain(ts, 'renderActiveAiChatPanel(undefined, { preserveTabsSwitch: true })')
 		expectSourceToContain(ts, 'tabsInitialScrollLeft = getAiChatPanelActiveTabScrollLeft(')
 		expectSourceToContain(ts, 'tabsEl.scrollLeft = tabsInitialScrollLeft')
 		expectSourceToContain(ts, 'resizeActiveAiChatPanelTabsSwitch()')
@@ -1739,7 +1576,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'const placementAnchorNodeId = referenceNodeIds[0] ?? activeTargetNodeId ?? candidateNodeIds[0]')
 		expectSourceToContain(ts, '...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),')
 		expectSourceToContain(ts, 'referenceNodeIds: candidateNodeIds,')
-		expectSourceToContain(ts, ': rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)')
+		expectSourceToContain(ts, 'rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)')
 		expectSourceToContain(ts, 'const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)')
 		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(generationRun, [branchOriginNode, branchForkNode, branchLineNode])')
 		expectSourceToContain(ts, 'partialImageTracker.set(runKey, {')

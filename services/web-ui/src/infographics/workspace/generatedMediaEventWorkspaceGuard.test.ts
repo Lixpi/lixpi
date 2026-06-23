@@ -48,23 +48,6 @@ describe('generated media event workspace guard', () => {
         })).toBe(true)
     })
 
-    it('accepts legacy canvas thread nodes', () => {
-        expect(hasCurrentWorkspaceThread({
-            threadId: 'legacy-thread',
-            currentCanvasState: makeCanvasState({
-                nodes: [{
-                    nodeId: 'node-legacy-thread',
-                    type: 'aiChatThread',
-                    referenceId: 'legacy-thread',
-                    position: { x: 0, y: 0 },
-                    dimensions: { width: 300, height: 200 },
-                } as any],
-            }),
-            currentAiChatThreads: [],
-            workspaceId: 'workspace-1',
-        })).toBe(true)
-    })
-
     it('rejects an event from another workspace even when the thread id is known locally', () => {
         expect(shouldAcceptGeneratedMediaEvent({
             threadId: 'thread-current',

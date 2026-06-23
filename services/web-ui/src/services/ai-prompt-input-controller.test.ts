@@ -481,26 +481,11 @@ describe('AiPromptInputController', () => {
             owner: { type: 'standalone' },
         })
 
-        expect(persistCanvasState).toHaveBeenCalledWith(
-            expect.objectContaining({
-                nodes: expect.arrayContaining([
-                    expect.objectContaining({
-                        nodeId: 'node-thread-id',
-                        type: 'aiChatThread',
-                        referenceId: 'thread-id',
-                        position: { x: 146, y: 20 },
-                        dimensions: { width: 420, height: 300 },
-                    }),
-                ]),
-                edges: expect.arrayContaining([
-                    expect.objectContaining({ sourceNodeId: 'target-doc', targetNodeId: 'node-thread-id' }),
-                ]),
-            }),
-        )
+        // The thread is panel-only now: no canvas node or edge is persisted.
+        expect(persistCanvasState).not.toHaveBeenCalled()
 
         expect(onAiChatThreadCreated).toHaveBeenCalledWith({
             threadId: 'thread-id',
-            nodeId: 'node-thread-id',
         })
         expect(controller.getTargetThreadId()).toBe('thread-id')
 

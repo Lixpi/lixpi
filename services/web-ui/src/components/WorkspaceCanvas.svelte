@@ -55,7 +55,6 @@
     const rightSidePanelStyle = [
         `--workspace-right-side-panel-width: min(${rightSidePanelSettings.defaultDimensions.width}px, calc(100vw - ${rightSidePanelSettings.dimensions.maxPaneMargin}px))`,
         '--side-panel-backdrop-width: var(--workspace-right-side-panel-width)',
-        `--workspace-right-side-panel-edge-gap: ${rightSidePanelSettings.layout.edgeGap}px`,
         `--workspace-right-side-panel-content-inset: ${rightSidePanelSettings.layout.contentInset}px`,
         `--side-panel-backdrop-fill: ${rightSidePanelSettings.styles.backdropFill}`,
         `--side-panel-backdrop-fill-opaque: ${rightSidePanelSettings.styles.backdropFillOpaque}`,

@@ -1,5 +1,4 @@
 import type {
-    AiChatThreadCanvasNode,
     CanvasNode,
     DocumentCanvasNode,
     ImageCanvasNode,
@@ -74,7 +73,6 @@ function getContextChipLabel(node: CanvasNode): string {
     if (trimmed) return trimmed
     switch (node.type) {
         case 'document': return 'Document'
-        case 'aiChatThread': return 'Chat'
         case 'image':
         case 'video': return ''
         default: return node.type
@@ -85,11 +83,6 @@ function getContextPreviewTitle(node: CanvasNode, environment: ContextPreviewEnv
     if (node.type === 'document') {
         const document = environment.getDocuments().find((item) => item.documentId === node.referenceId)
         const title = document?.title?.trim()
-        if (title) return title
-    }
-    if (node.type === 'aiChatThread') {
-        const thread = environment.getThreads().find((item) => item.threadId === node.referenceId)
-        const title = thread?.title?.trim()
         if (title) return title
     }
     if (node.type === 'image' || node.type === 'video') return ''
@@ -108,12 +101,6 @@ function getContextPreviewText(node: CanvasNode, environment: ContextPreviewEnvi
         return text.trim()
     }
 
-    if (node.type === 'aiChatThread') {
-        const thread = environment.getThreads().find((item) => item.threadId === node.referenceId)
-        const { text } = extractContentFromProseMirror((thread?.content ?? '') as string | object)
-        return text.trim()
-    }
-
     return ''
 }
 
@@ -122,7 +109,6 @@ function getContextPreviewTypeLabel(node: CanvasNode): string {
         case 'document': return 'Document'
         case 'image': return 'Image'
         case 'video': return 'Video'
-        case 'aiChatThread': return 'Chat'
         default: return node.type
     }
 }
@@ -246,7 +232,7 @@ function renderContextVideoPreview(node: VideoCanvasNode, label: string, environ
 }
 
 function renderContextDocumentPreview(
-    node: DocumentCanvasNode | AiChatThreadCanvasNode,
+    node: DocumentCanvasNode,
     title: string,
     text: string,
     size: 'mini' | 'large',
@@ -280,7 +266,7 @@ function renderContextPreviewVisual(
 ): HTMLElement {
     if (node.type === 'image') return renderContextImagePreview(node, title, environment, size)
     if (node.type === 'video') return renderContextVideoPreview(node, title, environment, size)
-    if (node.type === 'document' || node.type === 'aiChatThread') return renderContextDocumentPreview(node, title, text, size)
+    if (node.type === 'document') return renderContextDocumentPreview(node, title, text, size)
     return html`<div className="workspace-ai-chat-panel-context-preview-document">${title}</div>` as HTMLElement
 }
 

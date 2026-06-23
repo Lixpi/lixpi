@@ -107,19 +107,14 @@ describe('settings - grouped configuration', () => {
 	})
 
 	it('keeps scalar UI settings finite and numerically valid', () => {
-		expectFiniteNumber(settings.aiChatThread.defaultDimensions.width, 'settings.aiChatThread.defaultDimensions.width')
-		expectFiniteNumber(settings.aiChatThread.defaultDimensions.height, 'settings.aiChatThread.defaultDimensions.height')
-		expectFiniteNumber(settings.aiChatThread.adjacentNodeGap, 'settings.aiChatThread.adjacentNodeGap')
 		expectFiniteNumber(settings.aiChatThread.panelTabs.minTabWidth, 'settings.aiChatThread.panelTabs.minTabWidth')
 		expectFiniteNumber(settings.aiChatThread.panelTabs.height, 'settings.aiChatThread.panelTabs.height')
 		expectFiniteNumber(
 			settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor,
 			'settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor',
 		)
-		expectFiniteNumber(settings.aiChatThread.rail.offset, 'settings.aiChatThread.rail.offset')
-		expectFiniteNumber(settings.aiChatThread.rail.edgeMargin, 'settings.aiChatThread.rail.edgeMargin')
-		expectFiniteNumber(settings.aiChatThread.rail.minSlideHeight, 'settings.aiChatThread.rail.minSlideHeight')
-		expectFiniteNumber(settings.aiChatThread.rail.dragGrabWidth, 'settings.aiChatThread.rail.dragGrabWidth')
+		expectFiniteNumber(settings.connector.autoAlign.minSlideHeight, 'settings.connector.autoAlign.minSlideHeight')
+		expectFiniteNumber(settings.connector.autoAlign.edgeMargin, 'settings.connector.autoAlign.edgeMargin')
 		expectFiniteNumber(settings.helpTooltip.interactiveHideDelayMs, 'settings.helpTooltip.interactiveHideDelayMs')
 		expectFiniteNumber(settings.connector.proximityConnectThreshold, 'settings.connector.proximityConnectThreshold')
 		expectFiniteNumber(settings.connector.menuConnectionSnapRadius, 'settings.connector.menuConnectionSnapRadius')
@@ -200,7 +195,6 @@ describe('settings - grouped configuration', () => {
 		const booleanEntries = [
 			['modelSelectorDropdown.useModalityFilter', settings.modelSelectorDropdown.useModalityFilter],
 			['aiChatThread.showHeader', settings.aiChatThread.showHeader],
-			['aiChatThread.useShiftingGradientBackground', settings.aiChatThread.useShiftingGradientBackground],
 			['aiPromptInput.useShiftingGradientBackground', settings.aiPromptInput.useShiftingGradientBackground],
 			['mediaNode.useZoomCompensatedResizeHandleScaling', settings.mediaNode.useZoomCompensatedResizeHandleScaling],
 			['connector.useZoomCompensatedScaling', settings.connector.useZoomCompensatedScaling],
@@ -220,7 +214,6 @@ describe('settings - grouped configuration', () => {
 			'settings.aiChatThread.styles': settings.aiChatThread.styles,
 			'settings.aiPromptInput.modelMenu.styles': settings.aiPromptInput.modelMenu.styles,
 			'settings.aiChatThread.panelTabs.styles': settings.aiChatThread.panelTabs.styles,
-			'settings.aiChatThread.rail.styles': settings.aiChatThread.rail.styles,
 			'settings.aiChatThread.sessionHistory.styles': settings.aiChatThread.sessionHistory.styles,
 			'settings.aiChatThread.contextPreview.styles': settings.aiChatThread.contextPreview.styles,
 			'settings.connector.styles': settings.connector.styles,
@@ -315,7 +308,6 @@ describe('settings - grouped configuration', () => {
 			'panelSectionDividerBorder',
 		])
 		expectNoOwnKeys(settings.aiChatThread.panelTabs, ['activeTabBoxShadow', 'activeTabInsetShadow'])
-		expectNoOwnKeys(settings.aiChatThread.rail, ['gradient', 'width', 'boundaryCircleColors'])
 		expectNoOwnKeys(settings.connector, ['lineDefaultColor', 'lineFocusColor', 'lineClickAreaWidth'])
 		expectNoOwnKeys(settings.selection, [
 			'marqueeBorderColor',

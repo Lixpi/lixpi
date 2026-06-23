@@ -70,18 +70,6 @@ export type CanvasBubbleMenuSettings = {
     zoomScaling: BoundedZoomScalingSettings
 }
 
-export type AiChatThreadRailSettings = {
-    offset: number
-    edgeMargin: number
-    minSlideHeight: number
-    dragGrabWidth: number
-    styles: {
-        gradient: string
-        width: string
-        boundaryCircleColors: [string, string, string]
-    }
-}
-
 export type RightSidePanelSettings = {
     defaultDimensions: {
         width: number
@@ -91,7 +79,6 @@ export type RightSidePanelSettings = {
         maxPaneMargin: number
     }
     layout: {
-        edgeGap: number
         contentInset: number
     }
     resizeHandle: {
@@ -180,13 +167,9 @@ export type AiChatThreadContextPreviewSettings = {
 
 export type AiChatThreadSettings = {
     showHeader: boolean
-    useShiftingGradientBackground: boolean
-    defaultDimensions: { width: number; height: number }
-    adjacentNodeGap: number
     panelTabs: AiChatThreadPanelTabsSettings
     sessionHistory: AiChatThreadSessionHistorySettings
     contextPreview: AiChatThreadContextPreviewSettings
-    rail: AiChatThreadRailSettings
     styles: {
         nodeBoxShadow: string
         nodeBorder: string
@@ -243,6 +226,13 @@ export type ConnectorSettings = {
     }
     proximityConnectThreshold: number
     menuConnectionSnapRadius: number
+    // Vertical auto-alignment of a connector's anchor along the target node's left edge.
+    autoAlign: {
+        // Minimum target-node height (px) before connector anchors can slide away from the vertical center.
+        minSlideHeight: number
+        // Fractional top/bottom margin where the sliding anchor stops, snapping to the nearest corner.
+        edgeMargin: number
+    }
     styles: {
         lineDefaultColor: string
         lineFocusColor: string
@@ -595,14 +585,12 @@ export const settings: Settings = {
             maxPaneMargin: 64,
         },
         layout: {
-            // Gap between the right side panel and viewport chrome that tracks it.
-            edgeGap: 15,
             // Inner horizontal inset for the panel content column.
             contentInset: 10,
         },
         resizeHandle: {
             // Horizontal offset in pixels from the panel's left edge to the resize handle center.
-            offset: -2,
+            offset: 0,
             // Screen-pixel width of the invisible resize hit target.
             grabWidth: 20,
             styles: {
@@ -616,9 +604,9 @@ export const settings: Settings = {
             openAriaLabel: 'Collapse right side panel',
             closedAriaLabel: 'Open right side panel',
             // Position when the panel is open.
-            openOffset: 'calc(var(--workspace-right-side-panel-width) + var(--workspace-right-side-panel-edge-gap) + 5px)',
+            openOffset: 'calc(var(--workspace-right-side-panel-width) + 5px)',
             // Travel distance used when the panel is closed.
-            closedTravel: 'calc(var(--workspace-right-side-panel-width) + var(--workspace-right-side-panel-edge-gap) - 10px)',
+            closedTravel: 'calc(var(--workspace-right-side-panel-width) - 10px)',
             top: '15px',
             size: '15px',
         },
@@ -635,16 +623,12 @@ export const settings: Settings = {
         },
     },
 
-    // AI chat thread presentation and interaction settings.
+    // AI chat thread panel presentation and interaction settings. The thread is a
+    // read-only transcript hosted in the right side panel; there is no on-canvas
+    // thread node.
     aiChatThread: {
-        // Hide or show the document title inside AI chat thread nodes on the workspace canvas.
+        // Hide or show the thread title inside the AI chat panel.
         showHeader: false,
-        // Enable the shifting gradient background on AI chat thread canvas nodes.
-        useShiftingGradientBackground: false,
-        // Default canvas-unit size for newly created AI chat thread nodes.
-        defaultDimensions: { width: 640, height: 480 },
-        // Canvas-unit gap when a new AI chat thread is placed next to a source media node.
-        adjacentNodeGap: 50,
 
         // AI Chat panel tab switch geometry.
         panelTabs: {
@@ -693,7 +677,7 @@ export const settings: Settings = {
             },
         },
 
-        // AI Chat panel composer context-preview tray and popover presentation.
+        // Theming for the AI Chat panel's context-preview tray chips and hover popover. Verified single-use: these tokens only feed the `--workspace-ai-chat-panel-context-*` CSS variables, applied to the panel element in WorkspaceCanvas.applyAiChatPanelContextPreviewSettings. The shared components/contextPreview tile renderer is reused elsewhere (e.g. generated-media info panels) but does not read these tokens, so the settings stay panel-scoped here rather than in a standalone section.
         contextPreview: {
             styles: {
                 // Color for the top context controls row.
@@ -730,30 +714,10 @@ export const settings: Settings = {
             },
         },
 
-        // Vertical rail presentation and hit-target settings for AI chat threads.
-        rail: {
-            // Horizontal offset in pixels from the thread node's left edge.
-            offset: -2,
-            // Fractional top and bottom margin where connector anchors stop sliding along the rail.
-            edgeMargin: 0.065,
-            // Minimum rail height in pixels before connectors can slide away from the center.
-            minSlideHeight: 120,
-            // Screen-pixel width of the invisible rail drag hit target. Lower values require a more precise grab.
-            dragGrabWidth: 20,
-            styles: {
-                // Background gradient painted on the visible rail line.
-                gradient: 'linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%)',
-                // Visible line width; this does not change the draggable hit target.
-                width: '3px',
-                // Colors for the boundary circle's outer fill, ring, and inner fill.
-                boundaryCircleColors: ['#F3E4F2', '#C5C0EE', 'rgb(202, 180, 201)'],
-            },
-        },
-
         styles: {
-            // Box shadow around the AI chat thread canvas node. Use `none` for a flat panel surface.
+            // Box shadow around the AI chat panel surface. Use `none` for a flat panel surface.
             nodeBoxShadow: 'none',
-            // Border around the AI chat thread canvas node. Use `none` to remove the browser-default border.
+            // Border around the AI chat panel surface. Use `none` to remove the browser-default border.
             nodeBorder: 'none',
             // Border used by AI Chat panel section dividers.
             panelSectionDividerBorder: '1px solid rgba(26, 39, 68, 0.09)',
@@ -829,6 +793,13 @@ export const settings: Settings = {
         proximityConnectThreshold: 700,
         // Renderer-coordinate distance at which menu-driven connection placement snaps to a target.
         menuConnectionSnapRadius: 110,
+        // Vertical auto-alignment of a connector's anchor along the target node's left edge.
+        autoAlign: {
+            // Minimum target-node height in pixels before the anchor can slide away from the vertical center.
+            minSlideHeight: 120,
+            // Fractional top/bottom margin where the sliding anchor stops, snapping to the nearest corner.
+            edgeMargin: 0.065,
+        },
         styles: {
             // Default color for connector lines between nodes.
             lineDefaultColor: colorPalette.steelBlue,

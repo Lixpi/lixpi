@@ -8,13 +8,12 @@ import {
     buildCanvasWideCandidateSnapshot,
     buildWorkspaceContextSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
-    isChatRootNode,
 } from '$src/services/ai-image-branching.ts'
 import type { CanvasNode, WorkspaceEdge } from '@lixpi/constants'
 
 const rootNode = {
     nodeId: 'thread-node-1',
-    type: 'aiChatThread',
+    type: 'document',
     referenceId: 'thread-1',
     position: { x: 0, y: 0 },
     dimensions: { width: 100, height: 100 },
@@ -198,7 +197,7 @@ const cubistDocNode = {
 
 const threadContextNode = {
     nodeId: 'thread-context',
-    type: 'aiChatThread',
+    type: 'document',
     referenceId: 'thread-context-ref',
     position: { x: 0, y: 0 },
     dimensions: { width: 100, height: 100 },
@@ -623,14 +622,6 @@ describe('buildCanvasWideCandidateSnapshot', () => {
 
         expect(snapshot.activeTargetNodeId).toBeUndefined()
         expect(snapshot.candidates.some((candidate) => candidate.roleHints.includes('active-target'))).toBe(false)
-    })
-})
-
-describe('isChatRootNode', () => {
-    it('returns true only for ai chat thread nodes', () => {
-        expect(isChatRootNode({ type: 'aiChatThread', nodeId: 'thread' } as CanvasNode)).toBe(true)
-        expect(isChatRootNode({ type: 'image', nodeId: 'image' } as CanvasNode)).toBe(false)
-        expect(isChatRootNode({ type: 'document', nodeId: 'doc' } as CanvasNode)).toBe(false)
     })
 })
 
