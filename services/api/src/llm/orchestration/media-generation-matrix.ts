@@ -569,6 +569,8 @@ export class MediaGenerationMatrixOrchestrator {
         const mediaBranchLineagePlan = this.lineagePlanner.buildPlan({
             generationRequestId: normalized.generationRequestId,
             reasoningModelIds: normalized.reasoningModelIds,
+            imageModelIds: normalized.imageModelIds,
+            videoModelIds: normalized.videoModelIds,
             imageBranchCandidateSnapshot: state.imageBranchCandidateSnapshot,
             imageBranchResolution: state.imageBranchResolution,
             workspaceContextSnapshot: state.workspaceContextSnapshot,

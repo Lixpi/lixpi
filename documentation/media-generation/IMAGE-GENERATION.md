@@ -162,7 +162,7 @@ Image editing is **provider-agnostic** and driven by canvas edges rather than pr
 ```
 
 {% callout type="note" %}
-Generated-image size and the vertical spacing of stacked images from one thread are controlled by `settings.imageBranchLineage`; the "Edit in New Thread" horizontal-chain geometry is controlled by `settings.aiChatThread`. The full placement, collision, and lineage rules are owned by [Branch Lineage](./BRANCH-LINEAGE.md) and [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).
+Generated-media size and branch-lineage spacing are controlled by `settings.mediaBranchLineage`; the "Edit in New Thread" horizontal-chain geometry is controlled by `settings.aiChatThread`. The full placement, collision, and lineage rules are owned by [Branch Lineage](./BRANCH-LINEAGE.md) and [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).
 {% /callout %}
 
 ### Editor Preservation During Generation

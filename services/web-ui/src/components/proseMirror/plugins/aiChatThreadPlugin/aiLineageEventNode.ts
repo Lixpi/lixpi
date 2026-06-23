@@ -1,8 +1,7 @@
 // @ts-nocheck
-// Explicit workflow event node used by read-only projections and future
-// canvas-native chat assembly. Live stream sections still persist lineage ids
-// on aiReasoningSection; projections can materialize those ids as standalone
-// event blocks without inheriting unrelated ancestor events.
+// Explicit workflow event node used by live chat history and read-only
+// projections. Matrix streams persist lineage ids on aiReasoningSection;
+// single-run streams materialize API lineage assignments as standalone events.
 import {
     createAiLineageEventMarker,
     getAiLineageEventLabel,
@@ -12,7 +11,8 @@ import {
 export const aiLineageEventNodeType = 'aiLineageEvent'
 
 function normalizeLineageEventKind(value: unknown): AiLineageEventKind {
-    return value === 'branch-origin' ? 'branch-origin' : 'branch-fork'
+    if (value === 'branch-origin' || value === 'branch-line') return value
+    return 'branch-fork'
 }
 
 export const aiLineageEventNodeSpec = {
@@ -20,6 +20,8 @@ export const aiLineageEventNodeSpec = {
         kind: { default: 'branch-fork' },
         branchOriginNodeId: { default: '' },
         branchForkNodeId: { default: '' },
+        branchLineNodeId: { default: '' },
+        reasoningModelId: { default: '' },
     },
     group: 'block',
     atom: true,
@@ -33,6 +35,8 @@ export const aiLineageEventNodeSpec = {
                     kind: normalizeLineageEventKind(dom.getAttribute('data-lineage-event-kind')),
                     branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
                     branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
+                    branchLineNodeId: dom.getAttribute('data-branch-line-node-id') || '',
+                    reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
                 }
             },
         },
@@ -48,28 +52,30 @@ export const aiLineageEventNodeSpec = {
                 'data-lineage-event-kind': kind,
                 'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
                 'data-branch-fork-node-id': node.attrs.branchForkNodeId,
+                'data-branch-line-node-id': node.attrs.branchLineNodeId,
+                'data-reasoning-model-id': node.attrs.reasoningModelId,
             },
         ]
     },
 }
 
 export const aiLineageEventNodeView = (node) => {
-    let dom = createAiLineageEventMarker({
+    const buildMarker = () => createAiLineageEventMarker({
         kind: normalizeLineageEventKind(node.attrs.kind),
         branchOriginNodeId: node.attrs.branchOriginNodeId || '',
         branchForkNodeId: node.attrs.branchForkNodeId || '',
+        branchLineNodeId: node.attrs.branchLineNodeId || '',
+        reasoningModelId: node.attrs.reasoningModelId || '',
     })
+
+    let dom = buildMarker()
 
     return {
         dom,
         update: (updatedNode) => {
             if (updatedNode.type.name !== aiLineageEventNodeType) return false
             node = updatedNode
-            const nextDom = createAiLineageEventMarker({
-                kind: normalizeLineageEventKind(node.attrs.kind),
-                branchOriginNodeId: node.attrs.branchOriginNodeId || '',
-                branchForkNodeId: node.attrs.branchForkNodeId || '',
-            })
+            const nextDom = buildMarker()
             dom.replaceWith(nextDom)
             dom = nextDom
             return true

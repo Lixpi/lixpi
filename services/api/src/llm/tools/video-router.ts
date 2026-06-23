@@ -67,6 +67,7 @@ export class VideoRouter {
                 generationRun: state.generationRun,
                 mediaModelId,
                 mediaType: 'video',
+                lineageAssignments: state.mediaBranchLineagePlan?.runAssignments,
             })
             : state.generationRun
 

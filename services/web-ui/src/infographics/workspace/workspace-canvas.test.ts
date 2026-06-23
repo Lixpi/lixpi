@@ -91,6 +91,14 @@ function loadAiGeneratedImageNode(): string {
 	return readSourceFile('../../components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts', 'components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts')
 }
 
+function loadAiGeneratedMediaCanvasRouter(): string {
+	return readSourceFile('../../components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedMediaCanvasRouter.ts', 'components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedMediaCanvasRouter.ts')
+}
+
+function loadAiPromptComposer(): string {
+	return readSourceFile('../../components/proseMirror/aiPromptComposer.ts', 'components/proseMirror/aiPromptComposer.ts')
+}
+
 function loadLayout(): string {
 	return readSourceFile('../../views/layouts/layout.svelte', 'views/layouts/layout.svelte')
 }
@@ -282,7 +290,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		const activeBlock = extractBlock(infoButtonBlock, '&.is-active')
 
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl, pendingBranchMarkerOverlayEl],')
 		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
 		expectSourceToContain(ts, 'getCanvasChromeScreenLayout({')
 		expectSourceToContain(ts, 'baseGap: settings.mediaNode.generatedMediaChrome.topGap,')
@@ -452,7 +460,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(outlineRendererTs, 'this.ease = options.ease ?? Easing.travelingOutlineTransition')
 		expectSourceToContain(pixiLayerTs, 'function setGeneratingImageNodes(nodeIds: Set<string>)')
 		expectSourceToContain(settingsTs, 'gap: 3')
-		expectSourceToContain(settingsTs, 'preFrameCircleScale: 1.3 / 3')
+		expectSourceToContain(settingsTs, 'preFrameCircleScale: 1 / 3')
 		expectSourceToContain(settingsTs, 'snakeWidth: 9')
 		expectSourceToContain(settingsTs, 'snakeTailWidthFraction: 0.14')
 		expectSourceToContain(settingsTs, 'snakeLengthFraction: 0.24')
@@ -649,7 +657,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const panelPosition = ts.slice(panelPositionStart, panelPositionEnd)
 
 		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl = createGeneratedMediaInfoPanelLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl, pendingBranchMarkerOverlayEl],')
 		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
 		expectSourceToContain(ts, 'function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode)')
 		expectSourceToContain(ts, "panel.setAttribute('data-media-info-panel-node-id', node.nodeId)")
@@ -1116,13 +1124,6 @@ describe('AI chat thread — auto-grow TS infrastructure', () => {
 		expectExcerptNotToContain(fnBody, 'requestAnimationFrame')
 	})
 
-	it('updateThreadNodeVisibility still repositions thread companions when visibility changes', () => {
-		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'repositionAllThreadFloatingInputs')
-	})
-
 	it('updateThreadNodeVisibility schedules disabled auto-grow for compatibility', () => {
 		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
@@ -1195,13 +1196,6 @@ describe('AI chat thread — empty thread visibility', () => {
 		expectExcerptToContain(fnBody, 'threadNodeEl.querySelector')
 	})
 
-	it('positionElementBelowNode accounts for hidden thread nodes', () => {
-		const fnMatch = ts.match(/function\s+positionElementBelowNode[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'getThreadTopOffset')
-	})
-
 	it('renderNodes clears hiddenEmptyThreadNodeIds', () => {
 		const renderMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
 		expect(renderMatch).not.toBeNull()
@@ -1232,41 +1226,12 @@ describe('AI chat thread — empty thread visibility', () => {
 		expectExcerptToContain(fnBody, "hiddenEmptyThreadNodeIds.delete")
 	})
 
-	it('defines getThreadTopOffset helper', () => {
-		const fnMatch = ts.match(/function\s+getThreadTopOffset[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'hiddenEmptyThreadNodeIds')
-	})
-
 	it('updateThreadNodeVisibility uses hideThreadNode and showThreadNode', () => {
 		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 		expectExcerptToContain(fnBody, 'showThreadNode')
 		expectExcerptToContain(fnBody, 'hideThreadNode')
-	})
-
-	it('hidden thread state collapses thread top offset', () => {
-		const fnMatch = ts.match(/function\s+getThreadTopOffset[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'hiddenEmptyThreadNodeIds.has')
-		expectExcerptToContain(fnBody, '? 0 : threadHeight + 16')
-	})
-
-	it('drag mousemove uses getThreadTopOffset for floating input positioning', () => {
-		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'getThreadTopOffset')
-	})
-
-	it('resize mousemove uses getThreadTopOffset for floating input positioning', () => {
-		const fnMatch = ts.match(/function\s+handleResizeStart[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'getThreadTopOffset')
 	})
 })
 
@@ -1448,12 +1413,6 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'function destroyAllThreadRails(')
 	})
 
-	it('repositionAllThreadFloatingInputs also repositions rails', () => {
-		const fnMatch = ts.match(/function\s+repositionAllThreadFloatingInputs[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'repositionThreadRail(')
-	})
-
 	it('drag mousemove handler repositions the rail', () => {
 		expectSourceToContain(ts, 'dragRail')
 		expectSourceToContain(ts, 'applyStyle(dragRail, { left:')
@@ -1546,14 +1505,14 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectExcerptToContain(fnMatch![0], 'connectionManager?.clearRailHeights()')
 	})
 
-	it('updateSelectionDrivenUi never shows the detached floating input under any node', () => {
+	it('updateSelectionDrivenUi never references a detached floating input under any node', () => {
 		const fnMatch = ts.match(/function\s+updateSelectionDrivenUi[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		// The deprecated detached prompt-input-below-node must never render for any
-		// node type (documents, threads, images, video).
-		expectExcerptNotToContain(fnBody, 'showFloatingInput')
-		expectExcerptToContain(fnBody, 'hideFloatingInput')
+		// The deprecated detached prompt-input-below-node was removed entirely in
+		// favor of the screen-fixed canvas composer; selection UI must not touch a
+		// per-node floating input at all.
+		expectExcerptNotToContain(fnBody, 'FloatingInput')
 		expectExcerptNotToContain(fnBody, 'promptInputController.setTarget')
 	})
 
@@ -1592,7 +1551,7 @@ describe('Vertical rail — TS infrastructure', () => {
 	it('keeps AI chat thread editor in the canvas-owned singleton panel', () => {
 		const start = ts.indexOf('function renderActiveAiChatPanel')
 		expect(start).toBeGreaterThan(-1)
-		const end = ts.indexOf('function createFloatingInput', start)
+		const end = ts.indexOf('function createGlobalCanvasComposer', start)
 		expect(end).toBeGreaterThan(start)
 		const fnBody = ts.slice(start, end)
 
@@ -1603,19 +1562,16 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectExcerptToContain(fnBody, 'paneEl.appendChild(backdropEl)')
 		expectExcerptToContain(fnBody, 'handleActiveAiChatPanelResizeStart')
 		expectExcerptToContain(fnBody, 'aiChatThreadRailBoundaryCircle')
-		expectSourceToContain(ts, 'function createFloatingInput(): void')
-		expectSourceToContain(ts, 'const promptEl = html`<div className="ai-prompt-input-floating workspace-ai-chat-floating-panel-prompt nopan"></div>`')
-		expectSourceToContain(ts, 'applyAiPromptInputStyleSettings(promptEl)')
+		// The panel's prompt input reuses the shared, decoupled composer component.
+		expectExcerptToContain(fnBody, 'createAiPromptComposer({')
+		expectExcerptToContain(fnBody, "className: 'workspace-ai-chat-floating-panel-prompt'")
 		expectSourceNotToContain(ts, `AiChat${'Panel.svelte'}`)
 	})
 
-	it('keeps AI prompt input style values in one helper', () => {
-		const fnMatch = ts.match(/function\s+applyAiPromptInputStyleSettings[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-
-		expectExcerptToContain(fnBody, "promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)")
-		expect(fnBody).not.toMatch(/open-prompt-z-index/)
+	it('keeps AI prompt input style values in the shared composer component', () => {
+		const composer = loadAiPromptComposer()
+		expectSourceToContain(composer, "this.element.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)")
+		expectSourceNotToContain(composer, 'open-prompt-z-index')
 	})
 
 	it('opens the panel without requiring an existing thread and creates standalone history on submit', () => {
@@ -1639,13 +1595,14 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-remove')
 		expectSourceToContain(ts, 'function refreshContextChipTray(): void')
 		expectSourceToContain(ts, 'function destroyContextPreviewTiles(): void')
-		expectSourceToContain(ts, 'activeContextPreviewTiles.clear()')
+		expectSourceToContain(ts, 'contextPreviewTilesByTray: Map<HTMLDivElement, Set<ContextPreviewTileInstance>>')
+		expectSourceToContain(ts, 'for (const trayEl of Array.from(contextPreviewTilesByTray.keys()))')
 		expectSourceToContain(ts, 'function addContextChips(nodeIds: Iterable<string>): void')
 		expectSourceToContain(ts, 'function removeContextChip(nodeId: string): void')
 		expectSourceToContain(ts, 'function clearExplicitContextChips(): void')
 		expectSourceToContain(ts, 'function createAiChatPanelContextTrayElement(): HTMLDivElement')
 		expectSourceToContain(ts, 'removeContextChip(nodeId)')
-		expectSourceToContain(ts, 'activeContextPreviewTiles.add(previewTile)')
+		expectSourceToContain(ts, 'trayTiles.add(previewTile)')
 		expectSourceToContain(ts, 'const previewTile = createContextPreviewTile({')
 		// Submitting a standalone chat force-includes the explicit chips.
 		expectSourceToContain(ts, 'const chipNodeIds = aiChatPanelState.contextChips')
@@ -1762,17 +1719,17 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, '...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),')
 		expectSourceToContain(ts, 'referenceNodeIds: candidateNodeIds,')
 		expectSourceToContain(ts, ': rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)')
-		expectSourceToContain(ts, 'const placementNode = getGeneratedMediaPlacementNode(threadId, generationRun)')
-			expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode')
+		expectSourceToContain(ts, 'const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)')
+		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(generationRun, [branchOriginNode, branchForkNode, branchLineNode])')
 		expectSourceToContain(ts, 'partialImageTracker.set(runKey, {')
 		expectSourceToContain(ts, 'nodeId,')
 		expectSourceToContain(ts, 'fileId: fileId || \'\',')
 		expectSourceToContain(ts, 'placementKey,')
 		expectSourceToContain(ts, 'hasReceivedFrame: Boolean(imageUrl),')
-		expectSourceToContain(ts, '(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}),')
+		expectSourceToContain(ts, 'sourceNodeId: edgeSourceNode.nodeId,')
 		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution, generationRun)')
 		expectSourceToContain(ts, 'placementAnchorNodeId: placement.placementAnchorNodeId ?? referenceNodeIds[0]')
-		expectSourceToContain(ts, 'branchId: resolution.branchId ?? placement.branchId')
+		expectSourceToContain(ts, 'imageBranchResolution: resolution')
 		expectSourceToContain(ts, 'imageBranchResolution: resolution')
 		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds([')
 		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds(resolution.referenceImageNodeIds)')
@@ -1783,7 +1740,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string, generationRun?: MediaGenerationRunMeta): Rect | undefined')
 		expectSourceToContain(ts, 'function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number, generationRun?: MediaGenerationRunMeta): { x: number; y: number } | undefined')
 		expectSourceToContain(ts, 'settings.imageBranchLineage.rootOutputGap')
-		expectSourceToContain(ts, 'const position = getGeneratedMediaInsertionPosition(threadId, imageHeight, generationRun)')
+		expectSourceToContain(ts, 'const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)')
 		expectSourceNotToContain(ts, 'if (!sourceThread) return\n            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)')
 	})
 
@@ -1803,7 +1760,11 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(aiChatThreadPlugin, "if (type === 'image_error')")
 		expectSourceToContain(aiChatThreadPlugin, 'this.handleImageError(view, event)')
 		expectSourceToContain(aiChatThreadPlugin, "if (type === 'context_relevance_resolved')")
-		expectSourceToContain(aiChatThreadPlugin, 'callbacks.onWorkspaceContextResolvedToCanvas?.({')
+		// Canvas placement dispatch is centralized in the shared router, used by
+		// both the chat plugin and the thread-less canvas composer.
+		expectSourceToContain(aiChatThreadPlugin, 'routeSegmentEventToCanvas(event)')
+		const canvasRouter = loadAiGeneratedMediaCanvasRouter()
+		expectSourceToContain(canvasRouter, 'onWorkspaceContextResolvedToCanvas?.({')
 		expectSourceToContain(aiGeneratedImageNode, 'onWorkspaceContextResolvedToCanvas?: (data: {')
 		expectSourceToContain(aiGeneratedImageNode, 'onImageErrorToCanvas?: (data: {')
 		expectSourceToContain(aiGeneratedImageNode, 'resolution: WorkspaceContextResolution')
@@ -1850,7 +1811,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(scss, 'mask-image: linear-gradient')
 		expectSourceToContain(scss, '@media (prefers-reduced-transparency: reduce)')
 		expectSourceToContain(svelte, 'class:workspace-canvas-chat-panel-open')
-		expectSourceToContain(svelte, 'workspace-media-library-launcher')
+		expectSourceToContain(svelte, 'workspace-canvas-action-panel-right workspace-canvas-action-panel-single')
 		expectSourceToContain(svelte, 'workspace-ai-chat-launcher')
 		expectSourceToContain(svelte, 'mediaFoloderIcon')
 		expectSourceToContain(svelte, 'aiChatPanelCollapseIcon')
@@ -1858,7 +1819,6 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceNotToContain(svelte, 'workspace-ai-chat-launcher-tooltip')
 		expectSourceToContain(svelte, 'workspace-zoom-indicator')
 		expectSourceNotToContain(svelte, 'workspace-canvas-utility-capsule')
-		expectSourceToContain(scss, '.workspace-canvas-chat-panel-open .workspace-media-library-launcher')
 		expectSourceToContain(scss, '.workspace-canvas-chat-panel-open .workspace-ai-chat-launcher')
 		expectSourceToContain(scss, 'top: 15px')
 		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + 5px)')
@@ -1903,7 +1863,6 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expectSourceToContain(ts, 'function getSingleSelectedNodeId(): string | null')
 		expectSourceToContain(ts, 'const singleSelectedNodeId = getSingleSelectedNodeId()')
 		expectSourceToContain(ts, 'hideCanvasBubbleMenu()')
-		expectSourceToContain(ts, 'hideFloatingInput()')
 	})
 
 	// -------------------------------------------------------------------------
@@ -2199,36 +2158,6 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		// preserve the original for the click path.
 		expectSourceToContain(ts, 'handleDragStart(e, node.nodeId, {')
 		expectSourceNotToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
-	})
-
-	it('treats AI chat thread floating input as part of the same selected composite', () => {
-		expectSourceToContain(ts, 'function getSelectionBoundsForNode(node: CanvasNode): Rect')
-		expectSourceToContain(ts, 'const threadFloatingInput = threadFloatingInputs.get(node.nodeId)')
-		expectSourceToContain(ts, 'const inputTop = position.y + getThreadTopOffset(node.nodeId, dimensions.height)')
-		expectSourceToContain(ts, 'const inputWidth = threadFloatingInput.el.offsetWidth || dimensions.width')
-		expectSourceToContain(ts, 'const inputHeight = threadFloatingInput.el.offsetHeight')
-		expectSourceToContain(ts, 'rectsOverlap(rect, getSelectionBoundsForNode(node))')
-		expectSourceToContain(ts, "threadFloatingInputs.get(nodeId)?.el.classList.add('is-selected')")
-		expectSourceToContain(ts, "threadFloatingInputs.get(nodeId)?.el.classList.remove('is-selected')")
-		expect(scss).toMatch(/\.ai-prompt-input-thread-persistent\s*\{[\s\S]*?&\.is-selected/)
-	})
-
-	it('uses only floating input bounds for hidden empty threads in selection hit-testing', () => {
-		const fnMatch = ts.match(/function\s+getSelectionBoundsForNode[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-
-		// Hidden empty threads must use only the floating input bounds,
-		// not the invisible thread node dimensions, to prevent phantom
-		// selection over areas the user cannot see
-		expectExcerptToContain(fnBody, 'const isHidden = hiddenEmptyThreadNodeIds.has(node.nodeId)')
-		expectExcerptToContain(fnBody, 'if (isHidden) {')
-		expectExcerptToContain(fnBody, 'right = position.x + inputWidth')
-		expectExcerptToContain(fnBody, 'bottom = inputTop + inputHeight')
-
-		// Visible threads still use Math.max to combine both bounds
-		expectExcerptToContain(fnBody, 'right = Math.max(right, position.x + inputWidth)')
-		expectExcerptToContain(fnBody, 'bottom = Math.max(bottom, inputTop + inputHeight)')
 	})
 
 	it('marquee selection includes hidden empty threads (they are selectable via their floating input)', () => {

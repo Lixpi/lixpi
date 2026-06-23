@@ -1,6 +1,5 @@
 import {
     createImageGenerationTraceDetails,
-    getImageGenerationSummaryTitle,
     type ImageGenerationTraceDetailsAttrs,
     type ImageGenerationTraceDetailsOptions,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
@@ -30,33 +29,21 @@ export const aiCollapsibleBlockNodeSpec = {
     draggable: false,
     parseDOM: [
         {
-            tag: 'details.ai-collapsible-block',
-            getAttrs(dom: HTMLDetailsElement) {
-                const summary = dom.querySelector('summary')
-                return {
-                    title: summary?.textContent || 'Image generation prompt',
-                    isOpen: dom.open,
-                    isStreaming: false,
-                    imageGenerationTrace: null,
-                    imageGenerationTraceId: null,
-                    videoGenerationTrace: null,
-                    generationRequestId: dom.getAttribute('data-generation-request-id') || '',
-                    reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
-                    mediaRunId: dom.getAttribute('data-media-run-id') || '',
-                    reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
-                    mediaModelId: dom.getAttribute('data-media-model-id') || '',
-                    mediaType: dom.getAttribute('data-media-type') || '',
-                    variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
-                }
+            tag: 'div.ai-generation-trace-block',
+            getAttrs(dom: HTMLElement) {
+                return parseTraceBlockAttrs(
+                    dom,
+                    dom.getAttribute('data-title') || 'Image generation prompt',
+                )
             },
         },
     ],
     toDOM(node: any) {
         return [
-            'details',
+            'div',
             {
-                class: `ai-collapsible-block${node.attrs.isStreaming ? ' is-streaming' : ''}`,
-                ...(node.attrs.isOpen ? { open: 'true' } : {}),
+                class: `ai-generation-trace-block${node.attrs.isStreaming ? ' is-streaming' : ''}`,
+                'data-title': node.attrs.title,
                 'data-generation-request-id': node.attrs.generationRequestId,
                 'data-reasoning-run-id': node.attrs.reasoningRunId,
                 'data-media-run-id': node.attrs.mediaRunId,
@@ -65,8 +52,7 @@ export const aiCollapsibleBlockNodeSpec = {
                 'data-media-type': node.attrs.mediaType,
                 'data-variant-index': node.attrs.variantIndex == null ? '' : String(node.attrs.variantIndex),
             },
-            ['summary', {}, getSummaryTitle(node.attrs)],
-            ['div', { class: 'ai-collapsible-block-body' }, ['div', { class: 'ai-collapsible-block-content' }, 0]],
+            ['div', { class: 'ai-generation-trace-body' }, ['div', { class: 'ai-generation-trace-content' }, 0]],
         ]
     },
 }
@@ -77,8 +63,22 @@ function parseVariantIndex(value: string | null): number | null {
     return Number.isFinite(parsed) ? parsed : null
 }
 
-const getSummaryTitle = (attrs: ImageGenerationTraceDetailsAttrs): string => {
-    return getImageGenerationSummaryTitle(attrs)
+function parseTraceBlockAttrs(dom: HTMLElement, title: string) {
+    return {
+        title,
+        isOpen: false,
+        isStreaming: false,
+        imageGenerationTrace: null,
+        imageGenerationTraceId: null,
+        videoGenerationTrace: null,
+        generationRequestId: dom.getAttribute('data-generation-request-id') || '',
+        reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
+        mediaRunId: dom.getAttribute('data-media-run-id') || '',
+        reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
+        mediaModelId: dom.getAttribute('data-media-model-id') || '',
+        mediaType: dom.getAttribute('data-media-type') || '',
+        variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
+    }
 }
 
 export type AiCollapsibleBlockNodeViewOptions = {
@@ -87,40 +87,13 @@ export type AiCollapsibleBlockNodeViewOptions = {
 
 export const aiCollapsibleBlockNodeView = (
     node: any,
-    view: any,
-    getPos: () => number | undefined,
+    _view: any,
+    _getPos: () => number | undefined,
     options: AiCollapsibleBlockNodeViewOptions = {},
 ) => {
     const traceDetails = createImageGenerationTraceDetails(options.traceDetailsOptions)
     const wrapper = traceDetails.dom
-    const summary = traceDetails.summary
     const contentDom = traceDetails.contentDom
-
-    const handleSummaryMouseDown = (event: MouseEvent) => {
-        // Prevent the parent thread's mousedown focus handler from stealing the interaction.
-        event.preventDefault()
-        event.stopPropagation()
-    }
-
-    const handleSummaryClick = (event: MouseEvent) => {
-        event.preventDefault()
-        event.stopPropagation()
-
-        const pos = getPos()
-        if (pos === undefined) return
-
-        const newOpen = !wrapper.open
-        wrapper.open = newOpen
-        if (newOpen) renderTrace(node)
-
-        if (!view.editable) return
-
-        const tr = view.state.tr.setNodeMarkup(pos, undefined, {
-            ...view.state.doc.nodeAt(pos)?.attrs,
-            isOpen: newOpen,
-        })
-        view.dispatch(tr)
-    }
 
     const renderTrace = (currentNode: any) => {
         traceDetails.render({
@@ -129,26 +102,12 @@ export const aiCollapsibleBlockNodeView = (
         })
     }
 
-    if (node.attrs.isOpen) {
-        wrapper.open = true
-    }
-
     renderTrace(node)
-
-    summary.addEventListener('mousedown', handleSummaryMouseDown)
-    summary.addEventListener('click', handleSummaryClick)
 
     return {
         dom: wrapper,
         contentDOM: contentDom,
-        stopEvent(event: Event) {
-            return event.target === summary || summary.contains(event.target as Node)
-        },
         ignoreMutation(mutation: MutationRecord) {
-            if (mutation.type === 'attributes'
-                && mutation.attributeName === 'open'
-                && mutation.target === wrapper) return true
-
             const target = mutation.target as Node
             return target !== contentDom && !contentDom.contains(target)
         },
@@ -156,7 +115,6 @@ export const aiCollapsibleBlockNodeView = (
             if (updatedNode.type.name !== aiCollapsibleBlockNodeType) return false
 
             node = updatedNode
-            wrapper.open = !!updatedNode.attrs.isOpen
             renderTrace(updatedNode)
 
             if (updatedNode.attrs.isStreaming) {
@@ -166,10 +124,6 @@ export const aiCollapsibleBlockNodeView = (
             }
 
             return true
-        },
-        destroy() {
-            summary.removeEventListener('mousedown', handleSummaryMouseDown)
-            summary.removeEventListener('click', handleSummaryClick)
         },
     }
 }

@@ -19,7 +19,7 @@ This feature is part of Lixpi's artifact-piping architecture (see [Product Overv
 
 **Branch** — A lineage of generated media nodes that represent edits or variants of the same visual artifact. Descendants share a `branchId` when the VLM resolves a prompt as continuing an existing target.
 
-**Parent Media** — The generated media node selected as the edit parent for a new generation. Stored as API-assigned `generatedBy.parentMediaNodeId`; `generatedBy.parentImageNodeId` exists only as a legacy alias for older image-named consumers.
+**Parent Media** — The generated media node selected as the edit parent for a new generation. Stored as API-assigned `generatedBy.parentMediaNodeId`; `generatedBy.parentImageNodeId` is a schema alias and must not drive browser topology.
 
 **Base Context** — Images, videos, documents, and thread content force-included through workspace edges, explicit panel context chips, or automatic workspace relevance. Base context narrows candidates and can also be selected by the VLM as visual reference material. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md).
 
@@ -68,7 +68,7 @@ Lixpi solves this by combining deterministic graph narrowing with VLM role assig
 - **One decision feeds routing and provenance.** The references sent to the model, the generated metadata, and branch-root provenance all come from the resolver result.
 - **No silent guessing.** Resolver failure is user-visible and *stops* generation instead of falling back to regexes, recency, or all-variant injection.
 - **Feature extraction stays independent.** `/use` feature references resolve before branch resolution, and their injected feature image blocks are preserved by the branch resolver.
-- **The root media is the branch unless a temporary origin is required.** The first generated image/video of a new branch carries its prompt and references on `generatedBy`. Continuations attach to the existing branch. Fresh multi-model requests with no source/thread node persist a `branchOrigin` marker so siblings share one explicit graph origin. Multi-reasoning media requests add `branchFork` markers under that origin or current lineage source so each reasoning run owns its generated descendants.
+- **The root media is the branch unless a temporary origin is required.** The first generated image/video of a new branch carries its prompt and references on `generatedBy`. Continuations attach to the existing branch. Fresh multi-model requests with no source/thread node persist a `branchOrigin` marker so siblings share one explicit graph origin. Multi-reasoning media requests add `branchFork` markers under that origin or current lineage source so each reasoning run owns its generated descendants; multiple image/video models invoked by the same reasoning run share that reasoning fork.
 
 ## System Architecture
 
@@ -76,7 +76,7 @@ The browser builds non-authoritative candidate and workspace-context snapshots a
 
 ## Hard Frontend Boundary
 
-Do not put branch-lineage decision logic in `services/web-ui`. The browser is allowed to render, animate, collect input, build non-authoritative snapshots, and compute layout. It is not allowed to decide branch IDs, `branchOrigin` creation, `branchFork` creation, lineage parentage, generated-media `parentMediaNodeId` or legacy `parentImageNodeId`, model/fork fanout, resolver outcomes, or marker provenance.
+Do not put branch-lineage decision logic in `services/web-ui`. The browser is allowed to render, animate, collect input, build non-authoritative snapshots, and compute layout. It is not allowed to decide branch IDs, `branchOrigin` creation, `branchFork` creation, lineage parentage, generated-media parent fields, model/fork fanout, resolver outcomes, or marker provenance.
 
 Those decisions must be made in `services/api` and streamed or persisted through typed contracts such as `IMAGE_BRANCH_RESOLVED`, `MEDIA_LINEAGE_PLANNED`, and `MediaRunLineageAssignment`. This rule exists because lineage is distributed system state: multiple browsers, retries, reloads, and collaborators must converge on the same graph without relying on one client's local canvas state.
 
@@ -239,7 +239,7 @@ export type ImageBranchCandidateImage = {
 export type ImageBranchCandidateSnapshot = {
     resolverVersion: string
     threadId: string
-    regionNodeId: string // legacy field name: current root/request anchor node id
+    regionNodeId: string // current root/request anchor node id
     promptText: string
     promptFingerprint: string
     candidates: ImageBranchCandidateImage[]
@@ -292,9 +292,11 @@ The plan assigns:
 - branch-origin marker ID and neutral root provenance when a fresh standalone request needs a visible root,
 - branchFork marker IDs, parent marker/source IDs, and reasoning-run provenance,
 - per-run `MediaRunLineageAssignment` entries copied into `generationRun.lineageAssignment`,
-- generated-media `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, legacy `parentImageNodeId`, selected references, operation kind, prompt text, prompt fingerprint, and created-at ordering.
+- generated-media `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, `parentImageNodeId` schema alias, selected references, operation kind, prompt text, prompt fingerprint, and created-at ordering.
 
-The browser must not derive `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, legacy `parentImageNodeId`, lineage parent selection, or marker provenance from model counts, prompt text, selected nodes, or local canvas state. It may compute marker/media positions from the plan and the visible canvas.
+The browser must not derive `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, lineage parent selection, or marker provenance from model counts, prompt text, selected nodes, local canvas state, existing connector edges, existing generated nodes, persisted alias fields, or DOM state. Branch forks are assigned per reasoning run by the API; media-model fanout under a reasoning run shares that fork. The browser may compute marker/media positions from the plan and the visible canvas.
+
+If the API plan or the concrete `generationRun.lineageAssignment` is missing, incomplete, or inconsistent, generation must wait for the API event or fail visibly. Do not add fallback topology, compatibility shims, best-effort parent recovery, or provider/router assignment recovery. The fix belongs in the API planner, stream ordering, or data migration path.
 
 ### Persisted Generated Metadata
 
@@ -304,7 +306,7 @@ Generated media nodes store resolver output in `ImageGeneratedByMetadata` so fut
 |-------|---------|
 | `branchId` | Stable ID for one generated-media lineage. |
 | `parentMediaNodeId` | API-selected generated-media edit parent. Reference/source media never populate this field unless they are themselves generated branch members. |
-| `parentImageNodeId` | Legacy alias for `parentMediaNodeId`; do not add new lineage logic that depends on the image-named field. |
+| `parentImageNodeId` | API-emitted schema alias for image-named consumers. It must not be used as a browser fallback or topology decision source. |
 | `branchOriginNodeId` | Temporary branch-origin marker that roots fresh multi-model siblings when no real source exists. |
 | `branchForkNodeId` | Temporary branchFork marker that groups generated descendants for a reasoning run or other nested lineage split. |
 | `sourceContextNodeIds` | Context nodes relevant to generation. |
@@ -373,7 +375,7 @@ The router's reference fingerprints should match the resolution's `referenceImag
 
 This is where the API lineage plan becomes a positioned, parented, provenance-bearing canvas artifact. The rules below are **shared by image and video**; the only modality difference is the event names that drive each step (progressive `IMAGE_PARTIAL` for images vs. `VIDEO_PENDING` / `VIDEO_GENERATING` / `VIDEO_COMPLETE` for video).
 
-[`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) stores pending visual progress by `generationRequestId` plus API run metadata, with a legacy thread-ID fallback for older single-run events. Standalone AI Chat panel generations no longer require a source `aiChatThread` canvas node.
+[`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) stores pending visual progress by `generationRequestId` plus API run metadata. Standalone AI Chat panel generations no longer require a source `aiChatThread` canvas node.
 
 ### The Three-Field Pending-Placement Split
 
@@ -419,7 +421,7 @@ For images, an empty `IMAGE_PARTIAL` creates a transparent placeholder canvas no
 2. The node's `generatedBy` metadata includes the API `MediaRunLineageAssignment` plus resolver metadata.
 3. **Placement geometry:**
    - If placement continues from a generated media node, the placeholder is **vertically centered** on that preceding artifact.
-   - **Fresh / reference-only** generations place to the **right of the combined bounds of all reference media**, with `settings.imageBranchLineage.rootOutputGap` breathing room. If no source/thread node exists, the temporary `branchOrigin` marker is placed to the left of the generated sibling group. If the run splits by reasoning model, the `branchFork` marker appears between the branch origin/current lineage source and that reasoning run's generated media.
+   - **Fresh / reference-only** generations place to the **right of the combined bounds of all reference media**, with `settings.mediaBranchLineage.rootToFirstMediaGap` breathing room. If no source/thread node or reference group exists, the temporary `branchOrigin` marker and first generated-media slot are centered as one group so the marker does not start outside the visible viewport. If the run splits by reasoning model, the `branchFork` marker appears between the branch origin/current lineage source and that reasoning run's generated media.
 4. Reference media animate with the same PIXI traveling outline as the generated placeholder while the reasoning model prepares the media prompt (see [Progress Outlines](#progress-outlines)).
 
 PIXI reports intrinsic dimensions whenever placeholder, partial, or final pixels load. For generated media-to-media continuations, each intrinsic-size correction recomputes the node's vertical position from its lineage-anchor center — so a square placeholder, a landscape partial, and a portrait final all stay on one branch center line even as their rectangles change size.
@@ -438,9 +440,9 @@ The finalized generated node also gets canvas provenance chrome rendered in a de
 
 - The **provider badge** and **info button** render in the media chrome overlay.
 - The **info panel** opens at the exact media-node width and expands to its full content height without cropping long prompts or reference metadata. It uses `generatedBy.responseMessageId` plus the persisted chat thread to reconstruct the original user prompt, the producing AI response, and the same generation-trace metadata shown in chat history. It reuses the same chat message shells and the `ImageGenerationTrace` / generation-trace detail renderer used by the AI chat history.
-- Fresh multi-model branch origins open a neutral provenance panel below the temporary `branchOrigin` marker. The panel uses API-authored origin provenance and shows only the user's prompt, provided references, and the decision to fork the request. It does not reconstruct a reasoning-model response from a generated child.
-- Multi-reasoning `branchFork` markers open that same provenance/details panel below the fork marker. The marker chooses a generated child with `generatedBy.branchForkNodeId` equal to the fork node id, so chat reconstruction is filtered by that child's `reasoningRunId` / `reasoningModelId` and shows only the relevant reasoning model response.
-- AI chat history mirrors the same fork provenance as decomposable message pieces. A matrix reasoning run stores the API-assigned `branchOriginNodeId` and `branchForkNodeId` on its `aiReasoningSection`, plus the same lineage ids on generated image/video nodes. Read-only canvas projections apply a lineage scope when they reassemble those pieces: branch roots materialize only `Branch started`, branch forks and generated-media runs render only fork-local `Branch fork created`, and the live chat can show the full conversation context. Generated-media provider rows stay model/provider-only while retaining lineage attrs for reconstruction.
+- Fresh multi-model branch origins show the stored user prompt on the marker itself from the hidden AI chat thread's ProseMirror content. The neutral provenance panel below the temporary `branchOrigin` marker uses API-authored origin provenance for provided references and the decision to fork the request. It does not reconstruct a prompt or reasoning-model response from generated media metadata.
+- Multi-reasoning `branchFork` markers open that same provenance/details panel below the fork marker. The marker chooses a generated media node with `generatedBy.branchForkNodeId` equal to the fork node id, so chat reconstruction is filtered by that node's `reasoningRunId` / `reasoningModelId` and shows only the relevant reasoning model response.
+- AI chat history mirrors the same fork provenance as decomposable message pieces. A matrix reasoning run stores the API-assigned `branchOriginNodeId`, `branchForkNodeId`, and `branchLineNodeId` on its `aiReasoningSection`, plus the same lineage ids on generated image/video nodes. Read-only canvas projections apply a lineage scope when they reassemble stored thread pieces: branch forks and generated-media runs render only scope-local workflow markers, and the live chat can show the full conversation context. Generated-media provider rows stay model/provider-only while retaining lineage attrs for reconstruction.
 
 (The DOM-overlay-vs-PIXI ownership split is owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md); the post-placement de-overlap pass is owned by [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).)
 
@@ -458,13 +460,13 @@ flowchart TB
 
 ## Balanced Branch-Tree Layout
 
-A branch lineage is a **tree** of generated media: the first generated image/video is normally the root, and each later edit/variant descends from a parent via API-assigned `generatedBy.parentMediaNodeId` or marker IDs. Fresh multi-model requests with no source/thread node use an API-planned temporary `branchOrigin` marker as the root so every sibling has the same explicit graph parent; the generated children still carry prompt, references, and visual summaries on `generatedBy`. When a request has multiple reasoning models, each reasoning run gets an API-planned `branchFork` child marker and the generated media for that run descend from that fork, so model lineage stays visible even when every run targets the same image/video models.
+A branch lineage is a **tree** of generated media: the first generated image/video is normally the root, and each later edit/variant descends from a parent via API-assigned `generatedBy.parentMediaNodeId` or marker IDs. Fresh multi-model requests with no source/thread node use an API-planned temporary `branchOrigin` marker as the root so every sibling has the same explicit graph parent; the generated media nodes still carry prompt, references, and visual summaries on `generatedBy`. When a request has multiple reasoning models, each reasoning run gets an API-planned `branchFork` marker and the generated media for that run descend from that fork, so model lineage stays visible even when every run targets the same image/video models.
 
 On every generated-media add/remove the affected tree is laid out deterministically and then rigid-separated from its neighbors:
 
-- [`utils/layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) is a pure, geometry-agnostic block-allocation **tidy-tree** algorithm (left-to-right). The root keeps its anchor; children fan out symmetrically around the parent's vertical center; linear chains stay collinear; branching parents add horizontal fanout gap before their child column; sibling subtrees occupy disjoint vertical bands, so the layout is provably overlap-free.
-- [`workspace/branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts) builds the generated-media forest from canvas nodes + lineage edges, runs the tidy layout per tree, then feeds **one rigid bounding box per tree** (plus one box per loose node) into the **unchanged** `resolveCollisions`. A pushed tree translates as a single block, so it never loses its internal balance because an unrelated node moved nearby.
-- Depth spacing starts with `settings.imageBranchLineage.imageToImageGap`, then adds `branchFanoutDepthGap` for every child after the first when a parent forks; sibling spacing reuses `branchToBranchGap`. Final image/video aspect-ratio updates preserve the node center and re-run the branch-tree layout, so a resolved frame cannot collapse forked children back onto the old predecessor center line.
+- [`utils/layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) is a pure, geometry-agnostic block-allocation **tidy-tree** algorithm (left-to-right). The root keeps its anchor; generated media fan out symmetrically around the parent's vertical center; linear chains stay collinear; branching parents add horizontal fanout gap before the generated-media column; sibling subtrees occupy disjoint vertical bands, so the layout is provably overlap-free.
+- [`workspace/branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts) builds the generated-media forest from API-assigned lineage fields on canvas nodes, runs the tidy layout per tree, then feeds **one rigid bounding box per tree** (plus one box per loose node) into the **unchanged** `resolveCollisions`. A pushed tree translates as a single block, so it never loses its internal balance because an unrelated node moved nearby.
+- Depth spacing starts with `settings.mediaBranchLineage.mediaToMediaGap`, except the first segment from a temporary `branchOrigin` marker uses `settings.mediaBranchLineage.branchOriginToFirstMediaGap`. Branches then add `branchFanoutExtraGap` for every extra generated media node when a lineage forks; sibling spacing reuses `branchRowGap`. Pending media with no received frame is laid out through a temporary proxy sized from `settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale`, while connector anchors still use the rendered outline bounds with the configured outline gap, stroke width, and zoom scaling. Final image/video aspect-ratio updates preserve the node center and re-run the branch-tree layout, so a resolved frame cannot collapse forked media back onto the old predecessor center line.
 
 ### What Counts as a Branch Tree
 
@@ -474,7 +476,7 @@ A branch tree is a connected component of **top-level generated media** plus tem
 - temporary origins: `type: 'branchOrigin'`, with `branchId`, `temporary: true`, and no `parentId`
 - temporary forks: `type: 'branchFork'`, with `branchId`, `temporary: true`, optional reasoning-run metadata, and no `parentId`
 
-A generated node's in-tree parent is resolved from API-assigned `generatedBy.branchForkNodeId` first, then `generatedBy.parentMediaNodeId`, then the legacy `generatedBy.parentImageNodeId` alias, then `generatedBy.branchOriginNodeId`; incoming lineage-edge fallback exists only for older persisted state. A `branchFork` parent is resolved from its API-assigned `parentBranchNodeId`. If neither exists, the generated node is a root. This lets one tree mix images and videos, lets a single branch fork into multiple children, gives fresh multi-model siblings a shared explicit root when no source node exists, and lets nested branchFork markers split any current lineage source for future features.
+A generated node's in-tree parent is resolved from API-assigned `generatedBy.parentMediaNodeId`, then `generatedBy.branchOriginNodeId`, then `generatedBy.branchForkNodeId` / `generatedBy.branchLineNodeId` when an API marker is the only visible lineage parent. A `branchFork` or `branchLine` parent is resolved from its API-assigned `parentBranchNodeId`. If neither exists, the generated node is a root. This lets one tree mix images and videos, lets a single branch fork into multiple children, and gives fresh multi-model siblings a shared explicit root when no source node exists.
 
 Reference/style media and workspace-relevance selections can anchor placement and become model references, but they are not tree members unless they are themselves generated media in the lineage. Parented nodes are also excluded from tree layout, matching the canvas rule that containment is handled separately from top-level branch placement.
 
@@ -490,10 +492,11 @@ export type TreeLayoutNode = {
     height: number
 }
 
-export type LayoutTreeOptions = {
+export type BranchTreeLayoutOptions = {
     depthGap: number
+    branchOriginDepthGap?: number
     siblingGap: number
-    branchFanoutDepthGap?: number
+    branchFanoutExtraGap?: number
 }
 
 export type LayoutTreeResult = {
@@ -503,13 +506,13 @@ export type LayoutTreeResult = {
 }
 ```
 
-The workspace adapter supplies `depthGap` from `settings.imageBranchLineage.imageToImageGap`, `siblingGap` from `branchToBranchGap`, and `branchFanoutDepthGap` from the same settings group. The pure utility never reads settings, canvas nodes, Svelte state, PIXI state, or `branchId`.
+The workspace adapter supplies `depthGap` from `settings.mediaBranchLineage.mediaToMediaGap`, `branchOriginDepthGap` from `branchOriginToFirstMediaGap` for the temporary origin marker's first segment, `siblingGap` from `branchRowGap`, and `branchFanoutExtraGap` from the same settings group. The lower-level layout utility never reads settings, canvas nodes, Svelte state, PIXI state, or `branchId`.
 
 ### Algorithm
 
 The layout is a left-to-right block-allocation tidy tree:
 
-- **X by depth and fanout:** `x(child) = x(parent) + width(parent) + depthGap + branchFanoutDepthGap * max(0, childCount(parent) - 1)`. A linear chain gets the base gap. A two-child fork gets extra curve room. A large fork pushes the whole child column and its descendants farther right during the same deterministic rebalance.
+- **X by depth and fanout:** `x(node) = x(parent) + width(parent) + depthGap + branchFanoutExtraGap * max(0, childCount(parent) - 1)`. A generated media node under a temporary `branchOrigin` uses `branchOriginDepthGap` for that first segment, then the whole descendant subtree keeps the normal downstream depth spacing. A two-output fork gets extra curve room. A large fork pushes the whole generated-media column and its descendants farther right during the same deterministic rebalance.
 - **Y by subtree bands:** each subtree reserves a vertical band equal to the larger of its own height and its stacked child bands plus sibling gaps. Children are stacked into disjoint bands, and the parent center is placed at the midpoint between the first and last child centers. Single-child nodes inherit the child's center, so chains stay perfectly horizontal.
 
 This is deliberately simpler than full Walker/Buchheim contour merging. The canvas is infinite, generated-media nodes are large, and the configured gaps are generous, so tighter contour packing is not worth the extra complexity right now. The module boundary can still support a future contour implementation because callers only depend on `TreeLayoutNode[] -> positions`.
@@ -521,7 +524,7 @@ This is deliberately simpler than full Walker/Buchheim contour merging. The canv
 | `R` | Single-node tree is a no-op; the root stays at its anchor. |
 | `R -> A -> B -> C` | All nodes stay on one horizontal center line. |
 | `R -> {A, B}` | `A` is above-right and `B` below-right, symmetric around `R`'s vertical center. |
-| `R -> {A, B, C}` | `B` aligns with `R`; `A` and `C` sit above/below with `branchToBranchGap`. |
+| `R -> {A, B, C}` | `B` aligns with `R`; `A` and `C` sit above/below with `branchRowGap`. |
 | `R -> {A -> {A1, A2, A3}, B}` | `A`'s subtree gets its own vertical band; `B` sits clear of it. |
 | `R(image) -> {A(video), B(image) -> B1(video)}` | Media kind does not affect geometry; images and videos share the same tree. |
 

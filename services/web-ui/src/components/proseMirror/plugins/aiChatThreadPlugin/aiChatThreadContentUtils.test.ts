@@ -3,6 +3,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+    parseProseMirrorJsonContent,
+    collectProseMirrorText,
+    collectResponseTextById,
+    buildGeneratedMediaTurnProjectionFromThreadContent,
+    buildBranchOriginPromptProjection,
     getGeneratedImageTurnInfoFromThreadContent,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
 import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
@@ -22,6 +27,246 @@ function createTrace(): ImageGenerationTrace {
         excludedReferences: [],
     }
 }
+
+describe('parseProseMirrorJsonContent', () => {
+    it('parses valid JSON strings into ProseMirror JSON objects', () => {
+        const content = parseProseMirrorJsonContent('{"type":"doc","content":[{"type":"text","text":"hello"}]}')
+
+        expect(content).toEqual({
+            type: 'doc',
+            content: [{ type: 'text', text: 'hello' }],
+        })
+    })
+
+    it('returns null for malformed JSON or unsupported input shapes', () => {
+        expect(parseProseMirrorJsonContent('{not valid json}')).toBeNull()
+        expect(parseProseMirrorJsonContent(123)).toBeNull()
+        expect(parseProseMirrorJsonContent(null)).toBeNull()
+    })
+})
+
+describe('collectProseMirrorText', () => {
+    it('concatenates nested text and preserves hard-break markers', () => {
+        const content = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'First line' },
+                        { type: 'hard_break' },
+                        { type: 'text', text: 'Second line' },
+                        { type: 'text', text: 'No space' },
+                    ],
+                },
+            ],
+        }
+
+        expect(collectProseMirrorText(content)).toBe('First line\nSecond lineNo space')
+    })
+
+    it('uses revised prompt for generated image nodes and respects excluded node types', () => {
+        const imageNode = {
+            type: 'aiGeneratedImage',
+            attrs: { revisedPrompt: 'Image brief' },
+            content: [{ type: 'text', text: 'Should be ignored' }],
+        }
+        const plainTextNode = { type: 'text', text: 'Keep me' }
+
+        expect(collectProseMirrorText({
+            type: 'doc',
+            content: [imageNode, plainTextNode],
+        } as any)).toBe('Image briefKeep me')
+
+        expect(collectProseMirrorText({
+            type: 'doc',
+            content: [imageNode, plainTextNode],
+        } as any, { excludedNodeTypes: ['aiGeneratedImage'] })).toBe('Keep me')
+    })
+})
+
+describe('collectResponseTextById', () => {
+    it('maps each response id to the preceding user text and response content', () => {
+        const content = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'aiChatThread',
+                    attrs: { threadId: 'thread-1' },
+                    content: [
+                        {
+                            type: 'aiUserMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'First prompt' }] },
+                        ]},
+                        {
+                            type: 'aiResponseMessage',
+                            attrs: { id: 'response-1' },
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'First answer' }] }],
+                        },
+                        {
+                            type: 'aiUserMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Second prompt' }] },
+                        ]},
+                        {
+                            type: 'aiResponseMessage',
+                            attrs: { id: 'response-2' },
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Second answer' }] }],
+                        },
+                    ],
+                },
+            ],
+        }
+
+        const responseTextById = collectResponseTextById(content)
+        expect(responseTextById).toEqual({
+            'response-1': 'First prompt\nFirst answer',
+            'response-2': 'Second prompt\nSecond answer',
+        })
+    })
+})
+
+describe('buildGeneratedMediaTurnProjectionFromThreadContent', () => {
+    it('builds a projection from matching locator and strips non-matching media nodes', () => {
+        const content = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'aiChatThread',
+                    attrs: { threadId: 'thread-1' },
+                    content: [
+                        {
+                            type: 'aiUserMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Prompt from user' }] },
+                        ]},
+                        {
+                            type: 'aiResponseMessage',
+                            attrs: { id: 'response-1', aiProvider: 'OpenAI' },
+                            content: [
+                                {
+                                    type: 'aiReasoningSection',
+                                    attrs: { reasoningModelId: 'OpenAI:gpt-4.1', reasoningRunId: 'run-1' },
+                                    content: [
+                                        {
+                                            type: 'aiCollapsibleBlock',
+                                            attrs: { imageGenerationTrace: createTrace() },
+                                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Generated prompt text' }] }],
+                                        },
+                                        {
+                                            type: 'aiGeneratedImage',
+                                            attrs: { mediaRunId: 'run-1', mediaType: 'image', fileId: 'file-1' },
+                                        },
+                                        {
+                                            type: 'aiGeneratedImage',
+                                            attrs: { mediaRunId: 'run-2', mediaType: 'image', fileId: 'file-2' },
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+
+        const projection = buildGeneratedMediaTurnProjectionFromThreadContent(content, {
+            responseMessageId: 'response-1',
+            mediaRunId: 'run-2',
+        }, {
+            limitToLocatorMedia: true,
+            forceGenerationDetailsOpen: true,
+            lineageProjectionScope: 'media-run',
+        })
+
+        expect(projection).not.toBeNull()
+        expect(projection?.source).toBe('thread-content')
+        expect(projection?.threadId).toBe('thread-1')
+
+        const responseMessage = projection?.content?.content?.[1]?.content?.[1]
+        const projectionImageRunIds = (responseMessage?.content?.[0]?.content ?? [])
+            .filter((node: any) => node?.type === 'aiGeneratedImage')
+            .map((node: any) => node?.attrs?.mediaRunId)
+        expect(projectionImageRunIds).toEqual(['run-2'])
+    })
+
+    it('falls back to latest matching response when no locator response id is specified', () => {
+        const content = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'aiChatThread',
+                    attrs: { threadId: 'thread-3' },
+                    content: [
+                        {
+                            type: 'aiUserMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Only prompt' }] },
+                        ]},
+                        {
+                            type: 'aiResponseMessage',
+                            attrs: { id: 'response-2' },
+                            content: [
+                                { type: 'paragraph', content: [{ type: 'text', text: 'Fallback answer' }] },
+                                { type: 'aiGeneratedImage', attrs: { mediaRunId: 'latest-media' } },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+
+        const projection = buildGeneratedMediaTurnProjectionFromThreadContent(content, {})
+
+        expect(projection?.source).toBe('thread-content')
+        expect(projection?.locator).toEqual({})
+        expect(JSON.stringify(projection?.content)).toContain('Fallback answer')
+    })
+
+    it('returns fallback projections when parsing fails', () => {
+        const projection = buildGeneratedMediaTurnProjectionFromThreadContent('not-json', {
+            responseMessageId: 'response-1',
+        }, {
+            fallback: {
+                threadId: 'fallback-thread',
+                promptText: 'Fallback prompt',
+                responseText: 'Fallback response',
+                responseProvider: 'OpenAI',
+                lineageEvents: [{ kind: 'branch-origin', branchOriginNodeId: 'branch-origin' }],
+                missingReason: 'Projection source unavailable',
+                referenceNodeIds: ['ref-a', 'ref-b'],
+                generatedAt: '2020-01-01T00:00:00.000Z',
+            },
+        })
+
+        expect(projection?.source).toBe('generated-by-fallback')
+        expect(projection?.threadId).toBe('fallback-thread')
+        expect(projection?.missingReason).toBe('Projection source unavailable')
+        expect(JSON.stringify(projection?.content)).toContain('Fallback response')
+        expect(JSON.stringify(projection?.content)).toContain('fallback-thread')
+    })
+})
+
+describe('buildBranchOriginPromptProjection', () => {
+    it('returns null when no branch-origins are available', () => {
+        expect(buildBranchOriginPromptProjection('   ', { threadId: 'thread-id' })).toBeNull()
+    })
+
+    it('builds provenance projection with a branch-origin marker and user prompt payload', () => {
+        const projection = buildBranchOriginPromptProjection('A branch prompt', {
+            threadId: 'branch-origin-thread',
+            branchOriginNodeId: 'branch-origin-id',
+            generatedAt: 1650000000,
+            referenceNodeIds: ['node-1', 'node-2'],
+        })
+
+        expect(projection?.source).toBe('branch-origin-fallback')
+        expect(projection?.threadId).toBe('branch-origin-thread')
+        expect(projection?.missingReason).toBe('Branch origin provenance is stored outside durable chat history.')
+        const content = JSON.stringify(projection?.content)
+        expect(content).toContain('A branch prompt')
+        expect(content).toContain('branch-origin-id')
+        expect(content).toContain('aiLineageEvent')
+        expect(content).toContain('branch-origin')
+    })
+})
 
 describe('aiChatThreadContentUtils', () => {
     it('extracts the user prompt, response text, and trace for a generated image response', () => {

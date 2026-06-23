@@ -266,6 +266,50 @@
     pointer-events: auto;
 }
 
+// Inline hover card (not body-portaled): stays a DOM descendant of the tile so it
+// inherits any ancestor CSS zoom transform and lives inside its surrounding context.
+// Replicates the help-tooltip-content chrome that the portaled variant relies on.
+.context-preview-inline {
+    --help-tooltip-width: 280px;
+    --help-tooltip-max-width: min(280px, calc(100vw - 24px));
+    --help-tooltip-padding: 8px;
+    --help-tooltip-background: var(--workspace-ai-chat-panel-context-preview-tooltip-background, #fff);
+    --help-tooltip-border-radius: var(--workspace-ai-chat-panel-context-preview-tooltip-border-radius, 8px);
+    --help-tooltip-box-shadow: var(--workspace-ai-chat-panel-context-preview-tooltip-box-shadow, 0 16px 38px rgba(57, 69, 93, 0.18), 0 2px 8px rgba(57, 69, 93, 0.12));
+    --help-tooltip-color: var(--workspace-ai-chat-panel-context-preview-tooltip-color, #1a3a47);
+    position: relative;
+    width: 58px;
+    height: 42px;
+}
+
+.context-preview-inline-trigger {
+    cursor: pointer;
+}
+
+.context-preview-inline-popover {
+    position: absolute;
+    // Anchor the card's left edge to the thumbnail and grow rightward into the panel.
+    // Centering would push the left half past the panel edge, where it gets clipped.
+    left: 0;
+    bottom: calc(100% + 10px);
+    z-index: var(--help-tooltip-content-z-index, 10120);
+    visibility: hidden;
+    opacity: 0;
+    padding: var(--help-tooltip-padding, 8px);
+    border-radius: var(--help-tooltip-border-radius, 8px);
+    background: var(--help-tooltip-background, #fff);
+    box-shadow: var(--help-tooltip-box-shadow, 0 16px 38px rgba(57, 69, 93, 0.18), 0 2px 8px rgba(57, 69, 93, 0.12));
+    color: var(--help-tooltip-color, #1a3a47);
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+.context-preview-inline-popover.is-open {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+
 .workspace-ai-chat-panel-context-preview-popover-portrait {
     width: 364px;
     max-width: calc(100vw - 24px);

@@ -36,6 +36,7 @@ export const aiGeneratedImageNodeSpec = {
         parentMediaNodeId: { default: '' },
         branchOriginNodeId: { default: '' },
         branchForkNodeId: { default: '' },
+        branchLineNodeId: { default: '' },
         lineageParentNodeId: { default: '' },
         // Image display attributes (same as regular image node)
         width: { default: null },
@@ -69,6 +70,7 @@ export const aiGeneratedImageNodeSpec = {
                     parentMediaNodeId: dom.getAttribute('data-parent-media-node-id') || '',
                     branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
                     branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
+                    branchLineNodeId: dom.getAttribute('data-branch-line-node-id') || '',
                     lineageParentNodeId: dom.getAttribute('data-lineage-parent-node-id') || '',
                     width: dom.getAttribute('data-width') || null,
                     alignment: dom.getAttribute('data-alignment') || 'left',
@@ -99,6 +101,7 @@ export const aiGeneratedImageNodeSpec = {
             'data-parent-media-node-id': node.attrs.parentMediaNodeId,
             'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
             'data-branch-fork-node-id': node.attrs.branchForkNodeId,
+            'data-branch-line-node-id': node.attrs.branchLineNodeId,
             'data-lineage-parent-node-id': node.attrs.lineageParentNodeId,
             'data-width': node.attrs.width || '',
             'data-alignment': node.attrs.alignment || 'left',
@@ -182,6 +185,7 @@ export function getAiGeneratedImageCallbacks(): AiGeneratedImageCallbacks {
 export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => number | undefined) => {
     const wrapper = html`
         <div className="ai-generated-image-wrapper ai-generated-media-node">
+            <div className="ai-generated-media-section-title">Final generated image</div>
             <div className="ai-generated-image-container">
                 <div className="ai-generated-image-spinner">
                     <div className="spinner-ring"></div>
@@ -194,9 +198,11 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     `
 
     const container = wrapper.querySelector('.ai-generated-image-container') as HTMLElement
+    const titleElement = wrapper.querySelector('.ai-generated-media-section-title') as HTMLElement
     const spinnerElement = wrapper.querySelector('.ai-generated-image-spinner') as HTMLElement
     const imageElement = wrapper.querySelector('.ai-generated-image-content') as HTMLImageElement
     const modelChromeElement = wrapper.querySelector('.ai-generated-media-model-chrome') as HTMLElement
+    titleElement.hidden = true
     applyMediaModelBadgeStyleProperties(wrapper, { scale: settings.mediaNode.generatedMediaChrome.chatScale })
     let unsubscribeAiModelsStore: (() => void) | null = null
 
@@ -226,11 +232,13 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         const { imageData, isPartial } = node.attrs
 
         if (!imageData) {
+            titleElement.hidden = true
             spinnerElement.classList.add('is-active')
             imageElement.classList.remove('is-visible')
             return
         }
 
+        titleElement.hidden = Boolean(isPartial)
         spinnerElement.classList.remove('is-active')
         imageElement.classList.add('is-visible')
 
@@ -269,6 +277,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     }
 
     imageElement.onerror = () => {
+        titleElement.hidden = true
         applyStyle(imageElement, { display: 'none' })
         if (!container.querySelector('.image-error-placeholder')) {
             container.appendChild(html`

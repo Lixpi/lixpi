@@ -303,31 +303,33 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
             : { thinkingBudget: args.thinkingBudgetTokens ?? -1, includeThoughts: true }
     }
 
-    const stream = await client.models.generateContentStream({
-        model: args.modelVersion,
-        contents,
-        config,
-    } as any)
-
     let rawText = ''
     let promptTokens = 0
     let completionTokens = 0
+    let finishReason = ''
 
-    for await (const chunk of stream as any) {
-        if (chunk?.usageMetadata) {
-            promptTokens = chunk.usageMetadata.promptTokenCount ?? promptTokens
-            completionTokens = chunk.usageMetadata.candidatesTokenCount ?? completionTokens
+    const collectUsage = (usageMetadata: any): void => {
+        if (!usageMetadata) return
+        promptTokens = usageMetadata.promptTokenCount ?? promptTokens
+        completionTokens = usageMetadata.candidatesTokenCount ?? completionTokens
+    }
+
+    const collectResponseText = (response: any): void => {
+        collectUsage(response?.usageMetadata)
+        if (!finishReason) {
+            const finishedCandidate = response?.candidates?.find((candidate: any) => candidate?.finishReason || candidate?.finish_reason)
+            finishReason = finishedCandidate?.finishReason ?? finishedCandidate?.finish_reason ?? ''
         }
-        // Parts can be either response text or thought summaries (when
-        // includeThoughts=true). Thought parts have a `thought: true` flag.
-        const candidates = chunk?.candidates ?? []
-        let chunkHadParts = false
-        for (const candidate of candidates) {
+        const directText = !args.onTextChunk && typeof response?.text === 'string' ? response.text : ''
+        if (directText) {
+            rawText += directText
+            return
+        }
+        for (const candidate of response?.candidates ?? []) {
             const parts = candidate?.content?.parts ?? []
             for (const part of parts) {
                 const text = part?.text ?? ''
                 if (!text) continue
-                chunkHadParts = true
                 if (part.thought === true) {
                     if (args.onTextChunk) args.onTextChunk(text)
                 } else {
@@ -336,11 +338,25 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
                 }
             }
         }
-        // Fallback for shapes where text is at chunk level (older SDK shapes).
-        if (!chunkHadParts && typeof chunk?.text === 'string' && chunk.text) {
-            rawText += chunk.text
-            if (args.onTextChunk) args.onTextChunk(chunk.text)
+    }
+
+    if (args.onTextChunk) {
+        const stream = await client.models.generateContentStream({
+            model: args.modelVersion,
+            contents,
+            config,
+        } as any)
+
+        for await (const chunk of stream as any) {
+            collectResponseText(chunk)
         }
+    } else {
+        const response = await client.models.generateContent({
+            model: args.modelVersion,
+            contents,
+            config,
+        } as any)
+        collectResponseText(response)
     }
 
     if (!rawText) throw new Error(`Google ${args.modelVersion} returned empty response for schema=${args.schema.name}`)
@@ -351,7 +367,10 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
 
     let parsed: T
     try { parsed = JSON.parse(cleaned) as T }
-    catch (e: any) { throw new Error(`Google returned non-JSON output: ${e?.message}. Preview: ${cleaned.slice(0, 200)}`) }
+    catch (e: any) {
+        const finish = finishReason ? ` finishReason=${finishReason}.` : ''
+        throw new Error(`Google returned non-JSON output:${finish} ${e?.message}. Preview: ${cleaned.slice(0, 200)}`)
+    }
 
     return { parsed, rawText: cleaned, modelName: args.modelVersion, promptTokens, completionTokens }
 }
@@ -406,7 +425,7 @@ const isTransientError = (error: any): boolean => {
         cause = cause.cause
     }
     // Anthropic's APIConnectionError carries no status and a bland message.
-    if (status === undefined && /connection error|socket hang up|fetch failed|terminated/i.test(error?.message ?? '')) return true
+    if (status === undefined && /connection error|socket hang up|fetch failed|\bterminated\b/i.test(error?.message ?? '')) return true
     return false
 }
 

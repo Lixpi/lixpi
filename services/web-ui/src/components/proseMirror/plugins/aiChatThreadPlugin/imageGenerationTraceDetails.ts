@@ -10,8 +10,8 @@ import { html } from '$src/utils/domTemplates.ts'
 
 // Image and video generation traces share an identical reference/excluded/
 // resolver/prompt shape, so this renderer is reused verbatim for both media
-// kinds — only the summary title differs. The video trace carries the extra
-// aspectRatio/resolution/durationSeconds fields, which this renderer ignores.
+// kinds. The video trace carries the extra aspectRatio/resolution/durationSeconds
+// fields, which this renderer ignores.
 export type GenerationTrace = ImageGenerationTrace | VideoGenerationTrace
 
 export type ImageGenerationTraceDetailsAttrs = {
@@ -21,9 +21,6 @@ export type ImageGenerationTraceDetailsAttrs = {
     imageGenerationTrace?: ImageGenerationTrace | null
     imageGenerationTraceId?: string | null
     videoGenerationTrace?: VideoGenerationTrace | null
-    // The reasoning model that produced this generation prompt. Shown in the
-    // collapsible summary (even while collapsed) so each run is attributable to
-    // its model without a separate pill beside the avatar.
     reasoningModelId?: string | null
 }
 
@@ -36,13 +33,15 @@ type RenderImageGenerationTraceDetailsParams = {
 
 export type ImageGenerationTraceDetailsOptions = {
     className?: string
-    renderReferencesWhenClosed?: boolean
     getAdditionalReferenceImageSources?: (reference: ImageGenerationTraceReference) => string[]
+    // Lets the host render its own reference tile (e.g. the canvas context-preview
+    // tile: thumbnail-only with a rich hover card). When it returns an element that
+    // element replaces the default captioned tile; returning null falls back.
+    renderReferenceTile?: (reference: ImageGenerationTraceReference) => HTMLElement | null
 }
 
 export type ImageGenerationTraceDetails = {
-    dom: HTMLDetailsElement
-    summary: HTMLElement
+    dom: HTMLElement
     contentDom: HTMLElement
     render: (params: RenderImageGenerationTraceDetailsParams) => void
     renderReferenceGrid: (trace: GenerationTrace) => void
@@ -59,18 +58,26 @@ export const getImageGenerationTrace = (attrs: ImageGenerationTraceDetailsAttrs)
     return attrs.imageGenerationTrace ?? attrs.videoGenerationTrace ?? null
 }
 
-export const getImageGenerationSummaryTitle = (attrs: ImageGenerationTraceDetailsAttrs): string => {
-    if (attrs.videoGenerationTrace) return 'Video generation details'
-    if (attrs.imageGenerationTrace || attrs.imageGenerationTraceId) return 'Image generation details'
-    return attrs.isStreaming ? 'Preparing image generation prompt' : attrs.title
-}
-
 export const formatImageGenerationTraceRole = (role: string): string => {
     return role.split(/[-_]/).map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join(' ')
 }
 
-// Reasoning model ids arrive as `Provider:model` (e.g. `Anthropic:claude-sonnet-4-6`);
-// the summary shows just the model segment.
+// Human-readable provenance for a reference image. The raw `label` is the prompt
+// that produced the source image, which reads like a stray user prompt — so the
+// caption names where the image actually came from instead.
+export const formatImageGenerationTraceReferenceSource = (source: string): string => {
+    switch (source) {
+        case 'branch-candidate':
+            return 'Image from this branch'
+        case 'feature-reference':
+            return 'Feature reference image'
+        case 'message-reference':
+            return 'Attached to chat message'
+        default:
+            return 'Reference image'
+    }
+}
+
 export const formatTraceModelLabel = (modelId?: string | null): string => {
     if (!modelId) return ''
     const parts = String(modelId).split(':')
@@ -174,6 +181,7 @@ const createReferenceTile = (
     options: ImageGenerationTraceDetailsOptions,
 ): HTMLElement => {
     const role = formatImageGenerationTraceRole(reference.role)
+    const sourceLabel = formatImageGenerationTraceReferenceSource(reference.source)
     // The tile starts hidden and reveals itself in `onload` (so the multi-source
     // retry chain never flashes a broken image). `loading="lazy"` must NOT be used
     // here: a hidden image is `display:none`, never intersects the viewport, so a
@@ -182,13 +190,17 @@ const createReferenceTile = (
     const image = html`<img className="ai-image-generation-reference-image" alt=${reference.label} />` as HTMLImageElement
     const unavailable = html`<span className="ai-image-generation-reference-unavailable">Unavailable</span>` as HTMLSpanElement
     const tile = html`
-        <figure className="ai-image-generation-reference" data=${{ source: reference.source, role: reference.role }}>
+        <figure
+            className="ai-image-generation-reference"
+            title=${reference.label}
+            data=${{ source: reference.source, role: reference.role }}
+        >
             <div className="ai-image-generation-reference-thumb">
                 ${image}
                 ${unavailable}
             </div>
             <figcaption>
-                <span className="ai-image-generation-reference-label">${reference.label}</span>
+                <span className="ai-image-generation-reference-label">${sourceLabel}</span>
                 <span className="ai-image-generation-reference-role">${role}</span>
             </figcaption>
         </figure>
@@ -266,25 +278,21 @@ const createExcludedItem = (reference: ImageGenerationTraceExcludedReference): H
 }
 
 export function createImageGenerationTraceDetails(options: ImageGenerationTraceDetailsOptions = {}): ImageGenerationTraceDetails {
-    const className = ['ai-collapsible-block', options.className].filter(Boolean).join(' ')
+    const className = ['ai-generation-trace-block', options.className].filter(Boolean).join(' ')
     const wrapper = html`
-        <details className=${className}>
-            <summary>
-                <span className="ai-collapsible-block-summary-title"></span>
-                <span className="ai-collapsible-block-summary-meta"></span>
-            </summary>
-            <div className="ai-collapsible-block-body">
+        <div className=${className}>
+            <div className="ai-generation-trace-body">
                 <section className="ai-image-generation-tool-prompt-section">
-                    <div className="ai-image-generation-section-label">Prompt written by chat model</div>
-                    <div className="ai-collapsible-block-content"></div>
+                    <div className="ai-image-generation-section-label">Prompt for media generation model written by reasoning model</div>
+                    <div className="ai-generation-trace-content"></div>
                     <pre className="ai-image-generation-tool-prompt-fallback"></pre>
                 </section>
                 <section className="ai-image-generation-final-prompt-section">
-                    <div className="ai-image-generation-section-label">Final prompt sent to the model</div>
+                    <div className="ai-image-generation-section-label">Final prompt sent to the media generation model</div>
                     <pre className="ai-image-generation-final-prompt"></pre>
                 </section>
                 <section className="ai-image-generation-reference-section">
-                    <div className="ai-image-generation-section-label">Reference images sent to the model</div>
+                    <div className="ai-image-generation-section-label">Reference items sent to the media generation model</div>
                     <div className="ai-image-generation-reference-grid"></div>
                 </section>
                 <section className="ai-image-generation-resolver-section">
@@ -294,13 +302,10 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
                     <ul className="ai-image-generation-excluded-list"></ul>
                 </section>
             </div>
-        </details>
-    ` as HTMLDetailsElement
+        </div>
+    ` as HTMLElement
 
-    const summary = wrapper.querySelector('summary')!
-    const summaryTitle = wrapper.querySelector('.ai-collapsible-block-summary-title') as HTMLElement
-    const summaryMeta = wrapper.querySelector('.ai-collapsible-block-summary-meta') as HTMLElement
-    const contentDom = wrapper.querySelector('.ai-collapsible-block-content') as HTMLElement
+    const contentDom = wrapper.querySelector('.ai-generation-trace-content') as HTMLElement
     const toolPromptSection = wrapper.querySelector('.ai-image-generation-tool-prompt-section') as HTMLElement
     const toolPromptFallback = wrapper.querySelector('.ai-image-generation-tool-prompt-fallback') as HTMLElement
     const finalPromptSection = wrapper.querySelector('.ai-image-generation-final-prompt-section') as HTMLElement
@@ -320,7 +325,8 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         if (renderedReferenceTrace === trace) return
 
         if (trace.referenceImages.length > 0) {
-            referenceGrid.replaceChildren(...trace.referenceImages.map((reference) => createReferenceTile(reference, options)))
+            referenceGrid.replaceChildren(...trace.referenceImages.map((reference) =>
+                options.renderReferenceTile?.(reference) ?? createReferenceTile(reference, options)))
         } else {
             referenceGrid.replaceChildren(html`
                 <div className="ai-image-generation-empty-references">No reference images were sent.</div>
@@ -342,30 +348,25 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
             attrs.title,
             attrs.isStreaming ? 'streaming' : 'done',
             childCount,
+            attrs.reasoningModelId ?? '',
             attrs.imageGenerationTraceId ?? 'inline-trace',
             forceToolPromptFallback ? 'force-fallback' : 'content-fallback',
             fallbackText,
         ].join('|')
 
         if (signature === renderedSignature && trace === renderedTrace) {
-            if (trace && (wrapper.open || options.renderReferencesWhenClosed)) renderReferenceGrid(trace)
+            if (trace) renderReferenceGrid(trace)
             return
         }
 
         renderedSignature = signature
         renderedTrace = trace
 
-        summaryTitle.textContent = getImageGenerationSummaryTitle(attrs)
-        const modelLabel = formatTraceModelLabel(attrs.reasoningModelId)
-        const referenceMeta = trace
-            ? `${trace.referenceImages.length} reference${trace.referenceImages.length === 1 ? '' : 's'}`
-            : ''
-        summaryMeta.textContent = [modelLabel, referenceMeta].filter(Boolean).join(' · ')
         wrapper.classList.toggle('has-image-generation-trace', hasTrace)
         wrapper.classList.toggle('is-streaming', attrs.isStreaming)
-        toolPromptSection.classList.toggle('has-trace', hasTrace)
 
         const shouldShowFallback = Boolean(fallbackText && (forceToolPromptFallback || childCount === 0))
+        toolPromptSection.classList.toggle('has-content', hasTrace || childCount > 0 || shouldShowFallback)
         toolPromptFallback.textContent = shouldShowFallback ? fallbackText : ''
         toolPromptFallback.hidden = !shouldShowFallback
 
@@ -377,7 +378,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         if (!trace) {
             referenceGrid.replaceChildren()
             renderedReferenceTrace = null
-        } else if (wrapper.open || options.renderReferencesWhenClosed) {
+        } else {
             renderReferenceGrid(trace)
         }
 
@@ -394,7 +395,6 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
 
     return {
         dom: wrapper,
-        summary,
         contentDom,
         render,
         renderReferenceGrid,

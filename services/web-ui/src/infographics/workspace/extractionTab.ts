@@ -11,7 +11,6 @@ import {
     type SubstepView,
 } from '$src/infographics/workspace/extractionTimelineModel.ts'
 import { MarkdownStreamRenderer, renderMarkdownStatic } from '$src/utils/markdownStreamRenderer.ts'
-import { claudeIcon, geminiIcon, gptAvatarIcon, stabilityIcon } from '$src/svgIcons/index.ts'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
@@ -181,24 +180,12 @@ function getAiProviderFromModel(aiModel: string | undefined): string {
     return aiModel?.split(':')[0] || ''
 }
 
-function getAssistantIcon(provider: string): string | null {
-    switch (provider) {
-        case 'Anthropic': return claudeIcon
-        case 'Google': return geminiIcon
-        case 'OpenAI': return gptAvatarIcon
-        case 'Stability': return stabilityIcon
-        default: return null
-    }
-}
-
-function createExtractionConversationLayout(bodyEl: HTMLElement, userText: string, aiProvider = ''): {
+function createExtractionConversationLayout(bodyEl: HTMLElement, userText: string): {
     timelineContainer: HTMLElement
     featureCardArea: HTMLElement
     assistantContentEl: HTMLElement
 } {
     bodyEl.replaceChildren()
-    const normalizedProviderClass = aiProvider ? ` assistant-${aiProvider.toLowerCase()}` : ''
-    const assistantIcon = getAssistantIcon(aiProvider)
     const threadEl = html`<div className="extraction-chat-thread ai-chat-thread-wrapper">
         <div className="ai-chat-thread-content">
             <div className="ai-user-message-wrapper">
@@ -208,20 +195,11 @@ function createExtractionConversationLayout(bodyEl: HTMLElement, userText: strin
             </div>
             <div className="ai-response-message-wrapper extraction-assistant-message">
                 <div className="ai-response-message">
-                    <div className="ai-response-message-bubble">
-                        <div className="ai-response-message-content"></div>
-                    </div>
+                    <div className="ai-response-message-content"></div>
                 </div>
             </div>
         </div>
     </div>` as HTMLElement
-
-    if (assistantIcon) {
-        const assistantMessageEl = threadEl.querySelector('.extraction-assistant-message') as HTMLElement
-        assistantMessageEl.appendChild(html`<div className="ai-response-message-meta">
-            <div className=${`user-avatar${normalizedProviderClass}`} innerHTML=${assistantIcon}></div>
-        </div>` as HTMLElement)
-    }
 
     const userContentEl = threadEl.querySelector('.ai-user-message-content') as HTMLElement
     renderUserText(userContentEl, userText)
@@ -298,7 +276,6 @@ function renderPersistedExtractionState(bodyEl: HTMLElement, state: CanvasFeatur
     const { timelineContainer, featureCardArea, assistantContentEl } = createExtractionConversationLayout(
         bodyEl,
         state.userText ?? 'Extract feature',
-        state.aiProvider,
     )
     const phases = computeExtractionTimelineModel(state.traceEvents ?? [], state.status, false, state.stageReasoning ?? {})
     buildPhaseTimeline(phases, timelineContainer, false)
@@ -339,7 +316,7 @@ export async function submitExtractionRequest(
     persistence: ExtractionTabPersistence = {},
 ) {
     const aiProvider = getAiProviderFromModel(ctx.aiModel)
-    const { timelineContainer, featureCardArea, assistantContentEl } = createExtractionConversationLayout(bodyEl, userText, aiProvider)
+    const { timelineContainer, featureCardArea, assistantContentEl } = createExtractionConversationLayout(bodyEl, userText)
     const traceEvents: StageTraceEvent[] = []
     let currentExtractionStatus: CanvasFeatureExtractionState['status'] = 'analyzing'
     let featureCard: Record<string, any> | undefined

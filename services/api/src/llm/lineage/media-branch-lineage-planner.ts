@@ -3,6 +3,7 @@
 import type {
     AiModelId,
     BranchForkLineagePlan,
+    BranchLineLineagePlan,
     BranchOriginLineagePlan,
     ImageBranchCandidateImage,
     ImageBranchCandidateSnapshot,
@@ -16,6 +17,11 @@ import { MediaGenerationRunPlanner } from './media-generation-run-planner.ts'
 export type MediaBranchLineagePlannerInput = {
     generationRequestId: string
     reasoningModelIds: AiModelId[]
+    // Media-generation axis. Each reasoning run fans out across every selected
+    // media model, so the total generation count is
+    // reasoningCount * (imageModelIds.length + videoModelIds.length).
+    imageModelIds?: AiModelId[]
+    videoModelIds?: AiModelId[]
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
     imageBranchResolution?: ImageBranchVlmResolution
     workspaceContextSnapshot?: WorkspaceContextSnapshot
@@ -28,11 +34,43 @@ type SourceDecision = {
     parentMediaNodeId?: string
 }
 
+// One concrete media generation. The mediaRunId mirrors the scheme used by
+// MediaGenerationRunPlanner.buildProviderMediaRun so the planner can pre-assign
+// a marker node per generation before any provider fanout runs.
+type MediaRunSpec = {
+    reasoningModelId: AiModelId
+    reasoningIndex: number
+    reasoningRunId: string
+    mediaModelId?: AiModelId
+    mediaType?: 'image' | 'video'
+    mediaIndex: number
+    mediaRunId?: string
+}
+
+type ReasoningRunSpec = {
+    reasoningModelId: AiModelId
+    reasoningIndex: number
+    reasoningRunId: string
+    mediaRunCount: number
+}
+
 const PLAN_VERSION: MediaBranchLineagePlan['planVersion'] = 'media-branch-lineage-v1'
 
 // Converts API-owned media routing decisions into the topology contract consumed
-// by the browser. This class owns branch/fork marker IDs, lineage parent IDs,
-// and marker provenance; the browser only applies the plan and computes layout.
+// by the browser. This class owns branch/fork/line marker IDs, lineage parent
+// IDs, and marker provenance; the browser only applies the plan and computes
+// layout.
+//
+// Marker rules:
+//   - More than one reasoning run, or one reasoning run that fans out to several
+//     media models -> one `branchFork` per reasoning run, flat under the lineage
+//     source / branch origin. The concrete media runs from that reasoning run
+//     share the fork marker.
+//   - Exactly one media generation that continues an existing generated branch
+//     -> one `branchLine` continuation marker between the source media and the
+//     new generation, carrying the prompt that drove the continuation.
+//   - Exactly one fresh generation with no generated source -> no per-generation
+//     marker; the request roots on its `branchOrigin` / chat source as before.
 export class MediaBranchLineagePlanner {
     private readonly mediaGenerationRunPlanner = new MediaGenerationRunPlanner()
 
@@ -49,6 +87,9 @@ export class MediaBranchLineagePlanner {
         const sourceContextNodeIds = resolution?.sourceContextNodeIds ?? []
         const createdAt = input.createdAt ?? Date.now()
         const sourceDecision = this.getSourceDecision(resolution, snapshot, referenceNodeIds)
+        const mediaRuns = this.enumerateMediaRuns(input)
+        const reasoningRuns = this.enumerateReasoningRuns(mediaRuns)
+        const usesReasoningForks = this.shouldCreateReasoningForks(reasoningRuns)
         const branchOrigin = this.buildBranchOrigin({
             input,
             branchId,
@@ -58,8 +99,10 @@ export class MediaBranchLineagePlanner {
             providedReferenceNodeIds,
             sourceContextNodeIds,
             sourceDecision,
+            reasoningBranchCount: reasoningRuns.length,
         })
-        const branchForks = this.buildBranchForks({
+        const parentBranchNodeId = sourceDecision.sourceNodeId ?? branchOrigin?.nodeId
+        const markerArgs = {
             input,
             branchId,
             promptText,
@@ -68,8 +111,13 @@ export class MediaBranchLineagePlanner {
             providedReferenceNodeIds,
             sourceContextNodeIds,
             sourceDecision,
-            branchOrigin,
-        })
+            parentBranchNodeId,
+            mediaRuns,
+            reasoningRuns,
+            usesReasoningForks,
+        }
+        const branchForks = this.buildBranchForks(markerArgs)
+        const branchLines = this.buildBranchLines(markerArgs)
         const runAssignments = this.buildRunAssignments({
             input,
             branchId,
@@ -79,7 +127,10 @@ export class MediaBranchLineagePlanner {
             sourceContextNodeIds,
             sourceDecision,
             branchOrigin,
+            parentBranchNodeId,
             branchForks,
+            branchLines,
+            mediaRuns,
             createdAt,
         })
 
@@ -95,9 +146,58 @@ export class MediaBranchLineagePlanner {
             sourceContextNodeIds,
             ...(branchOrigin ? { branchOrigin } : {}),
             branchForks,
+            branchLines,
             runAssignments,
             createdAt,
         }
+    }
+
+    // Expands the reasoning x media grid into one spec per concrete generation.
+    // When no media model IDs are supplied (legacy callers) it falls back to one
+    // synthetic run per reasoning model so the plan still has run assignments.
+    private enumerateMediaRuns(input: MediaBranchLineagePlannerInput): MediaRunSpec[] {
+        const imageModelIds = input.imageModelIds ?? []
+        const videoModelIds = input.videoModelIds ?? []
+        const specs: MediaRunSpec[] = []
+
+        for (const [reasoningIndex, reasoningModelId] of input.reasoningModelIds.entries()) {
+            const reasoningRunId = this.mediaGenerationRunPlanner.buildReasoningRunId(input.generationRequestId, reasoningIndex)
+            const base = { reasoningModelId, reasoningIndex, reasoningRunId }
+
+            if (imageModelIds.length === 0 && videoModelIds.length === 0) {
+                specs.push({ ...base, mediaIndex: 0 })
+                continue
+            }
+            imageModelIds.forEach((mediaModelId, mediaIndex) => {
+                specs.push({ ...base, mediaModelId, mediaType: 'image', mediaIndex, mediaRunId: `${reasoningRunId}:image:${mediaIndex}` })
+            })
+            videoModelIds.forEach((mediaModelId, mediaIndex) => {
+                specs.push({ ...base, mediaModelId, mediaType: 'video', mediaIndex, mediaRunId: `${reasoningRunId}:video:${mediaIndex}` })
+            })
+        }
+        return specs
+    }
+
+    private enumerateReasoningRuns(mediaRuns: MediaRunSpec[]): ReasoningRunSpec[] {
+        const reasoningRunsById = new Map<string, ReasoningRunSpec>()
+        for (const run of mediaRuns) {
+            const existing = reasoningRunsById.get(run.reasoningRunId)
+            if (existing) {
+                existing.mediaRunCount += 1
+                continue
+            }
+            reasoningRunsById.set(run.reasoningRunId, {
+                reasoningModelId: run.reasoningModelId,
+                reasoningIndex: run.reasoningIndex,
+                reasoningRunId: run.reasoningRunId,
+                mediaRunCount: 1,
+            })
+        }
+        return Array.from(reasoningRunsById.values())
+    }
+
+    private shouldCreateReasoningForks(reasoningRuns: ReasoningRunSpec[]): boolean {
+        return reasoningRuns.length > 1 || reasoningRuns.some(run => run.mediaRunCount > 1)
     }
 
     private getReferenceNodeIds(
@@ -183,9 +283,10 @@ export class MediaBranchLineagePlanner {
         providedReferenceNodeIds: string[]
         sourceContextNodeIds: string[]
         sourceDecision: SourceDecision
+        reasoningBranchCount: number
     }): BranchOriginLineagePlan | undefined {
         if (args.sourceDecision.sourceNodeId) return undefined
-        const forkCount = Math.max(0, args.input.reasoningModelIds.length)
+        const forkCount = Math.max(0, args.reasoningBranchCount)
         return {
             nodeId: `branch-origin-${args.input.generationRequestId}`,
             generationRequestId: args.input.generationRequestId,
@@ -197,50 +298,75 @@ export class MediaBranchLineagePlanner {
                 providedReferenceNodeIds: args.providedReferenceNodeIds,
                 referenceNodeIds: args.referenceNodeIds,
                 sourceContextNodeIds: args.sourceContextNodeIds,
-                forked: args.input.reasoningModelIds.length > 1,
+                forked: args.reasoningBranchCount > 1,
                 forkCount,
             },
         }
     }
 
-    private buildBranchForks(args: {
-        input: MediaBranchLineagePlannerInput
-        branchId: string
-        promptText: string
-        promptFingerprint?: string
-        referenceNodeIds: string[]
-        providedReferenceNodeIds: string[]
-        sourceContextNodeIds: string[]
-        sourceDecision: SourceDecision
-        branchOrigin?: BranchOriginLineagePlan
-    }): BranchForkLineagePlan[] {
-        if (args.input.reasoningModelIds.length <= 1) return []
-        const parentBranchNodeId = args.sourceDecision.sourceNodeId ?? args.branchOrigin?.nodeId
-        if (!parentBranchNodeId) return []
+    private buildBranchForks(args: MediaMarkerArgs): BranchForkLineagePlan[] {
+        if (!args.usesReasoningForks) return []
+        if (!args.parentBranchNodeId) return []
+        const parentBranchNodeId = args.parentBranchNodeId
 
-        return args.input.reasoningModelIds.map((reasoningModelId, reasoningIndex) => {
-            const reasoningRunId = this.mediaGenerationRunPlanner.buildReasoningRunId(args.input.generationRequestId, reasoningIndex)
-            return {
-                nodeId: `branch-fork-${args.input.generationRequestId}-reasoning-${reasoningIndex}`,
-                generationRequestId: args.input.generationRequestId,
-                branchId: args.branchId,
-                parentBranchNodeId,
-                reasoningRunId,
-                reasoningModelId,
-                reasoningIndex,
-                ...(args.promptFingerprint ? { promptFingerprint: args.promptFingerprint } : {}),
-                provenance: {
-                    kind: 'reasoning-run',
-                    promptText: args.promptText,
-                    providedReferenceNodeIds: args.providedReferenceNodeIds,
-                    referenceNodeIds: args.referenceNodeIds,
-                    sourceContextNodeIds: args.sourceContextNodeIds,
-                    reasoningRunId,
-                    reasoningModelId,
-                    reasoningIndex,
-                },
-            }
-        })
+        return args.reasoningRuns.map((run) => ({
+            nodeId: this.buildForkNodeId(args.input.generationRequestId, run),
+            generationRequestId: args.input.generationRequestId,
+            branchId: args.branchId,
+            parentBranchNodeId,
+            reasoningRunId: run.reasoningRunId,
+            reasoningModelId: run.reasoningModelId,
+            reasoningIndex: run.reasoningIndex,
+            ...(args.promptFingerprint ? { promptFingerprint: args.promptFingerprint } : {}),
+            provenance: {
+                kind: 'reasoning-run',
+                promptText: args.promptText,
+                providedReferenceNodeIds: args.providedReferenceNodeIds,
+                referenceNodeIds: args.referenceNodeIds,
+                sourceContextNodeIds: args.sourceContextNodeIds,
+                reasoningRunId: run.reasoningRunId,
+                reasoningModelId: run.reasoningModelId,
+                reasoningIndex: run.reasoningIndex,
+            },
+        }))
+    }
+
+    private buildBranchLines(args: MediaMarkerArgs): BranchLineLineagePlan[] {
+        // A continuation marker only makes sense for a single generation that
+        // descends from an existing generated branch. Reasoning fanouts use
+        // branchFork, and fresh single generations root on their origin/chat
+        // source directly.
+        if (args.usesReasoningForks) return []
+        if (!args.sourceDecision.parentMediaNodeId) return []
+        const run = args.mediaRuns[0]
+        if (!run || !args.parentBranchNodeId) return []
+
+        return [{
+            nodeId: this.buildLineNodeId(args.input.generationRequestId, run),
+            generationRequestId: args.input.generationRequestId,
+            branchId: args.branchId,
+            parentBranchNodeId: args.parentBranchNodeId,
+            reasoningRunId: run.reasoningRunId,
+            reasoningModelId: run.reasoningModelId,
+            reasoningIndex: run.reasoningIndex,
+            ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
+            ...(run.mediaModelId ? { mediaModelId: run.mediaModelId } : {}),
+            ...(run.mediaType ? { mediaType: run.mediaType } : {}),
+            ...(args.promptFingerprint ? { promptFingerprint: args.promptFingerprint } : {}),
+            provenance: {
+                kind: 'branch-continuation',
+                promptText: args.promptText,
+                providedReferenceNodeIds: args.providedReferenceNodeIds,
+                referenceNodeIds: args.referenceNodeIds,
+                sourceContextNodeIds: args.sourceContextNodeIds,
+                reasoningRunId: run.reasoningRunId,
+                reasoningModelId: run.reasoningModelId,
+                reasoningIndex: run.reasoningIndex,
+                ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
+                ...(run.mediaModelId ? { mediaModelId: run.mediaModelId } : {}),
+                ...(run.mediaType ? { mediaType: run.mediaType } : {}),
+            },
+        }]
     }
 
     private buildRunAssignments(args: {
@@ -252,20 +378,30 @@ export class MediaBranchLineagePlanner {
         sourceContextNodeIds: string[]
         sourceDecision: SourceDecision
         branchOrigin?: BranchOriginLineagePlan
+        parentBranchNodeId?: string
         branchForks: BranchForkLineagePlan[]
+        branchLines: BranchLineLineagePlan[]
+        mediaRuns: MediaRunSpec[]
         createdAt: number
     }): MediaRunLineageAssignment[] {
         const forkByReasoningRunId = new Map(args.branchForks.map(fork => [fork.reasoningRunId, fork]))
-        return args.input.reasoningModelIds.map((reasoningModelId, reasoningIndex) => {
-            const reasoningRunId = this.mediaGenerationRunPlanner.buildReasoningRunId(args.input.generationRequestId, reasoningIndex)
-            const branchFork = forkByReasoningRunId.get(reasoningRunId)
+        const lineByMarkerKey = new Map(args.branchLines.map(line => [line.mediaRunId ?? line.reasoningRunId, line]))
+
+        return args.mediaRuns.map((run, runOrdinal) => {
+            const markerKey = run.mediaRunId ?? run.reasoningRunId
+            const branchFork = forkByReasoningRunId.get(run.reasoningRunId)
+            const branchLine = lineByMarkerKey.get(markerKey)
             const lineageParentNodeId = branchFork?.nodeId
+                ?? branchLine?.nodeId
                 ?? args.sourceDecision.sourceNodeId
                 ?? args.branchOrigin?.nodeId
             return {
                 generationRequestId: args.input.generationRequestId,
-                reasoningRunId,
-                reasoningModelId,
+                reasoningRunId: run.reasoningRunId,
+                reasoningModelId: run.reasoningModelId,
+                ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
+                ...(run.mediaModelId ? { mediaModelId: run.mediaModelId } : {}),
+                ...(run.mediaType ? { mediaType: run.mediaType } : {}),
                 branchId: args.branchId,
                 ...(args.sourceDecision.parentMediaNodeId
                     ? {
@@ -275,6 +411,7 @@ export class MediaBranchLineagePlanner {
                     : {}),
                 ...(args.branchOrigin ? { branchOriginNodeId: args.branchOrigin.nodeId } : {}),
                 ...(branchFork ? { branchForkNodeId: branchFork.nodeId } : {}),
+                ...(branchLine ? { branchLineNodeId: branchLine.nodeId } : {}),
                 ...(lineageParentNodeId ? { lineageParentNodeId } : {}),
                 referenceNodeIds: args.referenceNodeIds,
                 sourceContextNodeIds: args.sourceContextNodeIds,
@@ -283,9 +420,34 @@ export class MediaBranchLineagePlanner {
                     : {}),
                 promptText: args.promptText,
                 ...(args.promptFingerprint ? { promptFingerprint: args.promptFingerprint } : {}),
-                createdAt: args.createdAt + reasoningIndex,
+                createdAt: args.createdAt + runOrdinal,
             }
         })
     }
 
+    private buildForkNodeId(generationRequestId: string, run: ReasoningRunSpec): string {
+        return `branch-fork-${generationRequestId}-reasoning-${run.reasoningIndex}`
+    }
+
+    private buildLineNodeId(generationRequestId: string, run: MediaRunSpec): string {
+        return run.mediaRunId
+            ? `branch-line-${generationRequestId}-r${run.reasoningIndex}-${run.mediaType}-${run.mediaIndex}`
+            : `branch-line-${generationRequestId}-reasoning-${run.reasoningIndex}`
+    }
+
+}
+
+type MediaMarkerArgs = {
+    input: MediaBranchLineagePlannerInput
+    branchId: string
+    promptText: string
+    promptFingerprint?: string
+    referenceNodeIds: string[]
+    providedReferenceNodeIds: string[]
+    sourceContextNodeIds: string[]
+    sourceDecision: SourceDecision
+    parentBranchNodeId?: string
+    mediaRuns: MediaRunSpec[]
+    reasoningRuns: ReasoningRunSpec[]
+    usesReasoningForks: boolean
 }

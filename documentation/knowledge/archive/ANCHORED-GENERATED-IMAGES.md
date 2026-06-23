@@ -61,8 +61,8 @@ Anchored placement used the thread DOM to find the response message that created
 1. Compute a constrained image width from the thread width.
 2. Find `[data-message-id="${responseMessageId}"]` inside the thread DOM.
 3. Fall back to the last response message while partial generation had no final message id.
-4. Convert message/bubble DOM coordinates into canvas coordinates using the thread DOM rect and current zoom.
-5. Place the image near the right side of the response bubble, overlapping the thread body.
+4. Convert message DOM coordinates into canvas coordinates using the thread DOM rect and current zoom.
+5. Place the image near the right side of the response message, overlapping the thread body.
 6. Preserve the image aspect ratio when computing the final height.
 
 The old constants were conceptually:

@@ -7,6 +7,10 @@ import type {
 
 export const NEW_CHAT_DRAFT_KEY = 'new-chat'
 
+// Draft key for the screen-fixed, canvas-wide composer (bottom-center). Stored
+// alongside chat drafts so its text + selected models survive a refresh.
+export const CANVAS_GLOBAL_DRAFT_KEY = 'canvas-global'
+
 export function createDefaultAiChatPanelState(): CanvasAiChatPanelState {
     return {
         isOpen: false,

@@ -39,15 +39,15 @@ function serializePromptModelSelection(value: unknown): string {
 }
 
 export function buildAiPromptDraftAttrsFromSubmitData(data: AiPromptSubmitModelData): Record<string, any> {
-    const legacyUseMultipleModels = parseBooleanModelMode(data.useMultipleModels)
+    const combinedMultiModelFlag = parseBooleanModelMode(data.useMultipleModels)
     const rawUseMultipleReasoningModels = parseBooleanModelMode(data.useMultipleReasoningModels)
     const rawUseMultipleImageModels = parseBooleanModelMode(data.useMultipleImageModels)
     const rawUseMultipleVideoModels = parseBooleanModelMode(data.useMultipleVideoModels)
     const hasSectionModelMode = rawUseMultipleReasoningModels || rawUseMultipleImageModels || rawUseMultipleVideoModels
-    const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionModelMode
-    const useMultipleReasoningModels = rawUseMultipleReasoningModels || useLegacyModeFallback
-    const useMultipleImageModels = rawUseMultipleImageModels || useLegacyModeFallback
-    const useMultipleVideoModels = rawUseMultipleVideoModels || useLegacyModeFallback
+    const shouldExpandCombinedModelFlag = combinedMultiModelFlag && !hasSectionModelMode
+    const useMultipleReasoningModels = rawUseMultipleReasoningModels || shouldExpandCombinedModelFlag
+    const useMultipleImageModels = rawUseMultipleImageModels || shouldExpandCombinedModelFlag
+    const useMultipleVideoModels = rawUseMultipleVideoModels || shouldExpandCombinedModelFlag
     const reasoningModelSelection = useMultipleReasoningModels
         ? data.aiModels
         : data.aiModel ? [data.aiModel] : []
@@ -86,15 +86,15 @@ export function buildAiPromptDraftFromText(promptText: string, attrs: Record<str
     const paragraph = text
         ? { type: 'paragraph', content: [{ type: 'text', text }] }
         : { type: 'paragraph' }
-    const legacyUseMultipleModels = parseBooleanModelMode(attrs.useMultipleModels)
+    const combinedMultiModelFlag = parseBooleanModelMode(attrs.useMultipleModels)
     const rawUseMultipleReasoningModels = parseBooleanModelMode(attrs.useMultipleReasoningModels)
     const rawUseMultipleImageModels = parseBooleanModelMode(attrs.useMultipleImageModels)
     const rawUseMultipleVideoModels = parseBooleanModelMode(attrs.useMultipleVideoModels)
     const hasSectionModelMode = rawUseMultipleReasoningModels || rawUseMultipleImageModels || rawUseMultipleVideoModels
-    const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionModelMode
-    const useMultipleReasoningModels = rawUseMultipleReasoningModels || useLegacyModeFallback
-    const useMultipleImageModels = rawUseMultipleImageModels || useLegacyModeFallback
-    const useMultipleVideoModels = rawUseMultipleVideoModels || useLegacyModeFallback
+    const shouldExpandCombinedModelFlag = combinedMultiModelFlag && !hasSectionModelMode
+    const useMultipleReasoningModels = rawUseMultipleReasoningModels || shouldExpandCombinedModelFlag
+    const useMultipleImageModels = rawUseMultipleImageModels || shouldExpandCombinedModelFlag
+    const useMultipleVideoModels = rawUseMultipleVideoModels || shouldExpandCombinedModelFlag
     return {
         type: 'doc',
         content: [
@@ -105,7 +105,7 @@ export function buildAiPromptDraftFromText(promptText: string, attrs: Record<str
                     aiModels: useMultipleReasoningModels
                         ? attrs.aiModels || ''
                         : serializeAiModelSelectionAttr(attrs.aiModel ? [attrs.aiModel] : []),
-                    useMultipleModels: legacyUseMultipleModels || hasSectionModelMode,
+                    useMultipleModels: combinedMultiModelFlag || hasSectionModelMode,
                     useMultipleReasoningModels,
                     useMultipleImageModels,
                     useMultipleVideoModels,

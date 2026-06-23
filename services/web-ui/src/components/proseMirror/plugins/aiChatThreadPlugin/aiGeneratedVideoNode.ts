@@ -50,6 +50,7 @@ export const aiGeneratedVideoNodeSpec = {
         parentMediaNodeId: { default: '' },
         branchOriginNodeId: { default: '' },
         branchForkNodeId: { default: '' },
+        branchLineNodeId: { default: '' },
         lineageParentNodeId: { default: '' },
         // Display attributes (mirror the image node)
         width: { default: null },
@@ -88,6 +89,7 @@ export const aiGeneratedVideoNodeSpec = {
                     parentMediaNodeId: dom.getAttribute('data-parent-media-node-id') || '',
                     branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
                     branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
+                    branchLineNodeId: dom.getAttribute('data-branch-line-node-id') || '',
                     lineageParentNodeId: dom.getAttribute('data-lineage-parent-node-id') || '',
                     width: dom.getAttribute('data-width') || null,
                     alignment: dom.getAttribute('data-alignment') || 'left',
@@ -123,6 +125,7 @@ export const aiGeneratedVideoNodeSpec = {
             'data-parent-media-node-id': node.attrs.parentMediaNodeId,
             'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
             'data-branch-fork-node-id': node.attrs.branchForkNodeId,
+            'data-branch-line-node-id': node.attrs.branchLineNodeId,
             'data-lineage-parent-node-id': node.attrs.lineageParentNodeId,
             'data-width': node.attrs.width || '',
             'data-alignment': node.attrs.alignment || 'left',
@@ -249,6 +252,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     }
     const wrapper = html`
         <div className="ai-generated-video-wrapper ai-generated-media-node">
+            <div className="ai-generated-media-section-title">Final generated video</div>
             <div className="ai-generated-video-container" style=${containerStyle}>
                 <div className="ai-generated-video-placeholder">
                     <span className="placeholder-text">Generating video…</span>
@@ -261,6 +265,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     `
 
     const container = wrapper.querySelector('.ai-generated-video-container') as HTMLElement
+    const titleElement = wrapper.querySelector('.ai-generated-media-section-title') as HTMLElement
     const placeholderElement = wrapper.querySelector('.ai-generated-video-placeholder') as HTMLElement
     const placeholderText = wrapper.querySelector('.ai-generated-video-placeholder .placeholder-text') as HTMLElement
     const videoElement = wrapper.querySelector('.ai-generated-video-content') as HTMLVideoElement
@@ -273,6 +278,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     let resizeObserver: ResizeObserver | null = null
     let unsubscribeAiModelsStore: (() => void) | null = null
 
+    titleElement.hidden = true
     applyStyle(videoElement, { display: 'none' })
 
     const syncContainerGeometry = (): void => {
@@ -375,6 +381,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         const { videoUrl, posterUrl, isPending, errorMessage } = node.attrs
 
         if (errorMessage) {
+            titleElement.hidden = true
             clearErrorPlaceholder()
             applyStyle(videoElement, { display: 'none' })
             applyStyle(controlsHost, { display: 'none' })
@@ -387,6 +394,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         }
 
         if (isPending || !videoUrl) {
+            titleElement.hidden = true
             clearErrorPlaceholder()
             applyStyle(videoElement, { display: 'none' })
             applyStyle(controlsHost, { display: 'none' })
@@ -397,6 +405,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         }
 
         clearErrorPlaceholder()
+        titleElement.hidden = false
         placeholderElement.classList.remove('is-active')
         applyStyle(videoElement, { display: 'block' })
         applyStyle(controlsHost, { display: 'block' })
@@ -414,6 +423,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     }
 
     videoElement.onerror = () => {
+        titleElement.hidden = true
         clearErrorPlaceholder()
         applyStyle(videoElement, { display: 'none' })
         applyStyle(controlsHost, { display: 'none' })

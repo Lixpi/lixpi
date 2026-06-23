@@ -358,71 +358,6 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     padding: 0.8rem 0 0.7rem;
     position: relative;
 
-    // ===== USER AVATAR =====
-    .user-avatar {
-        display: block;
-        width: 20px;
-        height: 20px;
-        border-radius: 99px;
-        position: relative;
-        user-select: none;
-        cursor: default;
-        flex: 0 0 auto;
-
-        svg {
-            display: block;
-            width: 20px;
-            height: 20px;
-            fill: #94999d;
-        }
-
-        // Assistant providers
-        &.assistant-anthropic {
-            svg {
-                // fill: #D97757;;
-                width: 20px;
-                height: 20px;
-            }
-        }
-
-        &.assistant-openai {
-            overflow: hidden;
-
-            &.node-receiving-animation svg {
-                animation: heartbeatAnimation 1.5s infinite;
-                animation-timing-function: ease-in-out;
-            }
-        }
-
-        &.assistant-google {
-            svg {
-                width: 20px;
-                height: 20px;
-            }
-        }
-    }
-
-    .ai-response-message-meta {
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        min-height: 20px;
-        margin-top: 0.25rem;
-        gap: 0.35rem;
-    }
-
-    .ai-response-run-meta {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-        min-width: 0;
-
-        &[hidden] {
-            display: none;
-        }
-    }
-
-    .ai-response-run-pill,
     .ai-generated-media-run-pill {
         display: inline-flex;
         align-items: center;
@@ -441,11 +376,6 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         white-space: nowrap;
         box-sizing: border-box;
 
-        &.is-variant {
-            color: rgba(32, 86, 96, 0.74);
-            border-color: rgba(79, 143, 157, 0.26);
-            background: rgba(241, 248, 247, 0.78);
-        }
     }
 
     // ===== AI RESPONSE MESSAGE =====
@@ -462,57 +392,30 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             padding-top: 0rem;
         }
 
-        // Bubble wrapper contains the loading indicator and content
-        .ai-response-message-bubble {
-            display: flex;
-            flex-direction: column;
-            background: var(--ai-response-bubble-color, #f7f7fd);
-            border-radius: 18px 18px 18px 12px;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-            margin-left: 0.75rem;
-            width: calc(100% - 0.75rem);
-            min-height: $aiResponseMessageEmptyNodeMinHeight;
-            min-width: 5rem;
-            position: relative;
-            box-sizing: border-box;
-            overflow: visible;
-            transition: max-width 0.3s ease-in-out;
+        .ai-response-loading-spinner {
+            display: none;
+            pointer-events: none;
+        }
 
-            @include speechBubbleTail((
-                position: 'left',
-                bubbleColor: #f7f7fd
-            ));
+        &.is-waiting .ai-response-loading-spinner {
+            display: block;
+            width: 14px;
+            height: 14px;
+            margin: 0.75rem 1rem 0.25rem 1rem;
+            border: 2px solid rgba(42, 45, 47, 0.15);
+            border-top-color: rgba(42, 45, 47, 0.55);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
 
-            // Override tail color with CSS variable for runtime theming
-            &::after {
-                background-color: var(--ai-response-bubble-color, #f7f7fd);
-            }
-
-            .ai-response-loading-spinner {
-                display: none;
-                pointer-events: none;
-            }
-
-            &.is-waiting .ai-response-loading-spinner {
-                display: block;
-                width: 14px;
-                height: 14px;
-                margin: 0.75rem 1rem 0.25rem 1rem;
-                border: 2px solid rgba(42, 45, 47, 0.15);
-                border-top-color: rgba(42, 45, 47, 0.55);
-                border-radius: 50%;
-                animation: spin 0.8s linear infinite;
-            }
-
-            &.is-waiting .ai-response-message-content {
-                padding-top: 0;
-                padding-bottom: 0.35rem;
-            }
+        &.is-waiting .ai-response-message-content {
+            padding-top: 0;
+            padding-bottom: 0.35rem;
         }
 
         // Message content
         .ai-response-message-content {
-            padding: 0.5rem 1rem;
+            // padding: 0.5rem 1rem;
             color: #2a2d2f;
             word-wrap: break-word;
             position: relative;
@@ -592,7 +495,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 
             // Per-reasoning-model slice of a multi-model response. Consecutive
             // sections are separated by a hairline so each model's reply + its
-            // generation collapsible + its image read as one grouped block.
+            // generation trace + its media read as one grouped block.
             .ai-reasoning-section {
                 position: relative;
 
@@ -833,80 +736,33 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     color: var(--workspace-media-model-badge-model-color, #181e23);
 }
 
+.ai-generated-media-section-title {
+    margin: 0 0 0.45rem;
+    color: rgba(0, 0, 0, 0.45);
+    font-size: 0.68rem;
+    font-style: normal;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
 @keyframes spin {
     to {
         transform: rotate(360deg);
     }
 }
 
-// ========== AI COLLAPSIBLE BLOCK ==========
-.ai-collapsible-block {
-    margin: 0.5rem 0;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 8px;
-    overflow: hidden;
+// ========== AI GENERATION TRACE BLOCK ==========
+.ai-generation-trace-block {
+    margin: 0.75rem 0;
     font-size: 0.875rem;
 
-    > summary {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.5rem 0.75rem;
-        cursor: pointer;
-        user-select: none;
-        color: rgba(0, 0, 0, 0.55);
-        font-weight: 500;
-        font-size: 0.8rem;
-        background: rgba(0, 0, 0, 0.02);
-        list-style: none;
-        transition: background 0.15s ease;
-
-        &::-webkit-details-marker {
-            display: none;
-        }
-
-        &::before {
-            content: '';
-            display: inline-block;
-            width: 0;
-            height: 0;
-            border-style: solid;
-            border-width: 4px 0 4px 6px;
-            border-color: transparent transparent transparent rgba(0, 0, 0, 0.35);
-            transition: transform 0.15s ease;
-            flex-shrink: 0;
-        }
-
-        &:hover {
-            background: rgba(0, 0, 0, 0.04);
-        }
-
-        .ai-collapsible-block-summary-title {
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .ai-collapsible-block-summary-meta {
-            margin-left: auto;
-            color: rgba(0, 0, 0, 0.38);
-            font-size: 0.72rem;
-            font-weight: 600;
-            white-space: nowrap;
-        }
+    .ai-generation-trace-body {
+        padding: 0;
     }
 
-    &[open] > summary::before {
-        transform: rotate(90deg);
-    }
-
-    .ai-collapsible-block-body {
-        padding: 0.5rem 0.75rem;
-        border-top: 1px solid rgba(0, 0, 0, 0.06);
-    }
-
-    .ai-collapsible-block-content {
+    .ai-generation-trace-content {
         color: rgba(0, 0, 0, 0.5);
         font-size: 0.78rem;
         font-style: italic;
@@ -919,6 +775,45 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             font-size: 0.78rem !important;
             font-style: italic;
         }
+    }
+
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content:not(:empty),
+    .ai-image-generation-tool-prompt-fallback,
+    .ai-image-generation-final-prompt {
+        margin: 0;
+        padding: 0.45rem 0.65rem;
+        max-height: 14rem;
+        overflow-y: auto;
+        border-left: 2px solid rgba(115, 87, 184, 0.34);
+        border-radius: 0 4px 4px 0;
+        background: rgba(115, 87, 184, 0.06);
+        color: rgba(26, 39, 68, 0.82);
+        font-family: inherit;
+        font-size: 0.76rem;
+        font-style: normal;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content:empty {
+        display: none;
+    }
+
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content p,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h1,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h2,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h3,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h4,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h5,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content h6,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content span,
+    .ai-image-generation-tool-prompt-section .ai-generation-trace-content div {
+        color: inherit;
+        font-size: 0.76rem !important;
+        font-style: normal;
+        line-height: 1.5;
     }
 
     .ai-image-generation-section-label {
@@ -938,32 +833,43 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     .ai-image-generation-resolver-section {
         margin: 0;
 
+        // Fading gradient separator between sections — mirrors the branch lineage
+        // node marker separator, tuned dark for the light info-panel background.
         & + section {
+            position: relative;
             margin-top: 0.85rem;
             padding-top: 0.85rem;
-            border-top: 1px solid rgba(0, 0, 0, 0.06);
+
+            &::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 1px;
+                border-radius: 999px;
+                background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.04) 10%, rgba(0, 0, 0, 0.08) 26%, rgba(0, 0, 0, 0.14) 50%, rgba(0, 0, 0, 0.08) 74%, rgba(0, 0, 0, 0.04) 90%, rgba(0, 0, 0, 0) 100%);
+            }
+        }
+
+        // The reference section follows the prompt box, which is already a visually
+        // bounded block — a divider between them reads as clutter, so drop it and
+        // tighten the gap since the box edge already provides separation.
+        & + .ai-image-generation-reference-section {
+            margin-top: 0.95rem;
+            padding-top: 0;
+
+            &::before {
+                content: none;
+            }
         }
     }
 
-    .ai-image-generation-tool-prompt-section.has-trace .ai-image-generation-section-label,
+    .ai-image-generation-tool-prompt-section.has-content .ai-image-generation-section-label,
     .ai-image-generation-final-prompt-section .ai-image-generation-section-label,
     .ai-image-generation-reference-section .ai-image-generation-section-label,
     .ai-image-generation-resolver-section .ai-image-generation-section-label {
         display: block;
-    }
-
-    .ai-image-generation-tool-prompt-fallback,
-    .ai-image-generation-final-prompt {
-        margin: 0;
-        max-height: 14rem;
-        overflow: auto;
-        white-space: pre-wrap;
-        word-break: break-word;
-        color: rgba(0, 0, 0, 0.58);
-        font-family: inherit;
-        font-size: 0.76rem;
-        font-style: normal;
-        line-height: 1.45;
     }
 
     .ai-image-generation-reference-grid {
@@ -1090,18 +996,5 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         color: rgba(0, 0, 0, 0.52);
         font-size: 0.7rem;
         line-height: 1.35;
-    }
-
-    &.is-streaming > summary::after {
-        content: '';
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border: 2px solid rgba(0, 0, 0, 0.1);
-        border-top-color: rgba(0, 0, 0, 0.4);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-        margin-left: auto;
-        flex-shrink: 0;
     }
 }

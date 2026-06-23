@@ -430,6 +430,51 @@ export function buildImageBranchCandidateSnapshot({
     }
 }
 
+type BuildCanvasWideCandidateSnapshotParams = {
+    // Identity used in place of a thread id to route streaming + placement for a
+    // thread-less, canvas-wide generation run.
+    generationRunId: string
+    nodes: CanvasNode[]
+    prompt: string
+    // Explicit reference chips, if any. A single reference becomes the active
+    // target hint; the VLM still owns the final role assignment.
+    referenceNodeIds?: string[]
+}
+
+// Candidate snapshot scoped to the WHOLE canvas (every media node), used by the
+// screen-fixed center-bottom composer. Unlike buildImageBranchCandidateSnapshot
+// — which narrows to one thread's lineage + edge-connected context — this offers
+// the VLM every still on the canvas as a candidate. Branch topology and role
+// assignment remain API-owned; this only collects non-authoritative candidates.
+export function buildCanvasWideCandidateSnapshot({
+    generationRunId,
+    nodes,
+    prompt,
+    referenceNodeIds = [],
+}: BuildCanvasWideCandidateSnapshotParams): ImageBranchCandidateSnapshot {
+    const activeTargetNodeId = referenceNodeIds.length === 1 ? referenceNodeIds[0] : undefined
+    const candidatesById = new Map<string, ImageBranchCandidateImage>()
+    for (const node of nodes) {
+        if (!isMediaCanvasNode(node)) continue
+        addCandidate(candidatesById, createBaseContextCandidate(node, activeTargetNodeId))
+    }
+
+    const candidates = Array.from(candidatesById.values())
+    return {
+        resolverVersion: RESOLVER_VERSION,
+        threadId: generationRunId,
+        // `standalone:`-prefixed so the API planner treats this as a rootless
+        // generation (no real source node) and plans a branchOrigin marker — a
+        // thread-less canvas run has no chat/source node to root on.
+        regionNodeId: `standalone:${generationRunId}`,
+        ...(activeTargetNodeId ? { activeTargetNodeId } : {}),
+        promptText: prompt,
+        promptFingerprint: fingerprintPrompt(prompt),
+        candidates,
+        transcriptContext: buildTranscriptContext(candidates, prompt, activeTargetNodeId),
+    }
+}
+
 const WORKSPACE_CONTEXT_RESOLVER_VERSION = 'workspace-context-v1'
 
 type BuildWorkspaceContextSnapshotParams = {

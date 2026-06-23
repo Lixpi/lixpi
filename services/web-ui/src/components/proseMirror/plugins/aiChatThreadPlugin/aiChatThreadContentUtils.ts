@@ -1,8 +1,5 @@
 import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
-import type {
-    AiLineageEventDescriptor,
-    AiLineageProjectionScope,
-} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
+import type { AiLineageProjectionScope } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 
 export type ProseMirrorJsonNode = {
     type?: string
@@ -34,28 +31,13 @@ export type GeneratedMediaTurnLocator = {
     variantIndex?: number | null
 }
 
-export type GeneratedMediaTurnFallback = {
-    threadId: string
-    promptText?: string
-    referenceNodeIds?: string[]
-    responseText?: string
-    responseProvider?: string
-    generatedAt?: string | number
-    lineageEvents?: AiLineageEventDescriptor[]
-    missingReason: string
-}
-
-export type GeneratedMediaTurnProjectionSource =
-    | 'thread-content'
-    | 'generated-by-fallback'
-    | 'branch-origin-fallback'
+export type GeneratedMediaTurnProjectionSource = 'thread-content'
 
 export type GeneratedMediaTurnProjection = {
     threadId: string
     locator: GeneratedMediaTurnLocator
     content: ProseMirrorJsonNode
     source: GeneratedMediaTurnProjectionSource
-    missingReason?: string
 }
 
 type BuildGeneratedMediaTurnProjectionOptions = {
@@ -63,14 +45,6 @@ type BuildGeneratedMediaTurnProjectionOptions = {
     forceGenerationDetailsOpen?: boolean
     limitToLocatorMedia?: boolean
     lineageProjectionScope?: AiLineageProjectionScope
-    fallback?: GeneratedMediaTurnFallback
-}
-
-type BuildBranchOriginPromptProjectionOptions = {
-    threadId?: string
-    branchOriginNodeId?: string
-    generatedAt?: string | number
-    referenceNodeIds?: string[]
 }
 
 type GeneratedMediaTurnMatch = {
@@ -140,41 +114,6 @@ export function collectResponseTextById(root: ProseMirrorJsonNode): Record<strin
     return responseTextById
 }
 
-// A multi-model response holds one aiReasoningSection per reasoning model; the
-// content owner for a given image/video is the section whose model produced it
-// (so each image's history shows ONLY its own model, never the other models').
-// Legacy single-model responses have no sections, so the message itself is used.
-function sectionContainsMediaRun(section: ProseMirrorJsonNode, mediaRunId: string): boolean {
-    for (const child of section.content ?? []) {
-        if ((child.type === 'aiGeneratedImage' || child.type === 'aiGeneratedVideo') && child.attrs?.mediaRunId === mediaRunId) {
-            return true
-        }
-    }
-    return false
-}
-
-function getReasoningContainer(responseNode: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): ProseMirrorJsonNode {
-    const sections = (responseNode.content ?? []).filter((child) => child.type === 'aiReasoningSection')
-    if (sections.length === 0) return responseNode
-
-    if (locator.reasoningRunId) {
-        const matched = sections.find((section) => section.attrs?.reasoningRunId === locator.reasoningRunId)
-        if (matched) return matched
-    }
-
-    if (locator.mediaRunId) {
-        const matched = sections.find((section) => sectionContainsMediaRun(section, locator.mediaRunId!))
-        if (matched) return matched
-    }
-
-    if (locator.reasoningModelId) {
-        const matched = sections.find((section) => section.attrs?.reasoningModelId === locator.reasoningModelId)
-        if (matched) return matched
-    }
-
-    return sections[0]
-}
-
 function cloneProseMirrorJsonNode(node: ProseMirrorJsonNode): ProseMirrorJsonNode {
     return {
         ...node,
@@ -194,7 +133,7 @@ function parseNullableNumber(value: unknown): number | null {
 }
 
 function generatedMediaNodeMatchesLocator(node: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): boolean {
-    if (!isGeneratedMediaProjectionNode(node)) return true
+    if (!isGeneratedMediaProjectionNode(node)) return false
 
     const attrs = node.attrs ?? {}
     if (locator.mediaType && attrs.mediaType && attrs.mediaType !== locator.mediaType) return false
@@ -210,15 +149,150 @@ function generatedMediaNodeMatchesLocator(node: ProseMirrorJsonNode, locator: Ge
     return false
 }
 
+function projectionNodeMatchesLocator(node: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): boolean {
+    if (!isGeneratedMediaProjectionNode(node)) return true
+    return generatedMediaNodeMatchesLocator(node, locator)
+}
+
+function containerContainsGeneratedMedia(container: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): boolean {
+    if (generatedMediaNodeMatchesLocator(container, locator)) return true
+    return Boolean(container.content?.some((child) => containerContainsGeneratedMedia(child, locator)))
+}
+
+// A multi-model response holds one aiReasoningSection per reasoning model; the
+// content owner for a given image/video is the section whose model produced it
+// so each generated-media projection shows only its matching model branch.
+function getReasoningContainer(responseNode: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): ProseMirrorJsonNode | null {
+    const sections = (responseNode.content ?? []).filter((child) => child.type === 'aiReasoningSection')
+    if (sections.length === 0) {
+        if (locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.fileId && !locator.reasoningModelId) {
+            return responseNode
+        }
+        return containerContainsGeneratedMedia(responseNode, locator) ? responseNode : null
+    }
+
+    if (locator.reasoningRunId) {
+        const matched = sections.find((section) => section.attrs?.reasoningRunId === locator.reasoningRunId)
+        if (matched) return matched
+    }
+
+    if (locator.mediaRunId || locator.fileId) {
+        const matched = sections.find((section) => containerContainsGeneratedMedia(section, locator))
+        if (matched) return matched
+    }
+
+    if (locator.reasoningModelId) {
+        const matched = sections.find((section) => section.attrs?.reasoningModelId === locator.reasoningModelId)
+        if (matched) return matched
+    }
+
+    if (locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.fileId && !locator.reasoningModelId) {
+        return responseNode
+    }
+
+    return null
+}
+
+function responseMessageMatchesLocator(responseNode: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): boolean {
+    const responseId = typeof responseNode.attrs?.id === 'string' ? responseNode.attrs.id : ''
+    if (locator.responseMessageId && responseId !== locator.responseMessageId) return false
+    if (!locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.fileId && !locator.reasoningModelId) return false
+    if (locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.fileId && !locator.reasoningModelId) return true
+    return Boolean(getReasoningContainer(responseNode, locator))
+}
+
 function createSingleGeneratedMediaFilter(locator: GeneratedMediaTurnLocator): ProjectionNodeFilter | undefined {
     if (!locator.mediaRunId && !locator.fileId) return undefined
-    return (node) => generatedMediaNodeMatchesLocator(node, locator)
+    return (node) => projectionNodeMatchesLocator(node, locator)
+}
+
+type LineageIds = {
+    branchOriginNodeIds: Set<string>
+    branchForkNodeIds: Set<string>
+    branchLineNodeIds: Set<string>
+}
+
+function addLineageId(set: Set<string>, value: unknown): void {
+    if (typeof value === 'string' && value) set.add(value)
+}
+
+function collectMatchingGeneratedMediaLineageIds(container: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): LineageIds {
+    const lineageIds: LineageIds = {
+        branchOriginNodeIds: new Set(),
+        branchForkNodeIds: new Set(),
+        branchLineNodeIds: new Set(),
+    }
+
+    function visit(node: ProseMirrorJsonNode): void {
+        if (generatedMediaNodeMatchesLocator(node, locator)) {
+            addLineageId(lineageIds.branchOriginNodeIds, node.attrs?.branchOriginNodeId)
+            addLineageId(lineageIds.branchForkNodeIds, node.attrs?.branchForkNodeId)
+            addLineageId(lineageIds.branchLineNodeIds, node.attrs?.branchLineNodeId)
+        }
+
+        for (const child of node.content ?? []) visit(child)
+    }
+
+    visit(container)
+    return lineageIds
+}
+
+function hasAnyLineageIds(lineageIds: LineageIds): boolean {
+    return lineageIds.branchOriginNodeIds.size > 0
+        || lineageIds.branchForkNodeIds.size > 0
+        || lineageIds.branchLineNodeIds.size > 0
+}
+
+function getLineageEventIdentity(node: ProseMirrorJsonNode): string {
+    const attrs = node.attrs ?? {}
+    const kind = typeof attrs.kind === 'string' ? attrs.kind : ''
+    const id = kind === 'branch-origin'
+        ? attrs.branchOriginNodeId
+        : kind === 'branch-line'
+            ? attrs.branchLineNodeId
+            : attrs.branchForkNodeId
+    return `${kind}:${typeof id === 'string' ? id : ''}`
+}
+
+function lineageEventMatchesIds(node: ProseMirrorJsonNode, lineageIds: LineageIds): boolean {
+    const attrs = node.attrs ?? {}
+    if (attrs.kind === 'branch-origin') return lineageIds.branchOriginNodeIds.has(String(attrs.branchOriginNodeId ?? ''))
+    if (attrs.kind === 'branch-line') return lineageIds.branchLineNodeIds.has(String(attrs.branchLineNodeId ?? ''))
+    return lineageIds.branchForkNodeIds.has(String(attrs.branchForkNodeId ?? ''))
+}
+
+function createProjectionNodeFilter(
+    container: ProseMirrorJsonNode,
+    locator: GeneratedMediaTurnLocator,
+    limitToLocatorMedia: boolean,
+): ProjectionNodeFilter {
+    const mediaFilter = limitToLocatorMedia
+        ? createSingleGeneratedMediaFilter(locator)
+        : undefined
+    const lineageIds = limitToLocatorMedia
+        ? collectMatchingGeneratedMediaLineageIds(container, locator)
+        : null
+    const shouldFilterLineageEvents = Boolean(lineageIds && hasAnyLineageIds(lineageIds))
+    const seenLineageEventIds = new Set<string>()
+
+    return (node) => {
+        if (isGeneratedMediaProjectionNode(node)) return mediaFilter ? mediaFilter(node) : true
+        if (node.type !== 'aiLineageEvent') return true
+
+        if (shouldFilterLineageEvents && lineageIds && !lineageEventMatchesIds(node, lineageIds)) return false
+
+        const eventId = getLineageEventIdentity(node)
+        if (seenLineageEventIds.has(eventId)) return false
+        seenLineageEventIds.add(eventId)
+        return true
+    }
 }
 
 function cloneProjectionNodeTree(
     node: ProseMirrorJsonNode,
     forceGenerationDetailsOpen: boolean,
     shouldKeepNode?: ProjectionNodeFilter,
+    reasoningModelId?: string,
 ): ProseMirrorJsonNode | null {
     if (shouldKeepNode && !shouldKeepNode(node)) return null
 
@@ -229,9 +303,18 @@ function cloneProjectionNodeTree(
             isOpen: true,
         }
     }
+    // Single-run streams materialize lineage as standalone aiLineageEvent nodes that
+    // predate the reasoningModelId attr. Backfill it from the projection locator so the
+    // marker can name the reasoning model even for already-persisted branches.
+    if (reasoningModelId && cloned.type === 'aiLineageEvent' && !cloned.attrs?.reasoningModelId) {
+        cloned.attrs = {
+            ...(cloned.attrs ?? {}),
+            reasoningModelId,
+        }
+    }
     if (cloned.content) {
         cloned.content = cloned.content
-            .map((child) => cloneProjectionNodeTree(child, forceGenerationDetailsOpen, shouldKeepNode))
+            .map((child) => cloneProjectionNodeTree(child, forceGenerationDetailsOpen, shouldKeepNode, reasoningModelId))
             .filter((child): child is ProseMirrorJsonNode => Boolean(child))
     }
     return cloned
@@ -241,93 +324,15 @@ function cloneProjectionNode(
     node: ProseMirrorJsonNode,
     forceGenerationDetailsOpen: boolean,
     shouldKeepNode?: ProjectionNodeFilter,
+    reasoningModelId?: string,
 ): ProseMirrorJsonNode {
-    return cloneProjectionNodeTree(node, forceGenerationDetailsOpen, shouldKeepNode) ?? cloneProseMirrorJsonNode(node)
+    return cloneProjectionNodeTree(node, forceGenerationDetailsOpen, shouldKeepNode, reasoningModelId) ?? cloneProseMirrorJsonNode(node)
 }
 
 function createDocumentTitleNode(text: string): ProseMirrorJsonNode {
     return {
         type: 'documentTitle',
         content: [{ type: 'text', text }],
-    }
-}
-
-function createParagraphNodesFromText(text: string): ProseMirrorJsonNode[] {
-    const blocks = text
-        .split(/\n{2,}/)
-        .map((block) => block.trim())
-        .filter(Boolean)
-
-    if (blocks.length === 0) {
-        return [{ type: 'paragraph' }]
-    }
-
-    return blocks.map((block) => ({
-        type: 'paragraph',
-        content: [{ type: 'text', text: block }],
-    }))
-}
-
-function parseTimestamp(value?: string | number): number {
-    if (!value) return 0
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0
-    const parsed = Date.parse(value)
-    return Number.isFinite(parsed) ? parsed : 0
-}
-
-function createUserMessageNode(text: string, createdAt = 0, referenceNodeIds: string[] = []): ProseMirrorJsonNode {
-    return {
-        type: 'aiUserMessage',
-        attrs: {
-            id: 'generated-media-provenance-user',
-            createdAt,
-            referenceNodeIds,
-        },
-        content: createParagraphNodesFromText(text),
-    }
-}
-
-function createResponseMessageNode(
-    text: string,
-    provider = '',
-    lineageEvents: AiLineageEventDescriptor[] = [],
-): ProseMirrorJsonNode {
-    const textContent = text.trim()
-        ? createParagraphNodesFromText(text)
-        : []
-    const content = [
-        ...lineageEvents.map(createLineageEventNode),
-        ...textContent,
-    ]
-
-    return {
-        type: 'aiResponseMessage',
-        attrs: {
-            id: 'generated-media-provenance-response',
-            style: '',
-            isInitialRenderAnimation: false,
-            isReceivingAnimation: false,
-            aiProvider: provider,
-            generationRequestId: '',
-            reasoningRunId: '',
-            mediaRunId: '',
-            reasoningModelId: '',
-            mediaModelId: '',
-            mediaType: '',
-            variantIndex: null,
-        },
-        content: content.length > 0 ? content : createParagraphNodesFromText(text),
-    }
-}
-
-function createLineageEventNode(event: AiLineageEventDescriptor): ProseMirrorJsonNode {
-    return {
-        type: 'aiLineageEvent',
-        attrs: {
-            kind: event.kind,
-            branchOriginNodeId: event.branchOriginNodeId ?? '',
-            branchForkNodeId: event.branchForkNodeId ?? '',
-        },
     }
 }
 
@@ -348,34 +353,23 @@ function createProjectionDocument(threadId: string, threadAttrs: Record<string, 
     }
 }
 
-function buildFallbackProjection(
-    locator: GeneratedMediaTurnLocator,
-    fallback: GeneratedMediaTurnFallback,
-    source: GeneratedMediaTurnProjectionSource,
-): GeneratedMediaTurnProjection {
-    const messages: ProseMirrorJsonNode[] = []
-    const createdAt = parseTimestamp(fallback.generatedAt)
+// In the detail modal the lineage outcome ("Branch continued") reads best as the
+// conclusion of the resolver audit, not as a heading above the response text. So
+// within each container we relocate standalone aiLineageEvent nodes to sit directly
+// before the generated media (which is rendered right after the resolver audit),
+// reflecting the flow: resolver decides → branch continued → generated result.
+function relocateLineageEventsBeforeGeneratedMedia(node: ProseMirrorJsonNode): void {
+    if (!node.content) return
 
-    if (fallback.promptText?.trim()) {
-        messages.push(createUserMessageNode(fallback.promptText.trim(), createdAt, fallback.referenceNodeIds ?? []))
+    const lineageEvents = node.content.filter((child) => child.type === 'aiLineageEvent')
+    if (lineageEvents.length > 0) {
+        const rest = node.content.filter((child) => child.type !== 'aiLineageEvent')
+        const firstMediaIndex = rest.findIndex(isGeneratedMediaProjectionNode)
+        const insertAt = firstMediaIndex === -1 ? rest.length : firstMediaIndex
+        node.content = [...rest.slice(0, insertAt), ...lineageEvents, ...rest.slice(insertAt)]
     }
 
-    const lineageEvents = fallback.lineageEvents ?? []
-    if (fallback.responseText?.trim() || fallback.responseProvider || lineageEvents.length > 0) {
-        messages.push(createResponseMessageNode(
-            fallback.responseText?.trim() ?? '',
-            fallback.responseProvider ?? '',
-            lineageEvents,
-        ))
-    }
-
-    return {
-        threadId: fallback.threadId,
-        locator,
-        content: createProjectionDocument(fallback.threadId, undefined, messages),
-        source,
-        missingReason: fallback.missingReason,
-    }
+    for (const child of node.content) relocateLineageEventsBeforeGeneratedMedia(child)
 }
 
 function cloneResponseForProjection(
@@ -384,21 +378,31 @@ function cloneResponseForProjection(
     forceGenerationDetailsOpen: boolean,
     limitToLocatorMedia: boolean,
     lineageProjectionScope: AiLineageProjectionScope,
-): ProseMirrorJsonNode {
-    const shouldKeepNode = limitToLocatorMedia
-        ? createSingleGeneratedMediaFilter(locator)
-        : undefined
+): ProseMirrorJsonNode | null {
     const sections = (responseNode.content ?? []).filter((child) => child.type === 'aiReasoningSection')
     if (sections.length === 0) {
-        return cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode)
+        const shouldKeepNode = createProjectionNodeFilter(responseNode, locator, limitToLocatorMedia)
+        const cloned = cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode, locator.reasoningModelId)
+        relocateLineageEventsBeforeGeneratedMedia(cloned)
+        return cloned
     }
 
     const selectedSection = getReasoningContainer(responseNode, locator)
-    const clonedSection = cloneProjectionNode(selectedSection, forceGenerationDetailsOpen, shouldKeepNode)
+    if (!selectedSection) return null
+    if (selectedSection === responseNode) {
+        const shouldKeepNode = createProjectionNodeFilter(responseNode, locator, limitToLocatorMedia)
+        const cloned = cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode, locator.reasoningModelId)
+        relocateLineageEventsBeforeGeneratedMedia(cloned)
+        return cloned
+    }
+
+    const shouldKeepNode = createProjectionNodeFilter(selectedSection, locator, limitToLocatorMedia)
+    const clonedSection = cloneProjectionNode(selectedSection, forceGenerationDetailsOpen, shouldKeepNode, locator.reasoningModelId)
     clonedSection.attrs = {
         ...(clonedSection.attrs ?? {}),
         lineageProjectionScope,
     }
+    relocateLineageEventsBeforeGeneratedMedia(clonedSection)
     return {
         ...cloneProseMirrorJsonNode(responseNode),
         content: selectedSection.type === 'aiReasoningSection'
@@ -413,13 +417,7 @@ export function buildGeneratedMediaTurnProjectionFromThreadContent(
     options: BuildGeneratedMediaTurnProjectionOptions = {},
 ): GeneratedMediaTurnProjection | null {
     const root = parseProseMirrorJsonContent(threadContent)
-    if (!root) {
-        return options.fallback
-            ? buildFallbackProjection(locator, options.fallback, 'generated-by-fallback')
-            : null
-    }
-
-    let fallbackMatch: GeneratedMediaTurnMatch | null = null
+    if (!root) return null
 
     function visitContainer(
         node: ProseMirrorJsonNode,
@@ -440,15 +438,13 @@ export function buildGeneratedMediaTurnProjectionFromThreadContent(
             }
 
             if (child.type === 'aiResponseMessage') {
-                const responseId = typeof child.attrs?.id === 'string' ? child.attrs.id : ''
                 const match = {
                     userMessage: scopedLatestUserMessage,
                     responseMessage: child,
                     threadAttrs: scopedThreadAttrs,
                 }
 
-                fallbackMatch = match
-                if (locator.responseMessageId && responseId === locator.responseMessageId) return match
+                if (responseMessageMatchesLocator(child, locator)) return match
                 continue
             }
 
@@ -459,30 +455,27 @@ export function buildGeneratedMediaTurnProjectionFromThreadContent(
         return null
     }
 
-    const exactMatch = visitContainer(root)
-    const match = exactMatch ?? (!locator.responseMessageId ? fallbackMatch : null)
-    if (!match) {
-        return options.fallback
-            ? buildFallbackProjection(locator, options.fallback, 'generated-by-fallback')
-            : null
-    }
+    const match = visitContainer(root)
+    if (!match) return null
 
     const matchedThreadId = typeof match.threadAttrs?.threadId === 'string' && match.threadAttrs.threadId
         ? match.threadAttrs.threadId
         : undefined
     const threadId = options.threadId
         ?? matchedThreadId
-        ?? options.fallback?.threadId
-        ?? 'generated-media-provenance'
+    if (!threadId) return null
+    const responseProjection = cloneResponseForProjection(
+        match.responseMessage,
+        locator,
+        options.forceGenerationDetailsOpen ?? false,
+        options.limitToLocatorMedia ?? false,
+        options.lineageProjectionScope ?? 'media-run',
+    )
+    if (!responseProjection) return null
+
     const messages = [
         match.userMessage ? cloneProjectionNode(match.userMessage, options.forceGenerationDetailsOpen ?? false) : null,
-        cloneResponseForProjection(
-            match.responseMessage,
-            locator,
-            options.forceGenerationDetailsOpen ?? false,
-            options.limitToLocatorMedia ?? false,
-            options.lineageProjectionScope ?? 'media-run',
-        ),
+        responseProjection,
     ].filter((message): message is ProseMirrorJsonNode => Boolean(message))
 
     return {
@@ -491,30 +484,6 @@ export function buildGeneratedMediaTurnProjectionFromThreadContent(
         content: createProjectionDocument(threadId, match.threadAttrs, messages),
         source: 'thread-content',
     }
-}
-
-export function buildBranchOriginPromptProjection(
-    promptText: string,
-    options: BuildBranchOriginPromptProjectionOptions = {},
-): GeneratedMediaTurnProjection | null {
-    const text = promptText.trim()
-    if (!text && !options.branchOriginNodeId) return null
-
-    const threadId = options.threadId ?? 'branch-origin-provenance'
-    const fallback: GeneratedMediaTurnFallback = {
-        threadId,
-        promptText: text,
-        referenceNodeIds: options.referenceNodeIds ?? [],
-        generatedAt: options.generatedAt,
-        lineageEvents: options.branchOriginNodeId
-            ? [{
-                kind: 'branch-origin',
-                branchOriginNodeId: options.branchOriginNodeId,
-            }]
-            : [],
-        missingReason: 'Branch origin provenance is stored outside durable chat history.',
-    }
-    return buildFallbackProjection({}, fallback, 'branch-origin-fallback')
 }
 
 function getFirstGenerationTrace(container: ProseMirrorJsonNode): {
@@ -546,7 +515,6 @@ export function getGeneratedImageTurnInfoFromThreadContent(
         : { responseMessageId: responseMessageIdOrLocator, reasoningModelId }
 
     let latestUserMessage: ProseMirrorJsonNode | null = null
-    let fallbackResponse: GeneratedImageTurnInfo | null = null
 
     function visitContainer(node: ProseMirrorJsonNode): GeneratedImageTurnInfo | null {
         for (const child of node.content ?? []) {
@@ -556,8 +524,10 @@ export function getGeneratedImageTurnInfoFromThreadContent(
             }
 
             if (child.type === 'aiResponseMessage') {
+                if (!responseMessageMatchesLocator(child, locator)) continue
                 const responseId = typeof child.attrs?.id === 'string' ? child.attrs.id : ''
                 const container = getReasoningContainer(child, locator)
+                if (!container) continue
                 const { imageTrace, videoTrace, promptText } = getFirstGenerationTrace(container)
                 const info: GeneratedImageTurnInfo = {
                     userPromptText: collectProseMirrorText(latestUserMessage ?? undefined).trim(),
@@ -570,10 +540,7 @@ export function getGeneratedImageTurnInfoFromThreadContent(
                     videoGenerationTrace: videoTrace,
                     imageGenerationPromptText: promptText,
                 }
-
-                fallbackResponse = info
-                if (locator.responseMessageId && responseId === locator.responseMessageId) return info
-                continue
+                return info
             }
 
             const nestedMatch = visitContainer(child)
@@ -583,6 +550,5 @@ export function getGeneratedImageTurnInfoFromThreadContent(
         return null
     }
 
-    const exactMatch = visitContainer(root)
-    return exactMatch ?? (!locator.responseMessageId ? fallbackResponse : null)
+    return visitContainer(root)
 }

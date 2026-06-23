@@ -83,6 +83,20 @@ describe('MediaBranchLineagePlanner', () => {
         expect(plan.branchOrigin).toBeUndefined()
         expect(plan.branchForks).toEqual([])
 
+        // A single generation that continues an existing generated branch gets a
+        // branchLine continuation marker between the source media and the output.
+        expect(plan.branchLines).toHaveLength(1)
+        const branchLine = plan.branchLines[0]
+        expect(branchLine).toMatchObject({
+            nodeId: 'branch-line-request-1-reasoning-0',
+            parentBranchNodeId: 'person-generated',
+            branchId: 'branch-person',
+        })
+        expect(branchLine.provenance).toMatchObject({
+            kind: 'branch-continuation',
+            promptText: 'stylize the portrait',
+        })
+
         const assignment = plan.runAssignments[0]
         expect(assignment).toMatchObject({
             generationRequestId: 'request-1',
@@ -91,7 +105,8 @@ describe('MediaBranchLineagePlanner', () => {
             branchId: 'branch-person',
             parentMediaNodeId: 'person-generated',
             parentImageNodeId: 'person-generated',
-            lineageParentNodeId: 'person-generated',
+            branchLineNodeId: 'branch-line-request-1-reasoning-0',
+            lineageParentNodeId: 'branch-line-request-1-reasoning-0',
             referenceNodeIds: ['person-generated'],
             sourceContextNodeIds: ['parent-person'],
             operationKind: 'edit_existing',
@@ -261,6 +276,50 @@ describe('MediaBranchLineagePlanner', () => {
             createdAt: 1700000003001,
             referenceNodeIds: ['candidate-1', 'candidate-2'],
             sourceContextNodeIds: ['chip-1', 'chip-3'],
+        })
+    })
+
+    it('forks per media run when a single reasoning model fans out to multiple image models', () => {
+        const snapshot: ImageBranchCandidateSnapshot = {
+            resolverVersion: 'image-branch-vlm-v1',
+            threadId: 'thread-5',
+            regionNodeId: 'standalone:region-5',
+            promptText: 'two angry pigs',
+            transcriptContext: 'context',
+            candidates: [],
+        }
+
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-5',
+            reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1-mini', 'Google:gemini-2.5-flash-image'],
+            imageBranchCandidateSnapshot: snapshot,
+            createdAt: 1700000005000,
+        })
+
+        // Two image models under one reasoning model = two generations -> a split,
+        // so each generation gets its own branchFork flat under the branch origin.
+        expect(plan.branchLines).toEqual([])
+        expect(plan.branchForks).toHaveLength(1)
+        expect(plan.branchOrigin).toBeDefined()
+        expect(plan.branchForks.map((fork) => fork.nodeId)).toEqual([
+            'branch-fork-request-5-reasoning-0',
+        ])
+        expect(plan.branchForks.every((fork) => fork.parentBranchNodeId === plan.branchOrigin?.nodeId)).toBe(true)
+
+        expect(plan.runAssignments).toHaveLength(2)
+        expect(plan.runAssignments[0]).toMatchObject({
+            mediaRunId: 'request-5:reasoning:0:image:0',
+            mediaModelId: 'OpenAI:gpt-image-1-mini',
+            mediaType: 'image',
+            branchForkNodeId: 'branch-fork-request-5-reasoning-0',
+            lineageParentNodeId: 'branch-fork-request-5-reasoning-0',
+        })
+        expect(plan.runAssignments[1]).toMatchObject({
+            mediaRunId: 'request-5:reasoning:0:image:1',
+            mediaModelId: 'Google:gemini-2.5-flash-image',
+            mediaType: 'image',
+            branchForkNodeId: 'branch-fork-request-5-reasoning-0',
         })
     })
 })

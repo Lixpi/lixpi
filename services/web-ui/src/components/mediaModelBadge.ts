@@ -15,6 +15,9 @@ export type MediaModelBadgeConfig = {
     modelId?: string | null
     modelProvider?: string | null
     iconOnly?: boolean
+    // Use the monochrome provider glyph instead of the brand-colored icon. Useful
+    // where the badge sits inline next to muted text (e.g. lineage attribution).
+    monochromeIcon?: boolean
 }
 
 export type MediaModelBadgeStyleOptions = {
@@ -84,11 +87,13 @@ export function getMediaModelBadgeMeta(config: MediaModelBadgeConfig): MediaMode
     const label = providerTitle && modelTitle
         ? `${providerTitle}${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}${modelTitle}`
         : providerTitle || modelTitle
-    const icon = getAiModelIcon(modelMeta?.colorIconName)
-        ?? getAiProviderColorIcon(providerTitle)
-        ?? getAiProviderColorIcon(providerKey)
-        ?? getAiProviderIcon(providerTitle)
-        ?? getAiProviderIcon(providerKey)
+    const icon = config.monochromeIcon
+        ? (getAiProviderIcon(providerTitle) ?? getAiProviderIcon(providerKey))
+        : (getAiModelIcon(modelMeta?.colorIconName)
+            ?? getAiProviderColorIcon(providerTitle)
+            ?? getAiProviderColorIcon(providerKey)
+            ?? getAiProviderIcon(providerTitle)
+            ?? getAiProviderIcon(providerKey))
 
     return {
         providerTitle,

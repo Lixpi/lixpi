@@ -238,7 +238,7 @@ Edge styling:
 
 ## Message-Level Anchoring
 
-When an edge has a `sourceMessageId` — connecting a specific AI response to a generated image — the renderer dynamically calculates `sourceT` to anchor the arrow exactly to that message bubble in the DOM. It also intelligently adjusts `targetT` so the arrow points in a straight line to the target image height, preventing the "diving arrow" effect where a connector would otherwise plunge diagonally toward the image's vertical center.
+When an edge has a `sourceMessageId` — connecting a specific AI response to a generated image — the renderer dynamically calculates `sourceT` to anchor the arrow exactly to that response message in the DOM. It also intelligently adjusts `targetT` so the arrow points in a straight line to the target image height, preventing the "diving arrow" effect where a connector would otherwise plunge diagonally toward the image's vertical center.
 
 The `sourceMessageId` is the same property defined on `WorkspaceEdge` (see [Workspace Model](./WORKSPACE-MODEL.md#workspaceedge)); it ties a generated image back to the exact `aiResponseMessage` that produced it, and that linkage is what lets context extraction associate images with their originating conversation turns ([Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md)).
 

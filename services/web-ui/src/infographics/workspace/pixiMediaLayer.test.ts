@@ -49,6 +49,14 @@ const outlineRendererInstances: Array<{
     setVisible: ReturnType<typeof vi.fn>
     destroy: ReturnType<typeof vi.fn>
 }> = []
+const edgeRendererInstances: Array<{
+    render: ReturnType<typeof vi.fn>
+    destroy: ReturnType<typeof vi.fn>
+}> = []
+const pixiApplicationInstances: Array<{
+    destroy: ReturnType<typeof vi.fn>
+    stage: { addChild: ReturnType<typeof vi.fn> }
+}> = []
 
 vi.mock('pixi.js', () => {
     const fakeFrameRequest = { x: 0, y: 0 }
@@ -133,6 +141,7 @@ vi.mock('pixi.js', () => {
     }
 
     class FakeApplication {
+        public static reset() {}
         public stage = new FakeContainer()
         public world = new FakeContainer()
         public ticker = new FakeTicker()
@@ -140,6 +149,10 @@ vi.mock('pixi.js', () => {
         public init = vi.fn(async () => undefined)
         public render = vi.fn()
         public destroy = vi.fn()
+
+        constructor() {
+            pixiApplicationInstances.push(this)
+        }
     }
 
     return {
@@ -186,30 +199,41 @@ vi.mock('$src/infographics/workspace/pixiMediaLayerLogic.ts', () => ({
 }))
 
 vi.mock('$src/infographics/workspace/rendering/pixiEdgeRenderer.ts', () => ({
-    createPixiEdgeRenderer: vi.fn(() => ({ render: vi.fn(), destroy: vi.fn() })),
+    createPixiEdgeRenderer: vi.fn(() => {
+        const instance = { render: vi.fn(), destroy: vi.fn() }
+        edgeRendererInstances.push(instance)
+        return instance
+    }),
 }))
 
 vi.mock('$src/infographics/workspace/rendering/mediaNodeRegistry.ts', () => ({
     createMediaNodeRegistry: () => mediaNodeRegistryCalls,
 }))
 
-vi.mock('$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts', () => ({
-    PixiTravelingOutlineRenderer: class FakePixiTravelingOutlineRenderer {
-        public sync = vi.fn()
-        public updateGeometry = vi.fn()
-        public setVisible = vi.fn()
-        public destroy = vi.fn()
+vi.mock('$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts', async () => {
+    const actual = await vi.importActual<typeof import('$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts')>(
+        '$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts'
+    )
 
-        public constructor() {
-            outlineRendererInstances.push({
-                sync: this.sync,
-                updateGeometry: this.updateGeometry,
-                setVisible: this.setVisible,
-                destroy: this.destroy,
-            })
-        }
-    },
-}))
+    return {
+        ...actual,
+        PixiTravelingOutlineRenderer: class FakePixiTravelingOutlineRenderer {
+            public sync = vi.fn()
+            public updateGeometry = vi.fn()
+            public setVisible = vi.fn()
+            public destroy = vi.fn()
+
+            public constructor() {
+                outlineRendererInstances.push({
+                    sync: this.sync,
+                    updateGeometry: this.updateGeometry,
+                    setVisible: this.setVisible,
+                    destroy: this.destroy,
+                })
+            }
+        },
+    }
+})
 
 vi.mock('$src/settings.ts', () => ({
     settings: {
@@ -350,6 +374,8 @@ function clearMocks(): void {
     mediaNodeRegistryCalls.dispatchLiveTransform.mockReset()
     mediaNodeRegistryCalls.destroy.mockReset()
     mediaNodeRegistryCalls.register.mockReset()
+    edgeRendererInstances.length = 0
+    pixiApplicationInstances.length = 0
     outlineRendererInstances.length = 0
 }
 
@@ -409,6 +435,32 @@ describe('createPixiMediaLayer runtime behavior', () => {
         expect(mediaNodeRegistryCalls.dispatchLiveTransform).toHaveBeenCalledWith('video-live', { x: 50, y: 60 }, { width: 70, height: 80 })
     })
 
+    it('forwards live transforms and outline geometry updates for generating non-image nodes', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const videoNode = makeNonImageNode('video-live-outline', 'video')
+        layer.sync(makeCanvasState({ nodes: [videoNode] }))
+        layer.setGeneratingImageNodes(new Set(['video-live-outline']))
+        mediaNodeRegistryCalls.dispatchLiveTransform.mockReset()
+        outlineRendererInstances.at(-1)!.updateGeometry.mockReset()
+
+        layer.setNodeLiveTransform('video-live-outline', { x: 11, y: 22 }, { width: 40, height: 30 })
+
+        expect(mediaNodeRegistryCalls.dispatchLiveTransform).toHaveBeenCalledWith(
+            'video-live-outline',
+            { x: 11, y: 22 },
+            { width: 40, height: 30 },
+        )
+        expect(outlineRendererInstances.at(-1)!.updateGeometry).toHaveBeenCalledWith('video-live-outline', expect.objectContaining({
+            x: 11,
+            y: 22,
+            width: 40,
+            height: 30,
+            radius: 8,
+        }))
+    })
+
     it('syncs generating-image border geometry from currently flagged nodes', async () => {
         const layer = createTestLayer()
         await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
@@ -434,13 +486,76 @@ describe('createPixiMediaLayer runtime behavior', () => {
         })
     })
 
+    it('converts generating-outline options into pre-frame-circle geometry', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const imageNode = makeImageNode('preframe')
+        layer.sync(makeCanvasState({ nodes: [imageNode] }))
+        layer.setGeneratingImageNodes(new Map([['preframe', { shape: 'preFrameCircle', direction: 'counterclockwise' }]]))
+
+        const renderer = outlineRendererInstances.at(-1)
+        expect(renderer).toBeTruthy()
+        const calls = renderer!.sync.mock.calls
+        const generated = calls.at(-1)?.[0]?.[0]
+
+        expect(generated).toMatchObject({
+            id: 'preframe',
+            direction: 'counterclockwise',
+            visible: true,
+        })
+        expect(generated?.width).toBeCloseTo(30.333333333333332)
+        expect(generated?.height).toBeCloseTo(30.333333333333332)
+        expect(generated?.radius).toBeCloseTo(15.166666666666666)
+        expect(generated?.durationMs).toBeGreaterThan(0)
+        expect(generated?.snakeLengthFraction).toBeGreaterThan(0)
+    })
+
+    it('forwards viewport changes to the edge renderer', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const edgeRenderer = edgeRendererInstances.at(-1)
+        layer.setViewport({ x: 10, y: -20, zoom: 1.5 })
+
+        expect(edgeRenderer?.render).toHaveBeenCalledWith([], { x: 10, y: -20, zoom: 1.5 })
+    })
+
+    it('updates node outlines when dragging generating image nodes', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const imageNode = makeImageNode('dragging')
+        layer.sync(makeCanvasState({ nodes: [imageNode] }))
+        layer.setGeneratingImageNodes(new Set(['dragging']))
+        const renderer = outlineRendererInstances.at(-1)!
+        renderer.updateGeometry.mockReset()
+
+        layer.setNodeLiveTransform('dragging', { x: 50, y: 60 }, { width: 80, height: 90 })
+
+        expect(renderer.updateGeometry).toHaveBeenCalledWith('dragging', expect.objectContaining({
+            x: 50,
+            y: 60,
+            width: 80,
+            height: 90,
+            radius: 8,
+        }))
+        expect(mediaNodeRegistryCalls.dispatchLiveTransform).not.toHaveBeenCalled()
+    })
+
     it('invokes media-node registry destroy during teardown', async () => {
         const layer = createTestLayer()
         await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
 
+        const app = pixiApplicationInstances.at(-1)
         layer.sync(makeCanvasState({ nodes: [makeNonImageNode('video-1', 'video')] }))
         layer.destroy()
 
         expect(mediaNodeRegistryCalls.destroy).toHaveBeenCalled()
+        expect(app?.destroy).toHaveBeenCalledWith(true, { children: true, texture: false, textureSource: false })
+        expect(outlineRendererInstances.at(-1)?.destroy).toHaveBeenCalled()
+        expect(layer.getHealth()).toBe('destroyed')
+        const edgeRenderer = edgeRendererInstances.at(-1)
+        expect(edgeRenderer?.destroy).toHaveBeenCalled()
     })
 })

@@ -278,9 +278,17 @@ export abstract class BaseProvider {
             modelName: state.aiModelMetaInfo.model,
             modelVersion: state.modelVersion,
         })
+        const imageModelId = state.imageModelVersion && state.imageProviderName
+            ? this.mediaGenerationRunPlanner.buildMediaModelId(state.imageProviderName, state.imageModelMetaInfo?.model, state.imageModelVersion)
+            : undefined
+        const videoModelId = state.videoModelVersion && state.videoProviderName
+            ? this.mediaGenerationRunPlanner.buildMediaModelId(state.videoProviderName, state.videoModelMetaInfo?.model, state.videoModelVersion)
+            : undefined
         const lineagePlan = this.mediaBranchLineagePlanner.buildPlan({
             generationRequestId: generationRun.generationRequestId,
             reasoningModelIds: [generationRun.reasoningModelId],
+            ...(imageModelId ? { imageModelIds: [imageModelId] } : {}),
+            ...(videoModelId ? { videoModelIds: [videoModelId] } : {}),
             imageBranchCandidateSnapshot: state.imageBranchCandidateSnapshot,
             imageBranchResolution: state.imageBranchResolution,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
@@ -498,6 +506,7 @@ export abstract class BaseProvider {
             mediaType,
             mediaIndex,
             mediaModelCount,
+            lineageAssignments: state.mediaBranchLineagePlan?.runAssignments,
         })
     }
 

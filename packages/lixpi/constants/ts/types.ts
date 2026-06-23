@@ -70,7 +70,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin' | 'branchFork'
+export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin' | 'branchFork' | 'branchLine'
 
 type CanvasNodePosition = {
     x: number
@@ -317,6 +317,33 @@ export type BranchForkProvenance = {
     reasoningIndex: number
 }
 
+// A branchLine marks a plain (non-split) branch continuation: exactly one media
+// generation descends from its lineage source. Unlike branchFork it does not
+// represent a split — it carries the prompt message that drove the continuation.
+export type BranchLineProvenance = {
+    kind: 'branch-continuation'
+    promptText: string
+    providedReferenceNodeIds?: string[]
+    referenceNodeIds: string[]
+    sourceContextNodeIds: string[]
+    reasoningRunId: string
+    reasoningModelId: AiModelId
+    reasoningIndex: number
+    mediaRunId?: string
+    mediaModelId?: AiModelId
+    mediaType?: 'image' | 'video'
+}
+
+export type BranchMarkerPendingState = {
+    phase: 'preflight' | 'planned'
+    promptText: string
+    reasoningModelIds: AiModelId[]
+    reasoningModelId?: AiModelId
+    reasoningIndex?: number
+    imageModelIds: AiModelId[]
+    videoModelIds: AiModelId[]
+}
+
 export type BranchOriginLineagePlan = {
     nodeId: string
     generationRequestId: string
@@ -337,6 +364,21 @@ export type BranchForkLineagePlan = {
     provenance: BranchForkProvenance
 }
 
+export type BranchLineLineagePlan = {
+    nodeId: string
+    generationRequestId: string
+    branchId: string
+    parentBranchNodeId: string
+    reasoningRunId: string
+    reasoningModelId: AiModelId
+    reasoningIndex: number
+    mediaRunId?: string
+    mediaModelId?: AiModelId
+    mediaType?: 'image' | 'video'
+    promptFingerprint?: string
+    provenance: BranchLineProvenance
+}
+
 export type MediaRunLineageAssignment = {
     generationRequestId: string
     reasoningRunId?: string
@@ -346,11 +388,12 @@ export type MediaRunLineageAssignment = {
     mediaType?: 'image' | 'video'
     branchId: string
     parentMediaNodeId?: string
-    // Legacy alias retained for older image-named consumers. New lineage code
-    // must use parentMediaNodeId so image/video/future media share one contract.
+    // Image-named schema alias. Lineage code uses parentMediaNodeId so
+    // image/video/future media share one contract.
     parentImageNodeId?: string
     branchOriginNodeId?: string
     branchForkNodeId?: string
+    branchLineNodeId?: string
     lineageParentNodeId?: string
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -372,6 +415,7 @@ export type MediaBranchLineagePlan = {
     sourceContextNodeIds: string[]
     branchOrigin?: BranchOriginLineagePlan
     branchForks: BranchForkLineagePlan[]
+    branchLines: BranchLineLineagePlan[]
     runAssignments: MediaRunLineageAssignment[]
     createdAt: number
 }
@@ -562,6 +606,7 @@ export type GeneratedMediaVariantMetadata = {
     parentMediaNodeId?: string
     branchOriginNodeId?: string
     branchForkNodeId?: string
+    branchLineNodeId?: string
 }
 
 export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
@@ -572,7 +617,7 @@ export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     revisedPrompt: string
     responseMessageId?: string
     branchId?: string
-    // Legacy alias for parentMediaNodeId.
+    // Image-named schema alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]
@@ -654,7 +699,7 @@ export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     sourceVideoNodeId?: string    // set for extend/edit continuations (Phase 6)
     // reused branch-lineage audit fields (identical names to images)
     branchId?: string
-    // Legacy alias for parentMediaNodeId.
+    // Image-named schema alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]
@@ -714,8 +759,10 @@ export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     type: 'branchOrigin'
     branchId: string
     generationRequestId: string
+    aiChatThreadId?: string
     promptFingerprint?: string
     provenance?: BranchOriginProvenance
+    pendingState?: BranchMarkerPendingState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     temporary: true
@@ -726,18 +773,41 @@ export type BranchForkCanvasNode = CanvasNodeParentingFields & {
     type: 'branchFork'
     branchId: string
     generationRequestId: string
+    aiChatThreadId?: string
     reasoningRunId?: string
     reasoningModelId?: AiModelId
     reasoningIndex?: number
     parentBranchNodeId?: string
     promptFingerprint?: string
     provenance?: BranchForkProvenance
+    pendingState?: BranchMarkerPendingState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     temporary: true
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode
+export type BranchLineCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'branchLine'
+    branchId: string
+    generationRequestId: string
+    aiChatThreadId?: string
+    reasoningRunId?: string
+    reasoningModelId?: AiModelId
+    reasoningIndex?: number
+    mediaRunId?: string
+    mediaModelId?: AiModelId
+    mediaType?: 'image' | 'video'
+    parentBranchNodeId?: string
+    promptFingerprint?: string
+    provenance?: BranchLineProvenance
+    pendingState?: BranchMarkerPendingState
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    temporary: true
+}
+
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 
 export type CanvasViewport = {
     x: number

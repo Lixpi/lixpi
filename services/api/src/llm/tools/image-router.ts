@@ -52,6 +52,7 @@ export class ImageRouter {
                 generationRun: state.generationRun,
                 mediaModelId,
                 mediaType: 'image',
+                lineageAssignments: state.mediaBranchLineagePlan?.runAssignments,
             })
             : state.generationRun
 

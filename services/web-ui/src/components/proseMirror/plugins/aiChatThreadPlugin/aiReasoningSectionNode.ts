@@ -2,7 +2,7 @@
 // A single reasoning model's slice of a multi-model response. One user prompt
 // produces ONE aiResponseMessage; inside it, each selected reasoning model gets
 // its own aiReasoningSection holding that model's reply text, its image/video
-// generation collapsible, and its generated media — kept separate so the
+// generation trace, and its generated media — kept separate so the
 // concurrently-streaming models never interleave their content.
 import { html } from '$src/utils/domTemplates.ts'
 import {
@@ -21,6 +21,7 @@ export const aiReasoningSectionNodeSpec = {
         reasoningIndex: { default: null },
         branchOriginNodeId: { default: '' },
         branchForkNodeId: { default: '' },
+        branchLineNodeId: { default: '' },
         lineageProjectionScope: { default: 'conversation' },
         isReceivingAnimation: { default: false },
     },
@@ -38,6 +39,7 @@ export const aiReasoningSectionNodeSpec = {
                     reasoningIndex: parseReasoningIndex(dom.getAttribute('data-reasoning-index')),
                     branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
                     branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
+                    branchLineNodeId: dom.getAttribute('data-branch-line-node-id') || '',
                     lineageProjectionScope: normalizeAiLineageProjectionScope(dom.getAttribute('data-lineage-projection-scope')),
                     isReceivingAnimation: false,
                 }
@@ -55,6 +57,7 @@ export const aiReasoningSectionNodeSpec = {
                 'data-reasoning-index': node.attrs.reasoningIndex == null ? '' : String(node.attrs.reasoningIndex),
                 'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
                 'data-branch-fork-node-id': node.attrs.branchForkNodeId,
+                'data-branch-line-node-id': node.attrs.branchLineNodeId,
                 'data-lineage-projection-scope': node.attrs.lineageProjectionScope,
             },
             0,
@@ -79,6 +82,7 @@ export const aiReasoningSectionNodeView = (node) => {
                 reasoningIndex: node.attrs.reasoningIndex == null ? '' : String(node.attrs.reasoningIndex),
                 branchOriginNodeId: node.attrs.branchOriginNodeId || '',
                 branchForkNodeId: node.attrs.branchForkNodeId || '',
+                branchLineNodeId: node.attrs.branchLineNodeId || '',
                 lineageProjectionScope: node.attrs.lineageProjectionScope || 'conversation',
             }}
         >
@@ -96,15 +100,24 @@ export const aiReasoningSectionNodeView = (node) => {
         const isWaiting = current.childCount === 0 && current.attrs.isReceivingAnimation
         const branchOriginNodeId = current.attrs.branchOriginNodeId || ''
         const branchForkNodeId = current.attrs.branchForkNodeId || ''
+        const branchLineNodeId = current.attrs.branchLineNodeId || ''
+        const reasoningModelId = current.attrs.reasoningModelId || ''
         const lineageProjectionScope = normalizeAiLineageProjectionScope(current.attrs.lineageProjectionScope)
         const lineageEvents = getReasoningSectionLineageEvents(current.attrs, lineageProjectionScope)
         dom.classList.toggle('is-empty', isWaiting)
         dom.classList.toggle('has-branch-origin', lineageEvents.some(event => event.kind === 'branch-origin'))
         dom.classList.toggle('has-branch-fork', lineageEvents.some(event => event.kind === 'branch-fork'))
+        dom.classList.toggle('has-branch-line', lineageEvents.some(event => event.kind === 'branch-line'))
         dom.dataset.branchOriginNodeId = branchOriginNodeId
         dom.dataset.branchForkNodeId = branchForkNodeId
+        dom.dataset.branchLineNodeId = branchLineNodeId
         dom.dataset.lineageProjectionScope = lineageProjectionScope
-        lineageMarkers.replaceChildren(...lineageEvents.map(createAiLineageEventMarker))
+        // Attribute the reasoning model on each marker so the "Branch continued" row
+        // shows which reasoning model drove the branch (matrix streams carry lineage
+        // on the section; single-run streams use standalone aiLineageEvent nodes).
+        lineageMarkers.replaceChildren(
+            ...lineageEvents.map((event) => createAiLineageEventMarker({ ...event, reasoningModelId })),
+        )
         lineageMarkers.hidden = lineageEvents.length === 0
         spinner.classList.toggle('is-active', isWaiting)
     }
@@ -123,6 +136,7 @@ export const aiReasoningSectionNodeView = (node) => {
             dom.dataset.reasoningIndex = node.attrs.reasoningIndex == null ? '' : String(node.attrs.reasoningIndex)
             dom.dataset.branchOriginNodeId = node.attrs.branchOriginNodeId || ''
             dom.dataset.branchForkNodeId = node.attrs.branchForkNodeId || ''
+            dom.dataset.branchLineNodeId = node.attrs.branchLineNodeId || ''
             dom.dataset.lineageProjectionScope = node.attrs.lineageProjectionScope || 'conversation'
             syncState(node)
             return true

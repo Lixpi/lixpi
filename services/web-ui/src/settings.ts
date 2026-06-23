@@ -148,7 +148,6 @@ export type AiChatThreadSettings = {
     contextPreview: AiChatThreadContextPreviewSettings
     rail: AiChatThreadRailSettings
     styles: {
-        responseMessageBubbleColor: string
         nodeBoxShadow: string
         nodeBorder: string
         panelSectionDividerBorder: string
@@ -281,6 +280,24 @@ export type MediaNodeSettings = {
             infoButtonHoverColor: string
         }
     }
+    generatedMediaInfoPanel: {
+        widthMultiplier: number
+        minWidth: number
+        maxWidth: number | null
+        horizontalOffset: number
+        mediaTopOffset: number
+        branchMarkerTopOffset: number
+        layerZIndex: number
+        styles: {
+            background: string
+            border: string
+            borderRadius: string
+            boxShadow: string
+            color: string
+            overflow: string
+            padding: string
+        }
+    }
     useZoomCompensatedResizeHandleScaling: boolean
     resizeHandle: {
         size: number
@@ -402,12 +419,15 @@ export type VideoControlsSettings = {
     }
 }
 
-export type ImageBranchLineageSettings = {
-    generatedImageSize: number
-    rootOutputGap: number
-    branchToBranchGap: number
-    imageToImageGap: number
-    branchFanoutDepthGap: number
+export type MediaBranchLineageSettings = {
+    generatedMediaSize: number
+    rootToFirstMediaGap: number
+    branchRowGap: number
+    mediaToMediaGap: number
+    branchOriginToFirstMediaGap: number
+    branchFanoutExtraGap: number
+    pendingMarkerInputGap: number
+    pendingMarkerMoveDurationMs: number
     branchOrigin: {
         size: number
         iconSize: number
@@ -416,6 +436,26 @@ export type ImageBranchLineageSettings = {
             borderColor: string
             iconColor: string
             boxShadow: string
+            separatorGradient: string
+        }
+    }
+    marker: {
+        minWidthMultiplier: number
+        maxWidthGrowth: number
+        screenFixedMaxWidthGrowth: number
+        screenFixedMaxWidthFraction: number
+        // Text sizing for the marker's user-message and AI-response preview lines.
+        // Kept in sync with the floating detail panel so a marker reads at the same
+        // size as the expanded thread it represents.
+        text: {
+            // Pixel font size of the user-message preview line (the bold prompt text).
+            messageFontSize: number
+            // Unitless line-height multiplier applied to the user-message preview.
+            messageLineHeight: number
+            // Pixel font size of the AI-response preview line below the separator.
+            responseFontSize: number
+            // Unitless line-height multiplier applied to the AI-response preview.
+            responseLineHeight: number
         }
     }
 }
@@ -452,7 +492,7 @@ export type Settings = {
 
     videoControls: VideoControlsSettings
 
-    imageBranchLineage: ImageBranchLineageSettings
+    mediaBranchLineage: MediaBranchLineageSettings
 
     mediaLibrary: MediaLibrarySettings
 
@@ -616,8 +656,6 @@ export const settings: Settings = {
         },
 
         styles: {
-            // Background color for AI response message bubbles and their pigtail.
-            responseMessageBubbleColor: '#f7f7fd',
             // Box shadow around the AI chat thread canvas node. Use `none` for a flat panel surface.
             nodeBoxShadow: 'none',
             // Border around the AI chat thread canvas node. Use `none` to remove the browser-default border.
@@ -679,8 +717,12 @@ export const settings: Settings = {
             strokeWidth: 3,
             // Base screen-pixel arrowhead size at 100% and higher zoom.
             markerSize: 23,
-            // Base screen-pixel source/target marker offsets at 100% and higher zoom.
-            markerOffset: { source: 11, target: 24 },
+            // Base screen-pixel gap between a connector endpoint and the node it
+            // attaches to, at 100% and higher zoom. This is the pure node↔line gap
+            // and is identical for both ends; it carries NO arrowhead knowledge —
+            // WorkspaceConnectionManager adds the arrowhead's own length only on
+            // ends that actually draw an arrow.
+            markerOffset: { source: 15, target: 15 },
             // Screen-pixel width of the invisible selection hit area around connector lines.
             clickAreaWidth: 24,
             // Lower zoom breakpoint for connector chrome. Runtime call sites opt
@@ -760,6 +802,34 @@ export const settings: Settings = {
             },
         },
 
+        // Expanded provenance/descriptor panel opened from generated-media chrome and branch-lineage markers.
+        generatedMediaInfoPanel: {
+            // Panel width as a proportion of the media/lineage width that anchors it.
+            widthMultiplier: 1,
+            // Minimum canvas-unit panel width after widthMultiplier is applied. Use 0 to keep the anchor width as the floor.
+            minWidth: 0,
+            // Optional maximum canvas-unit panel width after widthMultiplier is applied. Use null for no cap.
+            maxWidth: null,
+            // Canvas-unit horizontal offset from the anchor's left edge.
+            horizontalOffset: 0,
+            // Additional screen-pixel vertical offset below the generated-media icon strip.
+            mediaTopOffset: 0,
+            // Canvas-unit vertical offset below a branch-lineage marker.
+            branchMarkerTopOffset: 10,
+            // Stacking level for the viewport-transformed info panel layer.
+            layerZIndex: 5,
+            styles: {
+                background: '#fff',
+                border: '1px solid rgba(34, 40, 49, 0.08)',
+                borderRadius: '20px',
+                // Twice the prior intensity (alpha doubled 0.14 → 0.28, with a deeper spread) so the floating detail modal reads as clearly lifted above the canvas.
+                boxShadow: '0 16px 44px rgba(20, 24, 30, 0.28)',
+                color: '#252b33',
+                overflow: 'visible',
+                padding: '0',
+            },
+        },
+
         // Keep resize corner handles at a stable apparent size as the canvas zoom changes.
         useZoomCompensatedResizeHandleScaling: true,
         // Resize-handle base sizes and zoom breakpoint, shared by image and video resize.
@@ -783,7 +853,7 @@ export const settings: Settings = {
             // Empty screen-pixel gap between the media node edge and the inside edge of the snake at 100% zoom.
             gap: 3,
             // Diameter of the pre-first-frame generation circle as a fraction of the pending media node's shortest side.
-            preFrameCircleScale: 1.3 / 3,
+            preFrameCircleScale: 1 / 3,
             // Screen-pixel width of the snake head at 100% zoom. The body tapers from this value toward the tail.
             snakeWidth: 9,
             // Tail width as a fraction of `snakeWidth`; lower values make the tail taper to a finer point.
@@ -999,29 +1069,54 @@ export const settings: Settings = {
         panelWidthFraction: 2 / 3,
     },
 
-    // Image branch lineage placement settings. These values control where newly generated image nodes appear in relation to their chat root and previous branch images.
-    imageBranchLineage: {
-        // Canvas-unit width and height for new generated image nodes. Increasing it makes each generated branch image larger when inserted.
-        generatedImageSize: 800,
-        // Canvas-unit horizontal gap between a chat root and the first generated image in that branch. Increasing it moves first outputs farther right.
-        rootOutputGap: 384,
+    // Generated media branch-lineage placement settings for image and video nodes.
+    mediaBranchLineage: {
+        // Canvas-unit base width and height for new generated media nodes. Increasing it makes each generated branch artifact larger when inserted.
+        generatedMediaSize: 800,
+        // Canvas-unit horizontal gap between a chat root or reference group and the first generated media node in that branch.
+        rootToFirstMediaGap: 384,
         // Canvas-unit vertical gap between separate branch rows spawned from the same chat root. Increasing it moves new branches farther below the previous branch.
-        branchToBranchGap: 160,
-        // Canvas-unit base horizontal gap between consecutive generated images in the same branch lineage. Increasing it stretches every image-to-image branch step.
-        imageToImageGap: 512,
-        // Canvas-unit extra horizontal gap added for each child after the first when a generated-media node forks. Increasing it gives large branch fans more curve room.
-        branchFanoutDepthGap: 96,
+        branchRowGap: 160,
+        // Canvas-unit base horizontal gap between consecutive generated media nodes in the same branch lineage.
+        mediaToMediaGap: 712,
+        // Canvas-unit horizontal gap from a temporary branchOrigin marker to its first generated media node.
+        branchOriginToFirstMediaGap: 312,
+        // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
+        branchFanoutExtraGap: 96,
+        // Screen-pixel vertical gap between the global prompt input and the pending branch marker shown immediately after canvas prompt submit.
+        pendingMarkerInputGap: 8,
+        // Milliseconds for moving and scaling a pending branch marker from the global prompt input to its API-planned canvas position.
+        pendingMarkerMoveDurationMs: 420,
         // Temporary root marker used when a fresh multi-model branch has no real source node.
         branchOrigin: {
-            // Canvas-unit diameter of the branch-origin circle.
+            // Canvas-unit base size for branch lineage markers; final width and height are derived in WorkspaceCanvas.
             size: 96,
-            // Canvas-unit size for the centered branch icon.
+            // Canvas-unit base size for the branch icon inside marker labels.
             iconSize: 52,
             styles: {
                 backgroundColor: colorPalette.steelBlue,
                 borderColor: colorPalette.steelBlue,
                 iconColor: colorPalette.offWhite,
                 boxShadow: '0 8px 24px rgba(42, 48, 57, 0.22)',
+                separatorGradient: 'linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.18) 10%, rgba(255, 255, 255, 0.34) 26%, rgba(255, 255, 255, 0.62) 50%, rgba(255, 255, 255, 0.34) 74%, rgba(255, 255, 255, 0.18) 90%, rgba(255, 255, 255, 0) 100%)',
+            },
+        },
+        // Width sizing for the branch marker pill that hugs a user message.
+        marker: {
+            // Multiplier on branchOrigin.size for the marker's comfortable minimum width (the pill never shrinks below this).
+            minWidthMultiplier: 2.6,
+            // Multiplier on the minimum width capping how wide an on-canvas (already-placed) marker may grow before its preview wraps to a second line and truncates. Lower it to keep long placed messages more compact.
+            maxWidthGrowth: 1.5,
+            // Multiplier on the minimum width capping the docked, above-the-composer pose (single line). Kept wider than maxWidthGrowth so long prompts stay on one line while still being assessed; once the marker lands on the canvas it tightens to maxWidthGrowth.
+            screenFixedMaxWidthGrowth: 6,
+            // Hard cap on the docked pose's on-screen width as a fraction of the prompt input field width. The pill hugs its content but never grows past this share of the input; longer messages truncate with an ellipsis.
+            screenFixedMaxWidthFraction: 0.8,
+            // Text sizing for the marker's preview lines. Matches the floating detail panel's body text (1rem / 16px) so a marker reads at the same size as the thread it represents.
+            text: {
+                messageFontSize: 16,
+                messageLineHeight: 1.14,
+                responseFontSize: 11.5,
+                responseLineHeight: 1.15,
             },
         },
     },

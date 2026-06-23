@@ -26,6 +26,10 @@ export type BuildProviderMediaRunInput = {
     mediaType: MediaRunType
     mediaIndex?: number
     mediaModelCount?: number
+    // API-planned per-media-run lineage assignments. The concrete run must match
+    // the computed mediaRunId so each generation keeps its media metadata while
+    // sharing the API-planned reasoning fork when the reasoning run fans out.
+    lineageAssignments?: MediaRunLineageAssignment[]
 }
 
 export type BuildMatrixReasoningRunInput = {
@@ -85,8 +89,9 @@ export class MediaGenerationRunPlanner {
         const mediaRunId = input.generationRun.mediaRunId ?? `${input.generationRun.reasoningRunId}:${input.mediaType}:${mediaIndex}`
         const mediaModelCount = input.mediaModelCount ?? 1
         const variantIndex = input.generationRun.variantIndex ?? input.generationRun.reasoningIndex * mediaModelCount + mediaIndex
+        const plannedAssignment = input.lineageAssignments?.find(assignment => assignment.mediaRunId === mediaRunId)
         const lineageAssignment = this.buildMediaRunLineageAssignment(
-            input.generationRun.lineageAssignment,
+            plannedAssignment,
             mediaRunId,
             input.mediaModelId,
             input.mediaType,

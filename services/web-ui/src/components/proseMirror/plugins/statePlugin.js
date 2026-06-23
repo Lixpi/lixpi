@@ -1,6 +1,6 @@
 import { Plugin, PluginKey } from 'prosemirror-state'
 
-export const statePlugin = (initialStateContent, dispatchUpdateCallback, documentTitleChangeCallback) => {
+export const statePlugin = (initialStateContent, dispatchUpdateCallback, documentTitleChangeCallback, dispatchLiveUpdateCallback) => {
     const hasInProgressAiContent = (doc) => {
         let inProgress = false
         doc.descendants((node) => {
@@ -15,6 +15,15 @@ export const statePlugin = (initialStateContent, dispatchUpdateCallback, documen
 
     const applyPluginState = (tr, _, oldState) => {
         const skipDispatch = tr.getMeta('skipDispatch');
+        // Live consumers (e.g. branch lineage markers) need to mirror the document
+        // as it streams. Streamed AI tokens are dispatched with `skipDispatch` set
+        // so they never persist — but those are exactly the transactions the live
+        // preview must react to. This callback therefore fires on EVERY doc change,
+        // ignoring `skipDispatch`, and must never persist: it is purely a read-only
+        // projection of the live doc.
+        if (tr.docChanged) {
+            dispatchLiveUpdateCallback?.(tr.doc.toJSON());
+        }
         // If the transaction has the 'skipDispatch' flag set, don't call the update callback
         if (!skipDispatch && tr.docChanged && !hasInProgressAiContent(tr.doc)) {
             dispatchUpdateCallback(tr.doc.toJSON());
