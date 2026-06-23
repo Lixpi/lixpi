@@ -110,6 +110,29 @@ describe('MediaGenerationRunPlanner', () => {
         expect(planner.buildMediaModelId('Google', undefined, 'veo-3.1-generate-preview')).toBe('Google:veo-3.1-generate-preview')
     })
 
+    it('preserves an existing variant index when building provider media runs', () => {
+        const generationRun = {
+            requestKind: 'single-media',
+            generationRequestId: 'request-7',
+            reasoningRunId: 'request-7:reasoning:3',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            reasoningIndex: 3,
+            variantIndex: 14,
+        } as const
+
+        const run = planner.buildProviderMediaRun({
+            generationRun,
+            mediaModelId: 'OpenAI:imagen-4.0-generate-001',
+            mediaType: 'image',
+            mediaModelCount: 2,
+            mediaIndex: 1,
+        }) as any
+
+        expect(run?.variantIndex).toBe(14)
+        expect(run?.mediaIndex).toBe(1)
+        expect(run?.mediaRunId).toBe('request-7:reasoning:3:image:1')
+    })
+
     it('projects media run metadata onto nested event meta payloads', () => {
         const generationRun = {
             requestKind: 'single-media',

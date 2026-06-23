@@ -115,4 +115,35 @@ describe('VideoRouter', () => {
 
         expect(result).toEqual({ error: 'Video generation failed: provider completed without a generated video' })
     })
+
+    it('does not leak feature reference images into media references when videoSourceForExtension is present', async () => {
+        const { router, process } = createRouter()
+        const refs = ['data:image/png;base64,ref-0', 'data:image/png;base64,ref-1']
+        const featureRefs = ['data:image/png;base64,feature-0', 'data:image/png;base64,feature-1']
+
+        await router.execute(createState({
+            videoReferenceImages: refs,
+            featureReferenceImages: featureRefs,
+            featureUsagePrompt: 'Use warm brush marks in motion.',
+            videoSourceForExtension: 'nats-obj://workspace-workspace-1-files/source-video-file',
+        }))
+
+        const requestData = process.mock.calls[0]?.[0]
+        expect(requestData.videoReferenceImages).toEqual(refs)
+    })
+
+    it('removes the transient video provider even when processing throws', async () => {
+        const remove = vi.fn()
+        const process = vi.fn(async () => {
+            throw new Error('video provider crash')
+        })
+        const createTransient = vi.fn(() => ({ process }))
+        const router = new VideoRouter({ createTransient, remove } as any)
+
+        const result = await router.execute(createState())
+
+        expect(process).toHaveBeenCalledOnce()
+        expect(result.error).toBe('video provider crash')
+        expect(remove).toHaveBeenCalledWith('workspace-1:thread-1:video')
+    })
 })

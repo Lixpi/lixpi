@@ -66,7 +66,7 @@ import {
 } from '$src/components/proseMirror/readOnlyAiChatThreadRenderer.ts'
 import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, atomIcon, imageIcon, videoPlayGlyphIcon, promptIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, atomIcon, imageIcon, videoPlayGlyphIcon, promptIcon, aiChatPanelCollapseIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasMediaNodeLifecycleTracker } from '$src/infographics/workspace/canvasMediaNodeLifecycle.ts'
 import { shouldAcceptGeneratedMediaEvent as shouldAcceptGeneratedMediaEventForState } from '$src/infographics/workspace/generatedMediaEventWorkspaceGuard.ts'
@@ -75,6 +75,7 @@ import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/component
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { getAdaptiveBoundedZoomScalingOptions, getCanvasChromeScreenLayout, getResizeHandleScaledSizes, scaleCanvasChromeToScreenForZoom, scaleCanvasChromeWorldSizeForZoom } from '$src/infographics/utils/zoomScaling.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import { createSidePanel, type SidePanelInstance } from '$src/components/sidePanel/index.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'
 import {
@@ -517,6 +518,7 @@ type AiChatThreadEditorEntry = {
 type ChatRootNode = AiChatThreadCanvasNode
 type RenderActiveAiChatPanelOptions = {
     preserveTabsSwitch?: boolean
+    animateOpen?: boolean
 }
 
 type MarqueeSelectionState = {
@@ -704,6 +706,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET = settings.videoControls.canvas.compactHorizontalInset
     const VIDEO_CONTROLS_COMPACT_WIDTH_THRESHOLD = settings.videoControls.canvas.compactWidthThreshold
     const VIDEO_CONTROLS_BOTTOM_INSET = settings.videoControls.canvas.bottomInset
+    const RIGHT_SIDE_PANEL_SETTINGS = settings.rightSidePanel
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
     let selectionRectEl: HTMLDivElement | null = null
@@ -726,10 +729,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPanelRootNodeId: string | null = null
     let activeAiChatPanelHadContent = false
     let activeAiChatPanelEl: HTMLDivElement | null = null
-    let activeAiChatBackdropEl: HTMLDivElement | null = null
     let activeAiChatPanelTabsSwitch: SlidingTabsSwitchInstance<string> | null = null
     let activeAiChatPromptEditor: AiPromptComposerInstance | null = null
-    let activeAiChatPromptResizeObserver: ResizeObserver | null = null
+    let activeRightSidePanel: SidePanelInstance | null = null
     // Screen-fixed, canvas-wide composer mounted at the bottom-center of the
     // viewport. Each submission creates one hidden ProseMirror-backed message
     // instance whose visible projection is the spatial branch lineage marker.
@@ -742,7 +744,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const activeCanvasRunServices: Map<string, AiInteractionService> = new Map()
     const activeCanvasRunTeardowns: Set<() => void> = new Set()
     const activeCanvasRunTeardownsByThread: Map<string, () => void> = new Map()
-    let activeAiChatPanelRailHeightFrame: number | null = null
     const activeContextChipTrayEls: Set<HTMLDivElement> = new Set()
     const contextPreviewTilesByTray: Map<HTMLDivElement, Set<ContextPreviewTileInstance>> = new Map()
     let contextPreviewRefreshVersion = 0
@@ -3709,14 +3710,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     // Vertical rail elements — one per AI chat thread, spanning thread + floating input
-    const RAIL_OFFSET = settings.aiChatThread.rail.offset
-    const RAIL_GRAB_WIDTH = settings.aiChatThread.rail.dragGrabWidth
-    const AI_CHAT_PANEL_RAIL_PROMPT_GAP = 16
-    const AI_CHAT_PANEL_MIN_WIDTH = 320
-    const AI_CHAT_PANEL_DEFAULT_WIDTH = 380
-    const AI_CHAT_PANEL_MAX_PANE_MARGIN = 64
+    const THREAD_RAIL_OFFSET = settings.aiChatThread.rail.offset
+    const THREAD_RAIL_GRAB_WIDTH = settings.aiChatThread.rail.dragGrabWidth
     const threadRails: Map<string, HTMLElement> = new Map()
-    let activeAiChatPanelWidth: number | null = null
+    // The active right side panel's width state lives in the SidePanel instance
+    // (activeRightSidePanel), which owns clamping, persistence, and the public
+    // get/set/subscribe API. The host only reflects the reported width into DOM.
+    let activeOpeningRightSidePanel: SidePanelInstance | null = null
+    let activeClosingRightSidePanel: SidePanelInstance | null = null
+    let hasRenderedInitialAiChatPanelState = false
 
     const promptInputController = new AiPromptInputController({
         workspaceId,
@@ -3778,14 +3780,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return paneEl.closest('.workspace-canvas') as HTMLElement | null
     }
 
-    function getActiveAiChatPanelMaxWidth(): number {
+    function getRightSidePanelMaxWidth(): number {
         const paneWidth = paneEl.getBoundingClientRect().width
-        return Math.max(AI_CHAT_PANEL_MIN_WIDTH, paneWidth - AI_CHAT_PANEL_MAX_PANE_MARGIN)
+        return Math.max(
+            RIGHT_SIDE_PANEL_SETTINGS.dimensions.minWidth,
+            paneWidth - RIGHT_SIDE_PANEL_SETTINGS.dimensions.maxPaneMargin
+        )
     }
 
-    function getActiveAiChatPanelCurrentWidth(): number {
-        if (activeAiChatPanelWidth !== null) return activeAiChatPanelWidth
-        return Math.min(AI_CHAT_PANEL_DEFAULT_WIDTH, getActiveAiChatPanelMaxWidth())
+    function getRightSidePanelCurrentWidth(): number {
+        if (activeRightSidePanel) return activeRightSidePanel.getWidth()
+        return Math.min(RIGHT_SIDE_PANEL_SETTINGS.defaultDimensions.width, getRightSidePanelMaxWidth())
     }
 
     function getCssPixelVariable(name: string, defaultValue: number): number {
@@ -3794,8 +3799,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return Number.isFinite(value) ? value : defaultValue
     }
 
-    function getAiChatPanelTabsViewportWidth(panelWidth = getActiveAiChatPanelCurrentWidth()): number {
-        const inlinePadding = getCssPixelVariable('--workspace-ai-chat-panel-content-inset', 10)
+    function getAiChatPanelTabsViewportWidth(panelWidth = getRightSidePanelCurrentWidth()): number {
+        const inlinePadding = getCssPixelVariable(
+            '--workspace-right-side-panel-content-inset',
+            RIGHT_SIDE_PANEL_SETTINGS.layout.contentInset
+        )
         return Math.max(0, panelWidth - inlinePadding * 2)
     }
 
@@ -3833,45 +3841,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function applyActiveAiChatPanelWidth(width: number): number {
-        const nextWidth = clampInsideRange(width, AI_CHAT_PANEL_MIN_WIDTH, getActiveAiChatPanelMaxWidth())
-        const widthValue = `${nextWidth}px`
-        const previousWidth = activeAiChatPanelWidth
-
-        activeAiChatPanelWidth = nextWidth
-        getWorkspaceCanvasElement()?.style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)
-        activeAiChatPanelEl?.style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)
-        if (previousWidth === null || Math.abs(nextWidth - previousWidth) >= 0.5) {
-            resizeActiveAiChatPanelTabsSwitch()
-        }
-
-        return nextWidth
+    // Reflects the width owned by the SidePanel instance into host DOM. The
+    // SidePanel has already clamped and stored it; this only updates CSS vars and
+    // dependent layout.
+    function reflectRightSidePanelWidth(width: number): void {
+        const widthValue = `${width}px`
+        const workspaceCanvasElement = getWorkspaceCanvasElement()
+        workspaceCanvasElement?.style.setProperty('--workspace-right-side-panel-width', widthValue)
+        workspaceCanvasElement?.style.setProperty('--side-panel-backdrop-width', widthValue)
+        activeAiChatPanelEl?.style.setProperty('--workspace-right-side-panel-width', widthValue)
+        activeAiChatPanelEl?.style.setProperty('--side-panel-backdrop-width', widthValue)
+        resizeActiveAiChatPanelTabsSwitch()
     }
 
-    function measureActiveAiChatPanelRailThreadHeight(panelEl: HTMLElement): number {
-        const promptEl = panelEl.querySelector<HTMLElement>('.workspace-ai-chat-floating-panel-prompt')
-        if (promptEl) return Math.max(0, promptEl.offsetTop - AI_CHAT_PANEL_RAIL_PROMPT_GAP)
-
-        const bodyHost = panelEl.querySelector<HTMLElement>('.workspace-ai-chat-panel-body')
-        if (bodyHost) return bodyHost.offsetTop + bodyHost.offsetHeight
-
-        return panelEl.querySelector<HTMLElement>('.ai-chat-thread-node-editor')?.offsetHeight ?? 0
-    }
-
-    function handleActiveAiChatPanelResizeStart(event: MouseEvent, panelEl: HTMLDivElement): void {
-        if (event.button !== 0) return
-
-        event.preventDefault()
-        event.stopPropagation()
-
-        const startX = event.clientX
-        const startWidth = activeAiChatPanelWidth ?? panelEl.getBoundingClientRect().width
-        const previousBodyCursor = document.body.style.cursor
-        const previousBodyUserSelect = document.body.style.userSelect
-
-        panelEl.classList.add('is-resizing')
-        applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })
-
+    function handleRightSidePanelResizeStart(): void {
+        activeAiChatPanelEl?.classList.add('is-resizing')
         if (panZoom) {
             panZoom.update({
                 ...panZoomConfig,
@@ -3881,29 +3865,54 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 selectionOnDrag: false
             })
         }
+    }
 
-        const handleMouseMove = (moveEvent: MouseEvent) => {
-            applyActiveAiChatPanelWidth(startWidth + startX - moveEvent.clientX)
+    function handleRightSidePanelResizeEnd(): void {
+        activeAiChatPanelEl?.classList.remove('is-resizing')
+        if (panZoom) {
+            panZoom.update(panZoomConfig)
         }
+    }
 
-        const handleMouseUp = () => {
-            panelEl.classList.remove('is-resizing')
-            applyStyle(document.body, { cursor: previousBodyCursor, userSelect: previousBodyUserSelect })
+    function ensureActiveRightSidePanel(): SidePanelInstance {
+        if (activeRightSidePanel) return activeRightSidePanel
 
-            document.removeEventListener('mousemove', handleMouseMove)
-            document.removeEventListener('mouseup', handleMouseUp)
-
-            if (panZoom) {
-                panZoom.update(panZoomConfig)
-            }
-            if (activeAiChatPanelWidth !== null) {
-                aiChatPanelState = { ...aiChatPanelState, width: activeAiChatPanelWidth }
+        const { defaultDimensions, dimensions, resizeHandle, toggle, animation } = RIGHT_SIDE_PANEL_SETTINGS
+        activeRightSidePanel = createSidePanel({
+            side: 'right',
+            offset: resizeHandle.offset,
+            grabWidth: resizeHandle.grabWidth,
+            className: 'workspace-ai-chat-side-panel-resize-handle',
+            styles: resizeHandle.styles,
+            toggle: {
+                iconSvg: aiChatPanelCollapseIcon,
+                className: 'workspace-ai-chat-panel-toggle',
+                openAriaLabel: toggle.openAriaLabel,
+                closedAriaLabel: toggle.closedAriaLabel,
+                openOffset: toggle.openOffset,
+                closedTravel: toggle.closedTravel,
+                top: toggle.top,
+                size: toggle.size,
+                onToggle: toggleAiChatPanelVisibility,
+            },
+            animation,
+            minWidth: dimensions.minWidth,
+            defaultWidth: defaultDimensions.width,
+            getMaxWidth: getRightSidePanelMaxWidth,
+            measureWidth: () => activeAiChatPanelEl?.getBoundingClientRect().width ?? defaultDimensions.width,
+            loadState: () => ({ width: aiChatPanelState.width ?? null }),
+            persistState: (state) => {
+                aiChatPanelState = { ...aiChatPanelState, width: state.width ?? undefined }
                 persistAiChatSidebarState()
-            }
-        }
-
-        document.addEventListener('mousemove', handleMouseMove)
-        document.addEventListener('mouseup', handleMouseUp)
+            },
+            onResizeStart: handleRightSidePanelResizeStart,
+            onResize: (width) => reflectRightSidePanelWidth(width),
+            onResizeEnd: handleRightSidePanelResizeEnd,
+        })
+        if (activeRightSidePanel.toggleElement) paneEl.appendChild(activeRightSidePanel.toggleElement)
+        activeRightSidePanel.setOpen(aiChatPanelState.isOpen)
+        reflectRightSidePanelWidth(activeRightSidePanel.getWidth())
+        return activeRightSidePanel
     }
 
     function aiChatThreadHasRenderableContent(thread: AiChatThread | undefined): boolean {
@@ -4026,7 +4035,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function destroyActiveAiChatPanel(
         clearActive = false,
         panelThreadId = activeAiChatPanelThreadId ?? activeAiChatThreadId,
-        preserveTabsSwitch = false
+        preserveTabsSwitch = false,
+        destroySidePanel = false
     ): void {
         if (panelThreadId) {
             const entry = threadEditors.get(panelThreadId)
@@ -4040,22 +4050,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         activeAiChatPromptEditor?.destroy()
-        activeAiChatPromptResizeObserver?.disconnect()
-        if (activeAiChatPanelRailHeightFrame !== null) {
-            cancelAnimationFrame(activeAiChatPanelRailHeightFrame)
-            activeAiChatPanelRailHeightFrame = null
+        if (activeOpeningRightSidePanel === activeRightSidePanel) activeOpeningRightSidePanel = null
+        if (activeClosingRightSidePanel === activeRightSidePanel) activeClosingRightSidePanel = null
+        if (destroySidePanel) {
+            activeRightSidePanel?.destroy()
+            activeRightSidePanel = null
+        } else {
+            activeRightSidePanel?.detachPanel()
+            if (!aiChatPanelState.isOpen) activeRightSidePanel?.setOpen(false)
         }
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch?.destroy()
         activeAiChatPanelEl?.remove()
-        activeAiChatBackdropEl?.remove()
         activeAiChatPanelThreadId = null
         activeAiChatPanelRootNodeId = null
         activeAiChatPanelHadContent = false
         activeAiChatPanelEl = null
-        activeAiChatBackdropEl = null
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch = null
         activeAiChatPromptEditor = null
-        activeAiChatPromptResizeObserver = null
         refreshContextChipTray()
 
         if (clearActive) {
@@ -4230,28 +4241,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         refreshContextChipTray()
     }
 
-    function updateActiveAiChatPanelRailHeight(): void {
-        if (!activeAiChatPanelEl) return
-        const panelRail = activeAiChatPanelEl.querySelector<HTMLElement>('.workspace-ai-chat-floating-panel-rail')
-        if (!panelRail) return
-        panelRail.style.setProperty('--rail-thread-height', `${measureActiveAiChatPanelRailThreadHeight(activeAiChatPanelEl)}px`)
-    }
-
-    function scheduleActiveAiChatPanelRailHeightUpdate(): void {
-        if (activeAiChatPanelRailHeightFrame !== null) return
-        activeAiChatPanelRailHeightFrame = requestAnimationFrame(() => {
-            activeAiChatPanelRailHeightFrame = null
-            updateActiveAiChatPanelRailHeight()
-        })
-    }
-
     function restoreAiChatPanelHistoryScroll(historyScrollerEl: HTMLElement | null | undefined, scrollTop: number | null, refreshVersion: number): void {
         if (!historyScrollerEl || scrollTop === null) return
         historyScrollerEl.scrollTop = scrollTop
         requestAnimationFrame(() => {
             if (refreshVersion !== contextPreviewRefreshVersion) return
             if (historyScrollerEl.isConnected) historyScrollerEl.scrollTop = scrollTop
-            updateActiveAiChatPanelRailHeight()
         })
     }
 
@@ -4323,7 +4318,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
         restoreAiChatPanelHistoryScroll(historyScrollerEl, previousScrollTop, refreshVersion)
-        updateActiveAiChatPanelRailHeight()
     }
 
     function getPersistedFeatureExtractionState(extractionRunId: string): CanvasFeatureExtractionState | undefined {
@@ -4349,7 +4343,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         aiChatPanelState = getAiChatPanelState(currentCanvasState)
         aiChatSidebarTabs = aiChatPanelState.tabs
         activeAiChatSidebarTabId = aiChatPanelState.activeTabId ?? null
-        if (aiChatPanelState.width !== undefined) activeAiChatPanelWidth = aiChatPanelState.width
+        // The SidePanel instance owns width; push the persisted value into it
+        // when one exists. When the panel is not mounted, the next createSidePanel
+        // loads the width from this same state via its loadState adapter.
+        if (aiChatPanelState.width != null) activeRightSidePanel?.setWidth(aiChatPanelState.width, { persist: false })
+        activeRightSidePanel?.setOpen(aiChatPanelState.isOpen)
         const activeTab = getActiveAiChatSidebarTab()
         activeAiChatThreadId = activeTab?.type === 'thread' ? activeTab.refId : null
         const activeRootNode = activeAiChatThreadId
@@ -4506,6 +4504,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         void loadExtractionSessionHistory()
     }
 
+    async function playRightSidePanelOpen(sidePanel: SidePanelInstance, panelEl: HTMLElement): Promise<void> {
+        await sidePanel.playOpen(panelEl)
+        if (activeOpeningRightSidePanel === sidePanel) activeOpeningRightSidePanel = null
+    }
+
     function startNewAiChatDraft({
         preserveOpenTabs = true,
         syncFromState = true,
@@ -4540,15 +4543,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         renderActiveAiChatPanel()
     }
 
-    function closeAiChatPanel(): void {
+    async function closeAiChatPanel(): Promise<void> {
+        if (activeClosingRightSidePanel) return
+        const closingSidePanel = activeRightSidePanel
+        if (activeOpeningRightSidePanel === closingSidePanel) activeOpeningRightSidePanel = null
+        activeClosingRightSidePanel = closingSidePanel
         aiChatPanelState = { ...aiChatPanelState, isOpen: false }
         persistAiChatSidebarState()
-        destroyActiveAiChatPanel(false)
+        // Slide the panel back out to its edge before tearing it down. State
+        // sync must not destroy the panel while this animation is in flight.
+        if (closingSidePanel) await closingSidePanel.playClose()
+        if (activeRightSidePanel === closingSidePanel && !aiChatPanelState.isOpen) destroyActiveAiChatPanel(false)
+        if (activeClosingRightSidePanel === closingSidePanel) activeClosingRightSidePanel = null
     }
 
     function toggleAiChatPanelVisibility(): void {
         if (aiChatPanelState.isOpen) {
-            closeAiChatPanel()
+            void closeAiChatPanel()
         } else {
             openAiChatPanel()
         }
@@ -4716,10 +4727,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         options: RenderActiveAiChatPanelOptions = {}
     ): void {
         if (!aiChatPanelState.isOpen) {
-            destroyActiveAiChatPanel(false)
+            if (!activeClosingRightSidePanel) destroyActiveAiChatPanel(false)
+            hasRenderedInitialAiChatPanelState = true
             return
         }
+        if (activeOpeningRightSidePanel && activeAiChatPanelEl) return
         void loadExtractionSessionHistory()
+
+        // Play the drawer slide-in only when the panel goes from absent to
+        // present. Tab switches and content re-renders rebuild the panel while it
+        // is already on screen, and must not replay the open animation.
+        const wasMounted = activeAiChatPanelEl !== null && !activeClosingRightSidePanel
+        const shouldAnimateOpen = !wasMounted && hasRenderedInitialAiChatPanelState && options.animateOpen !== false
 
         const activeSidebarTab = getActiveAiChatSidebarTab()
         const panelThreadId = activeSidebarTab?.type === 'thread' ? activeSidebarTab.refId : null
@@ -4753,7 +4772,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         panelEl.style.setProperty('--workspace-ai-chat-panel-divider-border', settings.aiChatThread.styles.panelSectionDividerBorder)
         applyAiChatPanelSessionHistorySettings(panelEl)
         applyAiChatPanelContextPreviewSettings(panelEl)
-        const backdropEl = html`<div className="workspace-ai-chat-panel-backdrop" aria-hidden="true"></div>` as HTMLDivElement
 
         if (!settings.aiChatThread.showHeader) {
             panelEl.classList.add('workspace-ai-chat-thread-node-hide-title')
@@ -5130,7 +5148,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             controlFactories: promptControlFactories,
             onContentChange: (value: object) => {
                 persistAiChatPromptDraft(promptDraftKey, value)
-                scheduleActiveAiChatPanelRailHeightUpdate()
             },
             onSubmit: (data) => {
                 const currentTab = getActiveAiChatSidebarTab()
@@ -5180,60 +5197,42 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const promptEl = activeAiChatPromptEditor.element
         panelEl.appendChild(promptEl)
 
-        const railStyle = {
-            position: 'absolute' as const,
-            width: `${RAIL_GRAB_WIDTH}px`,
-            left: `${-RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`,
-            top: '0',
-            zIndex: '9990',
-        }
-        const rail = html`<div
-            className="workspace-thread-rail workspace-ai-chat-floating-panel-rail nopan"
-            style=${railStyle}
-            data=${{ threadNodeId: rootNode?.nodeId ?? 'ai-chat-panel' }}
-        ></div>` as HTMLDivElement
-        rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.styles.gradient)
-        rail.style.setProperty('--rail-width', settings.aiChatThread.rail.styles.width)
-        rail.addEventListener('mousedown', (event) => {
-            handleActiveAiChatPanelResizeStart(event, panelEl)
-        })
-
-        const line = html`<div className="workspace-thread-rail-line"></div>` as HTMLDivElement
-        const bottomCircle = html`<div className="workspace-thread-rail-boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
-        const circlePaths = bottomCircle.querySelectorAll('path')
-        const [outerColor, ringColor, innerColor] = settings.aiChatThread.rail.styles.boundaryCircleColors
-        if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
-        if (circlePaths[1]) circlePaths[1].setAttribute('fill', ringColor)
-        if (circlePaths[2]) circlePaths[2].setAttribute('fill', innerColor)
-        line.appendChild(bottomCircle)
-        rail.appendChild(line)
-        panelEl.appendChild(rail)
+        activeRightSidePanel = ensureActiveRightSidePanel()
+        const resizeHandle = activeRightSidePanel.element
+        panelEl.appendChild(resizeHandle)
 
         activeAiChatPanelEl = panelEl
         activeAiChatPanelThreadId = panelThreadId
         activeAiChatPanelRootNodeId = rootNode?.nodeId ?? null
         activeAiChatPanelHadContent = hasContent
-        activeAiChatBackdropEl = backdropEl
-        activeAiChatPromptResizeObserver = new ResizeObserver(scheduleActiveAiChatPanelRailHeightUpdate)
-        activeAiChatPromptResizeObserver.observe(promptEl)
-        paneEl.appendChild(backdropEl)
+        if (shouldAnimateOpen) {
+            activeOpeningRightSidePanel = activeRightSidePanel
+            activeRightSidePanel.prepareOpen(panelEl)
+        } else {
+            activeRightSidePanel.mountOpen(panelEl)
+        }
+        paneEl.appendChild(activeRightSidePanel.backdropElement)
         paneEl.appendChild(panelEl)
 
-        if (activeAiChatPanelWidth !== null) {
-            applyActiveAiChatPanelWidth(activeAiChatPanelWidth)
+        if (activeRightSidePanel.getRawWidth() !== null) {
+            reflectRightSidePanelWidth(activeRightSidePanel.getWidth())
         }
+
+        if (shouldAnimateOpen) {
+            void playRightSidePanelOpen(activeRightSidePanel, panelEl)
+        }
+        hasRenderedInitialAiChatPanelState = true
 
         requestAnimationFrame(() => {
             resizeActiveAiChatPanelTabsSwitch()
             if (tabsEl) tabsEl.scrollLeft = tabsInitialScrollLeft
-            rail.style.setProperty('--rail-thread-height', `${measureActiveAiChatPanelRailThreadHeight(panelEl)}px`)
         })
     }
 
     // Screen-fixed, canvas-wide composer at the bottom-center of the viewport.
-    // Reuses the shared aiPromptComposer component (same one the chat panel uses)
+    // Reuses the shared aiPromptComposer component (same one the right side panel uses)
     // but renders the submitted message as a branch marker instead of opening the
-    // chat panel.
+    // right side panel.
     function createGlobalCanvasComposer(): void {
         if (globalCanvasComposer || globalCanvasComposerHostEl) return
 
@@ -5598,7 +5597,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const railStyle = {
             position: 'absolute' as const,
-            width: `${RAIL_GRAB_WIDTH}px`,
+            width: `${THREAD_RAIL_GRAB_WIDTH}px`,
             zIndex: '9990',
         }
         const rail = html`<div
@@ -5642,7 +5641,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const totalHeight = threadHeight + gap
 
         applyStyle(rail, {
-            left: `${node.position.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`,
+            left: `${node.position.x - THREAD_RAIL_OFFSET - THREAD_RAIL_GRAB_WIDTH / 2}px`,
             top: `${node.position.y}px`,
             height: `${totalHeight}px`,
         })
@@ -8819,15 +8818,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Track pane bounds on resize for visibility detection
     const resizeObserver = new ResizeObserver(() => {
         paneRect = paneEl.getBoundingClientRect()
-        if (activeAiChatPanelWidth !== null) {
-            applyActiveAiChatPanelWidth(activeAiChatPanelWidth)
-        }
-        if (activeAiChatPanelEl) {
-            const panelRail = activeAiChatPanelEl.querySelector<HTMLElement>('.workspace-ai-chat-floating-panel-rail')
-            if (panelRail) {
-                panelRail.style.setProperty('--rail-thread-height', `${measureActiveAiChatPanelRailThreadHeight(activeAiChatPanelEl)}px`)
-            }
-        }
+        // The max width depends on pane width, so re-clamp through the SidePanel.
+        // It re-emits the clamped width, which reflectRightSidePanelWidth applies.
+        activeRightSidePanel?.applyConstraints()
         syncPendingBranchMarkerScreenPlacements()
         updateVisibleNodes()
     })
@@ -9062,7 +9055,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             paneEl,
             viewportEl,
             getTransform: () => lastTransform,
-            railOffset: RAIL_OFFSET,
+            railOffset: THREAD_RAIL_OFFSET,
             panBy: async ({ x, y }) => {
                 if (!panZoom) return false
                 const vp = panZoom.getViewport()
@@ -9336,7 +9329,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 const dragRail = threadRails.get(draggedNodeId)
                 if (dragRail) {
-                    applyStyle(dragRail, { left: `${currentPos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`, top: `${currentPos.y}px` })
+                    applyStyle(dragRail, { left: `${currentPos.x - THREAD_RAIL_OFFSET - THREAD_RAIL_GRAB_WIDTH / 2}px`, top: `${currentPos.y}px` })
                     const totalH = parseFloat(dragRail.style.height || '0')
                     if (totalH > 0) connectionManager?.setRailHeight(draggedNodeId, totalH)
                 }
@@ -9643,7 +9636,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const threadH = hiddenEmptyThreadNodeIds.has(nodeId) ? 0 : newHeight
                 const gap = hiddenEmptyThreadNodeIds.has(nodeId) ? 0 : 16
                 const totalH = threadH + gap
-                applyStyle(resizeRail, { left: `${pos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`, top: `${pos.y}px`, height: `${totalH}px` })
+                applyStyle(resizeRail, { left: `${pos.x - THREAD_RAIL_OFFSET - THREAD_RAIL_GRAB_WIDTH / 2}px`, top: `${pos.y}px`, height: `${totalH}px` })
                 resizeRail.style.setProperty('--rail-thread-height', `${threadH}px`)
                 connectionManager?.setRailHeight(nodeId, totalH)
             }
@@ -10270,7 +10263,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ensureSelectionGroupOverlayElement()
         ensureSelectionRectElement()
 
-        destroyActiveAiChatPanel(false)
+        const shouldAnimatePanelOpenAfterRender = aiChatPanelState.isOpen && !activeAiChatPanelEl && hasRenderedInitialAiChatPanelState
+        if (!activeClosingRightSidePanel) destroyActiveAiChatPanel(false)
 
         for (const [, { editor, aiService }] of documentEditors) {
             if (editor?.destroy) editor.destroy()
@@ -10341,7 +10335,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.syncEdges(currentCanvasState.edges)
         scheduleEdgesRender()
 
-        renderActiveAiChatPanel()
+        renderActiveAiChatPanel(undefined, undefined, { animateOpen: shouldAnimatePanelOpenAfterRender })
 
         // A full re-render (including initial page load) appends pending markers at
         // their stale stored world position inside viewportEl. Project them onto the
@@ -10572,6 +10566,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     initializePanZoom()
     initCanvasBubbleMenu()
     syncActiveAiChatPanelFromState()
+    if (!aiChatPanelState.isOpen) ensureActiveRightSidePanel()
     // Create the connection manager up front so connector edges render even when
     // the canvas mounts empty. renderNodes() only calls ensureConnectionManager()
     // after an early-return guard on currentCanvasState, so a workspace that starts
@@ -10700,7 +10695,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             } else {
                 refreshActiveAiChatPanelWhenContentLoads()
                 if (aiChatPanelState.isOpen && !activeAiChatPanelEl) renderActiveAiChatPanel()
-                if (!aiChatPanelState.isOpen && activeAiChatPanelEl) destroyActiveAiChatPanel(false)
+                if (!aiChatPanelState.isOpen && activeAiChatPanelEl && !activeClosingRightSidePanel) destroyActiveAiChatPanel(false)
             }
             refreshBranchMarkerPreviewsForLoadedThreads(newAiChatThreads)
 
@@ -10863,7 +10858,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             globalCanvasComposerHostEl?.remove()
             globalCanvasComposerHostEl = null
 
-            destroyActiveAiChatPanel(true)
+            destroyActiveAiChatPanel(true, activeAiChatPanelThreadId ?? activeAiChatThreadId, false, true)
             destroyContextPreviewTiles()
             activeContextChipTrayEls.clear()
 

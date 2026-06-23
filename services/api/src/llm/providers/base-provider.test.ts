@@ -276,6 +276,35 @@ describe('BaseProvider fanout', () => {
         })
     })
 
+    it('keeps successful fanout results when a sibling model throws and does not emit top-level error', async () => {
+        const nats = makeFakeNats()
+        const runImageRouter = vi.fn(async (state: ProviderState): Promise<Partial<ProviderState>> => {
+            if (state.generationRun?.mediaIndex === 0) {
+                throw new Error('image provider crashed')
+            }
+            return { generatedImages: ['final-image-base64'] }
+        })
+
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter,
+            runVideoRouter: vi.fn(),
+        } as unknown as BaseProviderDeps
+        const provider = new TestProvider('ws1:thread1', deps)
+
+        const result = await provider.runImageGeneration(createFanoutState())
+
+        expect(result).toEqual({ generatedImages: ['final-image-base64'] })
+        expect(runImageRouter).toHaveBeenCalledTimes(2)
+        const topLevelErrors = nats.published.filter((item) =>
+            item.payload?.content?.status === STREAM_STATUS.ERROR,
+        )
+        expect(topLevelErrors).toHaveLength(0)
+    })
+
     it('returns successful video fanout results while emitting a video error event for failures', async () => {
         const nats = makeFakeNats()
         const runVideoRouter = vi.fn(async (state: ProviderState): Promise<Partial<ProviderState>> => {

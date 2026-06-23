@@ -20,7 +20,8 @@
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
     import { settings } from '$src/settings.ts'
-    import { createNewFileIcon, imageIcon, aiChatPanelCollapseIcon, mediaFoloderIcon } from '$src/svgIcons/index.ts'
+    import { createNewFileIcon, imageIcon, mediaFoloderIcon } from '$src/svgIcons/index.ts'
+    import '$src/components/sidePanel/side-panel.scss'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
 
@@ -32,15 +33,11 @@
         renderer?.toggleMediaLibrary?.()
     }
 
-    function handleToggleAiChatPanel() {
-        renderer?.toggleAiChatPanel?.()
-    }
-
     let workspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId as string)
     let loadedWorkspaceId = $derived($workspaceStore.data.workspaceId)
     let isRouteWorkspaceLoaded = $derived(Boolean(workspaceId && loadedWorkspaceId === workspaceId))
     let canvasState = $derived(isRouteWorkspaceLoaded ? $workspaceStore.data.canvasState : null)
-    let isAiChatPanelOpen = $derived(Boolean(isRouteWorkspaceLoaded && (canvasState?.aiChatPanel?.isOpen ?? canvasState?.lastActiveAiChatThreadId)))
+    let isRightSidePanelOpen = $derived(Boolean(isRouteWorkspaceLoaded && (canvasState?.aiChatPanel?.isOpen ?? canvasState?.lastActiveAiChatThreadId)))
     let documents = $derived(isRouteWorkspaceLoaded ? $documentsStore.data.filter((document: any) => document.workspaceId === workspaceId) : [])
     let aiChatThreads = $derived(isRouteWorkspaceLoaded ? Array.from($aiChatThreadsStore.data.values()).filter((thread: any) => thread.workspaceId === workspaceId) : [])
 
@@ -54,6 +51,17 @@
     const documentService = new DocumentService()
     const aiChatThreadService = new AiChatThreadService()
     const DEFAULT_DOCUMENT_NODE_DIMENSIONS = { width: 400, height: 350 }
+    const rightSidePanelSettings = settings.rightSidePanel
+    const rightSidePanelStyle = [
+        `--workspace-right-side-panel-width: min(${rightSidePanelSettings.defaultDimensions.width}px, calc(100vw - ${rightSidePanelSettings.dimensions.maxPaneMargin}px))`,
+        '--side-panel-backdrop-width: var(--workspace-right-side-panel-width)',
+        `--workspace-right-side-panel-edge-gap: ${rightSidePanelSettings.layout.edgeGap}px`,
+        `--workspace-right-side-panel-content-inset: ${rightSidePanelSettings.layout.contentInset}px`,
+        `--side-panel-backdrop-fill: ${rightSidePanelSettings.styles.backdropFill}`,
+        `--side-panel-backdrop-fill-opaque: ${rightSidePanelSettings.styles.backdropFillOpaque}`,
+        `--side-panel-toggle-color: ${rightSidePanelSettings.styles.toggleColor}`,
+        `--side-panel-toggle-hover-color: ${rightSidePanelSettings.styles.toggleHoverColor}`,
+    ].join('; ')
 
     function getImageInsertionDimensions(aspectRatio: number): { width: number; height: number } {
         const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1
@@ -356,16 +364,9 @@
 
 <div
     class="workspace-canvas"
-    class:workspace-canvas-chat-panel-open={isAiChatPanelOpen}
+    class:workspace-canvas-right-side-panel-open={isRightSidePanelOpen}
+    style={rightSidePanelStyle}
 >
-    <button
-        class="workspace-ai-chat-launcher"
-        onclick={handleToggleAiChatPanel}
-        aria-label={isAiChatPanelOpen ? 'Collapse AI Chat' : 'Open AI Chat'}
-    >
-        {@html aiChatPanelCollapseIcon}
-    </button>
-
     <!-- Left action panel — flanks the composer. Two icons render it as an oval. -->
     <div class="workspace-canvas-action-panel workspace-canvas-action-panel-left">
         <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument} aria-label="New Document">

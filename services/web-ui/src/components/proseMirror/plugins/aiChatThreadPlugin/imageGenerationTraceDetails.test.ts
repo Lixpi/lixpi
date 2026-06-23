@@ -144,41 +144,135 @@ describe('createImageGenerationTraceDetails — reference grid', () => {
 })
 
 // =============================================================================
-// COLLAPSIBLE SUMMARY — REASONING MODEL ATTRIBUTION
-// The reasoning model is identified in the collapsible header (replacing the pill
-// that used to sit beside the avatar), and must show even while collapsed.
+// RENDER CONTRACTS
 // =============================================================================
 
-function renderSummary(attrs: Partial<ImageGenerationTraceDetailsAttrs>) {
-    const details = createImageGenerationTraceDetails()
-    details.render({
-        attrs: { title: 'Image generation prompt', isOpen: false, isStreaming: false, ...attrs },
-        childCount: 0,
-    })
-    const summaryMeta = details.dom.querySelector('.ai-collapsible-block-summary-meta') as HTMLElement
-    return summaryMeta
-}
+describe('createImageGenerationTraceDetails — render contract', () => {
+    it('shows tool prompt fallback text only when fallback conditions apply', () => {
+        const details = createImageGenerationTraceDetails()
 
-describe('createImageGenerationTraceDetails — reasoning model in the summary', () => {
-    it('shows the reasoning model alongside the reference count', () => {
-        const summaryMeta = renderSummary({
-            imageGenerationTrace: makeTrace([makeReference()]),
-            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+        details.render({
+            attrs: { title: 'Image generation prompt', isOpen: false, isStreaming: true, imageGenerationTraceId: 'streaming-trace' },
+            childCount: 2,
+            toolPromptFallbackText: 'draft from server',
         })
-        expect(summaryMeta.textContent).toBe('claude-sonnet-4-6 · 1 reference')
-    })
+        expect(details.dom.querySelector('.ai-image-generation-tool-prompt-fallback')?.textContent).toBe('')
+        expect(details.dom.querySelector('.ai-image-generation-tool-prompt-fallback')?.hidden).toBe(true)
 
-    it('shows the model even before the trace arrives (while streaming the prompt)', () => {
-        const summaryMeta = renderSummary({
-            isStreaming: true,
-            reasoningModelId: 'Google:gemini-flash-latest',
+        details.render({
+            attrs: { title: 'Image generation prompt', isOpen: false, isStreaming: true, imageGenerationTraceId: 'streaming-trace' },
+            childCount: 0,
+            toolPromptFallbackText: 'draft from server',
         })
-        expect(summaryMeta.textContent).toBe('gemini-flash-latest')
+        expect(details.dom.querySelector('.ai-image-generation-tool-prompt-fallback')?.textContent).toBe('draft from server')
+        expect(details.dom.querySelector('.ai-image-generation-tool-prompt-fallback')?.hidden).toBe(false)
+
+        details.render({
+            attrs: { title: 'Image generation prompt', isOpen: false, isStreaming: true, imageGenerationTraceId: 'streaming-trace' },
+            childCount: 0,
+            toolPromptFallbackText: 'draft from server',
+            forceToolPromptFallback: true,
+        })
+        expect(details.dom.querySelector('.ai-image-generation-tool-prompt-fallback')?.textContent).toBe('draft from server')
+        expect(details.dom.querySelector('.ai-image-generation-tool-prompt-fallback')?.hidden).toBe(false)
     })
 
-    it('omits the model segment when no reasoning model is set', () => {
-        const summaryMeta = renderSummary({ imageGenerationTrace: makeTrace([makeReference()]) })
-        expect(summaryMeta.textContent).toBe('1 reference')
+    it('shows final prompt only when the prompt was changed in resolver mode', () => {
+        const details = createImageGenerationTraceDetails()
+        const baselineTrace = makeTrace([makeReference()])
+        const changedTrace: ImageGenerationTrace = {
+            ...baselineTrace,
+            promptWasChanged: true,
+            finalPrompt: 'Adjusted prompt with stronger style constraints',
+        }
+        const finalPrompt = details.dom.querySelector('.ai-image-generation-final-prompt') as HTMLElement
+        const finalPromptSection = details.dom.querySelector('.ai-image-generation-final-prompt-section') as HTMLElement
+
+        details.render({
+            attrs: { title: 'Image generation prompt', isOpen: false, isStreaming: false, imageGenerationTrace: baselineTrace },
+            childCount: 1,
+        })
+        expect(finalPromptSection.hidden).toBe(true)
+
+        details.render({
+            attrs: { title: 'Image generation prompt', isOpen: false, isStreaming: false, imageGenerationTrace: changedTrace },
+            childCount: 1,
+        })
+        expect(finalPromptSection.hidden).toBe(false)
+        expect(finalPrompt.textContent).toBe('Adjusted prompt with stronger style constraints')
+    })
+
+    it('updates streaming/trace wrapper classes from attrs and hides trace sections when no trace exists', () => {
+        const details = createImageGenerationTraceDetails()
+        const referenceSection = details.dom.querySelector('.ai-image-generation-reference-section') as HTMLElement
+        const resolverSection = details.dom.querySelector('.ai-image-generation-resolver-section') as HTMLElement
+        const resolverSummary = details.dom.querySelector('.ai-image-generation-resolver-summary') as HTMLElement
+
+        details.render({
+            attrs: { title: 'Image generation prompt', isOpen: false, isStreaming: false, imageGenerationTraceId: null },
+            childCount: 0,
+        })
+        expect(details.dom.classList.contains('has-image-generation-trace')).toBe(false)
+        expect(details.dom.classList.contains('is-streaming')).toBe(false)
+        expect(referenceSection.hidden).toBe(true)
+        expect(resolverSection.hidden).toBe(true)
+        expect(resolverSummary.textContent).toBe('')
+
+        details.render({
+            attrs: {
+                title: 'Image generation prompt',
+                isOpen: false,
+                isStreaming: true,
+                imageGenerationTrace: makeTrace([makeReference()]),
+            },
+            childCount: 1,
+        })
+        expect(details.dom.classList.contains('has-image-generation-trace')).toBe(true)
+        expect(details.dom.classList.contains('is-streaming')).toBe(true)
+        expect(referenceSection.hidden).toBe(false)
+    })
+
+    it('renders resolver details and excluded-reference list independently', () => {
+        const details = createImageGenerationTraceDetails()
+        const traceWithResolver: ImageGenerationTrace = {
+            ...makeTrace([makeReference()]),
+            resolver: {
+                resolverKind: 'structured-vlm',
+                resolverVersion: 'v1',
+                resolverModelProvider: 'Anthropic',
+                resolverModelId: 'claude-sonnet-4-6',
+                mode: 'context-only',
+                operationKind: 'new_image',
+                confidence: 0.82,
+                rationale: 'Closest candidate in context',
+                targetImageNodeId: 'person',
+                branchId: null,
+            },
+            excludedReferences: [
+                {
+                    nodeId: 'excluded-node',
+                    label: 'Old result',
+                    role: 'excluded',
+                    reason: 'Low similarity',
+                },
+            ],
+        }
+
+        details.render({
+            attrs: { title: 'Image generation prompt', isOpen: false, isStreaming: false, imageGenerationTrace: traceWithResolver },
+            childCount: 1,
+        })
+
+        const resolverSection = details.dom.querySelector('.ai-image-generation-resolver-section') as HTMLElement
+        const resolverSummary = details.dom.querySelector('.ai-image-generation-resolver-summary') as HTMLElement
+        const resolverRationale = details.dom.querySelector('.ai-image-generation-resolver-rationale') as HTMLElement
+        const excludedList = details.dom.querySelector('.ai-image-generation-excluded-list') as HTMLElement
+
+        expect(resolverSection.hidden).toBe(false)
+        expect(resolverSummary.textContent).toBe('New Image | Context Only | confidence 82%')
+        expect(resolverRationale.textContent).toBe('Closest candidate in context')
+        expect(excludedList.hidden).toBe(false)
+        expect(excludedList.children).toHaveLength(1)
     })
 })
 

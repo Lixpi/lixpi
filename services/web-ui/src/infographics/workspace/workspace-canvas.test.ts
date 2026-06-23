@@ -99,6 +99,14 @@ function loadAiPromptComposer(): string {
 	return readSourceFile('../../components/proseMirror/aiPromptComposer.ts', 'components/proseMirror/aiPromptComposer.ts')
 }
 
+function loadSidePanel(): string {
+	return readSourceFile('../../components/sidePanel/sidePanel.ts', 'components/sidePanel/sidePanel.ts')
+}
+
+function loadSidePanelScss(): string {
+	return readSourceFile('../../components/sidePanel/side-panel.scss', 'components/sidePanel/side-panel.scss')
+}
+
 function loadLayout(): string {
 	return readSourceFile('../../views/layouts/layout.svelte', 'views/layouts/layout.svelte')
 }
@@ -303,8 +311,8 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectSourceToContain(ts, 'getAdaptiveBoundedZoomScalingOptions(settings.canvasBubbleMenu.zoomScaling),')
 		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.topGap,')
 		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.iconSize,')
-		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize) / zoom')
-		expectSourceToContain(ts, 'updateGeneratedMediaChromeLiveTransform(node.nodeId, position, node.dimensions, getLiveViewport())')
+		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize + panelSettings.mediaTopOffset) / zoom')
+		expectSourceToContain(ts, 'updateGeneratedMediaChromeLiveTransform(node.nodeId, position, dimensions, getLiveViewport())')
 		expectSourceToContain(ts, 'updateGeneratedMediaChromeLayout()')
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl.replaceChildren(')
 		expectSourceToContain(ts, 'mediaChromeViewportEl.replaceChildren(')
@@ -342,10 +350,10 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectExcerptToContain(activeBlock, 'background: transparent', 'active image info button block')
 		expectExcerptNotToContain(activeBlock, '$steelBlue', 'active image info button block')
 		expectExcerptNotToContain(activeBlock, 'border-color:', 'active image info button block')
-		expectExcerptToContain(panelBlock, 'overflow: visible', 'generated image info panel block')
+		expectExcerptToContain(panelBlock, 'overflow: var(--workspace-generated-media-info-panel-overflow, visible)', 'generated image info panel block')
 		expectExcerptNotToContain(panelBlock, 'max-height: 440px', 'generated image info panel block')
 		expectExcerptNotToContain(panelBlock, 'overflow: auto', 'generated image info panel block')
-		expectExcerptToContain(traceDetailsBlock, 'margin: 0.65rem 0 0', 'canvas trace details block')
+		expectExcerptToContain(traceDetailsBlock, 'margin: 0.95rem 0 0', 'canvas trace details block')
 		expect(promptAndFinalFallbackBlock).toContain('max-height: none')
 		expect(promptAndFinalFallbackBlock).toContain('overflow: visible')
 	})
@@ -431,7 +439,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 
 		const partialHandler = ts.slice(partialStart, completeStart)
 		expectExcerptToContain(partialHandler, "const imageSrc = buildImageSrc(imageUrl, '', false)")
-		expectExcerptToContain(partialHandler, 'commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: updatedNodes })')
+		expectExcerptToContain(partialHandler, 'commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: resolvedNodes })')
 		expectExcerptNotToContain(partialHandler, 'imgEl.src', 'partial image handler')
 	})
 
@@ -516,10 +524,10 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		// nodes via the unchanged resolver, replacing the per-handler collision block.
 		expectSourceToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
 		expectSourceToContain(ts, 'function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[]')
-		expectSourceToContain(ts, 'return rebalanceBranchTreesAndResolve(nodes, edges, {')
-		expectSourceToContain(ts, 'depthGap: settings.imageBranchLineage.imageToImageGap,')
-		expectSourceToContain(ts, 'siblingGap: settings.imageBranchLineage.branchToBranchGap,')
-		expectSourceToContain(ts, 'branchFanoutDepthGap: settings.imageBranchLineage.branchFanoutDepthGap,')
+		expectSourceToContain(ts, 'const resolvedNodes = rebalanceBranchTreesAndResolve(layoutProxyPlan.nodes, edges, {')
+		expectSourceToContain(ts, 'depthGap: settings.mediaBranchLineage.mediaToMediaGap,')
+		expectSourceToContain(ts, 'siblingGap: settings.mediaBranchLineage.branchRowGap,')
+		expectSourceToContain(ts, 'branchFanoutExtraGap: settings.mediaBranchLineage.branchFanoutExtraGap,')
 		// Wired into every generated-media add path (image partial + complete, video).
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithImage, newEdges)')
 		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, edges)')
@@ -662,7 +670,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, 'function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode)')
 		expectSourceToContain(ts, "panel.setAttribute('data-media-info-panel-node-id', node.nodeId)")
 		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl.replaceChildren(')
-		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize) / zoom')
+		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize + panelSettings.mediaTopOffset) / zoom')
 		expectSourceToContain(ts, "transform: 'none',")
 		expect(panelPositionStart).toBeGreaterThan(-1)
 		expect(panelPositionEnd).toBeGreaterThan(panelPositionStart)
@@ -856,7 +864,10 @@ describe('Workspace canvas — AI panel reload stability', () => {
 		const fnMatch = ts.match(/function\s+getAiChatThreadsKey[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'return threads.map(t => t.threadId).join')
+		expectExcerptToContain(fnBody, 'return threads')
+		expectExcerptToContain(fnBody, '.filter(t => !isDetachedCanvasThreadId(t.threadId))')
+		expectExcerptToContain(fnBody, '.map(t => t.threadId)')
+		expectExcerptToContain(fnBody, '.join(\',\')')
 		expectExcerptNotToContain(fnBody, 't.content')
 	})
 
@@ -1383,22 +1394,31 @@ describe('Vertical rail — CSS styling', () => {
 describe('Vertical rail — TS infrastructure', () => {
 	const ts = loadTs()
 
-	it('defines RAIL_OFFSET from settings', () => {
-		expect(ts).toMatch(/const\s+RAIL_OFFSET\s*=\s*settings\.aiChatThread\.rail\.offset/)
+	it('defines thread rail offset from settings', () => {
+		expect(ts).toMatch(/const\s+THREAD_RAIL_OFFSET\s*=\s*settings\.aiChatThread\.rail\.offset/)
 	})
 
-	it('defines RAIL_GRAB_WIDTH from settings', () => {
-		expect(ts).toMatch(/const\s+RAIL_GRAB_WIDTH\s*=\s*settings\.aiChatThread\.rail\.dragGrabWidth/)
+	it('defines thread rail grab width from settings', () => {
+		expect(ts).toMatch(/const\s+THREAD_RAIL_GRAB_WIDTH\s*=\s*settings\.aiChatThread\.rail\.dragGrabWidth/)
 	})
 
 	it('defines threadRails Map', () => {
 		expect(ts).toMatch(/const\s+threadRails:\s*Map<string,\s*HTMLElement>/)
 	})
 
-	it('defines active AI chat panel resize width state', () => {
-		expectSourceToContain(ts, 'const AI_CHAT_PANEL_MIN_WIDTH = 320')
-		expectSourceToContain(ts, 'let activeAiChatPanelWidth: number | null = null')
-		expectSourceToContain(ts, "style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)")
+	it('delegates right side panel state to SidePanel with content-agnostic settings', () => {
+		expectSourceToContain(ts, 'const RIGHT_SIDE_PANEL_SETTINGS = settings.rightSidePanel')
+		expectSourceToContain(ts, 'function ensureActiveRightSidePanel(): SidePanelInstance')
+		expectSourceToContain(ts, 'const { defaultDimensions, dimensions, resizeHandle, toggle, animation } = RIGHT_SIDE_PANEL_SETTINGS')
+		expectSourceToContain(ts, 'minWidth: dimensions.minWidth')
+		expectSourceToContain(ts, 'defaultWidth: defaultDimensions.width')
+		expectSourceToContain(ts, 'getMaxWidth: getRightSidePanelMaxWidth')
+		expectSourceToContain(ts, 'animation,')
+		expectSourceToContain(ts, 'function reflectRightSidePanelWidth(width: number)')
+		expectSourceToContain(ts, "style.setProperty('--workspace-right-side-panel-width', widthValue)")
+		expectSourceNotToContain(ts, 'settings.aiChatThread.rightSidePanel')
+		expectSourceNotToContain(ts, 'AI_CHAT_PANEL_MIN_WIDTH')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-sidebar')
 	})
 
 	it('defines createThreadRail function', () => {
@@ -1445,7 +1465,7 @@ describe('Vertical rail — TS infrastructure', () => {
 	})
 
 	it('passes railOffset to WorkspaceConnectionManager', () => {
-		expect(ts).toMatch(/railOffset:\s*RAIL_OFFSET/)
+		expect(ts).toMatch(/railOffset:\s*THREAD_RAIL_OFFSET/)
 	})
 
 	it('createThreadRail creates line child element', () => {
@@ -1557,11 +1577,12 @@ describe('Vertical rail — TS infrastructure', () => {
 
 		expectExcerptToContain(fnBody, 'workspace-ai-chat-floating-panel workspace-ai-chat-thread-node')
 		expectExcerptToContain(fnBody, 'new ProseMirrorEditor')
-		expectExcerptToContain(fnBody, 'workspace-thread-rail workspace-ai-chat-floating-panel-rail')
-		expectExcerptToContain(fnBody, 'const backdropEl = html`<div className="workspace-ai-chat-panel-backdrop"')
-		expectExcerptToContain(fnBody, 'paneEl.appendChild(backdropEl)')
-		expectExcerptToContain(fnBody, 'handleActiveAiChatPanelResizeStart')
-		expectExcerptToContain(fnBody, 'aiChatThreadRailBoundaryCircle')
+		expectExcerptToContain(fnBody, 'ensureActiveRightSidePanel()')
+		expectExcerptToContain(fnBody, "const resizeHandle = activeRightSidePanel.element")
+		expectExcerptToContain(fnBody, 'panelEl.appendChild(resizeHandle)')
+		// The glass backdrop element is owned by the SidePanel component.
+		expectExcerptToContain(fnBody, 'paneEl.appendChild(activeRightSidePanel.backdropElement)')
+		expectSourceToContain(ts, 'function handleRightSidePanelResizeStart()')
 		// The panel's prompt input reuses the shared, decoupled composer component.
 		expectExcerptToContain(fnBody, 'createAiPromptComposer({')
 		expectExcerptToContain(fnBody, "className: 'workspace-ai-chat-floating-panel-prompt'")
@@ -1613,7 +1634,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-toggle')
 		expectSourceToContain(ts, 'const isSessionHistoryOpen = !aiChatPanelState.isSessionHistoryOpen')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-sessions-hidden')
-		expectSourceToContain(scss, '--workspace-ai-chat-panel-content-inset')
+		expectSourceToContain(scss, '--workspace-right-side-panel-content-inset')
 		expectSourceToContain(scss, '.workspace-ai-chat-panel-tabs-switch')
 		// Open tabs are now a D3 sliding switch, not DOM tag-style buttons.
 		expectSourceToContain(ts, "createSlidingTabsSwitch")
@@ -1739,7 +1760,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(getGeneratedMediaPlacementKey(threadId, generationRun), referenceNodeIds)')
 		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string, generationRun?: MediaGenerationRunMeta): Rect | undefined')
 		expectSourceToContain(ts, 'function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number, generationRun?: MediaGenerationRunMeta): { x: number; y: number } | undefined')
-		expectSourceToContain(ts, 'settings.imageBranchLineage.rootOutputGap')
+		expectSourceToContain(ts, 'settings.mediaBranchLineage.rootToFirstMediaGap')
 		expectSourceToContain(ts, 'const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)')
 		expectSourceNotToContain(ts, 'if (!sourceThread) return\n            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)')
 	})
@@ -1786,44 +1807,63 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectExcerptToContain(deleteExtractionBody, 'removeAiChatPanelDraft(`extraction:${extractionRunId}`)', 'delete-extraction handler')
 	})
 
-	it('uses the floating panel rail as the horizontal resize handle', () => {
-		const scss = loadScss()
+	it('uses the reusable SidePanel component as the horizontal resize handle', () => {
+		const sidePanel = loadSidePanel()
 
-		expectSourceToContain(ts, 'function handleActiveAiChatPanelResizeStart(')
-		expectSourceToContain(ts, "applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })")
-		expectSourceToContain(scss, '.workspace-thread-rail.workspace-ai-chat-floating-panel-rail')
-		expectSourceToContain(scss, 'cursor: ew-resize')
+		expectSourceToContain(ts, 'function handleRightSidePanelResizeStart(')
+		expectSourceToContain(ts, 'createSidePanel({')
+		expectSourceToContain(ts, "side: 'right'")
+		expectSourceToContain(ts, 'offset: resizeHandle.offset')
+		expectSourceToContain(ts, 'grabWidth: resizeHandle.grabWidth')
+		expectSourceToContain(sidePanel, "applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })")
+		expectSourceToContain(sidePanel, 'side-panel-resize-handle')
+		// Touch support: the resize gesture is driven by Pointer Events, not mouse.
+		expectSourceToContain(sidePanel, "addEventListener('pointerdown', this.handleResizeStart)")
+		expectSourceToContain(sidePanel, "addEventListener('pointermove', handlePointerMove)")
 	})
 
-	it('uses a full-height right-edge chat panel with zoom and avatar offsets', () => {
+	it('plays the drawer slide animation through the SidePanel component', () => {
+		const sidePanel = loadSidePanel()
+
+		// The component owns the open/close slide; the host only triggers it.
+		expectSourceToContain(sidePanel, 'playOpen = (panelElement: HTMLElement)')
+		expectSourceToContain(sidePanel, 'playClose = (): Promise<void>')
+		expectSourceToContain(sidePanel, 'private runSlide = async (panelElement: HTMLElement | null, direction: \'in\' | \'out\'): Promise<void>')
+		expectSourceToContain(sidePanel, 'this.applyAnimationSettings(target.element)')
+		expectSourceToContain(sidePanel, 'transition: SLIDE_TRANSITION')
+		expectSourceToContain(sidePanel, 'this.getSlideDurationMs() + SLIDE_FALLBACK_BUFFER_MS')
+
+		// Host wiring: slide in only on a fresh open, slide out before teardown.
+		expectSourceToContain(ts, 'void playRightSidePanelOpen(activeRightSidePanel, panelEl)')
+		expectSourceToContain(ts, 'await closingSidePanel.playClose()')
+	})
+
+	it('uses content-agnostic right side panel sizing for right-edge surfaces', () => {
 		const scss = loadScss()
 		const svelte = loadWorkspaceCanvasSvelte()
 		const layout = loadLayout()
 		const sidebar = loadSidebar()
 
-		expectSourceToContain(scss, '--workspace-ai-chat-sidebar-width')
-		expectSourceToContain(scss, '--workspace-ai-chat-sidebar-edge-gap: 15px')
-		expectSourceToContain(scss, '.workspace-ai-chat-panel-backdrop')
-		expectSourceToContain(scss, 'z-index: 90')
-		expectSourceToContain(scss, 'width: var(--workspace-ai-chat-sidebar-width)')
-		expectSourceToContain(scss, 'backdrop-filter: blur(24px) saturate(145%)')
-		expectSourceToContain(scss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
-		expectSourceToContain(scss, 'mask-image: linear-gradient')
-		expectSourceToContain(scss, '@media (prefers-reduced-transparency: reduce)')
-		expectSourceToContain(svelte, 'class:workspace-canvas-chat-panel-open')
+		const sidePanelScss = loadSidePanelScss()
+		expectSourceToContain(svelte, 'const rightSidePanelSettings = settings.rightSidePanel')
+		expectSourceToContain(svelte, '--workspace-right-side-panel-width')
+		expectSourceToContain(svelte, '--side-panel-backdrop-width: var(--workspace-right-side-panel-width)')
+		expectSourceToContain(svelte, 'class:workspace-canvas-right-side-panel-open')
+		// The glass backdrop is owned by the SidePanel component.
+		expectSourceToContain(sidePanelScss, '.side-panel-backdrop')
+		expectSourceToContain(sidePanelScss, 'z-index: 90')
+		expectSourceToContain(sidePanelScss, '--side-panel-backdrop-width')
+		expectSourceToContain(sidePanelScss, 'backdrop-filter: blur(24px) saturate(145%)')
+		expectSourceToContain(sidePanelScss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
+		expectSourceToContain(sidePanelScss, '@media (prefers-reduced-transparency: reduce)')
 		expectSourceToContain(svelte, 'workspace-canvas-action-panel-right workspace-canvas-action-panel-single')
-		expectSourceToContain(svelte, 'workspace-ai-chat-launcher')
 		expectSourceToContain(svelte, 'mediaFoloderIcon')
-		expectSourceToContain(svelte, 'aiChatPanelCollapseIcon')
-		expectSourceToContain(svelte, "aria-label={isAiChatPanelOpen ? 'Collapse AI Chat' : 'Open AI Chat'}")
-		expectSourceNotToContain(svelte, 'workspace-ai-chat-launcher-tooltip')
 		expectSourceToContain(svelte, 'workspace-zoom-indicator')
 		expectSourceNotToContain(svelte, 'workspace-canvas-utility-capsule')
-		expectSourceToContain(scss, '.workspace-canvas-chat-panel-open .workspace-ai-chat-launcher')
-		expectSourceToContain(scss, 'top: 15px')
-		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + 5px)')
+		expectSourceToContain(scss, '.workspace-canvas-right-side-panel-open .workspace-zoom-indicator')
+		expectSourceToContain(scss, 'right: calc(var(--workspace-right-side-panel-width) + var(--workspace-right-side-panel-edge-gap) + 5px)')
 		expectSourceToContain(scss, 'right: calc(0px - var(--workspace-canvas-padding-inline))')
-		expectSourceToContain(scss, 'bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom))')
+		expectSourceToContain(scss, 'bottom: calc(var(--workspace-right-side-panel-edge-gap) - var(--workspace-canvas-padding-bottom))')
 		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'top: 0px', 'outer chat panel')
 		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'border-radius: 10px', 'outer chat panel')
 		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'background: transparent', 'outer chat panel')
@@ -2022,11 +2062,11 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expectSourceToContain(ts, 'handleDragStart(event, primaryNodeId)')
 	})
 
-		it('keeps connector lines visible when nodes are selected', () => {
-			expectSourceNotToContain(ts, 'function getEdgesForConnectionManager')
-			expectSourceNotToContain(ts, 'syncEdges(getEdgesForConnectionManager')
-			expectSourceNotToContain(ts, ['selectedContext', 'RegionNodeIds'].join(''))
-		expectSourceToContain(ts, 'connectionManager?.syncEdges(nextState.edges)')
+	it('keeps connector lines visible when nodes are selected', () => {
+		expectSourceNotToContain(ts, 'function getEdgesForConnectionManager')
+		expectSourceNotToContain(ts, 'syncEdges(getEdgesForConnectionManager')
+		expectSourceNotToContain(ts, ['selectedContext', 'RegionNodeIds'].join(''))
+		expectSourceToContain(ts, 'connectionManager?.syncEdges(currentCanvasState.edges)')
 		expectSourceToContain(ts, 'connectionManager.syncEdges(currentCanvasState.edges)')
 	})
 

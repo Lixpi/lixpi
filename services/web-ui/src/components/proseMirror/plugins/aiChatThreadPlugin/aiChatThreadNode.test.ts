@@ -625,7 +625,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
         mount.remove()
     })
 
-    it('updates one chat placeholder across progressive image indices', () => {
+    it('tracks progressive partial placeholders across image indices when run metadata is unavailable', () => {
         const { view, mount } = createView()
 
         SegmentsReceiver.receiveSegment({
@@ -649,8 +649,17 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         const imageNodes = getGeneratedImageNodes(view)
 
-        expect(imageNodes).toHaveLength(1)
-        expect(imageNodes[0].attrs).toMatchObject({
+        expect(imageNodes).toHaveLength(2)
+        expect(imageNodes.map((node) => node.attrs.partialIndex).sort((a, b) => a - b)).toEqual([0, 2])
+
+        expect(imageNodes.find((node) => node.attrs.partialIndex === 0)?.attrs).toMatchObject({
+            imageData: '',
+            fileId: '',
+            isPartial: true,
+            partialIndex: 0,
+            alignment: 'right',
+        })
+        expect(imageNodes.find((node) => node.attrs.partialIndex === 2)?.attrs).toMatchObject({
             imageData: '/api/images/workspace-1/file-partial',
             fileId: 'file-partial',
             isPartial: true,
@@ -668,6 +677,15 @@ describe('aiChatThreadPlugin — generated image completion', () => {
             statePlugin({}, onPersist, vi.fn()),
         ])
         const trace = createImageGenerationTrace()
+        const generationRun = {
+            generationRequestId: 'gen-1',
+            reasoningRunId: 'reasoning-run',
+            mediaRunId: 'media-run-1',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'OpenAI:dall-e-3',
+            mediaType: 'image',
+            variantIndex: 0,
+        } as const
 
         SegmentsReceiver.receiveSegment({
             type: 'image_generation_trace',
@@ -684,6 +702,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
                 workspaceId: 'workspace-1',
                 partialIndex,
                 aiProvider: 'OpenAI',
+                generationRun,
             })
         }
 
@@ -697,6 +716,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
             revisedPrompt: 'A revised prompt',
             aiProvider: 'OpenAI',
             imageModelProvider: 'OpenAI',
+            generationRun,
         })
         SegmentsReceiver.receiveSegment({
             status: 'END_STREAM',

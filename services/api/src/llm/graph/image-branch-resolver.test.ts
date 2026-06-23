@@ -692,4 +692,52 @@ describe('resolveImageBranch', () => {
         expect(update.videoFirstFrameImage).toBe(resolvedTinyPngUrl)
         expect(update.videoReferenceImages).toBeUndefined()
     })
+
+    it('normalizes candidate node-id arrays by trimming whitespace and deduplicating', async () => {
+        const { deps, publisher } = createDeps({
+            ...createParsedResolution({
+                referenceImageNodeIds: ['  portrait-source', 'landscape-source ', 'portrait-source', '', 'landscape-source'],
+                sourceContextNodeIds: [' landscape-source', 'landscape-source  ', ''],
+                styleReferenceNodeIds: ['person-generated', ' person-generated', '', 'person-generated'],
+                excludedNodeIds: ['', 'person-generated', 'person-generated', ''],
+                includeGeneratedNodeIds: ['goat-generated', 'goat-generated', ''],
+            }),
+        })
+
+        const update = await resolveImageBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
+
+        expect(publisher.imageBranchResolved).toHaveBeenCalledOnce()
+        expect(update.imageBranchResolution).toMatchObject({
+            referenceImageNodeIds: ['portrait-source', 'landscape-source'],
+            sourceContextNodeIds: ['landscape-source'],
+            styleReferenceNodeIds: ['person-generated'],
+            excludedNodeIds: ['person-generated'],
+            includeGeneratedNodeIds: ['goat-generated'],
+        })
+    })
+
+    it('ignores decision rows for unknown nodeIds while preserving known decisions', async () => {
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'context-only',
+            operationKind: 'new_image',
+            referenceImageNodeIds: ['portrait-source'],
+            sourceContextNodeIds: ['portrait-source'],
+            styleReferenceNodeIds: [],
+            excludedNodeIds: [],
+            decisions: [
+                { nodeId: 'missing-node', role: 'style-reference', reason: 'should be ignored' },
+                { nodeId: 'portrait-source', role: 'base-context', reason: 'portrait is the intended source' },
+            ],
+        }))
+
+        const update = await resolveImageBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
+
+        expect(update.imageBranchResolution?.decisions).toEqual([
+            {
+                nodeId: 'portrait-source',
+                role: 'base-context',
+                reason: 'portrait is the intended source',
+            },
+        ])
+    })
 })

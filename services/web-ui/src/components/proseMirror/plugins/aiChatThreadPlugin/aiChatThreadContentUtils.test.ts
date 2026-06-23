@@ -7,7 +7,6 @@ import {
     collectProseMirrorText,
     collectResponseTextById,
     buildGeneratedMediaTurnProjectionFromThreadContent,
-    buildBranchOriginPromptProjection,
     getGeneratedImageTurnInfoFromThreadContent,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
 import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
@@ -215,56 +214,13 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent', () => {
 
         const projection = buildGeneratedMediaTurnProjectionFromThreadContent(content, {})
 
-        expect(projection?.source).toBe('thread-content')
-        expect(projection?.locator).toEqual({})
-        expect(JSON.stringify(projection?.content)).toContain('Fallback answer')
+        expect(projection).toBeNull()
     })
 
-    it('returns fallback projections when parsing fails', () => {
-        const projection = buildGeneratedMediaTurnProjectionFromThreadContent('not-json', {
-            responseMessageId: 'response-1',
-        }, {
-            fallback: {
-                threadId: 'fallback-thread',
-                promptText: 'Fallback prompt',
-                responseText: 'Fallback response',
-                responseProvider: 'OpenAI',
-                lineageEvents: [{ kind: 'branch-origin', branchOriginNodeId: 'branch-origin' }],
-                missingReason: 'Projection source unavailable',
-                referenceNodeIds: ['ref-a', 'ref-b'],
-                generatedAt: '2020-01-01T00:00:00.000Z',
-            },
-        })
+    it('returns null when parsing fails', () => {
+        const projection = buildGeneratedMediaTurnProjectionFromThreadContent('not-json', {})
 
-        expect(projection?.source).toBe('generated-by-fallback')
-        expect(projection?.threadId).toBe('fallback-thread')
-        expect(projection?.missingReason).toBe('Projection source unavailable')
-        expect(JSON.stringify(projection?.content)).toContain('Fallback response')
-        expect(JSON.stringify(projection?.content)).toContain('fallback-thread')
-    })
-})
-
-describe('buildBranchOriginPromptProjection', () => {
-    it('returns null when no branch-origins are available', () => {
-        expect(buildBranchOriginPromptProjection('   ', { threadId: 'thread-id' })).toBeNull()
-    })
-
-    it('builds provenance projection with a branch-origin marker and user prompt payload', () => {
-        const projection = buildBranchOriginPromptProjection('A branch prompt', {
-            threadId: 'branch-origin-thread',
-            branchOriginNodeId: 'branch-origin-id',
-            generatedAt: 1650000000,
-            referenceNodeIds: ['node-1', 'node-2'],
-        })
-
-        expect(projection?.source).toBe('branch-origin-fallback')
-        expect(projection?.threadId).toBe('branch-origin-thread')
-        expect(projection?.missingReason).toBe('Branch origin provenance is stored outside durable chat history.')
-        const content = JSON.stringify(projection?.content)
-        expect(content).toContain('A branch prompt')
-        expect(content).toContain('branch-origin-id')
-        expect(content).toContain('aiLineageEvent')
-        expect(content).toContain('branch-origin')
+        expect(projection).toBeNull()
     })
 })
 

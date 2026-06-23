@@ -87,7 +87,7 @@ describe('settings - grouped configuration', () => {
 			'selection',
 			'mediaNode',
 			'videoControls',
-			'imageBranchLineage',
+			'mediaBranchLineage',
 			'mediaLibrary',
 			'contentDescriptor',
 		]
@@ -179,13 +179,13 @@ describe('settings - grouped configuration', () => {
 			settings.mediaNode.inProgressOutlineAnimation.zoomScaling.minZoom,
 			'settings.mediaNode.inProgressOutlineAnimation.zoomScaling.minZoom',
 		)
-		expectFiniteNumber(settings.imageBranchLineage.generatedImageSize, 'settings.imageBranchLineage.generatedImageSize')
-		expectFiniteNumber(settings.imageBranchLineage.rootOutputGap, 'settings.imageBranchLineage.rootOutputGap')
-		expectFiniteNumber(settings.imageBranchLineage.branchToBranchGap, 'settings.imageBranchLineage.branchToBranchGap')
-		expectFiniteNumber(settings.imageBranchLineage.imageToImageGap, 'settings.imageBranchLineage.imageToImageGap')
-		expectFiniteNumber(settings.imageBranchLineage.branchFanoutDepthGap, 'settings.imageBranchLineage.branchFanoutDepthGap')
-		expectFiniteNumber(settings.imageBranchLineage.branchOrigin.size, 'settings.imageBranchLineage.branchOrigin.size')
-		expectFiniteNumber(settings.imageBranchLineage.branchOrigin.iconSize, 'settings.imageBranchLineage.branchOrigin.iconSize')
+		expectFiniteNumber(settings.mediaBranchLineage.generatedMediaSize, 'settings.mediaBranchLineage.generatedMediaSize')
+		expectFiniteNumber(settings.mediaBranchLineage.rootToFirstMediaGap, 'settings.mediaBranchLineage.rootToFirstMediaGap')
+		expectFiniteNumber(settings.mediaBranchLineage.branchRowGap, 'settings.mediaBranchLineage.branchRowGap')
+		expectFiniteNumber(settings.mediaBranchLineage.mediaToMediaGap, 'settings.mediaBranchLineage.mediaToMediaGap')
+		expectFiniteNumber(settings.mediaBranchLineage.branchFanoutExtraGap, 'settings.mediaBranchLineage.branchFanoutExtraGap')
+		expectFiniteNumber(settings.mediaBranchLineage.branchOrigin.size, 'settings.mediaBranchLineage.branchOrigin.size')
+		expectFiniteNumber(settings.mediaBranchLineage.branchOrigin.iconSize, 'settings.mediaBranchLineage.branchOrigin.iconSize')
 		expectFiniteNumber(settings.mediaLibrary.panelWidthFraction, 'settings.mediaLibrary.panelWidthFraction')
 		expectFiniteNumber(settings.contentDescriptor.editDebounceMs, 'settings.contentDescriptor.editDebounceMs')
 		expectFiniteNumber(settings.contentDescriptor.minTextLength, 'settings.contentDescriptor.minTextLength')
@@ -228,7 +228,7 @@ describe('settings - grouped configuration', () => {
 			'settings.mediaNode.styles': settings.mediaNode.styles,
 			'settings.mediaNode.generatedMediaChrome.styles': settings.mediaNode.generatedMediaChrome.styles,
 			'settings.mediaNode.inProgressOutlineAnimation.styles': settings.mediaNode.inProgressOutlineAnimation.styles,
-			'settings.imageBranchLineage.branchOrigin.styles': settings.imageBranchLineage.branchOrigin.styles,
+			'settings.mediaBranchLineage.branchOrigin.styles': settings.mediaBranchLineage.branchOrigin.styles,
 		}
 
 		for (const [path, group] of Object.entries(styleGroups)) {

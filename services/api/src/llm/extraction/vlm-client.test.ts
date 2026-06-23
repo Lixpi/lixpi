@@ -130,6 +130,58 @@ describe('callStructuredVlm', () => {
         expect(result.parsed).toEqual({ status: 'ok' })
     })
 
+    it('fails immediately when OpenAI throws a non-transient error', async () => {
+        const nonTransientError = {
+            name: 'BadRequestError',
+            status: 400,
+            message: 'Request malformed',
+            headers: { get: vi.fn(() => undefined) },
+        }
+
+        openAiCreate.mockRejectedValueOnce(nonTransientError)
+
+        await expect(callStructuredVlm({
+            provider: 'OpenAI',
+            modelVersion: 'gpt-4.1',
+            natsService: {} as any,
+            ...baseArgs,
+        })).rejects.toThrow('OpenAI/gpt-4.1 (extract): BadRequestError')
+
+        expect(openAiCreate).toHaveBeenCalledOnce()
+    })
+
+    it('retries transient OpenAI errors inferred from a nested cause code', async () => {
+        const transientError = {
+            name: 'Error',
+            message: 'temporary network disruption',
+            headers: { get: vi.fn(() => '0') },
+            cause: {
+                name: 'CauseError',
+                message: 'timeout while reading',
+                cause: { code: 'ETIMEDOUT', message: 'socket timed out' },
+            },
+        }
+
+        openAiCreate
+            .mockRejectedValueOnce(transientError)
+            .mockResolvedValueOnce(makeAsyncStream([
+                {
+                    ...makeOpenAiToolCallChunk('{"status":"'),
+                },
+                makeOpenAiToolCallChunk('ok"}'),
+            ]))
+
+        const result = await callStructuredVlm({
+            provider: 'OpenAI',
+            modelVersion: 'gpt-4.1',
+            natsService: {} as any,
+            ...baseArgs,
+        })
+
+        expect(openAiCreate).toHaveBeenCalledTimes(2)
+        expect(result.parsed).toEqual({ status: 'ok' })
+    })
+
     it('retries transient failures up to three attempts and then throws with enriched context', async () => {
         const headers = { get: vi.fn(() => '0') }
         const transientError = { name: 'APIConnectionError', message: 'Connection error.', cause: { code: 'ECONNRESET', message: 'socket hang up' }, headers }
