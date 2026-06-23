@@ -1,5 +1,6 @@
 export {
     createSidePanel,
+    type SidePanelAnimationConfig,
     type SidePanelConfig,
     type SidePanelInstance,
     type SidePanelSide,

@@ -1,12 +1,15 @@
 @import '$src/sass/_transitions.scss';
 
-// SidePanel - reusable resizable side panel. The "rail" is the internal term
-// for the vertical drag handle that resizes the panel.
+// SidePanel - reusable resizable side panel.
 //
 // Both the .side-panel-resize-handle hit target and the visible .side-panel-resize-handle-line
 // span the full height of the panel as a single unbroken line. Callers can
-// target an additional class passed via `className` to style a specific rail
-// separately.
+// target an additional class passed via `className` to style a specific resize
+// handle separately.
+
+@function panelSlideTransition($property) {
+    @return #{$property} var(--side-panel-slide-duration, 1000ms) var(--side-panel-slide-easing, cubic-bezier(0.32, 0.72, 0, 1));
+}
 
 .side-panel-resize-handle {
     position: absolute;
@@ -19,7 +22,7 @@
 
 .side-panel-slide,
 .side-panel-toggle {
-    --side-panel-slide-transition: #{panelSlideTransition(transform, 1000ms)};
+    --side-panel-slide-transition: #{panelSlideTransition(transform)};
 }
 
 .side-panel-slide {
@@ -71,7 +74,7 @@
     z-index: 90;
     top: 0;
     bottom: calc(0px - var(--workspace-canvas-padding-bottom, 0px));
-    width: var(--side-panel-backdrop-width, var(--workspace-ai-chat-sidebar-width));
+    width: var(--side-panel-backdrop-width, 0px);
     pointer-events: none;
     background: var(--side-panel-backdrop-fill, rgba(248, 250, 253, 0.84));
     backdrop-filter: blur(24px) saturate(145%);

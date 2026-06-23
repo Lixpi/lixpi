@@ -4,11 +4,6 @@
 @import '$src/components/contextPreview/context-preview.scss';
 
 :root {
-    --workspace-ai-chat-sidebar-width: min(380px, calc(100vw - 64px));
-    --workspace-ai-chat-sidebar-edge-gap: 15px;
-    --workspace-ai-chat-sidebar-padding: 15px;
-    --workspace-ai-chat-panel-content-inset: 10px;
-    --workspace-ai-chat-sidebar-zoom-gap: 15px;
     --workspace-canvas-padding-top: 32px;
     --workspace-canvas-padding-inline: 0px;
     --workspace-canvas-padding-bottom: 0px;
@@ -235,8 +230,8 @@
     pointer-events: none;
 }
 
-.workspace-canvas-chat-panel-open .workspace-zoom-indicator {
-    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + 5px);
+.workspace-canvas-right-side-panel-open .workspace-zoom-indicator {
+    right: calc(var(--workspace-right-side-panel-width) + var(--workspace-right-side-panel-edge-gap) + 5px);
 }
 
 .workspace-pane {
@@ -843,7 +838,7 @@
     padding: 0 0 1rem;
 }
 
-/* Override global ProseMirror padding for the floating chat panel */
+/* Override global ProseMirror padding for the right side panel content */
 .workspace-ai-chat-floating-panel .ai-chat-thread-node-editor .ProseMirror {
     padding: 0 0 1rem;
 }
@@ -852,14 +847,14 @@
     position: absolute;
     top: 0px;
     right: calc(0px - var(--workspace-canvas-padding-inline));
-    bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom));
-    width: var(--workspace-ai-chat-sidebar-width);
+    bottom: calc(var(--workspace-right-side-panel-edge-gap) - var(--workspace-canvas-padding-bottom));
+    width: var(--workspace-right-side-panel-width);
     box-sizing: border-box;
     height: auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding: 0 var(--workspace-ai-chat-panel-content-inset);
+    padding: 0 var(--workspace-right-side-panel-content-inset);
     z-index: 10030;
     pointer-events: auto;
     border-radius: 10px;
@@ -878,7 +873,7 @@
     }
 }
 
-// The translucent glass backdrop behind the AI chat panel is owned by the
+// The translucent glass backdrop behind the right side panel is owned by the
 // reusable SidePanel component (see components/sidePanel) — its element and all
 // glass styling live there, under .side-panel-backdrop.
 
@@ -1302,11 +1297,11 @@
     left: auto !important;
     top: auto !important;
     width: calc(
-        100% + var(--workspace-ai-chat-panel-content-inset) + var(--workspace-ai-chat-panel-content-inset) - var(--workspace-ai-chat-sidebar-edge-gap)
+        100% + var(--workspace-right-side-panel-content-inset) + var(--workspace-right-side-panel-content-inset) - var(--workspace-right-side-panel-edge-gap)
     ) !important;
     flex: 0 0 auto;
     margin-top: 12px;
-    margin-left: calc(0px - var(--workspace-ai-chat-panel-content-inset));
+    margin-left: calc(0px - var(--workspace-right-side-panel-content-inset));
     z-index: 4;
     box-shadow: var(--dropdown-popover-box-shadow) !important;
 
@@ -1439,9 +1434,9 @@
     }
 }
 
-// The resizable AI chat panel is rendered by the reusable SidePanel component
+// The resizable right side panel is rendered by the reusable SidePanel component
 // (see components/sidePanel). Its base presentation lives in side-panel.scss;
-// add panel-specific overrides under .workspace-ai-chat-side-panel-resize-handle
+// Add panel-specific resize-handle overrides under .workspace-ai-chat-side-panel-resize-handle.
 // here when needed.
 
 .workspace-ai-chat-floating-panel.is-resizing {

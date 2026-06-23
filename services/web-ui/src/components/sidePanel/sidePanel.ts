@@ -1,9 +1,8 @@
 // SidePanel - reusable resizable side panel for a canvas-hosted panel.
 //
 // Renderer: TypeScript `html` DOM (no Svelte). It is meant to be mounted as a
-// child of a canvas-hosted panel element, the same way the AI chat thread panel
-// uses it. The component renders the "rail" (the internal term for the vertical
-// drag handle line) and owns the entire resize lifecycle:
+// child of any canvas-hosted panel element. The component renders the resize
+// handle and owns the entire resize lifecycle:
 //
 //   - It is the single source of truth for the panel width.
 //   - It tracks every resize gesture (drag) and clamps the width to its
@@ -18,19 +17,19 @@
 // variables, dependent layout). It does not clamp, store, or decide width.
 //
 // The panel can sit on either edge of the screen:
-//   - side: 'right'  -> panel lives on the right, its rail hugs the panel's left
-//     edge; dragging left grows the panel.
-//   - side: 'left'   -> panel lives on the left, its rail hugs the panel's right
-//     edge; dragging right grows the panel.
+//   - side: 'right'  -> panel lives on the right, its resize handle hugs the
+//     panel's left edge; dragging left grows the panel.
+//   - side: 'left'   -> panel lives on the left, its resize handle hugs the
+//     panel's right edge; dragging right grows the panel.
 
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 
 export type SidePanelSide = 'left' | 'right'
 
 export type SidePanelStyles = {
-    // Background gradient painted on the visible rail line.
+    // Background gradient painted on the visible resize handle line.
     gradient?: string
-    // Visible rail line thickness, e.g. '3px'.
+    // Visible resize handle line thickness, e.g. '3px'.
     width?: string
 }
 
@@ -44,6 +43,11 @@ export type SidePanelToggleConfig = {
     top?: string
     size?: string
     onToggle: () => void
+}
+
+export type SidePanelAnimationConfig = {
+    durationMs: number
+    easing: string
 }
 
 // Persisted resize state. `width` is null when the user has never resized the
@@ -60,16 +64,17 @@ export type SidePanelSetWidthOptions = {
 }
 
 export type SidePanelConfig = {
-    // Which edge of the screen the panel (and therefore its rail) hugs.
+    // Which edge of the screen the panel (and therefore its resize handle) hugs.
     side: SidePanelSide
-    // Distance in px from the panel edge to the rail center.
+    // Distance in px from the panel edge to the resize handle center.
     offset: number
     // Screen-pixel width of the invisible drag hit target.
     grabWidth: number
-    // Extra class for callers that want to style this panel's rail separately.
+    // Extra class for callers that want to style this panel's resize handle separately.
     className?: string
     styles?: SidePanelStyles
     toggle?: SidePanelToggleConfig
+    animation?: SidePanelAnimationConfig
 
     // Resize constraints. `getMaxWidth` is a getter because the upper bound is
     // dynamic (it depends on the available canvas/pane width).
@@ -94,7 +99,7 @@ export type SidePanelConfig = {
 }
 
 export type SidePanelInstance = {
-    // The rail element — appended by the host into its panel element.
+    // The resize handle element appended by the host into its panel element.
     element: HTMLDivElement
     // The translucent glass backdrop — a sibling that sits behind the panel and
     // blurs the canvas behind it. Appended by the host into the same container as
@@ -138,7 +143,8 @@ function clamp(value: number, min: number, max: number): number {
     return Math.min(Math.max(value, min), max)
 }
 
-const SLIDE_DURATION_MS = 1000
+const SLIDE_DEFAULT_DURATION_MS = 1000
+const SLIDE_DEFAULT_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 const SLIDE_FALLBACK_BUFFER_MS = 80
 const SLIDE_TRANSITION = 'var(--side-panel-slide-transition)'
 
@@ -168,7 +174,7 @@ class SidePanel implements SidePanelInstance {
         const { offset, grabWidth, side, className } = config
 
         const edgeOffset = `${-offset - grabWidth / 2}px`
-        const railStyle = {
+        const resizeHandleStyle = {
             position: 'absolute' as const,
             width: `${grabWidth}px`,
             top: '0',
@@ -178,17 +184,18 @@ class SidePanel implements SidePanelInstance {
 
         this.element = html`<div
             className=${`side-panel-resize-handle side-panel-resize-handle-${side} nopan${className ? ` ${className}` : ''}`}
-            style=${railStyle}
+            style=${resizeHandleStyle}
         ></div>` as HTMLDivElement
 
         const styles = config.styles
         if (styles?.gradient) this.element.style.setProperty('--side-panel-resize-handle-gradient', styles.gradient)
         if (styles?.width) this.element.style.setProperty('--side-panel-resize-handle-width', styles.width)
 
-        const line = html`<div className="side-panel-resize-handle-line"></div>` as HTMLDivElement
-        this.element.appendChild(line)
-        // Pointer events unify mouse, touch, and pen, so the rail resizes on
-        // touch devices without a separate touch code path.
+        const resizeHandleLine = html`<div className="side-panel-resize-handle-line"></div>` as HTMLDivElement
+        this.element.appendChild(resizeHandleLine)
+        this.applyAnimationSettings(this.element)
+        // Pointer events unify mouse, touch, and pen, so the resize handle works
+        // on touch devices without a separate touch code path.
         this.element.addEventListener('pointerdown', this.handleResizeStart)
 
         // Translucent glass backdrop. It is a sibling that sits behind the panel
@@ -200,6 +207,8 @@ class SidePanel implements SidePanelInstance {
         ></div>` as HTMLDivElement
 
         this.toggleElement = config.toggle ? this.createToggleElement(config.toggle) : null
+        this.applyAnimationSettings(this.backdropElement)
+        if (this.toggleElement) this.applyAnimationSettings(this.toggleElement)
         this.setOpen(false)
         if (this.toggleElement) applyStyle(this.toggleElement, { transition: 'none', transform: this.getToggleClosedTransform() })
     }
@@ -241,6 +250,23 @@ class SidePanel implements SidePanelInstance {
 
     private persist = (): void => {
         this.config.persistState?.(this.getState())
+    }
+
+    private getSlideDurationMs = (): number => {
+        const durationMs = this.config.animation?.durationMs
+        return typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0
+            ? durationMs
+            : SLIDE_DEFAULT_DURATION_MS
+    }
+
+    private getSlideEasing = (): string => {
+        const easing = this.config.animation?.easing?.trim()
+        return easing ? easing : SLIDE_DEFAULT_EASING
+    }
+
+    private applyAnimationSettings = (element: HTMLElement): void => {
+        element.style.setProperty('--side-panel-slide-duration', `${this.getSlideDurationMs()}ms`)
+        element.style.setProperty('--side-panel-slide-easing', this.getSlideEasing())
     }
 
     // Resolve the width to start a drag from. Prefer the stored width; otherwise
@@ -286,8 +312,8 @@ class SidePanel implements SidePanelInstance {
         applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })
         this.config.onResizeStart?.()
 
-        // Capture the pointer so the drag keeps tracking past the thin rail and
-        // outside the window, on both mouse and touch.
+        // Capture the pointer so the drag keeps tracking past the thin resize
+        // handle and outside the window, on both mouse and touch.
         const canCapture = Number.isFinite(pointerId) && typeof this.element.setPointerCapture === 'function'
         if (canCapture) this.element.setPointerCapture(pointerId)
 
@@ -352,6 +378,7 @@ class SidePanel implements SidePanelInstance {
         this.setOpen(true)
         const targets = this.getSlideTargets(panelElement, 'in')
         for (const target of targets) {
+            this.applyAnimationSettings(target.element)
             target.element.classList.add('side-panel-slide')
             applyStyle(target.element, { transition: 'none', transform: target.endTransform })
         }
@@ -362,6 +389,7 @@ class SidePanel implements SidePanelInstance {
         this.setOpen(true)
         const targets = this.getSlideTargets(panelElement, 'in')
         for (const target of targets) {
+            this.applyAnimationSettings(target.element)
             target.element.classList.add('side-panel-slide')
             applyStyle(target.element, { transition: 'none', transform: target.startTransform })
         }
@@ -394,7 +422,7 @@ class SidePanel implements SidePanelInstance {
     )
 
     private getToggleClosedTransform = (): string => {
-        const travel = 'var(--side-panel-toggle-closed-travel, var(--side-panel-backdrop-width, var(--workspace-ai-chat-sidebar-width, 0px)))'
+        const travel = 'var(--side-panel-toggle-closed-travel, var(--side-panel-backdrop-width, 0px))'
         return this.config.side === 'left'
             ? `translate3d(calc(-1 * ${travel}), 0, 0)`
             : `translate3d(${travel}, 0, 0)`
@@ -444,6 +472,7 @@ class SidePanel implements SidePanelInstance {
         const targets = this.getSlideTargets(panelElement, direction)
 
         for (const target of targets) {
+            this.applyAnimationSettings(target.element)
             target.element.classList.add('side-panel-slide')
             applyStyle(target.element, { transition: 'none', transform: target.startTransform })
         }
@@ -470,7 +499,7 @@ class SidePanel implements SidePanelInstance {
             if (this.slideRunId === runId) this.finishSlideWait = null
             resolve()
         }
-        const timeoutId = window.setTimeout(finish, SLIDE_DURATION_MS + SLIDE_FALLBACK_BUFFER_MS)
+        const timeoutId = window.setTimeout(finish, this.getSlideDurationMs() + SLIDE_FALLBACK_BUFFER_MS)
 
         this.finishSlideWait = finish
         for (const target of targets) target.addEventListener('transitionend', handleTransitionEnd)

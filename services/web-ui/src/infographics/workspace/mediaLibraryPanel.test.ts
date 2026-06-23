@@ -52,13 +52,13 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(panelStyles, 'box-shadow: inset 0 0 0 1px')
     })
 
-    it('uses a full-height panel, accounts for AI chat, and focuses details when narrow', () => {
+    it('uses a full-height panel, accounts for the right side panel, and focuses details when narrow', () => {
         expectSourceToContain(panelStyles, 'top: 0;')
         expectSourceToContain(panelStyles, 'bottom: 0;')
         expectSourceToContain(panelStyles, 'right: 0;')
         expectSourceToContain(panelStyles, 'var(--media-library-panel-fraction, 0.666667)')
-        expectSourceToContain(panelStyles, '.workspace-canvas-chat-panel-open .media-library-panel')
-        expectSourceToContain(panelStyles, 'var(--workspace-ai-chat-sidebar-width)')
+        expectSourceToContain(panelStyles, '.workspace-canvas-right-side-panel-open .media-library-panel')
+        expectSourceToContain(panelStyles, 'var(--workspace-right-side-panel-width)')
         expectSourceToContain(panelStyles, '@container media-library (max-width: 680px)')
         expectSourceToContain(panelStyles, '.media-library-panel-feature-selected .media-library-inspector')
     })

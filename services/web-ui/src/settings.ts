@@ -82,6 +82,46 @@ export type AiChatThreadRailSettings = {
     }
 }
 
+export type RightSidePanelSettings = {
+    defaultDimensions: {
+        width: number
+    }
+    dimensions: {
+        minWidth: number
+        maxPaneMargin: number
+    }
+    layout: {
+        edgeGap: number
+        contentInset: number
+    }
+    resizeHandle: {
+        offset: number
+        grabWidth: number
+        styles: {
+            gradient: string
+            width: string
+        }
+    }
+    toggle: {
+        openAriaLabel: string
+        closedAriaLabel: string
+        openOffset: string
+        closedTravel: string
+        top: string
+        size: string
+    }
+    animation: {
+        durationMs: number
+        easing: string
+    }
+    styles: {
+        backdropFill: string
+        backdropFillOpaque: string
+        toggleColor: string
+        toggleHoverColor: string
+    }
+}
+
 export type AiChatThreadPanelTabsSettings = {
     minTabWidth: number
     height: number
@@ -480,6 +520,8 @@ export type Settings = {
 
     canvasBubbleMenu: CanvasBubbleMenuSettings
 
+    rightSidePanel: RightSidePanelSettings
+
     aiChatThread: AiChatThreadSettings
 
     aiPromptInput: AiPromptInputSettings
@@ -538,6 +580,59 @@ export const settings: Settings = {
         // opt this config into the shared adaptive low-zoom curve, which defaults
         // to 0.45 unless this object provides `lowZoomPower`.
         zoomScaling: { minZoom: 0.4 },
+    },
+
+    // Right side panel surface, resize, toggle, and slide settings.
+    rightSidePanel: {
+        defaultDimensions: {
+            // Screen-pixel width before the user has resized the panel.
+            width: 380,
+        },
+        dimensions: {
+            // Minimum screen-pixel width while resizing.
+            minWidth: 320,
+            // Remaining pane width kept visible when computing the dynamic max width.
+            maxPaneMargin: 64,
+        },
+        layout: {
+            // Gap between the right side panel and viewport chrome that tracks it.
+            edgeGap: 15,
+            // Inner horizontal inset for the panel content column.
+            contentInset: 10,
+        },
+        resizeHandle: {
+            // Horizontal offset in pixels from the panel's left edge to the resize handle center.
+            offset: -2,
+            // Screen-pixel width of the invisible resize hit target.
+            grabWidth: 20,
+            styles: {
+                // Background gradient painted on the visible resize-handle line.
+                gradient: 'linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%)',
+                // Visible line width; this does not change the draggable hit target.
+                width: '3px',
+            },
+        },
+        toggle: {
+            openAriaLabel: 'Collapse right side panel',
+            closedAriaLabel: 'Open right side panel',
+            // Position when the panel is open.
+            openOffset: 'calc(var(--workspace-right-side-panel-width) + var(--workspace-right-side-panel-edge-gap) + 5px)',
+            // Travel distance used when the panel is closed.
+            closedTravel: 'calc(var(--workspace-right-side-panel-width) + var(--workspace-right-side-panel-edge-gap) - 10px)',
+            top: '15px',
+            size: '15px',
+        },
+        animation: {
+            // Drawer-style slide duration.
+            durationMs: 150,
+            easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+        },
+        styles: {
+            backdropFill: 'rgba(248, 250, 253, 0.84)',
+            backdropFillOpaque: '#f8fafd',
+            toggleColor: '#4b5563',
+            toggleHoverColor: '#1f2937',
+        },
     },
 
     // AI chat thread presentation and interaction settings.
@@ -1065,7 +1160,7 @@ export const settings: Settings = {
 
     // Media Library panel layout settings.
     mediaLibrary: {
-        // Fraction of the canvas space remaining after any open AI chat panel is reserved.
+    // Fraction of the canvas space remaining after any open right side panel is reserved.
         panelWidthFraction: 2 / 3,
     },
 
