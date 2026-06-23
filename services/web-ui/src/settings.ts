@@ -444,6 +444,19 @@ export type MediaBranchLineageSettings = {
         maxWidthGrowth: number
         screenFixedMaxWidthGrowth: number
         screenFixedMaxWidthFraction: number
+        // Text sizing for the marker's user-message and AI-response preview lines.
+        // Kept in sync with the floating detail panel so a marker reads at the same
+        // size as the expanded thread it represents.
+        text: {
+            // Pixel font size of the user-message preview line (the bold prompt text).
+            messageFontSize: number
+            // Unitless line-height multiplier applied to the user-message preview.
+            messageLineHeight: number
+            // Pixel font size of the AI-response preview line below the separator.
+            responseFontSize: number
+            // Unitless line-height multiplier applied to the AI-response preview.
+            responseLineHeight: number
+        }
     }
 }
 
@@ -1097,6 +1110,13 @@ export const settings: Settings = {
             screenFixedMaxWidthGrowth: 6,
             // Hard cap on the docked pose's on-screen width as a fraction of the prompt input field width. The pill hugs its content but never grows past this share of the input; longer messages truncate with an ellipsis.
             screenFixedMaxWidthFraction: 0.8,
+            // Text sizing for the marker's preview lines. Matches the floating detail panel's body text (1rem / 16px) so a marker reads at the same size as the thread it represents.
+            text: {
+                messageFontSize: 16,
+                messageLineHeight: 1.14,
+                responseFontSize: 11.5,
+                responseLineHeight: 1.15,
+            },
         },
     },
 

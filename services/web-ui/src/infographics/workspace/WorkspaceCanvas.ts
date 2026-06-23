@@ -221,13 +221,24 @@ const BRANCH_MARKER_HORIZONTAL_PADDING = 60
 const BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS = 120
 const BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS = 50
 const BRANCH_MARKER_VERTICAL_PADDING = 21
-const BRANCH_MARKER_MESSAGE_LINE_HEIGHT = 17
 const BRANCH_MARKER_SEPARATOR_HEIGHT = 13
-const BRANCH_MARKER_RESPONSE_LINE_HEIGHT = 16
+// Rendered pixel line heights are derived from the configurable text sizing in
+// settings.ts so the height the layout reserves stays in sync with the CSS that
+// actually paints the marker's preview lines.
+function getBranchMarkerMessageLineHeight(): number {
+    const { messageFontSize, messageLineHeight } = settings.mediaBranchLineage.marker.text
+    return Math.ceil(messageFontSize * messageLineHeight)
+}
+function getBranchMarkerResponseLineHeight(): number {
+    const { responseFontSize, responseLineHeight } = settings.mediaBranchLineage.marker.text
+    return Math.ceil(responseFontSize * responseLineHeight)
+}
 // Match the natural single-line height (vertical padding + one message line) so a
 // one-line marker isn't inflated relative to a wrapped two-line one — otherwise
 // `justify-content: center` pads the single-line case more than the multi-line case.
-const BRANCH_MARKER_MIN_HEIGHT = BRANCH_MARKER_VERTICAL_PADDING + BRANCH_MARKER_MESSAGE_LINE_HEIGHT
+function getBranchMarkerMinHeight(): number {
+    return BRANCH_MARKER_VERTICAL_PADDING + getBranchMarkerMessageLineHeight()
+}
 const BRANCH_MARKER_PENDING_STACK_GAP = 8
 // Must match the `workspace-branch-marker-spin` animation duration in
 // workspace-canvas.scss (0.8s). Used to phase-align recreated spinners to a
@@ -267,15 +278,15 @@ function getBranchMarkerContentDimensions(promptText: string, options: { respons
     const width = getBranchMarkerWidthForText(promptText)
     const promptLineCount = getBranchMarkerPromptLineCount(promptText, width)
     const responseHeight = options.responseLine
-        ? BRANCH_MARKER_SEPARATOR_HEIGHT + BRANCH_MARKER_RESPONSE_LINE_HEIGHT
+        ? BRANCH_MARKER_SEPARATOR_HEIGHT + getBranchMarkerResponseLineHeight()
         : 0
     return {
         width,
         height: Math.max(
-            BRANCH_MARKER_MIN_HEIGHT,
+            getBranchMarkerMinHeight(),
             Math.ceil(
                 BRANCH_MARKER_VERTICAL_PADDING
-                + promptLineCount * BRANCH_MARKER_MESSAGE_LINE_HEIGHT
+                + promptLineCount * getBranchMarkerMessageLineHeight()
                 + responseHeight
             )
         ),
@@ -292,7 +303,7 @@ function getBranchMarkerScreenFixedDimensions(promptText: string): { width: numb
     const desiredWidth = BRANCH_MARKER_HORIZONTAL_PADDING + promptPreview.length * BRANCH_MARKER_APPROX_CHAR_WIDTH
     return {
         width: Math.round(Math.max(minWidth, Math.min(maxWidth, desiredWidth))),
-        height: BRANCH_MARKER_MIN_HEIGHT,
+        height: getBranchMarkerMinHeight(),
     }
 }
 
@@ -623,6 +634,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-branch-origin-box-shadow', branchOriginSettings.styles.boxShadow)
     paneEl.style.setProperty('--workspace-branch-marker-separator-gradient', branchOriginSettings.styles.separatorGradient)
     paneEl.style.setProperty('--workspace-branch-marker-move-duration', `${settings.mediaBranchLineage.pendingMarkerMoveDurationMs}ms`)
+    const branchMarkerText = settings.mediaBranchLineage.marker.text
+    paneEl.style.setProperty('--workspace-branch-marker-message-font-size', `${branchMarkerText.messageFontSize}px`)
+    paneEl.style.setProperty('--workspace-branch-marker-message-line-height', `${branchMarkerText.messageLineHeight}`)
+    paneEl.style.setProperty('--workspace-branch-marker-response-font-size', `${branchMarkerText.responseFontSize}px`)
+    paneEl.style.setProperty('--workspace-branch-marker-response-line-height', `${branchMarkerText.responseLineHeight}`)
 
     let currentCanvasState: CanvasState | null = options.canvasState
         ? normalizeBranchMarkerDimensions(options.canvasState)

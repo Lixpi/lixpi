@@ -1735,9 +1735,9 @@
     gap: 7px;
     padding: 0 3px;
     color: currentColor;
-    font-size: 11.5px;
+    font-size: var(--workspace-branch-marker-response-font-size, 16px);
     font-weight: 500;
-    line-height: 1.15;
+    line-height: var(--workspace-branch-marker-response-line-height, 1.15);
     opacity: 0.72;
     overflow: hidden;
     white-space: nowrap;
@@ -1787,10 +1787,10 @@
     align-items: center;
     box-sizing: border-box;
     color: currentColor;
-    font-size: 15px;
+    font-size: var(--workspace-branch-marker-message-font-size, 16px);
     font-weight: 700;
     gap: 8px;
-    line-height: 1.14;
+    line-height: var(--workspace-branch-marker-message-line-height, 1.14);
     opacity: 0.94;
     overflow: hidden;
     padding: 0 3px;
