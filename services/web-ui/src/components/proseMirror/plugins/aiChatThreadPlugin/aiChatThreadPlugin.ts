@@ -1183,15 +1183,18 @@ class AiChatThreadPluginClass {
         }, 'conversation')
         if (events.length === 0) return
 
+        const responseMessagePos = tr.mapping.map(responseContext.responseMessagePos, 1)
+        const responseMessageNode = tr.doc.nodeAt(responseMessagePos)
+        if (!responseMessageNode || responseMessageNode.type.name !== aiResponseMessageNodeType) return
         const existingEventIds = new Set<string>()
-        let insertAfterLeadingLineageEventsPos = responseContext.responseMessagePos + 1
+        let insertAfterLeadingLineageEventsPos = responseMessagePos + 1
         let hasSeenNonLineageEventNode = false
 
-        responseContext.responseMessageNode.forEach((child: ProseMirrorNode, offset: number) => {
+        responseMessageNode.forEach((child: ProseMirrorNode, offset: number) => {
             if (child.type.name === aiLineageEventNodeType) {
                 existingEventIds.add(getLineageEventNodeIdentity(child))
                 if (!hasSeenNonLineageEventNode) {
-                    insertAfterLeadingLineageEventsPos = responseContext.responseMessagePos + 1 + offset + child.nodeSize
+                    insertAfterLeadingLineageEventsPos = responseMessagePos + 1 + offset + child.nodeSize
                 }
                 return
             }
@@ -1199,7 +1202,7 @@ class AiChatThreadPluginClass {
             hasSeenNonLineageEventNode = true
         })
 
-        let insertPos = tr.mapping.map(insertAfterLeadingLineageEventsPos, 1)
+        let insertPos = insertAfterLeadingLineageEventsPos
         for (const event of events) {
             if (existingEventIds.has(getLineageEventIdentity(event))) continue
 

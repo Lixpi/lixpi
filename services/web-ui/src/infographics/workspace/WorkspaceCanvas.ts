@@ -1825,7 +1825,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const panel = html`<div className=${panelClassName}></div>` as HTMLElement
 
         if (generatedBy) {
-            const thread = currentAiChatThreads.find((candidate: AiChatThread) => candidate.threadId === generatedBy.aiChatThreadId)
+            const threadContent = getAiChatThreadContentForProjection(generatedBy.aiChatThreadId)
             const locator = {
                 responseMessageId: generatedBy.responseMessageId,
                 reasoningRunId: generatedBy.reasoningRunId,
@@ -1837,7 +1837,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             const lineageProjectionScope = options.lineageProjectionScope ?? 'media-run'
 
-            const projection = buildGeneratedMediaTurnProjectionFromThreadContent(thread?.content, locator, {
+            const projection = buildGeneratedMediaTurnProjectionFromThreadContent(threadContent, locator, {
                 threadId: generatedBy.aiChatThreadId,
                 forceGenerationDetailsOpen: true,
                 limitToLocatorMedia: options.limitProjectionToSelectedMedia ?? true,
@@ -2106,8 +2106,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             className: 'canvas-branch-line-info-panel',
             includeDescriptor: false,
             rendererKey: `branch-line:${branchLineNode.nodeId}`,
-            limitProjectionToSelectedMedia: false,
-            lineageProjectionScope: 'branch-fork',
+            limitProjectionToSelectedMedia: true,
+            lineageProjectionScope: 'media-run',
         })
     }
 
@@ -4962,8 +4962,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 },
                 onEditorChange: (value: any) => {
                     liveAiChatThreadContentOverrides.delete(panelThreadId)
+                    rememberAiChatThreadContent(panelThreadId, value)
                     onAiChatThreadContentChange?.({ workspaceId, threadId: panelThreadId, content: value })
                     refreshBranchMarkersForAiChatThread(panelThreadId)
+                    refreshGeneratedMediaProjectionsForAiChatThread(panelThreadId)
                     // The descriptor lives on the canvas thread node (if this thread
                     // has one); standalone panel-only sessions have no node to patch.
                     if (rootNode) scheduleTextNodeDescriptor(rootNode.nodeId, value)
@@ -4975,6 +4977,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 onStreamingUpdate: (value: any) => {
                     liveAiChatThreadContentOverrides.set(panelThreadId, value)
                     refreshBranchMarkersForAiChatThread(panelThreadId)
+                    refreshGeneratedMediaProjectionsForAiChatThread(panelThreadId)
                 },
                 onProjectTitleChange: () => {},
                 onAiChatSubmit: async ({
@@ -5370,8 +5373,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             },
             onEditorChange: (value: any) => {
                 liveAiChatThreadContentOverrides.delete(threadId)
+                rememberAiChatThreadContent(threadId, value)
                 onAiChatThreadContentChange?.({ workspaceId, threadId, content: value })
                 refreshBranchMarkersForAiChatThread(threadId)
+                refreshGeneratedMediaProjectionsForAiChatThread(threadId)
             },
             // Streamed AI tokens are dispatched with skipDispatch, so they never
             // reach onEditorChange or the store. Mirror the live doc into the
@@ -5380,6 +5385,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             onStreamingUpdate: (value: any) => {
                 liveAiChatThreadContentOverrides.set(threadId, value)
                 refreshBranchMarkersForAiChatThread(threadId)
+                refreshGeneratedMediaProjectionsForAiChatThread(threadId)
             },
             onProjectTitleChange: () => {},
             onAiChatSubmit: async ({
@@ -7006,8 +7012,35 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         value: string
     }
 
-    function getAiChatThreadContentForBranchMarker(threadId: string): object | undefined {
-        return liveAiChatThreadContentOverrides.get(threadId) ?? aiChatThreadsStore.getThread(threadId)?.content
+    function getPersistedAiChatThread(threadId: string): AiChatThread | undefined {
+        const storeThread = aiChatThreadsStore.getThread(threadId)
+        const currentThread = currentAiChatThreads.find((candidate: AiChatThread) => candidate.threadId === threadId)
+        if (!storeThread) return currentThread
+        if (!currentThread) return storeThread
+        return storeThread.updatedAt >= currentThread.updatedAt ? storeThread : currentThread
+    }
+
+    function rememberAiChatThreadContent(threadId: string, content: object): void {
+        const thread = getPersistedAiChatThread(threadId)
+        if (!thread) return
+
+        const updatedThread = {
+            ...thread,
+            content,
+            updatedAt: Math.max(thread.updatedAt, Date.now()),
+        }
+        currentAiChatThreads = currentAiChatThreads.some((candidate: AiChatThread) => candidate.threadId === threadId)
+            ? currentAiChatThreads.map((candidate: AiChatThread) => candidate.threadId === threadId ? updatedThread : candidate)
+            : [...currentAiChatThreads, updatedThread]
+    }
+
+    function getAiChatThreadContentForProjection(threadId: string): unknown {
+        return liveAiChatThreadContentOverrides.get(threadId)
+            ?? getPersistedAiChatThread(threadId)?.content
+    }
+
+    function getAiChatThreadContentForBranchMarker(threadId: string): unknown {
+        return getAiChatThreadContentForProjection(threadId)
     }
 
     function getBranchMarkerThreadId(node: BranchMarkerNode): string {
@@ -7249,6 +7282,32 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function refreshBranchMarkerPreviewsForLoadedThreads(threads: AiChatThread[]): void {
         for (const thread of threads) {
             refreshBranchMarkersForAiChatThread(thread.threadId)
+        }
+    }
+
+    function hasOpenGeneratedMediaProjectionForAiChatThread(threadId: string): boolean {
+        if (!currentCanvasState) return false
+        return currentCanvasState.nodes.some((node: CanvasNode) => {
+            if ((node.type === 'image' || node.type === 'video')
+                && expandedGeneratedMediaInfoNodeIds.has(node.nodeId)
+                && node.generatedBy?.aiChatThreadId === threadId) {
+                return true
+            }
+
+            if ((node.type === 'branchFork' || node.type === 'branchLine')
+                && node.aiChatThreadId === threadId) {
+                return node.type === 'branchFork'
+                    ? expandedBranchForkInfoNodeIds.has(node.nodeId)
+                    : expandedBranchLineInfoNodeIds.has(node.nodeId)
+            }
+
+            return false
+        })
+    }
+
+    function refreshGeneratedMediaProjectionsForAiChatThread(threadId: string): void {
+        if (hasOpenGeneratedMediaProjectionForAiChatThread(threadId)) {
+            scheduleGeneratedMediaChromeSync()
         }
     }
 
@@ -10598,6 +10657,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 draggingNodeId = null
                 resizingNodeId = null
                 extractionSessionHistoryLoaded = false
+                liveAiChatThreadContentOverrides.clear()
             }
 
             // Only do a full re-render if node structure or documents/threads changed

@@ -792,11 +792,36 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         }
 
         .ai-collapsible-block-summary-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
             margin-left: auto;
             color: rgba(0, 0, 0, 0.38);
             font-size: 0.72rem;
             font-weight: 600;
             white-space: nowrap;
+        }
+
+        .ai-image-generation-summary-model-tag,
+        .ai-image-generation-summary-model-tag-svg {
+            flex: 0 0 auto;
+        }
+
+        .ai-image-generation-summary-model-tag {
+            display: inline-flex;
+            line-height: 0;
+        }
+
+        .ai-image-generation-summary-model-tag-svg {
+            display: block;
+            overflow: visible;
+        }
+
+        .ai-collapsible-block-summary-reference-meta {
+            color: rgba(0, 0, 0, 0.38);
+            font-size: 0.72rem;
+            font-weight: 600;
+            line-height: 1;
         }
     }
 
@@ -822,6 +847,45 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             font-size: 0.78rem !important;
             font-style: italic;
         }
+    }
+
+    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content:not(:empty),
+    .ai-image-generation-tool-prompt-fallback,
+    .ai-image-generation-final-prompt {
+        margin: 0;
+        padding: 0.45rem 0.65rem;
+        max-height: 14rem;
+        overflow-y: auto;
+        border-left: 2px solid rgba(115, 87, 184, 0.34);
+        border-radius: 0 4px 4px 0;
+        background: rgba(115, 87, 184, 0.06);
+        color: rgba(26, 39, 68, 0.82);
+        font-family: inherit;
+        font-size: 0.76rem;
+        font-style: normal;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content:empty {
+        display: none;
+    }
+
+    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content p,
+    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h1,
+    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h2,
+    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h3,
+    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h4,
+    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h5,
+    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content h6,
+    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content span,
+    .ai-image-generation-tool-prompt-section .ai-collapsible-block-content div {
+        color: inherit;
+        font-size: 0.76rem !important;
+        font-style: normal;
+        line-height: 1.5;
     }
 
     .ai-image-generation-section-label {
@@ -853,20 +917,6 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     .ai-image-generation-reference-section .ai-image-generation-section-label,
     .ai-image-generation-resolver-section .ai-image-generation-section-label {
         display: block;
-    }
-
-    .ai-image-generation-tool-prompt-fallback,
-    .ai-image-generation-final-prompt {
-        margin: 0;
-        max-height: 14rem;
-        overflow: auto;
-        white-space: pre-wrap;
-        word-break: break-word;
-        color: rgba(0, 0, 0, 0.58);
-        font-family: inherit;
-        font-size: 0.76rem;
-        font-style: normal;
-        line-height: 1.45;
     }
 
     .ai-image-generation-reference-grid {

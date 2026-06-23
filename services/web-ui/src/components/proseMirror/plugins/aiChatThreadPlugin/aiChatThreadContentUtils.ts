@@ -206,6 +206,88 @@ function createSingleGeneratedMediaFilter(locator: GeneratedMediaTurnLocator): P
     return (node) => projectionNodeMatchesLocator(node, locator)
 }
 
+type LineageIds = {
+    branchOriginNodeIds: Set<string>
+    branchForkNodeIds: Set<string>
+    branchLineNodeIds: Set<string>
+}
+
+function addLineageId(set: Set<string>, value: unknown): void {
+    if (typeof value === 'string' && value) set.add(value)
+}
+
+function collectMatchingGeneratedMediaLineageIds(container: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): LineageIds {
+    const lineageIds: LineageIds = {
+        branchOriginNodeIds: new Set(),
+        branchForkNodeIds: new Set(),
+        branchLineNodeIds: new Set(),
+    }
+
+    function visit(node: ProseMirrorJsonNode): void {
+        if (generatedMediaNodeMatchesLocator(node, locator)) {
+            addLineageId(lineageIds.branchOriginNodeIds, node.attrs?.branchOriginNodeId)
+            addLineageId(lineageIds.branchForkNodeIds, node.attrs?.branchForkNodeId)
+            addLineageId(lineageIds.branchLineNodeIds, node.attrs?.branchLineNodeId)
+        }
+
+        for (const child of node.content ?? []) visit(child)
+    }
+
+    visit(container)
+    return lineageIds
+}
+
+function hasAnyLineageIds(lineageIds: LineageIds): boolean {
+    return lineageIds.branchOriginNodeIds.size > 0
+        || lineageIds.branchForkNodeIds.size > 0
+        || lineageIds.branchLineNodeIds.size > 0
+}
+
+function getLineageEventIdentity(node: ProseMirrorJsonNode): string {
+    const attrs = node.attrs ?? {}
+    const kind = typeof attrs.kind === 'string' ? attrs.kind : ''
+    const id = kind === 'branch-origin'
+        ? attrs.branchOriginNodeId
+        : kind === 'branch-line'
+            ? attrs.branchLineNodeId
+            : attrs.branchForkNodeId
+    return `${kind}:${typeof id === 'string' ? id : ''}`
+}
+
+function lineageEventMatchesIds(node: ProseMirrorJsonNode, lineageIds: LineageIds): boolean {
+    const attrs = node.attrs ?? {}
+    if (attrs.kind === 'branch-origin') return lineageIds.branchOriginNodeIds.has(String(attrs.branchOriginNodeId ?? ''))
+    if (attrs.kind === 'branch-line') return lineageIds.branchLineNodeIds.has(String(attrs.branchLineNodeId ?? ''))
+    return lineageIds.branchForkNodeIds.has(String(attrs.branchForkNodeId ?? ''))
+}
+
+function createProjectionNodeFilter(
+    container: ProseMirrorJsonNode,
+    locator: GeneratedMediaTurnLocator,
+    limitToLocatorMedia: boolean,
+): ProjectionNodeFilter {
+    const mediaFilter = limitToLocatorMedia
+        ? createSingleGeneratedMediaFilter(locator)
+        : undefined
+    const lineageIds = limitToLocatorMedia
+        ? collectMatchingGeneratedMediaLineageIds(container, locator)
+        : null
+    const shouldFilterLineageEvents = Boolean(lineageIds && hasAnyLineageIds(lineageIds))
+    const seenLineageEventIds = new Set<string>()
+
+    return (node) => {
+        if (isGeneratedMediaProjectionNode(node)) return mediaFilter ? mediaFilter(node) : true
+        if (node.type !== 'aiLineageEvent') return true
+
+        if (shouldFilterLineageEvents && lineageIds && !lineageEventMatchesIds(node, lineageIds)) return false
+
+        const eventId = getLineageEventIdentity(node)
+        if (seenLineageEventIds.has(eventId)) return false
+        seenLineageEventIds.add(eventId)
+        return true
+    }
+}
+
 function cloneProjectionNodeTree(
     node: ProseMirrorJsonNode,
     forceGenerationDetailsOpen: boolean,
@@ -267,20 +349,20 @@ function cloneResponseForProjection(
     limitToLocatorMedia: boolean,
     lineageProjectionScope: AiLineageProjectionScope,
 ): ProseMirrorJsonNode | null {
-    const shouldKeepNode = limitToLocatorMedia
-        ? createSingleGeneratedMediaFilter(locator)
-        : undefined
     const sections = (responseNode.content ?? []).filter((child) => child.type === 'aiReasoningSection')
     if (sections.length === 0) {
+        const shouldKeepNode = createProjectionNodeFilter(responseNode, locator, limitToLocatorMedia)
         return cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode)
     }
 
     const selectedSection = getReasoningContainer(responseNode, locator)
     if (!selectedSection) return null
     if (selectedSection === responseNode) {
+        const shouldKeepNode = createProjectionNodeFilter(responseNode, locator, limitToLocatorMedia)
         return cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode)
     }
 
+    const shouldKeepNode = createProjectionNodeFilter(selectedSection, locator, limitToLocatorMedia)
     const clonedSection = cloneProjectionNode(selectedSection, forceGenerationDetailsOpen, shouldKeepNode)
     clonedSection.attrs = {
         ...(clonedSection.attrs ?? {}),

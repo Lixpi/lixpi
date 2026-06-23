@@ -5,7 +5,16 @@ import type {
     VideoGenerationTrace,
 } from '@lixpi/constants'
 
+// @ts-ignore - runtime import
+import { select } from 'd3-selection'
+import { createTagPill, type TagPillInstance } from '$src/components/tagPill/index.ts'
+import {
+    transformModelsToOptions,
+    type AiModelDropdownOption,
+} from '$src/components/proseMirror/plugins/primitives/aiControls/aiControls.ts'
 import AuthService from '$src/services/auth-service.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
+import { settings } from '$src/settings.ts'
 import { html } from '$src/utils/domTemplates.ts'
 
 // Image and video generation traces share an identical reference/excluded/
@@ -75,6 +84,61 @@ export const formatTraceModelLabel = (modelId?: string | null): string => {
     if (!modelId) return ''
     const parts = String(modelId).split(':')
     return parts[1] || parts[0] || ''
+}
+
+const formatTraceModelTagFallbackLabel = (modelId?: string | null): string => {
+    const modelLabel = formatTraceModelLabel(modelId).trim()
+    if (!modelLabel) return ''
+    return modelLabel
+        .split(/[-_]/)
+        .filter(Boolean)
+        .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+        .join(' ')
+}
+
+const getTraceModelOption = (modelId?: string | null): AiModelDropdownOption | null => {
+    if (!modelId) return null
+    const normalizedModelId = String(modelId).trim().toLowerCase()
+    const normalizedModelSegment = formatTraceModelLabel(modelId).trim().toLowerCase()
+    if (!normalizedModelId) return null
+
+    const options = transformModelsToOptions(aiModelsStore.getData())
+    return options.find((option) =>
+        option.aiModel.toLowerCase() === normalizedModelId
+        || option.model.toLowerCase() === normalizedModelId
+        || option.model.toLowerCase() === normalizedModelSegment
+    ) ?? null
+}
+
+const createTraceModelTag = (
+    modelId: string | null | undefined,
+    setTagPill: (tagPill: TagPillInstance) => void,
+): HTMLElement | null => {
+    const option = getTraceModelOption(modelId)
+    const label = option?.title ?? formatTraceModelTagFallbackLabel(modelId)
+    if (!label) return null
+
+    const tagHost = html`<span className="ai-image-generation-summary-model-tag"></span>` as HTMLElement
+    const svgEl = select(tagHost)
+        .append('svg')
+        .attr('class', 'ai-image-generation-summary-model-tag-svg ai-prompt-selected-model-tag-svg')
+        .node() as SVGSVGElement
+    const tagStyles = settings.aiPromptInput.modelMenu.styles
+    const tagPill = createTagPill(select(svgEl), {
+        id: option?.aiModel ?? String(modelId ?? label),
+        x: 0,
+        y: 0,
+        label,
+        icon: option?.icon ?? '',
+        iconColor: tagStyles.selectedModelTagIconColor,
+        textColor: tagStyles.selectedModelTagTextColor,
+        selected: true,
+        closable: false,
+        labelAlign: 'start',
+        className: 'ai-prompt-selected-model-tag-pill ai-image-generation-summary-model-tag-pill',
+    })
+    setTagPill(tagPill)
+    return tagHost
 }
 
 const appendAuthenticatedToken = async (imageUrl: string): Promise<string> => {
@@ -315,6 +379,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
     let renderedSignature = ''
     let renderedTrace: GenerationTrace | null = null
     let renderedReferenceTrace: GenerationTrace | null = null
+    let summaryModelTagPill: TagPillInstance | null = null
 
     const renderReferenceGrid = (trace: GenerationTrace) => {
         if (renderedReferenceTrace === trace) return
@@ -342,6 +407,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
             attrs.title,
             attrs.isStreaming ? 'streaming' : 'done',
             childCount,
+            attrs.reasoningModelId ?? '',
             attrs.imageGenerationTraceId ?? 'inline-trace',
             forceToolPromptFallback ? 'force-fallback' : 'content-fallback',
             fallbackText,
@@ -356,11 +422,18 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         renderedTrace = trace
 
         summaryTitle.textContent = getImageGenerationSummaryTitle(attrs)
-        const modelLabel = formatTraceModelLabel(attrs.reasoningModelId)
         const referenceMeta = trace
             ? `${trace.referenceImages.length} reference${trace.referenceImages.length === 1 ? '' : 's'}`
             : ''
-        summaryMeta.textContent = [modelLabel, referenceMeta].filter(Boolean).join(' · ')
+        summaryModelTagPill?.destroy()
+        summaryModelTagPill = null
+        const modelTag = createTraceModelTag(attrs.reasoningModelId, (tagPill) => {
+            summaryModelTagPill = tagPill
+        })
+        const referenceMetaEl = referenceMeta
+            ? html`<span className="ai-collapsible-block-summary-reference-meta">${referenceMeta}</span>`
+            : null
+        summaryMeta.replaceChildren(...[modelTag, referenceMetaEl].filter((el): el is HTMLElement => Boolean(el)))
         wrapper.classList.toggle('has-image-generation-trace', hasTrace)
         wrapper.classList.toggle('is-streaming', attrs.isStreaming)
         toolPromptSection.classList.toggle('has-trace', hasTrace)
