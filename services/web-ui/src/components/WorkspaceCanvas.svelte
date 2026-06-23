@@ -20,7 +20,7 @@
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
     import { settings } from '$src/settings.ts'
-    import { createNewFileIcon, imageIcon, aiChatPanelCollapseIcon, mediaFoloderIcon } from '$src/svgIcons/index.ts'
+    import { createNewFileIcon, imageIcon, mediaFoloderIcon } from '$src/svgIcons/index.ts'
     import '$src/components/sidePanel/side-panel.scss'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
@@ -31,10 +31,6 @@
 
     function handleToggleMediaLibrary() {
         renderer?.toggleMediaLibrary?.()
-    }
-
-    function handleToggleAiChatPanel() {
-        renderer?.toggleAiChatPanel?.()
     }
 
     let workspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId as string)
@@ -359,14 +355,6 @@
     class="workspace-canvas"
     class:workspace-canvas-chat-panel-open={isAiChatPanelOpen}
 >
-    <button
-        class="workspace-ai-chat-launcher"
-        onclick={handleToggleAiChatPanel}
-        aria-label={isAiChatPanelOpen ? 'Collapse AI Chat' : 'Open AI Chat'}
-    >
-        {@html aiChatPanelCollapseIcon}
-    </button>
-
     <!-- Left action panel — flanks the composer. Two icons render it as an oval. -->
     <div class="workspace-canvas-action-panel workspace-canvas-action-panel-left">
         <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument} aria-label="New Document">

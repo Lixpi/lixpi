@@ -322,6 +322,57 @@ describe('MediaBranchLineagePlanner', () => {
             branchForkNodeId: 'branch-fork-request-5-reasoning-0',
         })
     })
+
+    it('falls back placement anchor to the first reference node for standalone regions without lineage source', () => {
+        const snapshot: ImageBranchCandidateSnapshot = {
+            resolverVersion: 'image-branch-vlm-v1',
+            threadId: 'thread-6',
+            regionNodeId: 'standalone:region-6',
+            promptText: 'a tiny portrait',
+            transcriptContext: 'context',
+            candidates: [
+                candidate({ nodeId: 'reference-a', roleHints: ['base-context'], fileId: 'reference-a' }),
+                candidate({ nodeId: 'reference-b', roleHints: ['base-context'], fileId: 'reference-b' }),
+            ],
+        }
+
+        const resolution: ImageBranchVlmResolution = {
+            resolverKind: 'structured-vlm',
+            resolverVersion: 'image-branch-vlm-v1',
+            resolverModelProvider: 'OpenAI',
+            resolverModelId: 'gpt-4.1',
+            mode: 'context-only',
+            operationKind: 'new_image',
+            targetImageNodeId: null,
+            branchId: null,
+            includeGeneratedNodeIds: [],
+            referenceImageNodeIds: ['reference-b', 'reference-a'],
+            sourceContextNodeIds: [],
+            styleReferenceNodeIds: [],
+            excludedNodeIds: [],
+            visualEntitySummary: 'portrait',
+            visualStyleSummary: 'minimal style',
+            entityTags: ['portrait'],
+            styleTags: ['minimal'],
+            confidence: 0.88,
+            rationale: 'context references',
+            decisions: [],
+        }
+
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-6',
+            reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageBranchCandidateSnapshot: snapshot,
+            imageBranchResolution: resolution,
+            createdAt: 1700000006000,
+        })
+
+        expect(plan.sourceNodeId).toBeUndefined()
+        expect(plan.placementAnchorNodeId).toBe('reference-b')
+        expect(plan.referenceNodeIds).toEqual(['reference-b', 'reference-a'])
+        expect(plan.runAssignments).toHaveLength(1)
+        expect(plan.runAssignments[0]?.lineageParentNodeId).toBe(plan.branchOrigin?.nodeId)
+    })
 })
 
 const resolutionForCandidate = (snapshot: ImageBranchCandidateSnapshot) => {

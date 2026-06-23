@@ -4,4 +4,5 @@ export {
     type SidePanelInstance,
     type SidePanelSide,
     type SidePanelStyles,
+    type SidePanelToggleConfig,
 } from './sidePanel.ts'

@@ -106,34 +106,25 @@ function createCollapsibleNodeView(attrs: Record<string, unknown> = {}) {
 }
 
 describe('aiCollapsibleBlockNodeView', () => {
-    it('toggles open state and syncs it back to the node on summary click', () => {
-        const { nodeView, mockView, transaction } = createCollapsibleNodeView()
-        const summary = nodeView.dom.querySelector('summary') as HTMLElement
+    it('uses the image-generation trace shell for rendering and exposes a contentDOM', () => {
+        const { nodeView } = createCollapsibleNodeView({ imageGenerationTrace: createTrace() })
 
-        summary.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
-        summary.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
-
-        expect((nodeView.dom as HTMLDetailsElement).open).toBe(true)
-        expect(transaction.setNodeMarkup).toHaveBeenCalledWith(
-            3,
-            undefined,
-            expect.objectContaining({ isOpen: true }),
-        )
-        expect(mockView.dispatch).toHaveBeenCalledWith(transaction)
+        expect(nodeView.dom.classList.contains('ai-generation-trace-block')).toBe(true)
+        expect(nodeView.dom.classList.contains('has-image-generation-trace')).toBe(true)
+        expect(nodeView.contentDOM?.className).toBe('ai-generation-trace-content')
+        expect(nodeView.dom.querySelector('.ai-image-generation-tool-prompt-section')).not.toBeNull()
+        expect(nodeView.dom.querySelector('.ai-image-generation-reference-section')).not.toBeNull()
     })
 
-    it('stops summary mousedown from bubbling to ancestor DOM handlers', () => {
+    it('ignores DOM mutations outside the trace content body', () => {
         const { nodeView } = createCollapsibleNodeView()
-        const summary = nodeView.dom.querySelector('summary') as HTMLElement
-        const parent = document.createElement('div')
-        const ancestorMouseDownHandler = vi.fn()
+        const mutation = {
+            type: 'attributes',
+            attributeName: 'class',
+            target: nodeView.dom,
+        } as unknown as MutationRecord
 
-        parent.addEventListener('mousedown', ancestorMouseDownHandler)
-        parent.appendChild(nodeView.dom)
-
-        summary.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
-
-        expect(ancestorMouseDownHandler).not.toHaveBeenCalled()
+        expect(nodeView.ignoreMutation!(mutation)).toBe(true)
     })
 
     it('ignores wrapper open attribute mutations from the manual toggle', () => {
@@ -148,32 +139,17 @@ describe('aiCollapsibleBlockNodeView', () => {
         expect(nodeView.ignoreMutation!(mutation)).toBe(true)
     })
 
-    it('stopEvent captures summary interactions but not content interactions', () => {
-        const { nodeView } = createCollapsibleNodeView()
-        const summary = nodeView.dom.querySelector('summary') as HTMLElement
-        const content = nodeView.contentDOM as HTMLElement
-
-        const summaryEvent = { target: summary } as unknown as Event
-        const contentEvent = { target: content } as unknown as Event
-
-        expect(nodeView.stopEvent!(summaryEvent)).toBe(true)
-        expect(nodeView.stopEvent!(contentEvent)).toBe(false)
-    })
-
-    it('update syncs the summary label, streaming class, and open state', () => {
+    it('updates streaming state through the trace wrapper class', () => {
         const { nodeView } = createCollapsibleNodeView()
         const updatedNode = schema.nodes.aiCollapsibleBlock.create(
-            { title: 'Revised prompt', isOpen: true, isStreaming: true },
+            { title: 'Revised prompt', isOpen: true, isStreaming: true, imageGenerationTrace: createTrace() },
             schema.nodes.paragraph.create(null, schema.text('Updated prompt body')),
         )
 
         const result = nodeView.update!(updatedNode)
-        const summary = nodeView.dom.querySelector('summary') as HTMLElement
 
         expect(result).toBe(true)
-        expect(summary.textContent).toBe('Preparing image generation prompt')
         expect(nodeView.dom.classList.contains('is-streaming')).toBe(true)
-        expect((nodeView.dom as HTMLDetailsElement).open).toBe(true)
     })
 
     it('update returns false for a different node type', () => {
@@ -183,34 +159,18 @@ describe('aiCollapsibleBlockNodeView', () => {
         expect(nodeView.update!(wrongNode)).toBe(false)
     })
 
-    it('renders trace summary, final prompt, resolver audit, and exclusions while collapsed', () => {
+    it('renders tool/final prompts, resolver metadata, and exclusions from an image trace', () => {
         const { nodeView } = createCollapsibleNodeView({ imageGenerationTrace: createTrace() })
 
-        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-title')?.textContent).toBe('Image generation details')
-        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-meta')?.textContent).toBe('2 references')
-        expect(nodeView.dom.querySelector('.ai-image-generation-final-prompt-section')?.hasAttribute('hidden')).toBe(false)
+        expect(nodeView.dom.querySelector('.ai-image-generation-tool-prompt-section')?.textContent).toContain('Prompt for media generation model written by reasoning model')
         expect(nodeView.dom.querySelector('.ai-image-generation-final-prompt')?.textContent).toContain('MANDATORY /use FEATURE TRANSFER')
         expect(nodeView.dom.querySelector('.ai-image-generation-resolver-summary')?.textContent).toBe('Style Transfer | Edit Active Branch | confidence 91%')
         expect(nodeView.dom.querySelector('.ai-image-generation-resolver-rationale')?.textContent).toContain('exclude the goat branch')
         expect(nodeView.dom.querySelector('.ai-image-generation-excluded-label')?.textContent).toBe('painted goat')
         expect(nodeView.dom.querySelector('.ai-image-generation-excluded-node')?.textContent).toBe('goat-generated')
-        expect(nodeView.dom.querySelector('.ai-image-generation-reference-grid')?.childElementCount).toBe(0)
-    })
-
-    it('renders reference image tiles only after the details block is opened', () => {
-        const { nodeView } = createCollapsibleNodeView({ imageGenerationTrace: createTrace() })
-        const summary = nodeView.dom.querySelector('summary') as HTMLElement
-
-        summary.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
-        summary.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
-
-        const tiles = Array.from(nodeView.dom.querySelectorAll('.ai-image-generation-reference'))
-        expect(tiles).toHaveLength(2)
-        expect(tiles[0].getAttribute('data-source')).toBe('branch-candidate')
-        expect(tiles[0].getAttribute('data-role')).toBe('target')
-        expect(tiles[0].querySelector('.ai-image-generation-reference-label')?.textContent).toBe('painted portrait of the man')
-        expect(tiles[0].querySelector('.ai-image-generation-reference-role')?.textContent).toBe('Target')
-        expect(tiles[1].querySelector('.ai-image-generation-reference-role')?.textContent).toBe('Style Reference')
+        const referenceGrid = nodeView.dom.querySelector('.ai-image-generation-reference-grid')
+        expect(referenceGrid?.childElementCount).toBe(2)
+        expect(referenceGrid?.querySelector('.ai-image-generation-reference')?.getAttribute('data-role')).toBe('target')
     })
 
     it('keeps the final prompt section hidden when the image prompt was not changed', () => {
@@ -228,8 +188,8 @@ describe('aiCollapsibleBlockNodeView', () => {
         cacheImageGenerationTrace('trace-1', createTrace({ referenceImages: [] }))
         const { nodeView } = createCollapsibleNodeView({ imageGenerationTraceId: 'trace-1' })
 
-        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-title')?.textContent).toBe('Image generation details')
-        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-meta')?.textContent).toBe('0 references')
+        expect(nodeView.dom.classList.contains('has-image-generation-trace')).toBe(true)
+        expect(nodeView.dom.querySelector('.ai-image-generation-reference-grid')?.textContent).toContain('No reference images were sent.')
     })
 
     it('renders a video generation trace through the same collapsible (parity with images)', () => {
@@ -278,10 +238,11 @@ describe('aiCollapsibleBlockNodeView', () => {
         }
         const { nodeView } = createCollapsibleNodeView({ videoGenerationTrace: videoTrace })
 
-        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-title')?.textContent).toBe('Video generation details')
-        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-meta')?.textContent).toBe('1 reference')
         expect(nodeView.dom.querySelector('.ai-image-generation-resolver-summary')?.textContent).toBe('Edit Existing | Edit Active Branch | confidence 88%')
         expect(nodeView.dom.querySelector('.ai-image-generation-resolver-rationale')?.textContent).toContain('seaside clip branch')
+        expect(nodeView.dom.querySelector('.ai-image-generation-tool-prompt-section')).not.toBeNull()
+        const referenceGrid = nodeView.dom.querySelector('.ai-image-generation-reference-grid')
+        expect(referenceGrid?.querySelector('.ai-image-generation-reference')?.getAttribute('data-role')).toBe('target')
     })
 
 })

@@ -129,4 +129,33 @@ describe('ImageRouter', () => {
 
         expect(createTransient).toHaveBeenCalledWith('workspace-1:thread-1:reasoning-1:image:1', 'Google')
     })
+
+    it('derives a media-run instance key when generationRun has no explicit mediaRunId', async () => {
+        const { router, createTransient } = createRouter()
+        const generationRun = {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            reasoningIndex: 0,
+        } as const
+
+        await router.execute(createState({ generationRun }))
+
+        expect(createTransient).toHaveBeenCalledWith('workspace-1:thread-1:reasoning-1:image:0', 'Google')
+    })
+
+    it('removes the transient image provider even when processing throws', async () => {
+        const remove = vi.fn()
+        const process = vi.fn(async () => {
+            throw new Error('image provider crash')
+        })
+        const createTransient = vi.fn(() => ({ process }))
+        const router = new ImageRouter({ createTransient, remove } as any)
+
+        const result = await router.execute(createState())
+
+        expect(process).toHaveBeenCalledOnce()
+        expect(result.error).toBe('image provider crash')
+        expect(remove).toHaveBeenCalledWith('workspace-1:thread-1:image')
+    })
 })

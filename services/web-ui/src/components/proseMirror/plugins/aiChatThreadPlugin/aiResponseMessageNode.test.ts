@@ -195,7 +195,6 @@ describe('aiResponseMessage — parseDOM spec', () => {
 			reasoningModelId: '',
 			mediaModelId: '',
 			mediaType: '',
-			variantIndex: null,
 		})
 	})
 })
@@ -361,29 +360,25 @@ describe('aiResponseMessageNodeView — DOM structure', () => {
 		expect(contentDOM.className).toBe('ai-response-message-content')
 	})
 
-	it('renders the response node without a provider avatar', () => {
-		// Avatars (and their animation) were removed from response nodes; a single
-		// response can hold several reasoning models, so a per-node avatar no longer
-		// makes sense. Attribution lives in each generation collapsible header.
+	it('renders the response shell shell elements', () => {
 		const { nodeView } = createResponseNodeView({ aiProvider: 'Google' })
 		const dom = nodeView.dom as HTMLElement
 		const messageRow = dom.querySelector('.ai-response-message')
-		const bubble = dom.querySelector('.ai-response-message-bubble')
+		const loadingIndicator = dom.querySelector('.ai-response-loading-spinner')
 
 		expect(messageRow).not.toBeNull()
-		expect(bubble).not.toBeNull()
-		expect(messageRow!.contains(bubble)).toBe(true)
-		expect(dom.querySelector('.user-avatar')).toBeNull()
+		expect(loadingIndicator).not.toBeNull()
 	})
 
 	it('shows the ring loading indicator while an empty response is receiving', () => {
 		const { nodeView } = createResponseNodeView({ isReceivingAnimation: true }, null)
 		const dom = nodeView.dom as HTMLElement
-		const bubble = dom.querySelector('.ai-response-message-bubble') as HTMLElement
+		const bubble = dom.querySelector('.ai-response-message') as HTMLElement
 		const loadingIndicator = dom.querySelector('.ai-response-loading-spinner') as HTMLElement
 
 		expect(loadingIndicator).not.toBeNull()
 		expect(bubble.classList.contains('is-waiting')).toBe(true)
+		expect(bubble.classList.contains('is-empty')).toBe(true)
 		expect(loadingIndicator.classList.contains('is-active')).toBe(true)
 		expect(dom.querySelector(`.${['ai-response', 'message', 'spinner'].join('-')}`)).toBeNull()
 	})
@@ -391,7 +386,7 @@ describe('aiResponseMessageNodeView — DOM structure', () => {
 	it('clears the loading indicator after content arrives', () => {
 		const { nodeView } = createResponseNodeView({ isReceivingAnimation: true }, null)
 		const dom = nodeView.dom as HTMLElement
-		const bubble = dom.querySelector('.ai-response-message-bubble') as HTMLElement
+		const bubble = dom.querySelector('.ai-response-message') as HTMLElement
 		const loadingIndicator = dom.querySelector('.ai-response-loading-spinner') as HTMLElement
 		const updatedNode = schema.nodes.aiResponseMessage.create(
 			{ id: 'test-msg-1', aiProvider: 'Anthropic', isReceivingAnimation: false },
@@ -401,20 +396,8 @@ describe('aiResponseMessageNodeView — DOM structure', () => {
 		nodeView.update!(updatedNode, [], null as any)
 
 		expect(bubble.classList.contains('is-waiting')).toBe(false)
+		expect(bubble.classList.contains('is-empty')).toBe(false)
 		expect(loadingIndicator.classList.contains('is-active')).toBe(false)
-	})
-
-	it('keeps the provider avatar compact so the bubble can use full width', () => {
-		const scss = loadScss()
-		const avatarBlock = scss.match(/\.user-avatar \{[\s\S]*?\n    \}/)
-		expect(avatarBlock).not.toBeNull()
-		const messageBlock = scss.match(/\.ai-response-message \{[\s\S]*?\.ai-response-message-bubble \{[\s\S]*?\n        \}/)
-		expect(messageBlock).not.toBeNull()
-
-		expect(avatarBlock![0]).toContain('width: 20px')
-		expect(avatarBlock![0]).toContain('height: 20px')
-		expect(messageBlock![0]).toContain('display: block')
-		expect(messageBlock![0]).toContain('width: 100%')
 	})
 
 	it('update() refreshes data-message-id when node id changes', () => {

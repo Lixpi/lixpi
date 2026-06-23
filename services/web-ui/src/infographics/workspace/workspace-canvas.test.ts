@@ -311,8 +311,8 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectSourceToContain(ts, 'getAdaptiveBoundedZoomScalingOptions(settings.canvasBubbleMenu.zoomScaling),')
 		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.topGap,')
 		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.iconSize,')
-		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize) / zoom')
-		expectSourceToContain(ts, 'updateGeneratedMediaChromeLiveTransform(node.nodeId, position, node.dimensions, getLiveViewport())')
+		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize + panelSettings.mediaTopOffset) / zoom')
+		expectSourceToContain(ts, 'updateGeneratedMediaChromeLiveTransform(node.nodeId, position, dimensions, getLiveViewport())')
 		expectSourceToContain(ts, 'updateGeneratedMediaChromeLayout()')
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl.replaceChildren(')
 		expectSourceToContain(ts, 'mediaChromeViewportEl.replaceChildren(')
@@ -350,10 +350,10 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectExcerptToContain(activeBlock, 'background: transparent', 'active image info button block')
 		expectExcerptNotToContain(activeBlock, '$steelBlue', 'active image info button block')
 		expectExcerptNotToContain(activeBlock, 'border-color:', 'active image info button block')
-		expectExcerptToContain(panelBlock, 'overflow: visible', 'generated image info panel block')
+		expectExcerptToContain(panelBlock, 'overflow: var(--workspace-generated-media-info-panel-overflow, visible)', 'generated image info panel block')
 		expectExcerptNotToContain(panelBlock, 'max-height: 440px', 'generated image info panel block')
 		expectExcerptNotToContain(panelBlock, 'overflow: auto', 'generated image info panel block')
-		expectExcerptToContain(traceDetailsBlock, 'margin: 0.65rem 0 0', 'canvas trace details block')
+		expectExcerptToContain(traceDetailsBlock, 'margin: 0.95rem 0 0', 'canvas trace details block')
 		expect(promptAndFinalFallbackBlock).toContain('max-height: none')
 		expect(promptAndFinalFallbackBlock).toContain('overflow: visible')
 	})
@@ -439,7 +439,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 
 		const partialHandler = ts.slice(partialStart, completeStart)
 		expectExcerptToContain(partialHandler, "const imageSrc = buildImageSrc(imageUrl, '', false)")
-		expectExcerptToContain(partialHandler, 'commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: updatedNodes })')
+		expectExcerptToContain(partialHandler, 'commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: resolvedNodes })')
 		expectExcerptNotToContain(partialHandler, 'imgEl.src', 'partial image handler')
 	})
 
@@ -524,10 +524,10 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		// nodes via the unchanged resolver, replacing the per-handler collision block.
 		expectSourceToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
 		expectSourceToContain(ts, 'function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[]')
-		expectSourceToContain(ts, 'return rebalanceBranchTreesAndResolve(nodes, edges, {')
-		expectSourceToContain(ts, 'depthGap: settings.imageBranchLineage.imageToImageGap,')
-		expectSourceToContain(ts, 'siblingGap: settings.imageBranchLineage.branchToBranchGap,')
-		expectSourceToContain(ts, 'branchFanoutDepthGap: settings.imageBranchLineage.branchFanoutDepthGap,')
+		expectSourceToContain(ts, 'const resolvedNodes = rebalanceBranchTreesAndResolve(layoutProxyPlan.nodes, edges, {')
+		expectSourceToContain(ts, 'depthGap: settings.mediaBranchLineage.mediaToMediaGap,')
+		expectSourceToContain(ts, 'siblingGap: settings.mediaBranchLineage.branchRowGap,')
+		expectSourceToContain(ts, 'branchFanoutExtraGap: settings.mediaBranchLineage.branchFanoutExtraGap,')
 		// Wired into every generated-media add path (image partial + complete, video).
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithImage, newEdges)')
 		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, edges)')
@@ -670,7 +670,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, 'function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode)')
 		expectSourceToContain(ts, "panel.setAttribute('data-media-info-panel-node-id', node.nodeId)")
 		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl.replaceChildren(')
-		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize) / zoom')
+		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize + panelSettings.mediaTopOffset) / zoom')
 		expectSourceToContain(ts, "transform: 'none',")
 		expect(panelPositionStart).toBeGreaterThan(-1)
 		expect(panelPositionEnd).toBeGreaterThan(panelPositionStart)
@@ -864,7 +864,10 @@ describe('Workspace canvas — AI panel reload stability', () => {
 		const fnMatch = ts.match(/function\s+getAiChatThreadsKey[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'return threads.map(t => t.threadId).join')
+		expectExcerptToContain(fnBody, 'return threads')
+		expectExcerptToContain(fnBody, '.filter(t => !isDetachedCanvasThreadId(t.threadId))')
+		expectExcerptToContain(fnBody, '.map(t => t.threadId)')
+		expectExcerptToContain(fnBody, '.join(\',\')')
 		expectExcerptNotToContain(fnBody, 't.content')
 	})
 
@@ -1751,7 +1754,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(getGeneratedMediaPlacementKey(threadId, generationRun), referenceNodeIds)')
 		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string, generationRun?: MediaGenerationRunMeta): Rect | undefined')
 		expectSourceToContain(ts, 'function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number, generationRun?: MediaGenerationRunMeta): { x: number; y: number } | undefined')
-		expectSourceToContain(ts, 'settings.imageBranchLineage.rootOutputGap')
+		expectSourceToContain(ts, 'settings.mediaBranchLineage.rootToFirstMediaGap')
 		expectSourceToContain(ts, 'const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)')
 		expectSourceNotToContain(ts, 'if (!sourceThread) return\n            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)')
 	})
@@ -1806,6 +1809,25 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, "side: 'right'")
 		expectSourceToContain(sidePanel, "applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })")
 		expectSourceToContain(sidePanel, 'side-panel-rail')
+		// Touch support: the resize gesture is driven by Pointer Events, not mouse.
+		expectSourceToContain(sidePanel, "addEventListener('pointerdown', this.handleResizeStart)")
+		expectSourceToContain(sidePanel, "addEventListener('pointermove', handlePointerMove)")
+	})
+
+	it('plays the drawer slide animation through the SidePanel component', () => {
+		const sidePanel = loadSidePanel()
+
+		// The component owns the open/close slide; the host only triggers it.
+		expectSourceToContain(sidePanel, 'playOpen = (panelElement: HTMLElement)')
+		expectSourceToContain(sidePanel, 'playClose = (): Promise<void>')
+		// The slide runs through CSS transition classes with transform fallthrough.
+		expectSourceToContain(sidePanel, 'runSlide = async (targets: HTMLElement[], direction: \'in\' | \'out\'): Promise<void>')
+		expectSourceToContain(sidePanel, 'side-panel-slide-offset-')
+		expectSourceToContain(sidePanel, "matchMedia('(prefers-reduced-motion: reduce)')")
+
+		// Host wiring: slide in only on a fresh open, slide out before teardown.
+		expectSourceToContain(ts, 'activeAiChatPanelRail.playOpen(panelEl)')
+		expectSourceToContain(ts, 'await closingRail.playClose()')
 	})
 
 	it('uses a full-height right-edge chat panel with zoom and avatar offsets', () => {
@@ -2036,11 +2058,11 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expectSourceToContain(ts, 'handleDragStart(event, primaryNodeId)')
 	})
 
-		it('keeps connector lines visible when nodes are selected', () => {
-			expectSourceNotToContain(ts, 'function getEdgesForConnectionManager')
-			expectSourceNotToContain(ts, 'syncEdges(getEdgesForConnectionManager')
-			expectSourceNotToContain(ts, ['selectedContext', 'RegionNodeIds'].join(''))
-		expectSourceToContain(ts, 'connectionManager?.syncEdges(nextState.edges)')
+	it('keeps connector lines visible when nodes are selected', () => {
+		expectSourceNotToContain(ts, 'function getEdgesForConnectionManager')
+		expectSourceNotToContain(ts, 'syncEdges(getEdgesForConnectionManager')
+		expectSourceNotToContain(ts, ['selectedContext', 'RegionNodeIds'].join(''))
+		expectSourceToContain(ts, 'connectionManager?.syncEdges(currentCanvasState.edges)')
 		expectSourceToContain(ts, 'connectionManager.syncEdges(currentCanvasState.edges)')
 	})
 

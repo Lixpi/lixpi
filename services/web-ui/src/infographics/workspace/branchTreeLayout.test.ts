@@ -14,7 +14,7 @@ import {
 
 const SIZE = 800
 const OPTS = { depthGap: 192, siblingGap: 160 }
-const FANOUT_OPTS = { ...OPTS, branchFanoutDepthGap: 96 }
+const FANOUT_OPTS = { ...OPTS, branchFanoutExtraGap: 96 }
 
 type GenOpts = {
     branchId?: string
@@ -322,7 +322,7 @@ describe('applyBranchTreeLayout', () => {
             genMedia('C1A', 20, 20, { parentMediaNodeId: 'C1', createdAt: 20 }),
         ]
         const out = applyBranchTreeLayout(nodes, [], FANOUT_OPTS)
-        const forkGap = FANOUT_OPTS.depthGap + FANOUT_OPTS.branchFanoutDepthGap * (children.length - 1)
+        const forkGap = FANOUT_OPTS.depthGap + FANOUT_OPTS.branchFanoutExtraGap * (children.length - 1)
 
         for (const child of children) expect(posOf(out, child.nodeId).x).toBe(SIZE + forkGap)
         expect(posOf(out, 'C1A').x).toBe(SIZE + forkGap + SIZE + FANOUT_OPTS.depthGap)

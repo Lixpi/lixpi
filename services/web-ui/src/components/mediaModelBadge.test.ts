@@ -7,7 +7,11 @@ import {
 } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { settings } from '$src/settings.ts'
-import { stabilityIcon, gptAvatarIcon } from '$src/svgIcons/index.ts'
+import {
+    geminiIcon,
+    gptAvatarIcon,
+    stabilityIcon,
+} from '$src/svgIcons/index.ts'
 
 function setMockModels(models: Array<{ provider?: string; model?: string; title?: string; providerTitle?: string; colorIconName?: string }>): void {
     aiModelsStore.setAiModels(models as any)
@@ -131,6 +135,25 @@ describe('getMediaModelBadgeMeta', () => {
         expect(meta.modelTitle).toBe('Gemini 2.5')
         expect(meta.label).toBe(`Google${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}Gemini 2.5`)
     })
+
+    it('uses provider iconography for monochrome mode even when a model icon exists', () => {
+        setMockModels([
+            {
+                provider: 'openai',
+                model: 'gpt-4o',
+                title: 'GPT-4o',
+                providerTitle: 'OpenAI',
+                colorIconName: 'geminiIcon',
+            },
+        ])
+
+        const meta = getMediaModelBadgeMeta({ modelId: 'openai:gpt-4o', monochromeIcon: true })
+
+        expect(meta.icon).toBe(gptAvatarIcon)
+        expect(meta.icon).not.toBe(geminiIcon)
+        expect(meta.providerTitle).toBe('OpenAI')
+        expect(meta.modelTitle).toBe('GPT-4o')
+    })
 })
 
 describe('createMediaModelBadge', () => {
@@ -174,6 +197,37 @@ describe('createMediaModelBadge', () => {
         expect(badge?.querySelector('.media-model-badge-icon')).not.toBeNull()
         expect(badge?.querySelector('.media-model-badge-name')).toBeNull()
         expect(badge?.title).toBe(`OpenAI${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}GPT-4o`)
+    })
+
+    it('keeps only provider text for provider-only metadata and no model value', () => {
+        const badge = createMediaModelBadge({ modelId: '', modelProvider: 'Anthropic' })
+
+        expect(badge).not.toBeNull()
+        expect(badge?.querySelector('.media-model-badge-provider')?.textContent).toBe('Anthropic')
+        expect(badge?.querySelector('.media-model-badge-model')).toBeNull()
+        expect(badge?.querySelector('.media-model-badge-name')?.textContent).toBe('Anthropic')
+    })
+
+    it('prefers provider icon when monochrome mode is requested', () => {
+        setMockModels([
+            {
+                provider: 'openai',
+                model: 'gpt-4o-mini',
+                title: 'GPT-4o Mini',
+                providerTitle: 'OpenAI',
+                colorIconName: 'geminiIcon',
+            },
+        ])
+
+        const badge = createMediaModelBadge({ modelId: 'openai:gpt-4o-mini', iconOnly: true, monochromeIcon: true })
+        const expectedIconContainer = document.createElement('div')
+        expectedIconContainer.innerHTML = gptAvatarIcon
+        const expectedIconPath = expectedIconContainer.querySelector('path')?.getAttribute('d')
+        const badgeIconPath = badge?.querySelector('.media-model-badge-icon')?.querySelector('path')?.getAttribute('d')
+
+        expect(badge?.querySelector('.media-model-badge-icon')).not.toBeNull()
+        expect(badgeIconPath).toBe(expectedIconPath)
+        expect(badge?.title).toContain('OpenAI')
     })
 
     it('returns null for resolved providers that resolve to no label and no icon', () => {
@@ -230,6 +284,28 @@ describe('renderMediaModelBadge', () => {
         expect(host.querySelector('.media-model-badge-icon')).not.toBeNull()
         expect(host.querySelector('.media-model-badge-name')).toBeNull()
     })
+
+    it('replaces host contents when rerendering with new badge config', () => {
+        setMockModels([
+            {
+                provider: 'openai',
+                model: 'gpt-4o',
+                title: 'GPT-4o',
+            },
+        ])
+        const host = createHost()
+
+        renderMediaModelBadge(host, { modelId: 'openai:gpt-4o' })
+        expect(host.querySelector('.media-model-badge-provider')?.textContent).toBe('openai')
+
+        host.innerHTML = '<span>old</span>'
+        renderMediaModelBadge(host, { modelId: '', modelProvider: 'Anthropic', iconOnly: true })
+        expect(host.hidden).toBe(false)
+        expect(host.querySelector('.media-model-badge-provider')).toBeNull()
+        expect(host.querySelector('.media-model-badge-name')).toBeNull()
+        expect(host.querySelector('.media-model-badge-icon')).not.toBeNull()
+        expect(host.querySelector('.media-model-badge')?.title).toBe('Anthropic')
+    })
 })
 
 describe('applyMediaModelBadgeStyleProperties', () => {
@@ -278,6 +354,15 @@ describe('applyMediaModelBadgeStyleProperties', () => {
 
         expect(host.style.getPropertyValue('--workspace-media-model-badge-icon-gap')).toBe('4.5px')
         expect(host.style.getPropertyValue('--workspace-media-model-badge-name-font-size')).toBe('22.5px')
+        expect(host.style.getPropertyValue('--workspace-media-model-badge-name-line-height')).toBe(String(settings.mediaNode.generatedMediaChrome.styles.modelBadgeNameLineHeight))
+    })
+
+    it('ignores non-finite scales and keeps unitless values stable', () => {
+        const host = createHost()
+        applyMediaModelBadgeStyleProperties(host, { scale: Number.POSITIVE_INFINITY })
+
+        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-icon-size')).toBe(`${settings.mediaNode.generatedMediaChrome.iconSize}px`)
+        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.topGap}px`)
         expect(host.style.getPropertyValue('--workspace-media-model-badge-name-line-height')).toBe(String(settings.mediaNode.generatedMediaChrome.styles.modelBadgeNameLineHeight))
     })
 })

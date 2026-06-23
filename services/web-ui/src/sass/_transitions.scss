@@ -5,3 +5,7 @@
 @function hoverTransition($property, $duration) {
     @return #{$property} #{$duration} cubic-bezier(0.19, 1, 0.22, 1);
 }
+
+@function panelSlideTransition($property, $duration) {
+    @return #{$property} #{$duration} cubic-bezier(0.32, 0.72, 0, 1);
+}

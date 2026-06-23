@@ -219,76 +219,6 @@
     }
 }
 
-// Right-side panel launcher remains independent of the zoom indicator.
-.workspace-ai-chat-launcher {
-    position: absolute;
-    right: 19px;
-    z-index: 100;
-    display: grid;
-    place-items: center;
-    width: 38px;
-    height: 38px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: $steelBlue;
-    cursor: pointer;
-    transition: right 50ms ease-in, color 50ms ease-in;
-
-    svg {
-        width: 20px;
-        height: 20px;
-        fill: currentColor;
-    }
-
-    &:hover,
-    &:focus-visible {
-        color: $nightBlue;
-        outline: none;
-    }
-}
-
-.workspace-ai-chat-launcher {
-    top: 15px;
-    right: 15px;
-    display: block;
-    width: 15px;
-    height: 15px;
-    color: $steelBlue;
-
-    svg {
-        display: block;
-        width: 100%;
-        height: 100%;
-        transform: rotate(180deg);
-        transform-origin: center;
-    }
-
-    &:hover,
-    &:focus-visible {
-        color: $nightBlue;
-    }
-}
-
-.workspace-canvas-chat-panel-open .workspace-ai-chat-launcher {
-    top: 15px;
-    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + 5px);
-    width: 15px;
-    height: 15px;
-    color: $steelBlue;
-
-    svg {
-        width: 100%;
-        height: 100%;
-        transform: none;
-    }
-
-    &:hover,
-    &:focus-visible {
-        color: $nightBlue;
-    }
-}
-
 // Zoom indicator - bottom-right corner
 .workspace-zoom-indicator {
     position: absolute;
@@ -1511,7 +1441,7 @@
 
 // The resizable AI chat panel is rendered by the reusable SidePanel component
 // (see components/sidePanel). Its base presentation lives in side-panel.scss;
-// add panel-specific overrides under .workspace-ai-chat-floating-panel-rail
+// add panel-specific overrides under .workspace-ai-chat-side-panel-resize-handle
 // here when needed.
 
 .workspace-ai-chat-floating-panel.is-resizing {

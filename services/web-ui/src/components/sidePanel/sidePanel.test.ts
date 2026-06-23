@@ -14,16 +14,19 @@ function buildConfig(overrides: Partial<SidePanelConfig> = {}): SidePanelConfig 
     }
 }
 
+// The rail listens to Pointer Events so it works for mouse and touch alike.
+// jsdom does not implement PointerEvent, so MouseEvent carries the pointer-event
+// type names and the clientX/button fields the handler reads.
 function mousedown(target: EventTarget, clientX: number, button = 0): void {
-    target.dispatchEvent(new MouseEvent('mousedown', { clientX, button, bubbles: true, cancelable: true }))
+    target.dispatchEvent(new MouseEvent('pointerdown', { clientX, button, bubbles: true, cancelable: true }))
 }
 
 function move(clientX: number): void {
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX, bubbles: true }))
+    document.dispatchEvent(new MouseEvent('pointermove', { clientX, bubbles: true }))
 }
 
 function mouseup(): void {
-    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    document.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }))
 }
 
 afterEach(() => {
@@ -232,6 +235,87 @@ describe('SidePanel', () => {
         expect(onResize).not.toHaveBeenCalled()
 
         rail.destroy()
+    })
+
+    function emitTransitionEnd(element: HTMLElement, propertyName = 'transform'): void {
+        const event = new Event('transitionend', { bubbles: true })
+        Object.defineProperty(event, 'propertyName', { value: propertyName })
+        element.dispatchEvent(event)
+    }
+
+    it('adds side-panel-slide classes on open', () => {
+        const rail = createSidePanel(buildConfig({ side: 'right' }))
+        const panel = document.createElement('div')
+
+        rail.playOpen(panel)
+
+        expect(panel.classList.contains('side-panel-slide')).toBe(true)
+        expect(rail.backdropElement.classList.contains('side-panel-slide')).toBe(true)
+        expect(panel.classList.contains('side-panel-slide-offset-right')).toBe(false)
+        expect(rail.backdropElement.classList.contains('side-panel-slide-offset-right')).toBe(false)
+
+        rail.destroy()
+    })
+
+    it('adds left-side offset classes on open for a left panel', () => {
+        const rail = createSidePanel(buildConfig({ side: 'left' }))
+        const panel = document.createElement('div')
+
+        rail.playOpen(panel)
+
+        expect(panel.classList.contains('side-panel-slide')).toBe(true)
+        expect(rail.backdropElement.classList.contains('side-panel-slide')).toBe(true)
+        expect(panel.classList.contains('side-panel-slide-offset-left')).toBe(false)
+        expect(rail.backdropElement.classList.contains('side-panel-slide-offset-left')).toBe(false)
+
+        rail.destroy()
+    })
+
+    it('resolves playClose only when panel and backdrop transitionend events finish', async () => {
+        const rail = createSidePanel(buildConfig({ side: 'left' }))
+        const panel = document.createElement('div')
+
+        rail.playOpen(panel)
+        const closed = rail.playClose()
+
+        let resolved = false
+        void closed.then(() => { resolved = true })
+        await Promise.resolve()
+        expect(resolved).toBe(false)
+
+        emitTransitionEnd(panel, 'width')
+        emitTransitionEnd(rail.backdropElement, 'transform')
+        await Promise.resolve()
+        expect(resolved).toBe(false)
+
+        emitTransitionEnd(panel, 'transform')
+        emitTransitionEnd(rail.backdropElement, 'transform')
+        await closed
+        expect(resolved).toBe(true)
+
+        rail.destroy()
+    })
+
+    it('resolves playClose immediately when prefers-reduced-motion is enabled', async () => {
+        const originalMatchMedia = window.matchMedia
+        window.matchMedia = vi.fn().mockReturnValue({ matches: true })
+
+        try {
+            const rail = createSidePanel(buildConfig())
+            await expect(rail.playClose()).resolves.toBeUndefined()
+            rail.destroy()
+        } finally {
+            window.matchMedia = originalMatchMedia
+        }
+    })
+
+    it('resolves an in-flight close if the component is destroyed first', async () => {
+        const rail = createSidePanel(buildConfig())
+
+        const closed = rail.playClose()
+        rail.destroy()
+
+        await expect(closed).resolves.toBeUndefined()
     })
 
     it('removes the element and detaches drag listeners on destroy', () => {

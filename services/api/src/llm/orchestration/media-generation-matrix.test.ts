@@ -319,6 +319,56 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         expect(childState.videoModelMetaInfo?.model).toBe('veo-3.1-generate-preview')
     })
 
+    it('rejects matrix requests when shared preflight fails and does not dispatch child processes', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
+        const workspaceContextSpy = vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext')
+        const resolveFeaturesSpy = vi.spyOn(featureResolver, 'resolveFeatures')
+        const resolveImageBranchSpy = vi.spyOn(imageBranchResolver, 'resolveImageBranch')
+
+        getAiModel.mockImplementation(async ({ model }: { provider: string; model: string }) => {
+            if (model === 'claude-sonnet-4-6') {
+                return {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet-4-6',
+                    modelVersion: 'claude-sonnet-4-6',
+                    modalities: [{ modality: 'text' }],
+                } as any
+            }
+            if (model === 'gemini-2.5-flash-image') {
+                return {
+                    provider: 'Google',
+                    model: 'gemini-2.5-flash-image',
+                    modelVersion: 'gemini-2.5-flash-image',
+                    modalities: [{ modality: 'image_generation' }],
+                } as any
+            }
+            return {
+                provider: 'Google',
+                model: 'veo-3.1-generate-preview',
+                modelVersion: 'veo-3.1-generate-preview',
+                modalities: [{ modality: 'video_generation' }],
+                videoAspectRatios: [{ value: '16:9' }],
+                videoResolutions: [{ value: '720p' }],
+                videoDurations: [{ value: '8' }],
+            } as any
+        })
+
+        workspaceContextSpy.mockRejectedValue(new Error('workspace context resolver failed'))
+        resolveFeaturesSpy.mockResolvedValue({})
+        resolveImageBranchSpy.mockResolvedValue({})
+
+        await expect(
+            orchestrator.process(createRequest()),
+        ).rejects.toThrow('workspace context resolver failed')
+
+        expect(workspaceContextSpy).toHaveBeenCalledOnce()
+        expect(resolveFeaturesSpy).not.toHaveBeenCalled()
+        expect(resolveImageBranchSpy).not.toHaveBeenCalled()
+        expect(registry.process).not.toHaveBeenCalled()
+    })
+
     it('propagates every preflight-resolved field — including a future media field — to every fanout child', async () => {
         // Higher-level enforcement of the fix: the fanout spreads the WHOLE resolved
         // patch from runSharedPreflight(), so any field a resolver emits reaches every

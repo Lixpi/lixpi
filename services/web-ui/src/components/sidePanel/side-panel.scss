@@ -1,18 +1,66 @@
-// SidePanel — reusable resizable side panel. The "rail" is the internal term
+@import '$src/sass/_transitions.scss';
+
+// SidePanel - reusable resizable side panel. The "rail" is the internal term
 // for the vertical drag handle that resizes the panel.
 //
-// Both the .side-panel-rail hit target and the visible .side-panel-rail-line
+// Both the .side-panel-resize-handle hit target and the visible .side-panel-resize-handle-line
 // span the full height of the panel as a single unbroken line. Callers can
 // target an additional class passed via `className` to style a specific rail
 // separately.
 
-.side-panel-rail {
+.side-panel-resize-handle {
     position: absolute;
     z-index: 10;
     pointer-events: auto;
     cursor: ew-resize;
     touch-action: none;
     height: 100%;
+}
+
+.side-panel-slide,
+.side-panel-toggle {
+    --side-panel-slide-transition: #{panelSlideTransition(transform, 1000ms)};
+}
+
+.side-panel-slide {
+    transition: var(--side-panel-slide-transition);
+    will-change: transform;
+}
+
+.side-panel-toggle {
+    position: absolute;
+    z-index: 10040;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--side-panel-toggle-color, #4b5563);
+    cursor: pointer;
+    pointer-events: auto;
+    transition: var(--side-panel-slide-transition), #{hoverTransition(color, 150ms)};
+    will-change: transform;
+
+    svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+        transform: rotate(180deg);
+        transform-origin: center;
+    }
+
+    &:hover,
+    &:focus-visible {
+        color: var(--side-panel-toggle-hover-color, #1f2937);
+        outline: none;
+    }
+}
+
+.side-panel-toggle-open {
+    svg {
+        transform: none;
+    }
 }
 
 // Translucent glass backdrop that sits behind the panel and blurs the canvas
@@ -46,7 +94,7 @@
     }
 }
 
-.side-panel-rail-line {
+.side-panel-resize-handle-line {
     position: absolute;
     top: 0;
     left: 0;
@@ -63,8 +111,8 @@
         bottom: 0;
         left: 50%;
         transform: translateX(-50%);
-        width: var(--side-panel-rail-width, 3px);
-        background-image: var(--side-panel-rail-gradient, linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%));
+        width: var(--side-panel-resize-handle-width, 3px);
+        background-image: var(--side-panel-resize-handle-gradient, linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%));
         border-radius: 2px;
     }
 }

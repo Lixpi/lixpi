@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import type { CanvasNode } from '@lixpi/constants'
 import { createContextPreviewTile, getContextPreviewAccessibleLabel, type ContextPreviewEnvironment } from '$src/components/contextPreview/contextPreview.ts'
 
 function createMockEnvironment(overrides: {
@@ -102,6 +103,22 @@ describe('context preview labels', () => {
         expect(getContextPreviewAccessibleLabel(createThreadNode(), env)).toBe('Design Chat')
         expect(getContextPreviewAccessibleLabel(createImageNode(), env)).toBe('Image')
         expect(getContextPreviewAccessibleLabel(createVideoNode(), env)).toBe('Video')
+    })
+
+    it('falls back to the node type label when title and metadata are missing', () => {
+        const env = createMockEnvironment()
+
+        expect(
+            getContextPreviewAccessibleLabel(
+                {
+                    type: 'unknown',
+                    nodeId: 'unknown-node',
+                    referenceId: 'unknown-node',
+                    dimensions: { width: 100, height: 100 },
+                } as unknown as CanvasNode,
+                env,
+            ),
+        ).toBe('unknown')
     })
 })
 
@@ -209,6 +226,60 @@ describe('createContextPreviewTile', () => {
         expect(env.getAuthToken).toHaveBeenCalledTimes(6)
     })
 
+    it('preserves existing query params when appending auth token to absolute API URLs', async () => {
+        const env = createMockEnvironment({
+            authToken: 'auth-token',
+        })
+
+        const { dom } = createContextPreviewTile({
+            node: createImageNode({ src: 'https://cdn.example.com/api/images/raw.png?existing=1' }),
+            environment: env,
+        })
+        document.body.appendChild(dom)
+
+        const imageEl = document.body.querySelector('.help-tooltip-content .workspace-ai-chat-panel-context-preview-image') as HTMLImageElement
+        await waitForNextTick()
+
+        expect(imageEl.src).toContain('https://cdn.example.com/api/images/raw.png?existing=1&token=auth-token')
+    })
+
+    it('falls back to base64 wrappers for relative paths that are not API or remote URLs', async () => {
+        const env = createMockEnvironment()
+        const { dom } = createContextPreviewTile({
+            node: createImageNode({ src: 'local-file.png' }),
+            environment: env,
+        })
+        document.body.appendChild(dom)
+
+        const imageEl = document.body.querySelector('.help-tooltip-content .workspace-ai-chat-panel-context-preview-image') as HTMLImageElement
+        await waitForMicrotasks()
+
+        expect(imageEl.src).toContain('data:image/png;base64,local-file.png')
+        expect(imageEl.src).not.toContain('token=')
+    })
+
+    it('keeps controls only on large video previews while mini thumbnails stay compact', async () => {
+        const env = createMockEnvironment()
+        const { dom } = createContextPreviewTile({
+            node: createVideoNode(),
+            environment: env,
+        })
+        document.body.appendChild(dom)
+
+        const miniVideo = dom.querySelector('video') as HTMLVideoElement
+        expect(miniVideo).not.toBeNull()
+        expect(miniVideo.hasAttribute('controls')).toBe(false)
+
+        const trigger = dom.querySelector('.help-tooltip-trigger') as HTMLElement
+        trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
+        await waitForMicrotasks()
+
+        const tooltipContent = document.body.querySelector('.help-tooltip-content') as HTMLElement
+        const largeVideo = tooltipContent.querySelector('.workspace-ai-chat-panel-context-preview-video-large video') as HTMLVideoElement
+        expect(largeVideo).not.toBeNull()
+        expect(largeVideo.hasAttribute('controls')).toBe(true)
+    })
+
     it('reruns preview rendering when getNode returns changed content', async () => {
         let currentNode = createThreadNode({
             descriptor: { status: 'ready', summary: 'First summary' },
@@ -248,6 +319,55 @@ describe('createContextPreviewTile', () => {
 
         tooltipContent = document.body.querySelector('.help-tooltip-content') as HTMLElement
         expect(tooltipContent.textContent).toContain('Second summary')
+    })
+
+    it('supports inline popovers that stay inside the tile and update on getNode', async () => {
+        let currentNode = createThreadNode({
+            title: 'Thread title',
+            descriptor: { status: 'ready', summary: 'First summary' },
+            content: createTextDoc('First body content'),
+        })
+        const env = createMockEnvironment({
+            threads: [{ threadId: 'thread-node', title: 'Thread title' }],
+        })
+        const { dom, destroy } = createContextPreviewTile({
+            node: currentNode,
+            getNode: () => currentNode,
+            environment: env,
+            inlinePopover: true,
+        })
+        document.body.appendChild(dom)
+
+        const trigger = dom.querySelector('.context-preview-inline-trigger') as HTMLElement
+        const popover = dom.querySelector('.context-preview-inline-popover') as HTMLElement
+        expect(popover).not.toBeNull()
+        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+        expect(popover.classList.contains('is-open')).toBe(false)
+
+        dom.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
+        await waitForMicrotasks()
+
+        expect(dom.classList.contains('is-open')).toBe(true)
+        expect(popover.classList.contains('is-open')).toBe(true)
+        expect(popover.querySelector('.workspace-ai-chat-panel-context-preview-document-title')?.textContent).toBe('Thread title')
+        expect(popover.querySelector('.workspace-ai-chat-panel-context-preview-document-text')?.textContent).toContain('First summary')
+
+        currentNode = createThreadNode({
+            title: 'Thread title',
+            descriptor: { status: 'ready', summary: 'Second summary' },
+            content: createTextDoc('Second body content'),
+        })
+
+        trigger.dispatchEvent(new PointerEvent('focusin', { bubbles: true }))
+        await waitForMicrotasks()
+
+        expect(popover.querySelector('.workspace-ai-chat-panel-context-preview-document-text')?.textContent).toContain('Second summary')
+
+        dom.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }))
+        await waitForMicrotasks()
+        expect(popover.classList.contains('is-open')).toBe(false)
+        destroy()
+        expect(popover.isConnected).toBe(false)
     })
 
     it('adds popover orientation classes for image previews with metadata', async () => {

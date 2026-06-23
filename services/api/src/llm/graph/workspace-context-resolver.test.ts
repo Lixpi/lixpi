@@ -636,4 +636,33 @@ describe('resolveWorkspaceContext', () => {
         expect(callLlm).not.toHaveBeenCalled()
         expect(publisher.contextRelevanceResolved).not.toHaveBeenCalled()
     })
+
+    it('deduplicates duplicate selections while preserving the first rationale', async () => {
+        const { deps, callLlm } = createDeps({
+            selections: [
+                {
+                    nodeId: 'goat-image',
+                    rationale: 'first rationale should win',
+                    needsBetterDescriptor: false,
+                },
+                {
+                    nodeId: 'goat-image',
+                    rationale: 'second rationale should never overwrite',
+                    needsBetterDescriptor: true,
+                },
+            ],
+        })
+
+        const update = await resolveWorkspaceContext(createState(), deps)
+
+        expect(callLlm).toHaveBeenCalledOnce()
+        expect(update.workspaceContextResolution?.selections).toHaveLength(3)
+        expect(update.workspaceContextResolution?.selections.filter((selection) => selection.nodeId === 'goat-image')).toHaveLength(1)
+        expect(update.workspaceContextResolution?.selections.find((selection) => selection.nodeId === 'goat-image'))
+            .toMatchObject({
+                nodeId: 'goat-image',
+                role: 'auto',
+                rationale: 'first rationale should win',
+            })
+    })
 })
