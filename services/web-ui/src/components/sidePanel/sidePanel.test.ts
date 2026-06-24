@@ -513,4 +513,145 @@ describe('SidePanel', () => {
         move(400)
         expect(onResize).not.toHaveBeenCalled()
     })
+
+    it('requests close from the overlay only while open and dismissible', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            overlay: {
+                enabled: true,
+                closeOnPointerDown: true,
+            },
+            onOpenChange,
+        }))
+
+        pointerdown(sidePanel.overlayElement as HTMLElement, 200)
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        sidePanel.setOpen(true)
+        pointerdown(sidePanel.overlayElement as HTMLElement, 200)
+        expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false)
+
+        sidePanel.destroy()
+
+        const disabledOverlayPanel = createSidePanel(buildConfig({
+            overlay: {
+                enabled: true,
+                closeOnPointerDown: false,
+            },
+            onOpenChange,
+        }))
+
+        onOpenChange.mockClear()
+        disabledOverlayPanel.setOpen(true)
+        pointerdown(disabledOverlayPanel.overlayElement as HTMLElement, 200)
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        disabledOverlayPanel.destroy()
+    })
+
+    it('swipe-closes from panel body drag while fading the overlay from the dragged distance', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            overlay: {
+                enabled: true,
+                opacity: 0.6,
+            },
+            drag: {
+                enabled: true,
+                closeThreshold: 0.25,
+                velocityThreshold: 999,
+                pointerSwipeStartThreshold: 2,
+                touchSwipeStartThreshold: 2,
+            },
+            onOpenChange,
+        }))
+        const panel = document.createElement('div')
+        Object.defineProperty(panel, 'getBoundingClientRect', {
+            value: () => ({ width: 400, height: 800, left: 0, top: 0, right: 400, bottom: 800 }),
+        })
+
+        sidePanel.mountOpen(panel)
+        pointerdown(panel, 500, { pointerType: 'touch' })
+        dispatchPointer(panel, 'pointermove', 620, { pointerType: 'touch' })
+
+        expect(panel.classList.contains('side-panel-touch-dragging')).toBe(true)
+        expect(panel.style.transform).toBe('translate3d(120px, 0, 0)')
+        expect(sidePanel.backdropElement.style.transform).toBe('translate3d(120px, 0, 0)')
+        expect(sidePanel.overlayElement?.style.opacity).toBe('0.42')
+
+        dispatchPointer(panel, 'pointerup', 620, { pointerType: 'touch' })
+
+        expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false)
+        expect(panel.classList.contains('side-panel-touch-dragging')).toBe(false)
+
+        sidePanel.destroy()
+    })
+
+    it('resets panel drag instead of closing when the close threshold is not reached', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            overlay: {
+                enabled: true,
+                opacity: 0.5,
+            },
+            drag: {
+                enabled: true,
+                closeThreshold: 0.5,
+                velocityThreshold: 999,
+                pointerSwipeStartThreshold: 2,
+            },
+            onOpenChange,
+        }))
+        const panel = document.createElement('div')
+        Object.defineProperty(panel, 'getBoundingClientRect', {
+            value: () => ({ width: 400, height: 800, left: 0, top: 0, right: 400, bottom: 800 }),
+        })
+
+        sidePanel.mountOpen(panel)
+        pointerdown(panel, 500, { pointerType: 'mouse' })
+        dispatchPointer(panel, 'pointermove', 560, { pointerType: 'mouse' })
+        dispatchPointer(panel, 'pointerup', 560, { pointerType: 'mouse' })
+
+        expect(onOpenChange).not.toHaveBeenCalled()
+        expect(panel.style.transform).toBe('translate3d(0, 0, 0)')
+        expect(panel.style.transition).toBe('var(--side-panel-slide-transition)')
+        expect(sidePanel.overlayElement?.style.opacity).toBe('0.5')
+        expect(sidePanel.overlayElement?.style.transition).toBe('var(--side-panel-overlay-transition)')
+
+        sidePanel.destroy()
+    })
+
+    it('does not start swipe-close gestures from interactive or opted-out panel children', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            drag: {
+                enabled: true,
+                closeThreshold: 0.25,
+                velocityThreshold: 999,
+            },
+            onOpenChange,
+        }))
+        const panel = document.createElement('div')
+        const button = document.createElement('button')
+        const optedOut = document.createElement('div')
+        optedOut.dataset.sidePanelNoDrag = 'true'
+        panel.append(button, optedOut)
+        Object.defineProperty(panel, 'getBoundingClientRect', {
+            value: () => ({ width: 400, height: 800, left: 0, top: 0, right: 400, bottom: 800 }),
+        })
+
+        sidePanel.mountOpen(panel)
+
+        pointerdown(button, 500)
+        dispatchPointer(panel, 'pointermove', 680)
+        dispatchPointer(panel, 'pointerup', 680)
+        pointerdown(optedOut, 500)
+        dispatchPointer(panel, 'pointermove', 680)
+        dispatchPointer(panel, 'pointerup', 680)
+
+        expect(onOpenChange).not.toHaveBeenCalled()
+        expect(panel.style.transform).toBe('translate3d(0, 0, 0)')
+
+        sidePanel.destroy()
+    })
 })

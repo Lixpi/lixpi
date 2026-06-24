@@ -37,6 +37,7 @@ const schema = {
         type: 'object',
         required: ['status'],
         properties: { status: { type: 'string' } },
+        additionalProperties: false,
     },
 }
 
@@ -106,6 +107,75 @@ describe('callStructuredVlm', () => {
         expect(createRequest?.model).toBe('gpt-4.1')
         expect(createRequest?.instructions).toBe('You are helping.')
         expect(createRequest?.text?.format).toMatchObject({ type: 'json_schema', name: 'extract', strict: true })
+    })
+
+    it('wraps OpenAI open schemas in a closed payload envelope and returns the parsed payload', async () => {
+        const openSchema = {
+            name: 'extract',
+            description: 'extract',
+            schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                    status: { type: 'string' },
+                    optionalNote: { type: 'string' },
+                },
+            },
+        }
+        const payloadText = '{"status":"ok","optionalNote":"kept"}'
+        const envelopeText = JSON.stringify({ payload: payloadText })
+        const chunks: string[] = []
+
+        openAiCreate.mockResolvedValueOnce(makeAsyncStream([
+            makeOpenAiTextDelta(envelopeText.slice(0, 12)),
+            makeOpenAiTextDelta(envelopeText.slice(12)),
+            makeOpenAiCompleted(envelopeText, 'gpt-4.1', { input_tokens: 14, output_tokens: 9 }),
+        ]))
+
+        const result = await callStructuredVlm({
+            provider: 'OpenAI',
+            modelVersion: 'gpt-4.1',
+            natsService: {} as any,
+            ...baseArgs,
+            schema: openSchema,
+            onTextChunk: (text) => chunks.push(text),
+        })
+
+        expect(result.rawText).toBe(payloadText)
+        expect(result.parsed).toEqual({ status: 'ok', optionalNote: 'kept' })
+        expect(chunks).toEqual([])
+
+        const createRequest = openAiCreate.mock.calls[0]?.[0]
+        expect(createRequest?.text?.format).toMatchObject({
+            type: 'json_schema',
+            name: 'extract_payload',
+            strict: true,
+            schema: {
+                type: 'object',
+                required: ['payload'],
+                additionalProperties: false,
+            },
+        })
+        expect(createRequest?.instructions).toContain('Structured output adapter:')
+        expect(createRequest?.instructions).toContain('The payload value must be a JSON string, not markdown.')
+        expect(createRequest?.instructions).toContain('"optionalNote"')
+    })
+
+    it('omits temperature for GPT-5 OpenAI structured calls', async () => {
+        openAiCreate.mockResolvedValueOnce(makeAsyncStream([
+            makeOpenAiCompleted('{"status":"ok"}', 'gpt-5'),
+        ]))
+
+        await callStructuredVlm({
+            provider: 'OpenAI',
+            modelVersion: 'gpt-5',
+            natsService: {} as any,
+            ...baseArgs,
+        })
+
+        const createRequest = openAiCreate.mock.calls[0]?.[0]
+        expect(createRequest).not.toHaveProperty('temperature')
+        expect(createRequest?.max_output_tokens).toBe(4096)
     })
 
     it('retries and succeeds when OpenAI throws a transient error once', async () => {

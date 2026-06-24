@@ -31,6 +31,7 @@ describe('AI chat panel persisted state', () => {
         expect(createDefaultAiChatPanelState()).toEqual({
             isOpen: false,
             isSessionHistoryOpen: false,
+            topLevelMode: 'aiThreads',
             tabs: [],
             contextChips: [],
         })
