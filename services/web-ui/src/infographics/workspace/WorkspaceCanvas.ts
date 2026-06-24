@@ -3906,13 +3906,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function ensureActiveRightSidePanel(): SidePanelInstance {
         if (activeRightSidePanel) return activeRightSidePanel
 
-        const { defaultDimensions, dimensions, resizeHandle, toggle, animation } = RIGHT_SIDE_PANEL_SETTINGS
+        const { defaultDimensions, dimensions, resizeHandle, toggle, animation, overlay, drag } = RIGHT_SIDE_PANEL_SETTINGS
         activeRightSidePanel = createSidePanel({
             side: 'right',
             offset: resizeHandle.offset,
             grabWidth: resizeHandle.grabWidth,
             className: 'workspace-ai-chat-side-panel-resize-handle',
             styles: resizeHandle.styles,
+            overlay,
+            drag,
             toggle: {
                 iconSvg: aiChatPanelCollapseIcon,
                 className: 'workspace-ai-chat-panel-toggle',
@@ -3937,6 +3939,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             onResizeStart: handleRightSidePanelResizeStart,
             onResize: (width) => reflectRightSidePanelWidth(width),
             onResizeEnd: handleRightSidePanelResizeEnd,
+            onOpenChange: (open) => {
+                if (open) {
+                    openAiChatPanel()
+                    return
+                }
+                void closeAiChatPanel()
+            },
         })
         if (activeRightSidePanel.toggleElement) paneEl.appendChild(activeRightSidePanel.toggleElement)
         activeRightSidePanel.setOpen(aiChatPanelState.isOpen)
@@ -5071,6 +5080,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         } else {
             activeRightSidePanel.mountOpen(panelEl)
         }
+        if (activeRightSidePanel.overlayElement) paneEl.appendChild(activeRightSidePanel.overlayElement)
         paneEl.appendChild(activeRightSidePanel.backdropElement)
         paneEl.appendChild(panelEl)
 

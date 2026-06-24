@@ -101,6 +101,20 @@ export type RightSidePanelSettings = {
         durationMs: number
         easing: string
     }
+    overlay: {
+        enabled: boolean
+        closeOnPointerDown: boolean
+        fill: string
+        fillOpaque: string
+        opacity: number
+    }
+    drag: {
+        enabled: boolean
+        closeThreshold: number
+        velocityThreshold: number
+        pointerSwipeStartThreshold: number
+        touchSwipeStartThreshold: number
+    }
     styles: {
         backdropFill: string
         backdropFillOpaque: string
@@ -614,6 +628,22 @@ export const settings: Settings = {
             // Drawer-style slide duration.
             durationMs: 150,
             easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+        },
+        overlay: {
+            // Full-canvas dark glass tint layer behind the side panel.
+            enabled: true,
+            closeOnPointerDown: true,
+            fill: 'rgba(15, 23, 42, 0.18)',
+            fillOpaque: 'rgba(15, 23, 42, 0.22)',
+            opacity: 1,
+        },
+        drag: {
+            // Vaul-style horizontal swipe-to-close gesture for pointer/touch input.
+            enabled: true,
+            closeThreshold: 0.25,
+            velocityThreshold: 0.4,
+            pointerSwipeStartThreshold: 2,
+            touchSwipeStartThreshold: 10,
         },
         styles: {
             backdropFill: 'rgba(248, 250, 253, 0.84)',
