@@ -897,6 +897,23 @@
     }
 }
 
+// Top-level Features / Media / AI Threads switch at the top of the right side panel.
+.workspace-right-panel-mode-switch {
+    position: relative;
+    z-index: 3;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    flex: 0 0 auto;
+    padding: 10px 12px 8px;
+}
+
+.workspace-right-panel-mode-switch-svg {
+    display: block;
+    width: 100%;
+    overflow: visible;
+}
+
 .workspace-ai-chat-panel-tabs-switch {
     display: block;
     flex: 0 0 auto;

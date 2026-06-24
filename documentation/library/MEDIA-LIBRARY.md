@@ -5,7 +5,7 @@ description: The canvas-owned panel for media a user keeps for reuse — saved i
 
 # Media Library
 
-The Media Library is the right-side canvas panel for media a user has chosen to keep. It has three categories: **Features**, which exposes the existing extracted-feature library, **Images**, which stores reusable copies of finished canvas images, and **Videos**, which stores reusable copies of finished canvas videos.
+The Media Library lives inside the right side canvas panel. A top-level sliding switch at the top of that panel chooses between three surfaces: **Features**, which exposes the extracted-feature library; **Media**, which colocates reusable copies of finished canvas images and videos; and **AI Threads**, which is the chat-thread surface. Saved images and videos are independent Object Store copies kept for reuse.
 
 The important detail is ownership. A saved image or video is not a bookmark to a canvas node and is not an alias to the workspace object. Saving makes a separate Object Store copy. Adding it back to a canvas makes another workspace copy. A user can therefore tidy or delete the original canvas media without losing the asset they saved for reuse.
 
@@ -17,7 +17,8 @@ This page is part of the feature library domain. For the larger canvas rendering
 
 | Concept | Definition |
 |---------|------------|
-| **Media Library** | A canvas-owned panel rendered by [`mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts). The first time it is opened for a canvas instance, it starts on `Features` with the current `Workspace` scope selected. |
+| **Media Library** | The Features and Media surfaces of the right side panel. The framework-agnostic renderer in [`mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts) mounts into the panel body; [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) owns the top-level switch that selects Features, Media, or AI Threads. The renderer starts on `Features` with the current `Workspace` scope selected. |
+| **Top-level switch** | A [`slidingSwitch`](../../services/web-ui/src/components/slidingSwitch/) at the top of the right side panel choosing `Features`, `Media`, or `AI Threads`. The selection persists on `CanvasAiChatPanelState.topLevelMode`. |
 | **Feature** | An extracted reusable feature such as a palette or style instruction. Features appear inside the Media Library, but they still use the established Feature model, NATS subjects, samples, extraction workflow, and `/use` resolution. They are **not** `MediaLibraryItem` records. |
 | **Saved Image** | A library-owned copy of a stored canvas image. It has its own item ID, scope, metadata record, preview route, and Object Store object. |
 | **Saved Video** | A library-owned copy of a stored canvas video. It has its own item ID, scope, metadata record, Range-capable MP4 content route, optional poster route, and Object Store object. |
@@ -28,8 +29,9 @@ This page is part of the feature library domain. For the larger canvas rendering
 
 ## What Users Can Do
 
-- Open **Media Library** from the independent bottom-right icon above the existing zoom indicator.
-- Browse extracted `Features`, explicitly saved `Images`, or explicitly saved `Videos`.
+- Open the right side panel from the independent bottom-right icon above the existing zoom indicator; it opens on the `Media` surface.
+- Switch the panel between `Features`, `Media`, and `AI Threads` with the top-level sliding switch.
+- Browse extracted `Features`, or the explicitly saved images and videos colocated under `Media`.
 - Search the active category and switch between `Workspace`, `Mine`, `Organization`, `Public`, and `All available`.
 - Select a completed stored image or video on the canvas and choose **Add to Media Library**.
 - Add a saved image or video back to the active canvas as a fresh node.
@@ -114,36 +116,33 @@ This gives the feature its deletion behavior:
 
 ## Panel Behavior
 
-The old feature-only drawer is replaced by [`mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts) and [`media-library-panel.scss`](../../services/web-ui/src/infographics/workspace/media-library-panel.scss).
+The Features and Media surfaces are rendered by [`mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts) and [`media-library-panel.scss`](../../services/web-ui/src/infographics/workspace/media-library-panel.scss), embedded in the right side panel body below the top-level switch.
 
 ### Position and Layout
 
-- The panel opens from the right side of the workspace pane.
-- It is flush to the top and bottom of the pane; there is no outer vertical whitespace.
-- Its width is two-thirds of the space available after any open AI chat panel is reserved.
-- If AI chat is open, AI chat remains rightmost and the Media Library moves immediately to its left.
-- The bottom-right Media Library icon and the existing zoom indicator independently move left with AI chat. While the panel is open, the drawer covers the launcher.
-- `settings.mediaLibrary.panelWidthFraction` owns the drawer width.
+- The right side panel opens from the right side of the workspace pane, hosted and sized by the shared [`sidePanel`](../../services/web-ui/src/components/sidePanel/sidePanel.ts) (its resize handle owns and persists the width).
+- The top-level [`slidingSwitch`](../../services/web-ui/src/components/slidingSwitch/) sits at the top of the panel; the selected surface renders in the body below it and fills the remaining height.
+- The bottom-right launcher icon and the existing zoom indicator sit left of the panel; the launcher opens the panel on `Media`.
 - Features use a browser and inspector layout: browse cards show a large preview, title, scope, and a two-line summary preview; the selected inspector preserves the full summary, tags, instructions, samples, palette data, and management controls.
 - When the remaining width is narrow, selecting a Feature replaces the browser with a focused detail view and an explicit **Back** action.
 
-### Categories
+### Surfaces
 
-The initial category is `Features`, preserving the path users already had from the old Feature Library. After a user changes category or scope, closing and reopening the panel in the same canvas instance retains that in-memory selection.
+The top-level switch defaults to `AI Threads`; the launcher and the `/use` path open it on `Media` and `Features` respectively. The selection persists on `CanvasAiChatPanelState.topLevelMode`. The scope and search selection within a surface is retained in memory while the panel stays mounted.
 
-| Category | Contents | Main actions |
-|----------|----------|--------------|
-| `Features` | Concise browse cards plus a selected Feature inspector | View full details and samples, `Use Feature`, change owned sharing, delete owned items, report public items, start extraction |
-| `Images` | Saved image metadata and authorized previews | `Add to canvas`, move scope, delete |
-| `Videos` | Saved video metadata, authorized posters, and hover MP4 previews | `Add to canvas`, move scope, delete |
+| Surface | Contents | Main actions |
+|---------|----------|--------------|
+| `Features` | Concise browse cards plus a selected Feature inspector | View full details and samples, `Use Feature`, change owned sharing, delete owned items, report public items |
+| `Media` | Saved images and videos colocated under `Images` and `Videos` headings, with authorized previews and hover MP4 previews | `Add to canvas`, move scope, delete |
+| `AI Threads` | The chat-thread surface (sessions, per-thread tabs, thread/extraction body) | Owned by the AI chat panel |
 
-Feature `created`, `updated`, and `deleted` events update or reload the Feature browser while it is open. Media Library `created`, `updated`, and `deleted` events reload image rows while the panel is open on `Images` and video rows while it is open on `Videos`. A successful media save on the canvas displays an in-place toast; it does not force the panel open or switch the current category.
+Feature `created`, `updated`, and `deleted` events update or reload the Feature browser while the `Features` surface is mounted. Media Library `created`, `updated`, and `deleted` events reload the colocated images and videos while the `Media` surface is mounted. A successful media save on the canvas displays an in-place toast; it does not force the panel open or switch the current surface.
 
 ### Filters
 
-The compact **Scope** selector exposes `Workspace`, `Mine`, `Organization`, `Public`, and `All available`; a segmented `Features` / `Images` / `Videos` control makes the content type separate from permissions.
+The compact **Scope** selector exposes `Workspace`, `Mine`, `Organization`, `Public`, and `All available`.
 
-- The panel's initial filter is `Workspace`; filter selection is retained in memory when the panel is closed and reopened on the same canvas instance.
+- The initial filter is `Workspace`; filter selection is retained in memory while the panel stays mounted.
 - `All available` asks the backend for readable media from all accessible workspaces, the current user's own scope, organizations the user belongs to, and public items.
 - Image and video search is applied by the media-list request against `displayName`.
 - Feature search stays in the Feature rendering path and matches feature name, summary, category, and tags.
@@ -411,9 +410,9 @@ Feature sharing has a separate durability rule. Samples begin in their origin wo
 
 | Area | File | Responsibility |
 |------|------|----------------|
-| Panel UI | [`services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts) | Segmented category control, compact scope selector, Feature browser/inspector, image rows, video rows, preview URLs and actions |
-| Panel layout | [`services/web-ui/src/infographics/workspace/media-library-panel.scss`](../../services/web-ui/src/infographics/workspace/media-library-panel.scss) | Full-height drawer, glass chrome, AI-chat offset, inspector and focused narrow view |
-| Canvas integration | [`services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) | Toggle panel, save selected images/videos, show feedback, materialize and insert media nodes |
+| Panel UI | [`services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts) | Embedded `mountInto`/`setMode` renderer: compact scope selector, Feature browser/inspector, colocated image and video rows, preview URLs and actions |
+| Panel layout | [`services/web-ui/src/infographics/workspace/media-library-panel.scss`](../../services/web-ui/src/infographics/workspace/media-library-panel.scss) | Embedded variant filling the right side panel body, glass chrome, inspector and focused narrow view |
+| Canvas integration | [`services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) | Top-level Features/Media/AI Threads switch, open panel to a surface, save selected images/videos, show feedback, materialize and insert media nodes |
 | Canvas utilities and URL import | [`services/web-ui/src/components/WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) | Independent bottom-right Media Library launcher, standalone zoom indicator and stored URL-image ingestion |
 | Browser service | [`services/web-ui/src/services/media-library-service.ts`](../../services/web-ui/src/services/media-library-service.ts) | NATS requests for image/video list/save/materialize/scope/delete actions |
 | Shared contracts | [`packages/lixpi/constants/ts/types.ts`](../../packages/lixpi/constants/ts/types.ts) | Scope, category, image/video item and metadata types |

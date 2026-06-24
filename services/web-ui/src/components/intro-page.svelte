@@ -27,7 +27,7 @@
 			.accent {
 				// color: $lixpiColor;
 				// color: $aiGreen;
-				// color: $darkPastelGreen;
+				// color: $selectionBlue;
 				font-weight: 500;
 			}
 			.masked {

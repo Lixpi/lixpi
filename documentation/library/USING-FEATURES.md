@@ -305,9 +305,9 @@ partition `public#public`, sorted by `updatedAt`. A real search index
 
 ## Where features are browsed and persisted
 
-- The **Media Library panel** is the canvas-owned surface where extracted
-  features live (in its `Features` category) alongside explicitly saved images.
-  It is authoritative for the saved-media panel UI — see
+- The **right side panel** is the canvas-owned surface where extracted features
+  live: its top-level switch selects the `Features` surface, the `Media` surface
+  (saved images and videos colocated), or `AI Threads`. See
   [Media Library](./MEDIA-LIBRARY.md). (An earlier "Feature Library panel"
   design is superseded by it.)
 - The **storage tables, the `resolveFeatures` internals, and the LangGraph

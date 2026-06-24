@@ -125,7 +125,7 @@ describe('createToggleSwitch', () => {
         expect(track.getAttribute('width')).toBe('36')
         expect(track.getAttribute('height')).toBe('20')
         expect(knob.getAttribute('cx')).toBe('26')
-        expect(track.getAttribute('fill')).toBe('#55967c')
+        expect(track.getAttribute('fill')).toBe('#5f8fcf')
     })
 
     it('re-enables click handling after setDisabled(false)', () => {

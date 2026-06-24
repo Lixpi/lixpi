@@ -4,7 +4,7 @@ export const colorPalette = {
     nightBlue: '#42494f',
     steelBlue: '#5d656d',
     aiGreen: '#56967c',
-    darkPastelGreen: '#55967c',
+    selectionBlue: '#5f8fcf',
     lightGrey: '#aeaeae',
     offWhite: '#f5f3f3',
     offWhiteMuted: '#bfbfbf',

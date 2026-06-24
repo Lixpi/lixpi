@@ -48,6 +48,7 @@
     }
 }
 
+
 // ********** Header **********
 .media-library-header {
     display: grid;
@@ -88,8 +89,8 @@
     }
 
     &:focus {
-        border-color: rgba(85, 150, 124, 0.55);
-        box-shadow: 0 0 0 3px rgba(85, 150, 124, 0.12);
+        border-color: rgba(95, 143, 207, 0.55);
+        box-shadow: 0 0 0 3px rgba(95, 143, 207, 0.12);
     }
 }
 
@@ -158,8 +159,8 @@
 
 .media-library-tab-active {
     color: #2f705d;
-    background: rgba(85, 150, 124, 0.12);
-    border-color: rgba(85, 150, 124, 0.24);
+    background: rgba(95, 143, 207, 0.12);
+    border-color: rgba(95, 143, 207, 0.24);
 }
 
 // ********** Body & states **********
@@ -230,20 +231,20 @@
 
     &:hover {
         background: rgba(255, 255, 255, 0.9);
-        border-color: rgba(85, 150, 124, 0.22);
+        border-color: rgba(95, 143, 207, 0.22);
         transform: translateY(-1px);
     }
 
     &:focus-visible {
-        border-color: rgba(85, 150, 124, 0.42);
-        box-shadow: 0 0 0 3px rgba(85, 150, 124, 0.13);
+        border-color: rgba(95, 143, 207, 0.42);
+        box-shadow: 0 0 0 3px rgba(95, 143, 207, 0.13);
     }
 }
 
 .feature-library-row-expanded {
     align-items: start;
     background: rgba(255, 255, 255, 0.92);
-    border-color: rgba(85, 150, 124, 0.24);
+    border-color: rgba(95, 143, 207, 0.24);
     box-shadow: 0 10px 24px rgba(26, 39, 68, 0.08);
 
     &:hover {
@@ -264,7 +265,7 @@
     width: 48px;
     height: 48px;
     border-radius: 8px;
-    background: linear-gradient(135deg, rgba(85, 150, 124, 0.16), rgba(115, 87, 184, 0.12));
+    background: linear-gradient(135deg, rgba(95, 143, 207, 0.16), rgba(115, 87, 184, 0.12));
     border: 1px solid rgba(26, 39, 68, 0.06);
     flex-shrink: 0;
 }
@@ -353,12 +354,12 @@
 }
 
 .feature-library-row-action-primary {
-    border-color: rgba(85, 150, 124, 0.3);
-    background: rgba(85, 150, 124, 0.12);
+    border-color: rgba(95, 143, 207, 0.3);
+    background: rgba(95, 143, 207, 0.12);
     color: #2f705d;
 
     &:hover {
-        background: rgba(85, 150, 124, 0.18);
+        background: rgba(95, 143, 207, 0.18);
         color: #245949;
     }
 }
@@ -650,7 +651,7 @@
 
     button:hover,
     select:hover {
-        background: rgba(85, 150, 124, 0.1);
+        background: rgba(95, 143, 207, 0.1);
         color: #1a2744;
     }
 }
@@ -768,37 +769,12 @@
 
     button:hover,
     select:hover {
-        background: rgba(85, 150, 124, 0.1);
+        background: rgba(95, 143, 207, 0.1);
         color: #1a2744;
     }
 }
 
 // ********** Footer **********
-.media-library-footer {
-    padding: 10px 12px;
-    border-top: 1px solid rgba(26, 39, 68, 0.08);
-    display: flex;
-    justify-content: flex-end;
-    flex-shrink: 0;
-    background: rgba(255, 255, 255, 0.5);
-}
-
-.media-library-footer-new-btn {
-    height: 30px;
-    padding: 0 12px;
-    border-radius: 8px;
-    border: 1px solid rgba(85, 150, 124, 0.32);
-    background: rgba(85, 150, 124, 0.12);
-    color: #2f705d;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 800;
-
-    &:hover {
-        background: rgba(85, 150, 124, 0.18);
-    }
-}
-
 // ********** Redesigned library browser and inspector **********
 .media-library-panel {
     top: 0;
@@ -1030,24 +1006,24 @@
     border-color: transparent;
     transform: none;
     background: rgba(255, 255, 255, 0.9);
-    box-shadow: inset 0 0 0 1px rgba(85, 150, 124, 0.22), 0 8px 20px rgba(26, 39, 68, 0.06);
+    box-shadow: inset 0 0 0 1px rgba(95, 143, 207, 0.22), 0 8px 20px rgba(26, 39, 68, 0.06);
 }
 
 .feature-library-row:focus-visible {
     border-color: transparent;
-    box-shadow: inset 0 0 0 1px rgba(85, 150, 124, 0.38), 0 0 0 3px rgba(85, 150, 124, 0.13);
+    box-shadow: inset 0 0 0 1px rgba(95, 143, 207, 0.38), 0 0 0 3px rgba(95, 143, 207, 0.13);
 }
 
 .feature-library-row-selected {
     border-color: transparent;
     background: rgba(255, 255, 255, 0.94);
-    box-shadow: inset 0 0 0 1px rgba(85, 150, 124, 0.34), 0 10px 24px rgba(26, 39, 68, 0.07);
+    box-shadow: inset 0 0 0 1px rgba(95, 143, 207, 0.34), 0 10px 24px rgba(26, 39, 68, 0.07);
 }
 
 .feature-library-row-selected:hover {
     border-color: transparent;
     transform: none;
-    box-shadow: inset 0 0 0 1px rgba(85, 150, 124, 0.34), 0 10px 24px rgba(26, 39, 68, 0.07);
+    box-shadow: inset 0 0 0 1px rgba(95, 143, 207, 0.34), 0 10px 24px rgba(26, 39, 68, 0.07);
 }
 
 .feature-library-row-thumb,
@@ -1249,16 +1225,6 @@
 .media-library-image-preview {
     max-height: 246px;
     border-radius: 11px;
-}
-
-.media-library-footer {
-    padding: 11px 20px;
-    background: rgba(255, 255, 255, 0.46);
-}
-
-.media-library-footer-new-btn {
-    height: 36px;
-    border-radius: 10px;
 }
 
 @container media-library (max-width: 680px) {
@@ -1915,4 +1881,42 @@
 
 .feature-reference-chip-mood {
     background: #7850b4;
+}
+
+// ********** Embedded variant **********
+// The library renders inside the right side panel body, below the top-level
+// Features / Media / AI Threads switch, instead of as a standalone drawer. The
+// host-scoped selector wins over the drawer positioning rules above by source
+// order, so the panel fills its host and drops the drawer chrome and animation.
+.workspace-right-panel-media-host {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+}
+
+.workspace-right-panel-media-host .media-library-panel {
+    position: static;
+    inset: auto;
+    right: auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    z-index: auto;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    animation: none;
+}
+
+// Colocated Media view section headings (Images / Videos).
+.media-library-media-group-title {
+    margin: 14px 0 8px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgba(26, 39, 68, 0.52);
 }

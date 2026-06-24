@@ -241,7 +241,7 @@
         // box-shadow: 0 0 0 .03rem $offWhite;
         // .add-icon {
         //     background: $offWhite;
-        //     background: $darkPastelGreen;
+        //     background: $selectionBlue;
         //     :global(svg) {
         //         fill: $nightBlue;
         //         fill: $offWhite;
@@ -355,7 +355,7 @@
             }
             // .add-icon {
             //     background: $offWhite;
-            //     background: $darkPastelGreen;
+            //     background: $selectionBlue;
             //     :global(svg) {
             //         fill: $nightBlue;
             //         fill: $offWhite;

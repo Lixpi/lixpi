@@ -101,7 +101,7 @@ $slashMenuBg: $steelBlue;
 $slashMenuFg: $offWhite;
 $slashMenuBorder: color.adjust($steelBlue, $lightness: -10%);
 $slashMenuHoverBg: $nightBlue;
-$slashMenuSelectedBg: rgba(85, 150, 124, 0.3);
+$slashMenuSelectedBg: rgba(95, 143, 207, 0.3);
 ```
 
 ## Future Improvements

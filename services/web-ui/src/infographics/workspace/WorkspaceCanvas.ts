@@ -27,6 +27,7 @@ import {
     type WorkspaceEdge,
     type CanvasAiChatSidebarTab,
     type CanvasAiChatPanelState,
+    type CanvasRightSidePanelMode,
     type CanvasFeatureExtractionState,
     type FeatureMeta,
     type MediaLibraryImageMeta,
@@ -142,6 +143,10 @@ import {
     createSlidingTabsSwitch,
     type SlidingTabsSwitchInstance,
 } from '$src/components/slidingTabsSwitch/index.ts'
+import {
+    createSlidingSwitch,
+    type SlidingSwitchInstance,
+} from '$src/components/slidingSwitch/index.ts'
 import {
     createContextPreviewTile,
     getContextPreviewAccessibleLabel,
@@ -526,6 +531,9 @@ type AiChatThreadEditorEntry = {
 
 type RenderActiveAiChatPanelOptions = {
     preserveTabsSwitch?: boolean
+    // Keep the live top-level mode switch (and its in-flight slide animation)
+    // across a body re-render instead of destroying and rebuilding it.
+    preserveModeSwitch?: boolean
     animateOpen?: boolean
 }
 
@@ -734,6 +742,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPanelHadContent = false
     let activeAiChatPanelEl: HTMLDivElement | null = null
     let activeAiChatPanelTabsSwitch: SlidingTabsSwitchInstance<string> | null = null
+    // Top-level Features / Media / AI Threads switch that lives at the top of the
+    // right side panel. Rebuilt on every panel render alongside the panel chrome.
+    let activeRightPanelModeSwitch: SlidingSwitchInstance<CanvasRightSidePanelMode> | null = null
+    // Set while a preserved-switch body re-render runs, so no resize path snaps
+    // the indicator mid-slide.
+    let suppressModeSwitchResize = false
+    let activeRightPanelRenderedMode: CanvasRightSidePanelMode | null = null
+    let activeRightPanelModeSwitchAnimationTimer: ReturnType<typeof setTimeout> | null = null
     let activeAiChatPanelProjectionRenderer: ReadOnlyAiChatThreadRendererInstance | null = null
     let activeRightSidePanel: SidePanelInstance | null = null
     // Screen-fixed, canvas-wide composer mounted at the bottom-center of the
@@ -3803,6 +3819,56 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function resizeActiveRightPanelModeSwitch(): void {
+        // While a mode-switch slide is being preserved across a body re-render,
+        // any resize would re-lay (and snap) the indicator. Leave it untouched.
+        if (suppressModeSwitchResize) return
+        if (!activeRightPanelModeSwitch || !activeAiChatPanelEl) return
+        const switchEl = activeAiChatPanelEl.querySelector<HTMLDivElement>('.workspace-right-panel-mode-switch')
+        const viewportWidth = switchEl?.clientWidth ?? getAiChatPanelTabsViewportWidth()
+        activeRightPanelModeSwitch.resize(0, 0, viewportWidth, settings.aiChatThread.panelTabs.height)
+    }
+
+    function clearRightPanelModeSwitchAnimationTimer(): void {
+        if (activeRightPanelModeSwitchAnimationTimer === null) return
+        clearTimeout(activeRightPanelModeSwitchAnimationTimer)
+        activeRightPanelModeSwitchAnimationTimer = null
+    }
+
+    function getRightPanelModeSwitchTransitionDuration(previousMode: CanvasRightSidePanelMode, nextMode: CanvasRightSidePanelMode): number {
+        const modes: CanvasRightSidePanelMode[] = ['features', 'media', 'aiThreads']
+        const previousIndex = modes.indexOf(previousMode)
+        const nextIndex = modes.indexOf(nextMode)
+        if (previousIndex < 0 || nextIndex < 0) return settings.aiChatThread.panelTabs.transitionDurationMs
+
+        const travelDistance = Math.max(1, Math.abs(nextIndex - previousIndex))
+        const speedup = 1 + (travelDistance - 1) * settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor
+        return Math.max(
+            settings.aiChatThread.panelTabs.transitionMinDurationMs,
+            Math.round(settings.aiChatThread.panelTabs.transitionDurationMs / speedup)
+        )
+    }
+
+    function preserveRightPanelModeSwitchDuringAnimation(previousSwitchMode: CanvasRightSidePanelMode, nextMode: CanvasRightSidePanelMode): void {
+        clearRightPanelModeSwitchAnimationTimer()
+        const durationMs = getRightPanelModeSwitchTransitionDuration(previousSwitchMode, nextMode)
+        activeRightPanelModeSwitchAnimationTimer = setTimeout(() => {
+            activeRightPanelModeSwitchAnimationTimer = null
+        }, durationMs)
+    }
+
+    function applyRightPanelModeBody(nextMode: CanvasRightSidePanelMode): void {
+        if (activeRightPanelRenderedMode === nextMode) return
+
+        if (activeRightPanelRenderedMode !== 'aiThreads' && nextMode !== 'aiThreads') {
+            ensureMediaLibraryPanel().setMode(nextMode === 'media' ? 'media' : 'features')
+            activeRightPanelRenderedMode = nextMode
+            return
+        }
+
+        renderActiveAiChatPanel(undefined, { preserveModeSwitch: true })
+    }
+
     // Reflects the width owned by the SidePanel instance into host DOM. The
     // SidePanel has already clamped and stored it; this only updates CSS vars and
     // dependent layout.
@@ -3814,6 +3880,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatPanelEl?.style.setProperty('--workspace-right-side-panel-width', widthValue)
         activeAiChatPanelEl?.style.setProperty('--side-panel-backdrop-width', widthValue)
         resizeActiveAiChatPanelTabsSwitch()
+        resizeActiveRightPanelModeSwitch()
     }
 
     function handleRightSidePanelResizeStart(): void {
@@ -3998,7 +4065,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         clearActive = false,
         panelThreadId = activeAiChatPanelThreadId ?? activeAiChatThreadId,
         preserveTabsSwitch = false,
-        destroySidePanel = false
+        destroySidePanel = false,
+        preserveModeSwitch = false
     ): void {
         destroyActiveAiChatPanelProjection()
         if (panelThreadId) {
@@ -4014,6 +4082,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (activeOpeningRightSidePanel === activeRightSidePanel) activeOpeningRightSidePanel = null
         if (activeClosingRightSidePanel === activeRightSidePanel) activeClosingRightSidePanel = null
+        if (!preserveModeSwitch) clearRightPanelModeSwitchAnimationTimer()
         if (destroySidePanel) {
             activeRightSidePanel?.destroy()
             activeRightSidePanel = null
@@ -4022,10 +4091,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (!aiChatPanelState.isOpen) activeRightSidePanel?.setOpen(false)
         }
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch?.destroy()
+        if (!preserveModeSwitch) {
+            activeRightPanelModeSwitch?.destroy()
+            activeRightPanelModeSwitch = null
+        }
+        mediaLibraryPanelInstance?.unmount()
         activeAiChatPanelEl?.remove()
         activeAiChatPanelThreadId = null
         activeAiChatPanelHadContent = false
         activeAiChatPanelEl = null
+        activeRightPanelRenderedMode = null
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch = null
         refreshContextChipTray()
 
@@ -4487,12 +4562,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         threadOverride?: AiChatThread,
         options: RenderActiveAiChatPanelOptions = {}
     ): void {
+        const preserveModeSwitchForRender = Boolean(
+            options.preserveModeSwitch
+            || (activeRightPanelModeSwitchAnimationTimer !== null && activeRightPanelModeSwitch && activeAiChatPanelEl)
+        )
         if (!aiChatPanelState.isOpen) {
             if (!activeClosingRightSidePanel) destroyActiveAiChatPanel(false)
             hasRenderedInitialAiChatPanelState = true
             return
         }
-        if (activeOpeningRightSidePanel && activeAiChatPanelEl) return
+        if (activeOpeningRightSidePanel && activeAiChatPanelEl) {
+            return
+        }
+        // Suppress switch resizes for the whole synchronous body of a preserved
+        // re-render so the in-flight slide is never re-laid or snapped.
+        suppressModeSwitchResize = preserveModeSwitchForRender
         void loadExtractionSessionHistory()
 
         // Play the drawer slide-in only when the panel goes from absent to
@@ -4515,7 +4599,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             : null
         const preservedTabsScrollLeft = preservedTabsEl?.scrollLeft ?? 0
         preservedTabsEl?.remove()
-        destroyActiveAiChatPanel(false, activeAiChatPanelThreadId ?? activeAiChatThreadId, Boolean(preservedTabsEl))
+        // Preserve the live mode switch across a body re-render so its in-flight
+        // slide animation survives (mirrors the AI-thread tabs switch).
+        const preservedModeSwitchEl = preserveModeSwitchForRender
+            ? activeAiChatPanelEl?.querySelector<HTMLDivElement>('.workspace-right-panel-mode-switch') ?? null
+            : null
+        preservedModeSwitchEl?.remove()
+        destroyActiveAiChatPanel(false, activeAiChatPanelThreadId ?? activeAiChatThreadId, Boolean(preservedTabsEl), false, Boolean(preservedModeSwitchEl))
 
         const panelEl = html`<div
             className="workspace-ai-chat-floating-panel workspace-ai-chat-thread-node nopan nowheel"
@@ -4537,7 +4627,56 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // The AI chat panel body never uses a shifting gradient background.
         const gradient: ReturnType<typeof createShiftingGradientBackground> | null = null
 
-        const controlsEl = html`<div className="workspace-ai-chat-panel-context-controls">
+        // Top-level switch: Features / Media / AI Threads. Always shown at the top
+        // of the panel; it owns which surface the panel body renders below it.
+        const topLevelMode = aiChatPanelState.topLevelMode
+        const showingAiThreads = topLevelMode === 'aiThreads'
+        // Reuse the live switch (and its in-flight slide) when only the body is
+        // being re-rendered; otherwise build a fresh one.
+        const modeSwitchEl = preservedModeSwitchEl ?? html`<div className="workspace-right-panel-mode-switch"></div>` as HTMLDivElement
+        if (!preservedModeSwitchEl) {
+            const modeSwitchSvg = select(modeSwitchEl).append('svg:svg')
+                .attr('class', 'workspace-right-panel-mode-switch-svg')
+                .attr('aria-label', 'Right side panel mode')
+            activeRightPanelModeSwitch = createSlidingSwitch<CanvasRightSidePanelMode>(modeSwitchSvg, {
+                id: 'workspace-right-panel-mode',
+                x: 0,
+                y: 0,
+                width: getAiChatPanelTabsViewportWidth(),
+                height: settings.aiChatThread.panelTabs.height,
+                options: [
+                    { label: 'Features', value: 'features' },
+                    { label: 'Media', value: 'media' },
+                    { label: 'AI Threads', value: 'aiThreads' },
+                ],
+                selectedValue: topLevelMode,
+                transition: {
+                    durationMs: settings.aiChatThread.panelTabs.transitionDurationMs,
+                    minDurationMs: settings.aiChatThread.panelTabs.transitionMinDurationMs,
+                    distanceSpeedupFactor: settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor,
+                },
+                indicatorBoxShadow: settings.aiChatThread.panelTabs.styles.activeTabBoxShadow,
+                indicatorInsetShadow: settings.aiChatThread.panelTabs.styles.activeTabInsetShadow,
+                onChange: (nextMode) => {
+                    const previousSwitchMode = aiChatPanelState.topLevelMode
+                    if (nextMode === previousSwitchMode) return
+                    preserveRightPanelModeSwitchDuringAnimation(previousSwitchMode, nextMode)
+                    aiChatPanelState = { ...aiChatPanelState, topLevelMode: nextMode }
+                    persistAiChatSidebarState()
+                    applyRightPanelModeBody(nextMode)
+                },
+            })
+        }
+        panelEl.appendChild(modeSwitchEl)
+
+        // Tab strip geometry is reused by the post-mount resize pass, and hasContent
+        // is read by the common tail; hoisted so they survive the AI-threads branch.
+        let tabsEl: HTMLDivElement | null = null
+        let tabsInitialScrollLeft = preservedTabsEl ? preservedTabsScrollLeft : 0
+        let hasContent = false
+
+        if (showingAiThreads) {
+            const controlsEl = html`<div className="workspace-ai-chat-panel-context-controls">
             <div className="workspace-ai-chat-panel-context-mode">
                 <div className="workspace-ai-chat-panel-history-control">
                     <button
@@ -4554,10 +4693,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         panelEl.appendChild(controlsEl)
         const historyToggleEl = controlsEl.querySelector<HTMLButtonElement>('.workspace-ai-chat-panel-history-toggle')!
 
-        const tabsEl = shouldRenderTabs
+        tabsEl = shouldRenderTabs
             ? preservedTabsEl ?? html`<div className="workspace-ai-chat-panel-tabs"></div>` as HTMLDivElement
             : null
-        let tabsInitialScrollLeft = preservedTabsEl ? preservedTabsScrollLeft : 0
         if (tabsEl && !preservedTabsEl) {
             const tabSwitchHeight = settings.aiChatThread.panelTabs.height
             const tabSwitchViewportWidth = getAiChatPanelTabsViewportWidth()
@@ -4720,7 +4858,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
         }
 
-        const hasContent = aiChatThreadHasRenderableContent(thread)
+        hasContent = aiChatThreadHasRenderableContent(thread)
         const promptControlFactories = getPromptControlFactories()
         let activeAiService: AiInteractionService | null = null
         if (showingThread && panelThreadId) {
@@ -4902,6 +5040,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 },
             })
         }
+        } else {
+            // Features / Media surface: host the framework-agnostic media library
+            // renderer in the panel body, below the top-level mode switch.
+            const mediaHost = html`<div className="workspace-right-panel-media-host"></div>` as HTMLDivElement
+            panelEl.appendChild(mediaHost)
+            const mediaLibrary = ensureMediaLibraryPanel()
+            // Set the surface before mounting so it loads once for the right mode
+            // instead of loading `features` then reloading `media`.
+            mediaLibrary.setMode(topLevelMode === 'media' ? 'media' : 'features')
+            mediaLibrary.mountInto(mediaHost)
+        }
+
+        // AI-thread editors are torn down when leaving the threads surface; detach
+        // the media renderer when the threads surface is active so its NATS event
+        // handlers stop reloading a hidden, detached body.
+        if (showingAiThreads) mediaLibraryPanelInstance?.unmount()
 
         activeRightSidePanel = ensureActiveRightSidePanel()
         const resizeHandle = activeRightSidePanel.element
@@ -4910,6 +5064,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatPanelEl = panelEl
         activeAiChatPanelThreadId = panelThreadId
         activeAiChatPanelHadContent = hasContent
+        activeRightPanelRenderedMode = topLevelMode
         if (shouldAnimateOpen) {
             activeOpeningRightSidePanel = activeRightSidePanel
             activeRightSidePanel.prepareOpen(panelEl)
@@ -4928,8 +5083,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
         hasRenderedInitialAiChatPanelState = true
 
+        // Synchronous body is done; allow resizes again. The rAF below still skips
+        // the mode-switch resize when it was preserved so the slide finishes clean.
+        suppressModeSwitchResize = false
+
         requestAnimationFrame(() => {
             resizeActiveAiChatPanelTabsSwitch()
+            // Resizing re-lays out the indicator at its target; skip it when the
+            // switch is mid-slide (preserved) so the animation isn't snapped.
+            if (!preservedModeSwitchEl) resizeActiveRightPanelModeSwitch()
             if (tabsEl) tabsEl.scrollLeft = tabsInitialScrollLeft
         })
     }
@@ -9858,7 +10020,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!mediaLibraryPanelInstance) {
             mediaLibraryPanelInstance = createMediaLibraryPanel({
                 workspaceId,
-                paneEl,
                 onUseFeature: insertFeatureIntoActivePrompt,
                 onInsertImage: async (item: MediaLibraryImageMeta) => {
                     try {
@@ -9926,12 +10087,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         return false
                     }
                 },
-                onOpenExtractionTab: (extractionRunId) => {
-                    openFeatureExtractionTab(extractionRunId)
-                },
             })
         }
         return mediaLibraryPanelInstance
+    }
+
+    // Open the right side panel on a specific top-level surface (used by the
+    // floating Media Library launcher and the `/use` slash command).
+    function openRightSidePanelToMode(mode: CanvasRightSidePanelMode): void {
+        ensureMediaLibraryPanel()
+        const alreadyOnMode = aiChatPanelState.isOpen && aiChatPanelState.topLevelMode === mode
+        aiChatPanelState = { ...aiChatPanelState, isOpen: true, topLevelMode: mode }
+        persistAiChatSidebarState()
+        if (!alreadyOnMode) syncActiveAiChatPanelFromState()
+        renderActiveAiChatPanel()
+        void loadExtractionSessionHistory()
     }
 
     const onOpenExtractionPanel = (event: Event) => {
@@ -9944,7 +10114,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const onOpenMediaLibraryFeatures = (event: Event) => {
         const detail = (event as CustomEvent<{ workspaceId?: string }>).detail
         if (detail?.workspaceId && detail.workspaceId !== workspaceId) return
-        ensureMediaLibraryPanel().openToFeatures()
+        openRightSidePanelToMode('features')
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -10131,13 +10301,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         },
         toggleMediaLibrary() {
-            ensureMediaLibraryPanel().toggle()
+            if (aiChatPanelState.isOpen && aiChatPanelState.topLevelMode === 'media') {
+                void closeAiChatPanel()
+                return
+            }
+            openRightSidePanelToMode('media')
         },
         toggleAiChatPanel() {
             toggleAiChatPanelVisibility()
         },
         destroy() {
-            mediaLibraryPanelInstance?.close()
+            clearRightPanelModeSwitchAnimationTimer()
+            mediaLibraryPanelInstance?.destroy()
             resizeObserver.disconnect()
             window.removeEventListener('keydown', onKeyDown)
             window.removeEventListener('lixpi:open-extraction-tab', onOpenExtractionPanel)

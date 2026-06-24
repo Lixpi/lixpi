@@ -1210,9 +1210,15 @@ export type CanvasAiChatSidebarTab = {
     title: string
 }
 
+// Right side panel top-level surface: the feature-extraction library, saved
+// media (images + videos colocated), or the AI chat threads.
+export type CanvasRightSidePanelMode = 'features' | 'media' | 'aiThreads'
+
 export type CanvasAiChatPanelState = {
     isOpen: boolean
     isSessionHistoryOpen: boolean
+    // Which top-level surface the right side panel shows. Defaults to 'aiThreads'.
+    topLevelMode: CanvasRightSidePanelMode
     tabs: CanvasAiChatSidebarTab[]
     activeTabId?: string
     // Explicit force-included canvas node ids, fed to the bottom-center composer

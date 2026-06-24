@@ -17,8 +17,8 @@ shape of an extracted feature. For **how** extraction actually runs, see the
 [Extraction Pipeline](./EXTRACTION-PIPELINE.md). For **how leakage is
 prevented**, see [Anti-Leakage](./ANTI-LEAKAGE.md). For the daily-use `/use`
 path and the scope/sharing model, see [Using Features](./USING-FEATURES.md).
-Extracted features are surfaced in the `Features` category of the
-[Media Library](./MEDIA-LIBRARY.md) panel.
+Extracted features are surfaced in the `Features` surface of the right side
+panel's [Media Library](./MEDIA-LIBRARY.md).
 
 ## Why this exists
 

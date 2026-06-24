@@ -43,8 +43,8 @@ const KNOB_PADDING = 0.15        // Padding around knob (as ratio of toggle heig
 // Color constants
 const COLORS = {
     active: {
-        fill: '#55967c',
-        stroke: '#55967c'
+        fill: '#5f8fcf',
+        stroke: '#5f8fcf'
     },
     inactive: {
         fill: '#d6d7d8',
