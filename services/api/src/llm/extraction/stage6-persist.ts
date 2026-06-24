@@ -7,6 +7,7 @@ import { info, err } from '@lixpi/debug-tools'
 
 import Feature from '../../models/feature.ts'
 import ExtractionRun from '../../models/extraction-run.ts'
+import { ensureFeatureSamplesForScope } from '../../services/feature-sample-storage.ts'
 import type { ExtractionDeps, ExtractionState, StageLogger } from './types.ts'
 
 export const persistFeature = async (state: ExtractionState, logger: StageLogger, _deps: ExtractionDeps): Promise<Partial<ExtractionState>> => {
@@ -14,6 +15,11 @@ export const persistFeature = async (state: ExtractionState, logger: StageLogger
         const draft = state.draft
         if (!draft) {
             throw new Error('Cannot persist: synthesis stage produced no draft')
+        }
+
+        const organizationId = state.input.organizationId
+        if (!organizationId) {
+            throw new Error('Cannot persist feature: organization context is required')
         }
 
         const featureId = uuid()
@@ -33,9 +39,9 @@ export const persistFeature = async (state: ExtractionState, logger: StageLogger
             instructions: draft.instructions,
             parameters: draft.parameters,
             sampleImages: orderedSamples,
-            scope: 'workspace',
             ownerUserId: state.input.userId,
             workspaceId: state.input.workspaceId,
+            organizationId,
             sourceContext: {
                 extractionRunId: state.input.extractionRunId,
                 sourceWorkspaceId: state.input.workspaceId,
@@ -49,6 +55,14 @@ export const persistFeature = async (state: ExtractionState, logger: StageLogger
 
         if (!feature) {
             throw new Error('Feature.createFeature returned undefined')
+        }
+
+        // Features are org-wide and outlive any single workspace, so copy sample bytes
+        // from the origin workspace bucket into the durable per-owner features bucket.
+        try {
+            await ensureFeatureSamplesForScope({ feature, newScope: 'organization', newScopeOwnerId: organizationId })
+        } catch (e) {
+            err(`Failed to durably store feature samples for ${featureId}: ${e instanceof Error ? e.message : String(e)}`)
         }
 
         await ExtractionRun.markComplete({

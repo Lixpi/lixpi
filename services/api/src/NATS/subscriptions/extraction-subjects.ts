@@ -5,6 +5,7 @@ import NATS_Service from '@lixpi/nats-service'
 import { NATS_SUBJECTS, type ProviderName } from '@lixpi/constants'
 import ExtractionRun from '../../models/extraction-run.ts'
 import Workspace from '../../models/workspace.ts'
+import Organization from '../../models/organization.ts'
 import AiModel from '../../models/ai-model.ts'
 import type { LlmModule } from '../../llm/index.ts'
 
@@ -39,7 +40,6 @@ export const extractionSubjects = [
             const {
                 user: { userId },
                 workspaceId,
-                organizationId,
                 extractionRunId,
                 messages,
                 sourceContextSnapshot,
@@ -58,6 +58,19 @@ export const extractionSubjects = [
                     natsService?.publish(`${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${extractionRunId}`, {
                         error: workspace?.error || 'WORKSPACE_NOT_FOUND',
                     })
+                    return
+                }
+
+                // Resolve the owning organization server-side from the authenticated user.
+                // Workspaces carry no org link and the client has no active-org concept, so the
+                // read paths (feature listByScope) resolve identically — see resolveUserOrganizationId
+                // in feature-subjects.ts. Both MUST match or extracted features won't be listed.
+                const userOrganizations = await Organization.getUserOrganizations({ userId })
+                const organizationId = userOrganizations[0]?.organizationId
+                if (!organizationId) {
+                    const message = 'Feature extraction could not start: no organization is associated with your account.'
+                    await ExtractionRun.markFailed({ extractionRunId, workspaceId, error: message })
+                    natsService?.publish(`${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${extractionRunId}`, { error: message })
                     return
                 }
 

@@ -6,6 +6,7 @@ import {
     NATS_SUBJECTS,
     MEDIA_LIBRARY_BROWSE_ALL,
     MEDIA_LIBRARY_SCOPE,
+    FEATURE_SCOPE,
     type CanvasFeatureExtractionState,
     type Feature,
     type FeatureMeta,
@@ -21,11 +22,17 @@ import { organizationStore } from '$src/stores/organizationStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 import { renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
 
+// Media library (images/videos) scopes. Features use FEATURE_SCOPES below.
 const SCOPES: Array<{ key: MediaLibraryScope; label: string }> = [
     { key: MEDIA_LIBRARY_SCOPE.WORKSPACE, label: 'Workspace' },
     { key: MEDIA_LIBRARY_SCOPE.USER, label: 'Mine' },
     { key: MEDIA_LIBRARY_SCOPE.ORGANIZATION, label: 'Organization' },
     { key: MEDIA_LIBRARY_SCOPE.PUBLIC, label: 'Public' },
+]
+
+// Features are org-wide — a single scope. 'shared' (external sharing) is deferred.
+const FEATURE_SCOPES: Array<{ key: string; label: string }> = [
+    { key: FEATURE_SCOPE.ORGANIZATION, label: 'Organization' },
 ]
 
 type MediaLibraryBrowseMode = MediaLibraryScope | typeof MEDIA_LIBRARY_BROWSE_ALL
@@ -296,10 +303,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
             const token = await AuthService.getTokenSilently()
             accessToken = token
             const organizationId = organizationStore.getData('organizationId') || undefined
-            const scopes = browseMode === MEDIA_LIBRARY_BROWSE_ALL
-                ? SCOPES
-                : SCOPES.filter((scope) => scope.key === browseMode)
-            const results = await Promise.all(scopes.map((scope) =>
+            const results = await Promise.all(FEATURE_SCOPES.map((scope) =>
                 nats.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.LIST_BY_SCOPE, {
                     token,
                     workspaceId,
@@ -840,7 +844,8 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         if (!window.confirm(`Delete "${feature.name}"?`)) return
         const nats = servicesStore.getData('nats')
         const token = await AuthService.getTokenSilently()
-        const response = await nats?.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.DELETE, { token, workspaceId, featureId: feature.featureId })
+        const organizationId = organizationStore.getData('organizationId') || undefined
+        const response = await nats?.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.DELETE, { token, workspaceId, organizationId, featureId: feature.featureId })
         if (response?.error) {
             setFeedback(`Could not delete @${feature.name}.`)
             return
@@ -850,38 +855,6 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         if (selectedFeatureId === feature.featureId) selectedFeatureId = null
         renderContent()
         setFeedback(`Deleted @${feature.name}.`)
-    }
-
-    async function reportFeature(feature: FeatureMeta) {
-        const nats = servicesStore.getData('nats')
-        const token = await AuthService.getTokenSilently()
-        const response = await nats?.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.REPORT_ABUSE, { token, workspaceId, featureId: feature.featureId })
-        setFeedback(response?.error ? `Could not report @${feature.name}.` : `Reported @${feature.name}.`)
-    }
-
-    async function changeFeatureScope(feature: FeatureMeta, newScope: MediaLibraryScope, revert: () => void) {
-        if (newScope === feature.scope) return
-        if (newScope === MEDIA_LIBRARY_SCOPE.PUBLIC && !window.confirm(`Make @${feature.name} public? Anyone will be able to discover and use it.`)) {
-            revert()
-            return
-        }
-        const nats = servicesStore.getData('nats')
-        const token = await AuthService.getTokenSilently()
-        const organizationId = organizationStore.getData('organizationId') || undefined
-        const response = await nats?.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.CHANGE_SCOPE, {
-            token,
-            workspaceId,
-            organizationId,
-            featureId: feature.featureId,
-            newScope,
-        })
-        if (!response || response.error) {
-            revert()
-            setFeedback(`Could not change sharing for @${feature.name}.`)
-            return
-        }
-        setFeedback(`Moved @${feature.name} to ${SCOPES.find((scope) => scope.key === newScope)?.label ?? newScope}.`)
-        await loadFeatures()
     }
 
     function selectExtractionRun(extractionRunId: string): void {
@@ -901,15 +874,9 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         if (!featureId || !featureCard) return undefined
 
         const firstSample = Array.isArray(featureCard.sampleImages) ? featureCard.sampleImages[0] : undefined
-        const scope = (textValue(featureCard.scope) as MediaLibraryScope | undefined) ?? MEDIA_LIBRARY_SCOPE.WORKSPACE
+        const scope = FEATURE_SCOPE.ORGANIZATION
         const ownerUserId = userStore.getData('userId') || ''
-        const scopeOwnerId = scope === MEDIA_LIBRARY_SCOPE.WORKSPACE
-            ? workspaceId
-            : scope === MEDIA_LIBRARY_SCOPE.PUBLIC
-                ? 'public'
-                : scope === MEDIA_LIBRARY_SCOPE.ORGANIZATION
-                    ? organizationStore.getData('organizationId') || ''
-                    : ownerUserId
+        const scopeOwnerId = organizationStore.getData('organizationId') || ''
         return {
             featureId,
             category: textValue(featureCard.category) ?? 'other',
@@ -1070,8 +1037,6 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
 
     function buildFeatureInspector(feature: FeatureMeta): HTMLElement {
         const details = featureDetails.get(feature.featureId)
-        const isOwner = userStore.getData('userId') === feature.ownerUserId
-        const organizationId = organizationStore.getData('organizationId') || undefined
         const inspectorEl = html`<article className="feature-library-inspector-card">
             <div className="feature-library-inspector-nav">
                 <button type="button" className="feature-library-inspector-back">Back</button>
@@ -1087,11 +1052,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
             </div>
             <div className="feature-library-inspector-actions">
                 <button type="button" className="feature-library-row-action feature-library-row-action-primary" data-action="use">Use Feature</button>
-                ${isOwner ? html`<button type="button" className="feature-library-row-action" data-action="delete">Delete</button>` : feature.scope === MEDIA_LIBRARY_SCOPE.PUBLIC ? html`<button type="button" className="feature-library-row-action" data-action="report">Report</button>` : null}
             </div>
-            ${isOwner ? html`<label className="feature-library-inspector-scope">Sharing
-                <span className="feature-library-scope-editor-mount"></span>
-            </label>` : null}
             <div className="feature-library-row-detail-grid">
                 <div className="feature-library-row-detail-field"><span>Category</span><strong>${feature.category || 'feature'}</strong></div>
                 <div className="feature-library-row-detail-field"><span>Scope</span><strong>${feature.scope}</strong></div>
@@ -1102,29 +1063,20 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
             <div className="feature-library-row-palette-mount"></div>
             <div className="feature-library-row-instructions-mount"></div>
             <div className="feature-library-row-detail-tags"></div>
+            <div className="feature-library-inspector-danger-zone">
+                <button type="button" className="feature-library-row-action feature-library-row-action-danger" data-action="delete">Delete feature</button>
+            </div>
         </article>` as HTMLElement
 
         inspectorEl.querySelector('.feature-library-inspector-back')!.addEventListener('click', () => {
             selectedFeatureId = null
             renderContent()
         })
-        const scopeEditorMount = inspectorEl.querySelector('.feature-library-scope-editor-mount') as HTMLElement | null
-        if (scopeEditorMount) {
-            const sharingOptions = SCOPES.filter((scope) => organizationId || scope.key !== MEDIA_LIBRARY_SCOPE.ORGANIZATION)
-            const sharingDropdown = trackTransientDropdown(createScopeDropdown({
-                id: `feature-library-scope-${feature.featureId}`,
-                options: sharingOptions,
-                selectedKey: feature.scope,
-                onSelect: (key) => void changeFeatureScope(feature, key as MediaLibraryScope, () => sharingDropdown.setSelectedKey(feature.scope)),
-            }))
-            scopeEditorMount.appendChild(sharingDropdown.dom)
-        }
         inspectorEl.querySelector('.feature-library-inspector-actions')!.addEventListener('click', (event) => {
             const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
             if (action === 'use') void handleUseFeature(feature)
-            else if (action === 'delete') void deleteFeature(feature)
-            else if (action === 'report') void reportFeature(feature)
         })
+        inspectorEl.querySelector('.feature-library-inspector-danger-zone [data-action="delete"]')!.addEventListener('click', () => void deleteFeature(feature))
 
         const samplesMount = inspectorEl.querySelector('.feature-library-row-samples-mount') as HTMLElement
         samplesMount.appendChild(buildSampleGallery(feature, details))

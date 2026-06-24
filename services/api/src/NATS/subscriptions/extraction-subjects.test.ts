@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
     workspace: {
         getWorkspace: vi.fn(),
     },
+    organization: {
+        getUserOrganizations: vi.fn(),
+    },
     extractionRun: {
         createRun: vi.fn(),
         updateStatus: vi.fn(),
@@ -29,6 +32,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@lixpi/debug-tools', () => ({ info: vi.fn(), err: vi.fn() }))
 vi.mock('@lixpi/nats-service', () => ({ default: { getInstance: vi.fn(() => ({ publish })) } }))
 vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
+vi.mock('../../models/organization.ts', () => ({ default: mocks.organization }))
 vi.mock('../../models/extraction-run.ts', () => ({ default: mocks.extractionRun }))
 vi.mock('../../models/ai-model.ts', () => ({ default: mocks.aiModel }))
 
@@ -42,6 +46,7 @@ const getHandler = (subject: string) =>
 beforeEach(() => {
     vi.clearAllMocks()
     mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1' })
+    mocks.organization.getUserOrganizations.mockResolvedValue([{ organizationId: 'org-1' }])
     setExtractionLlmModule(mocks.llmModule as any)
 })
 
@@ -53,7 +58,6 @@ describe('Feature extraction START', () => {
     const baseData = {
         user: { userId: 'user-1' },
         workspaceId: 'workspace-1',
-        organizationId: 'org-1',
         extractionRunId: 'run-1',
         messages: [{ role: 'user', content: 'extract the palette' }],
         aiModel: 'openai:gpt-test',
@@ -76,8 +80,31 @@ describe('Feature extraction START', () => {
         expect(mocks.llmModule.processExtraction).toHaveBeenCalledWith(expect.objectContaining({
             extractionRunId: 'run-1',
             workspaceId: 'workspace-1',
+            // organizationId is resolved server-side from the user, not taken from the client.
+            organizationId: 'org-1',
             intent: 'extract the palette',
         }))
+    })
+
+    it('ignores any client-supplied organizationId and resolves it server-side', async () => {
+        mocks.aiModel.getAiModel.mockResolvedValue({ model: 'gpt-test' })
+        mocks.llmModule.processExtraction.mockResolvedValue({ success: true })
+
+        // A client trying to inject another org has no effect — resolution is server-side.
+        await getHandler(SUBJECTS.START)({ ...baseData, organizationId: 'attacker-org' })
+
+        expect(mocks.llmModule.processExtraction).toHaveBeenCalledWith(expect.objectContaining({
+            organizationId: 'org-1',
+        }))
+    })
+
+    it('fails the run when the user has no associated organization', async () => {
+        mocks.organization.getUserOrganizations.mockResolvedValueOnce([])
+
+        await getHandler(SUBJECTS.START)(baseData)
+
+        expect(mocks.extractionRun.markFailed).toHaveBeenCalledWith(expect.objectContaining({ extractionRunId: 'run-1' }))
+        expect(mocks.llmModule.processExtraction).not.toHaveBeenCalled()
     })
 
     it('fails the run and publishes an error when the analysis model is unknown', async () => {

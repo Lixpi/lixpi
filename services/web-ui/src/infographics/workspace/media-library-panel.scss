@@ -948,7 +948,7 @@
 }
 
 .media-library-inspector {
-    background: rgba(255, 255, 255, 0.37);
+    background: transparent;
 }
 
 .media-library-panel-extraction-selected .media-library-inspector {
@@ -1103,6 +1103,32 @@
 .feature-library-inspector-card {
     display: grid;
     gap: 14px;
+    // Breathing room so the last content (tags / delete) isn't clipped by the
+    // scroll container's bottom edge.
+    padding-bottom: 28px;
+}
+
+.feature-library-inspector-danger-zone {
+    margin-top: 6px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(26, 39, 68, 0.1);
+    display: flex;
+}
+
+.feature-library-inspector-danger-zone .feature-library-row-action-danger {
+    flex: 1 1 auto;
+    height: 34px;
+}
+
+.feature-library-row-action-danger {
+    border-color: rgba(201, 64, 64, 0.32);
+    background: rgba(201, 64, 64, 0.08);
+    color: #b23636;
+
+    &:hover {
+        background: rgba(201, 64, 64, 0.16);
+        color: #9c2a2a;
+    }
 }
 
 .feature-library-inspector-nav {

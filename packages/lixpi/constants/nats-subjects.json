@@ -57,8 +57,6 @@
 			"LIST_BY_SCOPE": "workspace.feature.listByScope",
 			"UPDATE": "workspace.feature.update",
 			"DELETE": "workspace.feature.delete",
-			"CHANGE_SCOPE": "workspace.feature.changeScope",
-			"REPORT_ABUSE": "workspace.feature.reportAbuse",
 			"GET_SAMPLE_URL": "workspace.feature.getSampleUrl",
 			"EVENTS": {
 				"CREATED": "workspace.feature.events.created",

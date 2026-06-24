@@ -23,12 +23,11 @@ export const findFeatureSampleRef = (feature: Feature, sampleIndex: number): Fea
 
 export const getPrimaryFeatureSampleBucketName = (
     feature: Feature,
-    scope: FeatureScope = feature.scope,
-    scopeOwnerId: string = feature.scopeOwnerId,
+    _scope: FeatureScope = feature.scope,
+    _scopeOwnerId: string = feature.scopeOwnerId,
 ): string =>
-    scope === 'workspace'
-        ? getWorkspaceBucketName(scopeOwnerId)
-        : getDurableFeatureBucketName(feature.ownerUserId)
+    // All features are org-scoped, so samples live in the durable per-owner bucket.
+    getDurableFeatureBucketName(feature.ownerUserId)
 
 const getFeatureSampleBucketCandidates = (feature: Feature): string[] => {
     const primary = getPrimaryFeatureSampleBucketName(feature)
