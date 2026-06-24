@@ -244,7 +244,12 @@ function buildAiLineageEventNode(
 }
 
 function getLineageEventIdentity(event: AiLineageEventDescriptor): string {
-    return `${event.kind}:${event.branchOriginNodeId ?? event.branchForkNodeId ?? event.branchLineNodeId ?? ''}`
+    const id = event.kind === 'branch-origin'
+        ? event.branchOriginNodeId
+        : event.kind === 'branch-line'
+            ? event.branchLineNodeId
+            : event.branchForkNodeId
+    return `${event.kind}:${id ?? ''}`
 }
 
 function getLineageEventNodeIdentity(node: ProseMirrorNode): string {
@@ -1209,14 +1214,46 @@ class AiChatThreadPluginClass {
 
         let insertPos = insertAfterLeadingLineageEventsPos
         for (const event of events) {
-            if (existingEventIds.has(getLineageEventIdentity(event))) continue
+            const eventId = getLineageEventIdentity(event)
+            if (existingEventIds.has(eventId)) continue
 
             const eventNode = buildAiLineageEventNode(tr.doc.type.schema, event, generationRun.reasoningModelId || '')
             if (!eventNode) continue
 
             tr.insert(insertPos, eventNode)
             insertPos += eventNode.nodeSize
+            existingEventIds.add(eventId)
         }
+    }
+
+    private createDuplicateLineageEventCleanupTransaction(state: EditorState): Transaction | null {
+        const rangesToDelete: Array<{ from: number; to: number }> = []
+
+        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+            if (node.type.name !== aiResponseMessageNodeType) return
+
+            const seenLineageEventIds = new Set<string>()
+            node.forEach((child: ProseMirrorNode, offset: number) => {
+                if (child.type.name !== aiLineageEventNodeType) return
+
+                const eventId = getLineageEventNodeIdentity(child)
+                if (!seenLineageEventIds.has(eventId)) {
+                    seenLineageEventIds.add(eventId)
+                    return
+                }
+
+                const from = pos + 1 + offset
+                rangesToDelete.push({ from, to: from + child.nodeSize })
+            })
+        })
+
+        if (rangesToDelete.length === 0) return null
+
+        const tr = state.tr
+        for (const range of rangesToDelete.reverse()) {
+            tr.delete(range.from, range.to)
+        }
+        return tr
     }
 
     private applyGenerationRunLineageToChat(
@@ -2921,10 +2958,20 @@ class AiChatThreadPluginClass {
                     this.startStreaming(view)
                 }
 
+                let destroyed = false
+                if (!this.renderContext.readOnly) {
+                    queueMicrotask(() => {
+                        if (destroyed) return
+                        const cleanupTransaction = this.createDuplicateLineageEventCleanupTransaction(view.state)
+                        if (cleanupTransaction) view.dispatch(cleanupTransaction)
+                    })
+                }
+
                 // Note: Dropdown state bridging removed - now handled by dropdown primitive plugin
 
                 return {
                     destroy: () => {
+                        destroyed = true
                         if (this.unsubscribeFromSegments) {
                             this.unsubscribeFromSegments()
                         }

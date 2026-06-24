@@ -892,7 +892,7 @@ export const settings: Settings = {
                 boxShadow: '0 16px 44px rgba(20, 24, 30, 0.28)',
                 color: '#252b33',
                 overflow: 'visible',
-                padding: '0',
+                padding: '0.55rem 0.75rem',
             },
         },
 

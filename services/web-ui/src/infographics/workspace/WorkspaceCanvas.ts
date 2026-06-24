@@ -56,9 +56,11 @@ import {
     buildGeneratedMediaTurnProjectionFromThreadContent,
     collectProseMirrorText,
     parseProseMirrorJsonContent,
+    type GeneratedMediaTurnLocator,
     type ProseMirrorJsonNode,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
 import type { AiLineageProjectionScope } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
+import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import {
     mountReadOnlyAiChatThreadProjection,
     type ReadOnlyAiChatThreadRendererInstance,
@@ -174,6 +176,20 @@ type GeneratedMediaInfoPanelOptions = {
     // never the AI chat thread projection — used by the media info (i) button,
     // which must always show media meta info, not the generating conversation.
     descriptorOnly?: boolean
+}
+type GeneratedMediaProjectionTarget = {
+    node: ImageCanvasNode | VideoCanvasNode
+    lineageProjectionScope: AiLineageProjectionScope
+    limitProjectionToSelectedMedia: boolean
+}
+type MountGeneratedMediaProjectionOptions = {
+    mount: HTMLElement
+    node: ImageCanvasNode | VideoCanvasNode
+    rendererClassName: string
+    traceDetailsClassName: string
+    previewTiles: Set<ContextPreviewTileInstance>
+    lineageProjectionScope: AiLineageProjectionScope
+    limitProjectionToSelectedMedia: boolean
 }
 type BranchMarkerModelDescriptor = {
     modelId: string
@@ -679,6 +695,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const expandedBranchLineInfoNodeIds: Set<string> = new Set()
     const generatedMediaInfoRenderers: Map<string, ReadOnlyAiChatThreadRendererInstance> = new Map()
     const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
+    const activeAiChatPanelTracePreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
     const branchMarkerReasoningTooltips: Map<string, HelpTooltipInstance> = new Map()
     const branchMarkerMediaModelTooltips: Map<string, HelpTooltipInstance[]> = new Map()
@@ -717,6 +734,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPanelHadContent = false
     let activeAiChatPanelEl: HTMLDivElement | null = null
     let activeAiChatPanelTabsSwitch: SlidingTabsSwitchInstance<string> | null = null
+    let activeAiChatPanelProjectionRenderer: ReadOnlyAiChatThreadRendererInstance | null = null
     let activeRightSidePanel: SidePanelInstance | null = null
     // Screen-fixed, canvas-wide composer mounted at the bottom-center of the
     // viewport. Each submission creates one hidden ProseMirror-backed message
@@ -1685,7 +1703,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // tile with the same rich hover card used when media is attached to the AI chat
     // input. Looked up by the reference's canvas nodeId; falls back (null) to the
     // default captioned tile when the referenced node is no longer on the canvas.
-    function renderCanvasTraceReferenceTile(reference: ImageGenerationTraceReference): HTMLElement | null {
+    function renderCanvasTraceReferenceTile(
+        reference: ImageGenerationTraceReference,
+        previewTiles: Set<ContextPreviewTileInstance>,
+    ): HTMLElement | null {
         if (!reference.nodeId) return null
         const node = findCanvasNodeById(reference.nodeId)
         if (!node) return null
@@ -1696,8 +1717,91 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             preferredPlacement: 'bottom',
             inlinePopover: true,
         })
-        generatedMediaInfoPreviewTiles.add(tile)
+        previewTiles.add(tile)
         return tile.dom
+    }
+
+    function createCanvasTraceDetailsOptions(
+        className: string,
+        previewTiles: Set<ContextPreviewTileInstance>,
+    ): ImageGenerationTraceDetailsOptions {
+        return {
+            className,
+            getAdditionalReferenceImageSources: getCanvasTraceReferenceImageSources,
+            renderReferenceTile: (reference) => renderCanvasTraceReferenceTile(reference, previewTiles),
+        }
+    }
+
+    function getGeneratedMediaProjectionLocator(node: ImageCanvasNode | VideoCanvasNode): GeneratedMediaTurnLocator | null {
+        const generatedBy = node.generatedBy
+        if (!generatedBy) return null
+
+        return {
+            responseMessageId: generatedBy.responseMessageId,
+            reasoningRunId: generatedBy.reasoningRunId,
+            reasoningModelId: generatedBy.reasoningModelId,
+            mediaRunId: generatedBy.mediaRunId,
+            mediaType: generatedBy.mediaType ?? node.type,
+            fileId: node.fileId,
+            variantIndex: generatedBy.variantIndex ?? null,
+        }
+    }
+
+    function appendGeneratedMediaReasoningModelHeader(
+        mount: HTMLElement,
+        node: ImageCanvasNode | VideoCanvasNode,
+    ): void {
+        const reasoningModelId = node.generatedBy?.reasoningModelId
+        if (!reasoningModelId) return
+
+        const reasoningModelBadge = createMediaModelBadge({ modelId: reasoningModelId, monochromeIcon: true })
+        const reasoningModelHeader = html`<div className="canvas-generated-media-reasoning-model">
+            <span className="canvas-generated-media-reasoning-model-caption">Reasoning model:</span>
+            ${reasoningModelBadge}
+        </div>` as HTMLElement
+        applyMediaModelBadgeStyleProperties(reasoningModelHeader, { scale: settings.mediaNode.generatedMediaChrome.chatScale })
+        mount.appendChild(reasoningModelHeader)
+    }
+
+    function mountGeneratedMediaChatProjection({
+        mount,
+        node,
+        rendererClassName,
+        traceDetailsClassName,
+        previewTiles,
+        lineageProjectionScope,
+        limitProjectionToSelectedMedia,
+    }: MountGeneratedMediaProjectionOptions): ReadOnlyAiChatThreadRendererInstance | null {
+        const generatedBy = node.generatedBy
+        if (!generatedBy) return null
+
+        const locator = getGeneratedMediaProjectionLocator(node)
+        if (!locator) return null
+
+        const projection = buildGeneratedMediaTurnProjectionFromThreadContent(
+            getAiChatThreadContentForProjection(generatedBy.aiChatThreadId),
+            locator,
+            {
+                threadId: generatedBy.aiChatThreadId,
+                forceGenerationDetailsOpen: true,
+                limitToLocatorMedia: limitProjectionToSelectedMedia,
+                lineageProjectionScope,
+            },
+        )
+        if (!projection) return null
+
+        appendGeneratedMediaReasoningModelHeader(mount, node)
+        const projectionMount = html`<div className="canvas-generated-media-projection"></div>` as HTMLElement
+        mount.appendChild(projectionMount)
+
+        return mountReadOnlyAiChatThreadProjection({
+            mount: projectionMount,
+            content: projection.content,
+            threadId: projection.threadId,
+            className: rendererClassName,
+            contextPreview: getAiUserMessageContextPreviewRenderer(),
+            traceDetailsOptions: createCanvasTraceDetailsOptions(traceDetailsClassName, previewTiles),
+        })
     }
 
     // The node's compact descriptor (summary + tags) — shown for ALL media,
@@ -1746,57 +1850,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const panel = html`<div className=${panelClassName}></div>` as HTMLElement
 
         if (generatedBy && showChatThread) {
-            // Header naming the reasoning model that drove this whole turn, anchored at
-            // the very top of the modal so the provenance is the first thing read.
-            const reasoningModelBadge = generatedBy.reasoningModelId
-                ? createMediaModelBadge({ modelId: generatedBy.reasoningModelId, monochromeIcon: true })
-                : null
-            if (reasoningModelBadge) {
-                const reasoningModelHeader = html`<div className="canvas-generated-media-reasoning-model">
-                    <span className="canvas-generated-media-reasoning-model-caption">Reasoning model:</span>
-                    ${reasoningModelBadge}
-                </div>` as HTMLElement
-                applyMediaModelBadgeStyleProperties(reasoningModelHeader, { scale: settings.mediaNode.generatedMediaChrome.chatScale })
-                panel.appendChild(reasoningModelHeader)
-            }
-
-            const threadContent = getAiChatThreadContentForProjection(generatedBy.aiChatThreadId)
-            const locator = {
-                responseMessageId: generatedBy.responseMessageId,
-                reasoningRunId: generatedBy.reasoningRunId,
-                reasoningModelId: generatedBy.reasoningModelId,
-                mediaRunId: generatedBy.mediaRunId,
-                mediaType: generatedBy.mediaType ?? node.type,
-                fileId: node.fileId,
-                variantIndex: generatedBy.variantIndex ?? null,
-            }
-            const lineageProjectionScope = options.lineageProjectionScope ?? 'media-run'
-
-            const projection = buildGeneratedMediaTurnProjectionFromThreadContent(threadContent, locator, {
-                threadId: generatedBy.aiChatThreadId,
-                forceGenerationDetailsOpen: true,
-                limitToLocatorMedia: options.limitProjectionToSelectedMedia ?? true,
-                lineageProjectionScope,
+            const rendererKey = options.rendererKey ?? `media:${node.nodeId}`
+            destroyGeneratedMediaInfoRenderer(rendererKey)
+            const renderer = mountGeneratedMediaChatProjection({
+                mount: panel,
+                node,
+                rendererClassName: 'canvas-generated-media-projection-editor',
+                traceDetailsClassName: 'canvas-generated-media-trace-details',
+                previewTiles: generatedMediaInfoPreviewTiles,
+                lineageProjectionScope: options.lineageProjectionScope ?? 'media-run',
+                limitProjectionToSelectedMedia: options.limitProjectionToSelectedMedia ?? true,
             })
-
-            if (projection) {
-                const rendererKey = options.rendererKey ?? `media:${node.nodeId}`
-                const projectionMount = html`<div className="canvas-generated-media-projection"></div>` as HTMLElement
-                panel.appendChild(projectionMount)
-                destroyGeneratedMediaInfoRenderer(rendererKey)
-                generatedMediaInfoRenderers.set(rendererKey, mountReadOnlyAiChatThreadProjection({
-                    mount: projectionMount,
-                    content: projection.content,
-                    threadId: projection.threadId,
-                    className: 'canvas-generated-media-projection-editor',
-                    contextPreview: getAiUserMessageContextPreviewRenderer(),
-                    traceDetailsOptions: {
-                        className: 'canvas-generated-media-trace-details',
-                        getAdditionalReferenceImageSources: getCanvasTraceReferenceImageSources,
-                        renderReferenceTile: renderCanvasTraceReferenceTile,
-                    },
-                }))
-            }
+            if (renderer) generatedMediaInfoRenderers.set(rendererKey, renderer)
         }
 
         if (!showChatThread && options.includeDescriptor !== false) {
@@ -1832,6 +1897,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             expandedBranchLineInfoNodeIds.clear()
         }
         syncGeneratedMediaChrome(currentCanvasState)
+        if (activeAiChatPanelProjectionRenderer) {
+            refreshActiveAiChatPanelProjectionTarget(activeAiChatPanelThreadId ?? undefined)
+        }
     }
 
     function shouldClearGeneratedMediaInfoForCanvasClick(target: EventTarget | null): boolean {
@@ -1883,6 +1951,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             expandedBranchOriginInfoNodeIds.add(branchOriginNodeId)
         }
         syncGeneratedMediaChrome(currentCanvasState)
+        refreshActiveAiChatPanelProjectionTarget(getBranchMarkerAiChatThreadId(branchOriginNodeId))
     }
 
     function getBranchLineGeneratedMediaNodes(branchLineNodeId: string): Array<ImageCanvasNode | VideoCanvasNode> {
@@ -1893,6 +1962,73 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .sort(compareGeneratedMediaByGenerationOrder)
     }
 
+    function getOpenBranchProjectionTarget(threadId: string): GeneratedMediaProjectionTarget | null {
+        for (const branchOriginNodeId of expandedBranchOriginInfoNodeIds) {
+            const node = getBranchOriginGeneratedMediaNodes(branchOriginNodeId)[0]
+            if (node?.generatedBy?.aiChatThreadId === threadId) {
+                return { node, lineageProjectionScope: 'branch-origin', limitProjectionToSelectedMedia: false }
+            }
+        }
+
+        for (const branchForkNodeId of expandedBranchForkInfoNodeIds) {
+            const node = getBranchForkGeneratedMediaNodes(branchForkNodeId)[0]
+            if (node?.generatedBy?.aiChatThreadId === threadId) {
+                return { node, lineageProjectionScope: 'branch-fork', limitProjectionToSelectedMedia: false }
+            }
+        }
+
+        for (const branchLineNodeId of expandedBranchLineInfoNodeIds) {
+            const node = getBranchLineGeneratedMediaNodes(branchLineNodeId)[0]
+            if (node?.generatedBy?.aiChatThreadId === threadId) {
+                return { node, lineageProjectionScope: 'media-run', limitProjectionToSelectedMedia: true }
+            }
+        }
+
+        return null
+    }
+
+    function getSelectedGeneratedMediaProjectionTarget(threadId: string): GeneratedMediaProjectionTarget | null {
+        const nodesById = getCanvasNodesById(currentCanvasState?.nodes ?? [])
+        for (const nodeId of selectedNodeIds) {
+            const node = nodesById.get(nodeId)
+            if (!node || (node.type !== 'image' && node.type !== 'video')) continue
+            if (node.generatedBy?.aiChatThreadId !== threadId) continue
+            return { node, lineageProjectionScope: 'media-run', limitProjectionToSelectedMedia: true }
+        }
+        return null
+    }
+
+    function getDefaultGeneratedMediaProjectionTarget(threadId: string): GeneratedMediaProjectionTarget | null {
+        const node = (currentCanvasState?.nodes ?? [])
+            .filter((candidate: CanvasNode): candidate is ImageCanvasNode | VideoCanvasNode =>
+                (candidate.type === 'image' || candidate.type === 'video')
+                && candidate.generatedBy?.aiChatThreadId === threadId)
+            .sort(compareGeneratedMediaByGenerationOrder)
+            .at(-1)
+        return node
+            ? { node, lineageProjectionScope: 'media-run', limitProjectionToSelectedMedia: true }
+            : null
+    }
+
+    function getActiveAiChatPanelProjectionTarget(threadId: string): GeneratedMediaProjectionTarget | null {
+        if (promptInputController.isReceiving(threadId)) return null
+        return getOpenBranchProjectionTarget(threadId)
+            ?? getSelectedGeneratedMediaProjectionTarget(threadId)
+            ?? getDefaultGeneratedMediaProjectionTarget(threadId)
+    }
+
+    function getBranchMarkerAiChatThreadId(nodeId: string): string | undefined {
+        const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+        if (!node) return undefined
+        if (node.type !== 'branchOrigin' && node.type !== 'branchFork' && node.type !== 'branchLine') return undefined
+        return node.aiChatThreadId
+    }
+
+    function refreshActiveAiChatPanelProjectionTarget(threadId?: string): void {
+        if (!threadId || activeAiChatPanelThreadId !== threadId || !activeAiChatPanelEl) return
+        renderActiveAiChatPanel(undefined, { preserveTabsSwitch: true, animateOpen: false })
+    }
+
     function toggleBranchForkGeneratedMediaInfo(branchForkNodeId: string): void {
         if (expandedBranchForkInfoNodeIds.has(branchForkNodeId)) {
             expandedBranchForkInfoNodeIds.delete(branchForkNodeId)
@@ -1900,6 +2036,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             expandedBranchForkInfoNodeIds.add(branchForkNodeId)
         }
         syncGeneratedMediaChrome(currentCanvasState)
+        refreshActiveAiChatPanelProjectionTarget(getBranchMarkerAiChatThreadId(branchForkNodeId))
     }
 
     function toggleBranchLineGeneratedMediaInfo(branchLineNodeId: string): void {
@@ -1909,6 +2046,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             expandedBranchLineInfoNodeIds.add(branchLineNodeId)
         }
         syncGeneratedMediaChrome(currentCanvasState)
+        refreshActiveAiChatPanelProjectionTarget(getBranchMarkerAiChatThreadId(branchLineNodeId))
     }
 
     function createBranchOriginInfoPanel(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
@@ -2252,6 +2390,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             tile.destroy()
         }
         generatedMediaInfoPreviewTiles.clear()
+    }
+
+    function destroyActiveAiChatPanelProjection(): void {
+        activeAiChatPanelProjectionRenderer?.destroy()
+        activeAiChatPanelProjectionRenderer = null
+        for (const tile of activeAiChatPanelTracePreviewTiles) {
+            tile.destroy()
+        }
+        activeAiChatPanelTracePreviewTiles.clear()
     }
 
     function destroyBranchMarkerReasoningTooltip(nodeId: string): void {
@@ -3391,6 +3538,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         updateSelectionDrivenUi()
         pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
         scheduleEdgesRender()
+        const selectedGeneratedMediaThreadId = currentCanvasState?.nodes.find((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
+            selectedNodeIds.has(node.nodeId)
+            && (node.type === 'image' || node.type === 'video')
+            && Boolean(node.generatedBy?.aiChatThreadId)
+        )?.generatedBy?.aiChatThreadId
+        if (selectedGeneratedMediaThreadId) {
+            refreshActiveAiChatPanelProjectionTarget(selectedGeneratedMediaThreadId)
+        } else if (activeAiChatPanelProjectionRenderer) {
+            refreshActiveAiChatPanelProjectionTarget(activeAiChatPanelThreadId ?? undefined)
+        }
         // Selecting canvas nodes force-includes them as explicit composer previews.
         // Only newly-selected ids are added so a removed preview whose node stays
         // selected isn't immediately re-added.
@@ -3843,6 +4000,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         preserveTabsSwitch = false,
         destroySidePanel = false
     ): void {
+        destroyActiveAiChatPanelProjection()
         if (panelThreadId) {
             const entry = threadEditors.get(panelThreadId)
             if (entry) {
@@ -4521,14 +4679,36 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const bodyHost = html`<div className="workspace-ai-chat-panel-body"></div>` as HTMLDivElement
         const showingThread = activeSidebarTab?.type === 'thread'
         const showingExtraction = activeSidebarTab?.type === 'extraction'
+        const projectionTarget = showingThread && panelThreadId
+            ? getActiveAiChatPanelProjectionTarget(panelThreadId)
+            : null
+        const showingGeneratedMediaProjection = Boolean(projectionTarget)
         const emptyBodyText = 'Reopen a session from the history, or start a new chat from the prompt below the canvas.'
-        const editorContainer = html`<div className=${`ai-chat-thread-node-editor workspace-ai-chat-panel-body-pane nopan${showingThread ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
+        const editorContainer = html`<div className=${`ai-chat-thread-node-editor workspace-ai-chat-panel-body-pane nopan${showingThread && !showingGeneratedMediaProjection ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
+        const projectionContainer = html`<div className=${`workspace-ai-chat-panel-projection workspace-ai-chat-panel-body-pane nopan${showingGeneratedMediaProjection ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
         const extractionBodyEl = html`<div className=${`workspace-ai-chat-panel-extraction workspace-ai-chat-panel-body-pane nopan${showingExtraction ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
         const emptyBodyEl = html`<div className=${`workspace-ai-chat-panel-empty workspace-ai-chat-panel-body-pane nopan${showingThread || showingExtraction ? ' workspace-ai-chat-panel-body-pane-hidden' : ''}`}>${emptyBodyText}</div>` as HTMLDivElement
         bodyHost.appendChild(editorContainer)
+        bodyHost.appendChild(projectionContainer)
         bodyHost.appendChild(extractionBodyEl)
         bodyHost.appendChild(emptyBodyEl)
         panelEl.appendChild(bodyHost)
+
+        if (projectionTarget) {
+            activeAiChatPanelProjectionRenderer = mountGeneratedMediaChatProjection({
+                mount: projectionContainer,
+                node: projectionTarget.node,
+                rendererClassName: 'canvas-generated-media-projection-editor workspace-ai-chat-panel-projection-editor',
+                traceDetailsClassName: 'canvas-generated-media-trace-details workspace-ai-chat-panel-trace-details',
+                previewTiles: activeAiChatPanelTracePreviewTiles,
+                lineageProjectionScope: projectionTarget.lineageProjectionScope,
+                limitProjectionToSelectedMedia: projectionTarget.limitProjectionToSelectedMedia,
+            })
+            if (!activeAiChatPanelProjectionRenderer) {
+                projectionContainer.classList.add('workspace-ai-chat-panel-body-pane-hidden')
+                editorContainer.classList.remove('workspace-ai-chat-panel-body-pane-hidden')
+            }
+        }
 
         if (showingExtraction && activeSidebarTab) {
             const extractionState = getPersistedFeatureExtractionState(activeSidebarTab.refId)
@@ -4564,6 +4744,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 threadId: panelThreadId,
                 aiChatThreadRenderContext: {
                     contextPreview: getAiUserMessageContextPreviewRenderer(),
+                    traceDetailsOptions: createCanvasTraceDetailsOptions(
+                        'canvas-generated-media-trace-details workspace-ai-chat-panel-trace-details',
+                        activeAiChatPanelTracePreviewTiles,
+                    ),
                 },
                 onEditorChange: (value: any) => {
                     liveAiChatThreadContentOverrides.delete(panelThreadId)
@@ -4692,6 +4876,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 promptControlFactories,
                 onReceivingStateChange: (threadId: string, receiving: boolean) => {
                     promptInputController.setReceiving(threadId, receiving)
+                    if (threadId !== panelThreadId) return
+                    if (receiving) {
+                        projectionContainer.classList.add('workspace-ai-chat-panel-body-pane-hidden')
+                        editorContainer.classList.remove('workspace-ai-chat-panel-body-pane-hidden')
+                        return
+                    }
+                    requestAnimationFrame(() => refreshActiveAiChatPanelProjectionTarget(threadId))
                 }
             })
 

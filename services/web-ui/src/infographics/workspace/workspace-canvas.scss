@@ -461,6 +461,33 @@
     50% { opacity: 0.45; }
 }
 
+.canvas-generated-media-reasoning-model {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
+    min-width: 0;
+    // margin: 0 0 0.2rem;
+    // padding: 1rem 1rem 0;
+    margin-top: .5rem;
+    white-space: nowrap;
+
+    .media-model-badge {
+        flex: 0 1 auto;
+        min-width: 0;
+    }
+}
+
+.canvas-generated-media-reasoning-model-caption {
+    flex: 0 0 auto;
+    color: rgba(0, 0, 0, 0.5);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
 .canvas-generated-media-info-panel {
     width: 100%;
     overflow: var(--workspace-generated-media-info-panel-overflow, visible);
@@ -472,25 +499,6 @@
     box-shadow: var(--workspace-generated-media-info-panel-box-shadow, 0 10px 28px rgba(20, 24, 30, 0.14));
     color: var(--workspace-generated-media-info-panel-color, #252b33);
     box-sizing: border-box;
-
-    // Top provenance header: which reasoning model produced this turn.
-    .canvas-generated-media-reasoning-model {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        flex-wrap: wrap;
-        margin: 0 0 0.2rem;
-        padding: 1rem 1rem 0;
-    }
-
-    .canvas-generated-media-reasoning-model-caption {
-        color: rgba(0, 0, 0, 0.5);
-        font-size: 0.68rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        line-height: 1.2;
-        text-transform: uppercase;
-    }
 
     .canvas-generated-media-info-text,
     .canvas-generated-media-info-empty {
@@ -662,10 +670,6 @@
 
 .canvas-generated-media-projection-editor .ai-response-message {
     width: 100%;
-}
-
-.canvas-generated-media-projection-editor .ai-response-message-content {
-    padding: 0.55rem 0.75rem;
 }
 
 .canvas-generated-media-projection-editor .ai-response-message-content > *:first-child,

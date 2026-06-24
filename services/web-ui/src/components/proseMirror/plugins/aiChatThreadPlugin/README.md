@@ -137,6 +137,7 @@ Atom block for a materialized workflow event in chat history or a projected chat
 - Marker CSS mirrors the canvas branch-marker glyph ratio and per-shape SVG offsets so the same icon family stays optically centered at chat size.
 - Attrs: `kind`, `branchOriginNodeId`, `branchForkNodeId`, `branchLineNodeId`
 - `kind: 'branch-origin'` renders `Branch started`; `kind: 'branch-fork'` renders `Branch fork created`; `kind: 'branch-line'` renders `Branch continued`.
+- Materialized events are keyed by their kind-specific lineage id. The live editor removes duplicate materialized events inside each response message on mount, then persists the normalized document through the regular editor change path.
 - Live streamed responses materialize these nodes directly from API `generationRun.lineageAssignment` when the response is not split into `aiReasoningSection` nodes. Matrix responses keep lineage ids on each `aiReasoningSection`; projections decide whether to render standalone events or section-local markers.
 
 ### `aiGeneratedImage`
