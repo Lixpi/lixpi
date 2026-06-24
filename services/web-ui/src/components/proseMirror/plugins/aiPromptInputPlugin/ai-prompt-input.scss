@@ -388,7 +388,7 @@
     left: 50%;
     width: var(--ai-prompt-model-menu-section-divider-width, 92%);
     height: var(--ai-prompt-model-menu-section-divider-height, 2px);
-    background: var(--ai-prompt-model-menu-section-divider-gradient, linear-gradient(90deg, #fff 0%, #F7F7FD 10%, #F3E4F2 26%, #C5C0EE 50%, #E6E9F6 74%, #F7F7FD 90%, #fff 100%));
+    background: var(--ai-prompt-model-menu-section-divider-gradient, linear-gradient(90deg, rgba(247, 247, 253, 0) 0%, #F7F7FD 10%, #F3E4F2 26%, #C5C0EE 50%, #E6E9F6 74%, #F7F7FD 90%, rgba(247, 247, 253, 0) 100%));
     border-radius: var(--ai-prompt-model-menu-section-divider-border-radius, 999px);
     transform: translateX(-50%);
 }

@@ -918,7 +918,7 @@
     box-sizing: border-box;
     width: 100%;
     flex: 0 0 auto;
-    padding: 10px 12px 8px;
+    padding: 10px 0px 18px;
 }
 
 .workspace-right-panel-mode-switch-svg {
@@ -1322,48 +1322,6 @@
         box-sizing: border-box;
     }
 
-    // Active feature-extraction indicator: shown when "Ask AI" arms the composer.
-    .workspace-canvas-global-extraction-badge {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        align-self: flex-start;
-        max-width: 100%;
-        margin: 0 28px;
-        padding: 4px 8px 4px 12px;
-        border-radius: 9999px;
-        font-size: 12px;
-        line-height: 1.4;
-        color: var(--text-color, #1a1a1a);
-        background: var(--dropdown-popover-bg, rgba(255, 255, 255, 0.9));
-        box-shadow: var(--dropdown-popover-box-shadow);
-        box-sizing: border-box;
-
-        .workspace-canvas-global-extraction-badge-label {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .workspace-canvas-global-extraction-badge-cancel {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 18px;
-            height: 18px;
-            border: none;
-            border-radius: 50%;
-            font-size: 14px;
-            line-height: 1;
-            cursor: pointer;
-            color: inherit;
-            background: transparent;
-
-            &:hover {
-                background: rgba(0, 0, 0, 0.08);
-            }
-        }
-    }
 }
 
 // Single compact row: input on the left, model selector + send on the right,

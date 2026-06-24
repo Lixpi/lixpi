@@ -13,6 +13,7 @@ import { TextSelection } from 'prosemirror-state'
 import { v4 as uuidv4 } from 'uuid'
 import {
     NATS_SUBJECTS,
+    STREAM_STATUS,
     type CanvasState,
     type CanvasNode,
     type DocumentCanvasNode,
@@ -29,6 +30,8 @@ import {
     type CanvasAiChatPanelState,
     type CanvasRightSidePanelMode,
     type CanvasFeatureExtractionState,
+    type ExtractionRun,
+    type StageTraceEvent,
     type FeatureMeta,
     type MediaLibraryImageMeta,
     type MediaLibraryVideoMeta,
@@ -129,11 +132,13 @@ import {
     createGenericVideoAspectDropdown,
     createGenericVideoResolutionDropdown,
     createGenericVideoDurationDropdown,
-} from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+    applyAiModelMenuStyleSettings,
+    createAiModelMenuContent,
+} from '$src/components/aiModelControls/index.ts'
 import { createPixiMediaLayer, type GeneratingMediaOutlineTarget, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
-import { createMediaLibraryPanel } from '$src/infographics/workspace/mediaLibraryPanel.ts'
-import { setPendingExtractionContext, getPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
+import { createMediaLibraryPanel, type FeatureExtractionModelContext, type FeatureExtractionModelControlsInstance } from '$src/infographics/workspace/mediaLibraryPanel.ts'
+import { setPendingExtractionContext, getPendingExtractionContext, clearPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody, type ExtractionTabContext } from '$src/infographics/workspace/extractionTab.ts'
 import {
     getAiChatPanelState,
     setAiChatPanelState,
@@ -661,9 +666,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-branch-marker-response-font-size', `${branchMarkerText.responseFontSize}px`)
     paneEl.style.setProperty('--workspace-branch-marker-response-line-height', `${branchMarkerText.responseLineHeight}`)
 
-    let currentCanvasState: CanvasState | null = options.canvasState
+    const normalizedInitialCanvasState: CanvasState | null = options.canvasState
         ? normalizeBranchMarkerDimensions(options.canvasState)
         : options.canvasState
+    const initialFeatureExtractionState = pruneUnconfirmedFeatureExtractionRuns(normalizedInitialCanvasState)
+    let currentCanvasState: CanvasState | null = initialFeatureExtractionState.state
+    let initialUnconfirmedFeatureExtractionRunsPruned = initialFeatureExtractionState.removed
     let currentDocuments: Document[] = options.documents
     let currentAiChatThreads: AiChatThread[] = options.aiChatThreads
     let panZoom: PanZoomInstance | null = null
@@ -757,11 +765,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // instance whose visible projection is the spatial branch lineage marker.
     let globalCanvasComposer: AiPromptComposerInstance | null = null
     let globalCanvasComposerHostEl: HTMLDivElement | null = null
-    // Feature extraction is triggered from the bottom-center global composer.
-    // "Ask AI" on an image arms the composer with the target extraction run;
-    // the next submit routes to the extraction request instead of a generation.
-    let armedExtractionRunId: string | null = null
-    let armedExtractionBadgeEl: HTMLDivElement | null = null
+    // Feature extraction opens on the right panel's Features surface. Confirming
+    // the pending feature row starts the dedicated extraction stream there.
+    const pendingFeatureExtractionRuns = new Map<string, CanvasFeatureExtractionState>()
+    const apiFeatureExtractionRuns = new Map<string, CanvasFeatureExtractionState>()
+    const subscribedFeatureExtractionRunSubjects = new Map<string, { subject: string; errorSubject: string }>()
+    const featureExtractionModelSelections = new Map<string, FeatureExtractionModelContext>()
+    const featureExtractionRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>()
     // In-flight detached canvas message ids for composer receiving state and
     // delayed editor teardown. Generated-media event routing uses normal thread
     // and workspace state.
@@ -1084,28 +1094,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const contextMessage = aiChatThreadService.buildContextMessage(context)
 
                     const extractionRunId = uuidv4()
-
-                    // Store the image context so the extraction tab can use it when the user submits
-                    setPendingExtractionContext(extractionRunId, {
+                    const sourceContextSnapshot: ExtractionTabContext = {
                         imageNatsUrl,
                         contextMessages: contextMessage ? [contextMessage] : [],
-                    })
-                    persistFeatureExtractionState({
+                    }
+
+                    setPendingExtractionContext(extractionRunId, sourceContextSnapshot)
+                    setPendingFeatureExtractionRun({
                         extractionRunId,
                         status: 'pending',
-                        sourceContextSnapshot: {
-                            imageNatsUrl,
-                            contextMessages: contextMessage ? [contextMessage] : [],
-                        },
+                        userText: 'Extract a reusable visual feature from this image.',
+                        sourceContextSnapshot,
                         updatedAt: Date.now(),
                     })
 
-                    // Show the extraction session in the (view-only) panel, then
-                    // arm the bottom-center composer so the next submit runs the extraction.
-                    openFeatureExtractionTab(extractionRunId)
-                    armExtractionFromImage(extractionRunId)
+                    openFeatureExtractionRunInFeatures(extractionRunId)
                 } catch (error) {
-                    console.error('Failed to open extraction tab from image:', error)
+                    console.error('Failed to open feature extraction from image:', error)
                 }
             },
             onTriggerConnection: (nodeId) => {
@@ -4332,23 +4337,267 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         restoreAiChatPanelHistoryScroll(historyScrollerEl, previousScrollTop, refreshVersion)
     }
 
+    function isUnconfirmedFeatureExtractionState(extractionState: CanvasFeatureExtractionState | undefined): boolean {
+        return Boolean(
+            extractionState
+            && extractionState.status === 'pending'
+            && !extractionState.aiProvider
+            && !extractionState.featureCard
+            && !extractionState.error
+            && (!extractionState.traceEvents || extractionState.traceEvents.length === 0)
+        )
+    }
+
+    function getConfirmedFeatureExtractionEntries(canvasState: CanvasState): Array<[string, CanvasFeatureExtractionState]> {
+        return Object.entries(canvasState.featureExtractionRuns ?? {})
+            .filter(([, run]) => !isUnconfirmedFeatureExtractionState(run))
+    }
+
+    function pruneUnconfirmedFeatureExtractionRuns(canvasState: CanvasState | null): {
+        state: CanvasState | null
+        removed: boolean
+    } {
+        if (!canvasState?.featureExtractionRuns) return { state: canvasState, removed: false }
+        const entries = getConfirmedFeatureExtractionEntries(canvasState)
+        if (entries.length === Object.keys(canvasState.featureExtractionRuns).length) {
+            return { state: canvasState, removed: false }
+        }
+        return {
+            state: {
+                ...canvasState,
+                featureExtractionRuns: Object.fromEntries(entries),
+            },
+            removed: true,
+        }
+    }
+
+    function isTerminalFeatureExtractionStatus(status: CanvasFeatureExtractionState['status'] | undefined): boolean {
+        return status === 'completed' || status === 'failed'
+    }
+
+    function normalizeFeatureExtractionStatus(status: unknown): CanvasFeatureExtractionState['status'] {
+        const statusText = typeof status === 'string' ? status : 'pending'
+        switch (statusText) {
+            case 'pending':
+            case 'analyzing':
+            case 'routing':
+            case 'extracting':
+            case 'extracting_axes':
+            case 'materializing_crops':
+            case 'synthesizing':
+            case 'generating_samples':
+            case 'saving':
+            case 'completed':
+            case 'failed':
+                return statusText
+            default:
+                return 'analyzing'
+        }
+    }
+
+    function toCanvasFeatureExtractionState(run: ExtractionRun): CanvasFeatureExtractionState {
+        const analysisProvider = run.modelConfig?.analysisModelId
+            ? splitAiModelId(run.modelConfig.analysisModelId).provider
+            : ''
+        return {
+            extractionRunId: run.extractionRunId,
+            ...(run.featureId ? { featureId: run.featureId } : {}),
+            status: normalizeFeatureExtractionStatus(run.status),
+            ...(run.userText ? { userText: run.userText } : {}),
+            ...(analysisProvider ? { aiProvider: analysisProvider } : {}),
+            ...(run.modelConfig ? { modelConfig: run.modelConfig } : {}),
+            ...(run.stageReasoning ? { stageReasoning: run.stageReasoning } : {}),
+            ...(run.featureCard ? { featureCard: run.featureCard } : {}),
+            ...(run.trace ? { traceEvents: run.trace } : {}),
+            ...(run.sourceContextSnapshot ? { sourceContextSnapshot: run.sourceContextSnapshot } : {}),
+            ...(run.error ? { error: run.error } : {}),
+            updatedAt: run.updatedAt,
+        }
+    }
+
+    function upsertFeatureExtractionTraceEvent(
+        traceEvents: StageTraceEvent[] | undefined,
+        event: StageTraceEvent,
+    ): StageTraceEvent[] {
+        const nextTraceEvents = [...(traceEvents ?? [])]
+        const existingIndex = nextTraceEvents.findIndex((existing) => existing.stage === event.stage)
+        if (existingIndex >= 0) nextTraceEvents[existingIndex] = event
+        else nextTraceEvents.push(event)
+        return nextTraceEvents
+    }
+
+    function refreshSelectedFeatureExtractionRun(): void {
+        if (!mediaLibraryPanelInstance) return
+        if (aiChatPanelState.topLevelMode !== 'features') return
+        mediaLibraryPanelInstance.refresh()
+    }
+
+    function scheduleFeatureExtractionPanelRefresh(extractionRunId: string, immediate = false): void {
+        const existingTimer = featureExtractionRefreshTimers.get(extractionRunId)
+        if (existingTimer) {
+            clearTimeout(existingTimer)
+            featureExtractionRefreshTimers.delete(extractionRunId)
+        }
+        if (immediate) {
+            refreshSelectedFeatureExtractionRun()
+            return
+        }
+        const timer = setTimeout(() => {
+            featureExtractionRefreshTimers.delete(extractionRunId)
+            refreshSelectedFeatureExtractionRun()
+        }, 600)
+        featureExtractionRefreshTimers.set(extractionRunId, timer)
+    }
+
+    function unsubscribeFeatureExtractionRun(extractionRunId: string): void {
+        const subjects = subscribedFeatureExtractionRunSubjects.get(extractionRunId)
+        if (!subjects) return
+        servicesStore.getData('nats')?.getSubscriptions?.([subjects.subject, subjects.errorSubject])
+            ?.forEach((sub: any) => sub.unsubscribe())
+        subscribedFeatureExtractionRunSubjects.delete(extractionRunId)
+    }
+
+    function unsubscribeAllFeatureExtractionRuns(): void {
+        for (const extractionRunId of Array.from(subscribedFeatureExtractionRunSubjects.keys())) {
+            unsubscribeFeatureExtractionRun(extractionRunId)
+        }
+        for (const timer of featureExtractionRefreshTimers.values()) clearTimeout(timer)
+        featureExtractionRefreshTimers.clear()
+    }
+
+    function subscribeToFeatureExtractionRun(extractionRunId: string): void {
+        const extractionState = apiFeatureExtractionRuns.get(extractionRunId)
+        if (!extractionState || isTerminalFeatureExtractionStatus(extractionState.status)) return
+        if (subscribedFeatureExtractionRunSubjects.has(extractionRunId)) return
+
+        const nats = servicesStore.getData('nats')
+        if (!nats) return
+
+        const subject = `${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${extractionRunId}`
+        const errorSubject = `ai.interaction.chat.error.${workspaceId}:${extractionRunId}`
+        if ((nats.getSubscriptions?.([subject, errorSubject])?.length ?? 0) > 0) return
+        subscribedFeatureExtractionRunSubjects.set(extractionRunId, { subject, errorSubject })
+
+        let currentReasoningStage = 'router'
+        const saveUpdatedState = (
+            updater: (state: CanvasFeatureExtractionState) => CanvasFeatureExtractionState,
+            refreshImmediately = false,
+        ) => {
+            const current = apiFeatureExtractionRuns.get(extractionRunId)
+            if (!current) return
+            const next = updater(current)
+            apiFeatureExtractionRuns.set(extractionRunId, next)
+            if (isTerminalFeatureExtractionStatus(next.status)) unsubscribeFeatureExtractionRun(extractionRunId)
+            scheduleFeatureExtractionPanelRefresh(extractionRunId, refreshImmediately)
+        }
+
+        nats.subscribe(subject, (data: any) => {
+            if (data?.error) {
+                saveUpdatedState((state) => ({
+                    ...state,
+                    status: 'failed',
+                    error: String(data.error),
+                    updatedAt: Date.now(),
+                }), true)
+                return
+            }
+            const content = data?.content
+            if (!content) return
+            if (content.stageTraceEvent) {
+                const event = content.stageTraceEvent as StageTraceEvent
+                if (event.status === 'running') currentReasoningStage = event.stage
+                saveUpdatedState((state) => ({
+                    ...state,
+                    traceEvents: upsertFeatureExtractionTraceEvent(state.traceEvents, event),
+                    status: event.stage === 'persist' && event.status === 'ok'
+                        ? 'completed'
+                        : state.status,
+                    updatedAt: Date.now(),
+                }), true)
+            }
+            if (content.extractionStatus) {
+                saveUpdatedState((state) => ({
+                    ...state,
+                    status: normalizeFeatureExtractionStatus(content.extractionStatus),
+                    updatedAt: Date.now(),
+                }), true)
+            }
+            if (content.featureCard) {
+                saveUpdatedState((state) => ({
+                    ...state,
+                    ...(typeof content.featureCard.featureId === 'string' ? { featureId: content.featureCard.featureId } : {}),
+                    featureCard: content.featureCard,
+                    updatedAt: Date.now(),
+                }), true)
+            }
+            if (content.status === STREAM_STATUS.STREAMING && content.text) {
+                const text = String(content.text)
+                saveUpdatedState((state) => ({
+                    ...state,
+                    stageReasoning: {
+                        ...(state.stageReasoning ?? {}),
+                        [currentReasoningStage]: `${state.stageReasoning?.[currentReasoningStage] ?? ''}${text}`,
+                    },
+                    updatedAt: Date.now(),
+                }))
+            }
+            if (content.status === STREAM_STATUS.END_STREAM) {
+                saveUpdatedState((state) => ({
+                    ...state,
+                    status: state.status === 'failed' ? state.status : 'completed',
+                    updatedAt: Date.now(),
+                }), true)
+            }
+        })
+
+        nats.subscribe(errorSubject, (data: any) => {
+            saveUpdatedState((state) => ({
+                ...state,
+                status: 'failed',
+                error: String(data?.error ?? data?.message ?? 'Unknown extraction error'),
+                updatedAt: Date.now(),
+            }), true)
+        })
+    }
+
     function getPersistedFeatureExtractionState(extractionRunId: string): CanvasFeatureExtractionState | undefined {
-        return currentCanvasState?.featureExtractionRuns?.[extractionRunId]
+        return apiFeatureExtractionRuns.get(extractionRunId)
+    }
+
+    function getFeatureExtractionState(extractionRunId: string): CanvasFeatureExtractionState | undefined {
+        return getPersistedFeatureExtractionState(extractionRunId) ?? pendingFeatureExtractionRuns.get(extractionRunId)
+    }
+
+    function getFeatureExtractionRunsForPanel(): CanvasFeatureExtractionState[] {
+        const persistedRuns = Array.from(apiFeatureExtractionRuns.values())
+        const persistedRunIds = new Set(persistedRuns.map((run) => run.extractionRunId))
+        const pendingRuns = Array.from(pendingFeatureExtractionRuns.values())
+            .filter((run) => !persistedRunIds.has(run.extractionRunId))
+        return [...pendingRuns, ...persistedRuns]
+    }
+
+    function setPendingFeatureExtractionRun(extractionState: CanvasFeatureExtractionState): void {
+        for (const pendingRunId of pendingFeatureExtractionRuns.keys()) {
+            if (pendingRunId !== extractionState.extractionRunId) {
+                clearPendingExtractionContext(pendingRunId)
+                featureExtractionModelSelections.delete(pendingRunId)
+            }
+        }
+        pendingFeatureExtractionRuns.clear()
+        pendingFeatureExtractionRuns.set(extractionState.extractionRunId, extractionState)
     }
 
     function persistFeatureExtractionState(extractionState: CanvasFeatureExtractionState): void {
-        if (!currentCanvasState) return
+        pendingFeatureExtractionRuns.delete(extractionState.extractionRunId)
+        clearPendingExtractionContext(extractionState.extractionRunId)
 
-        const currentExtractionState = currentCanvasState.featureExtractionRuns?.[extractionState.extractionRunId]
+        const currentExtractionState = apiFeatureExtractionRuns.get(extractionState.extractionRunId)
         if (currentExtractionState && JSON.stringify(currentExtractionState) === JSON.stringify(extractionState)) return
 
-        commitCanvasStatePreservingEditors({
-            ...currentCanvasState,
-            featureExtractionRuns: {
-                ...(currentCanvasState.featureExtractionRuns ?? {}),
-                [extractionState.extractionRunId]: extractionState,
-            },
-        })
+        apiFeatureExtractionRuns.set(extractionState.extractionRunId, extractionState)
+        if (isTerminalFeatureExtractionStatus(extractionState.status)) {
+            scheduleFeatureExtractionPanelRefresh(extractionState.extractionRunId, true)
+        }
     }
 
     function syncActiveAiChatPanelFromState(): void {
@@ -4433,16 +4682,140 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return chunks.join('').replace(/\n{3,}/g, '\n\n').trim()
     }
 
-    function openFeatureExtractionTab(extractionRunId: string): void {
-        syncActiveAiChatPanelFromState()
-        aiChatPanelState = { ...aiChatPanelState, isOpen: true, isSessionHistoryOpen: false }
-        const tabId = `extraction:${extractionRunId}`
-        if (!aiChatSidebarTabs.some((tab) => tab.tabId === tabId)) {
-            aiChatSidebarTabs.push({ tabId, type: 'extraction', refId: extractionRunId, title: 'Extract Feature' })
+    function getModelId(model: any): string {
+        return model?.provider && model?.model ? `${model.provider}:${model.model}` : ''
+    }
+
+    function modelHasModality(model: any, modality: string): boolean {
+        return Boolean(model?.modalities?.some((entry: any) => (entry?.modality ?? entry) === modality))
+    }
+
+    function getDefaultFeatureExtractionAiModel(): string {
+        const models = (aiModelsStore.getData() ?? []) as any[]
+        return getModelId(models.find((model) =>
+            !modelHasModality(model, 'image_generation') && !modelHasModality(model, 'video_generation')
+        ))
+    }
+
+    function getDefaultFeatureExtractionImageModel(): string | undefined {
+        const models = (aiModelsStore.getData() ?? []) as any[]
+        return getModelId(models.find((model) => modelHasModality(model, 'image_generation'))) || undefined
+    }
+
+    function getFeatureExtractionModelSelection(extractionRunId: string): FeatureExtractionModelContext {
+        const existing = featureExtractionModelSelections.get(extractionRunId)
+        if (existing) return existing
+        const extractionState = getFeatureExtractionState(extractionRunId)
+        const sourceContext = extractionState?.sourceContextSnapshot as ExtractionTabContext | undefined
+        const savedModelConfig = extractionState?.modelConfig ?? sourceContext?.modelConfig
+        const initialSelection = {
+            aiModel: savedModelConfig?.analysisModelId ?? sourceContext?.aiModel ?? getDefaultFeatureExtractionAiModel(),
+            aiImageModel: savedModelConfig?.mediaModelId ?? sourceContext?.aiImageModel ?? getDefaultFeatureExtractionImageModel(),
         }
-        activeAiChatSidebarTabId = tabId
-        persistAiChatSidebarState()
-        renderActiveAiChatPanel()
+        featureExtractionModelSelections.set(extractionRunId, initialSelection)
+        return initialSelection
+    }
+
+    function setFeatureExtractionModelSelection(extractionRunId: string, modelContext: FeatureExtractionModelContext): void {
+        featureExtractionModelSelections.set(extractionRunId, modelContext)
+    }
+
+    function createFeatureExtractionModelControls(extractionRunId: string): FeatureExtractionModelControlsInstance {
+        const modelContext = { ...getFeatureExtractionModelSelection(extractionRunId) }
+        const analysisDropdown = createGenericAiModelDropdown({
+            getCurrentAiModel: () => modelContext.aiModel ?? '',
+            setAiModel: (aiModel) => {
+                modelContext.aiModel = aiModel
+                setFeatureExtractionModelSelection(extractionRunId, modelContext)
+            },
+        }, `feature-extraction-reasoning-${extractionRunId}`)
+        const mediaDropdown = createGenericImageModelDropdown({
+            getCurrentImageModel: () => modelContext.aiImageModel ?? '',
+            setImageModel: (aiImageModel) => {
+                modelContext.aiImageModel = aiImageModel
+                setFeatureExtractionModelSelection(extractionRunId, modelContext)
+            },
+        }, `feature-extraction-media-${extractionRunId}`)
+        const modelMenuContent = createAiModelMenuContent([
+            {
+                title: 'Reasoning model',
+                helpText: 'Reasoning model works on your prompt, resolves the most relevant items on canvas, crafts a detailed prompt for media model and passed it to the media model with the reference items included.',
+                controls: [
+                    { label: 'Model', control: analysisDropdown.dom },
+                ],
+            },
+            {
+                title: 'Image model',
+                helpText: 'In this section you can configure image generation options. The model choice decides which image generator will draw it. The second option controls the shape or exact size of the image, depending on what that model supports.',
+                controls: [
+                    { label: 'Model', control: mediaDropdown.dom },
+                ],
+            },
+        ])
+        const dom = modelMenuContent.dom
+        dom.classList.add('feature-extraction-model-controls')
+        applyAiModelMenuStyleSettings(dom)
+
+        return {
+            dom,
+            getModelContext: () => ({ ...modelContext }),
+            destroy: () => {
+                analysisDropdown.destroy()
+                mediaDropdown.destroy()
+                modelMenuContent.destroy()
+            },
+        }
+    }
+
+    function getFeatureExtractionUserText(extractionState: CanvasFeatureExtractionState | undefined): string {
+        const userText = extractionState?.userText?.trim()
+        if (userText) return userText
+        const ctx = extractionState?.sourceContextSnapshot as ExtractionTabContext | undefined
+        return ctx?.imageNatsUrl
+            ? 'Extract a reusable visual feature from this image.'
+            : 'Extract a reusable visual feature from the selected context.'
+    }
+
+    function startFeatureExtractionFromPanel(extractionRunId: string, bodyEl: HTMLElement, modelContext: FeatureExtractionModelContext): void {
+        const extractionState = getFeatureExtractionState(extractionRunId)
+        const savedContext = extractionState?.sourceContextSnapshot as ExtractionTabContext | undefined
+        const selectedModelContext = {
+            ...getFeatureExtractionModelSelection(extractionRunId),
+            ...modelContext,
+        }
+        setFeatureExtractionModelSelection(extractionRunId, selectedModelContext)
+        const ctx: ExtractionTabContext = {
+            ...(savedContext ?? getPendingExtractionContext(extractionRunId) ?? {}),
+            aiModel: selectedModelContext.aiModel,
+            aiImageModel: selectedModelContext.aiImageModel,
+            modelConfig: {
+                analysisModelId: selectedModelContext.aiModel,
+                mediaModelId: selectedModelContext.aiImageModel,
+            },
+        }
+        submitExtractionRequest(
+            bodyEl,
+            extractionRunId,
+            workspaceId,
+            getFeatureExtractionUserText(extractionState),
+            ctx,
+            {
+                getState: getPersistedFeatureExtractionState,
+                saveState: persistFeatureExtractionState,
+                surface: 'feature',
+            },
+        )
+    }
+
+    function openFeatureExtractionRunInFeatures(extractionRunId: string): void {
+        const mediaLibrary = ensureMediaLibraryPanel()
+        mediaLibrary.showExtractionRun(extractionRunId)
+        openRightSidePanelToMode('features')
+        mediaLibrary.showExtractionRun(extractionRunId)
+    }
+
+    function openFeatureExtractionTab(extractionRunId: string): void {
+        openFeatureExtractionRunInFeatures(extractionRunId)
     }
 
     function openAiChatPanel(): void {
@@ -4517,18 +4890,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     async function deleteExtractionSession(extractionRunId: string): Promise<void> {
+        const deletedPendingRun = pendingFeatureExtractionRuns.delete(extractionRunId)
+        clearPendingExtractionContext(extractionRunId)
+        if (deletedPendingRun && !apiFeatureExtractionRuns.has(extractionRunId)) {
+            featureExtractionModelSelections.delete(extractionRunId)
+            closeAiChatSidebarTab(`extraction:${extractionRunId}`)
+            renderActiveAiChatPanel()
+            return
+        }
+
         const response = await servicesStore.getData('nats')?.request(NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.FEATURE_EXTRACT.DELETE, {
             token: await AuthService.getTokenSilently(),
             workspaceId,
             extractionRunId,
         })
-        if (response?.error || !currentCanvasState) return
+        if (!response || response.error) return
 
-        const featureExtractionRuns = { ...(currentCanvasState.featureExtractionRuns ?? {}) }
-        delete featureExtractionRuns[extractionRunId]
-        currentCanvasState = { ...currentCanvasState, featureExtractionRuns }
+        apiFeatureExtractionRuns.delete(extractionRunId)
+        featureExtractionModelSelections.delete(extractionRunId)
+        unsubscribeFeatureExtractionRun(extractionRunId)
         closeAiChatSidebarTab(`extraction:${extractionRunId}`)
-        commitCanvasStatePreservingEditors(currentCanvasState)
+        renderActiveAiChatPanel()
     }
 
     async function loadExtractionSessionHistory(): Promise<void> {
@@ -4546,20 +4928,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 extractionSessionHistoryLoaded = false
                 return
             }
-            const featureExtractionRuns = { ...(currentCanvasState.featureExtractionRuns ?? {}) }
             let added = false
             for (const run of runs) {
-                if (!run?.extractionRunId || featureExtractionRuns[run.extractionRunId]) continue
-                featureExtractionRuns[run.extractionRunId] = {
-                    extractionRunId: run.extractionRunId,
-                    status: run.status,
-                    ...(run.sourceContextSnapshot ? { sourceContextSnapshot: run.sourceContextSnapshot } : {}),
-                    updatedAt: run.updatedAt,
+                if (!run?.extractionRunId) continue
+                const extractionState = toCanvasFeatureExtractionState(run as ExtractionRun)
+                const existing = apiFeatureExtractionRuns.get(extractionState.extractionRunId)
+                apiFeatureExtractionRuns.set(extractionState.extractionRunId, extractionState)
+                if (!isTerminalFeatureExtractionStatus(extractionState.status)) {
+                    subscribeToFeatureExtractionRun(extractionState.extractionRunId)
                 }
-                added = true
+                if (!existing || JSON.stringify(existing) !== JSON.stringify(extractionState)) added = true
             }
             if (!added) return
-            commitCanvasMetadataState({ ...currentCanvasState, featureExtractionRuns })
             renderActiveAiChatPanel()
         } catch (error) {
             extractionSessionHistoryLoaded = false
@@ -4798,7 +5178,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             sessionEl.appendChild(deleteEl)
             sessionsListEl.appendChild(sessionEl)
         }
-        const extractionSessions = Object.values(currentCanvasState?.featureExtractionRuns ?? {})
+        const extractionSessions = Array.from(apiFeatureExtractionRuns.values())
             .sort((a, b) => b.updatedAt - a.updatedAt)
         for (const extractionState of extractionSessions) {
             const sessionEl = html`<div className="workspace-ai-chat-panel-session">
@@ -5106,30 +5486,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    // Arm the global composer for a feature-extraction run: the extraction
-    // results render in the right side panel's extraction tab, while the next
-    // submit from the bottom-center composer carries the typed request.
-    function armExtractionFromImage(extractionRunId: string): void {
-        armedExtractionRunId = extractionRunId
-        if (!globalCanvasComposerHostEl) return
-        armedExtractionBadgeEl?.remove()
-        const badgeEl = html`<div className="workspace-canvas-global-extraction-badge">
-            <span className="workspace-canvas-global-extraction-badge-label">Extracting from image — type your request below</span>
-            <button type="button" className="workspace-canvas-global-extraction-badge-cancel" aria-label="Cancel feature extraction">×</button>
-        </div>` as HTMLDivElement
-        badgeEl.querySelector('.workspace-canvas-global-extraction-badge-cancel')
-            ?.addEventListener('click', () => disarmExtraction())
-        globalCanvasComposerHostEl.insertBefore(badgeEl, globalCanvasComposerHostEl.firstChild)
-        armedExtractionBadgeEl = badgeEl
-        globalCanvasComposer?.editorView?.focus()
-    }
-
-    function disarmExtraction(): void {
-        armedExtractionRunId = null
-        armedExtractionBadgeEl?.remove()
-        armedExtractionBadgeEl = null
-    }
-
     // Screen-fixed, canvas-wide composer at the bottom-center of the viewport.
     // Reuses the shared aiPromptComposer component (same one the right side panel uses)
     // but renders the submitted message as a branch marker instead of opening the
@@ -5428,31 +5784,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // visible projection, but storage/stream parsing/persistence stays on the same
     // aiChatThreadPlugin path as the panel.
     async function submitCanvasGenerationRun(data: AiPromptComposerSubmitData): Promise<void> {
-        // When armed by "Ask AI", the composer drives a feature-extraction run
-        // whose results render in the right side panel's extraction tab.
-        if (armedExtractionRunId) {
-            const runId = armedExtractionRunId
-            const userText = extractPromptTextFromContentJSON(data.contentJSON)
-            if (!userText) return
-            // Make sure the extraction tab is the active, rendered panel body, then
-            // submit into its live DOM container (renderActiveAiChatPanel is synchronous).
-            openFeatureExtractionTab(runId)
-            const extractionBodyEl = activeAiChatPanelEl?.querySelector<HTMLDivElement>('.workspace-ai-chat-panel-extraction') ?? null
-            if (!extractionBodyEl) return
-            const ctx = {
-                ...(getPendingExtractionContext(runId) ?? {}),
-                aiModel: data.aiModel,
-                aiImageModel: data.imageOptions?.aiImageModel,
-            }
-            submitExtractionRequest(extractionBodyEl, runId, workspaceId, userText, ctx, {
-                getState: getPersistedFeatureExtractionState,
-                saveState: persistFeatureExtractionState,
-            })
-            clearExplicitContextChips()
-            disarmExtraction()
-            return
-        }
-
         if (!data.aiModel) {
             alert('Please select an AI model from the dropdown before submitting.')
             return
@@ -7655,8 +7986,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function commitCanvasMetadataState(nextState: CanvasState): void {
-        currentCanvasState = nextState
-        onCanvasStateChange?.(nextState)
+        const prunedState = pruneUnconfirmedFeatureExtractionRuns(nextState).state ?? nextState
+        currentCanvasState = prunedState
+        onCanvasStateChange?.(prunedState)
     }
 
     function shouldAcceptGeneratedMediaEvent(threadId: string, eventWorkspaceId?: string): boolean {
@@ -8593,16 +8925,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function commitCanvasState(nextState: CanvasState) {
-        canvasMediaNodeLifecycle.trackCanvasState(nextState)
-        currentCanvasState = nextState
-        pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(nextState)
-        onCanvasStateChange?.(nextState)
+        const prunedState = pruneUnconfirmedFeatureExtractionRuns(nextState).state ?? nextState
+        canvasMediaNodeLifecycle.trackCanvasState(prunedState)
+        currentCanvasState = prunedState
+        pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(prunedState)
+        onCanvasStateChange?.(prunedState)
 
-        syncCanvasNodeDomGeometry(nextState.nodes)
-        syncPixiMediaLayer(nextState)
+        syncCanvasNodeDomGeometry(prunedState.nodes)
+        syncPixiMediaLayer(prunedState)
         syncConnectionManagerForCurrentCanvasState()
         pixiMediaLayer?.renderNow()
-        lastVisualSyncKey = getCanvasVisualSyncKey(nextState)
+        lastVisualSyncKey = getCanvasVisualSyncKey(prunedState)
     }
 
     function scheduleTransformSideEffects() {
@@ -10031,6 +10364,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             mediaLibraryPanelInstance = createMediaLibraryPanel({
                 workspaceId,
                 onUseFeature: insertFeatureIntoActivePrompt,
+                getFeatureExtractionRuns: getFeatureExtractionRunsForPanel,
+                createFeatureExtractionModelControls,
+                onConfirmFeatureExtraction: (extractionRunId, bodyEl, modelContext) => startFeatureExtractionFromPanel(extractionRunId, bodyEl, modelContext),
                 onInsertImage: async (item: MediaLibraryImageMeta) => {
                     try {
                         const materialized = await mediaLibraryService.materializeImage({
@@ -10115,10 +10451,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     const onOpenExtractionPanel = (event: Event) => {
-        const detail = (event as CustomEvent<{ extractionRunId?: string; workspaceId?: string }>).detail
+        const detail = (event as CustomEvent<{
+            extractionRunId?: string
+            workspaceId?: string
+            userText?: string
+            sourceContextSnapshot?: ExtractionTabContext
+        }>).detail
         if (!detail?.extractionRunId) return
         if (detail.workspaceId && detail.workspaceId !== workspaceId) return
-        openFeatureExtractionTab(detail.extractionRunId)
+        if (!getFeatureExtractionState(detail.extractionRunId)) {
+            const sourceContextSnapshot = detail.sourceContextSnapshot ?? {}
+            setPendingExtractionContext(detail.extractionRunId, sourceContextSnapshot)
+            setPendingFeatureExtractionRun({
+                extractionRunId: detail.extractionRunId,
+                status: 'pending',
+                userText: detail.userText?.trim() || 'Extract a reusable visual feature from the selected context.',
+                sourceContextSnapshot,
+                updatedAt: Date.now(),
+            })
+        }
+        openFeatureExtractionRunInFeatures(detail.extractionRunId)
     }
 
     const onOpenMediaLibraryFeatures = (event: Event) => {
@@ -10144,6 +10496,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     ensureConnectionManager()
     renderNodes()
     syncPixiMediaLayer(currentCanvasState)
+    if (initialUnconfirmedFeatureExtractionRunsPruned && currentCanvasState) {
+        initialUnconfirmedFeatureExtractionRunsPruned = false
+        onCanvasStateChange?.(currentCanvasState)
+    }
 
     let hasObservedInitialAiModelsStore = false
     const unsubscribeAiModelsStore = aiModelsStore.subscribe(() => {
@@ -10199,9 +10555,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 incomingState: newCanvasState,
                 pendingVisualCommit: pendingLocalCanvasVisualCommit,
             })
-            const effectiveCanvasState = renderStatePlan.state
+            const normalizedCanvasState = renderStatePlan.state
                 ? normalizeBranchMarkerDimensions(renderStatePlan.state)
                 : renderStatePlan.state
+            const prunedCanvasState = pruneUnconfirmedFeatureExtractionRuns(normalizedCanvasState)
+            const effectiveCanvasState = prunedCanvasState.state
+            if (prunedCanvasState.removed && effectiveCanvasState) onCanvasStateChange?.(effectiveCanvasState)
             pendingLocalCanvasVisualCommit = renderStatePlan.pendingVisualCommit
 
             // Stale drag/resize positions from a previous workspace would corrupt
@@ -10215,6 +10574,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 resizingNodeId = null
                 extractionSessionHistoryLoaded = false
                 liveAiChatThreadContentOverrides.clear()
+                for (const pendingRunId of pendingFeatureExtractionRuns.keys()) clearPendingExtractionContext(pendingRunId)
+                pendingFeatureExtractionRuns.clear()
+                apiFeatureExtractionRuns.clear()
+                featureExtractionModelSelections.clear()
+                unsubscribeAllFeatureExtractionRuns()
             }
 
             // Only do a full re-render if node structure or documents/threads changed
@@ -10413,8 +10777,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             activeCanvasRunTeardownsByThread.clear()
             activeCanvasRunServices.clear()
             activeCanvasRunIds.clear()
+            for (const pendingRunId of pendingFeatureExtractionRuns.keys()) clearPendingExtractionContext(pendingRunId)
+            pendingFeatureExtractionRuns.clear()
+            apiFeatureExtractionRuns.clear()
+            featureExtractionModelSelections.clear()
+            unsubscribeAllFeatureExtractionRuns()
 
-            disarmExtraction()
             globalCanvasComposer?.destroy()
             globalCanvasComposer = null
             globalCanvasComposerHostEl?.remove()

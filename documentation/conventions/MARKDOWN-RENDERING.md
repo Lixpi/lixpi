@@ -5,7 +5,7 @@ description: The one-parser rule for runtime markdown in the web UI — every pi
 
 # Markdown Rendering
 
-Markdown shows up in many places in the web UI — AI chat responses, the feature-extraction tab (prompt previews and streamed model output), the Media Library (saved feature instructions), and any future surface that displays model text. To keep all of it consistent and to avoid scattering markdown parsers across the codebase, Lixpi has **one rule**: every piece of markdown is tokenized by the same parser, and there are exactly two renderers that turn those tokens into UI.
+Markdown shows up in many places in the web UI — AI chat responses, the feature-extraction surface (prompt previews and streamed model output), the Media Library (saved feature instructions), and any future surface that displays model text. To keep all of it consistent and to avoid scattering markdown parsers across the codebase, Lixpi has **one rule**: every piece of markdown is tokenized by the same parser, and there are exactly two renderers that turn those tokens into UI.
 
 {% callout type="note" %}
 This convention governs **runtime markdown in the web UI** (model output, feature instructions, and similar surfaces). It is distinct from the documentation site's own **build-time Markdoc renderer** in [`documentation/site/`](../site/README.md), which turns these `.md` docs into static HTML. The two do not share code or this rule.
@@ -36,7 +36,7 @@ graph TB
 
     subgraph "Surfaces"
         Chat[AI chat threads]
-        Ext[Extraction tab<br/>prompt preview + model output]
+        Ext[Feature extraction<br/>prompt preview + model output]
         Lib[Media Library<br/>feature instructions]
     end
 
@@ -129,7 +129,7 @@ Markdown element styles are **global** and live in [`src/sass/_markdown.scss`](.
 | Consumer | What it renders | How |
 |----------|-----------------|-----|
 | AI chat thread | Streamed assistant responses | `aiChatThreadPlugin` (editable / ProseMirror) |
-| Feature-extraction tab | Stage prompt previews, streamed model output | `MarkdownStreamRenderer` / `renderMarkdownStatic` |
+| Feature-extraction surface | Stage prompt previews, streamed model output | `MarkdownStreamRenderer` / `renderMarkdownStatic` |
 | Media Library | Saved feature instructions ("Application notes") | `renderMarkdownStatic` |
 
 See also: [Feature Extraction — Overview](../library/FEATURE-EXTRACTION-OVERVIEW.md), [Using Features](../library/USING-FEATURES.md), and [Media Library](../library/MEDIA-LIBRARY.md).

@@ -22,11 +22,21 @@ export type ExtractionTabContext = {
     contextMessages?: Array<{ role: string; content: any }>
     aiModel?: string
     aiImageModel?: string
+    modelConfig?: {
+        analysisModelId?: string
+        mediaModelId?: string
+    }
 }
 
 export type ExtractionTabPersistence = {
     getState?: (extractionRunId: string) => CanvasFeatureExtractionState | undefined
     saveState?: (state: CanvasFeatureExtractionState) => void
+}
+
+export type ExtractionTabSurface = 'chat' | 'feature'
+
+export type ExtractionTabRenderOptions = ExtractionTabPersistence & {
+    surface?: ExtractionTabSurface
 }
 
 const VALID_EXTRACTION_STATUSES: Array<CanvasFeatureExtractionState['status']> = [
@@ -42,6 +52,10 @@ export function setPendingExtractionContext(extractionRunId: string, ctx: Extrac
 
 export function getPendingExtractionContext(extractionRunId: string): ExtractionTabContext | undefined {
     return pendingContexts.get(extractionRunId)
+}
+
+export function clearPendingExtractionContext(extractionRunId: string): void {
+    pendingContexts.delete(extractionRunId)
 }
 
 function getExtractionDetailText(content: any): string {
@@ -180,12 +194,34 @@ function getAiProviderFromModel(aiModel: string | undefined): string {
     return aiModel?.split(':')[0] || ''
 }
 
-function createExtractionConversationLayout(bodyEl: HTMLElement, userText: string): {
+function createExtractionConversationLayout(bodyEl: HTMLElement, userText: string, surface: ExtractionTabSurface = 'chat'): {
     timelineContainer: HTMLElement
     featureCardArea: HTMLElement
     assistantContentEl: HTMLElement
 } {
     bodyEl.replaceChildren()
+    if (surface === 'feature') {
+        const surfaceEl = html`<div className="feature-extraction-run-surface">
+            <div className="feature-extraction-run-request">
+                <span className="feature-extraction-run-request-label">Extraction request</span>
+                <div className="feature-extraction-run-request-copy"></div>
+            </div>
+            <div className="feature-extraction-run-content"></div>
+        </div>` as HTMLElement
+
+        const requestCopyEl = surfaceEl.querySelector('.feature-extraction-run-request-copy') as HTMLElement
+        renderUserText(requestCopyEl, userText)
+
+        const assistantContentEl = surfaceEl.querySelector('.feature-extraction-run-content') as HTMLElement
+        const timelineContainer = html`<div className="extraction-tab-steps"></div>` as HTMLElement
+        const featureCardArea = html`<div className="extraction-tab-card-area"></div>` as HTMLElement
+        assistantContentEl.appendChild(timelineContainer)
+        assistantContentEl.appendChild(featureCardArea)
+
+        bodyEl.appendChild(surfaceEl)
+        return { timelineContainer, featureCardArea, assistantContentEl }
+    }
+
     const threadEl = html`<div className="extraction-chat-thread ai-chat-thread-wrapper">
         <div className="ai-chat-thread-content">
             <div className="ai-user-message-wrapper">
@@ -272,10 +308,11 @@ function attachStaticStageOutputs(timelineContainer: HTMLElement, phases: PhaseV
     }
 }
 
-function renderPersistedExtractionState(bodyEl: HTMLElement, state: CanvasFeatureExtractionState, workspaceId: string) {
+function renderPersistedExtractionState(bodyEl: HTMLElement, state: CanvasFeatureExtractionState, workspaceId: string, surface: ExtractionTabSurface = 'chat') {
     const { timelineContainer, featureCardArea, assistantContentEl } = createExtractionConversationLayout(
         bodyEl,
         state.userText ?? 'Extract feature',
+        surface,
     )
     const phases = computeExtractionTimelineModel(state.traceEvents ?? [], state.status, false, state.stageReasoning ?? {})
     buildPhaseTimeline(phases, timelineContainer, false)
@@ -306,17 +343,17 @@ function parseFeatureCardPayload(buffer: string): any | null {
     }
 }
 
-// Called when an extraction tab submits a request.
+// Called when an extraction surface starts a request.
 export async function submitExtractionRequest(
     bodyEl: HTMLElement,
     extractionRunId: string,
     workspaceId: string,
     userText: string,
     ctx: ExtractionTabContext,
-    persistence: ExtractionTabPersistence = {},
+    persistence: ExtractionTabRenderOptions = {},
 ) {
     const aiProvider = getAiProviderFromModel(ctx.aiModel)
-    const { timelineContainer, featureCardArea, assistantContentEl } = createExtractionConversationLayout(bodyEl, userText)
+    const { timelineContainer, featureCardArea, assistantContentEl } = createExtractionConversationLayout(bodyEl, userText, persistence.surface ?? 'chat')
     const traceEvents: StageTraceEvent[] = []
     let currentExtractionStatus: CanvasFeatureExtractionState['status'] = 'analyzing'
     let featureCard: Record<string, any> | undefined
@@ -330,9 +367,11 @@ export async function submitExtractionRequest(
     let persistTimer: ReturnType<typeof setTimeout> | null = null
     const buildPersistedState = (): CanvasFeatureExtractionState => ({
         extractionRunId,
+        ...(typeof featureCard?.featureId === 'string' ? { featureId: featureCard.featureId } : {}),
         status: currentExtractionStatus,
         userText,
         aiProvider,
+        modelConfig: ctx.modelConfig,
         stageReasoning,
         featureCard,
         traceEvents,
@@ -521,6 +560,9 @@ export async function submitExtractionRequest(
             token, workspaceId, organizationId: '', extractionRunId, messages,
             aiModel: ctx.aiModel,
             aiImageModel: ctx.aiImageModel,
+            analysisModelId: ctx.modelConfig?.analysisModelId ?? ctx.aiModel,
+            mediaModelId: ctx.modelConfig?.mediaModelId ?? ctx.aiImageModel,
+            featureExtractionConfig: ctx.modelConfig,
             sourceContextSnapshot: ctx,
         })
     } catch (error) {
@@ -538,11 +580,11 @@ export function renderExtractionTabBody(
     extractionRunId: string,
     bodyEl: HTMLElement,
     workspaceId: string,
-    persistence: ExtractionTabPersistence = {},
+    persistence: ExtractionTabRenderOptions = {},
 ) {
     const persistedState = persistence.getState?.(extractionRunId)
     if (persistedState) {
-        renderPersistedExtractionState(bodyEl, persistedState, workspaceId)
+        renderPersistedExtractionState(bodyEl, persistedState, workspaceId, persistence.surface ?? 'chat')
         return
     }
 

@@ -85,7 +85,7 @@ trade-offs come up.
 - **A `feature` canvas node type.** Features are library-only; drag-to-canvas
   placement is parked for a later iteration.
 - **Inline editing of feature instructions** in the library card. Edits go
-  through "Open in extraction tab → Re-extract."
+  through "Open in Features → Re-extract."
 - **Versioning / revision history** of features. The `version` field is
   reserved but only `1` is written today.
 - **A search index for public features.** A simple GSI scan covers the current

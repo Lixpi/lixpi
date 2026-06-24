@@ -4,17 +4,19 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import { select } from 'd3-selection'
 import { html } from '$src/utils/domTemplates.ts'
 import { BubbleMenu, type BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
-import { createHelpTooltip } from '$src/components/helpTooltip/index.ts'
 import { createToggleSwitch } from '$src/components/toggleSwitch/index.ts'
 import { createTagPill, type TagPillInstance } from '$src/components/tagPill/index.ts'
 import { atomIcon } from '$src/svgIcons/index.ts'
-import { settings, type AiPromptInputModelMenuSettings } from '$src/settings.ts'
+import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
+    applyAiModelMenuStyleSettings,
+    createAiModelMenuContent,
     createMediaGenerationConfigMatrixView,
     transformModelsToOptions,
     type AiModelDropdownOption,
-} from '$src/components/proseMirror/plugins/primitives/aiControls/aiControls.ts'
+    type AiModelMenuContentView,
+} from '$src/components/aiModelControls/index.ts'
 import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
 
 export const aiPromptInputNodeType = 'aiPromptInput'
@@ -283,32 +285,6 @@ type DropdownView = {
     getControlLabel?: () => string
 }
 
-type ModelControlItem = {
-    label: string | HTMLElement
-    control: HTMLElement
-    getVisible?: () => boolean
-}
-
-type ModelControlSection = {
-    title: string
-    helpText: string
-    headingControl?: HTMLElement
-    selectedModelTags?: HTMLElement
-    controls: ModelControlItem[]
-}
-
-type ModelMenuSectionView = {
-    dom: HTMLElement
-    update: () => void
-    destroy: () => void
-}
-
-type ModelMenuContentView = {
-    dom: HTMLElement
-    update: () => void
-    destroy: () => void
-}
-
 type AiPromptInputNodeViewOptions = {
     onSubmit: () => void
     onStop: () => void
@@ -328,48 +304,11 @@ type AiPromptInputNodeViewOptions = {
     createSubmitButton: (controls: SubmitControls) => HTMLElement
 }
 
-type AiPromptInputModelMenuStyleSettings = AiPromptInputModelMenuSettings['styles']
-
-const modelMenuCssVariables: Array<[string, keyof AiPromptInputModelMenuStyleSettings]> = [
-    ['--ai-prompt-model-menu-trigger-color', 'triggerColor'],
-    ['--ai-prompt-model-menu-trigger-active-color', 'triggerActiveColor'],
-    ['--ai-prompt-model-menu-trigger-active-background', 'triggerActiveBackground'],
-    ['--ai-prompt-model-menu-trigger-focus-outline', 'triggerFocusOutline'],
-    ['--ai-prompt-model-menu-info-bubble-width', 'infoBubbleWidth'],
-    ['--ai-prompt-model-menu-info-bubble-border-radius', 'infoBubbleBorderRadius'],
-    ['--ai-prompt-model-menu-info-bubble-background', 'infoBubbleBackground'],
-    ['--ai-prompt-model-menu-info-bubble-box-shadow', 'infoBubbleBoxShadow'],
-    ['--ai-prompt-model-menu-info-bubble-color', 'infoBubbleColor'],
-    ['--ai-prompt-model-menu-section-divider-height', 'sectionDividerHeight'],
-    ['--ai-prompt-model-menu-section-divider-gradient', 'sectionDividerGradient'],
-    ['--ai-prompt-model-menu-section-divider-border-radius', 'sectionDividerBorderRadius'],
-    ['--ai-prompt-model-menu-section-title-color', 'sectionTitleColor'],
-    ['--ai-prompt-model-menu-control-label-color', 'controlLabelColor'],
-    ['--help-tooltip-trigger-border', 'helpTooltipTriggerBorder'],
-    ['--help-tooltip-trigger-background', 'helpTooltipTriggerBackground'],
-    ['--help-tooltip-trigger-color', 'helpTooltipTriggerColor'],
-    ['--help-tooltip-trigger-hover-background', 'helpTooltipTriggerHoverBackground'],
-    ['--help-tooltip-trigger-hover-color', 'helpTooltipTriggerHoverColor'],
-    ['--help-tooltip-trigger-focus-outline', 'helpTooltipTriggerFocusOutline'],
-    ['--help-tooltip-background', 'helpTooltipBackground'],
-    ['--help-tooltip-border', 'helpTooltipBorder'],
-    ['--help-tooltip-border-radius', 'helpTooltipBorderRadius'],
-    ['--help-tooltip-box-shadow', 'helpTooltipBoxShadow'],
-    ['--help-tooltip-color', 'helpTooltipColor'],
-]
-
 const modelMenuToggleDimensions = {
     width: 30,
     height: 18,
     svgWidth: 34,
     svgHeight: 22,
-}
-
-function applyModelMenuStyleSettings(element: HTMLElement): void {
-    const modelMenuStyleSettings = settings.aiPromptInput.modelMenu.styles
-    for (const [propertyName, settingKey] of modelMenuCssVariables) {
-        element.style.setProperty(propertyName, modelMenuStyleSettings[settingKey])
-    }
 }
 
 function uniqueNonEmptyValues(values: string[]): string[] {
@@ -402,88 +341,6 @@ function getNodeViewPos(getPos: () => number | undefined): number | undefined {
         return getPos()
     } catch {
         return undefined
-    }
-}
-
-function createModelMenuControl(item: ModelControlItem): { dom: HTMLElement; update: () => void } {
-    const label = item.label === ''
-        ? null
-        : typeof item.label === 'string'
-        ? html`<span className="ai-prompt-model-menu-control-label">${item.label}</span>` as HTMLElement
-        : item.label
-
-    const dom = html`
-        <div className="ai-prompt-model-menu-control">
-            ${label}
-            <span className="ai-prompt-model-menu-control-field">${item.control}</span>
-        </div>
-    ` as HTMLElement
-
-    const update = (): void => {
-        const nextVisible = String(item.getVisible?.() ?? true)
-        if (dom.dataset.visible === nextVisible) return
-        dom.dataset.visible = nextVisible
-    }
-    update()
-
-    return { dom, update }
-}
-
-function createModelMenuSection(section: ModelControlSection): ModelMenuSectionView {
-    const controlViews = section.controls.map(createModelMenuControl)
-    const helpTooltip = createHelpTooltip({
-        label: `${section.title} help`,
-        text: section.helpText,
-        className: 'ai-prompt-model-menu-section-help',
-    })
-
-    const dom = html`
-        <section className="ai-prompt-model-menu-section">
-            <div className="ai-prompt-model-menu-section-heading">
-                <div className="ai-prompt-model-menu-section-heading-main">
-                    <div className="ai-prompt-model-menu-section-title">${section.title}</div>
-                    ${helpTooltip.dom}
-                </div>
-                <div className="ai-prompt-model-menu-section-heading-action">${section.headingControl ?? null}</div>
-            </div>
-            <div className="ai-prompt-model-menu-section-controls">
-                ${controlViews.map(controlView => controlView.dom)}
-            </div>
-            ${section.selectedModelTags ?? null}
-        </section>
-    ` as HTMLElement
-
-    return {
-        dom,
-        update: () => {
-            for (const controlView of controlViews) {
-                controlView.update()
-            }
-        },
-        destroy: () => helpTooltip.destroy(),
-    }
-}
-
-function createModelMenuContent(sections: ModelControlSection[]): ModelMenuContentView {
-    const sectionViews = sections.map(createModelMenuSection)
-    const dom = html`
-        <div className="ai-prompt-model-menu-content" contenteditable="false">
-            ${sectionViews.map(sectionView => sectionView.dom)}
-        </div>
-    ` as HTMLElement
-
-    return {
-        dom,
-        update: () => {
-            for (const sectionView of sectionViews) {
-                sectionView.update()
-            }
-        },
-        destroy: () => {
-            for (const sectionView of sectionViews) {
-                sectionView.destroy()
-            }
-        },
     }
 }
 
@@ -748,7 +605,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const contentDOM = html`<div className="ai-prompt-input-content"></div>` as HTMLDivElement
         const controlsEl = html`<div className="ai-prompt-input-controls"></div>` as HTMLDivElement
         contentDOM.setAttribute('data-placeholder', options.placeholderText ?? '')
-        applyModelMenuStyleSettings(dom)
+        applyAiModelMenuStyleSettings(dom)
 
         // Build controls adapters that read/write ProseMirror node attrs
         const getSelectedModelIdsForMode = (selectionAttrName: string, scalarAttrName: string): string[] => {
@@ -1052,7 +909,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
 
         let modelMenu: BubbleMenu | null = null
         let modelMenuTrigger: HTMLButtonElement | null = null
-        let modelMenuContent: ModelMenuContentView
+        let modelMenuContent: AiModelMenuContentView
         let modelMenuLayoutSignature = ''
         const getModelMenuPosition = () => {
             if (!modelMenuTrigger) return null
@@ -1117,7 +974,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         }
         updateImageSizeControlLabel()
 
-        modelMenuContent = createModelMenuContent([
+        modelMenuContent = createAiModelMenuContent([
             {
                 title: 'Reasoning model',
                 helpText: 'Reasoning model works on your prompt, resolves the most relevant items on canvas, crafts a detailed prompt for media model and passed it to the media model with the reference items included.',

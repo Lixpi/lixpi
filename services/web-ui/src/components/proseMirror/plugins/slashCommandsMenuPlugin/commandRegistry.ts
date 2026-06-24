@@ -98,7 +98,13 @@ const createUseFeatureCommand = (): SlashCommand['execute'] => () => {
 const createExtractFeatureCommand = (): SlashCommand['execute'] => (_view: EditorView) => {
     const workspaceId = RouterService.getRouteParams().workspaceId as string
     const extractionRunId = uuidv4()
-    window.dispatchEvent(new CustomEvent('lixpi:open-extraction-tab', { detail: { extractionRunId, workspaceId } }))
+    window.dispatchEvent(new CustomEvent('lixpi:open-extraction-tab', {
+        detail: {
+            extractionRunId,
+            workspaceId,
+            userText: 'Extract a reusable visual feature from the selected context.',
+        },
+    }))
     return true
 }
 

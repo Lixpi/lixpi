@@ -8,13 +8,15 @@ import { getDynamoDbTableStageName, type ExtractionRun, type ExtractionRunStatus
 const { ORG_NAME, STAGE } = process.env
 
 export default {
-    createRun: async ({ extractionRunId: providedId, workspaceId, userId, sourceContextSnapshot }: {
-        extractionRunId?: string; workspaceId: string; userId: string; sourceContextSnapshot?: object
+    createRun: async ({ extractionRunId: providedId, workspaceId, userId, userText, modelConfig, sourceContextSnapshot }: {
+        extractionRunId?: string; workspaceId: string; userId: string; userText?: string; modelConfig?: ExtractionRun['modelConfig']; sourceContextSnapshot?: object
     }): Promise<ExtractionRun | undefined> => {
         const now = Date.now()
         const run: ExtractionRun = {
             extractionRunId: providedId ?? uuid(),
             workspaceId, userId, status: 'pending',
+            ...(userText ? { userText } : {}),
+            ...(modelConfig ? { modelConfig } : {}),
             ...(sourceContextSnapshot ? { sourceContextSnapshot } : {}),
             createdAt: now, updatedAt: now,
         }
@@ -83,6 +85,38 @@ export default {
 
     markFailed: async ({ extractionRunId, workspaceId, error }: { extractionRunId: string; workspaceId: string; error: string }): Promise<void> => {
         await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE), key: { extractionRunId, workspaceId }, updates: { status: 'failed' as ExtractionRunStatus, error, updatedAt: Date.now() }, origin: 'ExtractionRun.markFailed' })
+    },
+
+    appendStageReasoning: async ({ extractionRunId, workspaceId, stage, text }: { extractionRunId: string; workspaceId: string; stage: string; text: string }): Promise<void> => {
+        if (!stage || !text) return
+        try {
+            const existing = await dynamoDBService.getItem({
+                tableName: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE),
+                key: { extractionRunId, workspaceId },
+                origin: 'ExtractionRun.appendStageReasoning:read',
+            })
+            const stageReasoning = {
+                ...((existing as any)?.stageReasoning ?? {}),
+                [stage]: `${(existing as any)?.stageReasoning?.[stage] ?? ''}${text}`,
+            }
+            await dynamoDBService.updateItem({
+                tableName: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE),
+                key: { extractionRunId, workspaceId },
+                updates: { stageReasoning, updatedAt: Date.now() },
+                origin: 'ExtractionRun.appendStageReasoning',
+            })
+        } catch (error) {
+            console.error('Failed to append extraction-run reasoning:', error)
+        }
+    },
+
+    saveFeatureCard: async ({ extractionRunId, workspaceId, featureCard }: { extractionRunId: string; workspaceId: string; featureCard: Record<string, any> }): Promise<void> => {
+        await dynamoDBService.updateItem({
+            tableName: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE),
+            key: { extractionRunId, workspaceId },
+            updates: { featureCard, updatedAt: Date.now() },
+            origin: 'ExtractionRun.saveFeatureCard',
+        })
     },
 
     // Append a StageTraceEvent to the run's trace[] log. Best-effort: failures are logged but not propagated

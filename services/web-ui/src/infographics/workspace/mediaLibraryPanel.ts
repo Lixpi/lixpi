@@ -6,6 +6,7 @@ import {
     NATS_SUBJECTS,
     MEDIA_LIBRARY_BROWSE_ALL,
     MEDIA_LIBRARY_SCOPE,
+    type CanvasFeatureExtractionState,
     type Feature,
     type FeatureMeta,
     type MediaLibraryImageMeta,
@@ -18,6 +19,7 @@ import AuthService from '$src/services/auth-service.ts'
 import MediaLibraryService from '$src/services/media-library-service.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
+import { renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
 
 const SCOPES: Array<{ key: MediaLibraryScope; label: string }> = [
     { key: MEDIA_LIBRARY_SCOPE.WORKSPACE, label: 'Workspace' },
@@ -37,7 +39,20 @@ export type MediaLibraryPanelInstance = {
     rootEl: HTMLElement
     mountInto: (hostEl: HTMLElement) => void
     setMode: (mode: MediaLibraryPanelMode) => void
+    showExtractionRun: (extractionRunId: string) => void
+    refresh: () => void
     unmount: () => void
+    destroy: () => void
+}
+
+export type FeatureExtractionModelContext = {
+    aiModel?: string
+    aiImageModel?: string
+}
+
+export type FeatureExtractionModelControlsInstance = {
+    dom: HTMLElement
+    getModelContext: () => FeatureExtractionModelContext
     destroy: () => void
 }
 
@@ -46,6 +61,9 @@ type MediaLibraryPanelOptions = {
     onUseFeature?: (feature: FeatureMeta) => boolean
     onInsertImage?: (item: MediaLibraryImageMeta) => Promise<boolean>
     onInsertVideo?: (item: MediaLibraryVideoMeta) => Promise<boolean>
+    getFeatureExtractionRuns?: () => CanvasFeatureExtractionState[]
+    createFeatureExtractionModelControls?: (extractionRunId: string) => FeatureExtractionModelControlsInstance
+    onConfirmFeatureExtraction?: (extractionRunId: string, bodyEl: HTMLElement, modelContext: FeatureExtractionModelContext) => void | Promise<void>
 }
 
 type FeatureDetailsState = Feature | { error: string }
@@ -56,6 +74,55 @@ type ScopeDropdownInstance = {
     dom: HTMLElement
     setSelectedKey: (key: string) => void
     destroy: () => void
+}
+
+type FeatureLibraryRowShellConfig = {
+    className?: string
+    data: Record<string, string>
+    selected: boolean
+    thumbEl: HTMLElement
+    categoryLabel: string
+    scopeLabel: string
+    name: string
+    summary: string
+    actionEl?: HTMLElement
+}
+
+type FeatureLibraryRowShellInstance = {
+    dom: HTMLElement
+    destroy: () => void
+}
+
+class FeatureLibraryRowShell implements FeatureLibraryRowShellInstance {
+    readonly dom: HTMLElement
+
+    constructor(private readonly config: FeatureLibraryRowShellConfig) {
+        this.dom = this.render()
+    }
+
+    private render(): HTMLElement {
+        const rowClassName = `feature-library-row${this.config.className ? ` ${this.config.className}` : ''}${this.config.selected ? ' feature-library-row-selected' : ''}`
+        return html`<article className=${rowClassName} data=${this.config.data} tabindex="0" aria-selected=${this.config.selected ? 'true' : 'false'} data-side-panel-no-drag="true">
+            ${this.config.thumbEl}
+            <div className="feature-library-row-info">
+                <div className="feature-library-row-meta">
+                    <span className="feature-library-row-category">${this.config.categoryLabel}</span>
+                    <span className="feature-library-row-scope">${this.config.scopeLabel}</span>
+                </div>
+                <div className="feature-library-row-name">${this.config.name}</div>
+                <div className="feature-library-row-summary">${this.config.summary}</div>
+            </div>
+            ${this.config.actionEl ?? null}
+        </article>` as HTMLElement
+    }
+
+    destroy(): void {
+        this.dom.remove()
+    }
+}
+
+function createFeatureLibraryRowShell(config: FeatureLibraryRowShellConfig): FeatureLibraryRowShellInstance {
+    return new FeatureLibraryRowShell(config)
 }
 
 // Wrap the shared dropdown primitive so callers work in terms of scope keys
@@ -169,7 +236,7 @@ const toFeatureMeta = (feature: Feature | FeatureMeta): FeatureMeta => {
 }
 
 export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): MediaLibraryPanelInstance {
-    const { workspaceId, onUseFeature, onInsertImage, onInsertVideo } = options
+    const { workspaceId, onUseFeature, onInsertImage, onInsertVideo, getFeatureExtractionRuns, createFeatureExtractionModelControls, onConfirmFeatureExtraction } = options
     const mediaLibraryService = new MediaLibraryService()
     let isMounted = false
     let mode: MediaLibraryPanelMode = 'features'
@@ -183,6 +250,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
     let feedbackMessage = ''
     let accessToken = ''
     let selectedFeatureId: string | null = null
+    let selectedExtractionRunId: string | null = null
     const featureDetails = new Map<string, FeatureDetailsState>()
     const loadingFeatureDetails = new Set<string>()
     let panelEl: HTMLElement | null = null
@@ -196,15 +264,23 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
     // Row and inspector scope dropdowns are rebuilt on every renderContent and
     // must be destroyed to detach their popovers and document listeners.
     let transientDropdowns: ScopeDropdownInstance[] = []
+    let transientExtractionModelControls: FeatureExtractionModelControlsInstance[] = []
 
     function destroyTransientDropdowns() {
         for (const dropdown of transientDropdowns) dropdown.destroy()
         transientDropdowns = []
+        for (const controls of transientExtractionModelControls) controls.destroy()
+        transientExtractionModelControls = []
     }
 
     function trackTransientDropdown(dropdown: ScopeDropdownInstance): ScopeDropdownInstance {
         transientDropdowns.push(dropdown)
         return dropdown
+    }
+
+    function trackTransientExtractionModelControls(controls: FeatureExtractionModelControlsInstance): FeatureExtractionModelControlsInstance {
+        transientExtractionModelControls.push(controls)
+        return controls
     }
 
     async function loadFeatures() {
@@ -323,6 +399,64 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         imageEl.src = getStoredSampleUrl(feature, sampleIndex)
     }
 
+    function getExtractionRunsForPanel(): CanvasFeatureExtractionState[] {
+        return (getFeatureExtractionRuns?.() ?? [])
+            .filter((run) => run.status !== 'completed' || run.extractionRunId === selectedExtractionRunId)
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+    }
+
+    function getExtractionRunState(extractionRunId: string): CanvasFeatureExtractionState | undefined {
+        return (getFeatureExtractionRuns?.() ?? []).find((run) => run.extractionRunId === extractionRunId)
+    }
+
+    function isTerminalExtractionStatus(status: CanvasFeatureExtractionState['status'] | undefined): boolean {
+        return status === 'completed' || status === 'failed'
+    }
+
+    function shouldDeferFeatureListRenderForActiveExtraction(): boolean {
+        if (!selectedExtractionRunId) return false
+        const extractionRun = getExtractionRunState(selectedExtractionRunId)
+        return Boolean(extractionRun && !isTerminalExtractionStatus(extractionRun.status))
+    }
+
+    function renderAfterFeatureLibraryEvent(): void {
+        if (!isMounted || mode !== 'features') return
+        if (shouldDeferFeatureListRenderForActiveExtraction()) return
+        renderContent()
+    }
+
+    function getExtractionStatusLabel(status: CanvasFeatureExtractionState['status']): string {
+        switch (status) {
+            case 'pending': return 'Needs confirmation'
+            case 'analyzing': return 'Analyzing'
+            case 'routing': return 'Routing'
+            case 'extracting':
+            case 'extracting_axes': return 'Extracting'
+            case 'materializing_crops': return 'Cropping'
+            case 'synthesizing': return 'Synthesizing'
+            case 'generating_samples': return 'Sampling'
+            case 'saving': return 'Saving'
+            case 'completed': return 'Saved'
+            case 'failed': return 'Failed'
+            default: return 'Running'
+        }
+    }
+
+    function getExtractionRunTitle(run: CanvasFeatureExtractionState): string {
+        const featureName = typeof run.featureCard?.name === 'string' ? run.featureCard.name.trim() : ''
+        if (featureName) return `@${featureName}`
+        const userText = run.userText?.trim()
+        if (userText) return userText.length > 52 ? `${userText.slice(0, 49)}...` : userText
+        return 'Pending extracted feature'
+    }
+
+    function getExtractionRunSummary(run: CanvasFeatureExtractionState): string {
+        if (run.status === 'pending') return 'Confirm to start extraction from the selected source.'
+        if (run.status === 'failed') return run.error ? `Failed: ${run.error}` : 'Extraction failed.'
+        if (run.status === 'completed') return run.featureCard?.summary ?? 'Feature saved to the library.'
+        return 'Feature extraction is running. Progress renders in the inspector.'
+    }
+
     async function ensureFeatureDetails(featureId: string) {
         if (featureDetails.has(featureId) || loadingFeatureDetails.has(featureId)) return
         loadingFeatureDetails.add(featureId)
@@ -355,13 +489,15 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         browserEl.replaceChildren()
         inspectorEl.replaceChildren()
         const showingFeatures = mode === 'features'
+        const extractionRuns = showingFeatures ? getExtractionRunsForPanel() : []
         panelEl.classList.toggle('media-library-panel-images', !showingFeatures)
-        panelEl.classList.toggle('media-library-panel-feature-selected', showingFeatures && selectedFeatureId !== null)
-        if (isLoading) {
+        panelEl.classList.toggle('media-library-panel-feature-selected', showingFeatures && (selectedFeatureId !== null || selectedExtractionRunId !== null))
+        panelEl.classList.toggle('media-library-panel-extraction-selected', showingFeatures && selectedExtractionRunId !== null)
+        if (isLoading && (!showingFeatures || extractionRuns.length === 0)) {
             browserEl.appendChild(html`<div className="media-library-state">Loading ${showingFeatures ? 'features' : 'media'}</div>` as HTMLElement)
             return
         }
-        if (errorMessage) {
+        if (errorMessage && (!showingFeatures || extractionRuns.length === 0)) {
             browserEl.appendChild(html`<div className="media-library-state media-library-state-error">${errorMessage}</div>` as HTMLElement)
             return
         }
@@ -380,8 +516,24 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
             <h2>Features</h2>
             <p>Reusable visual properties extracted from images. Select one to inspect its guidance and samples.</p>
         </div>` as HTMLElement)
-        if (allFeatures.length === 0) {
+        if (allFeatures.length === 0 && extractionRuns.length === 0) {
             browserEl.appendChild(html`<div className="media-library-state">No features found.</div>` as HTMLElement)
+        }
+
+        if (extractionRuns.length > 0) {
+            const extractionSectionEl = html`<div className="feature-library-section feature-extraction-section">
+                <div className="feature-library-section-header">Feature extraction</div>
+                <div className="feature-library-section-items"></div>
+            </div>` as HTMLElement
+            const itemsEl = extractionSectionEl.querySelector('.feature-library-section-items') as HTMLElement
+            for (const run of extractionRuns) itemsEl.appendChild(buildExtractionRow(run))
+            browserEl.appendChild(extractionSectionEl)
+        }
+        if (isLoading) {
+            browserEl.appendChild(html`<div className="media-library-state">Loading saved features</div>` as HTMLElement)
+        }
+        if (errorMessage) {
+            browserEl.appendChild(html`<div className="media-library-state media-library-state-error">${errorMessage}</div>` as HTMLElement)
         }
 
         const groups = new Map<string, FeatureMeta[]>()
@@ -393,25 +545,25 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
 
         for (const [category, features] of groups) {
             const sectionEl = html`<div className="feature-library-section">
-                <button type="button" className="feature-library-section-header">${category}</button>
+                <div className="feature-library-section-header">${category}</div>
                 <div className="feature-library-section-items"></div>
             </div>` as HTMLElement
             const itemsEl = sectionEl.querySelector('.feature-library-section-items') as HTMLElement
-            let collapsed = false
-            sectionEl.querySelector('button')!.addEventListener('click', () => {
-                collapsed = !collapsed
-                itemsEl.hidden = collapsed
-            })
             for (const feature of features) itemsEl.appendChild(buildRow(feature))
             browserEl.appendChild(sectionEl)
         }
 
-        const selectedFeature = allFeatures.find((feature) => feature.featureId === selectedFeatureId)
-        if (selectedFeature) {
+        const selectedExtractionRun = selectedExtractionRunId ? getExtractionRunState(selectedExtractionRunId) : undefined
+        const selectedFeature = selectedExtractionRun ? undefined : allFeatures.find((feature) => feature.featureId === selectedFeatureId)
+        if (selectedExtractionRun) {
+            inspectorEl.appendChild(buildExtractionInspector(selectedExtractionRun))
+        } else if (selectedFeature) {
             inspectorEl.appendChild(buildFeatureInspector(selectedFeature))
         } else {
             selectedFeatureId = null
+            selectedExtractionRunId = null
             panelEl.classList.remove('media-library-panel-feature-selected')
+            panelEl.classList.remove('media-library-panel-extraction-selected')
             inspectorEl.appendChild(html`<div className="feature-library-inspector-empty">
                 <strong>Select a Feature</strong>
                 <span>Full instructions, palette details, samples, and sharing controls appear here.</span>
@@ -732,23 +884,169 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         await loadFeatures()
     }
 
+    function selectExtractionRun(extractionRunId: string): void {
+        selectedExtractionRunId = extractionRunId
+        selectedFeatureId = null
+        renderContent()
+    }
+
+    function getExtractionRunFeatureId(run: CanvasFeatureExtractionState): string | undefined {
+        if (run.featureId) return run.featureId
+        return typeof run.featureCard?.featureId === 'string' ? run.featureCard.featureId : undefined
+    }
+
+    function getFeatureMetaFromExtractionRun(run: CanvasFeatureExtractionState): FeatureMeta | undefined {
+        const featureCard = run.featureCard
+        const featureId = getExtractionRunFeatureId(run)
+        if (!featureId || !featureCard) return undefined
+
+        const firstSample = Array.isArray(featureCard.sampleImages) ? featureCard.sampleImages[0] : undefined
+        const scope = (textValue(featureCard.scope) as MediaLibraryScope | undefined) ?? MEDIA_LIBRARY_SCOPE.WORKSPACE
+        const ownerUserId = userStore.getData('userId') || ''
+        const scopeOwnerId = scope === MEDIA_LIBRARY_SCOPE.WORKSPACE
+            ? workspaceId
+            : scope === MEDIA_LIBRARY_SCOPE.PUBLIC
+                ? 'public'
+                : scope === MEDIA_LIBRARY_SCOPE.ORGANIZATION
+                    ? organizationStore.getData('organizationId') || ''
+                    : ownerUserId
+        return {
+            featureId,
+            category: textValue(featureCard.category) ?? 'other',
+            name: textValue(featureCard.name) ?? 'Extracted feature',
+            summary: textValue(featureCard.summary) ?? 'Feature saved to the library.',
+            tags: Array.isArray(featureCard.tags) ? featureCard.tags.map((tag) => String(tag)) : [],
+            scope,
+            scopeOwnerId,
+            status: 'active',
+            ownerUserId,
+            sampleZeroKey: textValue(firstSample?.fileId) ?? (firstSample?.idx != null && firstSample?.ext ? `features/${featureId}/sample-${firstSample.idx}.${firstSample.ext}` : undefined),
+            sampleZeroUrl: textValue(firstSample?.imageUrl),
+            updatedAt: run.updatedAt,
+        }
+    }
+
+    function openExtractionRun(run: CanvasFeatureExtractionState): void {
+        const featureId = getExtractionRunFeatureId(run)
+        if (run.status === 'completed' && featureId) {
+            const hasFeatureRow = allFeatures.some((feature) => feature.featureId === featureId)
+            const featureMeta = hasFeatureRow ? undefined : getFeatureMetaFromExtractionRun(run)
+            if (featureMeta) allFeatures = [featureMeta, ...allFeatures]
+            selectedFeatureId = featureId
+            selectedExtractionRunId = null
+            void ensureFeatureDetails(featureId)
+            renderContent()
+            return
+        }
+
+        selectExtractionRun(run.extractionRunId)
+    }
+
+    function buildExtractionRow(run: CanvasFeatureExtractionState): HTMLElement {
+        const isSelected = selectedExtractionRunId === run.extractionRunId
+        const thumbEl = html`<div className="feature-extraction-row-thumb" aria-hidden="true">
+                <span className="feature-extraction-row-thumb-mark"></span>
+            </div>` as HTMLElement
+        const rowEl = createFeatureLibraryRowShell({
+            className: `feature-extraction-row feature-extraction-row-${run.status}`,
+            data: { extractionRunId: run.extractionRunId },
+            selected: isSelected,
+            thumbEl,
+            categoryLabel: 'extracting',
+            scopeLabel: getExtractionStatusLabel(run.status),
+            name: getExtractionRunTitle(run),
+            summary: getExtractionRunSummary(run),
+        }).dom
+
+        const openRun = () => openExtractionRun(run)
+        rowEl.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return
+            event.preventDefault()
+            openRun()
+        })
+        rowEl.addEventListener('click', () => openRun())
+        return rowEl
+    }
+
+    function buildExtractionConfirmation(run: CanvasFeatureExtractionState, pipelineMountEl: HTMLElement): HTMLElement {
+        const modelControls = createFeatureExtractionModelControls
+            ? trackTransientExtractionModelControls(createFeatureExtractionModelControls(run.extractionRunId))
+            : undefined
+        const confirmationEl = html`<section className="feature-extraction-confirmation">
+            <div className="feature-extraction-confirmation-copy">
+                <h3>Confirm Feature Extraction</h3>
+                <p>Lixpi will analyze the selected source and connected context, generate source-safe feature samples, then save a reusable workspace Feature.</p>
+                <p>The source stays on the canvas. The resulting Feature appears in this tab when the pipeline finishes.</p>
+            </div>
+            ${modelControls?.dom ?? null}
+            <button type="button" className="feature-extraction-confirm-button">Start extraction</button>
+        </section>` as HTMLElement
+        const buttonEl = confirmationEl.querySelector('.feature-extraction-confirm-button') as HTMLButtonElement
+        buttonEl.addEventListener('click', () => {
+            buttonEl.disabled = true
+            buttonEl.textContent = 'Starting...'
+            void onConfirmFeatureExtraction?.(run.extractionRunId, pipelineMountEl, modelControls?.getModelContext() ?? {})
+            confirmationEl.classList.add('feature-extraction-confirmation-started')
+        })
+        return confirmationEl
+    }
+
+    function buildExtractionInspector(run: CanvasFeatureExtractionState): HTMLElement {
+        const inspectorEl = html`<article className="feature-library-inspector-card feature-extraction-inspector">
+            <div className="feature-library-inspector-nav">
+                <button type="button" className="feature-library-inspector-back">Back</button>
+                <span>Feature extraction</span>
+            </div>
+            <div className="feature-library-inspector-heading">
+                <div className="feature-library-row-meta">
+                    <span className="feature-library-row-category">extraction</span>
+                    <span className="feature-library-row-scope">${getExtractionStatusLabel(run.status)}</span>
+                </div>
+                <h2>${getExtractionRunTitle(run)}</h2>
+                <p>${getExtractionRunSummary(run)}</p>
+            </div>
+            <div className="feature-extraction-confirmation-mount"></div>
+            <div className="feature-extraction-pipeline-mount"></div>
+        </article>` as HTMLElement
+
+        inspectorEl.querySelector('.feature-library-inspector-back')!.addEventListener('click', () => {
+            selectedExtractionRunId = null
+            renderContent()
+        })
+
+        const pipelineMountEl = inspectorEl.querySelector('.feature-extraction-pipeline-mount') as HTMLElement
+        if (run.status === 'pending') {
+            const confirmationMountEl = inspectorEl.querySelector('.feature-extraction-confirmation-mount') as HTMLElement
+            confirmationMountEl.appendChild(buildExtractionConfirmation(run, pipelineMountEl))
+        } else {
+            renderExtractionTabBody(`feature-extraction:${run.extractionRunId}`, run.extractionRunId, pipelineMountEl, workspaceId, {
+                getState: getExtractionRunState,
+                surface: 'feature',
+            })
+        }
+        return inspectorEl
+    }
+
     function buildRow(feature: FeatureMeta): HTMLElement {
         const isSelected = selectedFeatureId === feature.featureId
-        const rowEl = html`<article className=${`feature-library-row${isSelected ? ' feature-library-row-selected' : ''}`} data=${{ featureId: feature.featureId }} tabindex="0" aria-selected=${isSelected ? 'true' : 'false'}>
-            ${feature.sampleZeroKey && accessToken ? html`<img className="feature-library-row-thumb" src=${getSampleUrl(feature)} alt=${`${feature.name} sample`} onerror=${(event: Event) => handleSampleImageError(event, feature)} />` : html`<div className="feature-library-row-thumb-placeholder" aria-hidden="true"></div>`}
-            <div className="feature-library-row-info">
-                <div className="feature-library-row-meta">
-                    <span className="feature-library-row-category">${feature.category || 'feature'}</span>
-                    <span className="feature-library-row-scope">${feature.scope}</span>
-                </div>
-                <div className="feature-library-row-name">@${feature.name}</div>
-                <div className="feature-library-row-summary">${feature.summary}</div>
-            </div>
-            <button type="button" className="feature-library-row-action feature-library-row-action-primary" data-action="use">Use</button>
-        </article>` as HTMLElement
+        const thumbEl = feature.sampleZeroKey && accessToken
+            ? html`<img className="feature-library-row-thumb" src=${getSampleUrl(feature)} alt=${`${feature.name} sample`} onerror=${(event: Event) => handleSampleImageError(event, feature)} />` as HTMLElement
+            : html`<div className="feature-library-row-thumb-placeholder" aria-hidden="true"></div>` as HTMLElement
+        const actionEl = html`<button type="button" className="feature-library-row-action feature-library-row-action-primary" data-action="use">Use</button>` as HTMLElement
+        const rowEl = createFeatureLibraryRowShell({
+            data: { featureId: feature.featureId },
+            selected: isSelected,
+            thumbEl,
+            categoryLabel: feature.category || 'feature',
+            scopeLabel: feature.scope,
+            name: `@${feature.name}`,
+            summary: feature.summary,
+            actionEl,
+        }).dom
 
         const selectFeature = () => {
             selectedFeatureId = feature.featureId
+            selectedExtractionRunId = null
             void ensureFeatureDetails(feature.featureId)
             renderContent()
         }
@@ -761,6 +1059,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         rowEl.addEventListener('click', (event) => {
             const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
             if (action === 'use') {
+                selectFeature()
                 void handleUseFeature(feature)
                 return
             }
@@ -853,15 +1152,17 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
                 if (!data?.feature) return
                 if ('sampleImages' in data.feature) featureDetails.set(data.feature.featureId, data.feature as Feature)
                 allFeatures = [toFeatureMeta(data.feature), ...allFeatures.filter((feature) => feature.featureId !== data.feature.featureId)]
-                if (isMounted && mode === 'features') renderContent()
+                renderAfterFeatureLibraryEvent()
             })
             nats?.subscribe(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.EVENTS.DELETED, (data: any) => {
                 if (!data?.featureId) return
                 allFeatures = allFeatures.filter((f) => f.featureId !== data.featureId)
-                if (isMounted && mode === 'features') renderContent()
+                renderAfterFeatureLibraryEvent()
             })
             nats?.subscribe(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.EVENTS.UPDATED, () => {
-                if (isMounted && mode === 'features') void loadFeatures()
+                if (!isMounted || mode !== 'features') return
+                if (shouldDeferFeatureListRenderForActiveExtraction()) return
+                void loadFeatures()
             })
         }
         if (!hasMediaEventSubscriptions) {
@@ -916,6 +1217,18 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         if (mode === nextMode && isMounted) return
         mode = nextMode
         selectedFeatureId = null
+        if (nextMode !== 'features') selectedExtractionRunId = null
+        if (isMounted) refreshActiveMode()
+    }
+
+    function showExtractionRun(extractionRunId: string) {
+        mode = 'features'
+        selectedExtractionRunId = extractionRunId
+        selectedFeatureId = null
+        if (isMounted) refreshActiveMode()
+    }
+
+    function refresh() {
         if (isMounted) refreshActiveMode()
     }
 
@@ -930,5 +1243,5 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         panelEl = null
     }
 
-    return { get rootEl() { build(); return panelEl! }, mountInto, setMode, unmount, destroy }
+    return { get rootEl() { build(); return panelEl! }, mountInto, setMode, showExtractionRun, refresh, unmount, destroy }
 }

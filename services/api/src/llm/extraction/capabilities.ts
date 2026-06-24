@@ -17,7 +17,8 @@ import type { ProviderName } from '@lixpi/constants'
 //   - Structured outputs (response_format json_schema + strict, or function tool
 //     with strict): gpt-4o-2024-08-06 and later.
 //   - o-series reasoning models (o1, o3, o4-mini, etc.) handle reasoning
-//     internally — no streamable thinking deltas. They also don't take temperature.
+//     internally — no streamable thinking deltas.
+//   - GPT-5-family and o-series models reject `temperature`.
 //   - Forced tool_choice works with reasoning models (no thinking-vs-tool conflict).
 //
 // **Google**:
@@ -37,11 +38,15 @@ export type ModelCapabilities = {
     // Anthropic forbids forced tool_choice ('any' | 'tool') with thinking on.
     // OpenAI and Google do not have this restriction.
     requiresAutoToolChoiceWithThinking: boolean
-    // o-series reasoning models reject `temperature`.
+    // Some OpenAI/Anthropic models reject `temperature`.
     supportsTemperature: boolean
     // True for chat-completion / responses-API models that accept a `system`
     // role or top-level instruction.
     supportsSystemPrompt: boolean
+    // Some structured-output APIs require every object in the response schema
+    // to be closed with additionalProperties=false. Open schemas need an
+    // adapter at the provider boundary, not stage-specific prompt changes.
+    requiresClosedJsonSchema: boolean
 }
 
 const matchAny = (modelVersion: string, patterns: RegExp[]): boolean =>
@@ -64,10 +69,11 @@ const ANTHROPIC_MANUAL_ONLY = [
     /^claude-3-7-sonnet/i,
 ]
 
-// OpenAI reasoning model families (no temperature, internal reasoning).
-const OPENAI_REASONING = [
+// OpenAI model families that reject temperature.
+const OPENAI_NO_TEMPERATURE = [
     /^o[134]\b/i,
     /^o4-mini\b/i,
+    /^gpt-5(?:\b|[-.])/i,
     /^gpt-5-?(o[134]|reasoning)/i,
 ]
 
@@ -83,25 +89,26 @@ export const detectCapabilities = (provider: ProviderName, modelVersion: string)
     if (provider === 'Anthropic') {
         const supportsTemperature = !matchAny(mv, ANTHROPIC_NO_TEMPERATURE)
         if (matchAny(mv, ANTHROPIC_ADAPTIVE_ONLY)) {
-            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true }
+            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false }
         }
         if (matchAny(mv, ANTHROPIC_ADAPTIVE_OR_MANUAL)) {
-            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true }
+            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false }
         }
         if (matchAny(mv, ANTHROPIC_MANUAL_ONLY)) {
-            return { provider, modelVersion: mv, thinkingMode: 'manual', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true }
+            return { provider, modelVersion: mv, thinkingMode: 'manual', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false }
         }
-        return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature, supportsSystemPrompt: true }
+        return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false }
     }
 
     if (provider === 'OpenAI') {
-        const isReasoning = matchAny(mv, OPENAI_REASONING)
+        const supportsTemperature = !matchAny(mv, OPENAI_NO_TEMPERATURE)
         return {
             provider, modelVersion: mv,
             thinkingMode: 'none',
             requiresAutoToolChoiceWithThinking: false,
-            supportsTemperature: !isReasoning,
+            supportsTemperature,
             supportsSystemPrompt: true,
+            requiresClosedJsonSchema: true,
         }
     }
 
@@ -113,8 +120,9 @@ export const detectCapabilities = (provider: ProviderName, modelVersion: string)
             requiresAutoToolChoiceWithThinking: false,
             supportsTemperature: true,
             supportsSystemPrompt: true,
+            requiresClosedJsonSchema: false,
         }
     }
 
-    return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature: true, supportsSystemPrompt: true }
+    return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature: true, supportsSystemPrompt: true, requiresClosedJsonSchema: false }
 }

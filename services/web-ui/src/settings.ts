@@ -770,7 +770,7 @@ export const settings: Settings = {
                 infoBubbleBackground: '#fff',
                 infoBubbleBoxShadow: '0 14px 32px rgba(66, 73, 79, 0.12), 0 2px 10px rgba(66, 73, 79, 0.08), inset 0 0 1px 1px rgba(66, 73, 79, 0.2)',
                 infoBubbleColor: colorPalette.nightBlue,
-                sectionDividerGradient: 'linear-gradient(90deg, #fff 0%, #F7F7FD 10%, #F3E4F2 26%, #C5C0EE 50%, #E6E9F6 74%, #F7F7FD 90%, #fff 100%)',
+                sectionDividerGradient: 'linear-gradient(90deg, rgba(247, 247, 253, 0) 0%, #F7F7FD 10%, #F3E4F2 26%, #C5C0EE 50%, #E6E9F6 74%, #F7F7FD 90%, rgba(247, 247, 253, 0) 100%)',
                 sectionDividerHeight: '2px',
                 sectionDividerBorderRadius: '999px',
                 sectionTitleColor: '#59626b',

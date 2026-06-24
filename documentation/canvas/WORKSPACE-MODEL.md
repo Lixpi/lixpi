@@ -118,7 +118,7 @@ type Workspace = {
 
 ### CanvasState
 
-`CanvasState` is the persisted heart of a workspace: the viewport, every node, every edge, the AI chat panel UI state, and any in-flight feature-extraction runs.
+`CanvasState` is the persisted heart of a workspace: the viewport, every node, every edge, and the AI chat panel UI state. Feature-extraction runs are API-owned `ExtractionRun` records; the canvas may hold only transient, unconfirmed UI placeholders before the user starts extraction.
 
 ```typescript
 type CanvasState = {
@@ -138,7 +138,6 @@ type CanvasState = {
         width?: number
         drafts?: Record<string, { content?: object }>
     }
-    featureExtractionRuns?: Record<string, CanvasFeatureExtractionState>
 }
 ```
 
