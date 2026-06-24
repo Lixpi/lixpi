@@ -557,7 +557,8 @@ export async function submitExtractionRequest(
         const token = await AuthService.getTokenSilently()
         accessToken = token || ''
         nats.publish(NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.FEATURE_EXTRACT.START, {
-            token, workspaceId, organizationId: '', extractionRunId, messages,
+            // organizationId is resolved server-side from the authenticated user.
+            token, workspaceId, extractionRunId, messages,
             aiModel: ctx.aiModel,
             aiImageModel: ctx.aiImageModel,
             analysisModelId: ctx.modelConfig?.analysisModelId ?? ctx.aiModel,

@@ -819,8 +819,18 @@ export type WorkspaceEdge = {
     pathType?: WorkspaceEdgePathType
 }
 
-export type FeatureScope = 'workspace' | 'user' | 'organization' | 'public'
+// Feature library access scopes. Intentionally distinct from MEDIA_LIBRARY_SCOPE:
+// features are org-wide (accessible across every workspace in the organization).
+// 'shared' (external/cross-org sharing) is reserved for a future release and has
+// no UI or code path yet.
+export type FeatureScope = 'organization' | 'shared'
 export type FeatureStatus = 'active' | 'reported' | 'removed'
+
+export const FEATURE_SCOPE = {
+    ORGANIZATION: 'organization',
+    SHARED: 'shared',
+} as const
+export type FeatureScopeValue = typeof FEATURE_SCOPE[keyof typeof FEATURE_SCOPE]
 
 export type FeatureSampleKind = 'source-crop' | 'texture-specimen' | 'applied-medium-probe' | 'palette-board'
 

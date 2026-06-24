@@ -8,12 +8,9 @@ import {
     type Feature,
     type FeatureMeta,
     type FeatureScope,
-    type FeatureStatus,
 } from '@lixpi/constants'
 
 const { ORG_NAME, STAGE } = process.env
-
-const REPORT_THRESHOLD = 5
 
 const buildScopeAndOwnerKey = (scope: FeatureScope, scopeOwnerId: string): string =>
     `${scope}#${scopeOwnerId}`
@@ -31,10 +28,8 @@ export type RequesterContext = {
 }
 
 export const canRead = (userId: string, feature: Feature, workspaceId?: string, organizationId?: string): boolean => {
-    if (feature.ownerUserId === userId) return true
-    if (feature.scope === 'public' && feature.status === 'active') return true
-    if (feature.scope === 'workspace' && feature.scopeOwnerId === workspaceId) return true
-    if (feature.scope === 'user' && feature.ownerUserId === userId) return true
+    // Features are org-wide: any member of the owning organization can read them.
+    // 'shared' (external sharing) has no allow path yet — deferred to a future release.
     if (feature.scope === 'organization' && feature.scopeOwnerId === organizationId) return true
     return false
 }
@@ -49,18 +44,16 @@ const FeatureModel = {
         instructions: string
         parameters: Record<string, any>
         sampleImages: Feature['sampleImages']
-        scope: FeatureScope
         ownerUserId: string
         workspaceId: string
+        organizationId: string
         sourceContext: Feature['sourceContext']
     }): Promise<Feature | undefined> => {
         const now = Date.now()
         const featureId = data.featureId ?? uuid()
-        const scope: FeatureScope = data.scope
-        const scopeOwnerId = scope === 'workspace' ? data.workspaceId
-            : scope === 'user' ? data.ownerUserId
-            : scope === 'public' ? 'public'
-            : 'org-placeholder'
+        // All features are org-scoped so they are accessible across every workspace in the org.
+        const scope: FeatureScope = 'organization'
+        const scopeOwnerId = data.organizationId
 
         const feature: Feature & { scopeAndOwner: string } = {
             featureId, version: 1,
@@ -154,7 +147,7 @@ const FeatureModel = {
             origin: `Feature.listPromotedByOriginWorkspaceForCleanup(${workspaceId})`,
         })
         return ((result?.items ?? []) as Feature[]).filter((feature) =>
-            feature.workspaceId === workspaceId && feature.scope !== 'workspace',
+            feature.workspaceId === workspaceId,
         )
     },
 
@@ -177,24 +170,6 @@ const FeatureModel = {
         await dynamoDBService.deleteItems({ tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE), key: { featureId }, origin: 'Feature.deleteFeature:meta' })
     },
 
-    changeScope: async ({ feature, newScope, newScopeOwnerId }: { feature: Feature; newScope: FeatureScope; newScopeOwnerId: string }): Promise<Feature> => {
-        const now = Date.now()
-        const gsiKey = buildScopeAndOwnerKey(newScope, newScopeOwnerId)
-        await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE), key: { featureId: feature.featureId, version: 1 }, updates: { scope: newScope, scopeOwnerId: newScopeOwnerId, scopeAndOwner: gsiKey, updatedAt: now }, origin: 'Feature.changeScope' })
-        await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE), key: { featureId: feature.featureId }, updates: { scope: newScope, scopeOwnerId: newScopeOwnerId, updatedAt: now }, origin: 'Feature.changeScope:meta' })
-        return { ...feature, scope: newScope, scopeOwnerId: newScopeOwnerId, updatedAt: now }
-    },
-
-    incrementReportCount: async ({ featureId }: { featureId: string }): Promise<{ newStatus: FeatureStatus }> => {
-        const item = await dynamoDBService.getItem({ tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE), key: { featureId, version: 1 }, origin: 'Feature.incrementReportCount:get' })
-        if (!item) return { newStatus: 'active' }
-        const count = (item.reportCount ?? 0) + 1
-        const newStatus: FeatureStatus = count >= REPORT_THRESHOLD ? 'reported' : 'active'
-        const now = Date.now()
-        await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE), key: { featureId, version: 1 }, updates: { reportCount: count, status: newStatus, updatedAt: now }, origin: 'Feature.incrementReportCount' })
-        if (newStatus === 'reported') await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE), key: { featureId }, updates: { status: newStatus, updatedAt: now }, origin: 'Feature.incrementReportCount:meta' })
-        return { newStatus }
-    },
 }
 
 export default FeatureModel
