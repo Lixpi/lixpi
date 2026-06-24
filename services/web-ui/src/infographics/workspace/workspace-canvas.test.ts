@@ -521,7 +521,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'const resolvedNodes = isGeneratedMediaNode(imageNode)')
 		expectSourceToContain(ts, 'const resolvedNodes = isGeneratedMediaNode(videoNode)')
 		expectSourceToContain(ts, '? rebalanceGeneratedMediaTrees(updatedNodes, currentCanvasState.edges)')
-		expectSourceToContain(ts, 'syncCanvasNodeDomGeometry(nextState.nodes)')
+		expectSourceToContain(ts, 'if (!needsRerender) syncCanvasNodeDomGeometry(currentCanvasState.nodes)')
 		expectSourceNotToContain(ts, 'getGeneratedImageLineageAnchorRect(')
 		expectSourceNotToContain(ts, '? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)')
 	})
@@ -887,9 +887,10 @@ describe('Workspace canvas — AI panel reload stability', () => {
 	it('preserves local visual drag commits when active-panel renders arrive stale', () => {
 		expectSourceToContain(ts, 'mergeIncomingCanvasStateWithPendingVisualCommit,')
 		expectSourceToContain(ts, 'let pendingLocalCanvasVisualCommit: PendingCanvasVisualCommit | null = null')
-		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(nextState)')
+		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(prunedState)')
 		expectSourceToContain(ts, 'const renderStatePlan = mergeIncomingCanvasStateWithPendingVisualCommit({')
-		expectSourceToContain(ts, 'const effectiveCanvasState = renderStatePlan.state')
+		expectSourceToContain(ts, 'const normalizedCanvasState = renderStatePlan.state')
+		expectSourceToContain(ts, 'const effectiveCanvasState = prunedCanvasState.state')
 		expectSourceToContain(ts, 'currentCanvasState = shouldPreserveLiveViewport && effectiveCanvasState')
 	})
 })
@@ -1008,16 +1009,14 @@ describe('Workspace AI chat panel — session history interactions', () => {
 		expectExcerptToContain(closeBody, 'return', 'closeAiChatSidebarTab')
 	})
 
-	it('opens a persistent extraction tab for a feature extraction run', () => {
+	it('opens a feature extraction run on the Features surface', () => {
 		const openBody = extractFunctionBody(ts, 'openFeatureExtractionTab')
+		const openInFeaturesBody = extractFunctionBody(ts, 'openFeatureExtractionRunInFeatures')
 
-		expectExcerptToContain(openBody, 'isOpen: true, isSessionHistoryOpen: false', 'openFeatureExtractionTab')
-		expectExcerptToContain(openBody, 'const tabId = `extraction:${extractionRunId}`', 'openFeatureExtractionTab')
-		expectExcerptToContain(openBody, 'if (!aiChatSidebarTabs.some((tab) => tab.tabId === tabId)) {', 'openFeatureExtractionTab')
-		expectExcerptToContain(openBody, "type: 'extraction'", 'openFeatureExtractionTab')
-		expectExcerptToContain(openBody, 'activeAiChatSidebarTabId = tabId', 'openFeatureExtractionTab')
-		expectExcerptToContain(openBody, 'persistAiChatSidebarState()', 'openFeatureExtractionTab')
-		expectExcerptToContain(openBody, 'renderActiveAiChatPanel()', 'openFeatureExtractionTab')
+		expectExcerptToContain(openBody, 'openFeatureExtractionRunInFeatures(extractionRunId)', 'openFeatureExtractionTab')
+		expectExcerptToContain(openInFeaturesBody, 'const mediaLibrary = ensureMediaLibraryPanel()', 'openFeatureExtractionRunInFeatures')
+		expectExcerptToContain(openInFeaturesBody, "openRightSidePanelToMode('features')", 'openFeatureExtractionRunInFeatures')
+		expect(openInFeaturesBody.match(/mediaLibrary\.showExtractionRun\(extractionRunId\)/g)).toHaveLength(2)
 	})
 
 	it('adds thread tabs idempotently when opening existing chat sessions', () => {
@@ -1172,11 +1171,13 @@ describe('Right side panel — TS infrastructure', () => {
 	it('delegates right side panel state to SidePanel with content-agnostic settings', () => {
 		expectSourceToContain(ts, 'const RIGHT_SIDE_PANEL_SETTINGS = settings.rightSidePanel')
 		expectSourceToContain(ts, 'function ensureActiveRightSidePanel(): SidePanelInstance')
-		expectSourceToContain(ts, 'const { defaultDimensions, dimensions, resizeHandle, toggle, animation } = RIGHT_SIDE_PANEL_SETTINGS')
+		expectSourceToContain(ts, 'const { defaultDimensions, dimensions, resizeHandle, toggle, animation, overlay, drag } = RIGHT_SIDE_PANEL_SETTINGS')
 		expectSourceToContain(ts, 'minWidth: dimensions.minWidth')
 		expectSourceToContain(ts, 'defaultWidth: defaultDimensions.width')
 		expectSourceToContain(ts, 'getMaxWidth: getRightSidePanelMaxWidth')
 		expectSourceToContain(ts, 'animation,')
+		expectSourceToContain(ts, 'overlay,')
+		expectSourceToContain(ts, 'drag,')
 		expectSourceToContain(ts, 'function reflectRightSidePanelWidth(width: number)')
 		expectSourceToContain(ts, "style.setProperty('--workspace-right-side-panel-width', widthValue)")
 		expectSourceNotToContain(ts, 'settings.aiChatThread.rightSidePanel')
@@ -1201,8 +1202,9 @@ describe('Right side panel — TS infrastructure', () => {
 
 	it('onAskAi opens a persisted extraction session without creating a context region', () => {
 		expect(ts).toMatch(/onAskAi.*async|async.*onAskAi/)
-		expectSourceToContain(ts, 'persistFeatureExtractionState({')
-		expectSourceToContain(ts, 'openFeatureExtractionTab(extractionRunId)')
+		expectSourceToContain(ts, 'setPendingExtractionContext(extractionRunId, sourceContextSnapshot)')
+		expectSourceToContain(ts, 'setPendingFeatureExtractionRun({')
+		expectSourceToContain(ts, 'openFeatureExtractionRunInFeatures(extractionRunId)')
 	})
 
 	it('rehydrates pending extraction context from the persisted snapshot when reopening a tab', () => {

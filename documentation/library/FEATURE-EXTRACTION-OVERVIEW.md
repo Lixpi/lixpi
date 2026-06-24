@@ -17,8 +17,8 @@ shape of an extracted feature. For **how** extraction actually runs, see the
 [Extraction Pipeline](./EXTRACTION-PIPELINE.md). For **how leakage is
 prevented**, see [Anti-Leakage](./ANTI-LEAKAGE.md). For the daily-use `/use`
 path and the scope/sharing model, see [Using Features](./USING-FEATURES.md).
-Extracted features are surfaced in the `Features` category of the
-[Media Library](./MEDIA-LIBRARY.md) panel.
+Extracted features are surfaced in the `Features` surface of the right side
+panel's [Media Library](./MEDIA-LIBRARY.md).
 
 ## Why this exists
 
@@ -85,7 +85,7 @@ trade-offs come up.
 - **A `feature` canvas node type.** Features are library-only; drag-to-canvas
   placement is parked for a later iteration.
 - **Inline editing of feature instructions** in the library card. Edits go
-  through "Open in extraction tab → Re-extract."
+  through "Open in Features → Re-extract."
 - **Versioning / revision history** of features. The `version` field is
   reserved but only `1` is written today.
 - **A search index for public features.** A simple GSI scan covers the current

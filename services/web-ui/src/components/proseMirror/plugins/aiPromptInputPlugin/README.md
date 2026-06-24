@@ -201,7 +201,7 @@ Receiving state is external. The NodeView polls `options.isReceiving()` every 20
 - Draft persistence: `canvasState.aiChatPanel.drafts`
 - Context tray: `createAiChatPanelContextTrayElement`
 - Receiving lookup: `promptInputController.isReceiving(panelThreadId ?? undefined)`
-- Submit path: extraction tabs call extraction submit logic; chat tabs call `promptInputController.submitMessage()`
+- Submit path: AI chat panel tabs call `promptInputController.submitMessage()`; feature extraction starts from the Features surface confirmation controls.
 
 ### Single Floating Input
 
@@ -272,7 +272,7 @@ Settings hooks:
 ## Related Modules
 
 - `$src/services/ai-prompt-input-controller.ts`: routes submitted prompt content to AI chat threads, creates threads for non-thread targets, queues pending messages, tracks receiving thread ids.
-- `$src/components/proseMirror/plugins/primitives/aiControls/`: reusable model, media, multi-select, and submit controls.
+- `$src/components/aiModelControls/`: reusable model, media, multi-select, and submit controls shared by the prompt input and feature extraction.
 - `$src/components/proseMirror/plugins/aiChatThreadPlugin/`: thread log and streaming response plugin.
 - `$src/infographics/workspace/WorkspaceCanvas.ts`: mounts prompt surfaces and wires controller callbacks.
 - `$src/components/proseMirror/components/editor.ts`: creates the `aiPromptInput` schema and plugin stack.

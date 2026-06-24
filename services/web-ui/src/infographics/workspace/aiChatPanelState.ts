@@ -2,13 +2,21 @@ import type {
     CanvasAiChatPanelState,
     CanvasAiChatSidebarTab,
     CanvasNode,
+    CanvasRightSidePanelMode,
     CanvasState,
 } from '@lixpi/constants'
+
+const RIGHT_SIDE_PANEL_MODES: CanvasRightSidePanelMode[] = ['features', 'media', 'aiThreads']
+
+function sanitizeTopLevelMode(mode: CanvasRightSidePanelMode | undefined): CanvasRightSidePanelMode {
+    return mode && RIGHT_SIDE_PANEL_MODES.includes(mode) ? mode : 'aiThreads'
+}
 
 export function createDefaultAiChatPanelState(): CanvasAiChatPanelState {
     return {
         isOpen: false,
         isSessionHistoryOpen: false,
+        topLevelMode: 'aiThreads',
         tabs: [],
         contextChips: [],
     }
@@ -49,6 +57,7 @@ export function getAiChatPanelState(canvasState: CanvasState | null | undefined)
     return {
         isOpen: persisted?.isOpen === true,
         isSessionHistoryOpen: persisted?.isSessionHistoryOpen === true,
+        topLevelMode: sanitizeTopLevelMode(persisted?.topLevelMode),
         tabs,
         ...(activeTabId ? { activeTabId } : {}),
         contextChips: sanitizeContextChips(persisted?.contextChips, canvasState.nodes),

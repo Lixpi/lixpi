@@ -5,22 +5,21 @@ import { renderMarkdownStatic } from '$src/utils/markdownStreamRenderer.ts'
 import {
     NATS_SUBJECTS,
     MEDIA_LIBRARY_BROWSE_ALL,
-    MEDIA_LIBRARY_CATEGORY,
     MEDIA_LIBRARY_SCOPE,
+    type CanvasFeatureExtractionState,
     type Feature,
     type FeatureMeta,
-    type MediaLibraryCategory,
     type MediaLibraryImageMeta,
     type MediaLibraryScope,
     type MediaLibraryVideoMeta,
 } from '@lixpi/constants'
+import { createPureDropdown } from '$src/components/dropdown/index.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import MediaLibraryService from '$src/services/media-library-service.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
-import { xIcon } from '$src/svgIcons/index.ts'
-import { settings } from '$src/settings.ts'
+import { renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
 
 const SCOPES: Array<{ key: MediaLibraryScope; label: string }> = [
     { key: MEDIA_LIBRARY_SCOPE.WORKSPACE, label: 'Workspace' },
@@ -31,16 +30,129 @@ const SCOPES: Array<{ key: MediaLibraryScope; label: string }> = [
 
 type MediaLibraryBrowseMode = MediaLibraryScope | typeof MEDIA_LIBRARY_BROWSE_ALL
 
+// The renderer surfaces two of the right side panel's top-level modes. The third
+// mode ('aiThreads') is owned by WorkspaceCanvas and never reaches this renderer.
+export type MediaLibraryPanelMode = 'features' | 'media'
+
+export type MediaLibraryPanelInstance = {
+    // Root element the host mounts into the right side panel body.
+    rootEl: HTMLElement
+    mountInto: (hostEl: HTMLElement) => void
+    setMode: (mode: MediaLibraryPanelMode) => void
+    showExtractionRun: (extractionRunId: string) => void
+    refresh: () => void
+    unmount: () => void
+    destroy: () => void
+}
+
+export type FeatureExtractionModelContext = {
+    aiModel?: string
+    aiImageModel?: string
+}
+
+export type FeatureExtractionModelControlsInstance = {
+    dom: HTMLElement
+    getModelContext: () => FeatureExtractionModelContext
+    destroy: () => void
+}
+
 type MediaLibraryPanelOptions = {
     workspaceId: string
-    paneEl: HTMLElement
-    onOpenExtractionTab: (extractionRunId: string) => void
     onUseFeature?: (feature: FeatureMeta) => boolean
     onInsertImage?: (item: MediaLibraryImageMeta) => Promise<boolean>
     onInsertVideo?: (item: MediaLibraryVideoMeta) => Promise<boolean>
+    getFeatureExtractionRuns?: () => CanvasFeatureExtractionState[]
+    createFeatureExtractionModelControls?: (extractionRunId: string) => FeatureExtractionModelControlsInstance
+    onConfirmFeatureExtraction?: (extractionRunId: string, bodyEl: HTMLElement, modelContext: FeatureExtractionModelContext) => void | Promise<void>
 }
 
 type FeatureDetailsState = Feature | { error: string }
+
+type ScopeDropdownOption = { key: string; label: string }
+
+type ScopeDropdownInstance = {
+    dom: HTMLElement
+    setSelectedKey: (key: string) => void
+    destroy: () => void
+}
+
+type FeatureLibraryRowShellConfig = {
+    className?: string
+    data: Record<string, string>
+    selected: boolean
+    thumbEl: HTMLElement
+    categoryLabel: string
+    scopeLabel: string
+    name: string
+    summary: string
+    actionEl?: HTMLElement
+}
+
+type FeatureLibraryRowShellInstance = {
+    dom: HTMLElement
+    destroy: () => void
+}
+
+class FeatureLibraryRowShell implements FeatureLibraryRowShellInstance {
+    readonly dom: HTMLElement
+
+    constructor(private readonly config: FeatureLibraryRowShellConfig) {
+        this.dom = this.render()
+    }
+
+    private render(): HTMLElement {
+        const rowClassName = `feature-library-row${this.config.className ? ` ${this.config.className}` : ''}${this.config.selected ? ' feature-library-row-selected' : ''}`
+        return html`<article className=${rowClassName} data=${this.config.data} tabindex="0" aria-selected=${this.config.selected ? 'true' : 'false'} data-side-panel-no-drag="true">
+            ${this.config.thumbEl}
+            <div className="feature-library-row-info">
+                <div className="feature-library-row-meta">
+                    <span className="feature-library-row-category">${this.config.categoryLabel}</span>
+                    <span className="feature-library-row-scope">${this.config.scopeLabel}</span>
+                </div>
+                <div className="feature-library-row-name">${this.config.name}</div>
+                <div className="feature-library-row-summary">${this.config.summary}</div>
+            </div>
+            ${this.config.actionEl ?? null}
+        </article>` as HTMLElement
+    }
+
+    destroy(): void {
+        this.dom.remove()
+    }
+}
+
+function createFeatureLibraryRowShell(config: FeatureLibraryRowShellConfig): FeatureLibraryRowShellInstance {
+    return new FeatureLibraryRowShell(config)
+}
+
+// Wrap the shared dropdown primitive so callers work in terms of scope keys
+// instead of option objects. Replaces the native <select> controls that looked
+// out of place on non-mac platforms.
+function createScopeDropdown(config: {
+    id: string
+    options: ScopeDropdownOption[]
+    selectedKey: string
+    onSelect: (key: string) => void
+}): ScopeDropdownInstance {
+    const dropdownOptions = config.options.map((option) => ({ title: option.label, key: option.key }))
+    const findOption = (key: string) => dropdownOptions.find((option) => option.key === key) ?? dropdownOptions[0]
+    const dropdown = createPureDropdown({
+        id: config.id,
+        // Match the AI model selector dropdown exactly.
+        theme: 'dark',
+        ignoreColorValuesForOptions: true,
+        renderIconForSelectedValue: false,
+        renderIconForOptions: false,
+        selectedValue: findOption(config.selectedKey),
+        options: dropdownOptions,
+        onSelect: (option) => config.onSelect(option.key),
+    })
+    return {
+        dom: dropdown.dom,
+        setSelectedKey: (key) => dropdown.update(findOption(key)),
+        destroy: dropdown.destroy,
+    }
+}
 
 type PaletteColor = {
     name: string
@@ -123,13 +235,13 @@ const toFeatureMeta = (feature: Feature | FeatureMeta): FeatureMeta => {
     }
 }
 
-export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
-    const { workspaceId, paneEl, onOpenExtractionTab, onUseFeature, onInsertImage, onInsertVideo } = options
+export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): MediaLibraryPanelInstance {
+    const { workspaceId, onUseFeature, onInsertImage, onInsertVideo, getFeatureExtractionRuns, createFeatureExtractionModelControls, onConfirmFeatureExtraction } = options
     const mediaLibraryService = new MediaLibraryService()
-    let isOpen = false
-    let activeCategory: MediaLibraryCategory = MEDIA_LIBRARY_CATEGORY.FEATURES
-    let browseMode: MediaLibraryBrowseMode = MEDIA_LIBRARY_SCOPE.WORKSPACE
-    let searchQuery = ''
+    let isMounted = false
+    let mode: MediaLibraryPanelMode = 'features'
+    // No scope filter in the UI — always browse everything the user can access.
+    const browseMode: MediaLibraryBrowseMode = MEDIA_LIBRARY_BROWSE_ALL
     let allFeatures: FeatureMeta[] = []
     let allImages: MediaLibraryImageMeta[] = []
     let allVideos: MediaLibraryVideoMeta[] = []
@@ -138,12 +250,38 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
     let feedbackMessage = ''
     let accessToken = ''
     let selectedFeatureId: string | null = null
+    let selectedExtractionRunId: string | null = null
     const featureDetails = new Map<string, FeatureDetailsState>()
     const loadingFeatureDetails = new Set<string>()
     let panelEl: HTMLElement | null = null
-    let backdropEl: HTMLElement | null = null
     let hasFeatureEventSubscriptions = false
     let hasMediaEventSubscriptions = false
+    // Track which surface's data is in memory and for which browse scope, so a
+    // re-mount or mode re-entry renders cached rows instead of flashing through a
+    // loading state and refetching every time.
+    let loadedFeaturesBrowseMode: MediaLibraryBrowseMode | null = null
+    let loadedMediaBrowseMode: MediaLibraryBrowseMode | null = null
+    // Row and inspector scope dropdowns are rebuilt on every renderContent and
+    // must be destroyed to detach their popovers and document listeners.
+    let transientDropdowns: ScopeDropdownInstance[] = []
+    let transientExtractionModelControls: FeatureExtractionModelControlsInstance[] = []
+
+    function destroyTransientDropdowns() {
+        for (const dropdown of transientDropdowns) dropdown.destroy()
+        transientDropdowns = []
+        for (const controls of transientExtractionModelControls) controls.destroy()
+        transientExtractionModelControls = []
+    }
+
+    function trackTransientDropdown(dropdown: ScopeDropdownInstance): ScopeDropdownInstance {
+        transientDropdowns.push(dropdown)
+        return dropdown
+    }
+
+    function trackTransientExtractionModelControls(controls: FeatureExtractionModelControlsInstance): FeatureExtractionModelControlsInstance {
+        transientExtractionModelControls.push(controls)
+        return controls
+    }
 
     async function loadFeatures() {
         isLoading = true
@@ -170,6 +308,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
                 }),
             ))
             allFeatures = results.flatMap((result) => result?.items ?? [])
+            loadedFeaturesBrowseMode = browseMode
         } catch (e) {
             console.error('Failed to load features:', e)
             errorMessage = 'Could not load features.'
@@ -179,56 +318,43 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         }
     }
 
-    async function loadImages() {
+    // Media mode colocates saved images and videos, so both lists load together.
+    async function loadMedia() {
         isLoading = true
         errorMessage = ''
         renderContent()
         try {
             accessToken = await AuthService.getTokenSilently()
-            allImages = await mediaLibraryService.listImages({
-                workspaceId,
-                scopes: browseMode === MEDIA_LIBRARY_BROWSE_ALL
-                    ? Object.values(MEDIA_LIBRARY_SCOPE)
-                    : [browseMode],
-                includeAllAvailable: browseMode === MEDIA_LIBRARY_BROWSE_ALL,
-                query: searchQuery,
-            })
+            const scopes = browseMode === MEDIA_LIBRARY_BROWSE_ALL
+                ? Object.values(MEDIA_LIBRARY_SCOPE)
+                : [browseMode]
+            const includeAllAvailable = browseMode === MEDIA_LIBRARY_BROWSE_ALL
+            const [images, videos] = await Promise.all([
+                mediaLibraryService.listImages({ workspaceId, scopes, includeAllAvailable }),
+                mediaLibraryService.listVideos({ workspaceId, scopes, includeAllAvailable }),
+            ])
+            allImages = images
+            allVideos = videos
+            loadedMediaBrowseMode = browseMode
         } catch (e) {
-            console.error('Failed to load Media Library images:', e)
-            errorMessage = 'Could not load images.'
+            console.error('Failed to load Media Library items:', e)
+            errorMessage = 'Could not load media.'
         } finally {
             isLoading = false
             renderContent()
         }
     }
 
-    async function loadVideos() {
-        isLoading = true
-        errorMessage = ''
-        renderContent()
-        try {
-            accessToken = await AuthService.getTokenSilently()
-            allVideos = await mediaLibraryService.listVideos({
-                workspaceId,
-                scopes: browseMode === MEDIA_LIBRARY_BROWSE_ALL
-                    ? Object.values(MEDIA_LIBRARY_SCOPE)
-                    : [browseMode],
-                includeAllAvailable: browseMode === MEDIA_LIBRARY_BROWSE_ALL,
-                query: searchQuery,
-            })
-        } catch (e) {
-            console.error('Failed to load Media Library videos:', e)
-            errorMessage = 'Could not load videos.'
-        } finally {
-            isLoading = false
-            renderContent()
-        }
+    function loadActiveMode() {
+        return mode === 'features' ? loadFeatures() : loadMedia()
     }
 
-    function loadActiveCategory() {
-        if (activeCategory === MEDIA_LIBRARY_CATEGORY.FEATURES) return loadFeatures()
-        if (activeCategory === MEDIA_LIBRARY_CATEGORY.VIDEOS) return loadVideos()
-        return loadImages()
+    // True when the current surface already has rows in memory for the active
+    // browse scope, so we can render cached content instead of reloading.
+    function hasFreshDataForMode(): boolean {
+        return mode === 'features'
+            ? loadedFeaturesBrowseMode === browseMode
+            : loadedMediaBrowseMode === browseMode
     }
 
     function setFeedback(message: string) {
@@ -273,6 +399,64 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         imageEl.src = getStoredSampleUrl(feature, sampleIndex)
     }
 
+    function getExtractionRunsForPanel(): CanvasFeatureExtractionState[] {
+        return (getFeatureExtractionRuns?.() ?? [])
+            .filter((run) => run.status !== 'completed' || run.extractionRunId === selectedExtractionRunId)
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+    }
+
+    function getExtractionRunState(extractionRunId: string): CanvasFeatureExtractionState | undefined {
+        return (getFeatureExtractionRuns?.() ?? []).find((run) => run.extractionRunId === extractionRunId)
+    }
+
+    function isTerminalExtractionStatus(status: CanvasFeatureExtractionState['status'] | undefined): boolean {
+        return status === 'completed' || status === 'failed'
+    }
+
+    function shouldDeferFeatureListRenderForActiveExtraction(): boolean {
+        if (!selectedExtractionRunId) return false
+        const extractionRun = getExtractionRunState(selectedExtractionRunId)
+        return Boolean(extractionRun && !isTerminalExtractionStatus(extractionRun.status))
+    }
+
+    function renderAfterFeatureLibraryEvent(): void {
+        if (!isMounted || mode !== 'features') return
+        if (shouldDeferFeatureListRenderForActiveExtraction()) return
+        renderContent()
+    }
+
+    function getExtractionStatusLabel(status: CanvasFeatureExtractionState['status']): string {
+        switch (status) {
+            case 'pending': return 'Needs confirmation'
+            case 'analyzing': return 'Analyzing'
+            case 'routing': return 'Routing'
+            case 'extracting':
+            case 'extracting_axes': return 'Extracting'
+            case 'materializing_crops': return 'Cropping'
+            case 'synthesizing': return 'Synthesizing'
+            case 'generating_samples': return 'Sampling'
+            case 'saving': return 'Saving'
+            case 'completed': return 'Saved'
+            case 'failed': return 'Failed'
+            default: return 'Running'
+        }
+    }
+
+    function getExtractionRunTitle(run: CanvasFeatureExtractionState): string {
+        const featureName = typeof run.featureCard?.name === 'string' ? run.featureCard.name.trim() : ''
+        if (featureName) return `@${featureName}`
+        const userText = run.userText?.trim()
+        if (userText) return userText.length > 52 ? `${userText.slice(0, 49)}...` : userText
+        return 'Pending extracted feature'
+    }
+
+    function getExtractionRunSummary(run: CanvasFeatureExtractionState): string {
+        if (run.status === 'pending') return 'Confirm to start extraction from the selected source.'
+        if (run.status === 'failed') return run.error ? `Failed: ${run.error}` : 'Extraction failed.'
+        if (run.status === 'completed') return run.featureCard?.summary ?? 'Feature saved to the library.'
+        return 'Feature extraction is running. Progress renders in the inspector.'
+    }
+
     async function ensureFeatureDetails(featureId: string) {
         if (featureDetails.has(featureId) || loadingFeatureDetails.has(featureId)) return
         loadingFeatureDetails.add(featureId)
@@ -296,43 +480,35 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         }
     }
 
-    function getFiltered(): FeatureMeta[] {
-        if (!searchQuery) return allFeatures
-        const normalizedQuery = searchQuery.toLowerCase()
-        return allFeatures.filter((feature) => feature.name.toLowerCase().includes(normalizedQuery) || feature.summary.toLowerCase().includes(normalizedQuery) || feature.category.toLowerCase().includes(normalizedQuery) || (feature.tags ?? []).some((tag) => tag.toLowerCase().includes(normalizedQuery)))
-    }
-
     function renderContent() {
         if (!panelEl) return
         const browserEl = panelEl.querySelector('.media-library-browser') as HTMLElement
         const inspectorEl = panelEl.querySelector('.media-library-inspector') as HTMLElement
         if (!browserEl || !inspectorEl) return
+        destroyTransientDropdowns()
         browserEl.replaceChildren()
         inspectorEl.replaceChildren()
-        const showingFeatures = activeCategory === MEDIA_LIBRARY_CATEGORY.FEATURES
+        const showingFeatures = mode === 'features'
+        const extractionRuns = showingFeatures ? getExtractionRunsForPanel() : []
         panelEl.classList.toggle('media-library-panel-images', !showingFeatures)
-        panelEl.classList.toggle('media-library-panel-feature-selected', showingFeatures && selectedFeatureId !== null)
-        if (isLoading) {
-            browserEl.appendChild(html`<div className="media-library-state">Loading ${activeCategory}</div>` as HTMLElement)
+        panelEl.classList.toggle('media-library-panel-feature-selected', showingFeatures && (selectedFeatureId !== null || selectedExtractionRunId !== null))
+        panelEl.classList.toggle('media-library-panel-extraction-selected', showingFeatures && selectedExtractionRunId !== null)
+        if (isLoading && (!showingFeatures || extractionRuns.length === 0)) {
+            browserEl.appendChild(html`<div className="media-library-state">Loading ${showingFeatures ? 'features' : 'media'}</div>` as HTMLElement)
             return
         }
-        if (errorMessage) {
+        if (errorMessage && (!showingFeatures || extractionRuns.length === 0)) {
             browserEl.appendChild(html`<div className="media-library-state media-library-state-error">${errorMessage}</div>` as HTMLElement)
             return
         }
-        if (activeCategory === MEDIA_LIBRARY_CATEGORY.IMAGES) {
+        if (mode === 'media') {
             browserEl.appendChild(html`<div className="media-library-browser-intro">
-                <h2>Images</h2>
-                <p>Saved image assets you can add back to the canvas.</p>
+                <h2>Media</h2>
+                <p>Saved images and videos you can add back to the canvas. Hover a video to preview.</p>
             </div>` as HTMLElement)
+            browserEl.appendChild(html`<h3 className="media-library-media-group-title">Images</h3>` as HTMLElement)
             renderImages(browserEl)
-            return
-        }
-        if (activeCategory === MEDIA_LIBRARY_CATEGORY.VIDEOS) {
-            browserEl.appendChild(html`<div className="media-library-browser-intro">
-                <h2>Videos</h2>
-                <p>Saved video assets you can add back to the canvas. Hover a card to preview.</p>
-            </div>` as HTMLElement)
+            browserEl.appendChild(html`<h3 className="media-library-media-group-title">Videos</h3>` as HTMLElement)
             renderVideos(browserEl)
             return
         }
@@ -340,13 +516,28 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
             <h2>Features</h2>
             <p>Reusable visual properties extracted from images. Select one to inspect its guidance and samples.</p>
         </div>` as HTMLElement)
-        const filtered = getFiltered()
-        if (filtered.length === 0) {
+        if (allFeatures.length === 0 && extractionRuns.length === 0) {
             browserEl.appendChild(html`<div className="media-library-state">No features found.</div>` as HTMLElement)
         }
 
+        if (extractionRuns.length > 0) {
+            const extractionSectionEl = html`<div className="feature-library-section feature-extraction-section">
+                <div className="feature-library-section-header">Feature extraction</div>
+                <div className="feature-library-section-items"></div>
+            </div>` as HTMLElement
+            const itemsEl = extractionSectionEl.querySelector('.feature-library-section-items') as HTMLElement
+            for (const run of extractionRuns) itemsEl.appendChild(buildExtractionRow(run))
+            browserEl.appendChild(extractionSectionEl)
+        }
+        if (isLoading) {
+            browserEl.appendChild(html`<div className="media-library-state">Loading saved features</div>` as HTMLElement)
+        }
+        if (errorMessage) {
+            browserEl.appendChild(html`<div className="media-library-state media-library-state-error">${errorMessage}</div>` as HTMLElement)
+        }
+
         const groups = new Map<string, FeatureMeta[]>()
-        for (const feature of filtered) {
+        for (const feature of allFeatures) {
             const category = feature.category || 'other'
             if (!groups.has(category)) groups.set(category, [])
             groups.get(category)!.push(feature)
@@ -354,25 +545,25 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
 
         for (const [category, features] of groups) {
             const sectionEl = html`<div className="feature-library-section">
-                <button type="button" className="feature-library-section-header">${category}</button>
+                <div className="feature-library-section-header">${category}</div>
                 <div className="feature-library-section-items"></div>
             </div>` as HTMLElement
             const itemsEl = sectionEl.querySelector('.feature-library-section-items') as HTMLElement
-            let collapsed = false
-            sectionEl.querySelector('button')!.addEventListener('click', () => {
-                collapsed = !collapsed
-                itemsEl.hidden = collapsed
-            })
             for (const feature of features) itemsEl.appendChild(buildRow(feature))
             browserEl.appendChild(sectionEl)
         }
 
-        const selectedFeature = allFeatures.find((feature) => feature.featureId === selectedFeatureId)
-        if (selectedFeature) {
+        const selectedExtractionRun = selectedExtractionRunId ? getExtractionRunState(selectedExtractionRunId) : undefined
+        const selectedFeature = selectedExtractionRun ? undefined : allFeatures.find((feature) => feature.featureId === selectedFeatureId)
+        if (selectedExtractionRun) {
+            inspectorEl.appendChild(buildExtractionInspector(selectedExtractionRun))
+        } else if (selectedFeature) {
             inspectorEl.appendChild(buildFeatureInspector(selectedFeature))
         } else {
             selectedFeatureId = null
+            selectedExtractionRunId = null
             panelEl.classList.remove('media-library-panel-feature-selected')
+            panelEl.classList.remove('media-library-panel-extraction-selected')
             inspectorEl.appendChild(html`<div className="feature-library-inspector-empty">
                 <strong>Select a Feature</strong>
                 <span>Full instructions, palette details, samples, and sharing controls appear here.</span>
@@ -449,12 +640,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
             <div className="media-library-video-actions">
                 <button type="button" data-action="insert">Add to canvas</button>
                 <label>Scope
-                    <select className="media-library-video-scope-select">
-                        <option value=${MEDIA_LIBRARY_SCOPE.WORKSPACE}>Workspace</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.USER}>Mine</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.ORGANIZATION}>Organization</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.PUBLIC}>Public</option>
-                    </select>
+                    <span className="media-library-video-scope-mount"></span>
                 </label>
                 <button type="button" data-action="delete">Delete</button>
             </div>
@@ -466,27 +652,31 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         rowEl.addEventListener('mouseenter', () => { videoEl.play().catch(() => {}) })
         rowEl.addEventListener('mouseleave', () => { videoEl.pause(); videoEl.currentTime = 0 })
 
-        const scopeSelect = rowEl.querySelector('.media-library-video-scope-select') as HTMLSelectElement
         const organizationId = organizationStore.getData('organizationId') || undefined
-        if (!organizationId) scopeSelect.querySelector(`option[value="${MEDIA_LIBRARY_SCOPE.ORGANIZATION}"]`)?.remove()
-        scopeSelect.value = item.scope
-        scopeSelect.addEventListener('change', async () => {
-            const newScope = scopeSelect.value as MediaLibraryScope
-            const response = await mediaLibraryService.changeItemScope({
-                workspaceId,
-                itemId: item.itemId,
-                newScope,
-                organizationId,
-            })
-            if (response.error) {
-                scopeSelect.value = item.scope
-                setFeedback(`Could not move ${item.displayName}.`)
-                return
-            }
-            const scopeLabel = scopeSelect.options[scopeSelect.selectedIndex]?.text ?? newScope
-            setFeedback(`Moved ${item.displayName} to ${scopeLabel}.`)
-            await loadVideos()
-        })
+        const scopeOptions = SCOPES.filter((scope) => organizationId || scope.key !== MEDIA_LIBRARY_SCOPE.ORGANIZATION)
+        const scopeDropdown = trackTransientDropdown(createScopeDropdown({
+            id: `media-library-video-scope-${item.itemId}`,
+            options: scopeOptions,
+            selectedKey: item.scope,
+            onSelect: async (key) => {
+                const newScope = key as MediaLibraryScope
+                const response = await mediaLibraryService.changeItemScope({
+                    workspaceId,
+                    itemId: item.itemId,
+                    newScope,
+                    organizationId,
+                })
+                if (response.error) {
+                    scopeDropdown.setSelectedKey(item.scope)
+                    setFeedback(`Could not move ${item.displayName}.`)
+                    return
+                }
+                const scopeLabel = SCOPES.find((scope) => scope.key === newScope)?.label ?? newScope
+                setFeedback(`Moved ${item.displayName} to ${scopeLabel}.`)
+                await loadMedia()
+            },
+        }))
+        ;(rowEl.querySelector('.media-library-video-scope-mount') as HTMLElement).appendChild(scopeDropdown.dom)
 
         rowEl.addEventListener('click', async (event) => {
             const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
@@ -523,38 +713,37 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
             <div className="media-library-image-actions">
                 <button type="button" data-action="insert">Add to canvas</button>
                 <label>Scope
-                    <select className="media-library-image-scope-select">
-                        <option value=${MEDIA_LIBRARY_SCOPE.WORKSPACE}>Workspace</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.USER}>Mine</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.ORGANIZATION}>Organization</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.PUBLIC}>Public</option>
-                    </select>
+                    <span className="media-library-image-scope-mount"></span>
                 </label>
                 <button type="button" data-action="delete">Delete</button>
             </div>
         </article>` as HTMLElement
 
-        const scopeSelect = rowEl.querySelector('.media-library-image-scope-select') as HTMLSelectElement
         const organizationId = organizationStore.getData('organizationId') || undefined
-        if (!organizationId) scopeSelect.querySelector(`option[value="${MEDIA_LIBRARY_SCOPE.ORGANIZATION}"]`)?.remove()
-        scopeSelect.value = item.scope
-        scopeSelect.addEventListener('change', async () => {
-            const newScope = scopeSelect.value as MediaLibraryScope
-            const response = await mediaLibraryService.changeImageScope({
-                workspaceId,
-                itemId: item.itemId,
-                newScope,
-                organizationId,
-            })
-            if (response.error) {
-                scopeSelect.value = item.scope
-                setFeedback(`Could not move ${item.displayName}.`)
-                return
-            }
-            const scopeLabel = scopeSelect.options[scopeSelect.selectedIndex]?.text ?? newScope
-            setFeedback(`Moved ${item.displayName} to ${scopeLabel}.`)
-            await loadImages()
-        })
+        const scopeOptions = SCOPES.filter((scope) => organizationId || scope.key !== MEDIA_LIBRARY_SCOPE.ORGANIZATION)
+        const scopeDropdown = trackTransientDropdown(createScopeDropdown({
+            id: `media-library-image-scope-${item.itemId}`,
+            options: scopeOptions,
+            selectedKey: item.scope,
+            onSelect: async (key) => {
+                const newScope = key as MediaLibraryScope
+                const response = await mediaLibraryService.changeImageScope({
+                    workspaceId,
+                    itemId: item.itemId,
+                    newScope,
+                    organizationId,
+                })
+                if (response.error) {
+                    scopeDropdown.setSelectedKey(item.scope)
+                    setFeedback(`Could not move ${item.displayName}.`)
+                    return
+                }
+                const scopeLabel = SCOPES.find((scope) => scope.key === newScope)?.label ?? newScope
+                setFeedback(`Moved ${item.displayName} to ${scopeLabel}.`)
+                await loadMedia()
+            },
+        }))
+        ;(rowEl.querySelector('.media-library-image-scope-mount') as HTMLElement).appendChild(scopeDropdown.dom)
 
         rowEl.addEventListener('click', async (event) => {
             const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
@@ -670,11 +859,10 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         setFeedback(response?.error ? `Could not report @${feature.name}.` : `Reported @${feature.name}.`)
     }
 
-    async function changeFeatureScope(feature: FeatureMeta, selectEl: HTMLSelectElement) {
-        const newScope = selectEl.value as MediaLibraryScope
+    async function changeFeatureScope(feature: FeatureMeta, newScope: MediaLibraryScope, revert: () => void) {
         if (newScope === feature.scope) return
         if (newScope === MEDIA_LIBRARY_SCOPE.PUBLIC && !window.confirm(`Make @${feature.name} public? Anyone will be able to discover and use it.`)) {
-            selectEl.value = feature.scope
+            revert()
             return
         }
         const nats = servicesStore.getData('nats')
@@ -688,34 +876,177 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
             newScope,
         })
         if (!response || response.error) {
-            selectEl.value = feature.scope
+            revert()
             setFeedback(`Could not change sharing for @${feature.name}.`)
             return
         }
-        browseMode = newScope
-        const scopeSelect = panelEl?.querySelector('.media-library-scope-select') as HTMLSelectElement | null
-        if (scopeSelect) scopeSelect.value = newScope
-        setFeedback(`Moved @${feature.name} to ${selectEl.options[selectEl.selectedIndex]?.text ?? newScope}.`)
+        setFeedback(`Moved @${feature.name} to ${SCOPES.find((scope) => scope.key === newScope)?.label ?? newScope}.`)
         await loadFeatures()
+    }
+
+    function selectExtractionRun(extractionRunId: string): void {
+        selectedExtractionRunId = extractionRunId
+        selectedFeatureId = null
+        renderContent()
+    }
+
+    function getExtractionRunFeatureId(run: CanvasFeatureExtractionState): string | undefined {
+        if (run.featureId) return run.featureId
+        return typeof run.featureCard?.featureId === 'string' ? run.featureCard.featureId : undefined
+    }
+
+    function getFeatureMetaFromExtractionRun(run: CanvasFeatureExtractionState): FeatureMeta | undefined {
+        const featureCard = run.featureCard
+        const featureId = getExtractionRunFeatureId(run)
+        if (!featureId || !featureCard) return undefined
+
+        const firstSample = Array.isArray(featureCard.sampleImages) ? featureCard.sampleImages[0] : undefined
+        const scope = (textValue(featureCard.scope) as MediaLibraryScope | undefined) ?? MEDIA_LIBRARY_SCOPE.WORKSPACE
+        const ownerUserId = userStore.getData('userId') || ''
+        const scopeOwnerId = scope === MEDIA_LIBRARY_SCOPE.WORKSPACE
+            ? workspaceId
+            : scope === MEDIA_LIBRARY_SCOPE.PUBLIC
+                ? 'public'
+                : scope === MEDIA_LIBRARY_SCOPE.ORGANIZATION
+                    ? organizationStore.getData('organizationId') || ''
+                    : ownerUserId
+        return {
+            featureId,
+            category: textValue(featureCard.category) ?? 'other',
+            name: textValue(featureCard.name) ?? 'Extracted feature',
+            summary: textValue(featureCard.summary) ?? 'Feature saved to the library.',
+            tags: Array.isArray(featureCard.tags) ? featureCard.tags.map((tag) => String(tag)) : [],
+            scope,
+            scopeOwnerId,
+            status: 'active',
+            ownerUserId,
+            sampleZeroKey: textValue(firstSample?.fileId) ?? (firstSample?.idx != null && firstSample?.ext ? `features/${featureId}/sample-${firstSample.idx}.${firstSample.ext}` : undefined),
+            sampleZeroUrl: textValue(firstSample?.imageUrl),
+            updatedAt: run.updatedAt,
+        }
+    }
+
+    function openExtractionRun(run: CanvasFeatureExtractionState): void {
+        const featureId = getExtractionRunFeatureId(run)
+        if (run.status === 'completed' && featureId) {
+            const hasFeatureRow = allFeatures.some((feature) => feature.featureId === featureId)
+            const featureMeta = hasFeatureRow ? undefined : getFeatureMetaFromExtractionRun(run)
+            if (featureMeta) allFeatures = [featureMeta, ...allFeatures]
+            selectedFeatureId = featureId
+            selectedExtractionRunId = null
+            void ensureFeatureDetails(featureId)
+            renderContent()
+            return
+        }
+
+        selectExtractionRun(run.extractionRunId)
+    }
+
+    function buildExtractionRow(run: CanvasFeatureExtractionState): HTMLElement {
+        const isSelected = selectedExtractionRunId === run.extractionRunId
+        const thumbEl = html`<div className="feature-extraction-row-thumb" aria-hidden="true">
+                <span className="feature-extraction-row-thumb-mark"></span>
+            </div>` as HTMLElement
+        const rowEl = createFeatureLibraryRowShell({
+            className: `feature-extraction-row feature-extraction-row-${run.status}`,
+            data: { extractionRunId: run.extractionRunId },
+            selected: isSelected,
+            thumbEl,
+            categoryLabel: 'extracting',
+            scopeLabel: getExtractionStatusLabel(run.status),
+            name: getExtractionRunTitle(run),
+            summary: getExtractionRunSummary(run),
+        }).dom
+
+        const openRun = () => openExtractionRun(run)
+        rowEl.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return
+            event.preventDefault()
+            openRun()
+        })
+        rowEl.addEventListener('click', () => openRun())
+        return rowEl
+    }
+
+    function buildExtractionConfirmation(run: CanvasFeatureExtractionState, pipelineMountEl: HTMLElement): HTMLElement {
+        const modelControls = createFeatureExtractionModelControls
+            ? trackTransientExtractionModelControls(createFeatureExtractionModelControls(run.extractionRunId))
+            : undefined
+        const confirmationEl = html`<section className="feature-extraction-confirmation">
+            <div className="feature-extraction-confirmation-copy">
+                <h3>Confirm Feature Extraction</h3>
+                <p>Lixpi will analyze the selected source and connected context, generate source-safe feature samples, then save a reusable workspace Feature.</p>
+                <p>The source stays on the canvas. The resulting Feature appears in this tab when the pipeline finishes.</p>
+            </div>
+            ${modelControls?.dom ?? null}
+            <button type="button" className="feature-extraction-confirm-button">Start extraction</button>
+        </section>` as HTMLElement
+        const buttonEl = confirmationEl.querySelector('.feature-extraction-confirm-button') as HTMLButtonElement
+        buttonEl.addEventListener('click', () => {
+            buttonEl.disabled = true
+            buttonEl.textContent = 'Starting...'
+            void onConfirmFeatureExtraction?.(run.extractionRunId, pipelineMountEl, modelControls?.getModelContext() ?? {})
+            confirmationEl.classList.add('feature-extraction-confirmation-started')
+        })
+        return confirmationEl
+    }
+
+    function buildExtractionInspector(run: CanvasFeatureExtractionState): HTMLElement {
+        const inspectorEl = html`<article className="feature-library-inspector-card feature-extraction-inspector">
+            <div className="feature-library-inspector-nav">
+                <button type="button" className="feature-library-inspector-back">Back</button>
+                <span>Feature extraction</span>
+            </div>
+            <div className="feature-library-inspector-heading">
+                <div className="feature-library-row-meta">
+                    <span className="feature-library-row-category">extraction</span>
+                    <span className="feature-library-row-scope">${getExtractionStatusLabel(run.status)}</span>
+                </div>
+                <h2>${getExtractionRunTitle(run)}</h2>
+                <p>${getExtractionRunSummary(run)}</p>
+            </div>
+            <div className="feature-extraction-confirmation-mount"></div>
+            <div className="feature-extraction-pipeline-mount"></div>
+        </article>` as HTMLElement
+
+        inspectorEl.querySelector('.feature-library-inspector-back')!.addEventListener('click', () => {
+            selectedExtractionRunId = null
+            renderContent()
+        })
+
+        const pipelineMountEl = inspectorEl.querySelector('.feature-extraction-pipeline-mount') as HTMLElement
+        if (run.status === 'pending') {
+            const confirmationMountEl = inspectorEl.querySelector('.feature-extraction-confirmation-mount') as HTMLElement
+            confirmationMountEl.appendChild(buildExtractionConfirmation(run, pipelineMountEl))
+        } else {
+            renderExtractionTabBody(`feature-extraction:${run.extractionRunId}`, run.extractionRunId, pipelineMountEl, workspaceId, {
+                getState: getExtractionRunState,
+                surface: 'feature',
+            })
+        }
+        return inspectorEl
     }
 
     function buildRow(feature: FeatureMeta): HTMLElement {
         const isSelected = selectedFeatureId === feature.featureId
-        const rowEl = html`<article className=${`feature-library-row${isSelected ? ' feature-library-row-selected' : ''}`} data=${{ featureId: feature.featureId }} tabindex="0" aria-selected=${isSelected ? 'true' : 'false'}>
-            ${feature.sampleZeroKey && accessToken ? html`<img className="feature-library-row-thumb" src=${getSampleUrl(feature)} alt=${`${feature.name} sample`} onerror=${(event: Event) => handleSampleImageError(event, feature)} />` : html`<div className="feature-library-row-thumb-placeholder" aria-hidden="true"></div>`}
-            <div className="feature-library-row-info">
-                <div className="feature-library-row-meta">
-                    <span className="feature-library-row-category">${feature.category || 'feature'}</span>
-                    <span className="feature-library-row-scope">${feature.scope}</span>
-                </div>
-                <div className="feature-library-row-name">@${feature.name}</div>
-                <div className="feature-library-row-summary">${feature.summary}</div>
-            </div>
-            <button type="button" className="feature-library-row-action feature-library-row-action-primary" data-action="use">Use</button>
-        </article>` as HTMLElement
+        const thumbEl = feature.sampleZeroKey && accessToken
+            ? html`<img className="feature-library-row-thumb" src=${getSampleUrl(feature)} alt=${`${feature.name} sample`} onerror=${(event: Event) => handleSampleImageError(event, feature)} />` as HTMLElement
+            : html`<div className="feature-library-row-thumb-placeholder" aria-hidden="true"></div>` as HTMLElement
+        const actionEl = html`<button type="button" className="feature-library-row-action feature-library-row-action-primary" data-action="use">Use</button>` as HTMLElement
+        const rowEl = createFeatureLibraryRowShell({
+            data: { featureId: feature.featureId },
+            selected: isSelected,
+            thumbEl,
+            categoryLabel: feature.category || 'feature',
+            scopeLabel: feature.scope,
+            name: `@${feature.name}`,
+            summary: feature.summary,
+            actionEl,
+        }).dom
 
         const selectFeature = () => {
             selectedFeatureId = feature.featureId
+            selectedExtractionRunId = null
             void ensureFeatureDetails(feature.featureId)
             renderContent()
         }
@@ -728,6 +1059,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         rowEl.addEventListener('click', (event) => {
             const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
             if (action === 'use') {
+                selectFeature()
                 void handleUseFeature(feature)
                 return
             }
@@ -758,12 +1090,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
                 ${isOwner ? html`<button type="button" className="feature-library-row-action" data-action="delete">Delete</button>` : feature.scope === MEDIA_LIBRARY_SCOPE.PUBLIC ? html`<button type="button" className="feature-library-row-action" data-action="report">Report</button>` : null}
             </div>
             ${isOwner ? html`<label className="feature-library-inspector-scope">Sharing
-                <select className="feature-library-scope-editor">
-                    <option value=${MEDIA_LIBRARY_SCOPE.WORKSPACE}>Workspace</option>
-                    <option value=${MEDIA_LIBRARY_SCOPE.USER}>Mine</option>
-                    ${organizationId ? html`<option value=${MEDIA_LIBRARY_SCOPE.ORGANIZATION}>Organization</option>` : null}
-                    <option value=${MEDIA_LIBRARY_SCOPE.PUBLIC}>Public</option>
-                </select>
+                <span className="feature-library-scope-editor-mount"></span>
             </label>` : null}
             <div className="feature-library-row-detail-grid">
                 <div className="feature-library-row-detail-field"><span>Category</span><strong>${feature.category || 'feature'}</strong></div>
@@ -781,10 +1108,16 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
             selectedFeatureId = null
             renderContent()
         })
-        const scopeEditor = inspectorEl.querySelector('.feature-library-scope-editor') as HTMLSelectElement | null
-        if (scopeEditor) {
-            scopeEditor.value = feature.scope
-            scopeEditor.addEventListener('change', () => void changeFeatureScope(feature, scopeEditor))
+        const scopeEditorMount = inspectorEl.querySelector('.feature-library-scope-editor-mount') as HTMLElement | null
+        if (scopeEditorMount) {
+            const sharingOptions = SCOPES.filter((scope) => organizationId || scope.key !== MEDIA_LIBRARY_SCOPE.ORGANIZATION)
+            const sharingDropdown = trackTransientDropdown(createScopeDropdown({
+                id: `feature-library-scope-${feature.featureId}`,
+                options: sharingOptions,
+                selectedKey: feature.scope,
+                onSelect: (key) => void changeFeatureScope(feature, key as MediaLibraryScope, () => sharingDropdown.setSelectedKey(feature.scope)),
+            }))
+            scopeEditorMount.appendChild(sharingDropdown.dom)
         }
         inspectorEl.querySelector('.feature-library-inspector-actions')!.addEventListener('click', (event) => {
             const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
@@ -811,93 +1144,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         return inspectorEl
     }
 
-    function open() {
-        if (isOpen) return
-        isOpen = true
-        backdropEl = html`<div className="media-library-backdrop"></div>` as HTMLElement
-        backdropEl.addEventListener('click', close)
-        paneEl.appendChild(backdropEl)
-
-        panelEl = html`<div className="media-library-panel nopan nowheel">
-            <div className="media-library-header">
-                <div className="media-library-header-title-group">
-                    <span className="media-library-header-title">Media Library</span>
-                    <span className="media-library-header-subtitle">Features and saved images</span>
-                    <span className="media-library-feedback"></span>
-                </div>
-                <button type="button" className="media-library-header-close" aria-label="Close Media Library">
-                    <span className="media-library-header-close-icon" innerHTML=${xIcon}></span>
-                </button>
-            </div>
-            <div className="media-library-controls">
-                <div className="media-library-category-tabs" role="tablist" aria-label="Library content"></div>
-                <label className="media-library-scope-control">
-                    <span>Scope</span>
-                    <select className="media-library-scope-select"></select>
-                </label>
-                <input type="text" className="media-library-header-search" placeholder="Search features" />
-            </div>
-            <div className="media-library-body">
-                <section className="media-library-browser"></section>
-                <aside className="media-library-inspector"></aside>
-            </div>
-            <div className="media-library-footer">
-                <button type="button" className="media-library-footer-new-btn">+ Extract new</button>
-            </div>
-        </div>` as HTMLElement
-        panelEl.style.setProperty('--media-library-panel-fraction', String(settings.mediaLibrary.panelWidthFraction))
-
-        const searchInput = panelEl.querySelector('.media-library-header-search') as HTMLInputElement
-        searchInput.addEventListener('input', () => {
-            searchQuery = searchInput.value
-            if (activeCategory === MEDIA_LIBRARY_CATEGORY.FEATURES) renderContent()
-            else if (activeCategory === MEDIA_LIBRARY_CATEGORY.VIDEOS) void loadVideos()
-            else void loadImages()
-        })
-        panelEl.querySelector('.media-library-header-close')!.addEventListener('click', close)
-
-        const categoryTabsEl = panelEl.querySelector('.media-library-category-tabs') as HTMLElement
-        for (const category of [
-            { key: MEDIA_LIBRARY_CATEGORY.FEATURES, label: 'Features' },
-            { key: MEDIA_LIBRARY_CATEGORY.IMAGES, label: 'Images' },
-            { key: MEDIA_LIBRARY_CATEGORY.VIDEOS, label: 'Videos' },
-        ] as Array<{ key: MediaLibraryCategory; label: string }>) {
-            const btn = html`<button type="button" role="tab" aria-selected=${activeCategory === category.key ? 'true' : 'false'} className=${`media-library-tab${activeCategory === category.key ? ' media-library-tab-active' : ''}`} data=${{ category: category.key }}>${category.label}</button>` as HTMLButtonElement
-            btn.addEventListener('click', () => {
-                activeCategory = category.key
-                selectedFeatureId = null
-                categoryTabsEl.querySelectorAll('.media-library-tab').forEach((el) => {
-                    const isActive = (el as HTMLElement).dataset.category === category.key
-                    el.classList.toggle('media-library-tab-active', isActive)
-                    el.setAttribute('aria-selected', String(isActive))
-                })
-                searchInput.placeholder = `Search ${category.label.toLowerCase()}`
-                const footerEl = panelEl?.querySelector('.media-library-footer') as HTMLElement | null
-                if (footerEl) footerEl.hidden = activeCategory !== MEDIA_LIBRARY_CATEGORY.FEATURES
-                void loadActiveCategory()
-            })
-            categoryTabsEl.appendChild(btn)
-        }
-
-        const filterSelectEl = panelEl.querySelector('.media-library-scope-select') as HTMLSelectElement
-        for (const filter of [...SCOPES, { key: MEDIA_LIBRARY_BROWSE_ALL, label: 'All available' }] as Array<{ key: MediaLibraryBrowseMode; label: string }>) {
-            filterSelectEl.appendChild(html`<option value=${filter.key}>${filter.label}</option>` as HTMLOptionElement)
-        }
-        filterSelectEl.value = browseMode
-        filterSelectEl.addEventListener('change', () => {
-            browseMode = filterSelectEl.value as MediaLibraryBrowseMode
-            selectedFeatureId = null
-            void loadActiveCategory()
-        })
-
-        panelEl.querySelector('.media-library-footer-new-btn')!.addEventListener('click', () => {
-            const id = crypto.randomUUID?.() ?? `run-${Date.now()}`
-            onOpenExtractionTab(id); close()
-        })
-
-        paneEl.appendChild(panelEl)
-        void loadActiveCategory()
-
+    function ensureEventSubscriptions() {
         if (!hasFeatureEventSubscriptions) {
             hasFeatureEventSubscriptions = true
             const nats = servicesStore.getData('nats')
@@ -905,11 +1152,17 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
                 if (!data?.feature) return
                 if ('sampleImages' in data.feature) featureDetails.set(data.feature.featureId, data.feature as Feature)
                 allFeatures = [toFeatureMeta(data.feature), ...allFeatures.filter((feature) => feature.featureId !== data.feature.featureId)]
-                renderContent()
+                renderAfterFeatureLibraryEvent()
             })
-            nats?.subscribe(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.EVENTS.DELETED, (data: any) => { if (data?.featureId) { allFeatures = allFeatures.filter((f) => f.featureId !== data.featureId); renderContent() } })
+            nats?.subscribe(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.EVENTS.DELETED, (data: any) => {
+                if (!data?.featureId) return
+                allFeatures = allFeatures.filter((f) => f.featureId !== data.featureId)
+                renderAfterFeatureLibraryEvent()
+            })
             nats?.subscribe(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.EVENTS.UPDATED, () => {
-                if (isOpen && activeCategory === MEDIA_LIBRARY_CATEGORY.FEATURES) void loadFeatures()
+                if (!isMounted || mode !== 'features') return
+                if (shouldDeferFeatureListRenderForActiveExtraction()) return
+                void loadFeatures()
             })
         }
         if (!hasMediaEventSubscriptions) {
@@ -921,31 +1174,74 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
                 NATS_SUBJECTS.WORKSPACE_SUBJECTS.MEDIA_LIBRARY_SUBJECTS.EVENTS.DELETED,
             ]) {
                 nats?.subscribe(subject, () => {
-                    if (!isOpen) return
-                    if (activeCategory === MEDIA_LIBRARY_CATEGORY.IMAGES) void loadImages()
-                    else if (activeCategory === MEDIA_LIBRARY_CATEGORY.VIDEOS) void loadVideos()
+                    if (isMounted && mode === 'media') void loadMedia()
                 })
             }
         }
     }
 
-    function close() {
-        if (!isOpen) return; isOpen = false
-        panelEl?.remove(); backdropEl?.remove()
-        panelEl = null; backdropEl = null
+    // Build the embedded DOM once. The right side panel hosts this root element;
+    // the top-level Features / Media / AI Threads switch lives in the host above it.
+    function build() {
+        if (panelEl) return
+        panelEl = html`<div className="media-library-panel media-library-panel-embedded nopan nowheel">
+            <div className="media-library-controls">
+                <span className="media-library-feedback"></span>
+            </div>
+            <div className="media-library-body">
+                <section className="media-library-browser"></section>
+                <aside className="media-library-inspector"></aside>
+            </div>
+        </div>` as HTMLElement
+
+        ensureEventSubscriptions()
     }
 
-    function toggle() { isOpen ? close() : open() }
+    // Render the active surface: reuse in-memory rows when they are fresh,
+    // otherwise reload (which shows the loading state). Set the mode first so a
+    // freshly mounted panel does not flash the previous surface.
+    function refreshActiveMode() {
+        const hasFreshData = hasFreshDataForMode()
+        if (hasFreshData) renderContent()
+        else void loadActiveMode()
+    }
 
-    // Open (or re-open) the panel forced onto the Features tab, regardless of the last-used
-    // category. Used by the `/use` slash command in the AI chat prompt.
-    function openToFeatures() {
-        activeCategory = MEDIA_LIBRARY_CATEGORY.FEATURES
+    function mountInto(hostEl: HTMLElement) {
+        build()
+        if (panelEl && panelEl.parentElement !== hostEl) hostEl.appendChild(panelEl)
+        isMounted = true
+        refreshActiveMode()
+    }
+
+    function setMode(nextMode: MediaLibraryPanelMode) {
+        if (mode === nextMode && isMounted) return
+        mode = nextMode
         selectedFeatureId = null
-        searchQuery = ''
-        if (isOpen) close()
-        open()
+        if (nextMode !== 'features') selectedExtractionRunId = null
+        if (isMounted) refreshActiveMode()
     }
 
-    return { open, close, toggle, openToFeatures }
+    function showExtractionRun(extractionRunId: string) {
+        mode = 'features'
+        selectedExtractionRunId = extractionRunId
+        selectedFeatureId = null
+        if (isMounted) refreshActiveMode()
+    }
+
+    function refresh() {
+        if (isMounted) refreshActiveMode()
+    }
+
+    function unmount() {
+        isMounted = false
+        panelEl?.remove()
+    }
+
+    function destroy() {
+        unmount()
+        destroyTransientDropdowns()
+        panelEl = null
+    }
+
+    return { get rootEl() { build(); return panelEl! }, mountInto, setMode, showExtractionRun, refresh, unmount, destroy }
 }

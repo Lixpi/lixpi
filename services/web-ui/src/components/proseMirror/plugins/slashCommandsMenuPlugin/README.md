@@ -71,6 +71,8 @@ Uses ProseMirror's `coordsAtPos()` to get screen coordinates at the `/` trigger 
 | Image | image, img, picture | Insert an image |
 | Table | table | Insert a table (Phase 2) |
 | File | file, attachment | Attach a file (Phase 2) |
+| Use Feature | use, feature, features | Open the Features panel to pick a reusable feature |
+| Extract Feature | extract, extract-feature | Open the Features panel with a pending extraction confirmation |
 
 ## Adding New Commands
 
@@ -101,7 +103,7 @@ $slashMenuBg: $steelBlue;
 $slashMenuFg: $offWhite;
 $slashMenuBorder: color.adjust($steelBlue, $lightness: -10%);
 $slashMenuHoverBg: $nightBlue;
-$slashMenuSelectedBg: rgba(85, 150, 124, 0.3);
+$slashMenuSelectedBg: rgba(95, 143, 207, 0.3);
 ```
 
 ## Future Improvements

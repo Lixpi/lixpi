@@ -43,7 +43,7 @@ dedicated `EXTRACTION_RUNS` table for the extraction transcript.
 | `FEATURES` | `featureId` | `version` | **GSI `byScopeAndOwner` (PK `scope#scopeOwnerId`, SK `updatedAt`)** | Primary feature record. The composite GSI partition key uses `scope#scopeOwnerId`, where `scopeOwnerId` is the workspaceId / userId / organizationId / fixed `'public'` — one GSI covers all four scope queries. |
 | `FEATURES_META` | `featureId` | — | — | Lightweight projection for list rendering (name, category, summary, scope, sample-0 thumbnail key, `updatedAt`). Avoids fetching full instructions blobs for the library list. |
 | `FEATURES_ACCESS_LIST` | `userId` | `featureId` | — | Explicit per-feature ACL beyond the scope rules (e.g. "share this `workspace`-scoped feature with one specific user outside the workspace"). Mirrors the existing `DOCUMENTS_ACCESS_LIST`. |
-| `EXTRACTION_RUNS` | `extractionRunId` | `workspaceId` | — | Persists the extraction tab's transcript (ProseMirror JSON) plus status, resulting `featureId`, and source-context snapshot. Restores the extraction tab UX on reload and supports historical browsing. |
+| `EXTRACTION_RUNS` | `extractionRunId` | `workspaceId` | — | Persists extraction status, resulting `featureId`, source-context snapshot, selected model config, trace, streamed stage reasoning, and feature-card payload. Restores the Features-surface extraction run on reload and supports historical browsing. |
 
 ### NATS Object Store layout (sample images)
 
@@ -134,7 +134,9 @@ Three shared types in
 fields.
 
 **`CanvasState` and the chat-panel state.** The panel persists tabs (thread and
-extraction) and drafts; extraction runs are tracked per-canvas.
+extraction) and drafts. Confirmed extraction runs are not canvas state; they are
+API-owned `ExtractionRun` records loaded by workspace and rendered by any UI
+that reconnects.
 
 ```typescript
 type CanvasState = {
@@ -143,7 +145,6 @@ type CanvasState = {
   lastActiveAiChatThreadId?: string   // legacy field; not used by current panel state
 
   aiChatPanel?: CanvasAiChatPanelState // panel visibility, tabs, drafts, and context chips
-  featureExtractionRuns?: Record<string, CanvasFeatureExtractionState>
 }
 
 type CanvasAiChatPanelState = {
@@ -168,9 +169,9 @@ type CanvasAiChatSidebarTab = {
 canvas-presence decision.
 
 Extraction runs appear in the AI Chat panel Sessions list alongside normal chats.
-Closing an extraction tab keeps the run reopenable. Deleting an extraction
-session deletes only its `ExtractionRun` history and persisted panel draft; any
-saved `Feature` produced by that run remains a separate library entity.
+Leaving the Features surface keeps the run reopenable. Deleting an extraction
+session deletes only its `ExtractionRun` history; any saved `Feature` produced
+by that run remains a separate library entity.
 
 **`AiInteractionChatSendMessagePayload`.** Gains the ID list that carries `/use`
 chips to the server.
@@ -485,8 +486,9 @@ the mitigation proves insufficient.
    persisted to `EXTRACTION_RUNS.trace[]` as soon as it's emitted. If the user
    reloads mid-run, the in-progress stage may have an incomplete event (no
    `finishedAt`). **Mitigation:** on reload, render the trace from
-   `EXTRACTION_RUNS.trace[]`; if `ExtractionRun.status === 'running'`, also
-   re-subscribe to the live stream subject so subsequent events flow in.
+   `EXTRACTION_RUNS.trace[]`; if `ExtractionRun.status` is not terminal
+   (`completed` or `failed`), also re-subscribe to the live stream subject so
+   subsequent events flow in.
 
 9. **Extraction cost.** Each extraction runs 1 router VLM call + up to 10 parallel
    extractor VLM calls + 1 synthesis VLM call + 0–3 image-router calls for samples

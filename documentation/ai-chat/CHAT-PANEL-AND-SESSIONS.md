@@ -7,9 +7,10 @@ description: The workspace-owned AI Chat panel, its tabbed surface, standalone a
 
 The AI Chat panel is a workspace-owned right-side surface that opens, persists,
 and restores independently of any canvas node. It hosts durable standalone chat
-tabs, extraction tabs, prompt drafts, explicit composer context previews,
-automatic workspace relevance feedback, and a collapsible Sessions list that merges
-standalone chats with feature-extraction sessions for the workspace.
+tabs, prompt drafts, explicit composer context previews, automatic workspace
+relevance feedback, and a collapsible Sessions list for standalone chats.
+Feature extraction runs share the same right-side panel shell but render on the
+top-level `Features` surface.
 
 The panel is a presentation surface, not a conversation entity. Opening it,
 resizing it, toggling Sessions, editing a draft, or changing composer context all
@@ -86,9 +87,10 @@ media info panel. See [Branch Lineage](../media-generation/BRANCH-LINEAGE.md).
 
 ## The Tabbed Panel
 
-The panel hosts normal standalone chat tabs, unsent draft tabs, and extraction
-tabs without displacing the user's current thread. The tab system follows Cursor
-IDE / Linear AI / Claude.ai / VS Code conventions.
+The panel hosts normal standalone chat tabs and unsent draft tabs without
+displacing the user's current thread. Feature extraction uses the top-level
+`Features` surface in the same right-side panel shell. The tab system follows
+Cursor IDE / Linear AI / Claude.ai / VS Code conventions.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -103,13 +105,11 @@ flowchart TB
     subgraph TabKinds["Tab kinds"]
         Thread[Thread tab<br/>standalone chat]
         Draft[Draft tab<br/>unsent chat]
-        Extraction[Extraction tab<br/>stage timeline + feature card]
     end
 
     Strip --> Body
     Body --> Thread
     Body --> Draft
-    Body --> Extraction
     Body --> Composer
     Strip -.toggle.-> Sessions
 ```
@@ -123,7 +123,8 @@ flowchart TB
   indicator surface, not a per-tab border.
 - **Selecting canvas nodes** can add explicit composer context while the panel is
   open; it does not create or activate a canvas thread node.
-- **All extraction triggers** open a new `extraction` tab.
+- **All extraction triggers** open the top-level `Features` surface with a
+  pending extracted-feature placeholder.
 - **Closing the last tab** leaves the durable session reopenable from Sessions;
   panel visibility is controlled by `aiChatPanel.isOpen`.
 - **Overflow** is a horizontal scroll on the strip, driven by
@@ -209,37 +210,38 @@ conversation can show the full `Branch started` / `Branch fork created` context,
 a branch-root canvas panel materializes only `Branch started`, and a branch-fork
 or media-run panel renders only fork-local `Branch fork created` markers.
 
-## Extraction Tab UX
+## Feature Extraction Surface
 
 When an extraction is triggered (for example via an image's "Ask AI" handler), a
-new extraction tab opens. It operates at the same message abstraction as a
-normal chat thread: a user message is inserted into the visible history, then one
-assistant response carries the extraction progress, reasoning, and final result.
+placeholder feature row appears on the `Features` surface. The inspector shows a
+confirmation section first; confirming starts the extraction run and mounts the
+pipeline progress in that same inspector. The unconfirmed placeholder is local
+UI state; the durable extraction session starts when the user confirms.
 
-1. **User message.** Shows the exact extraction request the user submitted,
-   using the same `ai-user-message` visual structure as normal chat history.
-2. **Assistant response with a stage timeline.** The assistant response uses the
-   normal `ai-response-message` structure. Inside it, a stage-aware timeline
-   renders one row per streamed pipeline stage event, each showing stage name,
-   model name, duration, and status (spinner / ok / failed), with an expandable
-   detail panel for the prompt preview and output summary.
-3. **Agent reasoning.** The streamed transcript renders inside the assistant
-   response and can remain separately collapsible.
-4. **Final feature card.** Appears when the `feature_card` block streams in at
-   completion. It shows the feature name, category badge, scope chip (workspace
-   by default), summary, tags, sample thumbnails, and action buttons:
-   `Open in Library`, `Change scope`, `Edit`, `Delete`.
+1. **Placeholder feature row.** Shows the pending run in the Features list before
+   server-side extraction starts.
+2. **Confirmation section.** Explains that extraction analyzes the selected
+   source and connected context, exposes dedicated Reasoning model and Image model selectors,
+   generates source-safe samples, and saves a workspace Feature.
+3. **Stage timeline.** After confirmation, a stage-aware timeline renders one
+   row per streamed pipeline stage event, each showing stage name, model name,
+   duration, and status, with expandable prompt/output detail.
+4. **Agent reasoning.** Streamed reasoning renders under the active stage.
+5. **Final feature card.** Appears when the `feature_card` block streams in at
+   completion. The created Feature event adds the normal saved Feature row to the
+   library.
 
-The extraction tab body subscribes to `EXTRACTION_RUNS` updates by id; after a
-page reload the transcript is restored from stored ProseMirror JSON. While
-running, live updates arrive on the same streaming subject pattern used by chat
-threads, with `extractionRunId` substituted for the thread id — the streaming
-infrastructure is agnostic to the ID type.
+The extraction surface reads local pending placeholders before confirmation.
+After confirmation, state comes from API-owned `ExtractionRun` records, not
+`CanvasState`. Started runs reconstruct persisted timeline state from stored
+trace events, stage reasoning, feature-card payload, source snapshot, and model
+config. While running, live updates arrive on the same streaming subject pattern
+used by chat threads, with `extractionRunId` substituted for the thread id.
 
 {% callout type="note" %}
-The extraction tab is the panel's view of an extraction run. The six-stage
-extraction pipeline, its stage trace events, and `/use` resolution are owned by
-the [Extraction Pipeline](../library/EXTRACTION-PIPELINE.md) and
+The Features surface is the panel's view of an extraction run. The six-stage
+extraction pipeline, its stage trace events, and `/use` resolution are covered
+in the [Extraction Pipeline](../library/EXTRACTION-PIPELINE.md) and
 [Using Features](../library/USING-FEATURES.md).
 {% /callout %}
 

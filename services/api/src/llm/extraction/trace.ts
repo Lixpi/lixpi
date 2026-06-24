@@ -20,6 +20,7 @@ export const createStageLogger = (args: {
     publisher: StreamPublisher
 }): StageLogger => {
     const { extractionRunId, workspaceId, publisher } = args
+    let currentStreamingStage = 'router'
 
     // persist defaults to true. The publish-only 'running' marker passes persist:false
     // so the durable trace keeps just one terminal event per stage (no running/ok pairs).
@@ -35,14 +36,18 @@ export const createStageLogger = (args: {
     const chunk = (text: string): void => {
         if (!text) return
         try { publisher.chunk(text) } catch (e) { err('chunk publish failed:', e) }
+        void ExtractionRun.appendStageReasoning({ extractionRunId, workspaceId, stage: currentStreamingStage, text })
     }
 
     const featureCard = (payload: Record<string, any>): void => {
         try { publisher.featureCard(payload) } catch (e) { err('featureCard publish failed:', e) }
+        void ExtractionRun.saveFeatureCard({ extractionRunId, workspaceId, featureCard: payload })
     }
 
     const span: StageLogger['span'] = async (stage, modelName, body, opts) => {
         const startedAt = Date.now()
+        const previousStreamingStage = currentStreamingStage
+        currentStreamingStage = stage
         // Stream an in-flight marker so the extraction tab can light up the stage
         // (spinner) the moment it begins, not only when it finishes.
         emit({
@@ -91,6 +96,8 @@ export const createStageLogger = (args: {
                 inputSummary: opts?.inputSummary,
             })
             throw e
+        } finally {
+            currentStreamingStage = previousStreamingStage
         }
     }
 

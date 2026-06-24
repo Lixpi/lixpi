@@ -4,7 +4,7 @@ export const colorPalette = {
     nightBlue: '#42494f',
     steelBlue: '#5d656d',
     aiGreen: '#56967c',
-    darkPastelGreen: '#55967c',
+    selectionBlue: '#5f8fcf',
     lightGrey: '#aeaeae',
     offWhite: '#f5f3f3',
     offWhiteMuted: '#bfbfbf',
@@ -100,6 +100,20 @@ export type RightSidePanelSettings = {
     animation: {
         durationMs: number
         easing: string
+    }
+    overlay: {
+        enabled: boolean
+        closeOnPointerDown: boolean
+        fill: string
+        fillOpaque: string
+        opacity: number
+    }
+    drag: {
+        enabled: boolean
+        closeThreshold: number
+        velocityThreshold: number
+        pointerSwipeStartThreshold: number
+        touchSwipeStartThreshold: number
     }
     styles: {
         backdropFill: string
@@ -615,6 +629,22 @@ export const settings: Settings = {
             durationMs: 150,
             easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
         },
+        overlay: {
+            // Full-canvas dark glass tint layer behind the side panel.
+            enabled: true,
+            closeOnPointerDown: true,
+            fill: 'rgba(15, 23, 42, 0.18)',
+            fillOpaque: 'rgba(15, 23, 42, 0.22)',
+            opacity: 1,
+        },
+        drag: {
+            // Vaul-style horizontal swipe-to-close gesture for pointer/touch input.
+            enabled: true,
+            closeThreshold: 0.25,
+            velocityThreshold: 0.4,
+            pointerSwipeStartThreshold: 2,
+            touchSwipeStartThreshold: 10,
+        },
         styles: {
             backdropFill: 'rgba(248, 250, 253, 0.84)',
             backdropFillOpaque: '#f8fafd',
@@ -740,7 +770,7 @@ export const settings: Settings = {
                 infoBubbleBackground: '#fff',
                 infoBubbleBoxShadow: '0 14px 32px rgba(66, 73, 79, 0.12), 0 2px 10px rgba(66, 73, 79, 0.08), inset 0 0 1px 1px rgba(66, 73, 79, 0.2)',
                 infoBubbleColor: colorPalette.nightBlue,
-                sectionDividerGradient: 'linear-gradient(90deg, #fff 0%, #F7F7FD 10%, #F3E4F2 26%, #C5C0EE 50%, #E6E9F6 74%, #F7F7FD 90%, #fff 100%)',
+                sectionDividerGradient: 'linear-gradient(90deg, rgba(247, 247, 253, 0) 0%, #F7F7FD 10%, #F3E4F2 26%, #C5C0EE 50%, #E6E9F6 74%, #F7F7FD 90%, rgba(247, 247, 253, 0) 100%)',
                 sectionDividerHeight: '2px',
                 sectionDividerBorderRadius: '999px',
                 sectionTitleColor: '#59626b',

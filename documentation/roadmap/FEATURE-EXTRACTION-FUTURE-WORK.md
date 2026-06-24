@@ -14,7 +14,7 @@ For real failure modes the live system can hit (and their mitigations), see "Kno
 - **Feature versioning / revision history.** The `version` field exists on the schema for forward compatibility; multi-revision history with rollback is deferred.
 - **Drag-to-reorder tabs** and **pinned tabs** in the AI chat panel. The tab strip uses chronological order only.
 - **Drag-to-canvas placement** of features as canvas nodes. Features are non-spatial today. A future `feature` `CanvasNodeType` could wrap an embedded library entry, with edges to threads auto-applying the feature on every send — leveraging Lixpi's spatial-is-the-workflow paradigm.
-- **Inline editing of feature instructions** in the library card. Reads, deletes, change-scope, and report exist today; edits go through "Open in extraction tab → Re-extract."
+- **Inline editing of feature instructions** in the library card. Reads, deletes, change-scope, and report exist today; edits go through "Open in Features → Re-extract."
 - **i18n of category names.** Categories are free-form and agent-determined; localized UI labels are post-launch work.
 - **Batch extraction** ("extract 5 different features from this collection of references"). Single-extraction only today.
 - **Feature composition** (a feature that references other features as building blocks). One level of indirection only.

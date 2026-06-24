@@ -167,6 +167,8 @@ export function createPureDropdown(config: PureDropdownConfig) {
             const li = html`
                 <li
                     class="flex justify-start items-center"
+                    role="button"
+                    tabindex="0"
                     data-selected=${isSelected ? 'true' : 'false'}
                     onclick=${(e: Event) => optionClickHandler(e, option)}
                 >
@@ -201,6 +203,8 @@ export function createPureDropdown(config: PureDropdownConfig) {
                 ${availableTags.map(tag => html`
                     <span
                         class="tag-filter-item"
+                        role="button"
+                        tabindex="0"
                         data-tag="${tag}"
                         onclick=${(e: Event) => handleTagFilterClick(e, tag)}
                     >${tag}</span>
@@ -237,7 +241,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
 
     // Build dropdown wrapper with button first
     const dom = html`
-        <div class="dropdown-menu-tag-pill-wrapper theme-${theme}${disableTriggerHover ? ' no-trigger-hover' : ''}" data-dropdown-id="${id}" data-arrow-side="top" contenteditable="false">
+        <div class="dropdown-menu-tag-pill-wrapper theme-${theme}${disableTriggerHover ? ' no-trigger-hover' : ''}" data-dropdown-id="${id}" data-arrow-side="top" data-side-panel-no-drag="true" contenteditable="false">
             <span class="dots-dropdown-menu">
                 <button
                     class="flex justify-between items-center"

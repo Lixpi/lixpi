@@ -146,7 +146,7 @@ The six-stage pipeline correctly classifies medium (digital-illustration vs
 traditional-watercolor) before any axis extractor runs, captures
 rendering-of-the-subject as a first-class signature via the `character-design`
 extractor, and emits live `StageTraceEvent` rows the user can watch in the
-extraction tab. Adaptive thinking (Opus 4.7, Sonnet 4.6) streams visible
+Features placeholder. Adaptive thinking (Opus 4.7, Sonnet 4.6) streams visible
 reasoning during the router and synthesis stages. Source crops carry pixel
 evidence into downstream `/use` calls without forwarding the full source frame.
 
@@ -299,7 +299,8 @@ model-rendered probes are auxiliary.
 ### Stage 6 — Persist + event + stream feature card
 
 Save the `Feature`, the `ExtractionRun` trace, publish `FEATURE_SUBJECTS.CREATE`,
-and stream the `feature_card` block to the extraction tab.
+and stream the `feature_card` block to the Features surface's extraction
+placeholder.
 
 ## Modular extractor architecture
 
@@ -454,17 +455,18 @@ type StageTraceEvent = {
 }
 ```
 
-**Extraction tab UI.** The existing 4-step strip is replaced by a stage-aware
-timeline that renders one row per `StageTraceEvent` as it streams in. Each row
-shows: stage name, model name, duration, status (spinner / ok / failed), and an
-expandable detail panel showing the prompt preview and output summary. The user
-can see exactly what model ran what prompt for how long. The tab surface itself —
-how it sits among the panel's standalone and extraction sessions — is owned by
-[Chat Panel and Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md).
+**Features surface UI.** The extraction placeholder renders one row per
+`StageTraceEvent` as it streams in. Each row shows: stage name, model name,
+duration, status (spinner / ok / failed), and an expandable detail panel showing
+the prompt preview and output summary. The user can see exactly what model ran
+what prompt for how long. The panel shell and top-level surface switch are
+covered in [Chat Panel and Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md).
 
 **Persistence.** `ExtractionRun.trace: StageTraceEvent[]` is appended on every
-stage event. A future "re-run with same trace" button could replay an extraction
-with the same model/prompt configuration.
+stage event; `modelConfig`, source snapshot, streamed stage reasoning, and the
+feature-card payload are also stored on the run. A future "re-run with same
+trace" button could replay an extraction with the same model/prompt
+configuration.
 
 **Cost tracking.** Each stage event includes the model name and output bytes.
 Aggregated per run, this yields a per-extraction cost breakdown. For an
@@ -483,13 +485,13 @@ pipeline today classifies it correctly and captures the actual signature traits.
    workspace's NATS Object Store bucket.
 
 2. **They click the Ask AI wand.** Bubble menu appears, they click the leftmost
-   wand icon. (The v0 "create a thread region" path is gone.)
+   wand icon.
 
-3. **A new extraction tab opens.** The AI chat panel slides in; a new
-   `Extraction` tab appears in the tab strip. The stage-aware timeline shows
-   `Stage 1 — Scene Assessment & Router` as `running`. The artist optionally
-   types an intent ("save this whole style") and submits, or just submits empty
-   (= extract the dominant signature).
+3. **A pending feature row opens.** The right-side panel slides in on the
+   `Features` surface. The selected placeholder is local UI state until
+   confirmation; the confirmation view includes dedicated Reasoning model and Image model
+   selectors. Confirming persists the API-owned run with that model config and
+   mounts the stage-aware timeline in that placeholder.
 
 4. **Stage 1 — Router runs.** Server-side, an `ExtractionRun` is created and
    `AI_INTERACTION_SUBJECTS.FEATURE_EXTRACT.START` is published. The router-stage
@@ -609,7 +611,8 @@ pipeline today classifies it correctly and captures the actual signature traits.
    the feature with all 11 sample references (7 source crops + 2 applied-medium
    probes; no texture specimen for this case since `surface-texture` was 0.10 and
    skipped). `FEATURE_SUBJECTS.CREATE` fires; the library panel in any open
-   session updates live. A `feature_card` block streams to the extraction tab:
+   session updates live. A `feature_card` block streams to the selected
+   extraction placeholder:
    name `cel-shaded-chibi-cat-warm-window`, category `illustration-style`, scope
    `Workspace`, summary, tags as pills, sample thumbnails, an expandable "Show
    pipeline trace" panel with all 12 `StageTraceEvent` rows. Total run duration:
@@ -674,11 +677,11 @@ orientation.
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph LR
     subgraph "Web UI Client"
-        Bubble[Image bubble<br/>Ask AI rewired]
+        Bubble[Image bubble<br/>Ask AI]
         Slash["/extract slash"]
         SlashUse["/use slash"]
-        Tabs[Panel tab strip]
-        ExtractTab[Extraction tab<br/>stage-aware timeline + card]
+        ModeSwitch[Right panel mode switch]
+        ExtractSurface[Features placeholder<br/>stage-aware timeline + card]
         Library[Media Library<br/>right-side panel<br/>Features + Images]
         Chip[Feature ref chip<br/>hover info bubble]
     end
@@ -708,10 +711,10 @@ graph LR
         Subjects[workspace.feature.*<br/>ai.interaction.feature.extract.*<br/>StageTraceEvent stream]
     end
 
-    Bubble --> ExtractTab
-    Slash --> ExtractTab
+    Bubble --> ModeSwitch --> ExtractSurface
+    Slash --> ModeSwitch
     SlashUse --> Chip
-    ExtractTab --> Subjects
+    ExtractSurface --> Subjects
     Subjects --> ExtractRunHandlers
     ExtractRunHandlers --> Router --> Extractors --> Synth --> Samples --> Persist
     Router --> Crops --> Synth

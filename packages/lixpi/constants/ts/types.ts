@@ -1195,9 +1195,16 @@ export type ExtractionRun = {
     userId: string
     status: ExtractionRunStatus
     featureId?: string
+    userText?: string
+    modelConfig?: {
+        analysisModelId?: string
+        mediaModelId?: string
+    }
     transcriptJson?: object
     sourceContextSnapshot?: object
     trace?: StageTraceEvent[]
+    stageReasoning?: Record<string, string>
+    featureCard?: Record<string, any>
     error?: string
     createdAt: number
     updatedAt: number
@@ -1210,9 +1217,15 @@ export type CanvasAiChatSidebarTab = {
     title: string
 }
 
+// Right side panel top-level surface: the feature-extraction library, saved
+// media (images + videos colocated), or the AI chat threads.
+export type CanvasRightSidePanelMode = 'features' | 'media' | 'aiThreads'
+
 export type CanvasAiChatPanelState = {
     isOpen: boolean
     isSessionHistoryOpen: boolean
+    // Which top-level surface the right side panel shows. Defaults to 'aiThreads'.
+    topLevelMode: CanvasRightSidePanelMode
     tabs: CanvasAiChatSidebarTab[]
     activeTabId?: string
     // Explicit force-included canvas node ids, fed to the bottom-center composer
@@ -1224,9 +1237,14 @@ export type CanvasAiChatPanelState = {
 
 export type CanvasFeatureExtractionState = {
     extractionRunId: string
+    featureId?: string
     status: ExtractionRunStatus
     userText?: string
     aiProvider?: string
+    modelConfig?: {
+        analysisModelId?: string
+        mediaModelId?: string
+    }
     stepDetails?: Record<string, string>
     reasoningText?: string
     // Streamed model output (thinking/reasoning) keyed by the stage that produced it,
@@ -1247,6 +1265,9 @@ export type CanvasState = {
     aiChatSidebarTabs?: CanvasAiChatSidebarTab[]
     activeAiChatSidebarTabId?: string
     aiChatPanel?: CanvasAiChatPanelState
+    // Legacy workspace-state field. Current feature extraction state is owned by
+    // API ExtractionRun records; clients may read this only to prune old pending
+    // placeholders from saved workspaces.
     featureExtractionRuns?: Record<string, CanvasFeatureExtractionState>
 }
 

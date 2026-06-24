@@ -36,7 +36,20 @@ export const extractionSubjects = [
         subject: FEATURE_EXTRACT.START, type: 'subscribe', queue: 'extraction', payloadType: 'json',
         permissions: { pub: { allow: [FEATURE_EXTRACT.START] }, sub: { allow: [`${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.>`] } },
         handler: async (data: any) => {
-            const { user: { userId, stripeCustomerId }, workspaceId, organizationId, extractionRunId, messages, aiModel, aiImageModel, sourceContextSnapshot } = data
+            const {
+                user: { userId },
+                workspaceId,
+                organizationId,
+                extractionRunId,
+                messages,
+                sourceContextSnapshot,
+            } = data
+            const analysisModelId = data.analysisModelId || data.featureExtractionConfig?.analysisModelId || data.aiModel
+            const mediaModelId = data.mediaModelId || data.featureExtractionConfig?.mediaModelId || data.aiImageModel
+            const modelConfig = {
+                ...(analysisModelId ? { analysisModelId } : {}),
+                ...(mediaModelId ? { mediaModelId } : {}),
+            }
             const natsService = NATS_Service.getInstance()
 
             try {
@@ -48,15 +61,30 @@ export const extractionSubjects = [
                     return
                 }
 
+                const userText = extractIntentFromMessages(messages)
                 // Always create/upsert the run record — client sends pre-generated ID
-                await ExtractionRun.createRun({ extractionRunId, workspaceId, userId, sourceContextSnapshot })
+                await ExtractionRun.createRun({
+                    extractionRunId,
+                    workspaceId,
+                    userId,
+                    userText,
+                    sourceContextSnapshot,
+                    modelConfig,
+                })
                 await ExtractionRun.updateStatus({ extractionRunId, workspaceId, status: 'analyzing' })
 
-                const [provider, model] = (aiModel as string).split(':')
+                if (!analysisModelId) {
+                    const message = 'Feature extraction could not start: no analysis model was selected.'
+                    await ExtractionRun.markFailed({ extractionRunId, workspaceId, error: message })
+                    natsService?.publish(`${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${extractionRunId}`, { error: message })
+                    return
+                }
+
+                const [provider, model] = (analysisModelId as string).split(':')
                 const aiModelMetaInfo = await AiModel.getAiModel({ provider: provider!, model: model!, omitPricing: false })
                 if (!aiModelMetaInfo) {
-                    const message = `AI model not found: ${aiModel}`
-                    err('AI model not found', { aiModel })
+                    const message = `AI model not found: ${analysisModelId}`
+                    err('AI model not found', { aiModel: analysisModelId })
                     await ExtractionRun.markFailed({ extractionRunId, workspaceId, error: message })
                     natsService?.publish(`${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${extractionRunId}`, { error: message })
                     return
@@ -64,9 +92,16 @@ export const extractionSubjects = [
 
                 let imageModelMetaInfo: any = undefined
                 let imageProvider: ProviderName | undefined = undefined
-                if (aiImageModel) {
-                    const [ip, im] = (aiImageModel as string).split(':')
+                if (mediaModelId) {
+                    const [ip, im] = (mediaModelId as string).split(':')
                     imageModelMetaInfo = await AiModel.getAiModel({ provider: ip!, model: im!, omitPricing: false })
+                    if (!imageModelMetaInfo) {
+                        const message = `Media model not found: ${mediaModelId}`
+                        err('Media model not found', { aiModel: mediaModelId })
+                        await ExtractionRun.markFailed({ extractionRunId, workspaceId, error: message })
+                        natsService?.publish(`${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${extractionRunId}`, { error: message })
+                        return
+                    }
                     imageProvider = ip as ProviderName
                 }
 
@@ -76,7 +111,7 @@ export const extractionSubjects = [
                     workspaceId,
                     userId,
                     organizationId,
-                    intent: extractIntentFromMessages(messages),
+                    intent: userText,
                     messages,
                     analysisProvider: provider as ProviderName,
                     analysisModel: aiModelMetaInfo,

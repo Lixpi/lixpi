@@ -30,7 +30,7 @@ graph TB
     end
 
     subgraph "AI Chat Panel"
-        Panel[Right-side panel<br/>standalone + extraction tabs]
+        Panel[Right-side panel<br/>standalone chats + Features surface]
         Chips[Explicit context chips<br/>plus workspace relevance]
         Composer[Composer<br/>documentType: 'aiPromptInput']
     end

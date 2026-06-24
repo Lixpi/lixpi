@@ -17,7 +17,7 @@ import {
     createGenericVideoAspectDropdown,
     createGenericVideoResolutionDropdown,
     createGenericVideoDurationDropdown,
-} from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+} from '$src/components/aiModelControls/index.ts'
 import { createShiftingGradientBackground } from '$src/utils/animations/gradients/shiftingGradientRenderer.ts'
 import { html } from '$src/utils/domTemplates.ts'
 import { settings } from '$src/settings.ts'

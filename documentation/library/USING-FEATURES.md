@@ -1,6 +1,6 @@
 ---
 title: Using Features
-description: How feature extraction is triggered, how features are applied to a prompt via /use, the extraction-tab content the user sees, and the four-scope sharing model.
+description: How feature extraction is triggered, how features are applied to a prompt via /use, the extraction progress content the user sees, and the four-scope sharing model.
 ---
 
 # Using Features
@@ -38,17 +38,17 @@ gathered.
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph LR
-    Bubble[Image bubble<br/>Ask AI rewired]
+    Bubble[Image bubble<br/>Ask AI]
     NL[Natural-language intent<br/>in a thread]
     Slash["/extract slash command"]
     Start([FEATURE_EXTRACT.START])
     Graph[Dedicated 6-stage<br/>extraction LangGraph]
-    Tab[Extraction tab<br/>stage timeline + feature card]
+    FeaturePanel[Features panel<br/>placeholder + pipeline]
 
     Bubble --> Start
     NL --> Start
     Slash --> Start
-    Start --> Graph --> Tab
+    Start --> Graph --> FeaturePanel
 ```
 
 | Entry point | Where the user is | How source context is gathered |
@@ -57,30 +57,34 @@ graph LR
 | Natural-language intent | Typing inside any chat thread | The thread's connected context, with the user's phrase carried as `intent` |
 | `/extract` slash command | Any prompt input | The current thread's full edge-graph context via `extractConnectedContext`, with post-command text as the seed |
 
-### 1. Image bubble "Ask AI" button (rewired)
+### 1. Image bubble "Ask AI" button
 
 The image bubble's "Ask AI" handler — in
 [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts)
 `initCanvasBubbleMenu` — is wired directly to feature extraction. Clicking the
 wand:
 
-1. Creates an `ExtractionRun` record via a NATS request
-   (`AI_INTERACTION_SUBJECTS.FEATURE_EXTRACT.START`).
-2. Opens a new `extraction` tab in the AI chat panel referencing the new
-   `extractionRunId`.
-3. Starts the LangGraph extraction with the source image's `nats-obj://` URL as
-   input — plus any directly-upstream connected nodes via the existing
-   `findConnectedNodes` traversal, so wired docs and threads are also factored
-   in.
-4. Leaves source canvas state otherwise untouched — no new canvas node or edge
+1. Creates a local pending extraction placeholder with a client-generated
+   `extractionRunId`, the source image's `nats-obj://` URL, and directly-upstream
+   connected context gathered through the existing context traversal. This
+   placeholder is not persisted.
+2. Opens the right-side panel on the `Features` surface and selects a placeholder
+   extracted-feature row for that run.
+3. Shows a confirmation section explaining that the user must confirm extraction,
+   with dedicated Reasoning model and Image model selectors for this extraction run.
+4. On confirmation, persists the API-owned extraction run with that model config,
+   publishes `AI_INTERACTION_SUBJECTS.FEATURE_EXTRACT.START`, and streams the
+   LangGraph pipeline into the placeholder row's inspector.
+5. Replaces the placeholder workflow with the saved Feature row when the backend
+   publishes the created Feature event.
+6. Leaves source canvas state otherwise untouched — no new canvas node or edge
    is created.
 
 The bubble menu definition file
 [`canvasBubbleMenuItems.ts`](../../services/web-ui/src/infographics/workspace/canvasBubbleMenuItems.ts)
-does not change — it just re-fires `callbacks.onAskAi(activeNodeId)`. The
-behaviour swap is entirely in the callback body. The `magicIcon` and the "Ask
-AI" label are kept (the UX intent — invoke AI on this artifact — is unchanged);
-the tooltip becomes "Ask AI · Extract feature."
+fires `callbacks.onAskAi(activeNodeId)`. The `WorkspaceCanvas.ts` callback owns
+the source-context snapshot, placeholder creation, panel selection, and
+confirmation-to-start handoff.
 
 ### 2. Natural language inside any thread
 
@@ -92,17 +96,15 @@ vocabulary on the user's last message) detects extraction intent — "save this
 style", "extract the palette" — and publishes
 `AI_INTERACTION_SUBJECTS.FEATURE_EXTRACT.START` with the connected context as
 references and the user's natural-language string as `intent`. The dedicated
-six-stage extraction LangGraph runs server-side; a feature card streams back
-into the chat thread as an embedded block when extraction completes.
+six-stage extraction LangGraph runs server-side; the feature run is visible in
+the `Features` surface while progress streams and when the feature card arrives.
 
 ### 3. `/extract` slash command
 
-Typing `/extract` in any prompt input opens a new `extraction` tab in the panel.
-The new tab inherits the current thread's full edge-graph context (connected
-images, docs, and upstream threads via the existing `extractConnectedContext`)
-and seeds the extraction with whatever text the user typed after `/extract` as
-the request. Submitting in the new tab runs the extraction. The original thread
-is untouched.
+Typing `/extract` in any prompt input opens the right-side panel on the
+`Features` surface with a pending extraction placeholder. The placeholder uses
+the selected context snapshot when one is available and starts only after the
+user confirms the extraction. The original thread is untouched.
 
 ## Applying features via `/use`
 
@@ -221,41 +223,38 @@ anti-leakage instruction — are documented in
 [Feature Storage](./FEATURE-STORAGE.md#resolvefeatures-always-on-pre-stage).
 {% /callout %}
 
-## What the user sees in the extraction tab
+## What the user sees during extraction
 
-While an extraction runs, the user watches it in an `extraction` tab. The tab
-operates at the same message abstraction as a normal chat thread: the user's
-request is inserted into the visible history, then a single assistant response
-carries the live progress, reasoning, and final feature card.
+While an extraction runs, the user watches it in the `Features` surface. The
+run starts as a local placeholder feature row before the backend begins; the
+inspector shows the confirmation section, then replaces it with the live
+pipeline after the user confirms. Unconfirmed placeholders are not persisted as
+extraction sessions.
 
 {% callout type="note" %}
-The tab strip, tab lifecycle, keyboard shortcuts, persistence, and the Sessions
-list are owned by
+The right-side panel shell, top-level surface switch, and persisted panel state
+are covered in
 [Chat Panel and Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md). This section
-covers only the *feature-specific content* rendered inside an extraction tab.
+covers only the feature-specific content rendered inside the `Features` surface.
 {% /callout %}
 
 The feature-specific content is:
 
-1. **User message.** Shows the exact extraction request the user submitted,
-   using the same `ai-user-message` visual structure as normal chat history.
-2. **Assistant response with a stage timeline.** The assistant response uses the
-   normal `ai-response-message` structure. Inside it, the static four-step strip
-   of v0 (`Analyzing input` → `Extracting essence` → `Generating samples (n)` →
-   `Saving to library`) is replaced by a **stage-aware timeline** that renders
-   one row per `StageTraceEvent` as it streams in. Each row shows the stage name,
-   the model name, the duration, the status (spinner / check / failed), and an
-   expandable detail panel with the prompt preview and output summary. The user
-   can see exactly what model ran what prompt for how long.
-3. **Agent reasoning.** The streamed transcript renders inside the assistant
-   response. Adaptive-thinking models stream visible reasoning during the router
-   and synthesis stages. The reasoning panel can be collapsed independently, but
-   it is not a substitute for per-step details.
-4. **Final feature card.** When the special `feature_card` block streams in at
+1. **Placeholder row.** Shows the pending feature immediately in the Features
+   list, with a status chip such as `Needs confirmation`, `Analyzing`, or
+   `Saving`.
+2. **Confirmation section.** Explains that extraction analyzes the selected
+   source and connected context, generates source-safe samples, and saves a
+   workspace Feature.
+3. **Stage-aware timeline.** Renders one row per `StageTraceEvent` as it streams
+   in. Each row shows the stage name, the model name, the duration, the status,
+   and an expandable detail panel with the prompt preview and output summary.
+4. **Agent reasoning.** Adaptive-thinking models stream visible reasoning during
+   the router and synthesis stages under the active stage.
+5. **Final feature card.** When the special `feature_card` block streams in at
    completion, it shows the name, a category badge, a scope chip (Workspace by
-   default), the summary, tags as pills, sample thumbnails, and action buttons:
-   `Open in Library`, `Change scope`, `Edit`, `Delete`. An expandable "Show
-   pipeline trace" panel lists every `StageTraceEvent` row.
+   default), the summary, tags as pills, and sample thumbnails. The saved Feature
+   row appears in the library from the created Feature event.
 
 ## Feature scope and sharing model
 
@@ -305,9 +304,9 @@ partition `public#public`, sorted by `updatedAt`. A real search index
 
 ## Where features are browsed and persisted
 
-- The **Media Library panel** is the canvas-owned surface where extracted
-  features live (in its `Features` category) alongside explicitly saved images.
-  It is authoritative for the saved-media panel UI — see
+- The **right side panel** is the canvas-owned surface where extracted features
+  live: its top-level switch selects the `Features` surface, the `Media` surface
+  (saved images and videos colocated), or `AI Threads`. See
   [Media Library](./MEDIA-LIBRARY.md). (An earlier "Feature Library panel"
   design is superseded by it.)
 - The **storage tables, the `resolveFeatures` internals, and the LangGraph

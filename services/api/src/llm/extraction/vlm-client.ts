@@ -216,6 +216,85 @@ const callAnthropic = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> =>
 
 // ─── OpenAI ───────────────────────────────────────────────────────────────────
 
+const asTypeArray = (type: unknown): string[] => {
+    if (Array.isArray(type)) return type.filter((entry): entry is string => typeof entry === 'string')
+    return typeof type === 'string' ? [type] : []
+}
+
+const schemaNeedsClosedSchemaAdapter = (schema: unknown): boolean => {
+    if (!schema || typeof schema !== 'object') return false
+    const node = schema as Record<string, any>
+    if (asTypeArray(node.type).includes('object') && node.additionalProperties !== false) {
+        return true
+    }
+
+    if (node.properties && typeof node.properties === 'object') {
+        const required = new Set(Array.isArray(node.required) ? node.required : [])
+        for (const key of Object.keys(node.properties)) {
+            if (!required.has(key)) return true
+        }
+        for (const child of Object.values(node.properties)) {
+            if (schemaNeedsClosedSchemaAdapter(child)) return true
+        }
+    }
+
+    const itemSchemas = Array.isArray(node.items)
+        ? node.items
+        : node.items ? [node.items] : []
+    for (const child of itemSchemas) {
+        if (schemaNeedsClosedSchemaAdapter(child)) return true
+    }
+
+    for (const key of ['anyOf', 'oneOf', 'allOf']) {
+        const variants = node[key]
+        if (!Array.isArray(variants)) continue
+        for (const child of variants) {
+            if (schemaNeedsClosedSchemaAdapter(child)) return true
+        }
+    }
+
+    if (node.not && schemaNeedsClosedSchemaAdapter(node.not)) return true
+    return false
+}
+
+const buildClosedSchemaPayloadEnvelope = (schema: VlmJsonSchema): VlmJsonSchema => ({
+    name: `${schema.name}_payload`,
+    description: `${schema.description} Return the result as a JSON string payload.`,
+    schema: {
+        type: 'object',
+        properties: {
+            payload: {
+                type: 'string',
+                description: `A JSON string conforming to the original ${schema.name} schema.`,
+            },
+        },
+        required: ['payload'],
+        additionalProperties: false,
+    },
+})
+
+const buildClosedSchemaPayloadInstructions = (systemPrompt: string, schema: VlmJsonSchema): string => [
+    systemPrompt,
+    '',
+    'Structured output adapter:',
+    'Return a JSON object with exactly one field named "payload".',
+    'The payload value must be a JSON string, not markdown.',
+    `The payload JSON string must conform to this original schema: ${JSON.stringify(schema.schema)}`,
+].join('\n')
+
+const parseClosedSchemaPayloadEnvelope = <T>(outer: unknown, provider: ProviderName, schemaName: string): { parsed: T; payloadText: string } => {
+    const payload = (outer as any)?.payload
+    if (typeof payload !== 'string' || payload.trim() === '') {
+        throw new Error(`${provider} returned invalid JSON payload envelope for schema=${schemaName}`)
+    }
+
+    try {
+        return { parsed: JSON.parse(payload) as T, payloadText: payload }
+    } catch (e: any) {
+        throw new Error(`${provider} returned non-JSON payload for schema=${schemaName}: ${e?.message}`)
+    }
+}
+
 const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = detectCapabilities(args.provider, args.modelVersion)
     const client = getOpenAi()
@@ -223,10 +302,13 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     // input_image). The system prompt rides on `instructions`, the modern
     // top-level field, rather than a synthetic system message in the input.
     const input = await resolveAndConvert(args.userMessages, args.natsService, 'OPENAI')
+    const usesClosedSchemaEnvelope = caps.requiresClosedJsonSchema && schemaNeedsClosedSchemaAdapter(args.schema.schema)
+    const requestSchema = usesClosedSchemaEnvelope ? buildClosedSchemaPayloadEnvelope(args.schema) : args.schema
+    const instructions = usesClosedSchemaEnvelope ? buildClosedSchemaPayloadInstructions(args.systemPrompt, args.schema) : args.systemPrompt
 
     const requestArgs: Record<string, any> = {
         model: args.modelVersion,
-        instructions: args.systemPrompt,
+        instructions,
         input,
         stream: true,
         store: false,
@@ -236,9 +318,9 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
         text: {
             format: {
                 type: 'json_schema',
-                name: args.schema.name,
-                description: args.schema.description,
-                schema: args.schema.schema,
+                name: requestSchema.name,
+                description: requestSchema.description,
+                schema: requestSchema.schema,
                 strict: true,
             },
         },
@@ -260,7 +342,7 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
                 const delta: string = event.delta ?? ''
                 if (delta) {
                     rawText += delta
-                    if (args.onTextChunk) args.onTextChunk(delta)
+                    if (args.onTextChunk && !usesClosedSchemaEnvelope) args.onTextChunk(delta)
                 }
                 break
             }
@@ -286,11 +368,15 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
 
     const outputText = finalText || rawText
     if (!outputText) throw new Error(`OpenAI ${args.modelVersion} returned empty structured output for schema=${args.schema.name}`)
-    let parsed: T
-    try { parsed = JSON.parse(outputText) as T }
+    let parsedOuter: unknown
+    try { parsedOuter = JSON.parse(outputText) }
     catch (e: any) { throw new Error(`OpenAI returned non-JSON structured output: ${e?.message}`) }
+    if (usesClosedSchemaEnvelope) {
+        const payload = parseClosedSchemaPayloadEnvelope<T>(parsedOuter, args.provider, args.schema.name)
+        return { parsed: payload.parsed, rawText: payload.payloadText, modelName, promptTokens, completionTokens }
+    }
 
-    return { parsed, rawText: outputText, modelName, promptTokens, completionTokens }
+    return { parsed: parsedOuter as T, rawText: outputText, modelName, promptTokens, completionTokens }
 }
 
 // ─── Google ───────────────────────────────────────────────────────────────────

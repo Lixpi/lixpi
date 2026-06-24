@@ -877,9 +877,22 @@
     }
 }
 
-// The translucent glass backdrop behind the right side panel is owned by the
-// reusable SidePanel component (see components/sidePanel) — its element and all
-// glass styling live there, under .side-panel-backdrop.
+// The overlay and translucent glass backdrop behind the right side panel are
+// owned by the reusable SidePanel component (see components/sidePanel). Their
+// base presentation lives there, under .side-panel-overlay and .side-panel-backdrop.
+//
+// The component's default background z-index is low (it only needs to sit behind
+// its own panel body). On the canvas, though, these layers must cover
+// canvas content — the bottom composer pill (9991) and selection overlays
+// (10000/10001). Lift them above that content while keeping them below the
+// panel body (10030) and the open/collapse toggle (10040).
+.workspace-canvas .side-panel-overlay-right {
+    z-index: 10010;
+}
+
+.workspace-canvas .side-panel-backdrop-right {
+    z-index: 10020;
+}
 
 .workspace-ai-chat-panel-tabs {
     position: relative;
@@ -895,6 +908,23 @@
     &::-webkit-scrollbar {
         display: none;
     }
+}
+
+// Top-level Features / Media / AI Threads switch at the top of the right side panel.
+.workspace-right-panel-mode-switch {
+    position: relative;
+    z-index: 3;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    flex: 0 0 auto;
+    padding: 10px 0px 18px;
+}
+
+.workspace-right-panel-mode-switch-svg {
+    display: block;
+    width: 100%;
+    overflow: visible;
 }
 
 .workspace-ai-chat-panel-tabs-switch {
@@ -1292,48 +1322,6 @@
         box-sizing: border-box;
     }
 
-    // Active feature-extraction indicator: shown when "Ask AI" arms the composer.
-    .workspace-canvas-global-extraction-badge {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        align-self: flex-start;
-        max-width: 100%;
-        margin: 0 28px;
-        padding: 4px 8px 4px 12px;
-        border-radius: 9999px;
-        font-size: 12px;
-        line-height: 1.4;
-        color: var(--text-color, #1a1a1a);
-        background: var(--dropdown-popover-bg, rgba(255, 255, 255, 0.9));
-        box-shadow: var(--dropdown-popover-box-shadow);
-        box-sizing: border-box;
-
-        .workspace-canvas-global-extraction-badge-label {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .workspace-canvas-global-extraction-badge-cancel {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 18px;
-            height: 18px;
-            border: none;
-            border-radius: 50%;
-            font-size: 14px;
-            line-height: 1;
-            cursor: pointer;
-            color: inherit;
-            background: transparent;
-
-            &:hover {
-                background: rgba(0, 0, 0, 0.08);
-            }
-        }
-    }
 }
 
 // Single compact row: input on the left, model selector + send on the right,
