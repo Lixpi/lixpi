@@ -9,6 +9,7 @@ import {
     getAiGeneratedVideoCallbacks,
     setAiGeneratedVideoCallbacks,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
+import AuthService from '$src/services/auth-service.ts'
 
 vi.mock('$src/components/videoControls/index.ts', () => ({
     createVideoControls: vi.fn(() => ({
@@ -20,6 +21,12 @@ vi.mock('$src/components/videoControls/index.ts', () => ({
 }))
 
 import { createVideoControls } from '$src/components/videoControls/index.ts'
+
+vi.mock('$src/services/auth-service.ts', () => ({
+    default: {
+        getTokenSilently: vi.fn(),
+    },
+}))
 
 const createVideoNode = (attrs: Record<string, unknown> = {}) => {
     return testSchema.nodes.aiGeneratedVideo.create({
@@ -62,6 +69,10 @@ const createNodeView = (attrs: Record<string, unknown> = {}) => {
 
     return aiGeneratedVideoNodeView(node, view as any, () => 0)
 }
+
+beforeEach(() => {
+    vi.mocked(AuthService.getTokenSilently).mockReset().mockResolvedValue('token-1')
+})
 
 describe('aiGeneratedVideoNodeSpec', () => {
     it('serializes core video attrs for ProseMirror DOM output', () => {
@@ -224,5 +235,26 @@ describe('aiGeneratedVideoNodeView', () => {
         view.destroy()
 
         expect(controlInstance.destroy).toHaveBeenCalled()
+    })
+
+    it('refreshes api video URLs and tokens without mutating non-video source shape', async () => {
+        const view = createNodeView({
+            isPending: false,
+            videoUrl: 'https://cdn.example.com/api/videos/workspace-id/video.mp4?token=stale',
+            posterUrl: 'https://cdn.example.com/api/images/workspace-id/poster.png?token=stale',
+            errorMessage: '',
+        })
+
+        const video = view.dom.querySelector('.ai-generated-video-content') as HTMLVideoElement
+
+        await vi.waitFor(() => {
+            const resolvedVideoSrc = video.getAttribute('src') || video.src
+            expect(resolvedVideoSrc).toContain('token=token-1')
+            expect(resolvedVideoSrc).not.toContain('token=stale')
+        })
+
+        const resolvedPosterSrc = video.poster || video.getAttribute('poster')
+        expect(resolvedPosterSrc).toContain('token=token-1')
+        expect(resolvedPosterSrc).not.toContain('token=stale')
     })
 })

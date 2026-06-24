@@ -357,6 +357,72 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         })
     })
 
+    it('rejects image multi-model payloads with invalid JSON and alerts the user', async () => {
+        const sendAiRequestHandler = vi.fn()
+        const plugin = createPlugin(sendAiRequestHandler)
+
+        const state = EditorState.create({
+            doc: doc(
+                makeThread(
+                    {
+                        threadId: 'thread-invalid-image-models',
+                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        useMultipleImageModels: true,
+                        aiImageModel: 'Google:gemini-2.5-flash-image',
+                        aiImageModels: 'not-json',
+                    },
+                    [makeUserMessage('Image model payload validation')]
+                )
+            ),
+            schema,
+            plugins: [plugin],
+        })
+
+        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
+            threadId: 'thread-invalid-image-models',
+            nodePos: findNodePosition(state.doc, 'aiChatThread'),
+        })
+        state.applyTransaction(trigger)
+
+        expect(alertMock).toHaveBeenCalledWith('Please select at least 1 image model.')
+        expect(sendAiRequestHandler).not.toHaveBeenCalled()
+    })
+
+    it('falls back to configured single image model when multi-model list is invalid but mode is single', async () => {
+        const sendAiRequestHandler = vi.fn()
+        const plugin = createPlugin(sendAiRequestHandler)
+
+        const state = EditorState.create({
+            doc: doc(
+                makeThread(
+                    {
+                        threadId: 'thread-single-image-invalid-list',
+                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        aiImageModel: 'Google:gemini-2.5-flash-image',
+                        aiImageModels: 'not-json',
+                    },
+                    [makeUserMessage('Single-image-model fallback')]
+                )
+            ),
+            schema,
+            plugins: [plugin],
+        })
+
+        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
+            threadId: 'thread-single-image-invalid-list',
+            nodePos: findNodePosition(state.doc, 'aiChatThread'),
+        })
+        state.applyTransaction(trigger)
+
+        await Promise.resolve()
+
+        const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
+        expect(payload.imageOptions).toMatchObject({
+            aiImageModel: 'Google:gemini-2.5-flash-image',
+            aiImageModels: [],
+        })
+    })
+
     it('dispatches stop request payload when STOP_AI_CHAT_META is present', () => {
         const stopAiRequestHandler = vi.fn()
         const plugin = createPlugin(vi.fn(), stopAiRequestHandler)

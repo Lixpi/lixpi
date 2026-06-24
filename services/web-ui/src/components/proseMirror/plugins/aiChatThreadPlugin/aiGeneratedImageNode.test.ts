@@ -230,6 +230,31 @@ describe('aiGeneratedImageNodeView', () => {
         expect(meta.textContent).toContain('OpenAI')
     })
 
+    it('transitions from pending to complete image state and applies authenticated /api URL', async () => {
+        const { nodeView } = createNodeView({
+            imageData: '',
+            isPartial: true,
+        })
+        const spinner = nodeView.dom.querySelector('.ai-generated-image-spinner') as HTMLElement
+        const image = nodeView.dom.querySelector('.ai-generated-image-content') as HTMLImageElement
+
+        await Promise.resolve()
+        expect(spinner.classList.contains('is-active')).toBe(true)
+        expect(image.classList.contains('is-visible')).toBe(false)
+
+        const updatedNode = createImageNode({
+            imageData: '/api/images/workspace-images/new-file',
+            isPartial: false,
+        })
+        const updated = nodeView.update(updatedNode)
+
+        await Promise.resolve()
+        expect(updated).toBe(true)
+        expect(spinner.classList.contains('is-active')).toBe(false)
+        expect(image.classList.contains('is-visible')).toBe(true)
+        expect(image.src).toContain('/api/images/workspace-images/new-file?token=token-1')
+    })
+
     it('adds an inline error placeholder only once when image fails to load', async () => {
         const { nodeView } = createNodeView()
         const image = nodeView.dom.querySelector('.ai-generated-image-content') as HTMLImageElement

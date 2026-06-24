@@ -402,4 +402,33 @@ describe('createContextPreviewTile', () => {
         expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
         expect(document.body.querySelector('.help-tooltip')).toBeNull()
     })
+
+    it('renders extracted document content when the descriptor is not ready', async () => {
+        const env = createMockEnvironment({
+            documents: [
+                {
+                    documentId: 'document-node',
+                    title: 'Draft Note',
+                    content: createTextDoc('Draft text that should backfill the panel'),
+                },
+            ],
+        })
+        const { dom } = createContextPreviewTile({
+            node: createDocumentNode({
+                descriptor: { status: 'error', summary: 'Descriptor should be ignored while not ready' },
+            } as unknown as CanvasNode),
+            environment: env,
+        })
+        document.body.appendChild(dom)
+
+        const trigger = dom.querySelector('.help-tooltip-trigger') as HTMLElement
+        trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
+        await waitForMicrotasks()
+
+        const tooltipContent = document.body.querySelector('.help-tooltip-content') as HTMLElement
+        expect(tooltipContent).not.toBeNull()
+        expect(tooltipContent.querySelector('.workspace-ai-chat-panel-context-preview-document-title')?.textContent).toBe('Draft Note')
+        expect(tooltipContent.querySelector('.workspace-ai-chat-panel-context-preview-document-text')?.textContent)
+            .toBe('Draft text that should backfill the panel')
+    })
 })
