@@ -9,6 +9,7 @@ import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
+import { detectCapabilities } from '../extraction/capabilities.ts'
 import {
     convertAttachmentsForProvider,
     parseDataUrl,
@@ -158,14 +159,16 @@ export class OpenAIProvider extends BaseProvider {
         aiChatThreadId: string
     }): Promise<Partial<ProviderState>> {
         const update: Partial<ProviderState> = {}
+        // GPT-5 / o-series accept only the default temperature — omit it for them.
+        const caps = detectCapabilities('OpenAI', args.modelVersion)
         const requestKwargs: Record<string, any> = {
             model: args.modelVersion,
             input: args.inputMessages,
             instructions: args.instructions,
-            temperature: args.temperature,
             stream: true,
             store: false,
         }
+        if (caps.supportsTemperature) requestKwargs.temperature = args.temperature
         if (args.maxTokens && args.maxTokens > 0) {
             requestKwargs.max_output_tokens = args.maxTokens
         }
@@ -485,11 +488,13 @@ export class OpenAIProvider extends BaseProvider {
         prompt: string,
         maxChars: number,
     ): Promise<string | undefined> {
+        const caps = detectCapabilities('OpenAI', state.modelVersion)
         const response = await this.client.responses.create({
             model: state.modelVersion,
             input: [{ role: 'user', content: `Original image prompt:\n${prompt}` }],
             instructions: buildImagePromptRewriteInstruction(maxChars),
-            temperature: 0.2,
+            // GPT-5 / o-series accept only the default temperature — omit it for them.
+            ...(caps.supportsTemperature ? { temperature: 0.2 } : {}),
             max_output_tokens: Math.max(256, Math.ceil((maxChars + 3) / 4) + 128),
             store: false,
         } as any)

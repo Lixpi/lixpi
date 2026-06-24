@@ -11,7 +11,7 @@ const googleGenerateContentStream = vi.fn()
 
 vi.mock('openai', () => ({
     default: class {
-        public chat = { completions: { create: openAiCreate } }
+        public responses = { create: openAiCreate }
     },
 }))
 
@@ -63,9 +63,15 @@ const makeAnthropicStream = (events: any[], finalMessage: any) => ({
     },
 })
 
-const makeOpenAiToolCallChunk = (argument: string, model?: string) => ({
-    ...(model ? { model } : {}),
-    choices: [{ delta: { tool_calls: [{ function: { arguments: argument } }] } }],
+// Responses-API streaming events: structured output arrives as output_text
+// deltas; the terminal event carries the authoritative output_text + usage.
+const makeOpenAiTextDelta = (delta: string) => ({
+    type: 'response.output_text.delta',
+    delta,
+})
+const makeOpenAiCompleted = (outputText: string, model: string, usage?: { input_tokens: number; output_tokens: number }) => ({
+    type: 'response.completed',
+    response: { model, output_text: outputText, ...(usage ? { usage } : {}) },
 })
 
 describe('callStructuredVlm', () => {
@@ -76,16 +82,11 @@ describe('callStructuredVlm', () => {
         vi.clearAllMocks()
     })
 
-    it('dispatches to OpenAI and parses streamed function arguments', async () => {
+    it('dispatches to OpenAI and parses streamed structured output', async () => {
         openAiCreate.mockResolvedValueOnce(makeAsyncStream([
-            {
-                ...makeOpenAiToolCallChunk('{"status":"'),
-                usage: { prompt_tokens: 10, completion_tokens: 4 },
-            },
-            {
-                ...makeOpenAiToolCallChunk('ok"}'),
-                usage: { prompt_tokens: 11, completion_tokens: 8 },
-            },
+            makeOpenAiTextDelta('{"status":"'),
+            makeOpenAiTextDelta('ok"}'),
+            makeOpenAiCompleted('{"status":"ok"}', 'gpt-4.1', { input_tokens: 11, output_tokens: 8 }),
         ]))
 
         const result = await callStructuredVlm({
@@ -103,7 +104,8 @@ describe('callStructuredVlm', () => {
         expect(result.completionTokens).toBe(8)
         const createRequest = openAiCreate.mock.calls[0]?.[0]
         expect(createRequest?.model).toBe('gpt-4.1')
-        expect(createRequest?.tool_choice).toMatchObject({ type: 'function', function: { name: 'extract' } })
+        expect(createRequest?.instructions).toBe('You are helping.')
+        expect(createRequest?.text?.format).toMatchObject({ type: 'json_schema', name: 'extract', strict: true })
     })
 
     it('retries and succeeds when OpenAI throws a transient error once', async () => {
@@ -113,10 +115,9 @@ describe('callStructuredVlm', () => {
         openAiCreate
             .mockRejectedValueOnce(transientError)
             .mockResolvedValueOnce(makeAsyncStream([
-                {
-                    ...makeOpenAiToolCallChunk('{"status":"'),
-                },
-                makeOpenAiToolCallChunk('ok"}'),
+                makeOpenAiTextDelta('{"status":"'),
+                makeOpenAiTextDelta('ok"}'),
+                makeOpenAiCompleted('{"status":"ok"}', 'gpt-4.1'),
             ]))
 
         const result = await callStructuredVlm({
@@ -165,10 +166,9 @@ describe('callStructuredVlm', () => {
         openAiCreate
             .mockRejectedValueOnce(transientError)
             .mockResolvedValueOnce(makeAsyncStream([
-                {
-                    ...makeOpenAiToolCallChunk('{"status":"'),
-                },
-                makeOpenAiToolCallChunk('ok"}'),
+                makeOpenAiTextDelta('{"status":"'),
+                makeOpenAiTextDelta('ok"}'),
+                makeOpenAiCompleted('{"status":"ok"}', 'gpt-4.1'),
             ]))
 
         const result = await callStructuredVlm({
