@@ -5,8 +5,6 @@ import { Fragment } from 'prosemirror-model'
 import type {
     CanvasState,
     CanvasNode,
-    AiChatThreadCanvasNode,
-    WorkspaceEdge,
     ImageGenerationSize,
     MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
@@ -16,7 +14,6 @@ import {
     serializeAiModelSelectionAttr,
     serializeMediaGenerationConfigSelectionAttr,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
-import { settings } from '$src/settings.ts'
 
 type ThreadEditorEntry = {
     editorView: EditorView
@@ -53,7 +50,8 @@ type AiSubmitPayload = {
 
 type TargetNode = {
     nodeId: string
-    type: CanvasNode['type']
+    // 'aiChatThread' is a panel-only thread target (no canvas node of that type exists).
+    type: CanvasNode['type'] | 'aiChatThread'
     referenceId: string
 }
 
@@ -79,7 +77,7 @@ type AiPromptInputControllerOptions = {
     workspaceId: string
     getCanvasState: () => CanvasState | null
     persistCanvasState: (state: CanvasState) => void
-    onAiChatThreadCreated?: (params: { threadId: string; nodeId: string }) => void
+    onAiChatThreadCreated?: (params: { threadId: string }) => void
     createAiChatThread: (params: {
         workspaceId: string
         threadId: string
@@ -427,7 +425,6 @@ export class AiPromptInputController {
         if (!this.target) return
 
         const threadId = uuidv4()
-        const targetNodeId = this.target.nodeId
         const legacyUseMultipleModels = Boolean(useMultipleModels)
         const threadUseMultipleReasoningModels = useMultipleReasoningModels ?? legacyUseMultipleModels
         const threadUseMultipleImageModels = useMultipleImageModels ?? legacyUseMultipleModels
@@ -502,7 +499,6 @@ export class AiPromptInputController {
 
         // Create the thread on the backend
         try {
-            const threadNodeId = `node-${threadId}`
             const thread = await this.createAiChatThread({
                 workspaceId: this.workspaceId,
                 threadId,
@@ -516,43 +512,10 @@ export class AiPromptInputController {
                 return
             }
 
-            // Add the thread canvas node and edge to canvas state
-            const canvasState = this.getCanvasState()
-            if (!canvasState) return
-
-            const targetCanvasNode = canvasState.nodes.find((n: CanvasNode) => n.nodeId === targetNodeId)
-            if (!targetCanvasNode) return
-
-            const threadDimensions = { ...settings.aiChatThread.defaultDimensions }
-
-            // Position the new thread to the right of the target node
-            const threadPosition = {
-                x: targetCanvasNode.position.x + (targetCanvasNode.dimensions?.width ?? 400) + settings.aiChatThread.adjacentNodeGap,
-                y: targetCanvasNode.position.y
-            }
-
-            const threadCanvasNode: AiChatThreadCanvasNode = {
-                nodeId: threadNodeId,
-                type: 'aiChatThread',
-                referenceId: threadId,
-                position: threadPosition,
-                dimensions: threadDimensions,
-            }
-
-            const edge: WorkspaceEdge = {
-                edgeId: uuidv4(),
-                sourceNodeId: targetNodeId,
-                targetNodeId: threadCanvasNode.nodeId,
-            }
-
-            const newCanvasState: CanvasState = {
-                ...canvasState,
-                nodes: [...canvasState.nodes, threadCanvasNode],
-                edges: [...canvasState.edges, edge]
-            }
-
-            // Queue the AI submit for after the thread editor mounts
-            // The message is already in the initial content, so we just need to trigger the AI request
+            // The thread is a read-only transcript hosted in the right side panel;
+            // it has no on-canvas node. Queue the AI submit for after the panel
+            // thread editor mounts — the message is already in the initial content,
+            // so we just need to trigger the AI request.
             this.pendingMessages.set(threadId, {
                 content: contentJSON,
                 aiModel,
@@ -566,15 +529,13 @@ export class AiPromptInputController {
                 referenceNodeIds,
             })
 
-            this.persistCanvasState(newCanvasState)
-
-            // Update target to point to the new thread
+            // Update target to point to the new thread (panel-only, no canvas node).
             this.target = {
-                nodeId: threadCanvasNode.nodeId,
+                nodeId: `node-${threadId}`,
                 type: 'aiChatThread',
                 referenceId: threadId
             }
-            this.onAiChatThreadCreated?.({ threadId, nodeId: threadCanvasNode.nodeId })
+            this.onAiChatThreadCreated?.({ threadId })
         } catch (error) {
             console.error('[AiPromptInputController] Failed to create thread:', error)
         }

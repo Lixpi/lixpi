@@ -450,7 +450,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		const partialStart = ts.indexOf('onImagePartialToCanvas:')
 		const completeStart = ts.indexOf('onImageCompleteToCanvas:', partialStart)
 		const partialHandler = ts.slice(partialStart, completeStart)
-		const completeEnd = ts.indexOf('onEditInNewThread:', completeStart)
+		const completeEnd = ts.indexOf('onVideoPendingToCanvas:', completeStart)
 		const completeHandler = ts.slice(completeStart, completeEnd)
 
 		expectSourceToContain(ts, 'pixiMediaLayer?.setGeneratingImageNodes(')
@@ -486,7 +486,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 
 	it('finalizes the same PIXI-backed image node without updating a legacy DOM image', () => {
 		const completeStart = ts.indexOf('onImageCompleteToCanvas:')
-		const callbackEnd = ts.indexOf('onEditInNewThread:', completeStart)
+		const callbackEnd = ts.indexOf('onVideoPendingToCanvas:', completeStart)
 		expect(completeStart).toBeGreaterThan(-1)
 		expect(callbackEnd).toBeGreaterThan(completeStart)
 
@@ -498,15 +498,22 @@ describe('Workspace canvas — generated image preview rendering', () => {
 	})
 
 	it('preserves workspace panel metadata when image workflows write canvas state', () => {
-		const partialStart = ts.indexOf('onImagePartialToCanvas:')
-		const completeStart = ts.indexOf('onImageCompleteToCanvas:', partialStart)
-		const editStart = ts.indexOf('onEditInNewThread:')
+		const imageCallbacksStart = ts.indexOf('setAiGeneratedImageCallbacks({')
+		const errorStart = ts.indexOf('onImageErrorToCanvas:', imageCallbacksStart)
+		const partialStart = ts.indexOf('onImagePartialToCanvas:', imageCallbacksStart)
+		const completeStart = ts.indexOf('onImageCompleteToCanvas:', imageCallbacksStart)
+		const videoStart = ts.indexOf('setAiGeneratedVideoCallbacks', errorStart)
 		const partialHandler = ts.slice(partialStart, completeStart)
-		const editHandler = ts.slice(editStart, ts.indexOf('// Visibility detection for lazy loading', editStart))
+		const completeHandler = ts.slice(completeStart, videoStart)
+		const errorHandler = ts.slice(errorStart, partialStart)
 
 		expectExcerptToContain(partialHandler, '...(currentCanvasState ?? {})', 'partial image handler')
-		expectExcerptToContain(editHandler, '...(currentCanvasState ?? {})', 'edit-in-new-thread handler')
-		expectSourceToContain(ts, 'const nextState: CanvasState = {\n                    ...currentCanvasState,')
+		expectExcerptToContain(completeHandler, '...(currentCanvasState ?? {})', 'complete image handler')
+		expectExcerptToContain(errorHandler, 'const resolvedTreeState = resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)', 'error image handler')
+		expectExcerptToContain(errorHandler, 'commitCanvasStatePreservingEditors(nextState)', 'error image handler')
+		expectSourceToContain(ts, 'commitCanvasStatePreservingEditors({')
+		expectSourceToContain(ts, 'commitCanvasState({')
+		expectSourceToContain(ts, 'viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 }')
 	})
 
 	it('re-tidies generated-media trees when final image proportions resolve', () => {
@@ -786,13 +793,11 @@ describe('Workspace canvas — content descriptors (documents & threads)', () =>
 		expectSourceToContain(ts, 'settings.contentDescriptor.editDebounceMs')
 	})
 
-	it('triggers a descriptor refresh on document and thread edits, and on node creation', () => {
-		// Edit triggers: document editor + AI chat panel thread editor.
+	it('triggers a descriptor refresh on document edits and on node creation', () => {
+		// Edit trigger: document editor.
 		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(node.nodeId, value, doc.title)')
-		expectSourceToContain(ts, 'if (rootNode) scheduleTextNodeDescriptor(rootNode.nodeId, value)')
-		// Create trigger: a newly inserted document/thread node with existing content.
+		// Create trigger: a newly inserted document node with existing content.
 		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(positionedNode.nodeId, doc.content, doc.title)')
-		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(positionedNode.nodeId, thread.content)')
 	})
 
 	it('clears pending descriptor timers on destroy', () => {
@@ -874,7 +879,7 @@ describe('Workspace canvas — AI panel reload stability', () => {
 	it('refreshes only the active panel when deferred thread content arrives', () => {
 		expectSourceToContain(ts, 'function refreshActiveAiChatPanelWhenContentLoads(): void')
 		expectSourceToContain(ts, 'if (activeAiChatPanelHadContent) return')
-		expectSourceToContain(ts, 'renderActiveAiChatPanel(undefined, thread)')
+		expectSourceToContain(ts, 'renderActiveAiChatPanel(thread)')
 		expectSourceToContain(ts, 'refreshActiveAiChatPanelWhenContentLoads()')
 		expectSourceToContain(ts, 'if (aiChatPanelState.isOpen && !activeAiChatPanelEl) renderActiveAiChatPanel()')
 	})
@@ -949,33 +954,34 @@ describe('Workspace AI chat panel — session history interactions', () => {
 	const scss = loadScss()
 	const svgIcons = loadSvgIcons()
 
-	it('uses the circle icon as the new-chat control and binds a start-new-draft action', () => {
-		expectSourceToContain(ts, 'xCircleIcon,')
-		expectSourceNotToContain(ts, 'xCircleIcon as plusIcon')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-new-chat')
-		expectSourceToContain(ts, 'aria-label="Start new chat"')
-		expectSourceToContain(ts, 'innerHTML=${xCircleIcon}')
-		expectSourceToContain(ts, 'const newChatEl = controlsEl.querySelector<HTMLButtonElement>(\'.workspace-ai-chat-panel-new-chat\')!')
-		expectSourceToContain(ts, 'newChatEl.addEventListener(\'click\', () => startNewAiChatDraft())')
-		expectSourceToContain(svgIcons, 'export const xCircleIcon')
+	it('uses only the history toggle control in the chat session header', () => {
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-toggle')
+		expectSourceToContain(ts, 'aria-label="Toggle session history"')
+		expectSourceToContain(ts, 'aria-controls="workspace-ai-chat-panel-sessions"')
+		expectSourceToContain(ts, 'const historyToggleEl = controlsEl.querySelector<HTMLButtonElement>(\'.workspace-ai-chat-panel-history-toggle\')!')
+		expectSourceToContain(ts, 'historyToggleEl.addEventListener(\'click\', () => {')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-new-chat')
+		expectSourceNotToContain(ts, 'startNewAiChatDraft')
+		const sessionHeaderStart = ts.indexOf('const controlsEl = html`<div className="workspace-ai-chat-panel-context-controls">')
+		const sessionsListStart = ts.indexOf('const sessionsEl =', sessionHeaderStart)
+		expect(sessionHeaderStart).toBeGreaterThan(-1)
+		expect(sessionsListStart).toBeGreaterThan(sessionHeaderStart)
+		const sessionHeaderBlock = ts.slice(sessionHeaderStart, sessionsListStart)
+		expectExcerptNotToContain(sessionHeaderBlock, 'xCircleIcon', 'chat session header')
+		expectSourceToContain(svgIcons, 'export const aiChatPanelToggleHistoryIcon')
 	})
 
 	it('styles the session control row and session entry details consistently', () => {
-		const historyToggleBlock = extractBlockContainingSelector(scss, '.workspace-ai-chat-panel-history-toggle,\n.workspace-ai-chat-panel-new-chat')
-		const newChatBlock = extractBlock(scss, '.workspace-ai-chat-panel-new-chat')
+		const historyToggleBlock = extractBlock(scss, '.workspace-ai-chat-panel-history-toggle')
 		const sessionBlock = extractBlock(scss, '.workspace-ai-chat-panel-session')
 		const titleBlock = extractBlock(scss, '.workspace-ai-chat-panel-session-title')
 		expectExcerptToContain(historyToggleBlock, 'display: grid', 'session controls block')
 		expectExcerptToContain(historyToggleBlock, 'place-items: center', 'session controls block')
-		expectExcerptToContain(newChatBlock, 'border-radius: 99px', 'new chat block')
-		expectExcerptToContain(newChatBlock, 'background: transparent', 'new chat block')
+		expectExcerptToContain(historyToggleBlock, 'background: transparent', 'session controls block')
 		const sessionHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-session:focus-within')
 		const historyToggleHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-history-toggle:focus-visible')
-		const newChatHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-new-chat:focus-visible')
 		expectExcerptToContain(historyToggleHoverBlock, 'background: var(--workspace-ai-chat-panel-session-history-toggle-hover-background, rgba(105, 115, 136, 0.1))', 'session history toggle focus block')
 		expectExcerptToContain(historyToggleHoverBlock, 'outline: none', 'session history toggle focus block')
-		expectExcerptToContain(newChatHoverBlock, 'color: var(--workspace-ai-chat-panel-session-action-hover-background, #{$steelBlue})', 'new chat focus block')
-		expectExcerptToContain(newChatHoverBlock, 'outline: none', 'new chat focus block')
 		expectExcerptToContain(sessionHoverBlock, 'background-image:', 'session focus block')
 		expectExcerptToContain(sessionHoverBlock, '--workspace-ai-chat-panel-session-hover-background-image', 'session focus block')
 		expectExcerptToContain(sessionHoverBlock, 'linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)', 'session focus block')
@@ -986,51 +992,41 @@ describe('Workspace AI chat panel — session history interactions', () => {
 		expectExcerptToContain(titleBlock, 'font-weight: 620', 'session title block')
 	})
 
-	it('starts a fresh standalone draft when last session tab is closed', () => {
+	it('keeps an empty-openable panel state when the last tab is closed', () => {
 		const closeBody = extractFunctionBody(ts, 'closeAiChatSidebarTab')
-		const startNewBody = extractFunctionBody(ts, 'startNewAiChatDraft')
 		const emptyBranchIndex = closeBody.indexOf('if (aiChatSidebarTabs.length === 0) {')
-		const startFreshIndex = closeBody.indexOf('startNewAiChatDraft({ preserveOpenTabs: false, syncFromState: false })')
-		const returnIndex = closeBody.indexOf('return', startFreshIndex)
+		const returnIndex = closeBody.indexOf('return', emptyBranchIndex)
 
 		expect(emptyBranchIndex).toBeGreaterThan(-1)
-		expect(startFreshIndex).toBeGreaterThan(emptyBranchIndex)
-		expect(returnIndex).toBeGreaterThan(startFreshIndex)
-		expectExcerptToContain(closeBody, 'startNewAiChatDraft({ preserveOpenTabs: false, syncFromState: false })', 'closeAiChatSidebarTab')
+		expect(returnIndex).toBeGreaterThan(emptyBranchIndex)
+		expectExcerptToContain(closeBody, 'activeAiChatSidebarTabId = null', 'closeAiChatSidebarTab')
+		expectExcerptToContain(closeBody, 'activeAiChatSidebarThreadId = null', 'closeAiChatSidebarTab')
+		expectExcerptToContain(closeBody, 'activeAiChatThreadId = null', 'closeAiChatSidebarTab')
+		expectExcerptToContain(closeBody, 'persistAiChatSidebarState()', 'closeAiChatSidebarTab')
+		expectExcerptToContain(closeBody, 'syncActiveAiChatPanelFromState()', 'closeAiChatSidebarTab')
+		expectExcerptToContain(closeBody, 'renderActiveAiChatPanel()', 'closeAiChatSidebarTab')
 		expectExcerptToContain(closeBody, 'return', 'closeAiChatSidebarTab')
-		expectExcerptToContain(startNewBody, 'const drafts = { ...(aiChatPanelState.drafts ?? {}) }', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'delete drafts[NEW_CHAT_DRAFT_KEY]', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'aiChatSidebarTabs = []', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'preserveOpenTabs = true', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'syncFromState = true', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'if (preserveOpenTabs && aiChatSidebarTabs.length > 0)', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'createAiChatDraftSidebarTab()', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'activeAiChatSidebarTabId = null', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'activeAiChatSidebarThreadId = null', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'activeAiChatThreadId = null', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'activeAiChatRootNodeId = null', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'contextChips: [],', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'promptInputController.setTarget(null)', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'syncActiveAiChatPanelFromState()', 'startNewAiChatDraft')
 	})
 
-	it('turns a submitted draft tab into a thread tab and removes only that draft payload', () => {
-		const replaceBody = extractFunctionBody(ts, 'replaceAiChatDraftSidebarTab')
-		const submitBody = extractFunctionBody(ts, 'createStandaloneThreadAndSubmit')
+	it('opens a persistent extraction tab for a feature extraction run', () => {
+		const openBody = extractFunctionBody(ts, 'openFeatureExtractionTab')
 
-		expectExcerptToContain(replaceBody, 'if (tab.tabId !== draftTabId) return tab', 'replaceAiChatDraftSidebarTab')
-		expectExcerptToContain(replaceBody, 'replacedDraftTab = true', 'replaceAiChatDraftSidebarTab')
-		expectExcerptToContain(replaceBody, 'return threadTab', 'replaceAiChatDraftSidebarTab')
-		expectExcerptToContain(replaceBody, 'delete drafts[draftTabId]', 'replaceAiChatDraftSidebarTab')
-		expectExcerptToContain(replaceBody, 'aiChatPanelState = { ...aiChatPanelState, drafts }', 'replaceAiChatDraftSidebarTab')
-		expectExcerptToContain(submitBody, "const submittedDraftTabId = submittedTab?.type === 'draft' ? submittedTab.tabId : null", 'createStandaloneThreadAndSubmit')
-		expectExcerptToContain(submitBody, 'replaceAiChatDraftSidebarTab(submittedDraftTabId, threadId)', 'createStandaloneThreadAndSubmit')
-		expectExcerptToContain(submitBody, 'activeAiChatSidebarTabId = `thread:${threadId}`', 'createStandaloneThreadAndSubmit')
-		expectSourceToContain(ts, 'buildAiPromptDraftAttrsFromSubmitData,')
-		expectSourceToContain(ts, 'buildAiPromptDraftFromText,')
-		expectExcerptToContain(submitBody, 'const submittedThreadDraftKey = `thread:${threadId}`', 'createStandaloneThreadAndSubmit')
-		expectExcerptToContain(submitBody, "const submittedThreadDraft = buildAiPromptDraftFromText('', buildAiPromptDraftAttrsFromSubmitData(data))", 'createStandaloneThreadAndSubmit')
-		expectExcerptToContain(submitBody, '[submittedThreadDraftKey]: { content: submittedThreadDraft }', 'createStandaloneThreadAndSubmit')
+		expectExcerptToContain(openBody, 'isOpen: true, isSessionHistoryOpen: false', 'openFeatureExtractionTab')
+		expectExcerptToContain(openBody, 'const tabId = `extraction:${extractionRunId}`', 'openFeatureExtractionTab')
+		expectExcerptToContain(openBody, 'if (!aiChatSidebarTabs.some((tab) => tab.tabId === tabId)) {', 'openFeatureExtractionTab')
+		expectExcerptToContain(openBody, "type: 'extraction'", 'openFeatureExtractionTab')
+		expectExcerptToContain(openBody, 'activeAiChatSidebarTabId = tabId', 'openFeatureExtractionTab')
+		expectExcerptToContain(openBody, 'persistAiChatSidebarState()', 'openFeatureExtractionTab')
+		expectExcerptToContain(openBody, 'renderActiveAiChatPanel()', 'openFeatureExtractionTab')
+	})
+
+	it('adds thread tabs idempotently when opening existing chat sessions', () => {
+		const ensureThreadBody = extractFunctionBody(ts, 'ensureAiChatSidebarThreadTab')
+
+		expectExcerptToContain(ensureThreadBody, 'const threadTabId = `thread:${threadId}`', 'ensureAiChatSidebarThreadTab')
+		expectExcerptToContain(ensureThreadBody, 'if (!aiChatSidebarTabs.some((tab) => tab.tabId === threadTabId))', 'ensureAiChatSidebarThreadTab')
+		expectExcerptToContain(ensureThreadBody, 'unshift(createAiChatThreadSidebarTab(threadId))', 'ensureAiChatSidebarThreadTab')
+		expectExcerptToContain(ensureThreadBody, 'activeAiChatSidebarThreadId = threadId', 'ensureAiChatSidebarThreadTab')
 	})
 
 	it('keeps thread sessions renderable with message count and status metadata', () => {
@@ -1099,152 +1095,6 @@ describe('AI chat thread — workspace CSS overrides for auto-grow', () => {
 	})
 })
 
-// =============================================================================
-// AI chat thread — auto-grow TypeScript infrastructure
-// =============================================================================
-
-describe('AI chat thread — auto-grow TS infrastructure', () => {
-	const ts = loadTs()
-
-	it('defines AI_CHAT_THREAD_MIN_HEIGHT constant', () => {
-		expect(ts).toMatch(/const\s+AI_CHAT_THREAD_MIN_HEIGHT\s*=\s*\d+/)
-	})
-
-	it('defines autoGrowThreadNode function', () => {
-		expect(ts).toMatch(/function\s+autoGrowThreadNode\s*\(\s*threadNodeId:\s*string\s*\)/)
-	})
-
-	it('defines scheduleThreadAutoGrow function', () => {
-		expect(ts).toMatch(/function\s+scheduleThreadAutoGrow\s*\(\s*threadNodeId:\s*string\s*\)/)
-	})
-
-	it('autoGrowThreadNode is disabled because canvas node dimensions stay explicit', () => {
-		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'The canvas keeps thread node dimensions explicit')
-		expect(fnBody).not.toMatch(/threadNodeEl\.style\.height\s*=\s*['"]auto['"]/)
-		expectExcerptNotToContain(fnBody, 'threadNodeEl.offsetHeight')
-	})
-
-	it('scheduleThreadAutoGrow is disabled with autoGrowThreadNode', () => {
-		const fnMatch = ts.match(/function\s+scheduleThreadAutoGrow[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'Disabled')
-		expectExcerptNotToContain(fnBody, 'requestAnimationFrame')
-	})
-
-	it('updateThreadNodeVisibility schedules disabled auto-grow for compatibility', () => {
-		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'scheduleThreadAutoGrow(nodeId)')
-	})
-
-	it('renderNodes does not schedule parent growth during rendering', () => {
-		const renderMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
-		expect(renderMatch).not.toBeNull()
-		const renderBody = renderMatch![0]
-		expectExcerptNotToContain(renderBody, 'scheduleThreadAutoGrow')
-	})
-
-	it('destroy() cleans up autoGrowRaf and pendingAutoGrowThreadNodeIds', () => {
-		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
-		expect(destroyMatch).not.toBeNull()
-		const destroyBody = destroyMatch![0]
-		expectExcerptToContain(destroyBody, 'autoGrowRaf')
-		expectExcerptToContain(destroyBody, 'pendingAutoGrowThreadNodeIds')
-	})
-})
-
-// =============================================================================
-// AI chat thread — empty thread hidden until messages appear
-// =============================================================================
-
-describe('AI chat thread — empty thread visibility', () => {
-	const ts = loadTs()
-
-	it('defines threadContentHasMessages helper', () => {
-		expect(ts).toMatch(/function\s+threadContentHasMessages\s*\(\s*content:\s*any\s*\):\s*boolean/)
-	})
-
-	it('defines hiddenEmptyThreadNodeIds set', () => {
-		expect(ts).toMatch(/const\s+hiddenEmptyThreadNodeIds:\s*Set<string>\s*=\s*new\s+Set/)
-	})
-
-	it('defines updateThreadNodeVisibility function', () => {
-		expect(ts).toMatch(/function\s+updateThreadNodeVisibility\s*\(/)
-	})
-
-	it('updateThreadNodeVisibility checks for message wrapper elements', () => {
-		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'ai-user-message-wrapper')
-		expectExcerptToContain(fnBody, 'ai-response-message-wrapper')
-	})
-
-	it('updateThreadNodeVisibility hides or shows thread nodes from message state', () => {
-		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'threadContentHasMessages')
-		expectExcerptToContain(fnBody, 'hideThreadNode')
-		expectExcerptToContain(fnBody, 'showThreadNode')
-	})
-
-	it('CSS hides thread nodes with data-thread-empty attribute', () => {
-		const scss = loadScss()
-		expectSourceToContain(scss, 'data-thread-empty')
-		expect(scss).toMatch(/data-thread-empty[\s\S]*?visibility:\s*hidden/)
-	})
-
-	it('updateThreadNodeVisibility accepts contentJSON and falls back to message wrappers', () => {
-		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'contentJSON')
-		expectExcerptToContain(fnBody, 'threadNodeEl.querySelector')
-	})
-
-	it('renderNodes clears hiddenEmptyThreadNodeIds', () => {
-		const renderMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
-		expect(renderMatch).not.toBeNull()
-		const renderBody = renderMatch![0]
-		expectExcerptToContain(renderBody, 'hiddenEmptyThreadNodeIds.clear()')
-	})
-
-	it('destroy() clears hiddenEmptyThreadNodeIds', () => {
-		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
-		expect(destroyMatch).not.toBeNull()
-		const destroyBody = destroyMatch![0]
-		expectExcerptToContain(destroyBody, 'hiddenEmptyThreadNodeIds')
-	})
-
-	it('defines hideThreadNode helper that sets data-thread-empty attribute', () => {
-		const fnMatch = ts.match(/function\s+hideThreadNode[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, "threadEmpty")
-		expectExcerptToContain(fnBody, "hiddenEmptyThreadNodeIds.add")
-	})
-
-	it('defines showThreadNode helper that removes data-thread-empty attribute', () => {
-		const fnMatch = ts.match(/function\s+showThreadNode[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, "threadEmpty")
-		expectExcerptToContain(fnBody, "hiddenEmptyThreadNodeIds.delete")
-	})
-
-	it('updateThreadNodeVisibility uses hideThreadNode and showThreadNode', () => {
-		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'showThreadNode')
-		expectExcerptToContain(fnBody, 'hideThreadNode')
-	})
-})
 
 // =============================================================================
 // AI chat thread — document title hidden (controlled by setting)
@@ -1297,16 +1147,6 @@ describe('Resize handles - corner-hover visibility', () => {
 		expectExcerptNotToContain(block, '&.thread-hovered .document-resize-handle')
 	})
 
-	it('does not create bottom resize handles for AI chat thread nodes', () => {
-		const fnMatch = ts.match(/function\s+createBaseNodeElement[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		sourceFileNames.set(fnBody, 'createBaseNodeElement')
-
-		expectSourceToContain(fnBody, "if (node.type === 'aiChatThread' && corner.startsWith('bottom')) continue")
-		expectSourceToContain(fnBody, 'nodeEl.appendChild(createResizeHandle(node.nodeId, corner))')
-	})
-
 	it('compares completed-video resize hitboxes in screen pixels', () => {
 		const fnBody = extractFunctionBody(ts, 'getVideoChromeResizeHandle')
 		sourceFileNames.set(fnBody, 'getVideoChromeResizeHandle')
@@ -1323,88 +1163,11 @@ describe('Resize handles - corner-hover visibility', () => {
 })
 
 // =============================================================================
-// AI chat thread sizing
+// Right side panel — TypeScript infrastructure
 // =============================================================================
 
-describe('AI chat thread sizing', () => {
+describe('Right side panel — TS infrastructure', () => {
 	const ts = loadTs()
-
-	it('preserves manually resized empty thread dimensions', () => {
-		const fnMatch = ts.match(/function\s+expandParentContainersToFitChildren[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-
-		expectExcerptToContain(fnBody, 'Empty parent containers keep their persisted size')
-		expectExcerptToContain(fnBody, 'node.dimensions.width <= 0 || node.dimensions.height <= 0')
-		expectExcerptNotToContain(fnBody, 'node.dimensions.width !== 300 || node.dimensions.height !== 200')
-	})
-
-	it('does not shrink manually enlarged threads when children are dragged with them', () => {
-		const fnMatch = ts.match(/function\s+expandParentContainersToFitChildren[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-
-		expectExcerptToContain(fnBody, 'Dropping a small image into a manually enlarged')
-		expectExcerptToContain(fnBody, 'let width = Math.max(200, node.dimensions.width)')
-		expectExcerptToContain(fnBody, 'let height = Math.max(120, node.dimensions.height)')
-		expectExcerptNotToContain(fnBody, 'let width = 200')
-		expectExcerptNotToContain(fnBody, 'let height = 120')
-	})
-})
-
-// =============================================================================
-// Vertical rail — CSS styling
-// =============================================================================
-
-describe('Vertical rail — CSS styling', () => {
-	const scss = loadScss()
-
-	it('defines .workspace-thread-rail with absolute positioning', () => {
-		const block = extractBlock(scss, '.workspace-thread-rail')
-		expect(block).toMatch(/position:\s*absolute/)
-	})
-
-	it('sets cursor: move on rail', () => {
-		const block = extractBlock(scss, '.workspace-thread-rail')
-		expect(block).toMatch(/cursor:\s*move/)
-	})
-
-	it('has line child with ::before pseudo-element for the visible line', () => {
-		expect(scss).toMatch(/\.workspace-thread-rail-line\s*\{/)
-		expect(scss).toMatch(/&::before/)
-		expect(scss).toMatch(/--rail-width/)
-		expect(scss).toMatch(/--rail-gradient/)
-		expect(scss).toMatch(/--rail-thread-height/)
-	})
-
-	it('has no .is-selected visual change on line::before (rail always looks the same)', () => {
-		expect(scss).not.toMatch(/\.is-selected\s+\.workspace-thread-rail-line::before/)
-	})
-
-	it('defines boundary-circle positioned at bottom of line', () => {
-		expect(scss).toMatch(/\.workspace-thread-rail-boundary-circle\s*\{/)
-		expect(scss).toMatch(/bottom:\s*-6px/)
-	})
-})
-
-// =============================================================================
-// Vertical rail — TypeScript infrastructure
-// =============================================================================
-
-describe('Vertical rail — TS infrastructure', () => {
-	const ts = loadTs()
-
-	it('defines thread rail offset from settings', () => {
-		expect(ts).toMatch(/const\s+THREAD_RAIL_OFFSET\s*=\s*settings\.aiChatThread\.rail\.offset/)
-	})
-
-	it('defines thread rail grab width from settings', () => {
-		expect(ts).toMatch(/const\s+THREAD_RAIL_GRAB_WIDTH\s*=\s*settings\.aiChatThread\.rail\.dragGrabWidth/)
-	})
-
-	it('defines threadRails Map', () => {
-		expect(ts).toMatch(/const\s+threadRails:\s*Map<string,\s*HTMLElement>/)
-	})
 
 	it('delegates right side panel state to SidePanel with content-agnostic settings', () => {
 		expectSourceToContain(ts, 'const RIGHT_SIDE_PANEL_SETTINGS = settings.rightSidePanel')
@@ -1419,110 +1182,6 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceNotToContain(ts, 'settings.aiChatThread.rightSidePanel')
 		expectSourceNotToContain(ts, 'AI_CHAT_PANEL_MIN_WIDTH')
 		expectSourceNotToContain(ts, 'workspace-ai-chat-sidebar')
-	})
-
-	it('defines createThreadRail function', () => {
-		expectSourceToContain(ts, 'function createThreadRail(')
-	})
-
-	it('defines repositionThreadRail function', () => {
-		expectSourceToContain(ts, 'function repositionThreadRail(')
-	})
-
-	it('defines destroyAllThreadRails function', () => {
-		expectSourceToContain(ts, 'function destroyAllThreadRails(')
-	})
-
-	it('drag mousemove handler repositions the rail', () => {
-		expectSourceToContain(ts, 'dragRail')
-		expectSourceToContain(ts, 'applyStyle(dragRail, { left:')
-	})
-
-	it('resize mousemove handler repositions the rail', () => {
-		expectSourceToContain(ts, 'resizeRail')
-		expectSourceToContain(ts, 'applyStyle(resizeRail, { left:')
-		expectSourceToContain(ts, 'height: `${totalH}px`')
-	})
-
-	it('updateNodeSelectionClasses toggles is-selected on the rail', () => {
-		const fnMatch = ts.match(/function\s+updateNodeSelectionClasses[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, "threadRails.get(nodeId)?.classList.add('is-selected')")
-		expectExcerptToContain(fnBody, "threadRails.get(nodeId)?.classList.remove('is-selected')")
-	})
-
-	it('renderNodes calls destroyAllThreadRails', () => {
-		const fnMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'destroyAllThreadRails()')
-	})
-
-	it('destroy() calls destroyAllThreadRails', () => {
-		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
-		expect(destroyMatch).not.toBeNull()
-		expectExcerptToContain(destroyMatch![0], 'destroyAllThreadRails()')
-	})
-
-	it('passes railOffset to WorkspaceConnectionManager', () => {
-		expect(ts).toMatch(/railOffset:\s*THREAD_RAIL_OFFSET/)
-	})
-
-	it('createThreadRail creates line child element', () => {
-		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'workspace-thread-rail-line')
-	})
-
-	it('createThreadRail sets z-index above all nodes to prevent overlap', () => {
-		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], "zIndex: '9990'")
-	})
-
-	it('createThreadRail appends boundary circle to line', () => {
-		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'workspace-thread-rail-boundary-circle')
-		expectExcerptToContain(fnMatch![0], 'aiChatThreadRailBoundaryCircle')
-	})
-
-	it('createThreadRail applies configured colors to boundary circle SVG paths', () => {
-		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'settings.aiChatThread.rail.styles.boundaryCircleColors')
-		expectExcerptToContain(fnBody, "setAttribute('fill'")
-	})
-
-	it('repositionThreadRail sets --rail-thread-height CSS var', () => {
-		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], '--rail-thread-height')
-	})
-
-	it('repositionThreadRail hides boundary circle when thread is hidden', () => {
-		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'workspace-thread-rail-boundary-circle')
-		expectExcerptToContain(fnBody, "isHidden ? 'none' : ''")
-	})
-
-	it('resize handler updates --rail-thread-height CSS var', () => {
-		expect(ts).toMatch(/resizeRail\.style\.setProperty\('--rail-thread-height'/)
-	})
-
-	it('repositionThreadRail calls connectionManager.setRailHeight', () => {
-		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'connectionManager?.setRailHeight(')
-	})
-
-	it('destroyAllThreadRails calls connectionManager.clearRailHeights', () => {
-		const fnMatch = ts.match(/function\s+destroyAllThreadRails[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expectExcerptToContain(fnMatch![0], 'connectionManager?.clearRailHeights()')
 	})
 
 	it('updateSelectionDrivenUi never references a detached floating input under any node', () => {
@@ -1583,9 +1242,9 @@ describe('Vertical rail — TS infrastructure', () => {
 		// The glass backdrop element is owned by the SidePanel component.
 		expectExcerptToContain(fnBody, 'paneEl.appendChild(activeRightSidePanel.backdropElement)')
 		expectSourceToContain(ts, 'function handleRightSidePanelResizeStart()')
-		// The panel's prompt input reuses the shared, decoupled composer component.
-		expectExcerptToContain(fnBody, 'createAiPromptComposer({')
-		expectExcerptToContain(fnBody, "className: 'workspace-ai-chat-floating-panel-prompt'")
+		// Prompt entry is rendered by the detached/shared composer below the canvas.
+		expectSourceToContain(ts, 'function createGlobalCanvasComposer(): void')
+		expectSourceToContain(ts, "className: 'workspace-canvas-global-composer'")
 		expectSourceNotToContain(ts, `AiChat${'Panel.svelte'}`)
 	})
 
@@ -1598,11 +1257,11 @@ describe('Vertical rail — TS infrastructure', () => {
 	it('opens the panel without requiring an existing thread and creates standalone history on submit', () => {
 		expectSourceToContain(ts, 'function openAiChatPanel(): void')
 		expectSourceToContain(ts, 'aiChatPanelState = { ...aiChatPanelState, isOpen: true }')
-		expectSourceToContain(ts, 'async function createStandaloneThreadAndSubmit(data: any): Promise<void>')
-		expectSourceToContain(ts, "owner: { type: 'standalone' }")
-		expectSourceToContain(ts, 'if (!panelThreadId) {')
+		expectSourceToContain(ts, 'addContextChips(selectedNodeIds)')
+		expectSourceToContain(ts, 'async function submitCanvasGenerationRun(data: AiPromptComposerSubmitData): Promise<void>')
 		expectSourceToContain(ts, 'void loadExtractionSessionHistory()')
 		expectSourceToContain(ts, 'extractionSessionHistoryLoaded = false')
+		expectSourceToContain(ts, "owner: { type: 'standalone' }")
 		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-title')
 		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-close')
 	})
@@ -1666,7 +1325,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'const preservedTabsEl = options.preserveTabsSwitch')
 		expectSourceToContain(ts, 'const preservedTabsScrollLeft = preservedTabsEl?.scrollLeft ?? 0')
 		expectSourceToContain(ts, 'preservedTabsEl?.remove()')
-		expectSourceToContain(ts, 'renderActiveAiChatPanel(undefined, undefined, { preserveTabsSwitch: true })')
+		expectSourceToContain(ts, 'renderActiveAiChatPanel(undefined, { preserveTabsSwitch: true })')
 		expectSourceToContain(ts, 'tabsInitialScrollLeft = getAiChatPanelActiveTabScrollLeft(')
 		expectSourceToContain(ts, 'tabsEl.scrollLeft = tabsInitialScrollLeft')
 		expectSourceToContain(ts, 'resizeActiveAiChatPanelTabsSwitch()')
@@ -1739,7 +1398,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'const placementAnchorNodeId = referenceNodeIds[0] ?? activeTargetNodeId ?? candidateNodeIds[0]')
 		expectSourceToContain(ts, '...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),')
 		expectSourceToContain(ts, 'referenceNodeIds: candidateNodeIds,')
-		expectSourceToContain(ts, ': rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)')
+		expectSourceToContain(ts, 'rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)')
 		expectSourceToContain(ts, 'const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)')
 		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(generationRun, [branchOriginNode, branchForkNode, branchLineNode])')
 		expectSourceToContain(ts, 'partialImageTracker.set(runKey, {')
@@ -1791,20 +1450,18 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(aiGeneratedImageNode, 'resolution: WorkspaceContextResolution')
 	})
 
-	it('keeps submitted-session drafts until deletion and removes unsent draft payloads when draft tabs close', () => {
+	it('keeps submitted-session tabs until explicit delete handlers remove them', () => {
 		const closeStart = ts.indexOf('function closeAiChatSidebarTab')
-		const removeDraftStart = ts.indexOf('function removeAiChatPanelDraft', closeStart)
-		const deleteChatStart = ts.indexOf('async function deleteAiChatSession', removeDraftStart)
+		const deleteChatStart = ts.indexOf('async function deleteAiChatSession', closeStart)
 		const deleteExtractionStart = ts.indexOf('async function deleteExtractionSession', deleteChatStart)
-		const closeBody = ts.slice(closeStart, removeDraftStart)
+		const closeBody = ts.slice(closeStart, deleteChatStart)
 		const deleteChatBody = ts.slice(deleteChatStart, deleteExtractionStart)
 		const deleteExtractionBody = ts.slice(deleteExtractionStart, ts.indexOf('async function loadExtractionSessionHistory', deleteExtractionStart))
 
-		expectExcerptToContain(closeBody, "if (closedTab?.type === 'draft')", 'close-tab handler')
-		expectExcerptToContain(closeBody, 'delete drafts[closedTab.tabId]', 'close-tab handler')
-		expectExcerptNotToContain(closeBody, 'removeAiChatPanelDraft', 'close-tab handler')
-		expectExcerptToContain(deleteChatBody, 'removeAiChatPanelDraft(`thread:${threadId}`)', 'delete-chat handler')
-		expectExcerptToContain(deleteExtractionBody, 'removeAiChatPanelDraft(`extraction:${extractionRunId}`)', 'delete-extraction handler')
+		expectExcerptToContain(closeBody, 'aiChatSidebarTabs = aiChatSidebarTabs.filter((tab) => tab.tabId !== tabId)', 'close-tab handler')
+		expectExcerptToContain(closeBody, 'if (aiChatSidebarTabs.length === 0)', 'close-tab handler')
+		expectExcerptToContain(deleteChatBody, 'closeAiChatSidebarTab(`thread:${threadId}`)', 'delete-chat handler')
+		expectExcerptToContain(deleteExtractionBody, 'closeAiChatSidebarTab(`extraction:${extractionRunId}`)', 'delete-extraction handler')
 	})
 
 	it('uses the reusable SidePanel component as the horizontal resize handle', () => {
@@ -1861,14 +1518,18 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(svelte, 'workspace-zoom-indicator')
 		expectSourceNotToContain(svelte, 'workspace-canvas-utility-capsule')
 		expectSourceToContain(scss, '.workspace-canvas-right-side-panel-open .workspace-zoom-indicator')
-		expectSourceToContain(scss, 'right: calc(var(--workspace-right-side-panel-width) + var(--workspace-right-side-panel-edge-gap) + 5px)')
+		expectSourceToContain(scss, 'right: calc(var(--workspace-right-side-panel-width) + 5px)')
 		expectSourceToContain(scss, 'right: calc(0px - var(--workspace-canvas-padding-inline))')
-		expectSourceToContain(scss, 'bottom: calc(var(--workspace-right-side-panel-edge-gap) - var(--workspace-canvas-padding-bottom))')
+		expectSourceToContain(scss, 'bottom: calc(0px - var(--workspace-canvas-padding-bottom))')
 		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'top: 0px', 'outer chat panel')
 		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'border-radius: 10px', 'outer chat panel')
 		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'background: transparent', 'outer chat panel')
-		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel-prompt'), 'width: calc(', 'chat composer')
-		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel-prompt'), 'margin-top: 12px', 'chat composer')
+		expectSourceToContain(scss, '.ai-prompt-input-floating.workspace-canvas-global-composer')
+		expectExcerptToContain(
+			extractBlock(scss, '.ai-prompt-input-floating.workspace-canvas-global-composer'),
+			'width: 100%',
+			'global composer'
+		)
 		expectSourceToContain(layout, 'workspace-sidebar-shell')
 		expectSourceToContain(layout, 'workspace-sidebar-body')
 		expectSourceToContain(layout, 'workspace-sidebar-footer')
@@ -2731,20 +2392,18 @@ describe('video generation — canvas + plugin source shape', () => {
 		expectSourceNotToContain(ts, 'video-dot-bounce')
 	})
 
-	it('wires the bubble menu for video nodes (Replace + Download + Extend + Connect + Delete)', () => {
+	it('wires the bubble menu for video nodes (Replace + Download + Connect + Add to Media Library + Delete)', () => {
 		// Video nodes share Replace, Download, Add to Media Library, and Connect
-		// with images, while keeping dedicated Extend and Delete entries.
+		// with images, while keeping dedicated Delete behavior.
 		const bubbleMenuTs = readSourceFile('canvasBubbleMenuItems.ts')
 		expectSourceToContain(ts, "import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT")
 		expectSourceToContain(ts, "node.type !== 'image' && node.type !== 'video'")
 		expectSourceToContain(ts, "node.type === 'video' ? CANVAS_VIDEO_CONTEXT : CANVAS_IMAGE_CONTEXT")
 		expectSourceToContain(ts, 'onDownloadMedia: (nodeId) => {')
 		expectSourceToContain(ts, 'onReplaceMedia: (nodeId) => {')
-		expectSourceToContain(ts, 'onExtendVideoInNewThread: async (nodeId) => {')
 		expectSourceToContain(bubbleMenuTs, "export const CANVAS_VIDEO_CONTEXT = 'canvasVideo'")
 		expectSourceToContain(bubbleMenuTs, "title: 'Replace media'")
 		expectSourceToContain(bubbleMenuTs, "title: 'Download media'")
-		expectSourceToContain(bubbleMenuTs, "title: 'Extend video in new thread'")
 		expectSourceToContain(bubbleMenuTs, "title: 'Delete video'")
 		expectSourceToContain(bubbleMenuTs, 'context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT]')
 	})

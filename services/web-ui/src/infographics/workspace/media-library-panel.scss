@@ -7,7 +7,7 @@
 }
 
 .workspace-canvas-right-side-panel-open .media-library-backdrop {
-    right: calc(var(--workspace-right-side-panel-width) + var(--workspace-right-side-panel-edge-gap));
+    right: var(--workspace-right-side-panel-width);
 }
 
 .media-library-panel {
@@ -32,8 +32,8 @@
 }
 
 .workspace-canvas-right-side-panel-open .media-library-panel {
-    right: calc(var(--workspace-right-side-panel-width) + var(--workspace-right-side-panel-edge-gap));
-    width: calc((100% - var(--workspace-right-side-panel-width) - var(--workspace-right-side-panel-edge-gap)) * var(--media-library-panel-fraction, 0.666667));
+    right: var(--workspace-right-side-panel-width);
+    width: calc((100% - var(--workspace-right-side-panel-width)) * var(--media-library-panel-fraction, 0.666667));
 }
 
 @keyframes media-library-drawer-in {
@@ -818,8 +818,8 @@
 }
 
 .workspace-canvas-right-side-panel-open .media-library-panel {
-    right: calc(var(--workspace-right-side-panel-width) + var(--workspace-right-side-panel-edge-gap));
-    width: calc((100% - var(--workspace-right-side-panel-width) - var(--workspace-right-side-panel-edge-gap)) * var(--media-library-panel-fraction, 0.666667));
+    right: var(--workspace-right-side-panel-width);
+    width: calc((100% - var(--workspace-right-side-panel-width)) * var(--media-library-panel-fraction, 0.666667));
 }
 
 .media-library-header {

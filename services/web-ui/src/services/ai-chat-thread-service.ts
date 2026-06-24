@@ -6,7 +6,6 @@ import type {
     WorkspaceEdge,
     ImageCanvasNode,
     DocumentCanvasNode,
-    AiChatThreadCanvasNode,
     VideoCanvasNode,
 } from '@lixpi/constants'
 
@@ -370,7 +369,6 @@ class AiChatThreadService {
         if (!canvasState) return []
 
         const documents: Document[] = documentsStore.getData()
-        const threadsMap: Map<string, AiChatThread> = aiChatThreadsStore.getData()
         const context: ExtractedContext = []
 
         for (const { node, edge } of connectedItems) {
@@ -428,30 +426,6 @@ class AiChatThreadService {
                         hasAudio: videoNode.hasAudio,
                         sourceMessageId: edge.sourceMessageId,
                     })
-                }
-            } else if (node.type === 'aiChatThread') {
-                const threadNode = node as AiChatThreadCanvasNode
-                const thread = threadsMap.get(threadNode.referenceId)
-
-                if (thread && thread.content) {
-                    const { text, imageSrcs } = extractContentFromProseMirror(thread.content)
-
-                    if (text) {
-                        context.push({
-                            type: 'aiChatThread',
-                            nodeId: node.nodeId,
-                            content: text,
-                        })
-                    }
-
-                    for (let i = 0; i < imageSrcs.length; i++) {
-                        context.push({
-                            type: 'image',
-                            nodeId: `${node.nodeId}-embedded-${i}`,
-                            parentNodeId: node.nodeId,
-                            content: imageSrcs[i],
-                        })
-                    }
                 }
             }
         }

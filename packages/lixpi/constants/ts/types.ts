@@ -70,7 +70,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin' | 'branchFork' | 'branchLine'
+export type CanvasNodeType = 'document' | 'image' | 'video' | 'branchOrigin' | 'branchFork' | 'branchLine'
 
 type CanvasNodePosition = {
     x: number
@@ -744,16 +744,6 @@ export type VideoCanvasNode = CanvasNodeParentingFields & {
     descriptor?: MediaDescriptor
 }
 
-export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {
-    nodeId: string
-    type: 'aiChatThread'
-    referenceId: string
-    position: CanvasNodePosition
-    dimensions: CanvasNodeDimensions
-    // Text summary of the thread transcript for the workspace relevance engine.
-    descriptor?: ContentDescriptor
-}
-
 export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'branchOrigin'
@@ -807,7 +797,7 @@ export type BranchLineCanvasNode = CanvasNodeParentingFields & {
     temporary: true
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | VideoCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 
 export type CanvasViewport = {
     x: number
@@ -1215,13 +1205,9 @@ export type ExtractionRun = {
 
 export type CanvasAiChatSidebarTab = {
     tabId: string
-    type: 'thread' | 'extraction' | 'draft'
+    type: 'thread' | 'extraction'
     refId: string
     title: string
-}
-
-export type CanvasAiChatPromptDraft = {
-    content?: object
 }
 
 export type CanvasAiChatPanelState = {
@@ -1229,12 +1215,11 @@ export type CanvasAiChatPanelState = {
     isSessionHistoryOpen: boolean
     tabs: CanvasAiChatSidebarTab[]
     activeTabId?: string
-    // Explicit force-included canvas node ids, shown as removable chips in the
-    // panel's context tray. The workspace relevance engine (later phases) unions
+    // Explicit force-included canvas node ids, fed to the bottom-center composer
+    // as context chips. The workspace relevance engine (later phases) unions
     // these with its automatic picks — it may add, never drop them.
     contextChips: string[]
     width?: number
-    drafts?: Record<string, CanvasAiChatPromptDraft>
 }
 
 export type CanvasFeatureExtractionState = {

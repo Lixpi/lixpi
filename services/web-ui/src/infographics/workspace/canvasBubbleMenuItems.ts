@@ -34,10 +34,6 @@ type CanvasBubbleMenuCallbacks = {
     onAddToMediaLibrary: (nodeId: string) => void
     canAddToMediaLibrary: (nodeId: string | null) => boolean
     onTriggerConnection: (nodeId: string) => void
-    // Spawns a new chat thread that consumes the active VideoCanvasNode as
-    // VEO's `video` (extension) input. Mirrors the image "Edit in new thread"
-    // contract but routes through the video extension path.
-    onExtendVideoInNewThread: (nodeId: string) => void
     onHide: () => void
 }
 
@@ -159,18 +155,6 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         },
     })
 
-    const extendVideoButton = createCanvasButton({
-        icon: magicIcon,
-        title: 'Extend video in new thread',
-        iconSize: 17,
-        onClick: () => {
-            if (activeNodeId) {
-                callbacks.onExtendVideoInNewThread(activeNodeId)
-                callbacks.onHide()
-            }
-        },
-    })
-
     const deleteVideoButton = createCanvasButton({
         icon: trashBinIcon,
         title: 'Delete video',
@@ -222,7 +206,6 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         // wired into a downstream thread the same way.
         { element: connectButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT] },
         { element: deleteButton, context: [CANVAS_IMAGE_CONTEXT] },
-        { element: extendVideoButton, context: [CANVAS_VIDEO_CONTEXT] },
         { element: deleteVideoButton, context: [CANVAS_VIDEO_CONTEXT] },
         { element: changeCurveButton, context: [CANVAS_EDGE_CONTEXT] },
         { element: deleteEdgeButton, context: [CANVAS_EDGE_CONTEXT] },

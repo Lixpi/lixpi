@@ -1,7 +1,5 @@
 import type {
     AiChatThread,
-    AiChatThreadCanvasNode,
-    CanvasNode,
     CanvasState,
 } from '@lixpi/constants'
 
@@ -25,8 +23,6 @@ export function hasCurrentWorkspaceThread({
 
     return Boolean(currentCanvasState?.aiChatPanel?.tabs?.some((tab) =>
         tab.type === 'thread' && tab.refId === threadId
-    ) || currentCanvasState?.nodes.some((node: CanvasNode) =>
-        node.type === 'aiChatThread' && (node as AiChatThreadCanvasNode).referenceId === threadId
     ))
 }
 

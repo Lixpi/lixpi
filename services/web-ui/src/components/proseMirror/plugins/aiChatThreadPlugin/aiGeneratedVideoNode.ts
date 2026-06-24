@@ -147,7 +147,6 @@ export type AiGeneratedVideoCallbacks = {
         revisedPrompt: string
         videoModel: string
     }) => void
-    onEditInNewThread?: (responseId: string) => void
     onVideoPendingToCanvas?: (data: {
         threadId: string
         aiProvider: string

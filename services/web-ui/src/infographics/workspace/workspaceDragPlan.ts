@@ -14,8 +14,10 @@ type WorkspaceDragPlan = {
     allowCollisionResolution: boolean
 }
 
-function isParentContainerNode(node: CanvasNode | undefined): boolean {
-    return node?.type === 'aiChatThread'
+function isParentContainerNode(_node: CanvasNode | undefined): boolean {
+    // No canvas node type currently acts as a parent container (the AI chat
+    // thread node, the only former container, has been removed).
+    return false
 }
 
 function isGeneratedOutputImageNode(node: CanvasNode | undefined): boolean {

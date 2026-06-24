@@ -548,7 +548,7 @@ export function renderExtractionTabBody(
 
     const ctx = getPendingExtractionContext(extractionRunId) ?? {}
     const hint = ctx.imageNatsUrl
-        ? 'Describe what to extract from the image — type your request in the prompt below.'
-        : 'Describe what feature to extract — type your request in the prompt below.'
+        ? 'Describe what to extract from the image — type your request in the prompt below the canvas.'
+        : 'Describe what feature to extract — type your request in the prompt below the canvas.'
     bodyEl.appendChild(html`<p className="extraction-tab-idle-hint">${hint}</p>` as HTMLElement)
 }
