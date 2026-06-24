@@ -219,59 +219,78 @@ const callAnthropic = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> =>
 const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = detectCapabilities(args.provider, args.modelVersion)
     const client = getOpenAi()
-    const formatted = await resolveAndConvert(args.userMessages, args.natsService, 'OPENAI')
-    const messages: Array<Record<string, any>> = [
-        { role: 'system', content: args.systemPrompt },
-        ...formatted,
-    ]
+    // 'OPENAI' format yields the Responses-API content shape (input_text /
+    // input_image). The system prompt rides on `instructions`, the modern
+    // top-level field, rather than a synthetic system message in the input.
+    const input = await resolveAndConvert(args.userMessages, args.natsService, 'OPENAI')
 
     const requestArgs: Record<string, any> = {
         model: args.modelVersion,
-        messages,
+        instructions: args.systemPrompt,
+        input,
         stream: true,
-        stream_options: { include_usage: true },
-        tools: [{
-            type: 'function',
-            function: {
+        store: false,
+        // Structured Outputs on the Responses API: the model is constrained to
+        // the JSON schema and emits the object as output_text — no tool-call
+        // round-trip needed.
+        text: {
+            format: {
+                type: 'json_schema',
                 name: args.schema.name,
                 description: args.schema.description,
-                parameters: args.schema.schema,
+                schema: args.schema.schema,
                 strict: true,
             },
-        }],
-        tool_choice: { type: 'function', function: { name: args.schema.name } },
+        },
     }
     if (args.temperature !== undefined && caps.supportsTemperature) requestArgs.temperature = args.temperature
-    if (args.maxTokens) requestArgs.max_tokens = args.maxTokens
+    if (args.maxTokens) requestArgs.max_output_tokens = args.maxTokens
 
-    const stream = await client.chat.completions.create(requestArgs as any, { signal: args.abortSignal })
+    const stream = await client.responses.create(requestArgs as any, { signal: args.abortSignal })
 
-    let toolCallArgs = ''
+    let rawText = ''
+    let finalText = ''
     let modelName = args.modelVersion
     let promptTokens = 0
     let completionTokens = 0
 
-    for await (const chunk of stream as any) {
-        if (chunk?.model) modelName = chunk.model
-        const delta = chunk?.choices?.[0]?.delta
-        if (delta?.content && args.onTextChunk) args.onTextChunk(String(delta.content))
-        if (delta?.tool_calls) {
-            for (const tc of delta.tool_calls) {
-                if (tc?.function?.arguments) toolCallArgs += tc.function.arguments
+    for await (const event of stream as any) {
+        switch (event?.type) {
+            case 'response.output_text.delta': {
+                const delta: string = event.delta ?? ''
+                if (delta) {
+                    rawText += delta
+                    if (args.onTextChunk) args.onTextChunk(delta)
+                }
+                break
             }
-        }
-        if (chunk?.usage) {
-            promptTokens = chunk.usage.prompt_tokens ?? promptTokens
-            completionTokens = chunk.usage.completion_tokens ?? completionTokens
+            case 'response.completed':
+            case 'response.incomplete': {
+                const response = event.response
+                if (response?.model) modelName = response.model
+                if (typeof response?.output_text === 'string' && response.output_text) {
+                    finalText = response.output_text
+                }
+                if (response?.usage) {
+                    promptTokens = response.usage.input_tokens ?? promptTokens
+                    completionTokens = response.usage.output_tokens ?? completionTokens
+                }
+                break
+            }
+            case 'response.failed': {
+                const message = event.response?.error?.message ?? 'unknown error'
+                throw new Error(`OpenAI ${args.modelVersion} response failed: ${message}`)
+            }
         }
     }
 
-    if (!toolCallArgs) throw new Error(`OpenAI ${args.modelVersion} did not call tool "${args.schema.name}"`)
+    const outputText = finalText || rawText
+    if (!outputText) throw new Error(`OpenAI ${args.modelVersion} returned empty structured output for schema=${args.schema.name}`)
     let parsed: T
-    try { parsed = JSON.parse(toolCallArgs) as T }
-    catch (e: any) { throw new Error(`OpenAI returned non-JSON tool args: ${e?.message}`) }
+    try { parsed = JSON.parse(outputText) as T }
+    catch (e: any) { throw new Error(`OpenAI returned non-JSON structured output: ${e?.message}`) }
 
-    return { parsed, rawText: toolCallArgs, modelName, promptTokens, completionTokens }
+    return { parsed, rawText: outputText, modelName, promptTokens, completionTokens }
 }
 
 // ─── Google ───────────────────────────────────────────────────────────────────
