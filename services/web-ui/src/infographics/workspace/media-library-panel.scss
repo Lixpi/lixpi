@@ -73,27 +73,6 @@
     color: #1a2744;
 }
 
-.media-library-header-search {
-    min-width: 0;
-    height: 30px;
-    padding: 0 10px;
-    border-radius: 8px;
-    border: 1px solid rgba(26, 39, 68, 0.12);
-    background: rgba(255, 255, 255, 0.72);
-    color: #1a2744;
-    font-size: 12px;
-    outline: none;
-
-    &::placeholder {
-        color: rgba(26, 39, 68, 0.42);
-    }
-
-    &:focus {
-        border-color: rgba(95, 143, 207, 0.55);
-        box-shadow: 0 0 0 3px rgba(95, 143, 207, 0.12);
-    }
-}
-
 .media-library-header-close {
     width: 28px;
     height: 28px;
@@ -866,14 +845,14 @@
 }
 
 .media-library-controls {
-    display: grid;
-    grid-template-columns: auto auto minmax(160px, 236px);
+    display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 5px 16px 9px;
-    border-bottom: 1px solid rgba(26, 39, 68, 0.08);
-    background: rgba(255, 255, 255, 0.36);
+    padding: 0 16px;
     flex-shrink: 0;
+
+    &:empty {
+        display: none;
+    }
 }
 
 .media-library-category-tabs {
@@ -900,37 +879,6 @@
     background: rgba(255, 255, 255, 0.86);
     box-shadow: 0 1px 6px rgba(26, 39, 68, 0.08);
     color: #1a2744;
-}
-
-.media-library-scope-control {
-    height: 36px;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 0 9px 0 11px;
-    border: 1px solid rgba(26, 39, 68, 0.08);
-    border-radius: 11px;
-    background: rgba(255, 255, 255, 0.52);
-    color: rgba(26, 39, 68, 0.48);
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.media-library-scope-select {
-    min-width: 94px;
-    border: 0;
-    outline: none;
-    background: transparent;
-    color: #1a2744;
-    font-size: 12px;
-    font-weight: 650;
-}
-
-.media-library-header-search {
-    height: 36px;
-    border-radius: 11px;
-    background: rgba(255, 255, 255, 0.58);
-    font-size: 12px;
 }
 
 .media-library-body {
@@ -1153,15 +1101,9 @@
     letter-spacing: 0.05em;
 }
 
-.feature-library-scope-editor {
-    height: 38px;
-    padding: 0 10px;
-    border: 1px solid rgba(26, 39, 68, 0.1);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.72);
-    color: #1a2744;
-    font-size: 12px;
-    font-weight: 650;
+.feature-library-scope-editor-mount {
+    display: flex;
+    align-items: center;
 }
 
 .feature-library-row-detail-grid {
@@ -1228,15 +1170,6 @@
 }
 
 @container media-library (max-width: 680px) {
-    .media-library-controls {
-        grid-template-columns: 1fr auto;
-    }
-
-    .media-library-header-search {
-        grid-column: 1 / -1;
-        width: 100%;
-    }
-
     .media-library-body {
         display: block;
     }

@@ -78,6 +78,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 
 ### Media Library Panel
 - Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies the independent bottom-right launcher above the zoom badge, and both bottom controls align to the same right side panel gap as the panel toggle when the panel is open.
+- The top-level `Features` / `Media` / `AI Threads` switch is the shared mode control for the right side panel; body swaps and Media Library loading happen immediately while the live SVG switch is preserved long enough for its independent slide transition to finish.
 - Renders `Features` through the established Feature subjects; promoted Feature samples copy to durable storage before scope changes and promoted samples are migrated before origin-workspace deletion.
 - Renders `Images` and `Videos` through generic media-library records whose Object Store bytes are copied on save and copied again when inserted back onto the canvas.
 - Supports `Workspace`, `Mine`, `Organization`, `Public`, and `All available` filtering in one compact scope selector; new media saves start in the current workspace scope.

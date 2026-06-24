@@ -22,7 +22,8 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(panelSource, 'media-library-panel-embedded')
         expectSourceToContain(panelSource, 'function mountInto')
         expectSourceToContain(panelSource, 'function setMode')
-        expectSourceToContain(panelSource, 'media-library-scope-select')
+        // No browse-scope filter control — the panel always shows everything available.
+        expectSourceNotToContain(panelSource, 'media-library-scope-select')
         // No standalone modal chrome, category tab strip, or backdrop.
         expectSourceNotToContain(panelSource, 'MEDIA_LIBRARY_CATEGORY')
         expectSourceNotToContain(panelSource, 'media-library-category-tabs')

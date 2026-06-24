@@ -880,6 +880,15 @@
 // The translucent glass backdrop behind the right side panel is owned by the
 // reusable SidePanel component (see components/sidePanel) — its element and all
 // glass styling live there, under .side-panel-backdrop.
+//
+// The component's default backdrop z-index is low (it only needs to sit behind
+// its own panel body). On the canvas, though, the panel must always cover
+// canvas content — the bottom composer pill (9991) and selection overlays
+// (10000/10001). Lift the backdrop above that content while keeping it below
+// the panel body (10030) and the open/collapse toggle (10040).
+.workspace-canvas .side-panel-backdrop-right {
+    z-index: 10020;
+}
 
 .workspace-ai-chat-panel-tabs {
     position: relative;

@@ -12,6 +12,7 @@ import {
     type MediaLibraryScope,
     type MediaLibraryVideoMeta,
 } from '@lixpi/constants'
+import { createPureDropdown } from '$src/components/dropdown/index.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import MediaLibraryService from '$src/services/media-library-service.ts'
@@ -48,6 +49,43 @@ type MediaLibraryPanelOptions = {
 }
 
 type FeatureDetailsState = Feature | { error: string }
+
+type ScopeDropdownOption = { key: string; label: string }
+
+type ScopeDropdownInstance = {
+    dom: HTMLElement
+    setSelectedKey: (key: string) => void
+    destroy: () => void
+}
+
+// Wrap the shared dropdown primitive so callers work in terms of scope keys
+// instead of option objects. Replaces the native <select> controls that looked
+// out of place on non-mac platforms.
+function createScopeDropdown(config: {
+    id: string
+    options: ScopeDropdownOption[]
+    selectedKey: string
+    onSelect: (key: string) => void
+}): ScopeDropdownInstance {
+    const dropdownOptions = config.options.map((option) => ({ title: option.label, key: option.key }))
+    const findOption = (key: string) => dropdownOptions.find((option) => option.key === key) ?? dropdownOptions[0]
+    const dropdown = createPureDropdown({
+        id: config.id,
+        // Match the AI model selector dropdown exactly.
+        theme: 'dark',
+        ignoreColorValuesForOptions: true,
+        renderIconForSelectedValue: false,
+        renderIconForOptions: false,
+        selectedValue: findOption(config.selectedKey),
+        options: dropdownOptions,
+        onSelect: (option) => config.onSelect(option.key),
+    })
+    return {
+        dom: dropdown.dom,
+        setSelectedKey: (key) => dropdown.update(findOption(key)),
+        destroy: dropdown.destroy,
+    }
+}
 
 type PaletteColor = {
     name: string
@@ -135,8 +173,8 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
     const mediaLibraryService = new MediaLibraryService()
     let isMounted = false
     let mode: MediaLibraryPanelMode = 'features'
-    let browseMode: MediaLibraryBrowseMode = MEDIA_LIBRARY_SCOPE.WORKSPACE
-    let searchQuery = ''
+    // No scope filter in the UI — always browse everything the user can access.
+    const browseMode: MediaLibraryBrowseMode = MEDIA_LIBRARY_BROWSE_ALL
     let allFeatures: FeatureMeta[] = []
     let allImages: MediaLibraryImageMeta[] = []
     let allVideos: MediaLibraryVideoMeta[] = []
@@ -155,6 +193,19 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
     // loading state and refetching every time.
     let loadedFeaturesBrowseMode: MediaLibraryBrowseMode | null = null
     let loadedMediaBrowseMode: MediaLibraryBrowseMode | null = null
+    // Row and inspector scope dropdowns are rebuilt on every renderContent and
+    // must be destroyed to detach their popovers and document listeners.
+    let transientDropdowns: ScopeDropdownInstance[] = []
+
+    function destroyTransientDropdowns() {
+        for (const dropdown of transientDropdowns) dropdown.destroy()
+        transientDropdowns = []
+    }
+
+    function trackTransientDropdown(dropdown: ScopeDropdownInstance): ScopeDropdownInstance {
+        transientDropdowns.push(dropdown)
+        return dropdown
+    }
 
     async function loadFeatures() {
         isLoading = true
@@ -203,8 +254,8 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
                 : [browseMode]
             const includeAllAvailable = browseMode === MEDIA_LIBRARY_BROWSE_ALL
             const [images, videos] = await Promise.all([
-                mediaLibraryService.listImages({ workspaceId, scopes, includeAllAvailable, query: searchQuery }),
-                mediaLibraryService.listVideos({ workspaceId, scopes, includeAllAvailable, query: searchQuery }),
+                mediaLibraryService.listImages({ workspaceId, scopes, includeAllAvailable }),
+                mediaLibraryService.listVideos({ workspaceId, scopes, includeAllAvailable }),
             ])
             allImages = images
             allVideos = videos
@@ -295,17 +346,12 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         }
     }
 
-    function getFiltered(): FeatureMeta[] {
-        if (!searchQuery) return allFeatures
-        const normalizedQuery = searchQuery.toLowerCase()
-        return allFeatures.filter((feature) => feature.name.toLowerCase().includes(normalizedQuery) || feature.summary.toLowerCase().includes(normalizedQuery) || feature.category.toLowerCase().includes(normalizedQuery) || (feature.tags ?? []).some((tag) => tag.toLowerCase().includes(normalizedQuery)))
-    }
-
     function renderContent() {
         if (!panelEl) return
         const browserEl = panelEl.querySelector('.media-library-browser') as HTMLElement
         const inspectorEl = panelEl.querySelector('.media-library-inspector') as HTMLElement
         if (!browserEl || !inspectorEl) return
+        destroyTransientDropdowns()
         browserEl.replaceChildren()
         inspectorEl.replaceChildren()
         const showingFeatures = mode === 'features'
@@ -334,13 +380,12 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
             <h2>Features</h2>
             <p>Reusable visual properties extracted from images. Select one to inspect its guidance and samples.</p>
         </div>` as HTMLElement)
-        const filtered = getFiltered()
-        if (filtered.length === 0) {
+        if (allFeatures.length === 0) {
             browserEl.appendChild(html`<div className="media-library-state">No features found.</div>` as HTMLElement)
         }
 
         const groups = new Map<string, FeatureMeta[]>()
-        for (const feature of filtered) {
+        for (const feature of allFeatures) {
             const category = feature.category || 'other'
             if (!groups.has(category)) groups.set(category, [])
             groups.get(category)!.push(feature)
@@ -443,12 +488,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
             <div className="media-library-video-actions">
                 <button type="button" data-action="insert">Add to canvas</button>
                 <label>Scope
-                    <select className="media-library-video-scope-select">
-                        <option value=${MEDIA_LIBRARY_SCOPE.WORKSPACE}>Workspace</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.USER}>Mine</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.ORGANIZATION}>Organization</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.PUBLIC}>Public</option>
-                    </select>
+                    <span className="media-library-video-scope-mount"></span>
                 </label>
                 <button type="button" data-action="delete">Delete</button>
             </div>
@@ -460,27 +500,31 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         rowEl.addEventListener('mouseenter', () => { videoEl.play().catch(() => {}) })
         rowEl.addEventListener('mouseleave', () => { videoEl.pause(); videoEl.currentTime = 0 })
 
-        const scopeSelect = rowEl.querySelector('.media-library-video-scope-select') as HTMLSelectElement
         const organizationId = organizationStore.getData('organizationId') || undefined
-        if (!organizationId) scopeSelect.querySelector(`option[value="${MEDIA_LIBRARY_SCOPE.ORGANIZATION}"]`)?.remove()
-        scopeSelect.value = item.scope
-        scopeSelect.addEventListener('change', async () => {
-            const newScope = scopeSelect.value as MediaLibraryScope
-            const response = await mediaLibraryService.changeItemScope({
-                workspaceId,
-                itemId: item.itemId,
-                newScope,
-                organizationId,
-            })
-            if (response.error) {
-                scopeSelect.value = item.scope
-                setFeedback(`Could not move ${item.displayName}.`)
-                return
-            }
-            const scopeLabel = scopeSelect.options[scopeSelect.selectedIndex]?.text ?? newScope
-            setFeedback(`Moved ${item.displayName} to ${scopeLabel}.`)
-            await loadMedia()
-        })
+        const scopeOptions = SCOPES.filter((scope) => organizationId || scope.key !== MEDIA_LIBRARY_SCOPE.ORGANIZATION)
+        const scopeDropdown = trackTransientDropdown(createScopeDropdown({
+            id: `media-library-video-scope-${item.itemId}`,
+            options: scopeOptions,
+            selectedKey: item.scope,
+            onSelect: async (key) => {
+                const newScope = key as MediaLibraryScope
+                const response = await mediaLibraryService.changeItemScope({
+                    workspaceId,
+                    itemId: item.itemId,
+                    newScope,
+                    organizationId,
+                })
+                if (response.error) {
+                    scopeDropdown.setSelectedKey(item.scope)
+                    setFeedback(`Could not move ${item.displayName}.`)
+                    return
+                }
+                const scopeLabel = SCOPES.find((scope) => scope.key === newScope)?.label ?? newScope
+                setFeedback(`Moved ${item.displayName} to ${scopeLabel}.`)
+                await loadMedia()
+            },
+        }))
+        ;(rowEl.querySelector('.media-library-video-scope-mount') as HTMLElement).appendChild(scopeDropdown.dom)
 
         rowEl.addEventListener('click', async (event) => {
             const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
@@ -517,38 +561,37 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
             <div className="media-library-image-actions">
                 <button type="button" data-action="insert">Add to canvas</button>
                 <label>Scope
-                    <select className="media-library-image-scope-select">
-                        <option value=${MEDIA_LIBRARY_SCOPE.WORKSPACE}>Workspace</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.USER}>Mine</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.ORGANIZATION}>Organization</option>
-                        <option value=${MEDIA_LIBRARY_SCOPE.PUBLIC}>Public</option>
-                    </select>
+                    <span className="media-library-image-scope-mount"></span>
                 </label>
                 <button type="button" data-action="delete">Delete</button>
             </div>
         </article>` as HTMLElement
 
-        const scopeSelect = rowEl.querySelector('.media-library-image-scope-select') as HTMLSelectElement
         const organizationId = organizationStore.getData('organizationId') || undefined
-        if (!organizationId) scopeSelect.querySelector(`option[value="${MEDIA_LIBRARY_SCOPE.ORGANIZATION}"]`)?.remove()
-        scopeSelect.value = item.scope
-        scopeSelect.addEventListener('change', async () => {
-            const newScope = scopeSelect.value as MediaLibraryScope
-            const response = await mediaLibraryService.changeImageScope({
-                workspaceId,
-                itemId: item.itemId,
-                newScope,
-                organizationId,
-            })
-            if (response.error) {
-                scopeSelect.value = item.scope
-                setFeedback(`Could not move ${item.displayName}.`)
-                return
-            }
-            const scopeLabel = scopeSelect.options[scopeSelect.selectedIndex]?.text ?? newScope
-            setFeedback(`Moved ${item.displayName} to ${scopeLabel}.`)
-            await loadMedia()
-        })
+        const scopeOptions = SCOPES.filter((scope) => organizationId || scope.key !== MEDIA_LIBRARY_SCOPE.ORGANIZATION)
+        const scopeDropdown = trackTransientDropdown(createScopeDropdown({
+            id: `media-library-image-scope-${item.itemId}`,
+            options: scopeOptions,
+            selectedKey: item.scope,
+            onSelect: async (key) => {
+                const newScope = key as MediaLibraryScope
+                const response = await mediaLibraryService.changeImageScope({
+                    workspaceId,
+                    itemId: item.itemId,
+                    newScope,
+                    organizationId,
+                })
+                if (response.error) {
+                    scopeDropdown.setSelectedKey(item.scope)
+                    setFeedback(`Could not move ${item.displayName}.`)
+                    return
+                }
+                const scopeLabel = SCOPES.find((scope) => scope.key === newScope)?.label ?? newScope
+                setFeedback(`Moved ${item.displayName} to ${scopeLabel}.`)
+                await loadMedia()
+            },
+        }))
+        ;(rowEl.querySelector('.media-library-image-scope-mount') as HTMLElement).appendChild(scopeDropdown.dom)
 
         rowEl.addEventListener('click', async (event) => {
             const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
@@ -664,11 +707,10 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         setFeedback(response?.error ? `Could not report @${feature.name}.` : `Reported @${feature.name}.`)
     }
 
-    async function changeFeatureScope(feature: FeatureMeta, selectEl: HTMLSelectElement) {
-        const newScope = selectEl.value as MediaLibraryScope
+    async function changeFeatureScope(feature: FeatureMeta, newScope: MediaLibraryScope, revert: () => void) {
         if (newScope === feature.scope) return
         if (newScope === MEDIA_LIBRARY_SCOPE.PUBLIC && !window.confirm(`Make @${feature.name} public? Anyone will be able to discover and use it.`)) {
-            selectEl.value = feature.scope
+            revert()
             return
         }
         const nats = servicesStore.getData('nats')
@@ -682,14 +724,11 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
             newScope,
         })
         if (!response || response.error) {
-            selectEl.value = feature.scope
+            revert()
             setFeedback(`Could not change sharing for @${feature.name}.`)
             return
         }
-        browseMode = newScope
-        const scopeSelect = panelEl?.querySelector('.media-library-scope-select') as HTMLSelectElement | null
-        if (scopeSelect) scopeSelect.value = newScope
-        setFeedback(`Moved @${feature.name} to ${selectEl.options[selectEl.selectedIndex]?.text ?? newScope}.`)
+        setFeedback(`Moved @${feature.name} to ${SCOPES.find((scope) => scope.key === newScope)?.label ?? newScope}.`)
         await loadFeatures()
     }
 
@@ -752,12 +791,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
                 ${isOwner ? html`<button type="button" className="feature-library-row-action" data-action="delete">Delete</button>` : feature.scope === MEDIA_LIBRARY_SCOPE.PUBLIC ? html`<button type="button" className="feature-library-row-action" data-action="report">Report</button>` : null}
             </div>
             ${isOwner ? html`<label className="feature-library-inspector-scope">Sharing
-                <select className="feature-library-scope-editor">
-                    <option value=${MEDIA_LIBRARY_SCOPE.WORKSPACE}>Workspace</option>
-                    <option value=${MEDIA_LIBRARY_SCOPE.USER}>Mine</option>
-                    ${organizationId ? html`<option value=${MEDIA_LIBRARY_SCOPE.ORGANIZATION}>Organization</option>` : null}
-                    <option value=${MEDIA_LIBRARY_SCOPE.PUBLIC}>Public</option>
-                </select>
+                <span className="feature-library-scope-editor-mount"></span>
             </label>` : null}
             <div className="feature-library-row-detail-grid">
                 <div className="feature-library-row-detail-field"><span>Category</span><strong>${feature.category || 'feature'}</strong></div>
@@ -775,10 +809,16 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
             selectedFeatureId = null
             renderContent()
         })
-        const scopeEditor = inspectorEl.querySelector('.feature-library-scope-editor') as HTMLSelectElement | null
-        if (scopeEditor) {
-            scopeEditor.value = feature.scope
-            scopeEditor.addEventListener('change', () => void changeFeatureScope(feature, scopeEditor))
+        const scopeEditorMount = inspectorEl.querySelector('.feature-library-scope-editor-mount') as HTMLElement | null
+        if (scopeEditorMount) {
+            const sharingOptions = SCOPES.filter((scope) => organizationId || scope.key !== MEDIA_LIBRARY_SCOPE.ORGANIZATION)
+            const sharingDropdown = trackTransientDropdown(createScopeDropdown({
+                id: `feature-library-scope-${feature.featureId}`,
+                options: sharingOptions,
+                selectedKey: feature.scope,
+                onSelect: (key) => void changeFeatureScope(feature, key as MediaLibraryScope, () => sharingDropdown.setSelectedKey(feature.scope)),
+            }))
+            scopeEditorMount.appendChild(sharingDropdown.dom)
         }
         inspectorEl.querySelector('.feature-library-inspector-actions')!.addEventListener('click', (event) => {
             const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
@@ -845,11 +885,6 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         if (panelEl) return
         panelEl = html`<div className="media-library-panel media-library-panel-embedded nopan nowheel">
             <div className="media-library-controls">
-                <label className="media-library-scope-control">
-                    <span>Scope</span>
-                    <select className="media-library-scope-select"></select>
-                </label>
-                <input type="text" className="media-library-header-search" placeholder="Search features" />
                 <span className="media-library-feedback"></span>
             </div>
             <div className="media-library-body">
@@ -858,30 +893,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
             </div>
         </div>` as HTMLElement
 
-        const searchInput = panelEl.querySelector('.media-library-header-search') as HTMLInputElement
-        searchInput.addEventListener('input', () => {
-            searchQuery = searchInput.value
-            if (mode === 'features') renderContent()
-            else void loadMedia()
-        })
-
-        const filterSelectEl = panelEl.querySelector('.media-library-scope-select') as HTMLSelectElement
-        for (const filter of [...SCOPES, { key: MEDIA_LIBRARY_BROWSE_ALL, label: 'All available' }] as Array<{ key: MediaLibraryBrowseMode; label: string }>) {
-            filterSelectEl.appendChild(html`<option value=${filter.key}>${filter.label}</option>` as HTMLOptionElement)
-        }
-        filterSelectEl.value = browseMode
-        filterSelectEl.addEventListener('change', () => {
-            browseMode = filterSelectEl.value as MediaLibraryBrowseMode
-            selectedFeatureId = null
-            void loadActiveMode()
-        })
-
         ensureEventSubscriptions()
-    }
-
-    function syncSearchPlaceholder() {
-        const searchInput = panelEl?.querySelector('.media-library-header-search') as HTMLInputElement | null
-        if (searchInput) searchInput.placeholder = mode === 'features' ? 'Search features' : 'Search media'
     }
 
     // Render the active surface: reuse in-memory rows when they are fresh,
@@ -897,7 +909,6 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         build()
         if (panelEl && panelEl.parentElement !== hostEl) hostEl.appendChild(panelEl)
         isMounted = true
-        syncSearchPlaceholder()
         refreshActiveMode()
     }
 
@@ -905,7 +916,6 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
         if (mode === nextMode && isMounted) return
         mode = nextMode
         selectedFeatureId = null
-        syncSearchPlaceholder()
         if (isMounted) refreshActiveMode()
     }
 
@@ -916,6 +926,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
 
     function destroy() {
         unmount()
+        destroyTransientDropdowns()
         panelEl = null
     }
 
