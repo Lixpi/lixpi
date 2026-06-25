@@ -63,6 +63,184 @@ export type GlassUvSample = {
     innerShadow?: number
 }
 
+export type CircularGlassMaterialStyle = {
+    absorptionVolumeStrength: number
+    absorptionFresnelStrength: number
+    absorptionInnerShadowStrength: number
+    causticLightStrength: number
+    specularLightStrength: number
+    alphaBaseMultiplier: number
+    alphaVolumeStrength: number
+    specularAlphaStrength: number
+    causticAlphaStrength: number
+    alphaMax: number
+    rimThicknessStart: number
+    rimThicknessEnd: number
+    upperMeniscusShadowCenterY: number
+    upperMeniscusShadowWidthY: number
+    upperMeniscusShadowCenterX: number
+    upperMeniscusShadowWidthX: number
+    lowerMeniscusDepthCenterY: number
+    lowerMeniscusDepthWidthY: number
+    lowerMeniscusDepthCenterX: number
+    lowerMeniscusDepthWidthX: number
+    lowerTransmittedLightCenterY: number
+    lowerTransmittedLightWidthY: number
+    lowerTransmittedLightCenterX: number
+    lowerTransmittedLightWidthX: number
+    topReflectionCenterY: number
+    topReflectionWidthY: number
+    topReflectionCenterX: number
+    topReflectionWidthX: number
+    leftEdgeReflectionCenterX: number
+    leftEdgeReflectionWidthX: number
+    leftEdgeReflectionCenterY: number
+    leftEdgeReflectionWidthY: number
+    smallGlintCenterX: number
+    smallGlintWidthX: number
+    smallGlintCenterY: number
+    smallGlintWidthY: number
+    horizontalWaveFrequencyX: number
+    horizontalWaveFrequencyY: number
+    horizontalWavePhase: number
+    fineWaveFrequencyX: number
+    fineWaveFrequencyY: number
+    fineWavePhase: number
+    upperStriationCenterY: number
+    upperStriationWidthY: number
+    upperStriationBase: number
+    upperStriationHorizontalWaveStrength: number
+    upperStriationFineWaveStrength: number
+    lowerStriationCenterY: number
+    lowerStriationWidthY: number
+    lowerStriationCenterX: number
+    lowerStriationWidthX: number
+    internalVeilCenterY: number
+    internalVeilWidthY: number
+    internalVeilBase: number
+    internalVeilHorizontalWaveStrength: number
+    flatThicknessBase: number
+    flatThicknessRimStrength: number
+    flatThicknessLowerDepthStrength: number
+    flatThicknessInternalVeilStrength: number
+    flatThicknessVerticalDepthStartY: number
+    flatThicknessVerticalDepthEndY: number
+    flatThicknessVerticalDepthStrength: number
+    directionalLightBase: number
+    directionalLightLowerTransmittedStrength: number
+    directionalLightTopReflectionStrength: number
+    directionalLightLeftEdgeStrength: number
+    directionalLightUpperStriationStrength: number
+    directionalLightLowerStriationStrength: number
+    directionalLightUpperMeniscusShadowStrength: number
+    directionalLightRimShadowStrength: number
+    crossSectionBase: number
+    crossSectionYStrength: number
+    crossSectionXStrength: number
+    lensAlphaBase: number
+    lensAlphaThicknessStrength: number
+    lensAlphaLowerDepthStrength: number
+    progressBase: number
+    progressLightStrength: number
+    causticLowerLightStrength: number
+    causticLowerStriationStrength: number
+    specularTopReflectionStrength: number
+    specularLeftEdgeStrength: number
+    specularSmallGlintStrength: number
+    innerShadowUpperMeniscusStrength: number
+    innerShadowRimStrength: number
+    innerShadowVeilStrength: number
+}
+
+const DEFAULT_CIRCULAR_GLASS_MATERIAL_STYLE: CircularGlassMaterialStyle = {
+    absorptionVolumeStrength: 0.04,
+    absorptionFresnelStrength: 0.26,
+    absorptionInnerShadowStrength: 0.34,
+    causticLightStrength: 0.34,
+    specularLightStrength: 0.58,
+    alphaBaseMultiplier: 0.82,
+    alphaVolumeStrength: 0.12,
+    specularAlphaStrength: 0.022,
+    causticAlphaStrength: 0.014,
+    alphaMax: 0.95,
+    rimThicknessStart: 0.56,
+    rimThicknessEnd: 1,
+    upperMeniscusShadowCenterY: -0.42,
+    upperMeniscusShadowWidthY: 0.08,
+    upperMeniscusShadowCenterX: 0.02,
+    upperMeniscusShadowWidthX: 0.68,
+    lowerMeniscusDepthCenterY: 0.64,
+    lowerMeniscusDepthWidthY: 0.18,
+    lowerMeniscusDepthCenterX: -0.02,
+    lowerMeniscusDepthWidthX: 0.64,
+    lowerTransmittedLightCenterY: 0.5,
+    lowerTransmittedLightWidthY: 0.16,
+    lowerTransmittedLightCenterX: -0.1,
+    lowerTransmittedLightWidthX: 0.5,
+    topReflectionCenterY: -0.28,
+    topReflectionWidthY: 0.1,
+    topReflectionCenterX: -0.24,
+    topReflectionWidthX: 0.26,
+    leftEdgeReflectionCenterX: -0.48,
+    leftEdgeReflectionWidthX: 0.08,
+    leftEdgeReflectionCenterY: -0.08,
+    leftEdgeReflectionWidthY: 0.46,
+    smallGlintCenterX: -0.18,
+    smallGlintWidthX: 0.04,
+    smallGlintCenterY: -0.02,
+    smallGlintWidthY: 0.06,
+    horizontalWaveFrequencyX: 3.6,
+    horizontalWaveFrequencyY: 0.7,
+    horizontalWavePhase: 0.15,
+    fineWaveFrequencyX: 8.2,
+    fineWaveFrequencyY: -1.4,
+    fineWavePhase: 0.35,
+    upperStriationCenterY: -0.16,
+    upperStriationWidthY: 0.18,
+    upperStriationBase: 0.42,
+    upperStriationHorizontalWaveStrength: 0.4,
+    upperStriationFineWaveStrength: 0.1,
+    lowerStriationCenterY: 0.34,
+    lowerStriationWidthY: 0.18,
+    lowerStriationCenterX: 0.16,
+    lowerStriationWidthX: 0.56,
+    internalVeilCenterY: 0.02,
+    internalVeilWidthY: 0.38,
+    internalVeilBase: 0.32,
+    internalVeilHorizontalWaveStrength: 0.22,
+    flatThicknessBase: 0.48,
+    flatThicknessRimStrength: 0.28,
+    flatThicknessLowerDepthStrength: 0.18,
+    flatThicknessInternalVeilStrength: 0.08,
+    flatThicknessVerticalDepthStartY: -0.12,
+    flatThicknessVerticalDepthEndY: 0.9,
+    flatThicknessVerticalDepthStrength: 0.1,
+    directionalLightBase: 0.24,
+    directionalLightLowerTransmittedStrength: 0.2,
+    directionalLightTopReflectionStrength: 0.16,
+    directionalLightLeftEdgeStrength: 0.1,
+    directionalLightUpperStriationStrength: 0.06,
+    directionalLightLowerStriationStrength: 0.08,
+    directionalLightUpperMeniscusShadowStrength: 0.12,
+    directionalLightRimShadowStrength: 0.1,
+    crossSectionBase: 0.5,
+    crossSectionYStrength: 0.58,
+    crossSectionXStrength: 0.035,
+    lensAlphaBase: 0.84,
+    lensAlphaThicknessStrength: 0.12,
+    lensAlphaLowerDepthStrength: 0.04,
+    progressBase: 0.14,
+    progressLightStrength: 0.64,
+    causticLowerLightStrength: 0.4,
+    causticLowerStriationStrength: 0.16,
+    specularTopReflectionStrength: 0.5,
+    specularLeftEdgeStrength: 0.34,
+    specularSmallGlintStrength: 0.7,
+    innerShadowUpperMeniscusStrength: 0.76,
+    innerShadowRimStrength: 0.16,
+    innerShadowVeilStrength: 0.1,
+}
+
 export function interpolateTravelingOutlineColor(colors: ReadonlyArray<string>, progress: number): number {
     if (colors.length === 0) return 0xffffff
     if (colors.length === 1) return Number.parseInt(colors[0].slice(1), 16)
@@ -304,6 +482,8 @@ export type CircularGlassMaterialOptions = {
     translucency?: number
     // Fraction of the radius used to feather the round rim to transparent.
     rimFeatherFraction?: number
+    // Circular-disc sampler and material coefficients.
+    discStyle?: Partial<CircularGlassMaterialStyle>
 }
 
 // Glass disc: a feathered round cutout with shallow slab-style thickness.
@@ -313,6 +493,7 @@ export class CircularGlassMaterial extends GlassMaterial {
     private readonly size: number
     private readonly translucency: number
     private readonly rimFeatherFraction: number
+    private readonly discStyle: CircularGlassMaterialStyle
 
     constructor(
         colors: ReadonlyArray<string>,
@@ -324,6 +505,7 @@ export class CircularGlassMaterial extends GlassMaterial {
         this.size = Math.max(2, Math.round(options.size ?? 128))
         this.translucency = Math.max(0, Math.min(1, options.translucency ?? 1))
         this.rimFeatherFraction = Math.max(0, Math.min(0.5, options.rimFeatherFraction ?? 0.08))
+        this.discStyle = { ...DEFAULT_CIRCULAR_GLASS_MATERIAL_STYLE, ...options.discStyle }
     }
 
     bake(): Texture {
@@ -345,15 +527,27 @@ export class CircularGlassMaterial extends GlassMaterial {
         const caustic = clamp01(sample.caustic ?? 0)
         const specular = clamp01(sample.specular ?? 0)
         const innerShadow = clamp01(sample.innerShadow ?? 0)
-        const absorption = clamp01(volume * 0.04 + fresnel * 0.26 + innerShadow * 0.34)
-        const transmittedLight = clamp01(caustic * 0.34 + specular * 0.58)
+        const discStyle = this.discStyle
+        const absorption = clamp01(
+            volume * discStyle.absorptionVolumeStrength
+                + fresnel * discStyle.absorptionFresnelStrength
+                + innerShadow * discStyle.absorptionInnerShadowStrength
+        )
+        const transmittedLight = clamp01(
+            caustic * discStyle.causticLightStrength
+                + specular * discStyle.specularLightStrength
+        )
         const shadowedColor = mixColor(shaded.color, glassShadow, Math.min(this.style.shadowMixMax, absorption))
         const color = mixColor(shadowedColor, white, Math.min(this.style.highlightWhiteMixMax, transmittedLight))
-        const alpha = clamp01(shaded.alpha * (0.82 + volume * 0.12) + specular * 0.022 + caustic * 0.014)
+        const alpha = clamp01(
+            shaded.alpha * (discStyle.alphaBaseMultiplier + volume * discStyle.alphaVolumeStrength)
+                + specular * discStyle.specularAlphaStrength
+                + caustic * discStyle.causticAlphaStrength
+        )
 
         return {
             color,
-            alpha: Math.min(0.95, alpha),
+            alpha: Math.min(discStyle.alphaMax, alpha),
         }
     }
 
@@ -366,40 +560,91 @@ export class CircularGlassMaterial extends GlassMaterial {
         const dy = (py - center) / radius
         const distance = Math.sqrt(dx * dx + dy * dy)
         const innerDistance = Math.min(1, distance)
-        const rimThickness = smoothstep(0.56, 1, innerDistance)
-        const upperMeniscusShadow = gaussian(dy, -0.42, 0.08) * gaussian(dx, 0.02, 0.68)
-        const lowerMeniscusDepth = gaussian(dy, 0.64, 0.18) * gaussian(dx, -0.02, 0.64)
-        const lowerTransmittedLight = gaussian(dy, 0.5, 0.16) * gaussian(dx, -0.1, 0.5)
-        const topReflection = gaussian(dy, -0.28, 0.1) * gaussian(dx, -0.24, 0.26)
-        const leftEdgeReflection = gaussian(dx, -0.48, 0.08) * gaussian(dy, -0.08, 0.46)
-        const smallGlint = gaussian(dx, -0.18, 0.04) * gaussian(dy, -0.02, 0.06)
+        const discStyle = this.discStyle
+        const rimThickness = smoothstep(discStyle.rimThicknessStart, discStyle.rimThicknessEnd, innerDistance)
+        const upperMeniscusShadow = gaussian(dy, discStyle.upperMeniscusShadowCenterY, discStyle.upperMeniscusShadowWidthY)
+            * gaussian(dx, discStyle.upperMeniscusShadowCenterX, discStyle.upperMeniscusShadowWidthX)
+        const lowerMeniscusDepth = gaussian(dy, discStyle.lowerMeniscusDepthCenterY, discStyle.lowerMeniscusDepthWidthY)
+            * gaussian(dx, discStyle.lowerMeniscusDepthCenterX, discStyle.lowerMeniscusDepthWidthX)
+        const lowerTransmittedLight = gaussian(dy, discStyle.lowerTransmittedLightCenterY, discStyle.lowerTransmittedLightWidthY)
+            * gaussian(dx, discStyle.lowerTransmittedLightCenterX, discStyle.lowerTransmittedLightWidthX)
+        const topReflection = gaussian(dy, discStyle.topReflectionCenterY, discStyle.topReflectionWidthY)
+            * gaussian(dx, discStyle.topReflectionCenterX, discStyle.topReflectionWidthX)
+        const leftEdgeReflection = gaussian(dx, discStyle.leftEdgeReflectionCenterX, discStyle.leftEdgeReflectionWidthX)
+            * gaussian(dy, discStyle.leftEdgeReflectionCenterY, discStyle.leftEdgeReflectionWidthY)
+        const smallGlint = gaussian(dx, discStyle.smallGlintCenterX, discStyle.smallGlintWidthX)
+            * gaussian(dy, discStyle.smallGlintCenterY, discStyle.smallGlintWidthY)
+        const horizontalWave = 0.5 + Math.sin((
+            dx * discStyle.horizontalWaveFrequencyX
+                + dy * discStyle.horizontalWaveFrequencyY
+                + discStyle.horizontalWavePhase
+        ) * Math.PI) * 0.5
+        const fineWave = 0.5 + Math.sin((
+            dx * discStyle.fineWaveFrequencyX
+                + dy * discStyle.fineWaveFrequencyY
+                + discStyle.fineWavePhase
+        ) * Math.PI) * 0.5
+        const upperStriation = gaussian(dy, discStyle.upperStriationCenterY, discStyle.upperStriationWidthY)
+            * (
+                discStyle.upperStriationBase
+                + horizontalWave * discStyle.upperStriationHorizontalWaveStrength
+                + fineWave * discStyle.upperStriationFineWaveStrength
+            )
+        const lowerStriation = gaussian(dy, discStyle.lowerStriationCenterY, discStyle.lowerStriationWidthY)
+            * gaussian(dx, discStyle.lowerStriationCenterX, discStyle.lowerStriationWidthX)
+        const internalVeil = gaussian(dy, discStyle.internalVeilCenterY, discStyle.internalVeilWidthY)
+            * (discStyle.internalVeilBase + horizontalWave * discStyle.internalVeilHorizontalWaveStrength)
         const flatThickness = clamp01(
-            0.48
-                + rimThickness * 0.28
-                + lowerMeniscusDepth * 0.18
-                + smoothstep(-0.12, 0.9, dy) * 0.1
+            discStyle.flatThicknessBase
+                + rimThickness * discStyle.flatThicknessRimStrength
+                + lowerMeniscusDepth * discStyle.flatThicknessLowerDepthStrength
+                + internalVeil * discStyle.flatThicknessInternalVeilStrength
+                + smoothstep(
+                    discStyle.flatThicknessVerticalDepthStartY,
+                    discStyle.flatThicknessVerticalDepthEndY,
+                    dy
+                ) * discStyle.flatThicknessVerticalDepthStrength
         )
         const directionalLight = clamp01(
-            0.24
-                + lowerTransmittedLight * 0.2
-                + topReflection * 0.16
-                + leftEdgeReflection * 0.1
-                - upperMeniscusShadow * 0.12
-                - rimThickness * 0.1
+            discStyle.directionalLightBase
+                + lowerTransmittedLight * discStyle.directionalLightLowerTransmittedStrength
+                + topReflection * discStyle.directionalLightTopReflectionStrength
+                + leftEdgeReflection * discStyle.directionalLightLeftEdgeStrength
+                + upperStriation * discStyle.directionalLightUpperStriationStrength
+                + lowerStriation * discStyle.directionalLightLowerStriationStrength
+                - upperMeniscusShadow * discStyle.directionalLightUpperMeniscusShadowStrength
+                - rimThickness * discStyle.directionalLightRimShadowStrength
         )
-        const crossSection = clamp01(0.5 + dy * 0.58 - dx * 0.035)
+        const crossSection = clamp01(
+            discStyle.crossSectionBase
+                + dy * discStyle.crossSectionYStrength
+                - dx * discStyle.crossSectionXStrength
+        )
         // 1 inside the disc, feathered to 0 across the rim, 0 outside.
         const rimMask = smoothstep(1, innerEdge, distance)
-        const lensAlpha = 0.84 + flatThickness * 0.12 + lowerMeniscusDepth * 0.04
+        const lensAlpha = discStyle.lensAlphaBase
+            + flatThickness * discStyle.lensAlphaThicknessStrength
+            + lowerMeniscusDepth * discStyle.lensAlphaLowerDepthStrength
 
         return {
-            progress: 0.14 + directionalLight * 0.64,
+            progress: discStyle.progressBase + directionalLight * discStyle.progressLightStrength,
             crossSection,
             volume: flatThickness,
             fresnel: rimThickness,
-            caustic: clamp01(lowerTransmittedLight * 0.52),
-            specular: clamp01(topReflection * 0.5 + leftEdgeReflection * 0.34 + smallGlint * 0.7),
-            innerShadow: clamp01(upperMeniscusShadow * 0.9 + rimThickness * 0.22),
+            caustic: clamp01(
+                lowerTransmittedLight * discStyle.causticLowerLightStrength
+                    + lowerStriation * discStyle.causticLowerStriationStrength
+            ),
+            specular: clamp01(
+                topReflection * discStyle.specularTopReflectionStrength
+                    + leftEdgeReflection * discStyle.specularLeftEdgeStrength
+                    + smallGlint * discStyle.specularSmallGlintStrength
+            ),
+            innerShadow: clamp01(
+                upperMeniscusShadow * discStyle.innerShadowUpperMeniscusStrength
+                    + rimThickness * discStyle.innerShadowRimStrength
+                    + internalVeil * discStyle.innerShadowVeilStrength
+            ),
             alphaMask: rimMask * lensAlpha * this.translucency,
         }
     }

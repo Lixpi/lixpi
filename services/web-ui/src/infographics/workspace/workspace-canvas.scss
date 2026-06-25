@@ -1696,21 +1696,36 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: var(--workspace-branch-marker-media-model-circle-size, 36px);
+    height: var(--workspace-branch-marker-media-model-circle-size, 36px);
     box-sizing: border-box;
     color: var(--workspace-branch-marker-media-model-icon-color, #42494f);
     border-radius: 50%;
-    background-color: transparent;
+    background-color: var(--workspace-branch-marker-media-model-circle-background-color, transparent);
     background-image: none;
     background-position: center;
     background-repeat: no-repeat;
     background-size: 100% 100%;
     border: none;
-    box-shadow:
-        inset 0 1px 1px rgba(255, 255, 255, 0.16),
-        inset 0 -8px 14px rgba(3, 7, 11, 0.16),
-        0 7px 18px rgba(18, 24, 31, 0.2);
+    box-shadow: var(
+        --workspace-branch-marker-media-model-circle-box-shadow,
+        inset 0 1px 1px rgba(255, 255, 255, 0.1),
+        inset 0 -4px 8px rgba(3, 7, 11, 0.07),
+        0 7px 18px rgba(18, 24, 31, 0.16)
+    );
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.workspace-branch-marker-media-model-texture {
+    position: absolute;
+    inset: var(--workspace-branch-marker-media-model-texture-inset, 5px);
+    z-index: 0;
+    border-radius: 50%;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: var(--workspace-branch-marker-media-model-texture-background-size, 142% 142%);
+    opacity: var(--workspace-branch-marker-media-model-texture-opacity, 0.82);
     overflow: hidden;
     pointer-events: none;
 }
@@ -1718,9 +1733,9 @@
 .workspace-branch-marker-media-model-circle .workspace-branch-marker-message-icon {
     position: relative;
     z-index: 1;
-    flex: 0 0 16px;
-    width: 16px;
-    height: 16px;
+    flex: 0 0 var(--workspace-branch-marker-media-model-icon-size, 16px);
+    width: var(--workspace-branch-marker-media-model-icon-size, 16px);
+    height: var(--workspace-branch-marker-media-model-icon-size, 16px);
 }
 
 .workspace-branch-marker-media-models .workspace-branch-marker-reasoning-tooltip,

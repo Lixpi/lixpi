@@ -104,7 +104,8 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/animations/gradients/shiftingGradientRenderer.ts'
 import { CircularGlassMaterial } from '$src/utils/animations/gradients/glassMaterial.ts'
-import { colorPalette, settings } from '$src/settings.ts'
+import { tPatternSvgTexture } from '$src/svgIcons/svgTextures.ts'
+import { settings } from '$src/settings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
@@ -274,6 +275,7 @@ const BRANCH_MARKER_PENDING_STACK_GAP = 8
 const BRANCH_MARKER_SPINNER_PERIOD_MS = 800
 const BRANCH_MARKER_VISIBLE_VIEWPORT_PADDING_SCREEN = 24
 const branchMarkerMediaModelCircleGlassCssImageByColor = new Map<string, string>()
+const branchMarkerMediaModelCircleTextureCssImageByColor = new Map<string, string>()
 type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 type CanvasGeometry = { position: { x: number; y: number }; dimensions: { width: number; height: number } }
 type PendingGeneratedMediaLayoutProxy = { offset: { x: number; y: number }; dimensions: { width: number; height: number } }
@@ -456,16 +458,30 @@ function mixBranchMarkerColor(fromHex: string, toHex: string, amount: number): s
     return `#${channel(from.r, to.r)}${channel(from.g, to.g)}${channel(from.b, to.b)}`.toUpperCase()
 }
 
-function getBranchMarkerMediaModelCircleGlassColors(modelColor: string | null): string[] {
-    const normalizedColor = normalizeBranchMarkerHexColor(modelColor)
-    if (!normalizedColor) return settings.mediaNode.branchMarkerMediaModelCircleGlass.glassColors
+function svgToCssImageUrl(svg: string): string {
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
+}
 
-    return [
-        mixBranchMarkerColor(normalizedColor, '#03070B', 0.22),
-        mixBranchMarkerColor(normalizedColor, '#000000', 0.04),
-        mixBranchMarkerColor(normalizedColor, '#FFFFFF', 0.32),
-        mixBranchMarkerColor(normalizedColor, '#FFFFFF', 0.78),
-    ]
+function getBranchMarkerMediaModelCircleGlassColors(modelColor: string | null): string[] {
+    const circleGlassSettings = settings.mediaBranchLineage.mediaModelCircle.glass
+    const normalizedColor = normalizeBranchMarkerHexColor(modelColor)
+    if (!normalizedColor) return circleGlassSettings.fallbackColors
+
+    return circleGlassSettings.brandColorStops.map(({ targetColor, amount }) =>
+        mixBranchMarkerColor(normalizedColor, targetColor, amount)
+    )
+}
+
+function getBranchMarkerMediaModelCircleTextureColor(modelColor: string | null): string {
+    const textureSettings = settings.mediaBranchLineage.mediaModelCircle.texture
+    const normalizedColor = normalizeBranchMarkerHexColor(modelColor)
+    if (!normalizedColor) return textureSettings.fallbackColor
+
+    return mixBranchMarkerColor(
+        normalizedColor,
+        textureSettings.brandColorMix.targetColor,
+        textureSettings.brandColorMix.amount,
+    )
 }
 
 function splitBranchMarkerModelId(modelId: string): { provider: string; model: string } {
@@ -674,24 +690,45 @@ function defaultPanZoomConfig(onTransformChange: (transform: Transform) => void)
 }
 
 function createBranchMarkerMediaModelCircleGlassCssImage(modelColor: string | null = null): string {
-    const circleGlass = settings.mediaNode.branchMarkerMediaModelCircleGlass
+    const circleGlass = settings.mediaBranchLineage.mediaModelCircle.glass
     const glassColors = getBranchMarkerMediaModelCircleGlassColors(modelColor)
-    const cacheKey = glassColors.join('|')
+    const cacheKey = JSON.stringify([
+        glassColors,
+        circleGlass.textureSize,
+        circleGlass.translucency,
+        circleGlass.rimFeatherFraction,
+        circleGlass.material,
+        circleGlass.discMaterial,
+    ])
     const cachedImage = branchMarkerMediaModelCircleGlassCssImageByColor.get(cacheKey)
     if (cachedImage !== undefined) return cachedImage
 
     const dataUrl = new CircularGlassMaterial(
         glassColors,
         0,
-        circleGlass.glassMaterial,
+        circleGlass.material,
         {
             size: circleGlass.textureSize,
             translucency: circleGlass.translucency,
             rimFeatherFraction: circleGlass.rimFeatherFraction,
+            discStyle: circleGlass.discMaterial,
         },
     ).bakeDataUrl()
     const image = dataUrl ? `url(${dataUrl})` : ''
     branchMarkerMediaModelCircleGlassCssImageByColor.set(cacheKey, image)
+    return image
+}
+
+function createBranchMarkerMediaModelCircleTextureCssImage(modelColor: string | null = null): string {
+    const textureSettings = settings.mediaBranchLineage.mediaModelCircle.texture
+    const textureColor = getBranchMarkerMediaModelCircleTextureColor(modelColor)
+    const cacheKey = `${textureColor}|${textureSettings.fillOpacity}`
+    const cachedImage = branchMarkerMediaModelCircleTextureCssImageByColor.get(cacheKey)
+    if (cachedImage !== undefined) return cachedImage
+
+    const texturedSvg = tPatternSvgTexture.replace('<path ', `<path fill="${textureColor}" fill-opacity="${textureSettings.fillOpacity}" `)
+    const image = svgToCssImageUrl(texturedSvg)
+    branchMarkerMediaModelCircleTextureCssImageByColor.set(cacheKey, image)
     return image
 }
 
@@ -704,6 +741,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const generatedMediaInfoPanelSettings = settings.mediaNode.generatedMediaInfoPanel
     const generatedMediaInfoPanelStyles = generatedMediaInfoPanelSettings.styles
     const branchOriginSettings = settings.mediaBranchLineage.branchOrigin
+    const mediaModelCircleSettings = settings.mediaBranchLineage.mediaModelCircle
 
     paneEl.style.setProperty('--connector-line-default-color', connectorStyles.lineDefaultColor)
     paneEl.style.setProperty('--connector-line-focus-color', connectorStyles.lineFocusColor)
@@ -729,7 +767,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-branch-origin-icon-color', branchOriginSettings.styles.iconColor)
     paneEl.style.setProperty('--workspace-branch-origin-box-shadow', branchOriginSettings.styles.boxShadow)
     paneEl.style.setProperty('--workspace-branch-marker-separator-gradient', branchOriginSettings.styles.separatorGradient)
-    paneEl.style.setProperty('--workspace-branch-marker-media-model-icon-color', colorPalette.nightBlue)
+    paneEl.style.setProperty('--workspace-branch-marker-media-model-circle-size', `${mediaModelCircleSettings.size}px`)
+    paneEl.style.setProperty('--workspace-branch-marker-media-model-icon-size', `${mediaModelCircleSettings.iconSize}px`)
+    paneEl.style.setProperty('--workspace-branch-marker-media-model-icon-color', mediaModelCircleSettings.styles.iconColor)
+    paneEl.style.setProperty('--workspace-branch-marker-media-model-circle-background-color', mediaModelCircleSettings.styles.backgroundColor)
+    paneEl.style.setProperty('--workspace-branch-marker-media-model-circle-box-shadow', mediaModelCircleSettings.styles.boxShadow)
+    paneEl.style.setProperty('--workspace-branch-marker-media-model-texture-inset', `${mediaModelCircleSettings.texture.inset}px`)
+    paneEl.style.setProperty('--workspace-branch-marker-media-model-texture-opacity', `${mediaModelCircleSettings.texture.opacity}`)
+    paneEl.style.setProperty('--workspace-branch-marker-media-model-texture-background-size', `${mediaModelCircleSettings.texture.backgroundSizePercent}% ${mediaModelCircleSettings.texture.backgroundSizePercent}%`)
     paneEl.style.setProperty('--workspace-branch-marker-move-duration', `${settings.mediaBranchLineage.pendingMarkerMoveDurationMs}ms`)
     const branchMarkerText = settings.mediaBranchLineage.marker.text
     paneEl.style.setProperty('--workspace-branch-marker-message-font-size', `${branchMarkerText.messageFontSize}px`)
@@ -10027,9 +10072,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createBranchMarkerMediaModelTooltip(nodeId: string, label: string, entry: BranchMarkerModelEntry, index: number): HTMLElement {
         const icon = entry.icon ?? getBranchMarkerMediaModelDefaultIcon(label)
         const circleGlassImage = createBranchMarkerMediaModelCircleGlassCssImage(entry.color)
+        const circleTextureImage = createBranchMarkerMediaModelCircleTextureCssImage(entry.color)
         const circleStyle = circleGlassImage ? { backgroundImage: circleGlassImage } : {}
+        const textureStyle = {
+            backgroundImage: circleTextureImage,
+        }
         const triggerContent = html`
             <span className="workspace-branch-marker-media-model-circle" style=${circleStyle} data=${{ mediaModelCircleIndex: String(index) }}>
+                <span className="workspace-branch-marker-media-model-texture" style=${textureStyle}></span>
                 <span
                     className="workspace-branch-marker-message-icon workspace-branch-marker-media-model-icon"
                     innerHTML=${icon}
