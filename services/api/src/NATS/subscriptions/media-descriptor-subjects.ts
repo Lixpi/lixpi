@@ -56,7 +56,8 @@ export const mediaDescriptorSubjects = [
 
             const [provider, modelVersion] = descriptorModelId.split(':')
             const aiModelMetaInfo = await AiModel.getAiModel({ provider: provider!, model: modelVersion!, omitPricing: true })
-            if (!aiModelMetaInfo) {
+            const maxTokens = aiModelMetaInfo?.maxCompletionSize || (!hasText ? settings.mediaDescriptor.defaultVlmMaxTokens : undefined)
+            if (!maxTokens) {
                 return { error: `AI_MODEL_NOT_FOUND:${descriptorModelId}` }
             }
 
@@ -73,15 +74,19 @@ export const mediaDescriptorSubjects = [
                         text: text!,
                         title,
                         natsService,
-                        maxTokens: aiModelMetaInfo.maxCompletionSize,
+                        maxTokens,
                     })
                     : await describeMediaStill({
                         provider: provider as ProviderName,
                         modelVersion: modelVersion!,
                         imageUrl: `nats-obj://workspace-${workspaceId}-files/${fileId}`,
                         natsService,
-                        maxTokens: aiModelMetaInfo.maxCompletionSize,
+                        maxTokens,
                     })
+                if (!hasText && !descriptor.summary?.trim()) {
+                    err(`media describe returned empty summary for workspace ${workspaceId} file ${fileId}`)
+                    return { error: 'MEDIA_DESCRIPTOR_EMPTY' }
+                }
                 return { ...descriptor }
             } catch (error: any) {
                 const message = error?.message ?? String(error)

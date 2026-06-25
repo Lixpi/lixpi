@@ -74,6 +74,26 @@ export function getCanvasVisualStructureKey(canvasState: CanvasStateVisualFields
     return `${getNodeStructureKey(canvasState)}::${getEdgeStructureKey(canvasState.edges)}`
 }
 
+function getNodeDescriptorSyncKey(node: CanvasNode): string {
+    const descriptor = (node as { descriptor?: {
+        status?: string
+        source?: string
+        summary?: string
+        entityTags?: string[]
+        styleTags?: string[]
+        version?: number
+    } }).descriptor
+    if (!descriptor) return ''
+    return [
+        descriptor.status ?? '',
+        descriptor.source ?? '',
+        descriptor.summary ?? '',
+        ...(descriptor.entityTags ?? []),
+        ...(descriptor.styleTags ?? []),
+        String(descriptor.version ?? ''),
+    ].join('\u001f')
+}
+
 export function getCanvasVisualSyncKey(canvasState: CanvasStateVisualFields | null): string {
     if (!canvasState) return ''
     const nodeKey = canvasState.nodes.map((node: CanvasNode) => [
@@ -86,6 +106,7 @@ export function getCanvasVisualSyncKey(canvasState: CanvasStateVisualFields | nu
         node.dimensions.height,
         node.type === 'image' ? node.fileId : '',
         node.type === 'image' ? node.src : '',
+        getNodeDescriptorSyncKey(node),
     ].join(':')).join('|')
     const edgeKey = canvasState.edges.map((edge: WorkspaceEdge) => [
         edge.edgeId,

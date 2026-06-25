@@ -526,6 +526,10 @@
             color: rgba(0, 0, 0, 0.46);
             font-style: italic;
         }
+
+        &.is-failed .canvas-media-descriptor-summary {
+            color: rgba(0, 0, 0, 0.46);
+        }
     }
 
     .canvas-media-descriptor-loading {

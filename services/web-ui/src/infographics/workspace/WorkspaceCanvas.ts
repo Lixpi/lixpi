@@ -273,6 +273,7 @@ const BRANCH_MARKER_PENDING_STACK_GAP = 8
 // workspace-canvas.scss (0.8s). Used to phase-align recreated spinners to a
 // shared rotation clock so the spinner never visibly restarts.
 const BRANCH_MARKER_SPINNER_PERIOD_MS = 800
+const MEDIA_DESCRIPTOR_ANALYSIS_RETRY_DELAYS_MS = [1000, 3000, 8000] as const
 const BRANCH_MARKER_VISIBLE_VIEWPORT_PADDING_SCREEN = 24
 const branchMarkerMediaModelCircleGlassCssImageByColor = new Map<string, string>()
 const branchMarkerMediaModelCircleTextureCssImageByColor = new Map<string, string>()
@@ -2040,9 +2041,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    // The node's compact descriptor (summary + tags) — shown for ALL media,
-    // including uploads with no generation metadata. Returns null when there is
-    // nothing useful to show (no descriptor, or analysis failed).
+    // The node's compact descriptor (summary + tags) — shown for all media,
+    // including uploads with no generation metadata. Failed analysis still gets
+    // a visible row so the info panel never collapses into an empty surface.
     function buildMediaDescriptorSection(descriptor: MediaDescriptor | undefined): HTMLElement | null {
         if (!descriptor) return null
         if (descriptor.source !== 'analysis') return null
@@ -2058,7 +2059,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 </div>
             ` as HTMLElement
         }
-        if (descriptor.status === 'failed' || !descriptor.summary) return null
+        if (descriptor.status === 'failed' || !descriptor.summary) {
+            return html`
+                <div className="canvas-media-descriptor is-failed">
+                    <span className="canvas-media-descriptor-label">Description unavailable</span>
+                    <p className="canvas-media-descriptor-summary">Media analysis did not return a usable description.</p>
+                </div>
+            ` as HTMLElement
+        }
 
         const section = html`
             <div className="canvas-media-descriptor">
@@ -8153,7 +8161,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // file or a video's representative frame/poster — never the MP4 and never
     // the generation prompt. Used by uploads, Media Library inserts, and completed
     // generated media so every visible description is VLM-authored.
-    async function analyzeCanvasMediaStill(nodeId: string, stillFileId: string): Promise<void> {
+    function scheduleCanvasMediaAnalysisRetry(nodeId: string, stillFileId: string, analysisAttempt: number): boolean {
+        const delayMs = MEDIA_DESCRIPTOR_ANALYSIS_RETRY_DELAYS_MS[analysisAttempt]
+        if (delayMs === undefined) return false
+        window.setTimeout(() => queueCanvasMediaAnalysis(nodeId, stillFileId, 0, analysisAttempt + 1), delayMs)
+        return true
+    }
+
+    async function analyzeCanvasMediaStill(nodeId: string, stillFileId: string, analysisAttempt = 0): Promise<void> {
         const failed = (): MediaDescriptor => ({ ...buildAnalyzingDescriptor(), status: 'failed', updatedAt: Date.now() })
         if (!stillFileId) {
             if (currentMediaStillMatches(nodeId, stillFileId)) patchMediaNodeDescriptor(nodeId, failed())
@@ -8163,6 +8178,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const result = await describeMedia({ workspaceId, fileId: stillFileId })
             if (!currentMediaStillMatches(nodeId, stillFileId)) return
             if (result.error || !result.summary) {
+                if (scheduleCanvasMediaAnalysisRetry(nodeId, stillFileId, analysisAttempt)) return
                 patchMediaNodeDescriptor(nodeId, failed())
                 return
             }
@@ -8176,7 +8192,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 updatedAt: Date.now(),
             })
         } catch {
-            if (currentMediaStillMatches(nodeId, stillFileId)) patchMediaNodeDescriptor(nodeId, failed())
+            if (!currentMediaStillMatches(nodeId, stillFileId)) return
+            if (scheduleCanvasMediaAnalysisRetry(nodeId, stillFileId, analysisAttempt)) return
+            patchMediaNodeDescriptor(nodeId, failed())
         }
     }
 
@@ -8184,18 +8202,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return `${nodeId}:${stillFileId}`
     }
 
-    async function runQueuedCanvasMediaAnalysis(nodeId: string, stillFileId: string, requestKey: string): Promise<void> {
+    async function runQueuedCanvasMediaAnalysis(
+        nodeId: string,
+        stillFileId: string,
+        requestKey: string,
+        analysisAttempt: number,
+    ): Promise<void> {
         try {
-            await analyzeCanvasMediaStill(nodeId, stillFileId)
+            await analyzeCanvasMediaStill(nodeId, stillFileId, analysisAttempt)
         } finally {
             mediaAnalysisRequestsInFlight.delete(requestKey)
         }
     }
 
-    function queueCanvasMediaAnalysis(nodeId: string, stillFileId: string | undefined, attempt = 0): void {
+    function queueCanvasMediaAnalysis(nodeId: string, stillFileId: string | undefined, attempt = 0, analysisAttempt = 0): void {
         const hasNode = currentCanvasState?.nodes.some((node: CanvasNode) => node.nodeId === nodeId) ?? false
         if (!hasNode && attempt < 20) {
-            window.setTimeout(() => queueCanvasMediaAnalysis(nodeId, stillFileId, attempt + 1), 50)
+            window.setTimeout(() => queueCanvasMediaAnalysis(nodeId, stillFileId, attempt + 1, analysisAttempt), 50)
             return
         }
         if (!stillFileId) {
@@ -8205,7 +8228,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const requestKey = getMediaAnalysisRequestKey(nodeId, stillFileId)
         if (mediaAnalysisRequestsInFlight.has(requestKey)) return
         mediaAnalysisRequestsInFlight.add(requestKey)
-        void runQueuedCanvasMediaAnalysis(nodeId, stillFileId, requestKey)
+        void runQueuedCanvasMediaAnalysis(nodeId, stillFileId, requestKey, analysisAttempt)
     }
 
     function getMediaDescriptorStillFileId(node: ImageCanvasNode | VideoCanvasNode): string | undefined {
@@ -8280,6 +8303,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (imageUrl.startsWith('http') && imageUrl.includes('/api/images/')) return `${imageUrl}${token ? `?token=${token}` : ''}`
         if (imageUrl.startsWith('http')) return imageUrl
         return `data:image/png;base64,${imageUrl}`
+    }
+
+    function buildStoredImageSrc(workspaceId: string, fileId: string): string {
+        return `/api/images/${encodeURIComponent(workspaceId)}/${encodeURIComponent(fileId)}`
+    }
+
+    function buildGeneratedImageFrameSrc({
+        imageUrl,
+        workspaceId: imageWorkspaceId,
+        fileId,
+        fallbackSrc,
+    }: {
+        imageUrl?: string
+        workspaceId: string
+        fileId?: string
+        fallbackSrc?: string
+    }): string {
+        if (imageUrl?.trim()) return buildImageSrc(imageUrl, '', false)
+        if (fileId) return buildStoredImageSrc(imageWorkspaceId, fileId)
+        if (fallbackSrc) return fallbackSrc
+        return buildImageSrc('', '', false)
     }
 
     // Append an image node to the DOM directly without a full renderNodes() cycle.
@@ -8596,7 +8640,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 sourceNodeId: edgeSourceNode.nodeId,
             })
 
-            const imageSrc = buildImageSrc(imageUrl, '', false)
+            const imageSrc = buildGeneratedImageFrameSrc({
+                imageUrl,
+                workspaceId: imgWorkspaceId || workspaceId,
+                fileId: fileId || '',
+            })
 
             const finalPosition = getNextGeneratedMediaPosition(edgeSourceNode, imageHeight)
             const position = getPendingGeneratedMediaBeforeFrameInsertionPosition(
@@ -8665,8 +8713,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             const partial = partialImageTracker.get(runKey)
 
-            const imageSrc = buildImageSrc(imageUrl, '', false)
-
             if (partial) {
                 const receivedFirstFrame = !partial.hasReceivedFrame
                 if (!getApiMediaRunLineageAssignment(generationRun)) {
@@ -8682,6 +8728,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const position = receivedFirstFrame
                         ? getFullFramePositionFromPendingGeneratedMediaPosition(imgNode.position, imgNode.dimensions)
                         : imgNode.position
+                    const imageSrc = buildGeneratedImageFrameSrc({
+                        imageUrl,
+                        workspaceId: imgWorkspaceId || imgNode.workspaceId,
+                        fileId: fileId || imgNode.fileId,
+                        fallbackSrc: imgNode.src,
+                    })
                     const generatedBy: ImageCanvasNode['generatedBy'] = {
                         aiChatThreadId: threadId,
                         responseId,
@@ -8765,6 +8817,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 clearPendingBranchMarkerStateForRun(threadId, generationRun)
                 const nodeId = `node-${fileId || uuidv4()}`
+                const imageSrc = buildGeneratedImageFrameSrc({
+                    imageUrl,
+                    workspaceId: imgWorkspaceId || workspaceId,
+                    fileId: fileId || '',
+                })
 
                 const position = getNextGeneratedMediaPosition(edgeSourceNode, imageHeight)
 
