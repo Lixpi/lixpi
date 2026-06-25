@@ -464,7 +464,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(outlineRendererTs, 'const headDistance = getTravelingOutlineHeadDistance(elapsed, durationMs, perimeter, this.ease)')
 		expectSourceToContain(outlineRendererTs, 'new MeshGeometry()')
 		expectSourceToContain(outlineRendererTs, 'new Mesh({ geometry, texture: this.texture })')
-		expectSourceToContain(outlineRendererTs, 'createTravelingSnakeTexture(this.style.snakeColors, this.style.snakeTailAlpha, this.style.glassMaterial)')
+		expectSourceToContain(outlineRendererTs, 'new TravelingSnakeGlassMaterial(')
 		expectSourceToContain(outlineRendererTs, 'this.ease = options.ease ?? Easing.travelingOutlineTransition')
 		expectSourceToContain(pixiLayerTs, 'function setGeneratingImageNodes(nodeIds: Set<string>)')
 		expectSourceToContain(settingsTs, 'gap: 3')
