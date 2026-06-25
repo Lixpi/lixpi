@@ -1030,7 +1030,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     if (!node.fileId) return
                     if (Array.from(partialImageTracker.values()).some((partial) => partial.nodeId === nodeId)) return
                     try {
-                        const response = await mediaLibraryService.addCanvasImage({ workspaceId, fileId: node.fileId })
+                        const response = await mediaLibraryService.addCanvasImage({ workspaceId, fileId: node.fileId, descriptor: (node as ImageCanvasNode).descriptor })
                         if (response.error || !response.itemId) {
                             console.error('Failed to add image to Media Library:', response.error ?? 'No saved item was returned.')
                             showCanvasToast('Could not save image to Media Library.', 'error')
@@ -1060,6 +1060,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             durationSeconds: node.durationSeconds || 0,
                             aspectRatio: node.aspectRatio || 1,
                             hasAudio: node.hasAudio ?? false,
+                            descriptor: (node as VideoCanvasNode).descriptor,
                         })
                         if (response.error || !response.itemId) {
                             console.error('Failed to add video to Media Library:', response.error ?? 'No saved item was returned.')
@@ -10376,6 +10377,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         if (!materialized.fileId || !materialized.url) return false
                         const width = settings.mediaNode.image.defaultInsertionWidth
                         const imageNodeId = `node-${materialized.fileId}`
+                        // Reuse the description copied into the library item so the media is
+                        // self-contained — only re-analyze when no ready descriptor travelled with it.
+                        const savedDescriptor = materialized.descriptor?.status === 'ready' ? materialized.descriptor : undefined
                         const imageNode: Omit<ImageCanvasNode, 'position'> = {
                             nodeId: imageNodeId,
                             type: 'image',
@@ -10384,12 +10388,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             src: materialized.url,
                             aspectRatio: item.aspectRatio,
                             dimensions: { width, height: width / item.aspectRatio },
-                            descriptor: buildAnalyzingDescriptor(),
+                            descriptor: savedDescriptor ?? buildAnalyzingDescriptor(),
                         }
                         insertNodeAtViewportCenterInternal(imageNode)
-                        // Caption the upload in the background; updates the node's
-                        // descriptor (analyzing → ready/failed) when it resolves.
-                        void analyzeUploadedMedia(imageNodeId, materialized.fileId)
+                        // Only caption when no stored description came back with the item.
+                        if (!savedDescriptor) void analyzeUploadedMedia(imageNodeId, materialized.fileId)
                         return true
                     } catch (error) {
                         console.error('Failed to add Media Library image to canvas:', error)
@@ -10409,6 +10412,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         const aspectRatio = item.aspectRatio || 1
                         const videoNodeId = `node-${materialized.video.fileId}`
                         const posterFileId = materialized.poster?.fileId ?? ''
+                        // Reuse the saved description so the media is self-contained.
+                        const savedDescriptor = materialized.descriptor?.status === 'ready' ? materialized.descriptor : undefined
                         const videoNode: Omit<VideoCanvasNode, 'position'> = {
                             nodeId: videoNodeId,
                             type: 'video',
@@ -10421,12 +10426,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             durationSeconds: item.durationSeconds,
                             hasAudio: item.hasAudio,
                             dimensions: { width, height: width / aspectRatio },
-                            descriptor: buildAnalyzingDescriptor(),
+                            descriptor: savedDescriptor ?? buildAnalyzingDescriptor(),
                         }
                         insertNodeAtViewportCenterInternal(videoNode)
-                        // Caption from the poster still (never the MP4); updates the
-                        // node's descriptor (analyzing → ready/failed) on resolve.
-                        void analyzeUploadedMedia(videoNodeId, posterFileId)
+                        // Only caption (from the poster still, never the MP4) when no stored description travelled with the item.
+                        if (!savedDescriptor) void analyzeUploadedMedia(videoNodeId, posterFileId)
                         return true
                     } catch (error) {
                         console.error('Failed to add Media Library video to canvas:', error)

@@ -38,14 +38,9 @@ describe('API storage bucket contract', () => {
             .toBeLessThan(putImageIndex)
     })
 
-    it('workspace creation provisions both primary and media-library buckets and rolls back both on failure', () => {
+    it('workspace creation provisions only the workspace file bucket (media buckets are org-scoped)', () => {
         const source = readSource('../NATS/subscriptions/workspace-subjects.ts')
 
-        expectSourceToContain(
-            source,
-            'const mediaLibraryBucketName = getMediaLibraryWorkspaceBucketName(workspace.workspaceId)',
-            'workspace create handler'
-        )
         expectSourceToContain(
             source,
             'await natsService.createObjectStore(bucketName',
@@ -53,33 +48,40 @@ describe('API storage bucket contract', () => {
         )
         expectSourceToContain(
             source,
-            'await natsService.createObjectStore(mediaLibraryBucketName',
-            'workspace create handler'
-        )
-        expectSourceToContain(
-            source,
             'await natsService.deleteObjectStore(bucketName).catch(() => {})',
             'workspace create rollback'
         )
-        expectSourceToContain(
+        // No per-workspace media-library bucket is provisioned anymore.
+        expectSourceNotToContain(
             source,
-            'await natsService.deleteObjectStore(mediaLibraryBucketName).catch(() => {})',
-            'workspace create rollback'
+            'getMediaLibraryWorkspaceBucketName',
+            'workspace create handler'
+        )
+        expectSourceNotToContain(
+            source,
+            'createObjectStore(mediaLibraryBucketName',
+            'workspace create handler'
         )
     })
 
-    it('media-library workspace bucket naming is centralized for create and delete paths', () => {
+    it('media-library buckets are org-scoped and created on demand at save time', () => {
         const source = readSource('./media-library-storage.ts')
 
         expectSourceToContain(
             source,
-            'export const getMediaLibraryWorkspaceBucketName = (workspaceId: string): string =>',
-            'media-library storage'
+            '`media-library-${scope}-${scopeOwnerId}-files`',
+            'media-library bucket name'
         )
         expectSourceToContain(
             source,
-            'deleteObjectStore(getMediaLibraryWorkspaceBucketName(workspaceId))',
-            'media-library workspace bucket delete'
+            'const ensureMediaLibraryBucket',
+            'on-demand bucket creation'
+        )
+        // The per-workspace media bucket helpers were removed with org-wide scoping.
+        expectSourceNotToContain(
+            source,
+            'getMediaLibraryWorkspaceBucketName',
+            'media-library storage'
         )
     })
 })

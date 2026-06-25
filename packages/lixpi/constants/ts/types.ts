@@ -1032,16 +1032,14 @@ export type FeatureReferenceMessageBlock = {
     sampleImages: Array<{ idx: number; subject: string; base64: string }>
 }
 
+// Media library access scopes mirror the feature library: items are org-wide
+// (accessible across every workspace in the organization). 'shared' (sharing with
+// external/global users) is reserved for a future release and has no UI or code path yet.
 export const MEDIA_LIBRARY_SCOPE = {
-    WORKSPACE: 'workspace',
-    USER: 'user',
     ORGANIZATION: 'organization',
-    PUBLIC: 'public',
+    SHARED: 'shared',
 } as const
 export type MediaLibraryScope = typeof MEDIA_LIBRARY_SCOPE[keyof typeof MEDIA_LIBRARY_SCOPE]
-
-// Sentinel scopeOwnerId for public-scoped items (no workspace/user/org owner).
-export const MEDIA_LIBRARY_PUBLIC_OWNER_ID = 'public'
 
 // Features retain their existing persistence path and are adapted into the library UI.
 export const MEDIA_LIBRARY_ITEM_KIND = {
@@ -1095,6 +1093,10 @@ export type MediaLibraryImageItem = {
     status: MediaLibraryItemStatus
     asset: MediaLibraryAssetRef
     image: MediaLibraryImageData
+    // Copied from the source canvas node so the saved item is self-contained: the
+    // description/tags travel with the media and are restored when it is re-added,
+    // instead of being re-analyzed from scratch in the destination workspace.
+    descriptor?: MediaDescriptor
     createdAt: number
     updatedAt: number
 }
@@ -1147,6 +1149,8 @@ export type MediaLibraryVideoItem = {
     asset: MediaLibraryAssetRef         // MP4 in library bucket
     poster?: MediaLibraryAssetRef       // PNG/JPEG poster in library bucket
     video: MediaLibraryVideoData
+    // Self-contained description/tags copied from the source canvas node (see image item).
+    descriptor?: MediaDescriptor
     createdAt: number
     updatedAt: number
 }

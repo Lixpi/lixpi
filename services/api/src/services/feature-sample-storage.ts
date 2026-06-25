@@ -12,8 +12,12 @@ const getStorageService = (): NATS_Service => {
 const getWorkspaceBucketName = (workspaceId: string): string =>
     `workspace-${workspaceId}-files`
 
-const getDurableFeatureBucketName = (ownerUserId: string): string =>
-    `user-${ownerUserId}-features`
+// Durable feature bucket, keyed on the feature's scope owner (the organization — a
+// UUID). Deliberately NOT keyed on the workspace (so samples outlive the workspace)
+// nor on the owner's userId (which is an email-like string containing characters that
+// are invalid in a NATS bucket name). Mirrors the media library's org-scoped bucket.
+const getDurableFeatureBucketName = (scope: FeatureScope, scopeOwnerId: string): string =>
+    `feature-${scope}-${scopeOwnerId}-files`
 
 export const getFeatureSampleObjectKey = (feature: Feature, sample: FeatureSampleRef): string =>
     sample.fileId ?? `features/${feature.featureId}/sample-${sample.idx}.${sample.ext}`
@@ -23,16 +27,21 @@ export const findFeatureSampleRef = (feature: Feature, sampleIndex: number): Fea
 
 export const getPrimaryFeatureSampleBucketName = (
     feature: Feature,
-    _scope: FeatureScope = feature.scope,
-    _scopeOwnerId: string = feature.scopeOwnerId,
+    scope: FeatureScope = feature.scope,
+    scopeOwnerId: string = feature.scopeOwnerId,
 ): string =>
-    // All features are org-scoped, so samples live in the durable per-owner bucket.
-    getDurableFeatureBucketName(feature.ownerUserId)
+    getDurableFeatureBucketName(scope, scopeOwnerId)
 
-const getFeatureSampleBucketCandidates = (feature: Feature): string[] => {
-    const primary = getPrimaryFeatureSampleBucketName(feature)
-    const originWorkspace = getWorkspaceBucketName(feature.workspaceId)
-    return primary === originWorkspace ? [primary] : [primary, originWorkspace]
+// The durable bucket is created on demand the first time a feature is saved for an
+// owner. open() rejects when a bucket is missing, so we create it then.
+const ensureDurableFeatureBucket = async (natsService: NATS_Service, bucketName: string): Promise<void> => {
+    try {
+        await natsService.getObjectStore(bucketName)
+    } catch {
+        await natsService.createObjectStore(bucketName, {
+            description: `Durable feature samples for ${bucketName}`,
+        }).catch(() => {})
+    }
 }
 
 export const readFeatureSampleObject = async ({
@@ -42,31 +51,35 @@ export const readFeatureSampleObject = async ({
     feature: Feature
     sample: FeatureSampleRef
 }): Promise<Uint8Array | null> => {
+    // Reads come ONLY from the durable bucket — features are fully decoupled from the
+    // workspace they were created in.
     const natsService = getStorageService()
     const objectKey = getFeatureSampleObjectKey(feature, sample)
-    for (const bucketName of getFeatureSampleBucketCandidates(feature)) {
-        try {
-            const data = await natsService.getObject(bucketName, objectKey)
-            if (data) return data
-        } catch {
-            // Older promoted records can still point at source-workspace bytes.
-        }
+    try {
+        const data = await natsService.getObject(getDurableFeatureBucketName(feature.scope, feature.scopeOwnerId), objectKey)
+        if (data) return data
+    } catch {
+        // Object missing in the durable bucket — nothing to return.
     }
     return null
 }
 
+// Persist a freshly extracted feature's samples into the durable bucket. The raw bytes
+// are produced into the origin workspace bucket as scratch during extraction; this copies
+// them into the durable, workspace-independent bucket so the feature is self-contained.
+// Called once at creation. Throws only if a sample's source bytes cannot be found AND it
+// is not already durable.
 export const ensureFeatureSamplesForScope = async ({
     feature,
-    newScope,
-    newScopeOwnerId,
 }: {
     feature: Feature
-    newScope: FeatureScope
-    newScopeOwnerId: string
+    newScope?: FeatureScope
+    newScopeOwnerId?: string
 }): Promise<void> => {
-    const destinationBucket = getPrimaryFeatureSampleBucketName(feature, newScope, newScopeOwnerId)
     const natsService = getStorageService()
-    const sourceBuckets = getFeatureSampleBucketCandidates(feature)
+    const destinationBucket = getDurableFeatureBucketName(feature.scope, feature.scopeOwnerId)
+    const sourceWorkspaceBucket = getWorkspaceBucketName(feature.workspaceId)
+    await ensureDurableFeatureBucket(natsService, destinationBucket)
 
     for (const sample of feature.sampleImages) {
         const objectKey = getFeatureSampleObjectKey(feature, sample)
@@ -77,24 +90,13 @@ export const ensureFeatureSamplesForScope = async ({
             // Copy below when the destination object is absent.
         }
 
-        let copied = false
-        for (const sourceBucket of sourceBuckets) {
-            if (sourceBucket === destinationBucket) continue
-            try {
-                const sourceStream = await natsService.getObjectStream(sourceBucket, objectKey)
-                if (!sourceStream) continue
-                await natsService.putObjectFromReadable(destinationBucket, objectKey, sourceStream, {
-                    name: objectKey,
-                    description: sample.subject || feature.name,
-                })
-                copied = true
-                break
-            } catch {
-                // Try the legacy/source-workspace candidate before failing.
-            }
-        }
-        if (!copied) {
+        const sourceStream = await natsService.getObjectStream(sourceWorkspaceBucket, objectKey).catch(() => null)
+        if (!sourceStream) {
             throw new Error(`Feature sample object not found: ${objectKey}`)
         }
+        await natsService.putObjectFromReadable(destinationBucket, objectKey, sourceStream, {
+            name: objectKey,
+            description: sample.subject || feature.name,
+        })
     }
 }

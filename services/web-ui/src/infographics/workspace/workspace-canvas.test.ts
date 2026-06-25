@@ -751,10 +751,19 @@ describe('Workspace canvas — media descriptors', () => {
 
 	it('captions uploaded media from a still (never the MP4) with an analyzing → ready flow', () => {
 		expectSourceToContain(ts, 'async function analyzeUploadedMedia(nodeId: string, stillFileId: string)')
-		expectSourceToContain(ts, 'descriptor: buildAnalyzingDescriptor(),')
+		expectSourceToContain(ts, 'descriptor: savedDescriptor ?? buildAnalyzingDescriptor(),')
 		// Uploaded video is captioned from the poster still, not the MP4.
 		expectSourceToContain(ts, 'void analyzeUploadedMedia(videoNodeId, posterFileId)')
 		expectSourceToContain(ts, 'void analyzeUploadedMedia(imageNodeId, materialized.fileId)')
+	})
+
+	it('reuses a Media Library item\'s saved description so re-added media is self-contained', () => {
+		// A ready descriptor copied into the library item is restored verbatim on
+		// re-insert; analysis only runs as a fallback when none travelled with the item.
+		expectSourceToContain(ts, "materialized.descriptor?.status === 'ready' ? materialized.descriptor : undefined")
+		expectSourceToContain(ts, 'descriptor: savedDescriptor ?? buildAnalyzingDescriptor(),')
+		expectSourceToContain(ts, 'if (!savedDescriptor) void analyzeUploadedMedia(imageNodeId, materialized.fileId)')
+		expectSourceToContain(ts, 'if (!savedDescriptor) void analyzeUploadedMedia(videoNodeId, posterFileId)')
 	})
 
 	it('shows an unobtrusive animated analyzing indicator with an explanation', () => {

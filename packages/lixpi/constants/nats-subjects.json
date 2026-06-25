@@ -71,11 +71,9 @@
 			"LIST_AVAILABLE": "workspace.mediaLibrary.listAvailable",
 			"MATERIALIZE_IMAGE_TO_WORKSPACE": "workspace.mediaLibrary.image.materializeToWorkspace",
 			"MATERIALIZE_VIDEO_TO_WORKSPACE": "workspace.mediaLibrary.video.materializeToWorkspace",
-			"CHANGE_SCOPE": "workspace.mediaLibrary.changeScope",
 			"DELETE": "workspace.mediaLibrary.delete",
 			"EVENTS": {
 				"CREATED": "workspace.mediaLibrary.events.created",
-				"UPDATED": "workspace.mediaLibrary.events.updated",
 				"DELETED": "workspace.mediaLibrary.events.deleted"
 			}
 		}

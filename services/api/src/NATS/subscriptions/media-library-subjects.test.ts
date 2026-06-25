@@ -9,38 +9,27 @@ const mocks = vi.hoisted(() => ({
     warn: vi.fn(),
     workspace: {
         getWorkspace: vi.fn(),
-        getUserWorkspaces: vi.fn(),
     },
     organization: {
-        getOrganization: vi.fn(),
         getUserOrganizations: vi.fn(),
     },
     mediaLibraryItem: {
         createImageItem: vi.fn(),
         getImageItem: vi.fn(),
-        getOwnedImageItem: vi.fn(),
         getAnyItem: vi.fn(),
-        getOwnedAnyItem: vi.fn(),
         listAvailable: vi.fn(),
-        changeScope: vi.fn(),
         deleteImageItem: vi.fn(),
-        findActiveWorkspaceImageBySource: vi.fn(),
-        // Video methods added in Phase 8 — included so the mock fully satisfies
-        // the model's surface for either-kind code paths.
+        findActiveOrgImageBySource: vi.fn(),
         createVideoItem: vi.fn(),
         getVideoItem: vi.fn(),
-        getOwnedVideoItem: vi.fn(),
-        changeScopeVideo: vi.fn(),
         deleteVideoItem: vi.fn(),
-        findActiveWorkspaceVideoBySource: vi.fn(),
+        findActiveOrgVideoBySource: vi.fn(),
     },
     copyWorkspaceImageToLibrary: vi.fn(),
     materializeLibraryImageToWorkspace: vi.fn(),
-    copyLibraryImageToScope: vi.fn(),
     deleteLibraryImageObject: vi.fn(),
     copyWorkspaceVideoToLibrary: vi.fn(),
     materializeLibraryVideoToWorkspace: vi.fn(),
-    copyLibraryVideoToScope: vi.fn(),
     deleteLibraryVideoObject: vi.fn(),
 }))
 
@@ -64,11 +53,9 @@ vi.mock('../../models/media-library-item.ts', () => ({
 vi.mock('../../services/media-library-storage.ts', () => ({
     copyWorkspaceImageToLibrary: mocks.copyWorkspaceImageToLibrary,
     materializeLibraryImageToWorkspace: mocks.materializeLibraryImageToWorkspace,
-    copyLibraryImageToScope: mocks.copyLibraryImageToScope,
     deleteLibraryImageObject: mocks.deleteLibraryImageObject,
     copyWorkspaceVideoToLibrary: mocks.copyWorkspaceVideoToLibrary,
     materializeLibraryVideoToWorkspace: mocks.materializeLibraryVideoToWorkspace,
-    copyLibraryVideoToScope: mocks.copyLibraryVideoToScope,
     deleteLibraryVideoObject: mocks.deleteLibraryVideoObject,
 }))
 
@@ -87,12 +74,12 @@ const item: MediaLibraryImageItem = {
     ownerUserId: 'user-1',
     originWorkspaceId: 'workspace-1',
     sourceFileId: 'file-1',
-    scope: 'workspace',
-    scopeOwnerId: 'workspace-1',
-    scopeAndOwner: 'workspace#workspace-1',
+    scope: 'organization',
+    scopeOwnerId: 'organization-1',
+    scopeAndOwner: 'organization#organization-1',
     status: 'active',
     asset: {
-        bucketName: 'media-library-workspace-workspace-1-files',
+        bucketName: 'media-library-organization-organization-1-files',
         objectKey: 'library-item-1',
         mimeType: 'image/png',
         byteSize: 10,
@@ -107,8 +94,8 @@ describe('Media Library NATS image lifecycle', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1' })
-        mocks.workspace.getUserWorkspaces.mockResolvedValue([{ workspaceId: 'workspace-1' }])
-        mocks.organization.getUserOrganizations.mockResolvedValue([])
+        // Org is resolved server-side from the user, never taken from the client.
+        mocks.organization.getUserOrganizations.mockResolvedValue([{ organizationId: 'organization-1' }])
         mocks.copyWorkspaceImageToLibrary.mockResolvedValue({
             itemId: item.itemId,
             displayName: item.displayName,
@@ -116,15 +103,12 @@ describe('Media Library NATS image lifecycle', () => {
             image: item.image,
         })
         mocks.mediaLibraryItem.createImageItem.mockResolvedValue(item)
-        mocks.mediaLibraryItem.findActiveWorkspaceImageBySource.mockResolvedValue(undefined)
+        mocks.mediaLibraryItem.findActiveOrgImageBySource.mockResolvedValue(undefined)
         mocks.mediaLibraryItem.getImageItem.mockResolvedValue(item)
-        mocks.mediaLibraryItem.getOwnedImageItem.mockResolvedValue(item)
-        // After Phase 8, image-kind subjects route through the kind-agnostic
-        // getAnyItem / getOwnedAnyItem so they can serve videos too. Return the
-        // same image fixture for both so the existing image lifecycle tests
-        // still pass.
         mocks.mediaLibraryItem.getAnyItem.mockResolvedValue(item)
-        mocks.mediaLibraryItem.getOwnedAnyItem.mockResolvedValue(item)
+        mocks.mediaLibraryItem.deleteImageItem.mockResolvedValue(undefined)
+        mocks.deleteLibraryImageObject.mockResolvedValue(undefined)
+        mocks.deleteLibraryVideoObject.mockResolvedValue(undefined)
         mocks.materializeLibraryImageToWorkspace.mockResolvedValue({
             fileId: 'fresh-file-1',
             url: '/api/images/workspace-1/fresh-file-1',
@@ -132,13 +116,9 @@ describe('Media Library NATS image lifecycle', () => {
             size: 10,
             mimeType: 'image/png',
         })
-        mocks.copyLibraryImageToScope.mockResolvedValue({
-            ...item.asset,
-            bucketName: 'media-library-user-user-1-files',
-        })
     })
 
-    it('creates a workspace-scoped saved item from an independently copied canvas image', async () => {
+    it('creates an org-scoped saved item from an independently copied canvas image', async () => {
         const result = await getHandler(SUBJECTS.CREATE_FROM_IMAGE)({
             user: { userId: 'user-1' },
             workspaceId: 'workspace-1',
@@ -148,20 +128,21 @@ describe('Media Library NATS image lifecycle', () => {
         expect(mocks.copyWorkspaceImageToLibrary).toHaveBeenCalledWith({
             workspaceId: 'workspace-1',
             fileId: 'file-1',
-            scope: 'workspace',
-            scopeOwnerId: 'workspace-1',
+            scope: 'organization',
+            scopeOwnerId: 'organization-1',
         })
         expect(mocks.mediaLibraryItem.createImageItem).toHaveBeenCalledWith(expect.objectContaining({
             itemId: item.itemId,
-            scope: 'workspace',
-            scopeOwnerId: 'workspace-1',
+            scope: 'organization',
+            scopeOwnerId: 'organization-1',
+            originWorkspaceId: 'workspace-1',
             sourceFileId: 'file-1',
         }))
         expect(result).toEqual(expect.objectContaining({ success: true, itemId: item.itemId }))
     })
 
-    it('reuses an existing saved item instead of copying the same source image again', async () => {
-        mocks.mediaLibraryItem.findActiveWorkspaceImageBySource.mockResolvedValueOnce(item)
+    it('reuses an existing org item instead of copying the same source image again', async () => {
+        mocks.mediaLibraryItem.findActiveOrgImageBySource.mockResolvedValueOnce(item)
 
         const result = await getHandler(SUBJECTS.CREATE_FROM_IMAGE)({
             user: { userId: 'user-1' },
@@ -177,6 +158,19 @@ describe('Media Library NATS image lifecycle', () => {
             deduplicated: true,
             itemId: item.itemId,
         }))
+    })
+
+    it('fails to save when the user has no associated organization', async () => {
+        mocks.organization.getUserOrganizations.mockResolvedValueOnce([])
+
+        const result = await getHandler(SUBJECTS.CREATE_FROM_IMAGE)({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            fileId: 'file-1',
+        })
+
+        expect(result).toEqual({ error: 'ORGANIZATION_ACCESS_DENIED' })
+        expect(mocks.copyWorkspaceImageToLibrary).not.toHaveBeenCalled()
     })
 
     it('materializes a saved item as a fresh workspace object before canvas insertion', async () => {
@@ -196,18 +190,27 @@ describe('Media Library NATS image lifecycle', () => {
         }))
     })
 
-    it('retains a copied destination object when scope metadata update fails', async () => {
-        mocks.mediaLibraryItem.changeScope.mockRejectedValueOnce(new Error('metadata write failed'))
-
-        await expect(getHandler(SUBJECTS.CHANGE_SCOPE)({
-            user: { userId: 'user-1' },
+    it('lets any member of the owning organization delete an item', async () => {
+        // A different user (user-2) in the same org can delete — getAnyItem gates on org membership.
+        const result = await getHandler(SUBJECTS.DELETE)({
+            user: { userId: 'user-2' },
             itemId: item.itemId,
-            workspaceId: 'workspace-1',
-            newScope: 'user',
-        })).rejects.toThrow('metadata write failed')
+        })
 
-        expect(mocks.copyLibraryImageToScope).toHaveBeenCalled()
-        expect(mocks.deleteLibraryImageObject).not.toHaveBeenCalled()
-        expect(mocks.warn).toHaveBeenCalledWith(expect.stringContaining('retaining copied object'))
+        expect(mocks.mediaLibraryItem.deleteImageItem).toHaveBeenCalledWith({ item })
+        expect(mocks.publish).toHaveBeenCalledWith(SUBJECTS.EVENTS.DELETED, { type: 'deleted', itemId: item.itemId })
+        expect(result).toEqual({ success: true, itemId: item.itemId })
+    })
+
+    it('does not delete an item the requester cannot read (other org)', async () => {
+        mocks.mediaLibraryItem.getAnyItem.mockResolvedValueOnce({ error: 'PERMISSION_DENIED' })
+
+        const result = await getHandler(SUBJECTS.DELETE)({
+            user: { userId: 'user-2' },
+            itemId: item.itemId,
+        })
+
+        expect(result).toEqual({ error: 'PERMISSION_DENIED' })
+        expect(mocks.mediaLibraryItem.deleteImageItem).not.toHaveBeenCalled()
     })
 })
