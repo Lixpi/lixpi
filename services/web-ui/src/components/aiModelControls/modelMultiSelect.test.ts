@@ -6,7 +6,7 @@ import {
     createGenericAiModelMultiSelect,
     createGenericImageModelMultiSelect,
     createGenericVideoModelMultiSelect,
-} from '$src/components/proseMirror/plugins/primitives/aiControls/modelMultiSelect.ts'
+} from '$src/components/aiModelControls/modelMultiSelect.ts'
 
 vi.mock('$src/components/infoBubble/index.ts', () => ({
     createInfoBubble: vi.fn(() => ({

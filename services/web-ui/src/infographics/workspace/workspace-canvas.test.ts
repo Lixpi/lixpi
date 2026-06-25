@@ -1087,11 +1087,6 @@ describe('AI chat thread — workspace CSS overrides for auto-grow', () => {
 		expect(block).toMatch(/padding-bottom:\s*0/)
 	})
 
-	it('hides the in-editor composer (.ai-user-input-wrapper) inside workspace thread', () => {
-		const block = extractBlock(scss, '.workspace-ai-chat-thread-node .ai-chat-thread-wrapper .ai-user-input-wrapper')
-		expect(block).toMatch(/display:\s*none/)
-	})
-
 	it('overrides ProseMirror min-height to 0 inside workspace thread', () => {
 		// There are two rules with this selector — search the raw SCSS for
 		// the min-height declaration scoped to the workspace thread.

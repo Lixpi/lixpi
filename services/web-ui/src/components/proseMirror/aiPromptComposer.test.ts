@@ -61,7 +61,7 @@ import {
     createGenericVideoAspectDropdown,
     createGenericVideoResolutionDropdown,
     createGenericVideoDurationDropdown,
-} from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+} from '$src/components/aiModelControls/index.ts'
 
 const getLastEditor = (): MockEditorInstance => editorInstances.at(-1) as MockEditorInstance
 

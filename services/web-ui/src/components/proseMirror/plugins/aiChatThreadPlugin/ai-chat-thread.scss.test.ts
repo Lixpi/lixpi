@@ -13,7 +13,6 @@ describe('ai-chat-thread.scss', () => {
         expectSourceToContain(scss, '.ai-chat-thread-wrapper')
         expectSourceToContain(scss, '.ai-user-message-wrapper')
         expectSourceToContain(scss, '.ai-user-message')
-        expectSourceToContain(scss, '.ai-user-input-wrapper')
         expectSourceToContain(scss, '.ai-submit-button')
     })
 

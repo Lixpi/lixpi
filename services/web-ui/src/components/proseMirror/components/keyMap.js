@@ -15,7 +15,7 @@ import {undo, redo} from "prosemirror-history"
 import {undoInputRule} from "prosemirror-inputrules"
 
 import { documentTitleNodeType } from "$src/components/proseMirror/customNodes/documentTitleNode.ts"
-import { useAiInput, insertAiChatThread } from "$src/components/proseMirror/components/commands.js"
+import { insertAiChatThread } from "$src/components/proseMirror/components/commands.js"
 
 const mac = typeof navigator != "undefined" ? /Mac|iP(hone|[oa]d)/.test(navigator.platform) : false
 
@@ -86,19 +86,13 @@ export const buildKeymap = (schema, documentType, mapKeys) => {
 
     // AI-specific keybindings - only for aiChatThread documents
     if (documentType === 'aiChatThread') {
-        // AI Input trigger
-        bind("Mod-i", useAiInput)
-        bind("Mod-I", useAiInput)
-
         // AI Chat Thread trigger
         bind("Mod-Shift-i", insertAiChatThread)
         bind("Mod-Shift-I", insertAiChatThread)
 
         if (type = schema.marks.em) {
-            // Mod-i is used for AI Input in aiChatThread mode
-            // Move italic binding to different keys
-            bind("Mod-Alt-i", toggleMark(type))
-            bind("Mod-Alt-I", toggleMark(type))
+            bind("Mod-i", toggleMark(type))
+            bind("Mod-I", toggleMark(type))
         }
     } else {
         // Regular document - standard italic binding

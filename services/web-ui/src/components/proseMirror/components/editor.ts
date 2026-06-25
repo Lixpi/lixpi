@@ -40,8 +40,6 @@ import {
     aiLineageEventNodeType,
     aiLineageEventNodeSpec
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
-// aiUserInput is kept in the schema for legacy content migration but no longer imported here
-import { aiUserInputNodeType, aiUserInputNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
 import {
     createAiPromptInputPlugin,
     aiPromptInputNodeType,
@@ -226,8 +224,6 @@ export class ProseMirrorEditor {
                 ...customNodes,
                 [aiChatThreadNodeType]: aiChatThreadNodeSpec,
                 [aiResponseMessageNodeType]: aiResponseMessageNodeSpec,
-                // aiUserInput kept in schema for legacy content migration
-                [aiUserInputNodeType]: aiUserInputNodeSpec,
                 [aiUserMessageNodeType]: aiUserMessageNodeSpec,
                 [aiGeneratedImageNodeType]: aiGeneratedImageNodeSpec,
                 [aiGeneratedVideoNodeType]: aiGeneratedVideoNodeSpec,

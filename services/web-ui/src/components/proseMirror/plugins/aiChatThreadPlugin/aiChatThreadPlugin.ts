@@ -14,8 +14,6 @@ import { documentTitleNodeType } from '$src/components/proseMirror/customNodes/d
 import { aiChatThreadNodeType, aiChatThreadNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
 import { AI_CHAT_THREAD_PLUGIN_KEY, USE_AI_CHAT_META, STOP_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import { aiResponseMessageNodeType, aiResponseMessageNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponseMessageNode.ts'
-// aiUserInput has been removed; imported content is normalized in appendTransaction().
-import { aiUserInputNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
 import { aiUserMessageNodeType, aiUserMessageNodeView, type AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
 import { aiReasoningSectionNodeType, aiReasoningSectionNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
@@ -50,9 +48,6 @@ import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGenerated
 import { setAiGeneratedVideoCallbacks, aiGeneratedVideoNodeType, aiGeneratedVideoNodeView, type AiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import { routeSegmentEventToCanvas } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedMediaCanvasRouter.ts'
-
-// dispatchSendAiChatFromUserInput has been removed — messages are now injected by AiPromptInputController
-// findUserInputInThread is no longer needed — aiUserInput has been removed from the schema
 
 const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 
@@ -2841,25 +2836,6 @@ class AiChatThreadPluginClass {
             },
 
             appendTransaction: (transactions: Transaction[], _oldState: EditorState, newState: EditorState) => {
-                // Strip imported aiUserInput nodes from threads if present.
-                const paragraphType = newState.schema.nodes.paragraph
-                if (paragraphType) {
-                    let tr: Transaction | null = null
-                    newState.doc.descendants((node: ProseMirrorNode, pos: number) => {
-                        if (node.type.name !== aiChatThreadNodeType) return
-
-                        // Remove any aiUserInput children.
-                        node.forEach((child: ProseMirrorNode, offset: number) => {
-                            if (child.type.name === aiUserInputNodeType) {
-                                const childPos = pos + 1 + offset
-                                tr = tr || newState.tr
-                                tr.delete(childPos, childPos + child.nodeSize)
-                            }
-                        })
-                    })
-                    if (tr) return tr
-                }
-
                 // Handle AI chat requests
                 const chatTransaction = transactions.find(tr => tr.getMeta(USE_AI_CHAT_META))
                 if (chatTransaction) {
