@@ -1,5 +1,5 @@
 import type { WorkspaceEdgePathType } from '@lixpi/constants'
-import type { CircularGlassMaterialStyle } from '$src/utils/animations/gradients/glassMaterial.ts'
+import type { CircularGlassMaterialStyle } from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
 
 export const colorPalette = {
     nightBlue: '#42494f',
@@ -469,9 +469,20 @@ export type MediaBranchLineageColorMixSettings = {
     amount: number
 }
 
+export type MediaBranchLineageColorAdjustSettings = {
+    saturationMultiplier: number
+    minSaturation: number
+    maxSaturation: number
+    lightnessMultiplier: number
+    minLightness: number
+    maxLightness: number
+}
+
 export type MediaBranchLineageMediaModelCircleSettings = {
     size: number
     iconSize: number
+    mainGap: number
+    stackGap: number
     styles: {
         iconColor: string
         backgroundColor: string
@@ -482,6 +493,7 @@ export type MediaBranchLineageMediaModelCircleSettings = {
         translucency: number
         rimFeatherFraction: number
         fallbackColors: string[]
+        brandColorAdjust: MediaBranchLineageColorAdjustSettings
         brandColorStops: MediaBranchLineageColorMixSettings[]
         material: GenerationBorderGlassMaterialSettings
         discMaterial: CircularGlassMaterialStyle
@@ -1234,9 +1246,13 @@ export const settings: Settings = {
         // Stacked translucent glass circles that identify which media models produced lineage children.
         mediaModelCircle: {
             // Screen-pixel diameter of each model circle.
-            size: 36,
+            size: 32,
             // Screen-pixel size of the provider/model SVG icon above the glass.
-            iconSize: 16,
+            iconSize: 18,
+            // Screen-pixel horizontal gap between the branch lineage node body and the media-model circle stack.
+            mainGap: 8,
+            // Screen-pixel vertical gap between stacked media-model circles.
+            stackGap: 2,
             // CSS-facing theme tokens for the circle shell and foreground icon.
             styles: {
                 // Color applied to the model SVG icon rendered over the glass.
@@ -1251,36 +1267,51 @@ export const settings: Settings = {
                 // Baked once per color at this resolution; reused as a CSS background.
                 textureSize: 128,
                 // Dense translucent body with enough transmission for internal caustic light.
-                translucency: 0.9,
+                translucency: 0.97,
                 // Soft round rim so the disc edge fades instead of aliasing.
                 rimFeatherFraction: 0.04,
                 // Fallback cool glass tint for models without synced brand colors.
-                fallbackColors: ['#102034', '#1B6E9C', '#6DD8FF', '#F6FDFF'],
+                fallbackColors: ['#06133A', '#0A49A7', '#1768D9', '#55A7FF'],
+                // Brand-color transform applied before glass stops are mixed, forcing deep saturated color instead of pastel brand tints.
+                brandColorAdjust: {
+                    // Multiplier applied to the model brand color's HSL saturation before stop mixing.
+                    saturationMultiplier: 2.1,
+                    // Minimum HSL saturation for the adjusted model color so lower-saturation brand colors still read as strong color.
+                    minSaturation: 0.72,
+                    // Maximum HSL saturation for the adjusted model color so glass stays rich without turning neon.
+                    maxSaturation: 0.9,
+                    // Multiplier applied to the model brand color's HSL lightness before stop mixing.
+                    lightnessMultiplier: 0.72,
+                    // Minimum HSL lightness for the adjusted model color so dark brands do not collapse to black.
+                    minLightness: 0.36,
+                    // Maximum HSL lightness for the adjusted model color so light brands stay deep and saturated.
+                    maxLightness: 0.46,
+                },
                 // Model brand color is remixed into the glass gradient through these stops.
                 brandColorStops: [
                     {
                         // Target color mixed into the first, darkest glass stop.
-                        targetColor: '#03070B',
+                        targetColor: '#020714',
                         // Blend amount from the model brand color to the first stop target.
-                        amount: 0.22,
+                        amount: 0.28,
                     },
                     {
                         // Target color mixed into the second, saturated body stop.
                         targetColor: '#000000',
                         // Blend amount from the model brand color to the second stop target.
-                        amount: 0.04,
+                        amount: 0.02,
                     },
                     {
                         // Target color mixed into the third, bright transmitted-light stop.
                         targetColor: '#FFFFFF',
                         // Blend amount from the model brand color to the third stop target.
-                        amount: 0.32,
+                        amount: 0.16,
                     },
                     {
                         // Target color mixed into the fourth, near-white highlight stop.
                         targetColor: '#FFFFFF',
                         // Blend amount from the model brand color to the fourth stop target.
-                        amount: 0.78,
+                        amount: 0.34,
                     },
                 ],
                 // Shared glass shader style reused by the circular material baker.
@@ -1310,7 +1341,7 @@ export const settings: Settings = {
                     // Progress value where the upper specular band reaches full strength.
                     upperSpecularFadeEnd: 0.14,
                     // Brightness contribution from the upper specular band.
-                    upperSpecularStrength: 0.38,
+                    upperSpecularStrength: 0.46,
                     // Progress center of the head glint in the shared material model.
                     headSpecularProgressCenter: 0.78,
                     // Progress width of the head glint.
@@ -1320,33 +1351,33 @@ export const settings: Settings = {
                     // Cross-section width of the head glint.
                     headSpecularCrossSectionWidth: 0.18,
                     // Brightness contribution from the head glint.
-                    headSpecularStrength: 0.24,
+                    headSpecularStrength: 0.34,
                     // Cross-section center of the lower edge shadow.
                     lowerEdgeShadowCenter: 0.9,
                     // Cross-section width of the lower edge shadow.
                     lowerEdgeShadowWidth: 0.18,
                     // Darkness contribution from the lower edge shadow.
-                    lowerEdgeShadowStrength: 0.24,
+                    lowerEdgeShadowStrength: 0.22,
                     // Cross-section center of the upper edge shadow.
                     upperEdgeShadowCenter: 0.08,
                     // Cross-section width of the upper edge shadow.
                     upperEdgeShadowWidth: 0.14,
                     // Darkness contribution from the upper edge shadow.
-                    upperEdgeShadowStrength: 0.16,
+                    upperEdgeShadowStrength: 0.13,
                     // Power curve for broad edge darkening.
                     edgeShadowPower: 1.8,
                     // Darkness contribution from broad edge darkening.
-                    edgeShadowStrength: 0.12,
+                    edgeShadowStrength: 0.09,
                     // Brightness contribution from the rounded lens core.
-                    lensHighlightStrength: 0.08,
+                    lensHighlightStrength: 0.14,
                     // Maximum amount of white mixed into highlights.
-                    highlightWhiteMixMax: 0.52,
+                    highlightWhiteMixMax: 0.3,
                     // Maximum amount of shadow color mixed into dark regions.
-                    shadowMixMax: 0.28,
+                    shadowMixMax: 0.16,
                     // Baseline material alpha before lens/specular additions.
-                    materialAlphaBase: 0.7,
+                    materialAlphaBase: 0.9,
                     // Maximum material alpha before circular masking and translucency.
-                    materialAlphaMax: 0.92,
+                    materialAlphaMax: 0.98,
                     // Alpha contribution from the rounded lens core.
                     lensAlphaStrength: 0.12,
                     // Alpha contribution from the upper specular band.
@@ -1357,17 +1388,17 @@ export const settings: Settings = {
                 // Circular-disc-only sampler and lighting coefficients.
                 discMaterial: {
                     // Amount that disc body volume darkens the sampled glass color.
-                    absorptionVolumeStrength: 0.04,
+                    absorptionVolumeStrength: 0.035,
                     // Amount that rim fresnel darkens the sampled glass color.
-                    absorptionFresnelStrength: 0.26,
+                    absorptionFresnelStrength: 0.2,
                     // Amount that internal shadows darken the sampled glass color.
-                    absorptionInnerShadowStrength: 0.34,
+                    absorptionInnerShadowStrength: 0.22,
                     // Amount that caustic bands brighten transmitted glass color.
-                    causticLightStrength: 0.34,
+                    causticLightStrength: 0.54,
                     // Amount that specular regions brighten transmitted glass color.
-                    specularLightStrength: 0.58,
+                    specularLightStrength: 0.66,
                     // Baseline multiplier applied to the shared material alpha.
-                    alphaBaseMultiplier: 0.82,
+                    alphaBaseMultiplier: 0.92,
                     // Additional alpha contributed by disc body volume.
                     alphaVolumeStrength: 0.12,
                     // Additional alpha contributed by specular regions.
@@ -1375,7 +1406,7 @@ export const settings: Settings = {
                     // Additional alpha contributed by caustic regions.
                     causticAlphaStrength: 0.014,
                     // Maximum final alpha for the baked disc pixels.
-                    alphaMax: 0.95,
+                    alphaMax: 0.98,
                     // Normalized radius where rim-thickness shading starts.
                     rimThicknessStart: 0.56,
                     // Normalized radius where rim-thickness shading reaches full strength.
@@ -1483,9 +1514,9 @@ export const settings: Settings = {
                     // Baseline directional light value before local bands adjust it.
                     directionalLightBase: 0.24,
                     // Directional-light contribution from the lower transmitted-light band.
-                    directionalLightLowerTransmittedStrength: 0.2,
+                    directionalLightLowerTransmittedStrength: 0.26,
                     // Directional-light contribution from the top reflection.
-                    directionalLightTopReflectionStrength: 0.16,
+                    directionalLightTopReflectionStrength: 0.22,
                     // Directional-light contribution from the left-edge reflection.
                     directionalLightLeftEdgeStrength: 0.1,
                     // Directional-light contribution from the upper striation band.
@@ -1513,15 +1544,15 @@ export const settings: Settings = {
                     // Directional-light contribution to shared material progress.
                     progressLightStrength: 0.64,
                     // Caustic contribution from the lower transmitted-light band.
-                    causticLowerLightStrength: 0.4,
+                    causticLowerLightStrength: 0.58,
                     // Caustic contribution from the lower striation band.
-                    causticLowerStriationStrength: 0.16,
+                    causticLowerStriationStrength: 0.18,
                     // Specular contribution from the top reflection.
-                    specularTopReflectionStrength: 0.5,
+                    specularTopReflectionStrength: 0.68,
                     // Specular contribution from the left-edge reflection.
-                    specularLeftEdgeStrength: 0.34,
+                    specularLeftEdgeStrength: 0.48,
                     // Specular contribution from the small internal glint.
-                    specularSmallGlintStrength: 0.7,
+                    specularSmallGlintStrength: 0.9,
                     // Internal-shadow contribution from the upper meniscus shadow.
                     innerShadowUpperMeniscusStrength: 0.76,
                     // Internal-shadow contribution from rim thickness.
@@ -1537,16 +1568,16 @@ export const settings: Settings = {
                 // Brand-color remap used to tint the SVG pattern toward a lighter glass-readable color.
                 brandColorMix: {
                     // Target color mixed into the model brand color for the pattern fill.
-                    targetColor: '#FFFFFF',
+                    targetColor: colorPalette.nightBlue,
                     // Blend amount from model brand color to the pattern target color.
-                    amount: 0.14,
+                    amount: 0.32,
                 },
                 // SVG path fill opacity baked into the generated pattern data URL.
-                fillOpacity: 0.22,
+                fillOpacity: 0.36,
                 // Screen-pixel inset from glass edge to the clipped texture circle.
                 inset: 4,
                 // CSS opacity applied to the clipped pattern layer.
-                opacity: 0.82,
+                opacity: 0.9,
                 // Percent background-size applied to the SVG pattern inside the clipped circle.
                 backgroundSizePercent: 142,
             },

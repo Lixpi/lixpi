@@ -1554,7 +1554,7 @@
 
 .workspace-branch-marker-media-models {
     position: absolute;
-    left: calc(100% + 10px);
+    left: calc(100% + var(--workspace-branch-marker-media-model-main-gap, 10px));
     top: 50%;
     transform: translateY(-50%);
     display: flex;
@@ -1562,7 +1562,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: var(--workspace-branch-marker-media-model-stack-gap, 6px);
     box-sizing: border-box;
     pointer-events: auto;
 }

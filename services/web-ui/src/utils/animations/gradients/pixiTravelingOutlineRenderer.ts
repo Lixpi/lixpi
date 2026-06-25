@@ -9,7 +9,7 @@ import {
     TravelingSnakeGlassMaterial,
     interpolateTravelingOutlineColor,
     type GlassMaterialStyle,
-} from '$src/utils/animations/gradients/glassMaterial.ts'
+} from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
 
 // Re-exported for back-compat with existing call sites and tests that import
 // these names from the renderer.

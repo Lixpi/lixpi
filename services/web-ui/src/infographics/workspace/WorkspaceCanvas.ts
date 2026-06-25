@@ -103,7 +103,7 @@ import { shouldPreserveLiveViewportForViewportOnlyRender } from '$src/infographi
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/animations/gradients/shiftingGradientRenderer.ts'
-import { CircularGlassMaterial } from '$src/utils/animations/gradients/glassMaterial.ts'
+import { CircularGlassMaterial } from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
 import { tPatternSvgTexture } from '$src/svgIcons/svgTextures.ts'
 import { settings } from '$src/settings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
@@ -429,6 +429,7 @@ function normalizeBranchMarkerModelValue(value: string | null | undefined): stri
 }
 
 type BranchMarkerRgbColor = { r: number; g: number; b: number }
+type BranchMarkerHslColor = { h: number; s: number; l: number }
 
 function normalizeBranchMarkerHexColor(value: string | null | undefined): string | null {
     const normalized = String(value ?? '').trim().replace(/^#/, '')
@@ -444,6 +445,96 @@ function parseBranchMarkerHexColor(hex: string): BranchMarkerRgbColor {
         g: (value >> 8) & 0xff,
         b: value & 0xff,
     }
+}
+
+function clampBranchMarkerColorUnit(value: number): number {
+    if (!Number.isFinite(value)) return 0
+    return Math.max(0, Math.min(1, value))
+}
+
+function branchMarkerRgbToHsl({ r, g, b }: BranchMarkerRgbColor): BranchMarkerHslColor {
+    const red = r / 255
+    const green = g / 255
+    const blue = b / 255
+    const max = Math.max(red, green, blue)
+    const min = Math.min(red, green, blue)
+    const lightness = (max + min) / 2
+    const delta = max - min
+    if (delta === 0) return { h: 0, s: 0, l: lightness }
+
+    const saturation = lightness > 0.5
+        ? delta / (2 - max - min)
+        : delta / (max + min)
+    let hue = 0
+    if (max === red) hue = (green - blue) / delta + (green < blue ? 6 : 0)
+    if (max === green) hue = (blue - red) / delta + 2
+    if (max === blue) hue = (red - green) / delta + 4
+    return {
+        h: hue / 6,
+        s: saturation,
+        l: lightness,
+    }
+}
+
+function branchMarkerHueToRgb(p: number, q: number, hue: number): number {
+    let normalizedHue = hue
+    if (normalizedHue < 0) normalizedHue += 1
+    if (normalizedHue > 1) normalizedHue -= 1
+    if (normalizedHue < 1 / 6) return p + (q - p) * 6 * normalizedHue
+    if (normalizedHue < 1 / 2) return q
+    if (normalizedHue < 2 / 3) return p + (q - p) * (2 / 3 - normalizedHue) * 6
+    return p
+}
+
+function branchMarkerHslToRgb({ h, s, l }: BranchMarkerHslColor): BranchMarkerRgbColor {
+    if (s === 0) {
+        const value = Math.round(l * 255)
+        return { r: value, g: value, b: value }
+    }
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s
+    const p = 2 * l - q
+    return {
+        r: Math.round(branchMarkerHueToRgb(p, q, h + 1 / 3) * 255),
+        g: Math.round(branchMarkerHueToRgb(p, q, h) * 255),
+        b: Math.round(branchMarkerHueToRgb(p, q, h - 1 / 3) * 255),
+    }
+}
+
+function branchMarkerRgbToHex({ r, g, b }: BranchMarkerRgbColor): string {
+    const channel = (value: number): string =>
+        Math.max(0, Math.min(255, Math.round(value)))
+            .toString(16)
+            .padStart(2, '0')
+    return `#${channel(r)}${channel(g)}${channel(b)}`.toUpperCase()
+}
+
+function adjustBranchMarkerBrandColor(
+    hex: string,
+    adjust: {
+        saturationMultiplier: number
+        minSaturation: number
+        maxSaturation: number
+        lightnessMultiplier: number
+        minLightness: number
+        maxLightness: number
+    }
+): string {
+    const hsl = branchMarkerRgbToHsl(parseBranchMarkerHexColor(hex))
+    const saturation = Math.min(
+        clampBranchMarkerColorUnit(adjust.maxSaturation),
+        Math.max(
+            clampBranchMarkerColorUnit(adjust.minSaturation),
+            clampBranchMarkerColorUnit(hsl.s * adjust.saturationMultiplier),
+        ),
+    )
+    const lightness = Math.max(
+        clampBranchMarkerColorUnit(adjust.minLightness),
+        Math.min(
+            clampBranchMarkerColorUnit(adjust.maxLightness),
+            clampBranchMarkerColorUnit(hsl.l * adjust.lightnessMultiplier),
+        ),
+    )
+    return branchMarkerRgbToHex(branchMarkerHslToRgb({ h: hsl.h, s: saturation, l: lightness }))
 }
 
 function mixBranchMarkerColor(fromHex: string, toHex: string, amount: number): string {
@@ -466,9 +557,10 @@ function getBranchMarkerMediaModelCircleGlassColors(modelColor: string | null): 
     const circleGlassSettings = settings.mediaBranchLineage.mediaModelCircle.glass
     const normalizedColor = normalizeBranchMarkerHexColor(modelColor)
     if (!normalizedColor) return circleGlassSettings.fallbackColors
+    const saturatedColor = adjustBranchMarkerBrandColor(normalizedColor, circleGlassSettings.brandColorAdjust)
 
     return circleGlassSettings.brandColorStops.map(({ targetColor, amount }) =>
-        mixBranchMarkerColor(normalizedColor, targetColor, amount)
+        mixBranchMarkerColor(saturatedColor, targetColor, amount)
     )
 }
 
@@ -769,6 +861,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-branch-marker-separator-gradient', branchOriginSettings.styles.separatorGradient)
     paneEl.style.setProperty('--workspace-branch-marker-media-model-circle-size', `${mediaModelCircleSettings.size}px`)
     paneEl.style.setProperty('--workspace-branch-marker-media-model-icon-size', `${mediaModelCircleSettings.iconSize}px`)
+    paneEl.style.setProperty('--workspace-branch-marker-media-model-main-gap', `${mediaModelCircleSettings.mainGap}px`)
+    paneEl.style.setProperty('--workspace-branch-marker-media-model-stack-gap', `${mediaModelCircleSettings.stackGap}px`)
     paneEl.style.setProperty('--workspace-branch-marker-media-model-icon-color', mediaModelCircleSettings.styles.iconColor)
     paneEl.style.setProperty('--workspace-branch-marker-media-model-circle-background-color', mediaModelCircleSettings.styles.backgroundColor)
     paneEl.style.setProperty('--workspace-branch-marker-media-model-circle-box-shadow', mediaModelCircleSettings.styles.boxShadow)
