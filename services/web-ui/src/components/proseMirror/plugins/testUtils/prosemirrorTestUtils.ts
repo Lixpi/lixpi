@@ -66,10 +66,6 @@ const builderResult = builders(testSchema, {
         nodeType: 'aiUserMessage',
     },
 
-    userInput: {
-        nodeType: 'aiUserInput',
-    },
-
     // AI prompt input
     promptInput: {
         nodeType: 'aiPromptInput',
@@ -85,7 +81,7 @@ const builderResult = builders(testSchema, {
 })
 
 // Export individual builders
-export const { doc, p, h1, h2, h3, img, aiImg, thread, response, reasoningSection, userMsg, userInput, promptInput, blockquote, codeBlock, hr } = builderResult
+export const { doc, p, h1, h2, h3, img, aiImg, thread, response, reasoningSection, userMsg, promptInput, blockquote, codeBlock, hr } = builderResult
 export const schema = builderResult.schema
 
 // Helper to find position of a node by type

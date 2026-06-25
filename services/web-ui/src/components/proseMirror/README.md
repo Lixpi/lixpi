@@ -491,7 +491,7 @@ User input is handled by a separate `aiPromptInputPlugin` which renders as a flo
 - Has its own `ProseMirrorEditor` with `documentType: 'aiPromptInput'`
 - `aiPromptComposer.ts` wraps that editor for hosts that mount a reusable prompt surface
 - `AiPromptInputController` coordinates message injection into thread editors
-- Controls (model selector, image toggle, submit button) are generic reusable factories in `primitives/aiControls/`
+- Controls (model selector, image toggle, submit button) are generic reusable factories in `$src/components/aiModelControls/`
 - Can target any canvas node type — auto-creates a new AI chat thread when targeting non-thread nodes
 
 **Key design decisions**:

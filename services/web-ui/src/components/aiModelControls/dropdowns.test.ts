@@ -7,12 +7,12 @@ vi.mock('$src/components/dropdown/index.ts', () => ({
 }))
 
 import { createPureDropdown } from '$src/components/dropdown/index.ts'
-import { transformModelsToOptions } from '$src/components/proseMirror/plugins/primitives/aiControls/aiControls.ts'
 import {
+    transformModelsToOptions,
     createGenericImageSizeDropdown,
     createGenericImageModelDropdown,
     createGenericVideoModelDropdown,
-} from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+} from '$src/components/aiModelControls/index.ts'
 
 type DropdownInstance = {
     dom: HTMLDivElement

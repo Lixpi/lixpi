@@ -168,41 +168,6 @@ $userMessageTextColor: #fff;
         > *:last-child { margin-bottom: 0; }
     }
 
-    // ===== USER INPUT (COMPOSER) =====
-    .ai-user-input-wrapper {
-        position: sticky;
-        bottom: 0;
-        z-index: 5;
-        margin-top: 1rem;
-        padding: 0.9rem 1rem;
-        border-radius: 16px;
-        background: rgba(255, 255, 255, 0.65);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
-    }
-
-    .ai-user-input-content {
-        min-height: 44px;
-
-        // Make the typing area look like an input, but still full rich text
-        > *:first-child { margin-top: 0; }
-        > *:last-child { margin-bottom: 0; }
-    }
-
-    .ai-user-input-controls {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        gap: 0.2rem;
-        margin-top: 0.4rem;
-        padding-right: 0.5rem;
-
-        .dropdown-menu-tag-pill-wrapper {
-            position: relative;
-        }
-    }
-
     // ===== SUBMIT BUTTON =====
     .ai-submit-button {
         position: relative; // ensure absolutely positioned state layers anchor here
