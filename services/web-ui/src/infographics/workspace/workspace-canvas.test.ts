@@ -491,7 +491,8 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expect(callbackEnd).toBeGreaterThan(completeStart)
 
 		const completeHandler = ts.slice(completeStart, callbackEnd)
-		expectExcerptToContain(completeHandler, "const imageSrc = buildImageSrc(imageUrl, '', false)")
+		expectExcerptToContain(completeHandler, "const imageSrc = buildGeneratedImageFrameSrc({")
+		expectExcerptToContain(completeHandler, "fallbackSrc: imgNode.src,")
 		expectExcerptToContain(completeHandler, 'commitCanvasState({')
 		expect([...completeHandler.matchAll(/\.\.\.\(currentCanvasState \?\? \{\}\)/g)]).toHaveLength(2)
 		expectExcerptNotToContain(completeHandler, 'imgEl.src', 'complete image handler')
@@ -743,27 +744,28 @@ describe('Workspace canvas — media descriptors', () => {
 	const scss = loadScss()
 
 	it('derives a descriptor from generated media metadata for free (no extra model call)', () => {
-		expectSourceToContain(ts, 'function buildDescriptorFromGeneratedBy(')
-		// Generated image and video completion both stamp the descriptor.
-		expectSourceToContain(ts, 'descriptor: buildDescriptorFromGeneratedBy(generatedBy)')
-		expectSourceToContain(ts, "source: 'generation',")
+		expectSourceToContain(ts, 'function analyzeCanvasMediaStill(nodeId: string, stillFileId: string, analysisAttempt = 0): Promise<void>')
+		expectSourceToContain(ts, 'function getMediaDescriptorStillFileId(node: ImageCanvasNode | VideoCanvasNode)')
+		expectSourceToContain(ts, 'patchMediaNodeDescriptor(nodeId, {')
+		expectSourceToContain(ts, 'source: \'analysis\'')
+		expectSourceToContain(ts, 'queueCanvasMediaAnalysis(')
 	})
 
 	it('captions uploaded media from a still (never the MP4) with an analyzing → ready flow', () => {
-		expectSourceToContain(ts, 'async function analyzeUploadedMedia(nodeId: string, stillFileId: string)')
-		expectSourceToContain(ts, 'descriptor: savedDescriptor ?? buildAnalyzingDescriptor(),')
-		// Uploaded video is captioned from the poster still, not the MP4.
-		expectSourceToContain(ts, 'void analyzeUploadedMedia(videoNodeId, posterFileId)')
-		expectSourceToContain(ts, 'void analyzeUploadedMedia(imageNodeId, materialized.fileId)')
+		expectSourceToContain(ts, 'queueCanvasMediaAnalysis(nodeId, data.fileId)')
+		expectSourceToContain(ts, 'queueCanvasMediaAnalysis(nodeId, data.posterFileId)')
+		expectSourceToContain(ts, 'if (node.type === \'image\') return node.fileId || undefined')
+		expectSourceToContain(ts, 'return node.frameFileId || node.posterFileId || undefined')
+		expectSourceToContain(ts, 'function queueCanvasMediaAnalysis(nodeId: string, stillFileId: string | undefined, attempt = 0, analysisAttempt = 0): void')
 	})
 
 	it('reuses a Media Library item\'s saved description so re-added media is self-contained', () => {
 		// A ready descriptor copied into the library item is restored verbatim on
 		// re-insert; analysis only runs as a fallback when none travelled with the item.
-		expectSourceToContain(ts, "materialized.descriptor?.status === 'ready' ? materialized.descriptor : undefined")
+		expectSourceToContain(ts, 'const savedDescriptor = isReadyAnalysisDescriptor(materialized.descriptor) ? materialized.descriptor : undefined')
 		expectSourceToContain(ts, 'descriptor: savedDescriptor ?? buildAnalyzingDescriptor(),')
-		expectSourceToContain(ts, 'if (!savedDescriptor) void analyzeUploadedMedia(imageNodeId, materialized.fileId)')
-		expectSourceToContain(ts, 'if (!savedDescriptor) void analyzeUploadedMedia(videoNodeId, posterFileId)')
+		expectSourceToContain(ts, 'const mediaNodeNeedsAnalysis = (positionedNode.type === \'image\' || positionedNode.type === \'video\')')
+		expectSourceToContain(ts, 'mediaNodeNeedsAnalysis && (preparedNode.type === \'image\' || preparedNode.type === \'video\')')
 	})
 
 	it('shows an unobtrusive animated analyzing indicator with an explanation', () => {
@@ -806,7 +808,7 @@ describe('Workspace canvas — content descriptors (documents & threads)', () =>
 		// Edit trigger: document editor.
 		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(node.nodeId, value, doc.title)')
 		// Create trigger: a newly inserted document node with existing content.
-		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(positionedNode.nodeId, doc.content, doc.title)')
+		expectSourceToContain(ts, 'if (doc?.content !== undefined) scheduleTextNodeDescriptor(preparedNode.nodeId, doc.content, doc.title)')
 	})
 
 	it('clears pending descriptor timers on destroy', () => {
@@ -1970,7 +1972,7 @@ describe('Workspace canvas — collision resolution ownership', () => {
 	it('routes toolbar insertion through the workspace renderer collision path', () => {
 		expectSourceToContain(ts, 'insertNodeAtViewportCenter(node: WorkspaceCanvasNodeInsertion, statePatch: WorkspaceCanvasInsertionStatePatch = {})')
 		expectSourceToContain(ts, 'position: getCenteredInsertionPosition(node.dimensions),')
-		expectSourceToContain(ts, 'nodes: resolveTopLevelNodeCollisions([...baseCanvasState.nodes, positionedNode]),')
+		expectSourceToContain(ts, 'nodes: resolveTopLevelNodeCollisions([...baseCanvasState.nodes, preparedNode]),')
 		expectSourceToContain(ts, 'onCanvasStateChange?.(newCanvasState)')
 		expectSourceNotToContain(ts, 'screenDimensionsToWorldDimensions(node.dimensions')
 	})

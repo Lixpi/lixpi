@@ -238,6 +238,41 @@ describe('PixiTravelingOutlineRenderer', () => {
         expect(entry?.mesh.renderable).toBe(false)
     })
 
+    it('reuses the same mesh and geometry when syncing an existing id', () => {
+        const { renderer } = createRenderer()
+        renderer.sync([{ id: 'a', x: 1, y: 2, width: 10, height: 10, visible: true }])
+
+        const meshAtStart = meshInstances.at(-1)
+        const geometryAtStart = geometryInstances.at(-1)
+
+        renderer.sync([{
+            id: 'a',
+            x: 4,
+            y: 8,
+            width: 9,
+            height: 6,
+            visible: false,
+            direction: 'counterclockwise',
+            durationMs: 1500,
+            snakeLengthFraction: 0.9,
+        }])
+
+        const entry = (renderer as any).entries.get('a')
+
+        expect(meshInstances.at(-1)).toBe(meshAtStart)
+        expect(geometryInstances.at(-1)).toBe(geometryAtStart)
+        expect(entry?.x).toBe(4)
+        expect(entry?.y).toBe(8)
+        expect(entry?.width).toBe(9)
+        expect(entry?.height).toBe(6)
+        expect(entry?.direction).toBe('counterclockwise')
+        expect(entry?.durationMs).toBe(1500)
+        expect(entry?.snakeLengthFraction).toBe(0.9)
+        expect(entry?.mesh.renderable).toBe(false)
+        expect(meshInstances).toHaveLength(1)
+        expect(geometryInstances).toHaveLength(1)
+    })
+
     it('stops animating when no entries remain and destroys all meshes', () => {
         ;(globalThis as any).requestAnimationFrame = vi.fn(() => 42)
         ;(globalThis as any).cancelAnimationFrame = vi.fn()
