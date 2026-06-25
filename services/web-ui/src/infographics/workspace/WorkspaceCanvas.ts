@@ -103,7 +103,8 @@ import { shouldPreserveLiveViewportForViewportOnlyRender } from '$src/infographi
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/animations/gradients/shiftingGradientRenderer.ts'
-import { settings } from '$src/settings.ts'
+import { CircularGlassMaterial } from '$src/utils/animations/gradients/glassMaterial.ts'
+import { colorPalette, settings } from '$src/settings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
@@ -212,10 +213,12 @@ type BranchMarkerModelCatalogEntry = {
     title?: string
     shortTitle?: string
     iconName?: string
+    color?: string
 }
 type BranchMarkerModelEntry = {
     title: string
     icon: string | null
+    color: string | null
 }
 type BranchMarkerModelDetail = {
     label: string
@@ -270,6 +273,7 @@ const BRANCH_MARKER_PENDING_STACK_GAP = 8
 // shared rotation clock so the spinner never visibly restarts.
 const BRANCH_MARKER_SPINNER_PERIOD_MS = 800
 const BRANCH_MARKER_VISIBLE_VIEWPORT_PADDING_SCREEN = 24
+const branchMarkerMediaModelCircleGlassCssImageByColor = new Map<string, string>()
 type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 type CanvasGeometry = { position: { x: number; y: number }; dimensions: { width: number; height: number } }
 type PendingGeneratedMediaLayoutProxy = { offset: { x: number; y: number }; dimensions: { width: number; height: number } }
@@ -422,6 +426,48 @@ function normalizeBranchMarkerModelValue(value: string | null | undefined): stri
     return String(value ?? '').trim().toLowerCase()
 }
 
+type BranchMarkerRgbColor = { r: number; g: number; b: number }
+
+function normalizeBranchMarkerHexColor(value: string | null | undefined): string | null {
+    const normalized = String(value ?? '').trim().replace(/^#/, '')
+    if (!/^[\da-f]{6}$/i.test(normalized)) return null
+    return `#${normalized.toUpperCase()}`
+}
+
+function parseBranchMarkerHexColor(hex: string): BranchMarkerRgbColor {
+    const normalized = normalizeBranchMarkerHexColor(hex) ?? '#53616C'
+    const value = Number.parseInt(normalized.slice(1), 16)
+    return {
+        r: (value >> 16) & 0xff,
+        g: (value >> 8) & 0xff,
+        b: value & 0xff,
+    }
+}
+
+function mixBranchMarkerColor(fromHex: string, toHex: string, amount: number): string {
+    const from = parseBranchMarkerHexColor(fromHex)
+    const to = parseBranchMarkerHexColor(toHex)
+    const boundedAmount = Math.max(0, Math.min(1, amount))
+    const channel = (fromChannel: number, toChannel: number): string =>
+        Math.round(fromChannel + (toChannel - fromChannel) * boundedAmount)
+            .toString(16)
+            .padStart(2, '0')
+
+    return `#${channel(from.r, to.r)}${channel(from.g, to.g)}${channel(from.b, to.b)}`.toUpperCase()
+}
+
+function getBranchMarkerMediaModelCircleGlassColors(modelColor: string | null): string[] {
+    const normalizedColor = normalizeBranchMarkerHexColor(modelColor)
+    if (!normalizedColor) return settings.mediaNode.branchMarkerMediaModelCircleGlass.glassColors
+
+    return [
+        mixBranchMarkerColor(normalizedColor, '#03070B', 0.22),
+        mixBranchMarkerColor(normalizedColor, '#000000', 0.04),
+        mixBranchMarkerColor(normalizedColor, '#FFFFFF', 0.32),
+        mixBranchMarkerColor(normalizedColor, '#FFFFFF', 0.78),
+    ]
+}
+
 function splitBranchMarkerModelId(modelId: string): { provider: string; model: string } {
     const separatorIndex = modelId.indexOf(':')
     if (separatorIndex < 0) return { provider: '', model: modelId }
@@ -460,14 +506,14 @@ function getBranchMarkerModelEntry(modelId: string, modelProvider = ''): BranchM
     const icon = getAiModelIcon(meta?.iconName)
         ?? getAiProviderIcon(meta?.provider)
         ?? getAiProviderIcon(providerKey)
-    return title ? { title, icon } : null
+    return title ? { title, icon, color: normalizeBranchMarkerHexColor(meta?.color) } : null
 }
 
 function uniqueBranchMarkerModelEntries(entries: BranchMarkerModelEntry[]): BranchMarkerModelEntry[] {
     const seen = new Set<string>()
     const uniqueEntries: BranchMarkerModelEntry[] = []
     for (const entry of entries) {
-        const key = `${entry.title}:${entry.icon ?? ''}`
+        const key = `${entry.title}:${entry.icon ?? ''}:${entry.color ?? ''}`
         if (seen.has(key)) continue
         seen.add(key)
         uniqueEntries.push(entry)
@@ -627,6 +673,28 @@ function defaultPanZoomConfig(onTransformChange: (transform: Transform) => void)
     }
 }
 
+function createBranchMarkerMediaModelCircleGlassCssImage(modelColor: string | null = null): string {
+    const circleGlass = settings.mediaNode.branchMarkerMediaModelCircleGlass
+    const glassColors = getBranchMarkerMediaModelCircleGlassColors(modelColor)
+    const cacheKey = glassColors.join('|')
+    const cachedImage = branchMarkerMediaModelCircleGlassCssImageByColor.get(cacheKey)
+    if (cachedImage !== undefined) return cachedImage
+
+    const dataUrl = new CircularGlassMaterial(
+        glassColors,
+        0,
+        circleGlass.glassMaterial,
+        {
+            size: circleGlass.textureSize,
+            translucency: circleGlass.translucency,
+            rimFeatherFraction: circleGlass.rimFeatherFraction,
+        },
+    ).bakeDataUrl()
+    const image = dataUrl ? `url(${dataUrl})` : ''
+    branchMarkerMediaModelCircleGlassCssImageByColor.set(cacheKey, image)
+    return image
+}
+
 export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const { paneEl, viewportEl, onViewportChange, onCanvasStateChange, onDocumentContentChange, onDocumentTitleChange, onAiChatThreadContentChange } = options
     let workspaceId = options.workspaceId
@@ -661,6 +729,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-branch-origin-icon-color', branchOriginSettings.styles.iconColor)
     paneEl.style.setProperty('--workspace-branch-origin-box-shadow', branchOriginSettings.styles.boxShadow)
     paneEl.style.setProperty('--workspace-branch-marker-separator-gradient', branchOriginSettings.styles.separatorGradient)
+    paneEl.style.setProperty('--workspace-branch-marker-media-model-icon-color', colorPalette.nightBlue)
     paneEl.style.setProperty('--workspace-branch-marker-move-duration', `${settings.mediaBranchLineage.pendingMarkerMoveDurationMs}ms`)
     const branchMarkerText = settings.mediaBranchLineage.marker.text
     paneEl.style.setProperty('--workspace-branch-marker-message-font-size', `${branchMarkerText.messageFontSize}px`)
@@ -9957,8 +10026,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createBranchMarkerMediaModelTooltip(nodeId: string, label: string, entry: BranchMarkerModelEntry, index: number): HTMLElement {
         const icon = entry.icon ?? getBranchMarkerMediaModelDefaultIcon(label)
+        const circleGlassImage = createBranchMarkerMediaModelCircleGlassCssImage(entry.color)
+        const circleStyle = circleGlassImage ? { backgroundImage: circleGlassImage } : {}
         const triggerContent = html`
-            <span className="workspace-branch-marker-media-model-circle" data=${{ mediaModelCircleIndex: String(index) }}>
+            <span className="workspace-branch-marker-media-model-circle" style=${circleStyle} data=${{ mediaModelCircleIndex: String(index) }}>
                 <span
                     className="workspace-branch-marker-message-icon workspace-branch-marker-media-model-icon"
                     innerHTML=${icon}

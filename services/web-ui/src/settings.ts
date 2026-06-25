@@ -370,6 +370,19 @@ export type MediaNodeSettings = {
             glassMaterial: GenerationBorderGlassMaterialSettings
         }
     }
+    // Translucent glass disc rendered as the branch-lineage media-model circle
+    // background. Shares the glass material with the in-progress outline snake.
+    branchMarkerMediaModelCircleGlass: {
+        // Baked square image resolution in pixels. The data URL is reused by every circle.
+        textureSize: number
+        // Final-alpha multiplier so the disc reads as see-through glass.
+        translucency: number
+        // Fraction of the radius used to feather the round rim to transparent.
+        rimFeatherFraction: number
+        // Fallback tint colors when model metadata has no valid brand color.
+        glassColors: string[]
+        glassMaterial: GenerationBorderGlassMaterialSettings
+    }
     // Image-specific.
     image: {
         defaultInsertionWidth: number
@@ -1045,6 +1058,54 @@ export const settings: Settings = {
                     // Opacity contribution from the head glint.
                     headSpecularAlphaStrength: 0.03,
                 },
+            },
+        },
+
+        // ── Branch-lineage media-model circle glass ──
+        branchMarkerMediaModelCircleGlass: {
+            // Baked once at this resolution; reused as a CSS background for every disc.
+            textureSize: 128,
+            // Dense translucent body with enough transmission for internal caustic light.
+            translucency: 0.9,
+            // Soft round rim so the disc edge fades instead of aliasing.
+            rimFeatherFraction: 0.04,
+            // Fallback cool glass tint for models without synced brand colors.
+            glassColors: ['#102034', '#1B6E9C', '#6DD8FF', '#F6FDFF'],
+            glassMaterial: {
+                shadowColor: '#03070B',
+                tailOpacityPower: 0.54,
+                tailFadeFraction: 0.05,
+                minTailOpacity: 0.56,
+                edgeFeatherFraction: 0.0,
+                edgeFeatherPower: 1.04,
+                lensCorePower: 0.58,
+                upperSpecularCenter: 0.18,
+                upperSpecularDrift: 0.02,
+                upperSpecularWidth: 0.08,
+                upperSpecularFadeStart: 0.03,
+                upperSpecularFadeEnd: 0.14,
+                upperSpecularStrength: 0.38,
+                headSpecularProgressCenter: 0.78,
+                headSpecularProgressWidth: 0.22,
+                headSpecularCrossSectionCenter: 0.34,
+                headSpecularCrossSectionWidth: 0.18,
+                headSpecularStrength: 0.24,
+                lowerEdgeShadowCenter: 0.9,
+                lowerEdgeShadowWidth: 0.18,
+                lowerEdgeShadowStrength: 0.24,
+                upperEdgeShadowCenter: 0.08,
+                upperEdgeShadowWidth: 0.14,
+                upperEdgeShadowStrength: 0.16,
+                edgeShadowPower: 1.8,
+                edgeShadowStrength: 0.12,
+                lensHighlightStrength: 0.08,
+                highlightWhiteMixMax: 0.52,
+                shadowMixMax: 0.34,
+                materialAlphaBase: 0.7,
+                materialAlphaMax: 0.92,
+                lensAlphaStrength: 0.12,
+                upperSpecularAlphaStrength: 0.05,
+                headSpecularAlphaStrength: 0.04,
             },
         },
 

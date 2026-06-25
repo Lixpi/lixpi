@@ -21,7 +21,7 @@ The visual-effects system has three rendering families:
 |---|---|---|---|
 | Freeform bitmap gradient | `FreeformGradientRenderer` | Canvas `ImageData` generated from four color anchors, eight phase positions, inverse-distance blending, and swirl distortion | AI chat thread and floating prompt shifting backgrounds |
 | SVG linear gradient | `SvgGradientRenderer` | D3-created `<linearGradient>` stops and rotating endpoint animation | Document context selection, document thread border |
-| PIXI traveling outline | `PixiTravelingOutlineRenderer` | Single PIXI mesh snake with a continuous tapered colored-glass droplet texture traveling around a rounded perimeter while active | Generated-media progress border and future PIXI outlined progress surfaces |
+| PIXI traveling outline | `PixiTravelingOutlineRenderer` + `GlassMaterial` | Single PIXI mesh snake with a continuous tapered colored-glass droplet texture traveling around a rounded perimeter while active | Generated-media progress border and future PIXI outlined progress surfaces |
 
 Animation curves are centralized in `Easing` where a surface uses shared easing, while surface-specific lifecycle remains with each consumer:
 
@@ -37,13 +37,14 @@ Animation curves are centralized in `Easing` where a surface uses shared easing,
 | `FreeformGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/freeformGradient.ts`](../../services/web-ui/src/utils/animations/gradients/freeformGradient.ts) | Color parsing, phase positions, freeform sampling, image-data painting, and canvas bitmap drawing |
 | `ShiftingGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts) | Singleton-per-color-set canvas renderer, subscriptions, visibility, resize redraws, optional pattern overlays, and animated phase changes |
 | `SvgGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/svgGradient.ts`](../../services/web-ui/src/utils/animations/gradients/svgGradient.ts) | Linear gradient stop construction, repeating border stops, and rotating linear-gradient animation |
-| `PixiTravelingOutlineRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts) | Reusable PIXI rounded-path snake renderer with a continuous tapered colored-glass droplet texture and active-only animation lifecycle |
+| `GlassMaterial` | [`services/web-ui/src/utils/animations/gradients/glassMaterial.ts`](../../services/web-ui/src/utils/animations/gradients/glassMaterial.ts) | Shared per-pixel glass material used by PIXI traveling snake textures and shallow glass branch-lineage media-model circle backgrounds |
+| `PixiTravelingOutlineRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts) | Reusable PIXI rounded-path snake renderer with active-only animation lifecycle |
 
 ### Reuse Rules
 
 - New Canvas or PIXI freeform gradient surfaces should call `FreeformGradientRenderer`; they should not copy the pixel sampling, phase, or swirl algorithm into consumer files.
 - New SVG animated gradient borders should call `SvgGradientRenderer` for stop construction and rotation.
-- New PIXI traveling progress outlines should call `PixiTravelingOutlineRenderer` and supply their own style and active bounds.
+- New PIXI traveling progress outlines should call `PixiTravelingOutlineRenderer` and supply their own style and active bounds. New glass surfaces should reuse `GlassMaterial` instead of duplicating texture sampling.
 - Runtime JavaScript animations that match existing interaction motion should use `Easing`, not reimplement cubic-bezier calculations.
 - Visual color choices belong in `settings.ts`; renderer classes consume configured colors rather than owning product palettes.
 
