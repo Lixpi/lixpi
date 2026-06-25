@@ -1,5 +1,9 @@
 import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
-import type { AiLineageProjectionScope } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
+import {
+    getAiLineageEventsForProjection,
+    type AiLineageEventDescriptor,
+    type AiLineageProjectionScope,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 
 export type ProseMirrorJsonNode = {
     type?: string
@@ -261,6 +265,22 @@ function lineageEventMatchesIds(node: ProseMirrorJsonNode, lineageIds: LineageId
     return lineageIds.branchForkNodeIds.has(String(attrs.branchForkNodeId ?? ''))
 }
 
+function createLineageEventProjectionNode(
+    event: AiLineageEventDescriptor,
+    reasoningModelId: string,
+): ProseMirrorJsonNode {
+    return {
+        type: 'aiLineageEvent',
+        attrs: {
+            kind: event.kind,
+            branchOriginNodeId: event.branchOriginNodeId ?? '',
+            branchForkNodeId: event.branchForkNodeId ?? '',
+            branchLineNodeId: event.branchLineNodeId ?? '',
+            reasoningModelId,
+        },
+    }
+}
+
 function createProjectionNodeFilter(
     container: ProseMirrorJsonNode,
     locator: GeneratedMediaTurnLocator,
@@ -353,23 +373,68 @@ function createProjectionDocument(threadId: string, threadAttrs: Record<string, 
     }
 }
 
-// In the detail modal the lineage outcome ("Branch continued") reads best as the
-// conclusion of the resolver audit, not as a heading above the response text. So
-// within each container we relocate standalone aiLineageEvent nodes to sit directly
-// before the generated media (which is rendered right after the resolver audit),
-// reflecting the flow: resolver decides → branch continued → generated result.
-function relocateLineageEventsBeforeGeneratedMedia(node: ProseMirrorJsonNode): void {
+function materializeReasoningSectionLineageEventsForProjection(
+    node: ProseMirrorJsonNode,
+    lineageProjectionScope: AiLineageProjectionScope,
+): void {
+    if (node.type !== 'aiReasoningSection') return
+
+    const events = getAiLineageEventsForProjection(node.attrs ?? {}, lineageProjectionScope)
+    if (events.length === 0) return
+
+    const existingEventIds = new Set(
+        (node.content ?? [])
+            .filter((child) => child.type === 'aiLineageEvent')
+            .map(getLineageEventIdentity),
+    )
+    const reasoningModelId = String(node.attrs?.reasoningModelId ?? '')
+    const eventNodes = events
+        .map((event) => createLineageEventProjectionNode(event, reasoningModelId))
+        .filter((eventNode) => {
+            const eventId = getLineageEventIdentity(eventNode)
+            if (existingEventIds.has(eventId)) return false
+            existingEventIds.add(eventId)
+            return true
+        })
+
+    if (eventNodes.length > 0) node.content = [...eventNodes, ...(node.content ?? [])]
+
+    node.attrs = {
+        ...(node.attrs ?? {}),
+        branchOriginNodeId: '',
+        branchForkNodeId: '',
+        branchLineNodeId: '',
+    }
+}
+
+function isGenerationTraceProjectionNode(node: ProseMirrorJsonNode): boolean {
+    const attrs = node.attrs ?? {}
+    return node.type === 'aiCollapsibleBlock'
+        && Boolean(attrs.imageGenerationTrace || attrs.videoGenerationTrace || attrs.imageGenerationTraceId)
+}
+
+// In detail panels, lineage outcomes read best as conclusions of the resolver
+// audit, not as headings above the response text. So within each container we
+// relocate standalone aiLineageEvent nodes to sit directly after the generation
+// trace block that renders resolver audit details. If an older projection lacks
+// that trace block, the generated media node remains the fallback anchor.
+function relocateLineageEventsToResolverAudit(node: ProseMirrorJsonNode): void {
     if (!node.content) return
 
     const lineageEvents = node.content.filter((child) => child.type === 'aiLineageEvent')
     if (lineageEvents.length > 0) {
         const rest = node.content.filter((child) => child.type !== 'aiLineageEvent')
+        const firstTraceIndex = rest.findIndex(isGenerationTraceProjectionNode)
         const firstMediaIndex = rest.findIndex(isGeneratedMediaProjectionNode)
-        const insertAt = firstMediaIndex === -1 ? rest.length : firstMediaIndex
+        const insertAt = firstTraceIndex >= 0
+            ? firstTraceIndex + 1
+            : firstMediaIndex === -1
+                ? rest.length
+                : firstMediaIndex
         node.content = [...rest.slice(0, insertAt), ...lineageEvents, ...rest.slice(insertAt)]
     }
 
-    for (const child of node.content) relocateLineageEventsBeforeGeneratedMedia(child)
+    for (const child of node.content) relocateLineageEventsToResolverAudit(child)
 }
 
 function cloneResponseForProjection(
@@ -383,7 +448,7 @@ function cloneResponseForProjection(
     if (sections.length === 0) {
         const shouldKeepNode = createProjectionNodeFilter(responseNode, locator, limitToLocatorMedia)
         const cloned = cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode, locator.reasoningModelId)
-        relocateLineageEventsBeforeGeneratedMedia(cloned)
+        relocateLineageEventsToResolverAudit(cloned)
         return cloned
     }
 
@@ -392,7 +457,7 @@ function cloneResponseForProjection(
     if (selectedSection === responseNode) {
         const shouldKeepNode = createProjectionNodeFilter(responseNode, locator, limitToLocatorMedia)
         const cloned = cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode, locator.reasoningModelId)
-        relocateLineageEventsBeforeGeneratedMedia(cloned)
+        relocateLineageEventsToResolverAudit(cloned)
         return cloned
     }
 
@@ -402,7 +467,8 @@ function cloneResponseForProjection(
         ...(clonedSection.attrs ?? {}),
         lineageProjectionScope,
     }
-    relocateLineageEventsBeforeGeneratedMedia(clonedSection)
+    materializeReasoningSectionLineageEventsForProjection(clonedSection, lineageProjectionScope)
+    relocateLineageEventsToResolverAudit(clonedSection)
     return {
         ...cloneProseMirrorJsonNode(responseNode),
         content: selectedSection.type === 'aiReasoningSection'

@@ -1,4 +1,5 @@
 import type { WorkspaceEdgePathType } from '@lixpi/constants'
+import type { CircularGlassMaterialStyle } from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
 
 export const colorPalette = {
     nightBlue: '#42494f',
@@ -463,6 +464,50 @@ export type VideoControlsSettings = {
     }
 }
 
+export type MediaBranchLineageColorMixSettings = {
+    targetColor: string
+    amount: number
+}
+
+export type MediaBranchLineageColorAdjustSettings = {
+    saturationMultiplier: number
+    minSaturation: number
+    maxSaturation: number
+    lightnessMultiplier: number
+    minLightness: number
+    maxLightness: number
+}
+
+export type MediaBranchLineageMediaModelCircleSettings = {
+    size: number
+    iconSize: number
+    mainGap: number
+    stackGap: number
+    styles: {
+        iconColor: string
+        backgroundColor: string
+        boxShadow: string
+    }
+    glass: {
+        textureSize: number
+        translucency: number
+        rimFeatherFraction: number
+        fallbackColors: string[]
+        brandColorAdjust: MediaBranchLineageColorAdjustSettings
+        brandColorStops: MediaBranchLineageColorMixSettings[]
+        material: GenerationBorderGlassMaterialSettings
+        discMaterial: CircularGlassMaterialStyle
+    }
+    texture: {
+        fallbackColor: string
+        brandColorMix: MediaBranchLineageColorMixSettings
+        fillOpacity: number
+        inset: number
+        opacity: number
+        backgroundSizePercent: number
+    }
+}
+
 export type MediaBranchLineageSettings = {
     generatedMediaSize: number
     rootToFirstMediaGap: number
@@ -483,6 +528,7 @@ export type MediaBranchLineageSettings = {
             separatorGradient: string
         }
     }
+    mediaModelCircle: MediaBranchLineageMediaModelCircleSettings
     marker: {
         minWidthMultiplier: number
         maxWidthGrowth: number
@@ -1178,7 +1224,7 @@ export const settings: Settings = {
         // Canvas-unit horizontal gap from a temporary branchOrigin marker to its first generated media node.
         branchOriginToFirstMediaGap: 312,
         // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
-        branchFanoutExtraGap: 96,
+        branchFanoutExtraGap: 200,
         // Screen-pixel vertical gap between the global prompt input and the pending branch marker shown immediately after canvas prompt submit.
         pendingMarkerInputGap: 8,
         // Milliseconds for moving and scaling a pending branch marker from the global prompt input to its API-planned canvas position.
@@ -1195,6 +1241,345 @@ export const settings: Settings = {
                 iconColor: colorPalette.offWhite,
                 boxShadow: '0 8px 24px rgba(42, 48, 57, 0.22)',
                 separatorGradient: 'linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.18) 10%, rgba(255, 255, 255, 0.34) 26%, rgba(255, 255, 255, 0.62) 50%, rgba(255, 255, 255, 0.34) 74%, rgba(255, 255, 255, 0.18) 90%, rgba(255, 255, 255, 0) 100%)',
+            },
+        },
+        // Stacked translucent glass circles that identify which media models produced lineage children.
+        mediaModelCircle: {
+            // Screen-pixel diameter of each model circle.
+            size: 32,
+            // Screen-pixel size of the provider/model SVG icon above the glass.
+            iconSize: 18,
+            // Screen-pixel horizontal gap between the branch lineage node body and the media-model circle stack.
+            mainGap: 8,
+            // Screen-pixel vertical gap between stacked media-model circles.
+            stackGap: 2,
+            // CSS-facing theme tokens for the circle shell and foreground icon.
+            styles: {
+                // Color applied to the model SVG icon rendered over the glass.
+                iconColor: colorPalette.nightBlue,
+                // Base circle background behind the baked glass image. Keep transparent unless a fallback fill is needed.
+                backgroundColor: 'transparent',
+                // CSS box-shadow for the circle shell, including any inset rim shadow and external lift shadow.
+                boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.1), inset 0 -4px 8px rgba(3, 7, 11, 0.07), 0 7px 18px rgba(18, 24, 31, 0.16)',
+            },
+            // Baked circular glass image settings and brand-color remapping.
+            glass: {
+                // Baked once per color at this resolution; reused as a CSS background.
+                textureSize: 128,
+                // Dense translucent body with enough transmission for internal caustic light.
+                translucency: 0.97,
+                // Soft round rim so the disc edge fades instead of aliasing.
+                rimFeatherFraction: 0.04,
+                // Fallback cool glass tint for models without synced brand colors.
+                fallbackColors: ['#06133A', '#0A49A7', '#1768D9', '#55A7FF'],
+                // Brand-color transform applied before glass stops are mixed, forcing deep saturated color instead of pastel brand tints.
+                brandColorAdjust: {
+                    // Multiplier applied to the model brand color's HSL saturation before stop mixing.
+                    saturationMultiplier: 2.1,
+                    // Minimum HSL saturation for the adjusted model color so lower-saturation brand colors still read as strong color.
+                    minSaturation: 0.72,
+                    // Maximum HSL saturation for the adjusted model color so glass stays rich without turning neon.
+                    maxSaturation: 0.9,
+                    // Multiplier applied to the model brand color's HSL lightness before stop mixing.
+                    lightnessMultiplier: 0.72,
+                    // Minimum HSL lightness for the adjusted model color so dark brands do not collapse to black.
+                    minLightness: 0.36,
+                    // Maximum HSL lightness for the adjusted model color so light brands stay deep and saturated.
+                    maxLightness: 0.46,
+                },
+                // Model brand color is remixed into the glass gradient through these stops.
+                brandColorStops: [
+                    {
+                        // Target color mixed into the first, darkest glass stop.
+                        targetColor: '#020714',
+                        // Blend amount from the model brand color to the first stop target.
+                        amount: 0.28,
+                    },
+                    {
+                        // Target color mixed into the second, saturated body stop.
+                        targetColor: '#000000',
+                        // Blend amount from the model brand color to the second stop target.
+                        amount: 0.02,
+                    },
+                    {
+                        // Target color mixed into the third, bright transmitted-light stop.
+                        targetColor: '#FFFFFF',
+                        // Blend amount from the model brand color to the third stop target.
+                        amount: 0.16,
+                    },
+                    {
+                        // Target color mixed into the fourth, near-white highlight stop.
+                        targetColor: '#FFFFFF',
+                        // Blend amount from the model brand color to the fourth stop target.
+                        amount: 0.34,
+                    },
+                ],
+                // Shared glass shader style reused by the circular material baker.
+                material: {
+                    // Dark tint color mixed into shadowed glass regions.
+                    shadowColor: '#03070B',
+                    // Exponent for tail-to-head opacity growth in the shared material sampler.
+                    tailOpacityPower: 0.54,
+                    // Fraction of material progress used to fade the start from transparent.
+                    tailFadeFraction: 0.05,
+                    // Minimum material opacity once the fade-in is complete.
+                    minTailOpacity: 0.56,
+                    // Extra transparent feather width at the material cross-section edge.
+                    edgeFeatherFraction: 0.0,
+                    // Exponent applied to the edge feather mask.
+                    edgeFeatherPower: 1.04,
+                    // Cross-section lens exponent controlling how broad the glass core highlight is.
+                    lensCorePower: 0.58,
+                    // Cross-section center of the upper specular band.
+                    upperSpecularCenter: 0.18,
+                    // Amount the upper specular band drifts as material progress changes.
+                    upperSpecularDrift: 0.02,
+                    // Cross-section width of the upper specular band.
+                    upperSpecularWidth: 0.08,
+                    // Progress value where the upper specular band starts fading in.
+                    upperSpecularFadeStart: 0.03,
+                    // Progress value where the upper specular band reaches full strength.
+                    upperSpecularFadeEnd: 0.14,
+                    // Brightness contribution from the upper specular band.
+                    upperSpecularStrength: 0.46,
+                    // Progress center of the head glint in the shared material model.
+                    headSpecularProgressCenter: 0.78,
+                    // Progress width of the head glint.
+                    headSpecularProgressWidth: 0.22,
+                    // Cross-section center of the head glint.
+                    headSpecularCrossSectionCenter: 0.34,
+                    // Cross-section width of the head glint.
+                    headSpecularCrossSectionWidth: 0.18,
+                    // Brightness contribution from the head glint.
+                    headSpecularStrength: 0.34,
+                    // Cross-section center of the lower edge shadow.
+                    lowerEdgeShadowCenter: 0.9,
+                    // Cross-section width of the lower edge shadow.
+                    lowerEdgeShadowWidth: 0.18,
+                    // Darkness contribution from the lower edge shadow.
+                    lowerEdgeShadowStrength: 0.22,
+                    // Cross-section center of the upper edge shadow.
+                    upperEdgeShadowCenter: 0.08,
+                    // Cross-section width of the upper edge shadow.
+                    upperEdgeShadowWidth: 0.14,
+                    // Darkness contribution from the upper edge shadow.
+                    upperEdgeShadowStrength: 0.13,
+                    // Power curve for broad edge darkening.
+                    edgeShadowPower: 1.8,
+                    // Darkness contribution from broad edge darkening.
+                    edgeShadowStrength: 0.09,
+                    // Brightness contribution from the rounded lens core.
+                    lensHighlightStrength: 0.14,
+                    // Maximum amount of white mixed into highlights.
+                    highlightWhiteMixMax: 0.3,
+                    // Maximum amount of shadow color mixed into dark regions.
+                    shadowMixMax: 0.16,
+                    // Baseline material alpha before lens/specular additions.
+                    materialAlphaBase: 0.9,
+                    // Maximum material alpha before circular masking and translucency.
+                    materialAlphaMax: 0.98,
+                    // Alpha contribution from the rounded lens core.
+                    lensAlphaStrength: 0.12,
+                    // Alpha contribution from the upper specular band.
+                    upperSpecularAlphaStrength: 0.05,
+                    // Alpha contribution from the head glint.
+                    headSpecularAlphaStrength: 0.04,
+                },
+                // Circular-disc-only sampler and lighting coefficients.
+                discMaterial: {
+                    // Amount that disc body volume darkens the sampled glass color.
+                    absorptionVolumeStrength: 0.035,
+                    // Amount that rim fresnel darkens the sampled glass color.
+                    absorptionFresnelStrength: 0.2,
+                    // Amount that internal shadows darken the sampled glass color.
+                    absorptionInnerShadowStrength: 0.22,
+                    // Amount that caustic bands brighten transmitted glass color.
+                    causticLightStrength: 0.54,
+                    // Amount that specular regions brighten transmitted glass color.
+                    specularLightStrength: 0.66,
+                    // Baseline multiplier applied to the shared material alpha.
+                    alphaBaseMultiplier: 0.92,
+                    // Additional alpha contributed by disc body volume.
+                    alphaVolumeStrength: 0.12,
+                    // Additional alpha contributed by specular regions.
+                    specularAlphaStrength: 0.022,
+                    // Additional alpha contributed by caustic regions.
+                    causticAlphaStrength: 0.014,
+                    // Maximum final alpha for the baked disc pixels.
+                    alphaMax: 0.98,
+                    // Normalized radius where rim-thickness shading starts.
+                    rimThicknessStart: 0.56,
+                    // Normalized radius where rim-thickness shading reaches full strength.
+                    rimThicknessEnd: 1,
+                    // Vertical center of the upper meniscus shadow band.
+                    upperMeniscusShadowCenterY: -0.42,
+                    // Vertical width of the upper meniscus shadow band.
+                    upperMeniscusShadowWidthY: 0.08,
+                    // Horizontal center of the upper meniscus shadow band.
+                    upperMeniscusShadowCenterX: 0.02,
+                    // Horizontal width of the upper meniscus shadow band.
+                    upperMeniscusShadowWidthX: 0.68,
+                    // Vertical center of the lower meniscus depth band.
+                    lowerMeniscusDepthCenterY: 0.64,
+                    // Vertical width of the lower meniscus depth band.
+                    lowerMeniscusDepthWidthY: 0.18,
+                    // Horizontal center of the lower meniscus depth band.
+                    lowerMeniscusDepthCenterX: -0.02,
+                    // Horizontal width of the lower meniscus depth band.
+                    lowerMeniscusDepthWidthX: 0.64,
+                    // Vertical center of the lower transmitted-light band.
+                    lowerTransmittedLightCenterY: 0.5,
+                    // Vertical width of the lower transmitted-light band.
+                    lowerTransmittedLightWidthY: 0.16,
+                    // Horizontal center of the lower transmitted-light band.
+                    lowerTransmittedLightCenterX: -0.1,
+                    // Horizontal width of the lower transmitted-light band.
+                    lowerTransmittedLightWidthX: 0.5,
+                    // Vertical center of the top reflection.
+                    topReflectionCenterY: -0.28,
+                    // Vertical width of the top reflection.
+                    topReflectionWidthY: 0.1,
+                    // Horizontal center of the top reflection.
+                    topReflectionCenterX: -0.24,
+                    // Horizontal width of the top reflection.
+                    topReflectionWidthX: 0.26,
+                    // Horizontal center of the left-edge reflection.
+                    leftEdgeReflectionCenterX: -0.48,
+                    // Horizontal width of the left-edge reflection.
+                    leftEdgeReflectionWidthX: 0.08,
+                    // Vertical center of the left-edge reflection.
+                    leftEdgeReflectionCenterY: -0.08,
+                    // Vertical width of the left-edge reflection.
+                    leftEdgeReflectionWidthY: 0.46,
+                    // Horizontal center of the small internal glint.
+                    smallGlintCenterX: -0.18,
+                    // Horizontal width of the small internal glint.
+                    smallGlintWidthX: 0.04,
+                    // Vertical center of the small internal glint.
+                    smallGlintCenterY: -0.02,
+                    // Vertical width of the small internal glint.
+                    smallGlintWidthY: 0.06,
+                    // Horizontal frequency of the broad internal wave used for striations.
+                    horizontalWaveFrequencyX: 3.6,
+                    // Vertical frequency of the broad internal wave used for striations.
+                    horizontalWaveFrequencyY: 0.7,
+                    // Phase offset for the broad internal wave.
+                    horizontalWavePhase: 0.15,
+                    // Horizontal frequency of the fine internal wave used for striations.
+                    fineWaveFrequencyX: 8.2,
+                    // Vertical frequency of the fine internal wave used for striations.
+                    fineWaveFrequencyY: -1.4,
+                    // Phase offset for the fine internal wave.
+                    fineWavePhase: 0.35,
+                    // Vertical center of the upper internal striation band.
+                    upperStriationCenterY: -0.16,
+                    // Vertical width of the upper internal striation band.
+                    upperStriationWidthY: 0.18,
+                    // Baseline opacity of the upper internal striation band.
+                    upperStriationBase: 0.42,
+                    // Broad-wave contribution to the upper internal striation band.
+                    upperStriationHorizontalWaveStrength: 0.4,
+                    // Fine-wave contribution to the upper internal striation band.
+                    upperStriationFineWaveStrength: 0.1,
+                    // Vertical center of the lower internal striation band.
+                    lowerStriationCenterY: 0.34,
+                    // Vertical width of the lower internal striation band.
+                    lowerStriationWidthY: 0.18,
+                    // Horizontal center of the lower internal striation band.
+                    lowerStriationCenterX: 0.16,
+                    // Horizontal width of the lower internal striation band.
+                    lowerStriationWidthX: 0.56,
+                    // Vertical center of the soft internal veil.
+                    internalVeilCenterY: 0.02,
+                    // Vertical width of the soft internal veil.
+                    internalVeilWidthY: 0.38,
+                    // Baseline opacity of the soft internal veil.
+                    internalVeilBase: 0.32,
+                    // Broad-wave contribution to the soft internal veil.
+                    internalVeilHorizontalWaveStrength: 0.22,
+                    // Baseline slab thickness used for non-spherical glass shading.
+                    flatThicknessBase: 0.48,
+                    // Rim contribution to slab thickness.
+                    flatThicknessRimStrength: 0.28,
+                    // Lower-depth contribution to slab thickness.
+                    flatThicknessLowerDepthStrength: 0.18,
+                    // Internal-veil contribution to slab thickness.
+                    flatThicknessInternalVeilStrength: 0.08,
+                    // Vertical coordinate where extra slab depth starts ramping in.
+                    flatThicknessVerticalDepthStartY: -0.12,
+                    // Vertical coordinate where extra slab depth reaches full strength.
+                    flatThicknessVerticalDepthEndY: 0.9,
+                    // Strength of the vertical slab-depth ramp.
+                    flatThicknessVerticalDepthStrength: 0.1,
+                    // Baseline directional light value before local bands adjust it.
+                    directionalLightBase: 0.24,
+                    // Directional-light contribution from the lower transmitted-light band.
+                    directionalLightLowerTransmittedStrength: 0.26,
+                    // Directional-light contribution from the top reflection.
+                    directionalLightTopReflectionStrength: 0.22,
+                    // Directional-light contribution from the left-edge reflection.
+                    directionalLightLeftEdgeStrength: 0.1,
+                    // Directional-light contribution from the upper striation band.
+                    directionalLightUpperStriationStrength: 0.06,
+                    // Directional-light contribution from the lower striation band.
+                    directionalLightLowerStriationStrength: 0.08,
+                    // Directional-light subtraction from the upper meniscus shadow.
+                    directionalLightUpperMeniscusShadowStrength: 0.12,
+                    // Directional-light subtraction from rim thickness.
+                    directionalLightRimShadowStrength: 0.1,
+                    // Baseline cross-section coordinate passed into the shared material shader.
+                    crossSectionBase: 0.5,
+                    // Vertical contribution to the shared material cross-section coordinate.
+                    crossSectionYStrength: 0.58,
+                    // Horizontal skew contribution to the shared material cross-section coordinate.
+                    crossSectionXStrength: 0.035,
+                    // Baseline opacity multiplier for the circular alpha mask.
+                    lensAlphaBase: 0.84,
+                    // Alpha-mask contribution from slab thickness.
+                    lensAlphaThicknessStrength: 0.12,
+                    // Alpha-mask contribution from the lower-depth band.
+                    lensAlphaLowerDepthStrength: 0.04,
+                    // Baseline progress coordinate passed into the shared material shader.
+                    progressBase: 0.14,
+                    // Directional-light contribution to shared material progress.
+                    progressLightStrength: 0.64,
+                    // Caustic contribution from the lower transmitted-light band.
+                    causticLowerLightStrength: 0.58,
+                    // Caustic contribution from the lower striation band.
+                    causticLowerStriationStrength: 0.18,
+                    // Specular contribution from the top reflection.
+                    specularTopReflectionStrength: 0.68,
+                    // Specular contribution from the left-edge reflection.
+                    specularLeftEdgeStrength: 0.48,
+                    // Specular contribution from the small internal glint.
+                    specularSmallGlintStrength: 0.9,
+                    // Internal-shadow contribution from the upper meniscus shadow.
+                    innerShadowUpperMeniscusStrength: 0.76,
+                    // Internal-shadow contribution from rim thickness.
+                    innerShadowRimStrength: 0.16,
+                    // Internal-shadow contribution from the soft internal veil.
+                    innerShadowVeilStrength: 0.1,
+                },
+            },
+            // SVG texture settings for the clipped pattern layer under the icon and over the glass.
+            texture: {
+                // Fallback texture color when model metadata has no valid brand color.
+                fallbackColor: '#4B5D70',
+                // Brand-color remap used to tint the SVG pattern toward a lighter glass-readable color.
+                brandColorMix: {
+                    // Target color mixed into the model brand color for the pattern fill.
+                    targetColor: colorPalette.nightBlue,
+                    // Blend amount from model brand color to the pattern target color.
+                    amount: 0.32,
+                },
+                // SVG path fill opacity baked into the generated pattern data URL.
+                fillOpacity: 0.36,
+                // Screen-pixel inset from glass edge to the clipped texture circle.
+                inset: 4,
+                // CSS opacity applied to the clipped pattern layer.
+                opacity: 0.9,
+                // Percent background-size applied to the SVG pattern inside the clipped circle.
+                backgroundSizePercent: 142,
             },
         },
         // Width sizing for the branch marker pill that hugs a user message.

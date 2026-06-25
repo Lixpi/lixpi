@@ -627,13 +627,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             entries.set(node.nodeId, entry)
             spatialIndex.insert(rect)
         } else if (entry.sourceKey !== newSourceKey) {
-            // Source image replaced. Drop loaded state; next visibility pass refetches.
-            if (entry.textureKey) releaseTexture(entry.textureKey)
-            entry.textureKey = null
+            // Source image replaced. Keep the currently rendered texture visible
+            // until the replacement texture loads, otherwise final generated
+            // frames can briefly blank while PIXI refetches the stored object.
             entry.loadedTier = null
             entry.requestedTier = null
             entry.requestId++
-            entry.sprite.texture = Texture.EMPTY
             entry.sourceKey = newSourceKey
         }
 

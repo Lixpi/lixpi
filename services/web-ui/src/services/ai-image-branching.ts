@@ -220,8 +220,8 @@ function getMediaPromptText(node: MediaCanvasNode, generatedMediaTextByNodeId: R
         generatedBy?.visualEntitySummary,
         generatedBy?.visualStyleSummary,
         generatedBy?.entitySummary,
-        // Uploaded media has no generation metadata — its descriptor summary is
-        // the only text that distinguishes it.
+        // Descriptor summaries come from the media pixels and help distinguish
+        // media from prompt/provenance text.
         node.descriptor?.summary,
         generatedMediaTextByNodeId[node.nodeId],
     ].filter((text): text is string => Boolean(text?.trim())).join('\n')

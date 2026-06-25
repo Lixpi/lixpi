@@ -6,12 +6,11 @@ import { MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH, CONTENT_DESCRIPTOR_TEXT_INPUT_MAX_
 import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from './extraction/vlm-client.ts'
 import type { ChatMessage } from './graph/state.ts'
 
-// Compact, model-friendly description of a single media still. Uploaded media
-// has no generation metadata, so a cheap structured-VLM pass produces a summary
-// and a few entity/style tags that let later features (the branch resolver, the
-// canvas info panel) distinguish media objects without re-analyzing the pixels.
-// For video the caller passes a representative still (mid-frame or poster), never
-// the MP4 — so this is a single-image call regardless of media kind.
+// Compact, model-friendly description of a single media still. Generated and
+// uploaded media both use this structured-VLM pass so descriptions describe the
+// actual pixels, never the generation prompt. For video the caller passes a
+// representative still (mid-frame or poster), never the MP4 — so this is a
+// single-image call regardless of media kind.
 export type MediaDescriptorResult = {
     summary: string
     entityTags: string[]

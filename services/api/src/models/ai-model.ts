@@ -224,15 +224,20 @@ export default {
         provider,
         model,
         omitPricing = true
-    }: Pick<AiModel, 'provider' | 'model'> & { omitPricing?: boolean }): Promise<AiModel | Omit<AiModel, 'pricing'>> => {
+    }: Pick<AiModel, 'provider' | 'model'> & { omitPricing?: boolean }): Promise<AiModel | Omit<AiModel, 'pricing'> | undefined> => {
         const aiModel = await dynamoDBService.getItem({
             tableName: getDynamoDbTableStageName('AI_MODELS_LIST', ORG_NAME, STAGE),
             key: { provider, model },
             origin: 'model::AiModel->getAiModel()',
         })
 
-        if (omitPricing)
-            delete aiModel.pricing    // Delete 'pricing' key from the item, this should not be exposed to the client
+        if (!aiModel) return undefined
+
+        if (omitPricing) {
+            const modelWithoutPricing = { ...aiModel }
+            delete modelWithoutPricing.pricing
+            return modelWithoutPricing
+        }
 
         return aiModel
     }

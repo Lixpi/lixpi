@@ -223,6 +223,6 @@ services/web-ui/src/infographics/workspace/
 - [Branch Lineage](./BRANCH-LINEAGE.md) — canvas placement, branch identity, branch-root provenance, balanced branch-tree layout, and the structured VLM resolver that selects which references reach the image model.
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — the complete stream-event catalog and the browser render path.
 - [Video Generation](./VIDEO-GENERATION.md) — the sibling video branch (Google VEO) that extends this pipeline.
-- [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the descriptor generated images compose for free from their generation metadata.
+- [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the VLM analysis descriptor generated images request after the final frame is stored.
 - [Media Library](../library/MEDIA-LIBRARY.md) — saving reusable copies of finished images.
 - [Rendering Engine](../canvas/RENDERING-ENGINE.md) — the PIXI media layer and DOM chrome overlay that render image nodes and provenance.

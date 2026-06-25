@@ -2,11 +2,12 @@
 
 import { err } from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
-import { NATS_SUBJECTS, type ProviderName } from '@lixpi/constants'
+import { NATS_SUBJECTS, type AiModelId, type ProviderName } from '@lixpi/constants'
 
 import Workspace from '../../models/workspace.ts'
 import AiModel from '../../models/ai-model.ts'
 import { describeMediaStill, describeTextContent } from '../../llm/media-descriptor.ts'
+import { settings } from '../../settings.ts'
 
 const { MEDIA_DESCRIBE } = NATS_SUBJECTS.AI_INTERACTION_SUBJECTS
 
@@ -21,8 +22,9 @@ const verifyWorkspaceAccess = async (userId: string, workspaceId: string): Promi
 //     never sent.
 //   - text: the client passes `text` (+ optional `title`) flattened from a
 //     document / chat-thread node → a text summary, no pixels.
-// Either way the client passes its currently-selected `aiModel`, so we never
-// hardcode a model.
+// Media stills use the API-owned media descriptor VLM setting. Text descriptors
+// still use the caller's selected model because those are lightweight summaries
+// of user-authored text, not media analysis.
 export const mediaDescriptorSubjects = [
     {
         subject: MEDIA_DESCRIBE,
@@ -39,7 +41,7 @@ export const mediaDescriptorSubjects = [
                 fileId?: string
                 text?: string
                 title?: string
-                aiModel: string
+                aiModel?: string
             }
 
             const hasText = typeof text === 'string' && text.trim().length > 0
@@ -47,14 +49,16 @@ export const mediaDescriptorSubjects = [
             if (!workspaceId || (!fileId && !hasText) || !(await verifyWorkspaceAccess(userId, workspaceId))) {
                 return { error: 'WORKSPACE_ACCESS_DENIED' }
             }
-            if (!aiModel || !aiModel.includes(':')) {
+            const descriptorModelId = (hasText ? aiModel : settings.mediaDescriptor.defaultVlmModelId) as AiModelId | undefined
+            if (!descriptorModelId || !descriptorModelId.includes(':')) {
                 return { error: 'AI_MODEL_REQUIRED' }
             }
 
-            const [provider, modelVersion] = aiModel.split(':')
+            const [provider, modelVersion] = descriptorModelId.split(':')
             const aiModelMetaInfo = await AiModel.getAiModel({ provider: provider!, model: modelVersion!, omitPricing: true })
-            if (!aiModelMetaInfo) {
-                return { error: `AI_MODEL_NOT_FOUND:${aiModel}` }
+            const maxTokens = aiModelMetaInfo?.maxCompletionSize || (!hasText ? settings.mediaDescriptor.defaultVlmMaxTokens : undefined)
+            if (!maxTokens) {
+                return { error: `AI_MODEL_NOT_FOUND:${descriptorModelId}` }
             }
 
             const natsService = NATS_Service.getInstance()
@@ -70,15 +74,19 @@ export const mediaDescriptorSubjects = [
                         text: text!,
                         title,
                         natsService,
-                        maxTokens: aiModelMetaInfo.maxCompletionSize,
+                        maxTokens,
                     })
                     : await describeMediaStill({
                         provider: provider as ProviderName,
                         modelVersion: modelVersion!,
                         imageUrl: `nats-obj://workspace-${workspaceId}-files/${fileId}`,
                         natsService,
-                        maxTokens: aiModelMetaInfo.maxCompletionSize,
+                        maxTokens,
                     })
+                if (!hasText && !descriptor.summary?.trim()) {
+                    err(`media describe returned empty summary for workspace ${workspaceId} file ${fileId}`)
+                    return { error: 'MEDIA_DESCRIPTOR_EMPTY' }
+                }
                 return { ...descriptor }
             } catch (error: any) {
                 const message = error?.message ?? String(error)

@@ -260,6 +260,13 @@ vi.mock('$src/settings.ts', () => ({
                     glassMaterial: {},
                 },
             },
+            branchMarkerMediaModelCircleGlass: {
+                textureSize: 128,
+                translucency: 0.92,
+                rimFeatherFraction: 0.07,
+                glassColors: ['#6b7480'],
+                glassMaterial: {},
+            },
             image: {
                 styles: {
                     borderRadius: 8,

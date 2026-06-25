@@ -111,6 +111,12 @@ type AnthropicModel = {
     type?: string
 }
 
+// Anthropic's models list endpoint is not reliable in every environment, but
+// media descriptions depend on this low-latency vision-capable Haiku alias.
+const STATIC_ANTHROPIC_MODELS: AnthropicModel[] = [
+    { id: 'claude-haiku-4-5', display_name: 'Claude Haiku 4.5', type: 'model' },
+]
+
 type GoogleModel = {
     name: string
     displayName?: string
@@ -277,16 +283,14 @@ export class AiModelsSync {
         Anthropic: {
             exact: [],
             prefix: [
-                'claude-3-haiku',
                 'claude-3-opus',
-                'claude-3-5',
+                'claude-3-5-sonnet',
                 'claude-3-7',
                 'claude-sonnet-4-5',
                 'claude-sonnet-4-20',
                 'claude-opus-4-5',
                 'claude-opus-4-1',
                 'claude-opus-4-20',
-                'claude-haiku-4-5',
             ],
             contains: []
         },
@@ -439,6 +443,7 @@ export class AiModelsSync {
                 { prefix: 'claude-opus-4-1', values: { contextWindow: 200000, maxCompletionSize: 32000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
                 { prefix: 'claude-opus-4', values: { contextWindow: 200000, maxCompletionSize: 32000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
                 { prefix: 'claude-sonnet-4', values: { contextWindow: 200000, maxCompletionSize: 64000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
+                { prefix: 'claude-haiku-4', values: { contextWindow: 200000, maxCompletionSize: 8192, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
                 { prefix: 'claude-3-7-sonnet', values: { contextWindow: 200000, maxCompletionSize: 64000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
                 { prefix: 'claude-3-5-haiku', values: { contextWindow: 200000, maxCompletionSize: 8192, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
                 { prefix: 'claude-3-haiku', values: { contextWindow: 200000, maxCompletionSize: 4096, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
@@ -852,12 +857,19 @@ export class AiModelsSync {
         }
     }
 
+    private addStaticAnthropicModels(models: AnthropicModel[]): AnthropicModel[] {
+        const modelsById = new Map<string, AnthropicModel>()
+        for (const model of STATIC_ANTHROPIC_MODELS) modelsById.set(model.id, model)
+        for (const model of models) modelsById.set(model.id, model)
+        return Array.from(modelsById.values())
+    }
+
     // Fetch available models from Anthropic API using SDK
     private async fetchAnthropicModels(): Promise<AnthropicModel[]> {
         const apiKey = this.anthropic.apiKey
         if (!apiKey) {
             warn('Anthropic API key not provided, skipping Anthropic models synchronization')
-            return []
+            return this.addStaticAnthropicModels([])
         }
 
         try {
@@ -877,7 +889,7 @@ export class AiModelsSync {
                     // Filter models based on blacklist
                     const blacklist = AiModelsSync.MODELS_BLACKLIST.Anthropic
 
-                    return models.filter(model => {
+                    const filteredModels = models.filter(model => {
                         const modelId = model.id
 
                         // Check exact blacklist matches
@@ -902,16 +914,17 @@ export class AiModelsSync {
 
                         return true
                     })
+                    return this.addStaticAnthropicModels(filteredModels)
                 }
             }
 
-            // Return empty array as fallback
-            info('Anthropic models list endpoint not available yet, returning empty array')
-            return []
+            // Use the static Haiku fallback when the list endpoint is unavailable.
+            info('Anthropic models list endpoint not available yet, using static model fallback')
+            return this.addStaticAnthropicModels([])
 
         } catch (error) {
             warn('Failed to fetch Anthropic models (expected, as endpoint may not exist yet):', error)
-            return []
+            return this.addStaticAnthropicModels([])
         }
     }
 

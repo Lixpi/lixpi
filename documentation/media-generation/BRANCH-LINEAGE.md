@@ -31,7 +31,7 @@ This feature is part of Lixpi's artifact-piping architecture (see [Product Overv
 
 **Resolver Audit Metadata** — The resolver model provider, model ID, confidence, rationale, excluded node IDs, operation kind, visual summaries, and schema version, persisted on generated-media metadata for later candidate labeling and debugging.
 
-**Branch Root** — The first generated image/video of a `branchId`. It normally carries the originating prompt, references, and visual summaries on its own `generatedBy` metadata, and its info panel reconstructs them. Fresh multi-model generations with no source/thread node persist a `branchOrigin` marker so every generated sibling has the same explicit graph parent; this marker opens the generated branch provenance/details panel below the marker and is never treated as chat context.
+**Branch Root** — The first generated image/video of a `branchId`. It normally carries the originating prompt, references, and visual summaries on its own `generatedBy` metadata, and its info panel reconstructs them. Fresh requests that need a neutral root marker persist a `branchOrigin`; reasoning-fanout requests use one `branchFork` per reasoning run, and a parentless fork is the visible root marker when no lineage source exists. These markers open generated branch provenance/details panels below the marker and are never treated as chat context.
 
 **Branch Fork** — A reusable lineage split marker inside a branch tree. A `branchFork` node represents a deliberate child lineage under the user current lineage source, such as one fork per reasoning model in a multi-reasoning media request. It renders as the same circular lineage chrome as a branch origin, using `branchForkfIcon`, opens generated branch provenance scoped to its own generated descendants, and is never treated as chat context.
 
@@ -68,7 +68,7 @@ Lixpi solves this by combining deterministic graph narrowing with VLM role assig
 - **One decision feeds routing and provenance.** The references sent to the model, the generated metadata, and branch-root provenance all come from the resolver result.
 - **No silent guessing.** Resolver failure is user-visible and *stops* generation instead of falling back to regexes, recency, or all-variant injection.
 - **Feature extraction stays independent.** `/use` feature references resolve before branch resolution, and their injected feature image blocks are preserved by the branch resolver.
-- **The root media is the branch unless a temporary origin is required.** The first generated image/video of a new branch carries its prompt and references on `generatedBy`. Continuations attach to the existing branch. Fresh multi-model requests with no source/thread node persist a `branchOrigin` marker so siblings share one explicit graph origin. Multi-reasoning media requests add `branchFork` markers under that origin or current lineage source so each reasoning run owns its generated descendants; multiple image/video models invoked by the same reasoning run share that reasoning fork.
+- **The root media is the branch unless a temporary marker is required.** The first generated image/video of a new branch carries its prompt and references on `generatedBy`. Continuations attach to the existing branch. Reasoning-fanout media requests add one `branchFork` marker per reasoning run so each reasoning run owns its generated descendants; multiple image/video models invoked by the same reasoning run share that reasoning fork. If no lineage source exists, that fork is the visible root marker.
 
 ## System Architecture
 
@@ -307,8 +307,8 @@ Generated media nodes store resolver output in `ImageGeneratedByMetadata` so fut
 | `branchId` | Stable ID for one generated-media lineage. |
 | `parentMediaNodeId` | API-selected generated-media edit parent. Reference/source media never populate this field unless they are themselves generated branch members. |
 | `parentImageNodeId` | API-emitted schema alias for image-named consumers. It must not be used as a browser fallback or topology decision source. |
-| `branchOriginNodeId` | Temporary branch-origin marker that roots fresh multi-model siblings when no real source exists. |
-| `branchForkNodeId` | Temporary branchFork marker that groups generated descendants for a reasoning run or other nested lineage split. |
+| `branchOriginNodeId` | Temporary branch-origin marker referenced by the API when a neutral branch root is needed. |
+| `branchForkNodeId` | Temporary branchFork marker that groups generated descendants for one reasoning run, including all media-model fanout under that run. |
 | `sourceContextNodeIds` | Context nodes relevant to generation. |
 | `referenceImageNodeIds` | Exact candidate node IDs sent as model references. |
 | `operationKind` | VLM-classified operation, e.g. `new_image`, `edit_existing`, `style_transfer`. |
@@ -386,8 +386,8 @@ Pending placement keeps three concepts strictly separate. This split is what pre
 | `sourceNodeId` | **API-declared verified connector and lineage source only.** |
 | `placementAnchorNodeId` | **Canvas placement helper only** — positions the output without parenting it. |
 | `referenceNodeIds` | **Context/reference media** for prompt routing, progress outlines, and branch-root provenance. |
-| `branchOriginNodeId` | **API-assigned temporary fresh-branch source** — points fresh multi-model siblings at the same `branchOrigin` marker when no source/thread node exists. |
-| `branchForkNodeId` | **API-assigned reusable lineage split source** — points a generated output at the `branchFork` marker for its reasoning run or future nested split. |
+| `branchOriginNodeId` | **API-assigned neutral root source** — points a generated output at a `branchOrigin` marker only when the plan declares that neutral root. |
+| `branchForkNodeId` | **API-assigned reasoning-run source** — points a generated output at the `branchFork` marker for its reasoning run. |
 
 ### On Submit
 
@@ -417,11 +417,11 @@ Style-transfer continuations can still continue a branch through these same sign
 
 For images, an empty `IMAGE_PARTIAL` creates a transparent placeholder canvas node; non-empty partials update that same node in place. (Video drops its placeholder on `VIDEO_PENDING` and upgrades it on `VIDEO_COMPLETE` — there are no partial frames.) In both cases:
 
-1. The placeholder edge uses the API-assigned `lineageParentNodeId`. Fresh multi-model runs with no source/thread node render the planned `branchOrigin` marker. Multi-reasoning requests render the planned `branchFork` marker for the active reasoning run, then edge that run's generated media from its fork.
+1. The placeholder edge uses the API-assigned `lineageParentNodeId`. If the API plan references a neutral `branchOrigin`, the canvas renders that origin marker. Reasoning-fanout requests render the planned `branchFork` marker for the active reasoning run; generated media for every selected media model under that reasoning run edges from the same fork.
 2. The node's `generatedBy` metadata includes the API `MediaRunLineageAssignment` plus resolver metadata.
 3. **Placement geometry:**
    - If placement continues from a generated media node, the placeholder is **vertically centered** on that preceding artifact.
-   - **Fresh / reference-only** generations place to the **right of the combined bounds of all reference media**, with `settings.mediaBranchLineage.rootToFirstMediaGap` breathing room. If no source/thread node or reference group exists, the temporary `branchOrigin` marker and first generated-media slot are centered as one group so the marker does not start outside the visible viewport. If the run splits by reasoning model, the `branchFork` marker appears between the branch origin/current lineage source and that reasoning run's generated media.
+   - **Fresh / reference-only** generations place to the **right of the combined bounds of all reference media**, with `settings.mediaBranchLineage.rootToFirstMediaGap` breathing room. If no source/thread node or reference group exists, the planned root marker and first generated-media slot are centered as one group so the marker does not start outside the visible viewport. A parentless `branchFork` is the root marker for reasoning-fanout runs without a lineage source.
 4. Reference media animate with the same PIXI traveling outline as the generated placeholder while the reasoning model prepares the media prompt (see [Progress Outlines](#progress-outlines)).
 
 PIXI reports intrinsic dimensions whenever placeholder, partial, or final pixels load. For generated media-to-media continuations, each intrinsic-size correction recomputes the node's vertical position from its lineage-anchor center — so a square placeholder, a landscape partial, and a portrait final all stay on one branch center line even as their rectangles change size.
@@ -431,7 +431,7 @@ PIXI reports intrinsic dimensions whenever placeholder, partial, or final pixels
 1. The placeholder/partial node is upgraded with the final file ID, media URL, response ID, revised prompt, provider badge, and response message ID.
 2. The edge `sourceMessageId` is set to the AI response message ID when applicable.
 3. Resolver metadata and API lineage assignment are persisted onto `generatedBy`.
-4. The branch tree is re-tidied and rigid-separated from neighbors via `rebalanceBranchTreesAndResolve(...)` (see [Balanced Branch-Tree Layout](#balanced-branch-tree-layout)). Fresh multi-model siblings may be rooted under the temporary `branchOrigin` marker; multi-reasoning descendants may be grouped under `branchFork` markers; otherwise the first generated image/video carries the branch's prompt + references on `generatedBy`.
+4. The branch tree is re-tidied and rigid-separated from neighbors via `rebalanceBranchTreesAndResolve(...)` (see [Balanced Branch-Tree Layout](#balanced-branch-tree-layout)). Generated siblings are rooted under the API-assigned lineage parent: a neutral `branchOrigin` when referenced, a `branchFork` for the producing reasoning run, or the first generated image/video when no marker is needed.
 5. Pending placement is cleared **only after** completion state and generated metadata have been committed.
 
 ### Generated-Media Provenance Chrome
@@ -440,8 +440,8 @@ The finalized generated node also gets canvas provenance chrome rendered in a de
 
 - The **provider badge** and **info button** render in the media chrome overlay.
 - The **info panel** opens at the exact media-node width and expands to its full content height without cropping long prompts or reference metadata. It uses `generatedBy.responseMessageId` plus the persisted chat thread to reconstruct the original user prompt, the producing AI response, and the same generation-trace metadata shown in chat history. It reuses the same chat message shells and the `ImageGenerationTrace` / generation-trace detail renderer used by the AI chat history.
-- Fresh multi-model branch origins show the stored user prompt on the marker itself from the hidden AI chat thread's ProseMirror content. The neutral provenance panel below the temporary `branchOrigin` marker uses API-authored origin provenance for provided references and the decision to fork the request. It does not reconstruct a prompt or reasoning-model response from generated media metadata.
-- Multi-reasoning `branchFork` markers open that same provenance/details panel below the fork marker. The marker chooses a generated media node with `generatedBy.branchForkNodeId` equal to the fork node id, so chat reconstruction is filtered by that node's `reasoningRunId` / `reasoningModelId` and shows only the relevant reasoning model response.
+- Neutral branch origins show the stored user prompt on the marker itself from the hidden AI chat thread's ProseMirror content. The neutral provenance panel below the temporary `branchOrigin` marker uses API-authored origin provenance for provided references and the decision to create that root. It does not reconstruct a prompt or reasoning-model response from generated media metadata.
+- `branchFork` markers open that same provenance/details panel below the fork marker. The marker chooses a generated media node with `generatedBy.branchForkNodeId` equal to the fork node id, so chat reconstruction is filtered by that node's `reasoningRunId` / `reasoningModelId` and shows only the relevant reasoning model response.
 - AI chat history mirrors the same fork provenance as decomposable message pieces. A matrix reasoning run stores the API-assigned `branchOriginNodeId`, `branchForkNodeId`, and `branchLineNodeId` on its `aiReasoningSection`, plus the same lineage ids on generated image/video nodes. Read-only canvas projections apply a lineage scope when they reassemble stored thread pieces: branch forks and generated-media runs render only scope-local workflow markers, and the live chat can show the full conversation context. Generated-media provider rows stay model/provider-only while retaining lineage attrs for reconstruction.
 
 (The DOM-overlay-vs-PIXI ownership split is owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md); the post-placement de-overlap pass is owned by [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).)
@@ -460,7 +460,7 @@ flowchart TB
 
 ## Balanced Branch-Tree Layout
 
-A branch lineage is a **tree** of generated media: the first generated image/video is normally the root, and each later edit/variant descends from a parent via API-assigned `generatedBy.parentMediaNodeId` or marker IDs. Fresh multi-model requests with no source/thread node use an API-planned temporary `branchOrigin` marker as the root so every sibling has the same explicit graph parent; the generated media nodes still carry prompt, references, and visual summaries on `generatedBy`. When a request has multiple reasoning models, each reasoning run gets an API-planned `branchFork` marker and the generated media for that run descend from that fork, so model lineage stays visible even when every run targets the same image/video models.
+A branch lineage is a **tree** of generated media: the first generated image/video is normally the root, and each later edit/variant descends from a parent via API-assigned `generatedBy.parentMediaNodeId` or marker IDs. API-planned temporary markers can become explicit roots when needed. A neutral `branchOrigin` is used only when the API references one; reasoning-fanout requests use one `branchFork` marker per reasoning run, and all selected media models under that reasoning run descend from the same fork.
 
 On every generated-media add/remove the affected tree is laid out deterministically and then rigid-separated from its neighbors:
 
@@ -476,7 +476,7 @@ A branch tree is a connected component of **top-level generated media** plus tem
 - temporary origins: `type: 'branchOrigin'`, with `branchId`, `temporary: true`, and no `parentId`
 - temporary forks: `type: 'branchFork'`, with `branchId`, `temporary: true`, optional reasoning-run metadata, and no `parentId`
 
-A generated node's in-tree parent is resolved from API-assigned `generatedBy.parentMediaNodeId`, then `generatedBy.branchOriginNodeId`, then `generatedBy.branchForkNodeId` / `generatedBy.branchLineNodeId` when an API marker is the only visible lineage parent. A `branchFork` or `branchLine` parent is resolved from its API-assigned `parentBranchNodeId`. If neither exists, the generated node is a root. This lets one tree mix images and videos, lets a single branch fork into multiple children, and gives fresh multi-model siblings a shared explicit root when no source node exists.
+A generated node's in-tree parent is resolved from API-assigned `generatedBy.parentMediaNodeId`, then `generatedBy.branchOriginNodeId`, then `generatedBy.branchForkNodeId` / `generatedBy.branchLineNodeId` when an API marker is the only visible lineage parent. A `branchFork` or `branchLine` parent is resolved from its API-assigned `parentBranchNodeId`; a parentless `branchFork` is a root marker. If no lineage parent exists, the generated node is a root. This lets one tree mix images and videos, lets a single reasoning branch fan out into multiple media-model children, and gives explicit roots only when the API plan declares them.
 
 Reference/style media and workspace-relevance selections can anchor placement and become model references, but they are not tree members unless they are themselves generated media in the lineage. Parented nodes are also excluded from tree layout, matching the canvas rule that containment is handled separately from top-level branch placement.
 
@@ -668,7 +668,7 @@ A dedicated `IMAGE_ARTIFACTS` table would help cross-workspace lineage queries a
 - [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow, `ProviderState`, routers, tool mechanism, and stream lifecycle that host `resolveImageBranch`.
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — the wire-level event catalog (`IMAGE_BRANCH_RESOLVED`, `CONTEXT_RELEVANCE_RESOLVED`, `IMAGE_*` / `VIDEO_*`) with payloads.
 - [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md) — descriptor-first workspace relevance that narrows candidates before this resolver runs; context-region removal.
-- [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the `ContentDescriptor` shape that labels candidates and is composed for free from resolver summaries.
+- [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the `ContentDescriptor` shape that labels candidates from VLM-authored media analysis.
 - [Image Generation](./IMAGE-GENERATION.md) — image-branch deltas: the `generate_image` tool, provider paths, partial streaming.
 - [Video Generation](./VIDEO-GENERATION.md) — video-branch deltas: VEO submit/poll, the mid-frame still, VEO input mapping.
 - [Rendering Engine](../canvas/RENDERING-ENGINE.md) — DOM/PIXI ownership for the media chrome overlay and the generated-media layers.
