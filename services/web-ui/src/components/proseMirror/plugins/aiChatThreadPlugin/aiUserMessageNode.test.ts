@@ -14,7 +14,7 @@ import {
 // Helper: instantiate aiUserMessageNodeView with minimal mocks
 // =============================================================================
 
-function createUserMessageNodeView(attrs: Record<string, unknown> = {}) {
+function createUserMessageNodeView(attrs: Record<string, unknown> = {}, options: any = undefined) {
     const node = schema.nodes.aiUserMessage.create(
         { id: 'user-msg-test-1', createdAt: 1700000000000, ...attrs }
     )
@@ -22,8 +22,32 @@ function createUserMessageNodeView(attrs: Record<string, unknown> = {}) {
     const mockView = {} as any
     const getPos = vi.fn(() => 0)
 
-    const nodeView = aiUserMessageNodeView(node, mockView, getPos)
+    const nodeView = aiUserMessageNodeView(node, mockView, getPos, options)
     return { nodeView, node, mockView, getPos }
+}
+
+function createImageCanvasNode(nodeId: string): any {
+    return {
+        type: 'image',
+        nodeId,
+        referenceId: nodeId,
+        src: `/api/images/${nodeId}.png`,
+        posterSrc: `/api/images/${nodeId}-poster.png`,
+        dimensions: { width: 420, height: 560 },
+        aspectRatio: 0.75,
+    }
+}
+
+function createMockContextPreview(nodes: Record<string, any>): any {
+    return {
+        getNodeById: (id: string) => nodes[id],
+        environment: {
+            getDocuments: () => [],
+            getThreads: () => [],
+            getApiBaseUrl: () => 'https://api.example.com',
+            getAuthToken: async () => 'token-123',
+        },
+    }
 }
 
 // =============================================================================
@@ -172,6 +196,85 @@ describe('aiUserMessageNodeView — DOM structure', () => {
 
         expect(aiUserMsg).not.toBeNull()
         expect(aiUserMsg!.contains(nodeView.contentDOM!)).toBe(true)
+    })
+})
+
+// =============================================================================
+// aiUserMessageNodeView — reference previews placement
+// =============================================================================
+
+describe('aiUserMessageNodeView — reference previews placement', () => {
+    it('renders reference preview tiles outside the message bubble', () => {
+        const contextPreview = createMockContextPreview({
+            'img-1': createImageCanvasNode('img-1'),
+        })
+
+        const { nodeView } = createUserMessageNodeView(
+            { referenceNodeIds: ['img-1'] },
+            { contextPreview },
+        )
+
+        const dom = nodeView.dom as HTMLElement
+        const previewsEl = dom.querySelector('.ai-user-message-reference-previews') as HTMLElement
+        const bubbleEl = dom.querySelector('.ai-user-message') as HTMLElement
+
+        expect(previewsEl.hidden).toBe(false)
+        expect(previewsEl.childElementCount).toBe(1)
+        // Tiles live outside the bubble, directly under the wrapper.
+        expect(bubbleEl.contains(previewsEl)).toBe(false)
+        expect(previewsEl.parentElement).toBe(dom)
+    })
+
+    it('positions the previews above the message bubble in the wrapper', () => {
+        const contextPreview = createMockContextPreview({
+            'img-1': createImageCanvasNode('img-1'),
+        })
+
+        const { nodeView } = createUserMessageNodeView(
+            { referenceNodeIds: ['img-1'] },
+            { contextPreview },
+        )
+
+        const dom = nodeView.dom as HTMLElement
+        const previewsEl = dom.querySelector('.ai-user-message-reference-previews') as HTMLElement
+        const bubbleEl = dom.querySelector('.ai-user-message') as HTMLElement
+        const children = Array.from(dom.children)
+
+        expect(children.indexOf(previewsEl)).toBeLessThan(children.indexOf(bubbleEl))
+    })
+
+    it('keeps the previews container hidden when there are no reference nodes', () => {
+        const contextPreview = createMockContextPreview({})
+
+        const { nodeView } = createUserMessageNodeView({}, { contextPreview })
+
+        const dom = nodeView.dom as HTMLElement
+        const previewsEl = dom.querySelector('.ai-user-message-reference-previews') as HTMLElement
+
+        expect(previewsEl.hidden).toBe(true)
+        expect(previewsEl.childElementCount).toBe(0)
+    })
+
+    it('ignoreMutation returns true for mutations inside the previews container', () => {
+        const contextPreview = createMockContextPreview({
+            'img-1': createImageCanvasNode('img-1'),
+        })
+
+        const { nodeView } = createUserMessageNodeView(
+            { referenceNodeIds: ['img-1'] },
+            { contextPreview },
+        )
+
+        const dom = nodeView.dom as HTMLElement
+        const previewsEl = dom.querySelector('.ai-user-message-reference-previews') as HTMLElement
+
+        const mutation = {
+            type: 'childList',
+            attributeName: null,
+            target: previewsEl.firstChild ?? previewsEl,
+        } as unknown as MutationRecord
+
+        expect(nodeView.ignoreMutation!(mutation)).toBe(true)
     })
 })
 
