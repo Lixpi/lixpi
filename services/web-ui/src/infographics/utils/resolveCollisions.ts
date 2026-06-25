@@ -7,6 +7,8 @@ type NodeBox = {
     y: number
     width: number
     height: number
+    margin?: number
+    overlapThreshold?: number
 }
 
 type CollisionOptions = {
@@ -35,13 +37,17 @@ export function resolveCollisions(
         shouldResolvePair,
     } = options
 
-    // Create mutable boxes with margin applied
+    // Create mutable boxes with margin applied. A box can override the global
+    // resolver margin so callers can keep the resolver geometry-agnostic while
+    // still configuring spacing per workspace node type.
     const boxes = nodes.map(node => ({
         id: node.id,
-        x: node.x - margin,
-        y: node.y - margin,
-        width: node.width + margin * 2,
-        height: node.height + margin * 2,
+        x: node.x - (node.margin ?? margin),
+        y: node.y - (node.margin ?? margin),
+        width: node.width + (node.margin ?? margin) * 2,
+        height: node.height + (node.margin ?? margin) * 2,
+        margin: node.margin ?? margin,
+        overlapThreshold: node.overlapThreshold ?? overlapThreshold,
         moved: false
     }))
 
@@ -76,21 +82,23 @@ export function resolveCollisions(
                 const px = (A.width + B.width) * 0.5 - Math.abs(dx)
                 const py = (A.height + B.height) * 0.5 - Math.abs(dy)
 
+                const pairOverlapThreshold = Math.min(A.overlapThreshold, B.overlapThreshold)
+
                 // Check if there's significant overlap on BOTH axes
-                if (px > overlapThreshold && py > overlapThreshold) {
+                if (px > pairOverlapThreshold && py > pairOverlapThreshold) {
                     const originalA = {
                         id: A.id,
-                        x: A.x + margin,
-                        y: A.y + margin,
-                        width: A.width - margin * 2,
-                        height: A.height - margin * 2,
+                        x: A.x + A.margin,
+                        y: A.y + A.margin,
+                        width: A.width - A.margin * 2,
+                        height: A.height - A.margin * 2,
                     }
                     const originalB = {
                         id: B.id,
-                        x: B.x + margin,
-                        y: B.y + margin,
-                        width: B.width - margin * 2,
-                        height: B.height - margin * 2,
+                        x: B.x + B.margin,
+                        y: B.y + B.margin,
+                        width: B.width - B.margin * 2,
+                        height: B.height - B.margin * 2,
                     }
                     if (shouldResolvePair && !shouldResolvePair(originalA, originalB)) continue
 
@@ -128,8 +136,8 @@ export function resolveCollisions(
         if (box.moved) {
             hasChanges = true
             result.set(box.id, {
-                x: box.x + margin,
-                y: box.y + margin
+                x: box.x + box.margin,
+                y: box.y + box.margin
             })
         }
     }

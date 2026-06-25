@@ -508,6 +508,29 @@ export type MediaBranchLineageMediaModelCircleSettings = {
     }
 }
 
+export type WorkspaceCollisionNodeTypeSettings = {
+    iterations: number
+    margin: number
+    overlapThreshold: number
+}
+
+export type WorkspaceCollisionFlowSettings = {
+    nodeTypes: {
+        document: WorkspaceCollisionNodeTypeSettings
+        image: WorkspaceCollisionNodeTypeSettings
+        video: WorkspaceCollisionNodeTypeSettings
+        branchOrigin: WorkspaceCollisionNodeTypeSettings
+        branchFork: WorkspaceCollisionNodeTypeSettings
+        branchLine: WorkspaceCollisionNodeTypeSettings
+    }
+}
+
+export type WorkspaceCollisionSettings = {
+    insertion: WorkspaceCollisionFlowSettings
+    dragRelease: WorkspaceCollisionFlowSettings
+    branchTree: WorkspaceCollisionFlowSettings
+}
+
 export type MediaBranchLineageSettings = {
     generatedMediaSize: number
     rootToFirstMediaGap: number
@@ -579,6 +602,8 @@ export type Settings = {
     connector: ConnectorSettings
 
     selection: SelectionSettings
+
+    workspaceCollision: WorkspaceCollisionSettings
 
     mediaNode: MediaNodeSettings
 
@@ -897,6 +922,50 @@ export const settings: Settings = {
             overlayBackgroundColor: 'rgba(230, 233, 246, 0.42)',
             // Outline color for a selected thread's floating prompt input.
             outlineColor: 'rgba(197, 192, 238, 0.75)',
+        },
+    },
+
+    // Workspace collision resolution settings. Resolver iterations, spacing,
+    // and trigger thresholds are configured per canvas node type so
+    // branch-lineage markers can stay close without inheriting media/document spacing.
+    workspaceCollision: {
+        // Viewport-centered insertions use wider breathing room.
+        insertion: {
+            nodeTypes: {
+                document: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
+                image: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
+                video: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
+                // Resolver margin expands both marker boxes, so 4 yields an 8-unit visible gap.
+                branchOrigin: { iterations: 50, margin: 4, overlapThreshold: 0 },
+                branchFork: { iterations: 50, margin: 4, overlapThreshold: 0 },
+                branchLine: { iterations: 50, margin: 4, overlapThreshold: 0 },
+            },
+        },
+        // Drag-release cleanup keeps manually positioned nodes tight while still
+        // preventing branch-lineage marker bodies from overlapping.
+        dragRelease: {
+            nodeTypes: {
+                document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                // Resolver margin expands both marker boxes, so 4 yields an 8-unit visible gap.
+                branchOrigin: { iterations: 50, margin: 4, overlapThreshold: 0 },
+                branchFork: { iterations: 50, margin: 4, overlapThreshold: 0 },
+                branchLine: { iterations: 50, margin: 4, overlapThreshold: 0 },
+            },
+        },
+        // Branch-tree rebalancing uses the same tight lineage-marker spacing as
+        // drag release and normal media/document breathing room.
+        branchTree: {
+            nodeTypes: {
+                document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                // Resolver margin expands both marker boxes, so 4 yields an 8-unit visible gap.
+                branchOrigin: { iterations: 50, margin: 4, overlapThreshold: 0 },
+                branchFork: { iterations: 50, margin: 4, overlapThreshold: 0 },
+                branchLine: { iterations: 50, margin: 4, overlapThreshold: 0 },
+            },
         },
     },
 
@@ -1225,7 +1294,7 @@ export const settings: Settings = {
         branchOriginToFirstMediaGap: 312,
         // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
         branchFanoutExtraGap: 200,
-        // Screen-pixel vertical gap between the global prompt input and the pending branch marker shown immediately after canvas prompt submit.
+        // Vertical gap between the global prompt input and pending branch marker; the same numeric gap separates stacked pending branch markers.
         pendingMarkerInputGap: 8,
         // Milliseconds for moving and scaling a pending branch marker from the global prompt input to its API-planned canvas position.
         pendingMarkerMoveDurationMs: 420,

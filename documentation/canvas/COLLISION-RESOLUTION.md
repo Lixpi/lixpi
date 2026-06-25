@@ -56,6 +56,8 @@ flowchart TB
 | `createCollisionPlan(...)` | Converts canvas nodes into world-space rectangular resolver boxes and adds parent/child exclusions. |
 | `resolveCollisions(...)` | Shared rectangle resolver. It knows nothing about canvas node types, parentage, Svelte, PIXI, or viewport state. |
 
+Workspace collision parameters live in `settings.workspaceCollision`. Each collision-producing flow (`insertion`, `dragRelease`, and `branchTree`) has per-canvas-node-type iterations, margin, and overlap threshold for `document`, `image`, `video`, `branchOrigin`, `branchFork`, and `branchLine`.
+
 ## Core Resolver
 
 `resolveCollisions(...)` receives an array of boxes shaped like `{ id, x, y, width, height }` and returns a map of moved box positions by id. It returns **only the boxes that actually moved**, so callers can apply a minimal set of position updates.
@@ -63,13 +65,14 @@ flowchart TB
 The resolver flow is:
 
 1. Expand each box by the requested margin.
-2. Check every pair in an O(n²) loop.
-3. Skip pairs listed in `excludePairs`.
-4. Compute overlap on the x and y axes.
-5. If both overlaps exceed the threshold, ask `shouldResolvePair(...)` whether the broad-phase overlap should be resolved.
-6. Move both boxes apart along the smaller overlap axis.
-7. Repeat until no boxes move or the iteration limit is reached.
-8. Return only the boxes that actually moved.
+2. Use any per-box margin / overlap-threshold overrides supplied by the workspace plan; otherwise use the resolver defaults.
+3. Check every pair in an O(n²) loop.
+4. Skip pairs listed in `excludePairs`.
+5. Compute overlap on the x and y axes.
+6. If both overlaps exceed the threshold, ask `shouldResolvePair(...)` whether the broad-phase overlap should be resolved.
+7. Move both boxes apart along the smaller overlap axis.
+8. Repeat until no boxes move or the iteration limit is reached.
+9. Return only the boxes that actually moved.
 
 {% callout type="warning" %}
 This resolver must stay geometry-agnostic. Do **not** teach it about canvas node types, generated image metadata, parent-child containment, or framework state. Add workspace-specific behavior in the collision plan that feeds it.
@@ -96,7 +99,7 @@ Several user actions can produce overlapping nodes. Each routes through the reso
 | Image or video generation commit | The generated media node is added to the canvas, parent/child pairs are excluded, and the resolver can move colliding nodes. |
 | Image-to-image branch continuation | The new media node is placed from the latest branch node, then the resolver can move colliding nodes. |
 | Generated output placement beside source media | The new generated media node is placed near the source/reference bounds, then the branch tree re-tidies and top-level collisions are resolved. |
-| Drag release | `computeWorkspaceDragPlan(...)` decides whether collision resolution is allowed. Single-node drags can resolve; rigid group drags preserve spacing; parent-container drags can resolve against top-level peers. |
+| Drag release | `computeWorkspaceDragPlan(...)` decides whether collision resolution is allowed. Single-node drags can resolve; rigid group drags preserve spacing; parent-container drags can resolve against top-level peers; selected branch-lineage marker groups can resolve so manually dragged markers never overlap each other. |
 
 For generated-media commit placement specifically, the affected branch tree is re-tidied by `rebalanceBranchTreesAndResolve(...)` **first** (see [Branch-Tree Layout](#branch-tree-layout-rigid-box-separation)), and the resolver runs only as a rigid-box cleanup pass afterward. See [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) for how lineage placement is computed.
 

@@ -210,13 +210,15 @@ const getResolverModel = (state: ProviderState): { provider: ProviderName; model
     return { provider, modelVersion }
 }
 
-const compactCandidateForPrompt = (candidate: ImageBranchCandidateImage): Record<string, unknown> => ({
+const compactCandidateForPrompt = (
+    candidate: ImageBranchCandidateImage,
+    candidateNodeIds: Set<string>,
+): Record<string, unknown> => ({
     nodeId: candidate.nodeId,
     roleHints: candidate.roleHints,
     branchId: candidate.branchId ?? '',
-    parentImageNodeId: candidate.parentImageNodeId ?? '',
-    ancestorNodeIds: candidate.ancestorNodeIds,
-    sourceContextNodeIds: candidate.sourceContextNodeIds,
+    ancestorNodeIds: (candidate.ancestorNodeIds ?? []).filter((nodeId) => candidateNodeIds.has(nodeId)),
+    sourceContextNodeIds: (candidate.sourceContextNodeIds ?? []).filter((nodeId) => candidateNodeIds.has(nodeId)),
     sourceMessageId: candidate.sourceMessageId ?? '',
     promptText: candidate.promptText ?? '',
     visualEntitySummary: candidate.visualEntitySummary ?? '',
@@ -247,6 +249,7 @@ const resolveCandidateImageUrls = async (
 const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
     const snapshot = state.imageBranchCandidateSnapshot
     if (!snapshot) throw new Error('Image branch candidate snapshot is required')
+    const candidateNodeIds = new Set(snapshot.candidates.map((candidate) => candidate.nodeId))
 
     const blocks: Array<Record<string, any>> = [{
         type: 'input_text',
@@ -258,7 +261,7 @@ const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
             snapshot.activeTargetNodeId ? `Active target node ID: ${snapshot.activeTargetNodeId}` : undefined,
             '',
             'Candidate metadata JSON:',
-            JSON.stringify(snapshot.candidates.map(compactCandidateForPrompt), null, 2),
+            JSON.stringify(snapshot.candidates.map((candidate) => compactCandidateForPrompt(candidate, candidateNodeIds)), null, 2),
             '',
             'Transcript/candidate context:',
             snapshot.transcriptContext,
@@ -295,6 +298,9 @@ const assertKnownNodeIds = (label: string, nodeIds: string[], candidateByNodeId:
         throw new Error(`Image branch resolver returned unknown ${label}: ${unknown.join(', ')}`)
     }
 }
+
+const appendRationale = (rationale: string, guardMessage: string): string =>
+    [rationale, guardMessage].filter(Boolean).join(' ')
 
 const sanitizeDecisions = (
     decisions: unknown,
@@ -394,11 +400,24 @@ const sanitizeResolution = (args: {
             mode = 'edit-active-branch'
             if (operationKind === 'new_image' || operationKind === 'fresh_branch') operationKind = 'style_transfer'
             excludedNodeIds = excludedNodeIds.filter((nodeId) => nodeId !== generatedTarget.nodeId)
-            rationale = [
+            rationale = appendRationale(
                 rationale,
                 `Resolver guard continued generated branch via selected target reference ${generatedTarget.nodeId}.`,
-            ].filter(Boolean).join(' ')
+            )
         }
+    }
+
+    if (parentImageNodeId && !candidateByNodeId.has(parentImageNodeId)) {
+        const unknownParentImageNodeId = parentImageNodeId
+        parentImageNodeId = targetImageNodeId && candidateByNodeId.has(targetImageNodeId)
+            ? targetImageNodeId
+            : undefined
+        rationale = appendRationale(
+            rationale,
+            parentImageNodeId
+                ? `Resolver guard replaced unknown parentImageNodeId ${unknownParentImageNodeId} with targetImageNodeId ${parentImageNodeId}.`
+                : `Resolver guard ignored unknown parentImageNodeId ${unknownParentImageNodeId}.`,
+        )
     }
 
     assertKnownNodeIds('targetImageNodeId', targetImageNodeId ? [targetImageNodeId] : [], candidateByNodeId)

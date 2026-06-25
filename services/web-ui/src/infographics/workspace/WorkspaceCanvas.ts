@@ -105,7 +105,7 @@ import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/animations/gradients/shiftingGradientRenderer.ts'
 import { CircularGlassMaterial } from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
 import { tPatternSvgTexture } from '$src/svgIcons/svgTextures.ts'
-import { settings } from '$src/settings.ts'
+import { settings, type WorkspaceCollisionFlowSettings, type WorkspaceCollisionNodeTypeSettings } from '$src/settings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
@@ -166,12 +166,21 @@ import { getAiModelIcon, getAiProviderIcon } from '$src/components/proseMirror/p
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 type ResizeHandle = ResizeCorner
-type CollisionBox = { id: string; x: number; y: number; width: number; height: number }
+type CollisionBox = {
+    id: string
+    x: number
+    y: number
+    width: number
+    height: number
+    margin?: number
+    overlapThreshold?: number
+}
 type CollisionEntry = { node: CanvasNode; offset: { x: number; y: number } }
 type CollisionPlan = {
     nodeBoxes: CollisionBox[]
     entries: Map<string, CollisionEntry>
     shouldResolvePair: (a: CollisionBox, b: CollisionBox) => boolean
+    iterations: number
 }
 type BaseNodeInteractionOptions = {
     renderResizeHandles?: boolean
@@ -268,7 +277,10 @@ function getBranchMarkerResponseLineHeight(): number {
 function getBranchMarkerMinHeight(): number {
     return BRANCH_MARKER_VERTICAL_PADDING + getBranchMarkerMessageLineHeight()
 }
-const BRANCH_MARKER_PENDING_STACK_GAP = 8
+function getBranchMarkerStackGap(): number {
+    const gap = Number(settings.mediaBranchLineage.pendingMarkerInputGap)
+    return Number.isFinite(gap) ? Math.max(0, gap) : 0
+}
 // Must match the `workspace-branch-marker-spin` animation duration in
 // workspace-canvas.scss (0.8s). Used to phase-align recreated spinners to a
 // shared rotation clock so the spinner never visibly restarts.
@@ -285,9 +297,53 @@ type PlannedBranchMarkerMediaLayoutProxy = {
     proxyNodeId: string
     parentBranchNodeId: string
 }
+type BranchMarkerStackGroup = {
+    markers: BranchMarkerNode[]
+}
 
 function getBranchMarkerMinWidth(): number {
     return Math.round(settings.mediaBranchLineage.branchOrigin.size * settings.mediaBranchLineage.marker.minWidthMultiplier)
+}
+
+function compareBranchMarkersByReasoningOrder(a: BranchMarkerNode, b: BranchMarkerNode): number {
+    const getReasoningIndex = (marker: BranchMarkerNode): number | undefined =>
+        marker.type === 'branchFork' || marker.type === 'branchLine'
+            ? marker.reasoningIndex
+            : marker.pendingState?.reasoningIndex
+    const indexDelta = (getReasoningIndex(a) ?? Number.MAX_SAFE_INTEGER)
+        - (getReasoningIndex(b) ?? Number.MAX_SAFE_INTEGER)
+    if (indexDelta !== 0) return indexDelta
+    const positionDelta = a.position.y - b.position.y
+    if (positionDelta !== 0) return positionDelta
+    return a.nodeId.localeCompare(b.nodeId)
+}
+
+function compareBranchMarkersByStackPosition(a: BranchMarkerNode, b: BranchMarkerNode): number {
+    const positionDelta = a.position.y - b.position.y
+    if (positionDelta !== 0) return positionDelta
+    return compareBranchMarkersByReasoningOrder(a, b)
+}
+
+function getBranchMarkerStackOffset(
+    markerIds: string[],
+    nodesById: Map<string, CanvasNode>,
+    markerNodeId: string,
+    gap: number,
+): number | null {
+    let offset = gap
+    for (const id of markerIds) {
+        if (id === markerNodeId) return offset
+        const markerNode = nodesById.get(id)
+        if (!markerNode) continue
+        offset += markerNode.dimensions.height + gap
+    }
+    return null
+}
+
+function getBranchMarkerStackHeight(markers: BranchMarkerNode[], gap: number): number {
+    if (markers.length === 0) return 0
+    return markers.reduce((height, marker) => height + marker.dimensions.height, 0)
+        + Math.max(0, markers.length - 1) * gap
 }
 
 function getBranchMarkerWidthForText(promptText: string): number {
@@ -351,6 +407,16 @@ function getBranchMarkerNodeDimensions(
 
 function getBranchOriginOutputGap(): number {
     return settings.mediaBranchLineage.branchOriginToFirstMediaGap
+}
+
+function getRootBranchMarkerOutputGap(): number {
+    return settings.mediaBranchLineage.rootToFirstMediaGap
+}
+
+function getGeneratedMediaOutputGap(sourceNode: CanvasNode): number {
+    if (sourceNode.type === 'branchOrigin') return getBranchOriginOutputGap()
+    if (sourceNode.type === 'branchFork' && !sourceNode.parentBranchNodeId) return getRootBranchMarkerOutputGap()
+    return settings.mediaBranchLineage.mediaToMediaGap
 }
 
 function getExpectedBranchMarkerDimensions(node: CanvasNode): { width: number; height: number } | undefined {
@@ -895,16 +961,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let generatedMediaChromeLayerEl: HTMLDivElement | null = null
     let pendingGeneratedMediaIconLayerEl: HTMLDivElement | null = null
     let generatedMediaInfoPanelLayerEl: HTMLDivElement | null = null
-    // Screen-fixed pending markers live here, not in viewportEl: the viewport is a
-    // low z-index stacking context beneath the PIXI media / chrome layers, so a
-    // marker parented there is overlapped by generated media. This overlay shares
-    // the viewport transform (registered with the viewport bridge) but sits above
-    // every canvas layer, so the marker overlaps media and the composer context tray.
+    // Screen-fixed pending markers live here, not in viewportEl: they are not real
+    // canvas nodes until the API lineage plan resolves, so pan/zoom must not scale
+    // them. The overlay sits above every canvas layer and is intentionally not
+    // registered with the viewport bridge.
     let pendingBranchMarkerOverlayEl: HTMLDivElement | null = null
     let generatedMediaChromeSyncRaf: number | null = null
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     const branchMarkerProjectionOverrideNodeIds: Set<string> = new Set()
+    const manuallyPositionedBranchMarkerNodeIds: Set<string> = new Set()
     // Streamed AI tokens are dispatched with `skipDispatch`, so the aiChatThreads
     // store lags behind the live editor doc until the stream settles. Branch
     // lineage markers read their preview text from this override while a thread is
@@ -1061,7 +1127,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     pendingBranchMarkerOverlayEl = createPendingBranchMarkerOverlay()
     viewportBridge = createViewportBridge({
         viewportEl,
-        viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl, pendingBranchMarkerOverlayEl],
+        viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],
         getPixiLayers: () => [pixiMediaLayer],
     })
     if (currentCanvasState?.viewport) {
@@ -1479,10 +1545,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createPendingBranchMarkerOverlay(): HTMLDivElement {
         const overlayStyle = {
             position: 'absolute' as const,
-            top: '0',
-            left: '0',
-            transformOrigin: '0 0',
-            willChange: 'transform',
+            inset: '0',
             pointerEvents: 'none' as const,
             // Above the canvas content/media layers and the composer host (9990)
             // so context items added to the prompt slide behind the marker.
@@ -3024,7 +3087,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     ): { x: number; y: number } {
         const mediaWidth = getGeneratedMediaInsertionSize()
         const groupDimensions = {
-            width: dimensions.width + settings.mediaBranchLineage.mediaToMediaGap + mediaWidth,
+            width: dimensions.width + getRootBranchMarkerOutputGap() + mediaWidth,
             height: Math.max(dimensions.height, mediaHeight),
         }
         const groupPosition = getCenteredInsertionPosition(groupDimensions)
@@ -3043,36 +3106,103 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function createCollisionPlan(nodes: CanvasNode[], topLevelOnly = false): CollisionPlan {
+    function getGeneratedMediaChromeCollisionHeight(node: CanvasNode): number {
+        if (!isGeneratedMediaNode(node) || isPendingGeneratedMediaBeforeFirstFrame(node.nodeId)) return 0
+        const generatedMediaChromeHeight = settings.mediaNode.generatedMediaChrome.topGap
+            + settings.mediaNode.generatedMediaChrome.iconSize
+        if (node.type !== 'video') return generatedMediaChromeHeight
+        return VIDEO_CONTROLS_BOTTOM_INSET + VIDEO_CONTROLS_HEIGHT + generatedMediaChromeHeight
+    }
+
+    function getCanvasNodeCollisionRect(
+        node: CanvasNode,
+        worldPosition: { x: number; y: number },
+    ): Rect {
+        const dimensions = isBranchMarkerNode(node)
+            ? liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions
+            : node.dimensions
+        return {
+            x: worldPosition.x,
+            y: worldPosition.y,
+            width: dimensions.width,
+            height: dimensions.height + getGeneratedMediaChromeCollisionHeight(node),
+        }
+    }
+
+    function getCanvasNodeCollisionSettings(
+        node: CanvasNode,
+        collisionSettings: WorkspaceCollisionFlowSettings,
+    ): WorkspaceCollisionNodeTypeSettings {
+        switch (node.type) {
+            case 'image':
+                return collisionSettings.nodeTypes.image
+            case 'video':
+                return collisionSettings.nodeTypes.video
+            case 'branchOrigin':
+                return collisionSettings.nodeTypes.branchOrigin
+            case 'branchFork':
+                return collisionSettings.nodeTypes.branchFork
+            case 'branchLine':
+                return collisionSettings.nodeTypes.branchLine
+            case 'document':
+            default:
+                return collisionSettings.nodeTypes.document
+        }
+    }
+
+    function getWorkspaceCollisionFlowIterations(collisionSettings: WorkspaceCollisionFlowSettings): number {
+        return Math.max(
+            ...Object.values(collisionSettings.nodeTypes)
+                .map((nodeSettings: WorkspaceCollisionNodeTypeSettings) => nodeSettings.iterations),
+        )
+    }
+
+    function createCollisionPlan(
+        nodes: CanvasNode[],
+        topLevelOnly = false,
+        collisionSettings: WorkspaceCollisionFlowSettings = settings.workspaceCollision.dragRelease,
+    ): CollisionPlan {
         const collisionNodes = topLevelOnly
             ? nodes.filter((node: CanvasNode) => !node.parentId)
             : nodes
         const nodesById = getCanvasNodesById(nodes)
         const entries = new Map<string, CollisionEntry>()
+        let iterations = 0
 
         const nodeBoxes = collisionNodes.map((node: CanvasNode) => {
             const worldPosition = getNodeWorldPosition(node, nodesById)
-            entries.set(node.nodeId, { node, offset: { x: 0, y: 0 } })
+            const collisionRect = getCanvasNodeCollisionRect(node, worldPosition)
+            const nodeCollisionSettings = getCanvasNodeCollisionSettings(node, collisionSettings)
+            iterations = Math.max(iterations, nodeCollisionSettings.iterations)
+            entries.set(node.nodeId, {
+                node,
+                offset: {
+                    x: worldPosition.x - collisionRect.x,
+                    y: worldPosition.y - collisionRect.y,
+                },
+            })
             return {
                 id: node.nodeId,
-                x: worldPosition.x,
-                y: worldPosition.y,
-                width: node.dimensions.width,
-                height: node.dimensions.height,
+                x: collisionRect.x,
+                y: collisionRect.y,
+                width: collisionRect.width,
+                height: collisionRect.height,
+                margin: nodeCollisionSettings.margin,
+                overlapThreshold: nodeCollisionSettings.overlapThreshold,
             }
         })
 
         const shouldResolvePair = (): boolean => true
 
-        return { nodeBoxes, entries, shouldResolvePair }
+        return { nodeBoxes, entries, shouldResolvePair, iterations }
     }
 
     function resolveTopLevelNodeCollisions(nodes: CanvasNode[]): CanvasNode[] {
-        const collisionPlan = createCollisionPlan(nodes, true)
+        const collisionSettings = settings.workspaceCollision.insertion
+        const collisionPlan = createCollisionPlan(nodes, true, collisionSettings)
         const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
-            iterations: 50,
-            overlapThreshold: 0.5,
-            margin: 32,
+            iterations: collisionPlan.iterations,
+            margin: 0,
             shouldResolvePair: collisionPlan.shouldResolvePair,
         })
 
@@ -3085,24 +3215,43 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
+    function clearStartedBranchMarkerProjectionOverrides(nodes: CanvasNode[]): void {
+        const { markerIdsWithGeneratedChildren } = getStartedLineageMarkerState(nodes)
+        for (const markerId of markerIdsWithGeneratedChildren) {
+            liveNodeOverrides.delete(markerId)
+            branchMarkerProjectionOverrideNodeIds.delete(markerId)
+            manuallyPositionedBranchMarkerNodeIds.delete(markerId)
+        }
+    }
+
     // Single entry point for the generated-media add/remove paths: re-tidy every
     // branch-lineage tree and rigid-separate trees + loose nodes through the
-    // unchanged resolver. Depth/sibling gaps come from mediaBranchLineage so
+    // shared resolver. Depth/sibling gaps come from mediaBranchLineage so
     // spacing matches the rest of the lineage placement.
     function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[] {
         const layoutProxyPlan = createPendingGeneratedMediaLayoutProxyPlan(nodes)
+        const collisionSettings = settings.workspaceCollision.branchTree
         const resolvedNodes = rebalanceBranchTreesAndResolve(layoutProxyPlan.nodes, edges, {
             depthGap: settings.mediaBranchLineage.mediaToMediaGap,
             branchOriginDepthGap: getBranchOriginOutputGap(),
+            rootMarkerDepthGap: getRootBranchMarkerOutputGap(),
             siblingGap: settings.mediaBranchLineage.branchRowGap,
             branchFanoutExtraGap: settings.mediaBranchLineage.branchFanoutExtraGap,
-            branchOriginMarkerStackGap: BRANCH_MARKER_PENDING_STACK_GAP,
+            branchOriginMarkerStackGap: getBranchMarkerStackGap(),
+            collisionIterations: getWorkspaceCollisionFlowIterations(collisionSettings),
+            collisionMargin: 0,
+            getNodeCollisionRect: getCanvasNodeCollisionRect,
+            getNodeCollisionMargin: (node: CanvasNode) => getCanvasNodeCollisionSettings(node, collisionSettings).margin,
+            getNodeCollisionOverlapThreshold: (node: CanvasNode) =>
+                getCanvasNodeCollisionSettings(node, collisionSettings).overlapThreshold,
         })
-        return restorePendingGeneratedMediaLayoutProxyPlan(
+        const restoredNodes = restorePendingGeneratedMediaLayoutProxyPlan(
             resolvedNodes,
             layoutProxyPlan.proxiesByNodeId,
             layoutProxyPlan.plannedMarkerProxiesByMarkerId,
         )
+        clearStartedBranchMarkerProjectionOverrides(restoredNodes)
+        return restoredNodes
     }
 
     function getPendingGeneratedMediaBeforeFrameCircleGeometry(
@@ -3232,16 +3381,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)
         const basePosition = referencePosition
             ? {
-                x: referencePosition.x - settings.mediaBranchLineage.mediaToMediaGap - markerDimensions.width,
+                x: referencePosition.x - getRootBranchMarkerOutputGap() - markerDimensions.width,
                 y: referencePosition.y + (mediaHeight - markerDimensions.height) / 2,
             }
             : getCenteredFreshRootBranchMarkerPosition(markerDimensions, mediaHeight)
 
         if (!siblingSlot) return basePosition
 
-        const stackStep = markerDimensions.height + BRANCH_MARKER_PENDING_STACK_GAP
+        const stackGap = getBranchMarkerStackGap()
+        const stackStep = markerDimensions.height + stackGap
         const stackHeight = siblingSlot.count * markerDimensions.height
-            + Math.max(0, siblingSlot.count - 1) * BRANCH_MARKER_PENDING_STACK_GAP
+            + Math.max(0, siblingSlot.count - 1) * stackGap
         return {
             x: basePosition.x,
             y: basePosition.y - stackHeight / 2
@@ -3284,11 +3434,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (parentNode.type === 'branchOrigin') {
             const stackIndex = siblingSlot?.index ?? 0
+            const stackGap = getBranchMarkerStackGap()
             return {
                 x: (parentAnchorX + futureCircleLeft) / 2 - markerDimensions.width / 2,
                 y: parentRect.y + parentRect.height
-                    + BRANCH_MARKER_PENDING_STACK_GAP
-                    + stackIndex * (markerDimensions.height + BRANCH_MARKER_PENDING_STACK_GAP),
+                    + stackGap
+                    + stackIndex * (markerDimensions.height + stackGap),
             }
         }
 
@@ -3509,9 +3660,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             markerIds.sort((a, b) => {
                 const aNode = nodesById.get(a) as BranchForkCanvasNode | BranchLineCanvasNode | undefined
                 const bNode = nodesById.get(b) as BranchForkCanvasNode | BranchLineCanvasNode | undefined
-                const indexDelta = (aNode?.reasoningIndex ?? Number.MAX_SAFE_INTEGER)
-                    - (bNode?.reasoningIndex ?? Number.MAX_SAFE_INTEGER)
-                if (indexDelta !== 0) return indexDelta
+                if (aNode && bNode) return compareBranchMarkersByStackPosition(aNode, bNode)
                 return a.localeCompare(b)
             })
         }
@@ -3533,12 +3682,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ? branchOriginMarkerIdsByParentId.get(parentNode.nodeId)
                 : undefined
             const branchOriginStackIndex = branchOriginMarkerIds?.indexOf(proxy.markerNodeId) ?? -1
+            const stackGap = getBranchMarkerStackGap()
+            const branchOriginStackOffset = branchOriginStackIndex >= 0 && branchOriginMarkerIds
+                ? getBranchMarkerStackOffset(branchOriginMarkerIds, nodesById, proxy.markerNodeId, stackGap)
+                : null
             plannedMarkerPositionsById.set(proxy.markerNodeId, {
                 x: (parentAnchorX + proxyAnchorX) / 2 - markerNode.dimensions.width / 2,
-                y: branchOriginStackIndex >= 0
-                    ? parentRect.y + parentRect.height
-                        + BRANCH_MARKER_PENDING_STACK_GAP
-                        + branchOriginStackIndex * (markerNode.dimensions.height + BRANCH_MARKER_PENDING_STACK_GAP)
+                y: branchOriginStackOffset !== null
+                    ? parentRect.y + parentRect.height + branchOriginStackOffset
                     : (parentAnchorY + proxyAnchorY) / 2 - markerNode.dimensions.height / 2,
             })
         }
@@ -5029,6 +5180,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getDefaultFeatureExtractionAiModel(): string {
         const models = (aiModelsStore.getData() ?? []) as any[]
+        const defaultId = aiModelsStore.getDefaultModelId('reasoning')
+        if (defaultId && models.some((model) => getModelId(model) === defaultId)) return defaultId
         return getModelId(models.find((model) =>
             !modelHasModality(model, 'image_generation') && !modelHasModality(model, 'video_generation')
         ))
@@ -5036,6 +5189,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getDefaultFeatureExtractionImageModel(): string | undefined {
         const models = (aiModelsStore.getData() ?? []) as any[]
+        const defaultId = aiModelsStore.getDefaultModelId('image')
+        if (defaultId && models.some((model) => getModelId(model) === defaultId)) return defaultId
         return getModelId(models.find((model) => modelHasModality(model, 'image_generation'))) || undefined
     }
 
@@ -6414,10 +6569,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getPendingBranchMarkerScreenProjection(
         dimensions: { width: number; height: number },
-        viewport: Viewport = getLiveViewport(),
         stackOffsetY = 0,
-    ): { position: { x: number; y: number }; visualScale: number } {
-        const zoom = getSafeViewportZoom(viewport)
+    ): { position: { x: number; y: number } } {
         const paneBounds = paneRect ?? paneEl.getBoundingClientRect()
         // Anchor to the input row itself, not the composer host: the host grows
         // upward as context items are added above the input, and we don't want
@@ -6430,10 +6583,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const screenBottom = paneBounds.height - 24 - gap - stackOffsetY
             return {
                 position: {
-                    x: (screenRight - viewport.x) / zoom - dimensions.width,
-                    y: (screenBottom - dimensions.height - viewport.y) / zoom,
+                    x: screenRight - dimensions.width,
+                    y: screenBottom - dimensions.height,
                 },
-                visualScale: 1 / zoom,
             }
         }
 
@@ -6441,17 +6593,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const screenBottom = composerBounds.top - paneBounds.top - gap - stackOffsetY
         return {
             position: {
-                x: (screenRight - viewport.x) / zoom - dimensions.width,
-                y: (screenBottom - dimensions.height - viewport.y) / zoom,
+                x: screenRight - dimensions.width,
+                y: screenBottom - dimensions.height,
             },
-            visualScale: 1 / zoom,
         }
     }
 
     function applyPendingBranchMarkerScreenProjection(
         nodeId: string,
         dimensions: { width: number; height: number },
-        viewport: Viewport = getLiveViewport(),
         stackOffsetY = 0,
     ): void {
         const nodeEl = findBranchMarkerNodeEl(nodeId)
@@ -6469,34 +6619,32 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // measure the intrinsic content width instead of a char-count heuristic, then
         // cap it so its on-screen width never exceeds 80% of the prompt input field —
         // beyond that the message truncates with an ellipsis.
-        const zoom = getSafeViewportZoom(viewport)
         const composerBounds = (globalCanvasComposer?.element ?? globalCanvasComposerHostEl)?.getBoundingClientRect()
         applyStyle(nodeEl, { width: 'max-content', height: `${dimensions.height}px` })
         let dockedWidth = Math.max(getBranchMarkerMinWidth(), nodeEl.scrollWidth || dimensions.width)
-        if (composerBounds) {
-            // On-screen width = canvas width * visualScale (1 / zoom); keep it ≤ 80% of
-            // the input field, so the canvas-unit cap is (0.8 * inputWidth) * zoom.
+        if (composerBounds && composerBounds.width > 0) {
+            // Preflight markers are screen-space UI, not canvas chrome. Keep the
+            // width cap independent from zoom; zoom only matters after promotion.
             const screenFixedMaxScreenWidth = composerBounds.width * settings.mediaBranchLineage.marker.screenFixedMaxWidthFraction
-            dockedWidth = Math.min(dockedWidth, screenFixedMaxScreenWidth * zoom)
+            dockedWidth = Math.min(dockedWidth, screenFixedMaxScreenWidth)
         }
         dockedWidth = Math.round(dockedWidth)
 
         const dockedDimensions = { width: dockedWidth, height: dimensions.height }
-        const projection = getPendingBranchMarkerScreenProjection(dockedDimensions, viewport, stackOffsetY)
+        const projection = getPendingBranchMarkerScreenProjection(dockedDimensions, stackOffsetY)
         applyStyle(nodeEl, {
             left: `${projection.position.x}px`,
             top: `${projection.position.y}px`,
             width: `${dockedWidth}px`,
             height: `${dimensions.height}px`,
-            transform: `scale(${projection.visualScale})`,
-            transformOrigin: 'top right',
+            transform: 'none',
             // Overlap the composer's context tray (host z-index 9990) so added
             // context items render behind the marker instead of shifting it.
             zIndex: '9991',
         })
     }
 
-    function syncPendingBranchMarkerScreenPlacements(viewport: Viewport = getLiveViewport()): void {
+    function syncPendingBranchMarkerScreenPlacements(): void {
         if (!currentCanvasState) return
         const pendingNodes = currentCanvasState.nodes
             .filter((node: CanvasNode): node is BranchMarkerNode =>
@@ -6509,12 +6657,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return a.nodeId.localeCompare(b.nodeId)
             })
         let stackOffsetY = 0
+        const stackGap = getBranchMarkerStackGap()
         for (const node of pendingNodes) {
             // The docked pose is laid out at its own compact, single-line size — not
             // the (taller, possibly wrapped) on-canvas dimensions the node carries.
             const dimensions = getBranchMarkerScreenFixedDimensions(getBranchMarkerPromptText(node))
-            applyPendingBranchMarkerScreenProjection(node.nodeId, dimensions, viewport, stackOffsetY)
-            stackOffsetY += dimensions.height + BRANCH_MARKER_PENDING_STACK_GAP
+            applyPendingBranchMarkerScreenProjection(node.nodeId, dimensions, stackOffsetY)
+            stackOffsetY += dimensions.height + stackGap
         }
     }
 
@@ -6528,12 +6677,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const pendingStates = getPendingBranchMarkerModelStates(data, promptText)
         const pendingNodes: BranchLineCanvasNode[] = []
         let stackOffsetY = 0
+        const stackGap = getBranchMarkerStackGap()
         pendingStates.forEach((pendingState, index) => {
             const dimensions = getBranchMarkerContentDimensions(promptText)
             // The node carries on-canvas dimensions, but its initial docked pose is
             // projected from the compact single-line screen-fixed size.
             const screenFixedDimensions = getBranchMarkerScreenFixedDimensions(promptText)
-            const projection = getPendingBranchMarkerScreenProjection(screenFixedDimensions, getLiveViewport(), stackOffsetY)
+            const projection = getPendingBranchMarkerScreenProjection(screenFixedDimensions, stackOffsetY)
             const nodeId = `pending-branch-${uuidv4()}`
             const basePendingNode: BranchLineCanvasNode = {
                 nodeId,
@@ -6564,7 +6714,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             if (pendingStates.length === 1) pendingBranchMarkers.set(placementKey, record)
             pendingNodes.push(pendingNode)
-            stackOffsetY += screenFixedDimensions.height + BRANCH_MARKER_PENDING_STACK_GAP
+            stackOffsetY += screenFixedDimensions.height + stackGap
         })
         commitCanvasStatePreservingEditors({
             ...currentCanvasState,
@@ -6614,10 +6764,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (pendingNodeId !== plannedNode.nodeId) {
             liveNodeOverrides.delete(pendingNodeId)
             branchMarkerProjectionOverrideNodeIds.delete(pendingNodeId)
+            manuallyPositionedBranchMarkerNodeIds.delete(pendingNodeId)
         }
         const nodeWithProjection = resizeBranchMarkerNodeFromProseMirror(plannedNode)
         liveNodeOverrides.delete(nodeWithProjection.nodeId)
         branchMarkerProjectionOverrideNodeIds.delete(nodeWithProjection.nodeId)
+        manuallyPositionedBranchMarkerNodeIds.delete(nodeWithProjection.nodeId)
         return nodeWithProjection
     }
 
@@ -6667,6 +6819,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return migrated
     }
 
+    function getPendingBranchMarkerViewportStartGeometry(pendingEl: HTMLElement): CanvasGeometry {
+        const viewport = getLiveViewport()
+        const zoom = getSafeViewportZoom(viewport)
+        const screenLeft = parseFloat(pendingEl.style.left) || 0
+        const screenTop = parseFloat(pendingEl.style.top) || 0
+        const screenWidth = parseFloat(pendingEl.style.width) || pendingEl.offsetWidth
+        const screenHeight = parseFloat(pendingEl.style.height) || pendingEl.offsetHeight
+
+        return {
+            position: {
+                x: (screenLeft - viewport.x) / zoom,
+                y: (screenTop - viewport.y) / zoom,
+            },
+            dimensions: {
+                width: screenWidth / zoom,
+                height: screenHeight / zoom,
+            },
+        }
+    }
+
     function promotePendingBranchMarkerElement(pendingNodeId: string, node: BranchMarkerNode): HTMLElement | null {
         const pendingEl = findBranchMarkerNodeEl(pendingNodeId)
         if (!pendingEl) return null
@@ -6679,19 +6851,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         } else {
             nodeEl = createBranchLineNode(node)
         }
+        const startGeometry = getPendingBranchMarkerViewportStartGeometry(pendingEl)
         applyStyle(nodeEl, {
-            left: pendingEl.style.left,
-            top: pendingEl.style.top,
+            left: `${startGeometry.position.x}px`,
+            top: `${startGeometry.position.y}px`,
             // Start at the docked pose's compact size so the move animation grows the
             // pill into its (larger) on-canvas dimensions instead of snapping.
-            width: pendingEl.style.width,
-            height: pendingEl.style.height,
-            transform: pendingEl.style.transform,
-            transformOrigin: pendingEl.style.transformOrigin || 'top right',
+            width: `${startGeometry.dimensions.width}px`,
+            height: `${startGeometry.dimensions.height}px`,
+            transform: 'scale(1)',
+            transformOrigin: 'top right',
         })
         // The marker now becomes a real canvas node: it must live in viewportEl so
-        // node layering and geometry sync own it. The overlay shares the viewport
-        // transform, so copying the same coordinates keeps it visually in place.
+        // node layering and geometry sync own it. Convert the screen-space docked
+        // rect into viewport world units so it stays visually in place at handoff.
         pendingEl.remove()
         viewportEl.appendChild(nodeEl)
         connectionManager?.registerNodeElement(node.nodeId, nodeEl as HTMLDivElement)
@@ -6910,6 +7083,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             else if (supportNode.type === 'branchFork') appendBranchForkNodeToDOM(supportNode)
             else appendBranchLineNodeToDOM(supportNode)
         }
+        refreshBranchMarkersForAiChatThread(threadId)
     }
 
     function clearPendingBranchMarkerStateForRun(threadId: string, generationRun?: MediaGenerationRunMeta): void {
@@ -6920,7 +7094,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         let updatedMarker: BranchMarkerNode | undefined
         const nodes = currentCanvasState.nodes.map((node: CanvasNode): CanvasNode => {
             if (node.nodeId !== record.nodeId || !isBranchMarkerNode(node) || !node.pendingState) return node
-            updatedMarker = resizeBranchMarkerNodeFromProseMirror(stripPendingBranchMarkerState(node) as BranchMarkerNode)
+            const liveNode = applyBranchMarkerLiveGeometry(node)
+            const resizedNode = resizeBranchMarkerNodeFromProseMirror(stripPendingBranchMarkerState(liveNode) as BranchMarkerNode)
+            updatedMarker = manuallyPositionedBranchMarkerNodeIds.has(node.nodeId)
+                ? { ...resizedNode, position: liveNode.position }
+                : resizedNode
             return updatedMarker
         })
         if (!updatedMarker) return
@@ -6932,6 +7110,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             nodes,
         })
         syncBranchMarkerNodeContent(updatedMarker)
+        refreshBranchMarkersForAiChatThread(threadId)
     }
 
     function forgetPendingBranchMarkerRecordForRun(threadId: string, generationRun?: MediaGenerationRunMeta): void {
@@ -6972,6 +7151,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 destroyBranchMarkerReasoningTooltip(nodeId)
                 liveNodeOverrides.delete(nodeId)
                 branchMarkerProjectionOverrideNodeIds.delete(nodeId)
+                manuallyPositionedBranchMarkerNodeIds.delete(nodeId)
                 findBranchMarkerNodeEl(nodeId)?.remove()
             }
             return
@@ -6991,6 +7171,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         destroyBranchMarkerReasoningTooltip(record.nodeId)
         liveNodeOverrides.delete(record.nodeId)
         branchMarkerProjectionOverrideNodeIds.delete(record.nodeId)
+        manuallyPositionedBranchMarkerNodeIds.delete(record.nodeId)
         findBranchMarkerNodeEl(record.nodeId)?.remove()
     }
 
@@ -7700,16 +7881,131 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
     }
 
+    function applyBranchMarkerLiveGeometry<T extends BranchMarkerNode>(node: T): T {
+        const override = liveNodeOverrides.get(node.nodeId)
+        if (!override?.position && !override?.dimensions) return node
+        return {
+            ...node,
+            ...(override.position ? { position: override.position } : {}),
+            ...(override.dimensions ? { dimensions: override.dimensions } : {}),
+        } as T
+    }
+
+    function getBranchMarkerStackGroupKey(marker: BranchMarkerNode): string | null {
+        if (marker.pendingState?.phase === 'preflight') return null
+        if (marker.type !== 'branchFork' && marker.type !== 'branchLine') return null
+        if (marker.parentBranchNodeId) return `parent:${marker.parentBranchNodeId}`
+        if (marker.type === 'branchFork') return `root:${marker.generationRequestId}`
+        return null
+    }
+
+    function getBranchMarkerStackGroups(
+        markers: BranchMarkerNode[],
+        allNodes: CanvasNode[],
+    ): BranchMarkerStackGroup[] {
+        const groupsByKey = new Map<string, BranchMarkerNode[]>()
+        const { markerIdsWithGeneratedChildren } = getStartedLineageMarkerState(allNodes)
+        for (const marker of markers) {
+            if (markerIdsWithGeneratedChildren.has(marker.nodeId)) continue
+            const key = getBranchMarkerStackGroupKey(marker)
+            if (!key) continue
+            const group = groupsByKey.get(key) ?? []
+            group.push(marker)
+            groupsByKey.set(key, group)
+        }
+        return [...groupsByKey.values()]
+            .filter((markersInGroup) => markersInGroup.length > 1)
+            .filter((markersInGroup) => markersInGroup.some(marker => Boolean(marker.pendingState)))
+            .filter((markersInGroup) =>
+                !markersInGroup.some(marker => manuallyPositionedBranchMarkerNodeIds.has(marker.nodeId))
+            )
+            .map((markersInGroup) => ({
+                markers: [...markersInGroup].sort(compareBranchMarkersByStackPosition),
+            }))
+    }
+
+    function getBranchMarkerStackAnchorTop(
+        group: BranchMarkerStackGroup,
+        nodesById: Map<string, CanvasNode>,
+        gap: number,
+    ): number {
+        const firstMarker = group.markers[0]
+        const parentBranchNodeId = firstMarker && (firstMarker.type === 'branchFork' || firstMarker.type === 'branchLine')
+            ? firstMarker.parentBranchNodeId
+            : undefined
+        const parentNode = parentBranchNodeId
+            ? nodesById.get(parentBranchNodeId)
+            : undefined
+        if (parentNode?.type === 'branchOrigin') {
+            const parentRect = getNodeWorldRect(parentNode, nodesById)
+            return parentRect.y + parentRect.height + gap
+        }
+
+        const top = Math.min(...group.markers.map(marker => marker.position.y))
+        const bottom = Math.max(...group.markers.map(marker => marker.position.y + marker.dimensions.height))
+        return ((top + bottom) / 2) - getBranchMarkerStackHeight(group.markers, gap) / 2
+    }
+
+    function reflowStackedBranchMarkers(
+        markers: BranchMarkerNode[],
+        allNodes: CanvasNode[],
+    ): Map<string, BranchMarkerNode> {
+        const reflowedMarkers = new Map<string, BranchMarkerNode>()
+        const groups = getBranchMarkerStackGroups(markers, allNodes)
+        if (groups.length === 0) return reflowedMarkers
+
+        const nodesById = new Map<string, CanvasNode>(allNodes.map((node: CanvasNode) => [node.nodeId, node]))
+        for (const marker of markers) nodesById.set(marker.nodeId, marker)
+
+        const gap = getBranchMarkerStackGap()
+        for (const group of groups) {
+            let y = getBranchMarkerStackAnchorTop(group, nodesById, gap)
+            for (const marker of group.markers) {
+                const nextMarker = {
+                    ...marker,
+                    position: {
+                        ...marker.position,
+                        y,
+                    },
+                }
+                reflowedMarkers.set(marker.nodeId, nextMarker)
+                nodesById.set(marker.nodeId, nextMarker)
+                y += marker.dimensions.height + gap
+            }
+        }
+
+        return reflowedMarkers
+    }
+
     function refreshBranchMarkersForAiChatThread(threadId: string): void {
         if (!currentCanvasState) return
 
-        const markersToSync: BranchMarkerNode[] = []
+        const markerIdsToSync: string[] = []
+        const nextMarkersById = new Map<string, BranchMarkerNode>()
         const geometryMarkersToSync: BranchMarkerNode[] = []
+        const { markerIdsWithGeneratedChildren } = getStartedLineageMarkerState(currentCanvasState.nodes)
 
         for (const node of currentCanvasState.nodes) {
             if (!isBranchMarkerNode(node) || getBranchMarkerThreadId(node) !== threadId) continue
-            const nextNode = resizeBranchMarkerNodeFromProseMirror(node)
-            markersToSync.push(nextNode)
+            const hasGeneratedChildren = markerIdsWithGeneratedChildren.has(node.nodeId)
+            const liveNode = hasGeneratedChildren ? node : applyBranchMarkerLiveGeometry(node)
+            const resizedNode = resizeBranchMarkerNodeFromProseMirror(liveNode)
+            const nextNode = !hasGeneratedChildren && manuallyPositionedBranchMarkerNodeIds.has(node.nodeId)
+                ? { ...resizedNode, position: liveNode.position }
+                : resizedNode
+            nextMarkersById.set(node.nodeId, nextNode)
+            markerIdsToSync.push(node.nodeId)
+        }
+
+        const reflowedMarkersById = reflowStackedBranchMarkers(
+            [...nextMarkersById.values()],
+            currentCanvasState.nodes,
+        )
+
+        for (const node of currentCanvasState.nodes) {
+            if (!isBranchMarkerNode(node) || getBranchMarkerThreadId(node) !== threadId) continue
+            const nextNode = reflowedMarkersById.get(node.nodeId) ?? nextMarkersById.get(node.nodeId)
+            if (!nextNode) continue
 
             // Preflight markers are docked over the prompt input via screen
             // projection at a compact, single-line size — their on-canvas dimensions
@@ -7758,7 +8054,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             connectionManager?.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
             scheduleEdgesRender()
         }
-        for (const marker of markersToSync) syncBranchMarkerNodeContent(marker)
+        for (const markerId of markerIdsToSync) {
+            const marker = reflowedMarkersById.get(markerId) ?? nextMarkersById.get(markerId)
+            if (marker) syncBranchMarkerNodeContent(marker)
+        }
     }
 
     function refreshBranchMarkerPreviewsForLoadedThreads(threads: AiChatThread[]): void {
@@ -7861,7 +8160,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return computeLineageContinuationPositionToRightOfRect(
             anchorRect,
             mediaHeight,
-            settings.mediaBranchLineage.mediaToMediaGap
+            previousOutput ? settings.mediaBranchLineage.mediaToMediaGap : getGeneratedMediaOutputGap(sourceNode)
         )
     }
 
@@ -9210,7 +9509,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             syncViewportInteractionState(vp)
             updateCurrentCanvasViewport(vp)
             viewportBridge?.applyViewport(vp)
-            syncPendingBranchMarkerScreenPlacements(vp)
+            syncPendingBranchMarkerScreenPlacements()
             updateGeneratedMediaChromeLayout()
             if (zoomChanged) {
                 if (settings.mediaNode.useZoomCompensatedResizeHandleScaling) {
@@ -9415,6 +9714,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             connectionManager.render()
             repositionEdgeBubbleMenu()
         })
+    }
+
+    function cancelScheduledEdgesRender(): void {
+        if (edgesRaf === null) return
+        cancelAnimationFrame(edgesRaf)
+        edgesRaf = null
     }
 
     function ensureConnectionManager() {
@@ -9727,8 +10032,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
 
             draggingNodeId = null
+            cancelScheduledEdgesRender()
 
             for (const draggedNodeId of draggedNodeEntries.keys()) {
+                const draggedNode = currentCanvasState.nodes.find((node: CanvasNode) => node.nodeId === draggedNodeId)
+                if (dragDidMove && draggedNode && isBranchMarkerNode(draggedNode)) continue
                 liveNodeOverrides.delete(draggedNodeId)
                 branchMarkerProjectionOverrideNodeIds.delete(draggedNodeId)
             }
@@ -9792,6 +10100,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return releasedNode
             })
 
+            const manuallyMovedBranchMarkerNodeIds = new Set<string>()
+
             if (dragPlan.allowCollisionResolution) {
                 const collisionExclusions = new Set<string>()
 
@@ -9801,12 +10111,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     }
                 }
 
-                const collisionPlan = createCollisionPlan(updatedNodes, dragPlan.isParentContainerDrag)
+                const collisionSettings = settings.workspaceCollision.dragRelease
+                const collisionPlan = createCollisionPlan(updatedNodes, dragPlan.isParentContainerDrag, collisionSettings)
 
                 const { nodes: movedNodes, hasChanges } = resolveCollisions(collisionPlan.nodeBoxes, {
-                    iterations: 50,
-                    overlapThreshold: 0.5,
-                    margin: 20,
+                    iterations: collisionPlan.iterations,
+                    margin: 0,
                     excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
                     shouldResolvePair: collisionPlan.shouldResolvePair,
                 })
@@ -9825,11 +10135,34 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             const nextPosition = n.parentId
                                 ? toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(updatedNodes))
                                 : resolvedPosition
+                            if (isBranchMarkerNode(n)) manuallyMovedBranchMarkerNodeIds.add(n.nodeId)
                             return { ...n, position: nextPosition }
                         }
                         return n
                     })
                 }
+            }
+
+            for (const draggedNodeId of finalDraggedPositions.keys()) {
+                const draggedNode = updatedNodes.find((node: CanvasNode) => node.nodeId === draggedNodeId)
+                if (draggedNode && isBranchMarkerNode(draggedNode)) {
+                    manuallyMovedBranchMarkerNodeIds.add(draggedNode.nodeId)
+                }
+            }
+
+            for (const movedBranchMarkerNodeId of manuallyMovedBranchMarkerNodeIds) {
+                const movedBranchMarkerNode = updatedNodes.find((node: CanvasNode) => node.nodeId === movedBranchMarkerNodeId)
+                if (!movedBranchMarkerNode || !isBranchMarkerNode(movedBranchMarkerNode)) continue
+                const movedBranchMarkerEl = viewportEl?.querySelector(`[data-node-id="${movedBranchMarkerNodeId}"]`) as HTMLElement
+                liveNodeOverrides.set(movedBranchMarkerNode.nodeId, {
+                    position: movedBranchMarkerNode.position,
+                    dimensions: {
+                        width: movedBranchMarkerEl?.offsetWidth ?? movedBranchMarkerNode.dimensions.width,
+                        height: movedBranchMarkerEl?.offsetHeight ?? movedBranchMarkerNode.dimensions.height,
+                    },
+                })
+                branchMarkerProjectionOverrideNodeIds.add(movedBranchMarkerNode.nodeId)
+                manuallyPositionedBranchMarkerNodeIds.add(movedBranchMarkerNode.nodeId)
             }
 
             commitCanvasState({
@@ -11019,6 +11352,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (workspaceChanged) {
                 liveNodeOverrides.clear()
                 branchMarkerProjectionOverrideNodeIds.clear()
+                manuallyPositionedBranchMarkerNodeIds.clear()
                 selectedNodeIds = new Set()
                 selectedEdgeId = null
                 draggingNodeId = null

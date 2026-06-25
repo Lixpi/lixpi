@@ -41,6 +41,41 @@ describe('AiModelsSync — image generation option metadata', () => {
 })
 
 // =============================================================================
+// DEFAULT MODEL FLAGS — capability defaults projected to the catalog
+// =============================================================================
+
+describe('AiModelsSync — default model flags', () => {
+    let sync: any
+
+    beforeAll(() => {
+        process.env.ORG_NAME = process.env.ORG_NAME || 'test-org'
+        process.env.STAGE = process.env.STAGE || 'test'
+        sync = new AiModelsSync({
+            dynamoDBService: {} as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: 'test-key',
+            googleApiKey: 'test-key',
+        })
+    })
+
+    it('flags the configured default reasoning, image, and video models', () => {
+        const haiku = sync.applyDefaultModelFlags(sync.mapAnthropicModelToAiModel({ id: 'claude-haiku-4-5' }, 1))
+        const geminiImage = sync.applyDefaultModelFlags(sync.mapGoogleModelToAiModel({ name: 'gemini-2.5-flash-image' }, 1))
+        const veoLite = sync.applyDefaultModelFlags(sync.mapGoogleModelToAiModel({ name: 'veo-3.1-lite-generate-preview' }, 1))
+
+        expect(haiku.isDefaultFor).toEqual(['reasoning'])
+        expect(geminiImage.isDefaultFor).toEqual(['image'])
+        expect(veoLite.isDefaultFor).toEqual(['video'])
+    })
+
+    it('leaves non-default models without a default flag', () => {
+        const sonnet = sync.applyDefaultModelFlags(sync.mapAnthropicModelToAiModel({ id: 'claude-sonnet-4-6' }, 1))
+
+        expect(sonnet.isDefaultFor).toBeUndefined()
+    })
+})
+
+// =============================================================================
 // VEO VIDEO MODEL SYNC — mapping, pricing, option lists, and blacklist removal
 // =============================================================================
 //

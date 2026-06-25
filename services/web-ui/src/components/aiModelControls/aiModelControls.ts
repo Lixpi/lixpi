@@ -19,6 +19,7 @@ import { createTagPill as createSvgTagPill, type TagPillInstance } from '$src/co
 import { settings } from '$src/settings.ts'
 
 import type {
+    DefaultAiModelCapability,
     MediaGenerationConfigControl,
     MediaGenerationConfigControlKey,
     MediaGenerationConfigGroup,
@@ -130,6 +131,18 @@ const AI_AVATAR_ICONS: Record<string, string> = {
     bytedanceIcon,
 }
 
+// Picks the option matching the API-configured default model for a capability.
+// The API owns the default value (and its fallback) — the UI only renders it, so
+// there is no UI-side fallback here. Returns undefined when the API default is not
+// present in the available options.
+function pickDefaultModelOption(
+    options: AiModelDropdownOption[],
+    capability: DefaultAiModelCapability,
+): AiModelDropdownOption | undefined {
+    const defaultModelId = aiModelsStore.getDefaultModelId(capability)
+    return options.find(option => option.aiModel === defaultModelId)
+}
+
 export function transformModelsToOptions(models: any[]): AiModelDropdownOption[] {
     return models.map((aiModel: any) => ({
         title: aiModel.shortTitle,
@@ -184,7 +197,7 @@ export function createGenericAiModelDropdown(
 
     const selectedValue: AiModelDropdownOption =
         aiModelsSelectorDropdownOptions.find(model => model.aiModel === currentAiModel)
-        || aiModelsSelectorDropdownOptions[0]
+        || pickDefaultModelOption(aiModelsSelectorDropdownOptions, 'reasoning')
         || placeholderValue
 
     const dropdown = createPureDropdown({
@@ -244,10 +257,12 @@ export function createGenericAiModelDropdown(
         })
 
         const current = controls.getCurrentAiModel()
-        if (!current && options.length > 0) {
-            const first = options[0]
-            controls.setAiModel(first.aiModel)
-            dropdown.update(first)
+        if (!current) {
+            const defaultOption = pickDefaultModelOption(options, 'reasoning')
+            if (defaultOption) {
+                controls.setAiModel(defaultOption.aiModel)
+                dropdown.update(defaultOption)
+            }
             return
         }
 
@@ -397,7 +412,7 @@ export function createGenericImageModelDropdown(
 
     const selectedValue: AiModelDropdownOption =
         options.find(m => m.aiModel === currentImageModel)
-        || options[0]
+        || pickDefaultModelOption(options, 'image')
         || placeholderValue
 
     const dropdown = createPureDropdown({
@@ -450,9 +465,12 @@ export function createGenericImageModelDropdown(
         dropdown.setOptions({ options })
 
         const current = controls.getCurrentImageModel()
-        if (!current && options.length > 0) {
-            controls.setImageModel(options[0].aiModel)
-            dropdown.update(options[0])
+        if (!current) {
+            const defaultOption = pickDefaultModelOption(options, 'image')
+            if (defaultOption) {
+                controls.setImageModel(defaultOption.aiModel)
+                dropdown.update(defaultOption)
+            }
             return
         }
 
@@ -793,6 +811,7 @@ export function createGenericVideoModelDropdown(
 
     const selectedValue: AiModelDropdownOption =
         options.find(m => m.aiModel === currentVideoModel)
+        || pickDefaultModelOption(options, 'video')
         || placeholderValue
 
     const dropdown = createPureDropdown({
@@ -813,10 +832,15 @@ export function createGenericVideoModelDropdown(
         }
     })
 
-    // Unlike the image model dropdown, do NOT auto-select the first video model.
-    // Video generation is opt-in (a single send with image vs video vs neither
-    // is a user choice), so leaving the placeholder visible until the user picks
-    // keeps `aiVideoModel` empty and `generate_video` un-injected by default.
+    // Auto-select the API-configured default video model when none is set, so the
+    // video selector defaults to the configured model instead of staying empty.
+    if (!currentVideoModel && selectedValue.aiModel) {
+        setTimeout(() => {
+            if (!controls.getCurrentVideoModel()) {
+                controls.setVideoModel(selectedValue.aiModel)
+            }
+        }, 0)
+    }
 
     let lastProcessedCount = aiModelsData.length
 
@@ -841,6 +865,16 @@ export function createGenericVideoModelDropdown(
         options = transformModelsToOptions(videoModels)
 
         dropdown.setOptions({ options })
+
+        const current = controls.getCurrentVideoModel()
+        if (!current) {
+            const defaultOption = pickDefaultModelOption(options, 'video')
+            if (defaultOption) {
+                controls.setVideoModel(defaultOption.aiModel)
+                dropdown.update(defaultOption)
+            }
+            return
+        }
 
         updateSelection()
     })

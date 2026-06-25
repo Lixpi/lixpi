@@ -30,10 +30,26 @@ import { computeWorldPosition, buildNodesById } from '$src/infographics/workspac
 
 type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
 type BranchTreeMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
+type BranchLineageMarkerNode = BranchTreeMarkerNode
 type BranchTreeMemberNode = GeneratedMediaNode | BranchTreeMarkerNode
 type Point = { x: number; y: number }
 type Rect = { x: number; y: number; width: number; height: number }
-type CollisionBox = { id: string; x: number; y: number; width: number; height: number }
+type CollisionEnvelope = Rect & { overlapThreshold?: number }
+type CollisionBox = {
+    id: string
+    x: number
+    y: number
+    width: number
+    height: number
+    margin?: number
+    overlapThreshold?: number
+}
+type MarkerCollisionEntry = {
+    node: BranchLineageMarkerNode
+    position: Point
+    rect: Rect
+    originalIndex: number
+}
 
 export type BranchTree = {
     rootId: string
@@ -44,10 +60,19 @@ export type BranchTree = {
 export type BranchTreeLayoutOptions = {
     depthGap: number                  // LR horizontal gap — mediaBranchLineage.mediaToMediaGap
     branchOriginDepthGap?: number     // LR horizontal gap from a branchOrigin marker to its first generated media node
+    rootMarkerDepthGap?: number       // LR horizontal gap from a parentless branch root marker to its first generated media node
     siblingGap: number                // LR vertical gap — mediaBranchLineage.branchRowGap
     branchFanoutExtraGap?: number     // LR extra depth gap for forked generated media nodes
     branchOriginMarkerStackGap?: number // Vertical gap between a branchOrigin and child fork/line markers
     collisionMargin?: number          // resolver breathing room; defaults to the resolver's own 20
+    collisionIterations?: number      // resolver iteration limit; defaults to the resolver's own 50
+    collisionOverlapThreshold?: number // fallback resolver overlap threshold; defaults to the resolver's own 0.5
+    getNodeCollisionRect?: (
+        node: CanvasNode,
+        worldPosition: { x: number; y: number },
+    ) => { x: number; y: number; width: number; height: number }
+    getNodeCollisionMargin?: (node: CanvasNode) => number
+    getNodeCollisionOverlapThreshold?: (node: CanvasNode) => number
 }
 
 // Matches the resolver's default margin so callers that omit it get the exact
@@ -85,6 +110,10 @@ function isMidpointMarker(node: CanvasNode | undefined): node is BranchForkCanva
     return Boolean(node) && (node!.type === 'branchFork' || node!.type === 'branchLine')
 }
 
+function isBranchLineageMarker(node: CanvasNode): node is BranchLineageMarkerNode {
+    return node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
+}
+
 function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<string | undefined> {
     return [
         node.generatedBy?.parentMediaNodeId,
@@ -97,6 +126,10 @@ function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<stri
 function getBranchMarkerParentCandidates(node: BranchTreeMarkerNode): Array<string | undefined> {
     if (node.type !== 'branchFork' && node.type !== 'branchLine') return []
     return [node.parentBranchNodeId]
+}
+
+function getGeneratedMediaLineageMarkerId(node: GeneratedMediaNode): string | undefined {
+    return node.generatedBy?.branchForkNodeId ?? node.generatedBy?.branchLineNodeId
 }
 
 function firstExistingMemberId(candidates: Array<string | undefined>, memberIds: Set<string>): string | null {
@@ -204,6 +237,223 @@ function parentByChildOf(tree: BranchTree): Map<string, string> {
     return parentByChild
 }
 
+function getNodeCollisionRect(
+    node: CanvasNode,
+    worldPosition: Point,
+    options: BranchTreeLayoutOptions,
+): Rect {
+    return options.getNodeCollisionRect?.(node, worldPosition) ?? {
+        x: worldPosition.x,
+        y: worldPosition.y,
+        width: node.dimensions.width,
+        height: node.dimensions.height,
+    }
+}
+
+function getNodeCollisionMargin(node: CanvasNode, options: BranchTreeLayoutOptions): number {
+    const margin = options.getNodeCollisionMargin?.(node) ?? 0
+    return Number.isFinite(margin) ? Math.max(0, margin) : 0
+}
+
+function getNodeCollisionOverlapThreshold(node: CanvasNode, options: BranchTreeLayoutOptions): number | undefined {
+    const threshold = options.getNodeCollisionOverlapThreshold?.(node)
+    return threshold !== undefined && Number.isFinite(threshold) ? Math.max(0, threshold) : undefined
+}
+
+function expandRect(rect: Rect, margin: number): Rect {
+    return {
+        x: rect.x - margin,
+        y: rect.y - margin,
+        width: rect.width + margin * 2,
+        height: rect.height + margin * 2,
+    }
+}
+
+function getNodeLayoutDimensions(
+    node: CanvasNode,
+    options: BranchTreeLayoutOptions,
+): { width: number; height: number } {
+    const rect = getNodeCollisionRect(node, { x: 0, y: 0 }, options)
+    return {
+        width: rect.width,
+        height: rect.height,
+    }
+}
+
+function getLineageMarkerStackGap(options: BranchTreeLayoutOptions): number {
+    const gap = options.branchOriginMarkerStackGap ?? 0
+    return Number.isFinite(gap) ? Math.max(0, gap) : 0
+}
+
+function getPlannedNodePosition(
+    node: CanvasNode,
+    nodesById: Map<string, CanvasNode>,
+    nextPositionById: Map<string, Point>,
+): Point {
+    return nextPositionById.get(node.nodeId) ?? computeWorldPosition(node, nodesById)
+}
+
+function buildMarkerCollisionEntry(
+    node: BranchLineageMarkerNode,
+    nodesById: Map<string, CanvasNode>,
+    nextPositionById: Map<string, Point>,
+    originalIndex: number,
+    options: BranchTreeLayoutOptions,
+): MarkerCollisionEntry {
+    const position = getPlannedNodePosition(node, nodesById, nextPositionById)
+    return {
+        node,
+        position,
+        rect: getNodeCollisionRect(node, position, options),
+        originalIndex,
+    }
+}
+
+function buildMarkerIdsWithGeneratedMediaChildren(nodes: CanvasNode[]): Set<string> {
+    const markerIds = new Set<string>()
+    for (const node of nodes) {
+        if (node.type !== 'image' && node.type !== 'video') continue
+        const branchOriginNodeId = node.generatedBy?.branchOriginNodeId
+        const branchForkNodeId = node.generatedBy?.branchForkNodeId
+        const branchLineNodeId = node.generatedBy?.branchLineNodeId
+        if (branchOriginNodeId) markerIds.add(branchOriginNodeId)
+        if (branchForkNodeId) markerIds.add(branchForkNodeId)
+        if (branchLineNodeId) markerIds.add(branchLineNodeId)
+    }
+    return markerIds
+}
+
+function compareMarkerCollisionEntries(a: MarkerCollisionEntry, b: MarkerCollisionEntry): number {
+    const yDelta = a.rect.y - b.rect.y
+    if (yDelta !== 0) return yDelta
+    return a.originalIndex - b.originalIndex
+}
+
+function markerEntriesNeedSeparation(entries: MarkerCollisionEntry[], gap: number): boolean {
+    let previousBottom = -Infinity
+    for (const entry of entries) {
+        if (entry.rect.y < previousBottom + gap) return true
+        previousBottom = Math.max(previousBottom, entry.rect.y + entry.rect.height)
+    }
+    return false
+}
+
+function markerEntriesCollide(a: MarkerCollisionEntry, b: MarkerCollisionEntry, gap: number): boolean {
+    const horizontalOverlap = a.rect.x < b.rect.x + b.rect.width
+        && b.rect.x < a.rect.x + a.rect.width
+    if (!horizontalOverlap) return false
+
+    return a.rect.y < b.rect.y + b.rect.height + gap
+        && b.rect.y < a.rect.y + a.rect.height + gap
+}
+
+function findMarkerCollisionComponents(entries: MarkerCollisionEntry[], gap: number): MarkerCollisionEntry[][] {
+    const parentIndices = entries.map((_, index: number) => index)
+    const find = (index: number): number => {
+        let current = index
+        while (parentIndices[current] !== current) current = parentIndices[current]
+        return current
+    }
+    const unite = (a: number, b: number): void => {
+        const rootA = find(a)
+        const rootB = find(b)
+        if (rootA !== rootB) parentIndices[rootB] = rootA
+    }
+
+    for (let a = 0; a < entries.length; a += 1) {
+        for (let b = a + 1; b < entries.length; b += 1) {
+            if (markerEntriesCollide(entries[a], entries[b], gap)) unite(a, b)
+        }
+    }
+
+    const componentsByRoot = new Map<number, MarkerCollisionEntry[]>()
+    for (let index = 0; index < entries.length; index += 1) {
+        const root = find(index)
+        const component = componentsByRoot.get(root) ?? []
+        component.push(entries[index])
+        componentsByRoot.set(root, component)
+    }
+
+    return [...componentsByRoot.values()]
+}
+
+function separateLineageMarkerEntries(
+    entries: MarkerCollisionEntry[],
+    gap: number,
+    nodesById: Map<string, CanvasNode>,
+    nextPositionById: Map<string, Point>,
+    treeMemberIdsByRootId: Map<string, string[]>,
+): void {
+    const top = Math.min(...entries.map((entry: MarkerCollisionEntry) => entry.rect.y))
+    const bottom = Math.max(...entries.map((entry: MarkerCollisionEntry) => entry.rect.y + entry.rect.height))
+    const stackHeight = entries.reduce((sum: number, entry: MarkerCollisionEntry) => sum + entry.rect.height, 0)
+        + Math.max(0, entries.length - 1) * gap
+    let nextRectY = (top + bottom - stackHeight) / 2
+
+    const markerNodeIds = new Set(entries.map((entry: MarkerCollisionEntry) => entry.node.nodeId))
+    const nextPositionsByMarkerId = new Map<string, Point>()
+    for (const entry of entries) {
+        const positionToRectOffsetY = entry.position.y - entry.rect.y
+        nextPositionsByMarkerId.set(entry.node.nodeId, {
+            x: entry.position.x,
+            y: nextRectY + positionToRectOffsetY,
+        })
+        nextRectY += entry.rect.height + gap
+    }
+
+    for (const entry of entries) {
+        const nextPosition = nextPositionsByMarkerId.get(entry.node.nodeId)
+        if (!nextPosition) continue
+        const memberIds = treeMemberIdsByRootId.get(entry.node.nodeId)
+        const dx = nextPosition.x - entry.position.x
+        const dy = nextPosition.y - entry.position.y
+
+        if (memberIds && memberIds.length > 1) {
+            for (const memberId of memberIds) {
+                if (markerNodeIds.has(memberId)) continue
+                const member = nodesById.get(memberId)
+                if (!member) continue
+                const memberPosition = getPlannedNodePosition(member, nodesById, nextPositionById)
+                nextPositionById.set(memberId, {
+                    x: memberPosition.x + dx,
+                    y: memberPosition.y + dy,
+                })
+            }
+        }
+    }
+
+    for (const [markerId, nextPosition] of nextPositionsByMarkerId) {
+        nextPositionById.set(markerId, nextPosition)
+    }
+}
+
+function resolveLineageMarkerOverlaps(
+    nodes: CanvasNode[],
+    nodesById: Map<string, CanvasNode>,
+    nextPositionById: Map<string, Point>,
+    treeMemberIdsByRootId: Map<string, string[]>,
+    options: BranchTreeLayoutOptions,
+): void {
+    const markerEntries: MarkerCollisionEntry[] = []
+    const markerIdsWithGeneratedMediaChildren = buildMarkerIdsWithGeneratedMediaChildren(nodes)
+    for (const [index, node] of nodes.entries()) {
+        if (!isBranchLineageMarker(node)) continue
+        if (!node.pendingState) continue
+        if (markerIdsWithGeneratedMediaChildren.has(node.nodeId)) continue
+        markerEntries.push(buildMarkerCollisionEntry(node, nodesById, nextPositionById, index, options))
+    }
+    if (markerEntries.length <= 1) return
+
+    const gap = getLineageMarkerStackGap(options)
+    markerEntries.sort(compareMarkerCollisionEntries)
+    for (const component of findMarkerCollisionComponents(markerEntries, gap)) {
+        if (component.length <= 1) continue
+        component.sort(compareMarkerCollisionEntries)
+        if (!markerEntriesNeedSeparation(component, gap)) continue
+        separateLineageMarkerEntries(component, gap, nodesById, nextPositionById, treeMemberIdsByRootId)
+    }
+}
+
 // Deterministic tidy layout for every tree; each root keeps its current anchor
 // and its descendants fan out to the right. Single-node trees are left as-is.
 export function applyBranchTreeLayout(
@@ -216,8 +466,10 @@ export function applyBranchTreeLayout(
 
     const nodesById = buildNodesById(nodes)
     const nextPositionById = new Map<string, Point>()
+    const treeMemberIdsByRootId = new Map<string, string[]>()
 
     for (const tree of trees) {
+        treeMemberIdsByRootId.set(tree.rootId, tree.memberIds)
         if (tree.memberIds.length <= 1) continue // single node: root stays put
 
         const parentByChild = parentByChildOf(tree)
@@ -230,11 +482,12 @@ export function applyBranchTreeLayout(
             .map((id: string) => {
                 const node = nodesById.get(id) as BranchTreeMemberNode
                 const parentId = parentByChild.get(id)
+                const dimensions = getNodeLayoutDimensions(node, options)
                 return {
                     id,
                     parentId: parentId && layoutMemberIds.has(parentId) ? parentId : null,
-                    width: node.dimensions.width,
-                    height: node.dimensions.height,
+                    width: dimensions.width,
+                    height: dimensions.height,
                 }
             })
 
@@ -249,19 +502,22 @@ export function applyBranchTreeLayout(
         const rootNode = nodesById.get(tree.rootId)
         if (!rootNode) continue
         const anchor = computeWorldPosition(rootNode, nodesById)
-        const rootIsBranchOrigin = rootNode.type === 'branchOrigin'
-        const originDepthAdjustment = rootIsBranchOrigin
-            ? Math.max(0, options.depthGap - (options.branchOriginDepthGap ?? options.depthGap))
-            : 0
+        const rootDepthGap = rootNode.type === 'branchOrigin'
+            ? options.branchOriginDepthGap
+            : rootNode.type === 'branchFork' && !rootNode.parentBranchNodeId
+                ? options.rootMarkerDepthGap
+                : undefined
+        const rootDepthAdjustment = rootDepthGap !== undefined ? options.depthGap - rootDepthGap : 0
         for (const [id, relative] of result.positions) {
             nextPositionById.set(id, {
-                x: anchor.x + relative.x - (id === tree.rootId ? 0 : originDepthAdjustment),
+                x: anchor.x + relative.x - (id === tree.rootId ? 0 : rootDepthAdjustment),
                 y: anchor.y + relative.y,
             })
         }
     }
 
-    positionLineageMarkers(nodes, nodesById, nextPositionById, options)
+    positionLineageMarkers(nodes, nodesById, nextPositionById)
+    resolveLineageMarkerOverlaps(nodes, nodesById, nextPositionById, treeMemberIdsByRootId, options)
 
     if (nextPositionById.size === 0) return nodes
     return nodes.map((node: CanvasNode) => {
@@ -280,36 +536,15 @@ function positionLineageMarkers(
     nodes: CanvasNode[],
     nodesById: Map<string, CanvasNode>,
     nextPositionById: Map<string, Point>,
-    options: BranchTreeLayoutOptions,
 ): void {
     const childrenByMarkerId = new Map<string, GeneratedMediaNode[]>()
     for (const node of nodes) {
         if (node.type !== 'image' && node.type !== 'video') continue
-        const markerId = node.generatedBy?.branchForkNodeId ?? node.generatedBy?.branchLineNodeId
+        const markerId = getGeneratedMediaLineageMarkerId(node)
         if (!markerId) continue
         const children = childrenByMarkerId.get(markerId) ?? []
         children.push(node as GeneratedMediaNode)
         childrenByMarkerId.set(markerId, children)
-    }
-
-    const branchOriginMarkerIdsByParentId = new Map<string, string[]>()
-    for (const node of nodes) {
-        if (!isMidpointMarker(node) || !node.parentBranchNodeId) continue
-        const parent = nodesById.get(node.parentBranchNodeId)
-        if (parent?.type !== 'branchOrigin') continue
-        const markerIds = branchOriginMarkerIdsByParentId.get(node.parentBranchNodeId) ?? []
-        markerIds.push(node.nodeId)
-        branchOriginMarkerIdsByParentId.set(node.parentBranchNodeId, markerIds)
-    }
-    for (const markerIds of branchOriginMarkerIdsByParentId.values()) {
-        markerIds.sort((a, b) => {
-            const aNode = nodesById.get(a) as BranchForkCanvasNode | BranchLineCanvasNode | undefined
-            const bNode = nodesById.get(b) as BranchForkCanvasNode | BranchLineCanvasNode | undefined
-            const indexDelta = (aNode?.reasoningIndex ?? Number.MAX_SAFE_INTEGER)
-                - (bNode?.reasoningIndex ?? Number.MAX_SAFE_INTEGER)
-            if (indexDelta !== 0) return indexDelta
-            return a.localeCompare(b)
-        })
     }
 
     const worldOf = (id: string): Point => {
@@ -323,7 +558,21 @@ function positionLineageMarkers(
         if (!isMidpointMarker(node)) continue
         const parentId = node.parentBranchNodeId
         const children = childrenByMarkerId.get(node.nodeId)
-        if (!parentId || !children?.length) continue
+        if (!children?.length) continue
+        if (!parentId) {
+            let childAnchorY = 0
+            for (const child of children) {
+                const childPos = worldOf(child.nodeId)
+                childAnchorY += childPos.y + child.dimensions.height / 2
+            }
+            childAnchorY /= children.length
+            const markerPos = worldOf(node.nodeId)
+            nextPositionById.set(node.nodeId, {
+                x: markerPos.x,
+                y: childAnchorY - node.dimensions.height / 2,
+            })
+            continue
+        }
         const parent = nodesById.get(parentId)
         if (!parent) continue
 
@@ -341,36 +590,41 @@ function positionLineageMarkers(
         }
         childAnchorX /= children.length
         childAnchorY /= children.length
-        const branchOriginMarkerIds = parent.type === 'branchOrigin'
-            ? branchOriginMarkerIdsByParentId.get(parent.nodeId)
-            : undefined
-        const branchOriginStackIndex = branchOriginMarkerIds?.indexOf(node.nodeId) ?? -1
         nextPositionById.set(node.nodeId, {
             x: (parentAnchorX + childAnchorX) / 2 - node.dimensions.width / 2,
-            y: branchOriginStackIndex >= 0
-                ? parentPos.y + parent.dimensions.height
-                    + (options.branchOriginMarkerStackGap ?? 0)
-                    + branchOriginStackIndex * (node.dimensions.height + (options.branchOriginMarkerStackGap ?? 0))
-                : (parentAnchorY + childAnchorY) / 2 - node.dimensions.height / 2,
+            y: (parentAnchorY + childAnchorY) / 2 - node.dimensions.height / 2,
         })
     }
 }
 
-function computeTreeAabb(tree: BranchTree, nodesById: Map<string, CanvasNode>): Rect {
+function computeTreeAabb(
+    tree: BranchTree,
+    nodesById: Map<string, CanvasNode>,
+    options: BranchTreeLayoutOptions,
+): CollisionEnvelope {
     let minX = Infinity
     let minY = Infinity
     let maxX = -Infinity
     let maxY = -Infinity
+    let overlapThreshold = Infinity
     for (const id of tree.memberIds) {
         const node = nodesById.get(id)
         if (!node) continue
         const world = computeWorldPosition(node, nodesById)
-        minX = Math.min(minX, world.x)
-        minY = Math.min(minY, world.y)
-        maxX = Math.max(maxX, world.x + node.dimensions.width)
-        maxY = Math.max(maxY, world.y + node.dimensions.height)
+        const rect = expandRect(getNodeCollisionRect(node, world, options), getNodeCollisionMargin(node, options))
+        minX = Math.min(minX, rect.x)
+        minY = Math.min(minY, rect.y)
+        maxX = Math.max(maxX, rect.x + rect.width)
+        maxY = Math.max(maxY, rect.y + rect.height)
+        overlapThreshold = Math.min(overlapThreshold, getNodeCollisionOverlapThreshold(node, options) ?? Infinity)
     }
-    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+    return {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+        ...(Number.isFinite(overlapThreshold) ? { overlapThreshold } : {}),
+    }
 }
 
 function toParentRelativePosition(
@@ -407,20 +661,43 @@ export function rebalanceBranchTreesAndResolve(
     const boxes: CollisionBox[] = []
     const treeBoxOriginById = new Map<string, Point>()
     for (const tree of trees) {
-        const aabb = computeTreeAabb(tree, nodesById)
-        boxes.push({ id: tree.rootId, x: aabb.x, y: aabb.y, width: aabb.width, height: aabb.height })
+        const aabb = computeTreeAabb(tree, nodesById, options)
+        boxes.push({
+            id: tree.rootId,
+            x: aabb.x,
+            y: aabb.y,
+            width: aabb.width,
+            height: aabb.height,
+            margin: 0,
+            ...(aabb.overlapThreshold !== undefined ? { overlapThreshold: aabb.overlapThreshold } : {}),
+        })
         treeBoxOriginById.set(tree.rootId, { x: aabb.x, y: aabb.y })
     }
 
     const excludePairs = new Set<string>()
+    const looseNodeCollisionOffsetById = new Map<string, Point>()
     for (const node of tidied) {
         if (memberToRoot.has(node.nodeId)) continue // already covered by its tree box
         const world = computeWorldPosition(node, nodesById)
-        boxes.push({ id: node.nodeId, x: world.x, y: world.y, width: node.dimensions.width, height: node.dimensions.height })
+        const rect = getNodeCollisionRect(node, world, options)
+        boxes.push({
+            id: node.nodeId,
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            margin: getNodeCollisionMargin(node, options),
+            ...(getNodeCollisionOverlapThreshold(node, options) !== undefined
+                ? { overlapThreshold: getNodeCollisionOverlapThreshold(node, options) }
+                : {}),
+        })
+        looseNodeCollisionOffsetById.set(node.nodeId, { x: world.x - rect.x, y: world.y - rect.y })
         if (node.parentId) excludePairs.add(`${node.parentId}-${node.nodeId}`)
     }
 
     const collisionResult = resolveCollisions(boxes, {
+        iterations: options.collisionIterations,
+        overlapThreshold: options.collisionOverlapThreshold,
         margin: options.collisionMargin ?? DEFAULT_COLLISION_MARGIN,
         excludePairs: excludePairs.size > 0 ? excludePairs : undefined,
     })
@@ -442,9 +719,11 @@ export function rebalanceBranchTreesAndResolve(
         // Loose node: move individually, mapping back to parent-relative space.
         const moved = collisionResult.nodes.get(node.nodeId)
         if (!moved) return node
+        const offset = looseNodeCollisionOffsetById.get(node.nodeId) ?? { x: 0, y: 0 }
+        const nodeWorldPosition = { x: moved.x + offset.x, y: moved.y + offset.y }
         const position = node.parentId
-            ? toParentRelativePosition(moved, node.parentId, nodesById)
-            : moved
+            ? toParentRelativePosition(nodeWorldPosition, node.parentId, nodesById)
+            : nodeWorldPosition
         return { ...node, position }
     })
 }

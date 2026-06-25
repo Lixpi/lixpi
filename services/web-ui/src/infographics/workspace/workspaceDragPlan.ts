@@ -24,6 +24,10 @@ function isGeneratedOutputImageNode(node: CanvasNode | undefined): boolean {
     return node?.type === 'image' && Boolean(node.generatedBy?.aiChatThreadId)
 }
 
+function isBranchLineageMarkerNode(node: CanvasNode | undefined): boolean {
+    return node?.type === 'branchOrigin' || node?.type === 'branchFork' || node?.type === 'branchLine'
+}
+
 function includeParentContainerDescendants(nodeIds: string[], nodes: CanvasNode[]): string[] {
     const draggableNodeIds = new Set(nodeIds)
     const pendingParentIds = [...nodeIds]
@@ -64,13 +68,16 @@ export function computeWorkspaceDragPlan(input: WorkspaceDragPlanInput): Workspa
     }
 
     const draggedNodeIds = includeParentContainerDescendants(baseDraggedNodeIds, input.nodes)
+    const isBranchLineageMarkerDrag = draggedNodeIds.every((nodeId: string) =>
+        isBranchLineageMarkerNode(nodesById.get(nodeId))
+    )
 
     return {
         resolvedNodeId,
         draggedNodeIds,
         isParentContainerDrag,
         allowProximityConnection: !isParentContainerDrag,
-        allowCollisionResolution: draggedNodeIds.length === 1 || isParentContainerDrag,
+        allowCollisionResolution: draggedNodeIds.length === 1 || isParentContainerDrag || isBranchLineageMarkerDrag,
     }
 }
 
