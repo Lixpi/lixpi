@@ -356,7 +356,7 @@ export type BranchForkLineagePlan = {
     nodeId: string
     generationRequestId: string
     branchId: string
-    parentBranchNodeId: string
+    parentBranchNodeId?: string
     reasoningRunId: string
     reasoningModelId: AiModelId
     reasoningIndex: number
@@ -643,9 +643,9 @@ export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
 
 // A compact, model-friendly description of a single context-bearing canvas node
 // (image, video, document, or aiChatThread) stored on the node so any feature can
-// read it without re-deriving it. Media descriptors are composed for free from the
-// branch resolver's summaries (generated media) or a single VLM pass (uploads);
-// document/thread descriptors are a text summary of the node's content (no pixels).
+// read it without re-deriving it. Media descriptors come from a VLM pass over the
+// actual still/final frame; document/thread descriptors are a text summary of the
+// node's content (no pixels).
 // Deliberately short so it can be fed into model context (e.g. the branch-resolver
 // transcript, the workspace relevance snapshot) without bloat.
 export type ContentDescriptorStatus = 'analyzing' | 'ready' | 'failed'
@@ -655,8 +655,8 @@ export type ContentDescriptor = {
     summary: string
     entityTags: string[]
     styleTags: string[]
-    // 'generation' = composed from generated-media metadata; 'analysis' = a VLM
-    // caption (media) or a text summary (document/thread).
+    // 'analysis' = a VLM caption (media) or a text summary (document/thread).
+    // 'generation' is a legacy persisted value and must not be written by new code.
     source: 'generation' | 'analysis'
     version: string
     updatedAt: number

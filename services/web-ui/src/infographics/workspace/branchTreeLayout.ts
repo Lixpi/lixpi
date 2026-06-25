@@ -3,11 +3,11 @@
 //
 // A "branch tree" is a connected component of top-level generated-media nodes
 // (image/video carrying generatedBy.branchId, no parentId) and temporary
-// branch-origin / branch-fork markers linked by lineage. A generated member's
-// in-tree parent is its generatedBy.parentMediaNodeId, then its
-// generatedBy.branchOriginNodeId, then its API-assigned branchFork/branchLine
+// branch-origin / branch-fork / branch-line markers linked by lineage. A
+// generated member's in-tree parent is its generatedBy.parentMediaNodeId, then
+// its generatedBy.branchOriginNodeId, then its API-assigned branchFork/branchLine
 // marker when that marker is the only visible lineage parent; otherwise the
-// member is a tree root.
+// member is a tree root. A parentless branchFork is also a tree root.
 //
 // This module is pure: it reads node positions/sizes + API-assigned lineage
 // fields and returns new node arrays. It never touches PIXI, the DOM, or canvas
@@ -46,6 +46,7 @@ export type BranchTreeLayoutOptions = {
     branchOriginDepthGap?: number     // LR horizontal gap from a branchOrigin marker to its first generated media node
     siblingGap: number                // LR vertical gap — mediaBranchLineage.branchRowGap
     branchFanoutExtraGap?: number     // LR extra depth gap for forked generated media nodes
+    branchOriginMarkerStackGap?: number // Vertical gap between a branchOrigin and child fork/line markers
     collisionMargin?: number          // resolver breathing room; defaults to the resolver's own 20
 }
 
@@ -260,7 +261,7 @@ export function applyBranchTreeLayout(
         }
     }
 
-    positionLineageMarkers(nodes, nodesById, nextPositionById)
+    positionLineageMarkers(nodes, nodesById, nextPositionById, options)
 
     if (nextPositionById.size === 0) return nodes
     return nodes.map((node: CanvasNode) => {
@@ -279,6 +280,7 @@ function positionLineageMarkers(
     nodes: CanvasNode[],
     nodesById: Map<string, CanvasNode>,
     nextPositionById: Map<string, Point>,
+    options: BranchTreeLayoutOptions,
 ): void {
     const childrenByMarkerId = new Map<string, GeneratedMediaNode[]>()
     for (const node of nodes) {
@@ -288,6 +290,26 @@ function positionLineageMarkers(
         const children = childrenByMarkerId.get(markerId) ?? []
         children.push(node as GeneratedMediaNode)
         childrenByMarkerId.set(markerId, children)
+    }
+
+    const branchOriginMarkerIdsByParentId = new Map<string, string[]>()
+    for (const node of nodes) {
+        if (!isMidpointMarker(node) || !node.parentBranchNodeId) continue
+        const parent = nodesById.get(node.parentBranchNodeId)
+        if (parent?.type !== 'branchOrigin') continue
+        const markerIds = branchOriginMarkerIdsByParentId.get(node.parentBranchNodeId) ?? []
+        markerIds.push(node.nodeId)
+        branchOriginMarkerIdsByParentId.set(node.parentBranchNodeId, markerIds)
+    }
+    for (const markerIds of branchOriginMarkerIdsByParentId.values()) {
+        markerIds.sort((a, b) => {
+            const aNode = nodesById.get(a) as BranchForkCanvasNode | BranchLineCanvasNode | undefined
+            const bNode = nodesById.get(b) as BranchForkCanvasNode | BranchLineCanvasNode | undefined
+            const indexDelta = (aNode?.reasoningIndex ?? Number.MAX_SAFE_INTEGER)
+                - (bNode?.reasoningIndex ?? Number.MAX_SAFE_INTEGER)
+            if (indexDelta !== 0) return indexDelta
+            return a.localeCompare(b)
+        })
     }
 
     const worldOf = (id: string): Point => {
@@ -319,9 +341,17 @@ function positionLineageMarkers(
         }
         childAnchorX /= children.length
         childAnchorY /= children.length
+        const branchOriginMarkerIds = parent.type === 'branchOrigin'
+            ? branchOriginMarkerIdsByParentId.get(parent.nodeId)
+            : undefined
+        const branchOriginStackIndex = branchOriginMarkerIds?.indexOf(node.nodeId) ?? -1
         nextPositionById.set(node.nodeId, {
             x: (parentAnchorX + childAnchorX) / 2 - node.dimensions.width / 2,
-            y: (parentAnchorY + childAnchorY) / 2 - node.dimensions.height / 2,
+            y: branchOriginStackIndex >= 0
+                ? parentPos.y + parent.dimensions.height
+                    + (options.branchOriginMarkerStackGap ?? 0)
+                    + branchOriginStackIndex * (node.dimensions.height + (options.branchOriginMarkerStackGap ?? 0))
+                : (parentAnchorY + childAnchorY) / 2 - node.dimensions.height / 2,
         })
     }
 }

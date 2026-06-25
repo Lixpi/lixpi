@@ -377,4 +377,4 @@ packages/lixpi/constants/
 - [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md) — the shared SVG playback control bar and its two mount points.
 - [Media Library](../library/MEDIA-LIBRARY.md) — saving and materializing reusable video copies.
 - [Rendering Engine](../canvas/RENDERING-ENGINE.md) — the PIXI media layer and DOM chrome overlay that render video nodes.
-- [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the descriptor generated videos compose for free from their generation metadata.
+- [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the VLM analysis descriptor generated videos request from their representative still/poster.

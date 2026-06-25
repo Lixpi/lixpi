@@ -62,10 +62,10 @@ const PLAN_VERSION: MediaBranchLineagePlan['planVersion'] = 'media-branch-lineag
 // layout.
 //
 // Marker rules:
-//   - More than one reasoning run, or one reasoning run that fans out to several
-//     media models -> one `branchFork` per reasoning run, flat under the lineage
-//     source / branch origin. The concrete media runs from that reasoning run
-//     share the fork marker.
+//   - One `branchFork` per reasoning run when a request fans out by reasoning
+//     model or media model. The concrete media runs from that reasoning run
+//     share the fork marker. If there is no lineage source, the fork itself is
+//     the visible root marker.
 //   - Exactly one media generation that continues an existing generated branch
 //     -> one `branchLine` continuation marker between the source media and the
 //     new generation, carrying the prompt that drove the continuation.
@@ -99,6 +99,7 @@ export class MediaBranchLineagePlanner {
             providedReferenceNodeIds,
             sourceContextNodeIds,
             sourceDecision,
+            usesReasoningForks,
             reasoningBranchCount: reasoningRuns.length,
         })
         const parentBranchNodeId = sourceDecision.sourceNodeId ?? branchOrigin?.nodeId
@@ -283,9 +284,11 @@ export class MediaBranchLineagePlanner {
         providedReferenceNodeIds: string[]
         sourceContextNodeIds: string[]
         sourceDecision: SourceDecision
+        usesReasoningForks: boolean
         reasoningBranchCount: number
     }): BranchOriginLineagePlan | undefined {
         if (args.sourceDecision.sourceNodeId) return undefined
+        if (args.usesReasoningForks) return undefined
         const forkCount = Math.max(0, args.reasoningBranchCount)
         return {
             nodeId: `branch-origin-${args.input.generationRequestId}`,
@@ -306,14 +309,12 @@ export class MediaBranchLineagePlanner {
 
     private buildBranchForks(args: MediaMarkerArgs): BranchForkLineagePlan[] {
         if (!args.usesReasoningForks) return []
-        if (!args.parentBranchNodeId) return []
-        const parentBranchNodeId = args.parentBranchNodeId
 
         return args.reasoningRuns.map((run) => ({
             nodeId: this.buildForkNodeId(args.input.generationRequestId, run),
             generationRequestId: args.input.generationRequestId,
             branchId: args.branchId,
-            parentBranchNodeId,
+            ...(args.parentBranchNodeId ? { parentBranchNodeId: args.parentBranchNodeId } : {}),
             reasoningRunId: run.reasoningRunId,
             reasoningModelId: run.reasoningModelId,
             reasoningIndex: run.reasoningIndex,

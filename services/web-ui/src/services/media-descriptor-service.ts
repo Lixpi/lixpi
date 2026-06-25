@@ -15,9 +15,9 @@ export type DescribeMediaResult = {
 }
 
 // Requests a compact VLM description of a single media still (an image's own
-// file, or a video's representative frame/poster). The MP4 is never sent — the
-// caller resolves the still fileId. `aiModel` is the user's currently-selected
-// VLM-capable model (same one the chat uses), so no model is hardcoded server-side.
+// file/final frame, or a video's representative frame/poster). Generated and
+// uploaded media use the same path. The MP4 is never sent — the caller resolves
+// the still fileId. The API owns the media descriptor VLM choice.
 export const describeMedia = async ({
     workspaceId,
     fileId,
@@ -25,7 +25,7 @@ export const describeMedia = async ({
 }: {
     workspaceId: string
     fileId: string
-    aiModel: string
+    aiModel?: string
 }): Promise<DescribeMediaResult> => {
     const nats = servicesStore.getData('nats')
     if (!nats) return { error: 'OFFLINE' }
@@ -33,7 +33,7 @@ export const describeMedia = async ({
         token: await AuthService.getTokenSilently(),
         workspaceId,
         fileId,
-        aiModel,
+        ...(aiModel ? { aiModel } : {}),
     }) as Promise<DescribeMediaResult>
 }
 

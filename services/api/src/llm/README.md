@@ -9,7 +9,7 @@ The in-process LangGraph workflow that orchestrates AI provider streaming. It re
 - Streams tokens to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) — the API HTTP server is not in the streaming path.
 - Routes dual-model image/video generation: text model emits `generate_image` or `generate_video`, then the workflow spawns a transient image-model provider or VEO video provider that stores the generated media in NATS Object Store.
 - Routes multi-model media matrix requests by running one shared workspace/branch preflight, starting one reasoning run per selected reasoning model, then fanning each emitted media prompt out to the selected image or video models with per-run stream metadata and per-model media options from API-authored configuration groups.
-- Plans media branch topology in the API for media-enabled requests, including branchOrigin and branchFork marker IDs, lineage parent IDs, neutral branch-root provenance, and per-run generated-media lineage assignments.
+- Plans media branch topology in the API for media-enabled requests, including branch origin/fork marker IDs, lineage parent IDs, neutral branch-root provenance when needed, and per-run generated-media lineage assignments.
 - Assigns reasoning/media run metadata through a shared media-agnostic run planner, so image and video providers only receive already-planned run IDs and lineage assignments instead of deciding topology themselves.
 - Publishes `IMAGE_GENERATION_TRACE` and `VIDEO_GENERATION_TRACE` events immediately before invoking transient media providers. These traces contain the text-model tool prompt, routed media prompt, selected/excluded reference candidates, and preview-safe reference URLs when available.
 - Computes token, image, and video usage costs via `decimal.js` pricing math against the model's pricing metadata. The reporter currently logs/returns the calculations; publishing usage events is still pending.
@@ -48,6 +48,8 @@ The factory returns `{ process, processMediaGenerationMatrix, stop, stopMediaGen
 ## File layout
 
 ```
+src/
+    settings.ts                  # API-owned defaults, including mediaDescriptor.defaultVlmModelId
 src/llm/
     index.ts                     # createLlmModule({ natsService, storeWorkspaceImage, storeWorkspaceVideo })
     config.ts                    # LLM_TIMEOUT_MS, VEO_POLL_INTERVAL_MS, BYTEPLUS_ARK_BASE_URL, BYTEPLUS_VIDEO_POLL_INTERVAL_MS
@@ -61,6 +63,7 @@ src/llm/
     lineage/
         media-branch-lineage-planner.ts # API-owned branchOrigin/branchFork topology and run assignments
         media-generation-run-planner.ts # Shared reasoning/media run IDs, media run enrichment, and event metadata
+    media-descriptor.ts          # Structured-VLM media still/text descriptor step used by uploads, generated final frames, and descriptor self-heal
     providers/
         base-provider.ts         # Abstract BaseProvider — owns the StateGraph, AbortController, workflow nodes
         provider-registry.ts     # Map<instanceKey, provider> + active-task dedupe via Map<string, AbortController>
@@ -125,7 +128,7 @@ Top-level chat requests publish `START_STREAM` before graph invocation. This kee
 
 `resolveImageBranch` runs after workspace relevance and `/use` feature resolution, before the chat provider streams. It consumes the narrowed `imageBranchCandidateSnapshot`, normalizes candidate media URLs once, calls the structured VLM client when candidates exist, publishes `IMAGE_BRANCH_RESOLVED`, and rewrites `state.messages` so only VLM-selected candidate images reach provider `extractReferenceImages()`. Empty candidate snapshots are resolved in the API as fresh generated branches without a VLM call. The same resolver is used for video generation; video candidates contribute a representative still (`frameFileId`, falling back to poster) and the selected result maps to VEO first-frame or reference-image inputs. When the snapshot includes `activeTargetNodeId` / an `active-target` role hint, the resolver prompt treats that candidate as a weak UI selection hint for purely deictic edit prompts while still requiring the selected pixels to match any explicit subject named by the user. For example, a selected goat must not win a prompt that says "that man"; the resolver should choose a visible man candidate or return ambiguous. If the selected target/identity reference is an existing generated candidate, the resolver continues that generated branch even for substantial palette or medium changes; targetless `fresh-branch` is reserved for genuinely new subjects with no generated target. Feature sample references injected by `resolveFeatures` are preserved; only candidate image blocks from the workspace snapshot are stripped/replaced. The selected reference message reuses the resolver-normalized image URLs so the chat provider and media routers do not downscale the same candidate refs again.
 
-For media-enabled requests, `MediaBranchLineagePlanner` runs immediately after branch resolution. It publishes `MEDIA_LINEAGE_PLANNED` with branch origin/fork marker IDs, marker provenance, lineage parent IDs, and run assignments. Branch forks are reasoning-run markers: multiple reasoning models produce separate forks, while multiple image/video models under the same reasoning run share that reasoning fork and fan out from it. Those assignments are copied into `generationRun.lineageAssignment` before reasoning and media fanout, so image/video events carry API-owned topology. Matrix requests run the planner once in shared preflight and pass the plan to every reasoning child; single media requests run it as the graph's `planMediaBranchLineage` node.
+For media-enabled requests, `MediaBranchLineagePlanner` runs immediately after branch resolution. It publishes `MEDIA_LINEAGE_PLANNED` with branch origin/fork marker IDs, marker provenance, lineage parent IDs, and run assignments. Branch forks are reasoning-run markers: multiple reasoning models produce separate forks, while multiple image/video models under the same reasoning run share that reasoning fork and fan out from it. When no lineage source exists, that reasoning fork is the visible root marker rather than being wrapped in a separate neutral origin. Those assignments are copied into `generationRun.lineageAssignment` before reasoning and media fanout, so image/video events carry API-owned topology. Matrix requests run the planner once in shared preflight and pass the plan to every reasoning child; single media requests run it as the graph's `planMediaBranchLineage` node.
 
 Lineage planning is an API-only contract. Provider routers, media routers, and browser code must not synthesize missing lineage assignments, recover marker IDs from model counts, or fall back to older reasoning-level metadata when a concrete media run is missing its exact assignment. Missing lineage is a planner/stream-ordering/data issue to fix in the API path.
 

@@ -48,8 +48,8 @@ The API owns the decisions:
 
 - `branchId`
 - `sourceNodeId` and `placementAnchorNodeId`
-- `branchOrigin.nodeId` and neutral root provenance
-- `branchForks[].nodeId` and `branchForks[].parentBranchNodeId`, assigned per reasoning run rather than per media model
+- `branchOrigin.nodeId` and neutral root provenance when a separate root marker is required
+- `branchForks[].nodeId` and optional `branchForks[].parentBranchNodeId`, assigned per reasoning run rather than per media model
 - per-run `MediaRunLineageAssignment`
 - generated-media lineage fields: `parentMediaNodeId`, schema alias `parentImageNodeId`, `branchOriginNodeId`, `branchForkNodeId`, references, source context, operation kind, prompt text, prompt fingerprint, and creation ordering
 
@@ -57,13 +57,13 @@ Matrix requests run the planner once in shared preflight, then pass the plan to 
 
 ## Branch-Root Provenance
 
-A `branchOrigin` marker is neutral lineage chrome. Its metadata describes only:
+A `branchOrigin` marker is neutral lineage chrome used only when the plan needs a separate neutral root marker. Its metadata describes only:
 
 - the user's prompt,
 - the references/context supplied to the request,
 - the API decision that this request starts or forks a generated branch.
 
-It must not include a child reasoning model's prompt rewrite, response text, media-run metadata, or model-specific output. When a request immediately forks into several reasoning runs, each `branchFork` carries the reasoning-run provenance for its dedicated branch. The branch root stays model-neutral.
+It must not include a child reasoning model's prompt rewrite, response text, media-run metadata, or model-specific output. When a request forks by reasoning run or by several media models under one reasoning run, each `branchFork` carries the reasoning-run provenance for its dedicated branch. If no lineage source exists, the fork itself is the visible root marker.
 
 ## Browser Responsibilities
 

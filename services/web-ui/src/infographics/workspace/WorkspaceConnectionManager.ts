@@ -29,6 +29,14 @@ import type { PixiEdgeRenderDatum, PixiEdgeArrow } from '$src/infographics/works
 
 import { getAdaptiveBoundedZoomScalingOptions, getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 import { applyStyle } from '$src/utils/domTemplates.ts'
+import {
+	getBranchMarkerMediaModelCircleDescriptors,
+	getBranchMarkerMediaModelCircleIndexForGeneratedMedia,
+	getBranchMarkerMediaModelCircleNodeId,
+	getBranchMarkerMediaModelCircleRect,
+	isBranchMarkerNodeForMediaModelCircles,
+	isGeneratedMediaNodeForMediaModelCircles,
+} from '$src/infographics/workspace/branchMarkerMediaModelCircles.ts'
 
 import type {
 	CanvasNode,
@@ -664,6 +672,46 @@ export class WorkspaceConnectionManager {
 		}
 	}
 
+	private addBranchMarkerMediaModelCircleNodes(
+		worldNodeMap: Map<string, NodeConfig>,
+		node: CanvasNode,
+	): void {
+		if (!isBranchMarkerNodeForMediaModelCircles(node)) return
+
+		const descriptors = getBranchMarkerMediaModelCircleDescriptors(node, this.nodes)
+		for (let index = 0; index < descriptors.length; index++) {
+			const rect = getBranchMarkerMediaModelCircleRect(node, index, descriptors.length)
+			const circleNodeId = getBranchMarkerMediaModelCircleNodeId(node.nodeId, index)
+			worldNodeMap.set(circleNodeId, {
+				id: circleNodeId,
+				shape: 'rect',
+				x: rect.x,
+				y: rect.y,
+				width: rect.width,
+				height: rect.height,
+				className: 'workspace-edge-node workspace-branch-marker-media-model-circle-edge-node'
+			})
+		}
+	}
+
+	private getRenderedEdgeSourceNodeId(
+		edge: WorkspaceEdge,
+		nodeById: Map<string, CanvasNode>,
+		worldNodeMap: Map<string, NodeConfig>,
+	): string {
+		const sourceNode = nodeById.get(edge.sourceNodeId)
+		const targetNode = nodeById.get(edge.targetNodeId)
+		if (!isBranchMarkerNodeForMediaModelCircles(sourceNode) || !isGeneratedMediaNodeForMediaModelCircles(targetNode)) {
+			return edge.sourceNodeId
+		}
+
+		const circleIndex = getBranchMarkerMediaModelCircleIndexForGeneratedMedia(sourceNode, this.nodes, targetNode)
+		if (circleIndex == null) return edge.sourceNodeId
+
+		const circleNodeId = getBranchMarkerMediaModelCircleNodeId(sourceNode.nodeId, circleIndex)
+		return worldNodeMap.has(circleNodeId) ? circleNodeId : edge.sourceNodeId
+	}
+
 	private buildEdgeAnchor(
 		nodeId: string,
 		position: AnchorPosition,
@@ -1263,6 +1311,7 @@ export class WorkspaceConnectionManager {
 				height: geometry.height,
 				className: 'workspace-edge-node'
 			})
+			this.addBranchMarkerMediaModelCircleNodes(worldNodeMap, canvasNode)
 		}
 
 		// Get current zoom for proportional scaling
@@ -1387,10 +1436,11 @@ export class WorkspaceConnectionManager {
 			// segment landing on the next generated media node.
 			const edgeTargetNode = this.nodes.find(n => n.nodeId === e.targetNodeId)
 			const targetIsLineageMarker = edgeTargetNode?.type === 'branchLine' || edgeTargetNode?.type === 'branchFork'
+			const renderedSourceNodeId = this.getRenderedEdgeSourceNodeId(e, nodeById, worldNodeMap)
 
 			const edgeConfig: EdgeConfig = {
 				id: e.edgeId,
-				source: this.buildEdgeAnchor(e.sourceNodeId, source, sourceT, nodeById),
+				source: this.buildEdgeAnchor(renderedSourceNodeId, source, sourceT, nodeById),
 				target: this.buildEdgeAnchor(e.targetNodeId, target, targetT, nodeById),
 				pathType: e.pathType ?? settings.connector.lineCurve,
 				marker: targetIsLineageMarker ? 'none' : (isSelected ? 'arrowhead-selected' : 'arrowhead'),

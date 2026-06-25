@@ -83,6 +83,7 @@ import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { createSidePanel, type SidePanelInstance } from '$src/components/sidePanel/index.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'
+import { getBranchMarkerMediaModelCircleDescriptors } from '$src/infographics/workspace/branchMarkerMediaModelCircles.ts'
 import {
     computeLineageContinuationPositionToRightOfRect,
     computeNextBranchRowPositionToRightOfRect,
@@ -565,6 +566,7 @@ type WorkspaceCanvasCallbacks = {
 type WorkspaceCanvasNodeInsertion =
     | Omit<DocumentCanvasNode, 'position'>
     | Omit<ImageCanvasNode, 'position'>
+    | Omit<VideoCanvasNode, 'position'>
 
 type PendingGeneratedMediaTracker = {
     nodeId: string
@@ -713,6 +715,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const activeAiChatPanelTracePreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
+    const mediaAnalysisRequestsInFlight: Set<string> = new Set()
     const branchMarkerReasoningTooltips: Map<string, HelpTooltipInstance> = new Map()
     const branchMarkerMediaModelTooltips: Map<string, HelpTooltipInstance[]> = new Map()
     type BranchMarkerStreamPhase = 'preamble' | 'enhancement' | 'done'
@@ -721,6 +724,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         responseText: string
         phase: BranchMarkerStreamPhase
         isReceiving: boolean
+        streamIsReceiving: boolean
     }
     const detachedAiChatThreadEditors: Map<string, AiChatThreadEditorEntry> = new Map()
     let detachedAiChatThreadHostEl: HTMLDivElement | null = null
@@ -986,7 +990,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) => {
                         if (n.nodeId !== nodeId) return n
                         if (n.type === 'image' && node.type === 'image') {
-                            return { ...n, fileId: data.fileId, src: newSrc } as ImageCanvasNode
+                            return { ...n, fileId: data.fileId, src: newSrc, descriptor: buildAnalyzingDescriptor() } as ImageCanvasNode
                         }
                         if (n.type === 'video' && node.type === 'video') {
                             return {
@@ -1002,8 +1006,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         return n
                     })
                     commitCanvasState({ ...currentCanvasState, nodes: updatedNodes })
-                    if (node.type === 'video' && data.posterFileId) {
-                        void analyzeUploadedMedia(nodeId, data.posterFileId)
+                    if (node.type === 'image') {
+                        queueCanvasMediaAnalysis(nodeId, data.fileId)
+                    } else if (node.type === 'video') {
+                        queueCanvasMediaAnalysis(nodeId, data.posterFileId)
                     }
                 })
                 document.body.appendChild(input)
@@ -1831,10 +1837,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // nothing useful to show (no descriptor, or analysis failed).
     function buildMediaDescriptorSection(descriptor: MediaDescriptor | undefined): HTMLElement | null {
         if (!descriptor) return null
+        if (descriptor.source !== 'analysis') return null
         if (descriptor.status === 'analyzing') {
+            const spinnerStyle = { animationDelay: `${-(performance.now() % BRANCH_MARKER_SPINNER_PERIOD_MS)}ms` }
             return html`
                 <div className="canvas-media-descriptor is-analyzing">
-                    <span className="canvas-media-descriptor-label">Analyzing media…</span>
+                    <div className="canvas-media-descriptor-loading">
+                        <span className="workspace-branch-marker-spinner canvas-media-descriptor-spinner" style=${spinnerStyle} aria-hidden="true"></span>
+                        <span className="canvas-media-descriptor-label">Analyzing media…</span>
+                    </div>
                     <p className="canvas-media-descriptor-summary">Generating a short description of this media. It runs once and is reused later.</p>
                 </div>
             ` as HTMLElement
@@ -2791,6 +2802,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }, dimensions)
     }
 
+    function getCenteredFreshRootBranchMarkerPosition(
+        dimensions: { width: number; height: number },
+        mediaHeight: number,
+    ): { x: number; y: number } {
+        const mediaWidth = getGeneratedMediaInsertionSize()
+        const groupDimensions = {
+            width: dimensions.width + settings.mediaBranchLineage.mediaToMediaGap + mediaWidth,
+            height: Math.max(dimensions.height, mediaHeight),
+        }
+        const groupPosition = getCenteredInsertionPosition(groupDimensions)
+        return clampBranchOriginPositionToVisibleViewport({
+            x: groupPosition.x,
+            y: groupPosition.y + (groupDimensions.height - dimensions.height) / 2,
+        }, dimensions)
+    }
+
     function getResolvedNodePositionFromCollisionBox(node: CanvasNode, box: { x: number; y: number }, entries: Map<string, CollisionEntry>): { x: number; y: number } {
         const entry = entries.get(node.nodeId)
         if (!entry) return box
@@ -2853,6 +2880,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             branchOriginDepthGap: getBranchOriginOutputGap(),
             siblingGap: settings.mediaBranchLineage.branchRowGap,
             branchFanoutExtraGap: settings.mediaBranchLineage.branchFanoutExtraGap,
+            branchOriginMarkerStackGap: BRANCH_MARKER_PENDING_STACK_GAP,
         })
         return restorePendingGeneratedMediaLayoutProxyPlan(
             resolvedNodes,
@@ -2952,6 +2980,60 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return { index, count: markerIds.length }
     }
 
+    function getPlannedRootBranchForkSiblingSlot(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        markerNodeId: string,
+    ): { index: number; count: number } | undefined {
+        const lineagePlan = getPendingGeneratedMediaPlacement(threadId, generationRun)?.lineagePlan
+        if (!lineagePlan) return undefined
+
+        const markerEntries = lineagePlan.branchForks
+            .filter((fork) => !fork.parentBranchNodeId)
+            .map((fork) => ({
+                nodeId: fork.nodeId,
+                reasoningIndex: fork.reasoningIndex,
+            }))
+            .sort((a, b) => {
+                const indexDelta = a.reasoningIndex - b.reasoningIndex
+                if (indexDelta !== 0) return indexDelta
+                return a.nodeId.localeCompare(b.nodeId)
+            })
+
+        const markerIds = markerEntries.map(entry => entry.nodeId)
+        const index = markerIds.indexOf(markerNodeId)
+        if (index < 0 || markerIds.length <= 1) return undefined
+        return { index, count: markerIds.length }
+    }
+
+    function getRootBranchMarkerPositionBeforeGeneratedMedia(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        markerDimensions: { width: number; height: number },
+        mediaHeight: number,
+        siblingSlot?: { index: number; count: number },
+    ): { x: number; y: number } {
+        const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)
+        const basePosition = referencePosition
+            ? {
+                x: referencePosition.x - settings.mediaBranchLineage.mediaToMediaGap - markerDimensions.width,
+                y: referencePosition.y + (mediaHeight - markerDimensions.height) / 2,
+            }
+            : getCenteredFreshRootBranchMarkerPosition(markerDimensions, mediaHeight)
+
+        if (!siblingSlot) return basePosition
+
+        const stackStep = markerDimensions.height + BRANCH_MARKER_PENDING_STACK_GAP
+        const stackHeight = siblingSlot.count * markerDimensions.height
+            + Math.max(0, siblingSlot.count - 1) * BRANCH_MARKER_PENDING_STACK_GAP
+        return {
+            x: basePosition.x,
+            y: basePosition.y - stackHeight / 2
+                + markerDimensions.height / 2
+                + siblingSlot.index * stackStep,
+        }
+    }
+
     function getPendingBranchMarkerPositionBeforeGeneratedMedia(
         parentNode: CanvasNode,
         markerDimensions: { width: number; height: number },
@@ -2983,6 +3065,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             : futureMediaPosition.y + futureCircleInset.y + futureCircleInset.size / 2
         const parentAnchorX = parentRect.x + parentRect.width
         const parentAnchorY = parentRect.y + parentRect.height / 2
+
+        if (parentNode.type === 'branchOrigin') {
+            const stackIndex = siblingSlot?.index ?? 0
+            return {
+                x: (parentAnchorX + futureCircleLeft) / 2 - markerDimensions.width / 2,
+                y: parentRect.y + parentRect.height
+                    + BRANCH_MARKER_PENDING_STACK_GAP
+                    + stackIndex * (markerDimensions.height + BRANCH_MARKER_PENDING_STACK_GAP),
+            }
+        }
 
         return {
             x: (parentAnchorX + futureCircleLeft) / 2 - markerDimensions.width / 2,
@@ -3187,6 +3279,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodesById = getCanvasNodesById(nodes)
         const plannedProxyNodeIds = new Set<string>()
         const plannedMarkerPositionsById = new Map<string, { x: number; y: number }>()
+        const branchOriginMarkerIdsByParentId = new Map<string, string[]>()
+        for (const node of nodes) {
+            if (node.type !== 'branchFork' && node.type !== 'branchLine') continue
+            if (!node.parentBranchNodeId) continue
+            const parentNode = nodesById.get(node.parentBranchNodeId)
+            if (parentNode?.type !== 'branchOrigin') continue
+            const markerIds = branchOriginMarkerIdsByParentId.get(node.parentBranchNodeId) ?? []
+            markerIds.push(node.nodeId)
+            branchOriginMarkerIdsByParentId.set(node.parentBranchNodeId, markerIds)
+        }
+        for (const markerIds of branchOriginMarkerIdsByParentId.values()) {
+            markerIds.sort((a, b) => {
+                const aNode = nodesById.get(a) as BranchForkCanvasNode | BranchLineCanvasNode | undefined
+                const bNode = nodesById.get(b) as BranchForkCanvasNode | BranchLineCanvasNode | undefined
+                const indexDelta = (aNode?.reasoningIndex ?? Number.MAX_SAFE_INTEGER)
+                    - (bNode?.reasoningIndex ?? Number.MAX_SAFE_INTEGER)
+                if (indexDelta !== 0) return indexDelta
+                return a.localeCompare(b)
+            })
+        }
         for (const proxy of plannedMarkerProxiesByMarkerId.values()) {
             plannedProxyNodeIds.add(proxy.proxyNodeId)
 
@@ -3201,9 +3313,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const parentAnchorY = parentRect.y + parentRect.height / 2
             const proxyAnchorX = proxyPosition.x
             const proxyAnchorY = proxyPosition.y + proxyNode.dimensions.height / 2
+            const branchOriginMarkerIds = parentNode.type === 'branchOrigin'
+                ? branchOriginMarkerIdsByParentId.get(parentNode.nodeId)
+                : undefined
+            const branchOriginStackIndex = branchOriginMarkerIds?.indexOf(proxy.markerNodeId) ?? -1
             plannedMarkerPositionsById.set(proxy.markerNodeId, {
                 x: (parentAnchorX + proxyAnchorX) / 2 - markerNode.dimensions.width / 2,
-                y: (parentAnchorY + proxyAnchorY) / 2 - markerNode.dimensions.height / 2,
+                y: branchOriginStackIndex >= 0
+                    ? parentRect.y + parentRect.height
+                        + BRANCH_MARKER_PENDING_STACK_GAP
+                        + branchOriginStackIndex * (markerNode.dimensions.height + BRANCH_MARKER_PENDING_STACK_GAP)
+                    : (parentAnchorY + proxyAnchorY) / 2 - markerNode.dimensions.height / 2,
             })
         }
 
@@ -6898,8 +7018,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return additions.length > 0 ? [...nodes, ...additions] : nodes
     }
 
-    // Both branchFork and branchLine markers connect from their parentBranchNodeId,
-    // so a single edge builder serves either marker kind.
+    // BranchFork and branchLine markers with a parentBranchNodeId connect to
+    // that parent through the same edge builder. Parentless branchFork markers
+    // are root markers, so they do not need a marker-to-marker edge.
     function createBranchMarkerEdge(markerNode: BranchForkCanvasNode | BranchLineCanvasNode): WorkspaceEdge | undefined {
         if (!markerNode.parentBranchNodeId) return undefined
         return {
@@ -6980,9 +7101,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodeId = branchForkNodeId
         const parentNode = getBranchForkParentNode(threadId, generationRun, branchOriginNode)
         const dimensions = getBranchMarkerContentDimensions(branchForkPlan.provenance?.promptText ?? '')
-        if (!parentNode) return undefined
-        const siblingSlot = getPlannedBranchMarkerSiblingSlot(threadId, generationRun, branchForkPlan.parentBranchNodeId, branchForkNodeId)
-        const position = getPendingBranchMarkerPositionBeforeGeneratedMedia(parentNode, dimensions, siblingSlot)
+        const mediaHeight = getGeneratedMediaInsertionSize()
+        const position = parentNode && branchForkPlan.parentBranchNodeId
+            ? getPendingBranchMarkerPositionBeforeGeneratedMedia(
+                parentNode,
+                dimensions,
+                getPlannedBranchMarkerSiblingSlot(threadId, generationRun, branchForkPlan.parentBranchNodeId, branchForkNodeId),
+            )
+            : getRootBranchMarkerPositionBeforeGeneratedMedia(
+                threadId,
+                generationRun,
+                dimensions,
+                mediaHeight,
+                getPlannedRootBranchForkSiblingSlot(threadId, generationRun, branchForkNodeId),
+            )
 
         const branchForkNode: BranchForkCanvasNode = {
             nodeId,
@@ -6993,7 +7125,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             reasoningRunId: branchForkPlan.reasoningRunId,
             reasoningModelId: branchForkPlan.reasoningModelId,
             reasoningIndex: branchForkPlan.reasoningIndex,
-            parentBranchNodeId: branchForkPlan.parentBranchNodeId,
+            ...(branchForkPlan.parentBranchNodeId ? { parentBranchNodeId: branchForkPlan.parentBranchNodeId } : {}),
             ...(branchForkPlan.promptFingerprint ? { promptFingerprint: branchForkPlan.promptFingerprint } : {}),
             provenance: branchForkPlan.provenance,
             position,
@@ -7308,6 +7440,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 responseText: '',
                 phase: 'preamble',
                 isReceiving: false,
+                streamIsReceiving: false,
             }
         }
 
@@ -7318,18 +7451,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 responseText: '',
                 phase: 'preamble',
                 isReceiving: false,
+                streamIsReceiving: false,
             }
         }
 
-        const { phase, isReceiving } = inferBranchMarkerPreviewPhase(responseMessage, responseContainer)
+        const { phase, isReceiving: streamIsReceiving } = inferBranchMarkerPreviewPhase(responseMessage, responseContainer)
         return {
             userText,
             responseText: collectProseMirrorText(responseContainer, {
                 excludedNodeTypes: ['aiGeneratedImage', 'aiGeneratedVideo', 'aiLineageEvent'],
             }).trim(),
             phase,
-            isReceiving: isReceiving || isBranchMarkerGenerationActive(node),
+            isReceiving: streamIsReceiving || isBranchMarkerGenerationActive(node),
+            streamIsReceiving,
         }
+    }
+
+    function shouldShowBranchMarkerResponseLine(
+        node: BranchMarkerNode,
+        preview: BranchMarkerConversationPreview | null | undefined,
+    ): boolean {
+        return Boolean(preview?.responseText) && (!node.pendingState || Boolean(preview?.streamIsReceiving))
     }
 
     function resizeBranchMarkerNodeFromProseMirror(node: BranchMarkerNode): BranchMarkerNode {
@@ -7337,7 +7479,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return resizeBranchMarkerNodeToDimensions(
             node,
             getBranchMarkerContentDimensions(preview?.userText ?? '', {
-                responseLine: Boolean(preview?.responseText),
+                responseLine: shouldShowBranchMarkerResponseLine(node, preview),
             }),
         )
     }
@@ -7688,31 +7830,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    // Compose a media descriptor for AI-generated media for free from the branch
-    // resolver's summaries already carried on generatedBy — no extra model call.
-    // Uploaded media has no generatedBy and is captioned separately (see
-    // analyzeUploadedMedia).
-    function buildDescriptorFromGeneratedBy(
-        generatedBy: ImageCanvasNode['generatedBy'] | VideoCanvasNode['generatedBy']
-    ): MediaDescriptor | undefined {
-        if (!generatedBy) return undefined
-        const summaryParts = [
-            generatedBy.visualEntitySummary ?? generatedBy.entitySummary,
-            generatedBy.visualStyleSummary,
-        ].filter((text): text is string => Boolean(text?.trim()))
-        const summary = (summaryParts.join(' — ') || generatedBy.revisedPrompt || generatedBy.promptText || '').trim()
-        if (!summary) return undefined
-        return {
-            status: 'ready',
-            summary,
-            entityTags: generatedBy.entityTags ?? [],
-            styleTags: generatedBy.styleTags ?? [],
-            source: 'generation',
-            version: MEDIA_DESCRIPTOR_VERSION,
-            updatedAt: Date.now(),
-        }
-    }
-
     function buildAnalyzingDescriptor(): MediaDescriptor {
         return {
             status: 'analyzing',
@@ -7723,6 +7840,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             version: MEDIA_DESCRIPTOR_VERSION,
             updatedAt: Date.now(),
         }
+    }
+
+    function isReadyAnalysisDescriptor(descriptor: MediaDescriptor | undefined): descriptor is MediaDescriptor {
+        return descriptor?.status === 'ready' && descriptor.source === 'analysis' && Boolean(descriptor.summary.trim())
+    }
+
+    function shouldAnalyzeMediaDescriptor(descriptor: MediaDescriptor | undefined): boolean {
+        return !isReadyAnalysisDescriptor(descriptor)
     }
 
     // The branch resolver and descriptor captioner both need a vision-capable
@@ -7805,18 +7930,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         commitCanvasState({ ...currentCanvasState, nodes })
     }
 
-    // Caption a freshly uploaded media object. `stillFileId` is the image's own
-    // file or a video's poster — never the MP4. Best-effort: on any failure the
-    // descriptor is marked 'failed' so the analyzing indicator resolves.
-    async function analyzeUploadedMedia(nodeId: string, stillFileId: string): Promise<void> {
+    function getCurrentCanvasMediaNode(nodeId: string): ImageCanvasNode | VideoCanvasNode | undefined {
+        const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+        if (!node || (node.type !== 'image' && node.type !== 'video')) return undefined
+        return node
+    }
+
+    function currentMediaStillMatches(nodeId: string, stillFileId: string): boolean {
+        const node = getCurrentCanvasMediaNode(nodeId)
+        return Boolean(node && getMediaDescriptorStillFileId(node) === stillFileId)
+    }
+
+    // Caption a media object from its pixels. `stillFileId` is the image's own
+    // file or a video's representative frame/poster — never the MP4 and never
+    // the generation prompt. Used by uploads, Media Library inserts, and completed
+    // generated media so every visible description is VLM-authored.
+    async function analyzeCanvasMediaStill(nodeId: string, stillFileId: string): Promise<void> {
         const failed = (): MediaDescriptor => ({ ...buildAnalyzingDescriptor(), status: 'failed', updatedAt: Date.now() })
-        const aiModel = pickDescriptorModel()
-        if (!aiModel || !stillFileId) {
-            patchMediaNodeDescriptor(nodeId, failed())
+        if (!stillFileId) {
+            if (currentMediaStillMatches(nodeId, stillFileId)) patchMediaNodeDescriptor(nodeId, failed())
             return
         }
         try {
-            const result = await describeMedia({ workspaceId, fileId: stillFileId, aiModel })
+            const result = await describeMedia({ workspaceId, fileId: stillFileId })
+            if (!currentMediaStillMatches(nodeId, stillFileId)) return
             if (result.error || !result.summary) {
                 patchMediaNodeDescriptor(nodeId, failed())
                 return
@@ -7831,8 +7968,41 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 updatedAt: Date.now(),
             })
         } catch {
-            patchMediaNodeDescriptor(nodeId, failed())
+            if (currentMediaStillMatches(nodeId, stillFileId)) patchMediaNodeDescriptor(nodeId, failed())
         }
+    }
+
+    function getMediaAnalysisRequestKey(nodeId: string, stillFileId: string): string {
+        return `${nodeId}:${stillFileId}`
+    }
+
+    async function runQueuedCanvasMediaAnalysis(nodeId: string, stillFileId: string, requestKey: string): Promise<void> {
+        try {
+            await analyzeCanvasMediaStill(nodeId, stillFileId)
+        } finally {
+            mediaAnalysisRequestsInFlight.delete(requestKey)
+        }
+    }
+
+    function queueCanvasMediaAnalysis(nodeId: string, stillFileId: string | undefined, attempt = 0): void {
+        const hasNode = currentCanvasState?.nodes.some((node: CanvasNode) => node.nodeId === nodeId) ?? false
+        if (!hasNode && attempt < 20) {
+            window.setTimeout(() => queueCanvasMediaAnalysis(nodeId, stillFileId, attempt + 1), 50)
+            return
+        }
+        if (!stillFileId) {
+            patchMediaNodeDescriptor(nodeId, { ...buildAnalyzingDescriptor(), status: 'failed', updatedAt: Date.now() })
+            return
+        }
+        const requestKey = getMediaAnalysisRequestKey(nodeId, stillFileId)
+        if (mediaAnalysisRequestsInFlight.has(requestKey)) return
+        mediaAnalysisRequestsInFlight.add(requestKey)
+        void runQueuedCanvasMediaAnalysis(nodeId, stillFileId, requestKey)
+    }
+
+    function getMediaDescriptorStillFileId(node: ImageCanvasNode | VideoCanvasNode): string | undefined {
+        if (node.type === 'image') return node.fileId || undefined
+        return node.frameFileId || node.posterFileId || undefined
     }
 
     // Patch a single document/thread node's descriptor and re-commit so the canvas
@@ -7849,8 +8019,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     // Summarize a document/thread node from its plain text (no pixels). Mirrors
-    // analyzeUploadedMedia's analyzing → ready/failed flow. Best-effort: any failure
-    // marks the descriptor 'failed' so the analyzing indicator resolves.
+    // analyzeCanvasMediaStill's analyzing -> ready/failed flow. Best-effort: any
+    // failure marks the descriptor 'failed' so the analyzing indicator resolves.
     async function analyzeTextNode(nodeId: string, text: string, title?: string): Promise<void> {
         const failed = (): ContentDescriptor => ({ ...buildAnalyzingDescriptor(), status: 'failed', updatedAt: Date.now() })
         const aiModel = pickDescriptorModel()
@@ -8031,7 +8201,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     aiModel: aiModel as any,
                     revisedPrompt,
                     responseMessageId: '',
-                }
+                },
+                descriptor: buildAnalyzingDescriptor(),
             }
 
             const newCanvasState: CanvasState = {
@@ -8041,7 +8212,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodes: [...existingNodes, imageNode]
             }
 
-            onCanvasStateChange?.(newCanvasState)
+            commitCanvasState(newCanvasState)
+            queueCanvasMediaAnalysis(imageNode.nodeId, fileId)
         },
 
         onImageBranchResolvedToCanvas: ({ threadId, resolution, generationRun }) => {
@@ -8319,7 +8491,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         src: imageSrc,
                         position,
                         generatedBy,
-                        descriptor: buildDescriptorFromGeneratedBy(generatedBy) ?? imgNode.descriptor,
+                        descriptor: buildAnalyzingDescriptor(),
                     } satisfies ImageCanvasNode
                 })
 
@@ -8344,6 +8516,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     edges,
                 })
                 finishGeneratedMediaRun(threadId, generationRun)
+                const completedImageNode = getCurrentCanvasMediaNode(partial.nodeId)
+                queueCanvasMediaAnalysis(
+                    partial.nodeId,
+                    completedImageNode ? getMediaDescriptorStillFileId(completedImageNode) : fileId || partial.fileId,
+                )
 
             } else {
                 // No partial existed — IMAGE_COMPLETE without prior IMAGE_PARTIAL.
@@ -8403,7 +8580,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     position,
                     dimensions: { width: imageWidth, height: imageHeight },
                     generatedBy,
-                    descriptor: buildDescriptorFromGeneratedBy(generatedBy),
+                    descriptor: buildAnalyzingDescriptor(),
                 }
 
                 const existingNodes = addBranchLineageMarkerNodesIfMissing(currentCanvasState?.nodes || [], branchOriginNode, branchForkNode, branchLineNode)
@@ -8436,6 +8613,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 commitCanvasStatePreservingEditors(currentCanvasState)
                 finishGeneratedMediaRun(threadId, generationRun)
+                queueCanvasMediaAnalysis(nodeId, fileId)
             }
         },
 
@@ -8639,7 +8817,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     durationSeconds: durationSeconds || videoNode.durationSeconds,
                     hasAudio: hasAudio ?? videoNode.hasAudio,
                     generatedBy,
-                    descriptor: buildDescriptorFromGeneratedBy(generatedBy) ?? videoNode.descriptor,
+                    descriptor: buildAnalyzingDescriptor(),
                 } satisfies VideoCanvasNode
             })
 
@@ -8660,6 +8838,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 edges: currentCanvasState.edges,
             })
             finishGeneratedMediaRun(threadId, generationRun)
+            const completedVideoNode = getCurrentCanvasMediaNode(existing.nodeId)
+            queueCanvasMediaAnalysis(
+                existing.nodeId,
+                completedVideoNode ? getMediaDescriptorStillFileId(completedVideoNode) : frameFileId || posterFileId,
+            )
         },
 
         onVideoErrorToCanvas: (data) => {
@@ -9730,34 +9913,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return entries[0] ?? null
     }
 
-    function getBranchMarkerDirectMediaModelDescriptor(node: BranchMarkerNode): BranchMarkerModelDescriptor | null {
-        if (node.type === 'branchLine' && node.mediaModelId) return { modelId: node.mediaModelId }
-        return null
-    }
-
     function getBranchMarkerMediaModelDetails(node: BranchMarkerNode): BranchMarkerModelDetail[] {
         const descriptorsByLabel = new Map<string, BranchMarkerModelDescriptor[]>()
-        const addDescriptor = (label: string, descriptor: BranchMarkerModelDescriptor | null): void => {
-            if (!descriptor?.modelId) return
-            descriptorsByLabel.set(label, [...(descriptorsByLabel.get(label) ?? []), descriptor])
-        }
-
-        for (const modelId of node.pendingState?.imageModelIds ?? []) {
-            addDescriptor('Image', { modelId })
-        }
-        for (const modelId of node.pendingState?.videoModelIds ?? []) {
-            addDescriptor('Video', { modelId })
-        }
-
-        if (node.type === 'branchLine' && node.mediaType) {
-            addDescriptor(node.mediaType === 'video' ? 'Video' : 'Image', getBranchMarkerDirectMediaModelDescriptor(node))
-        }
-
-        for (const mediaNode of getBranchMarkerGeneratedMediaNodes(node)) {
-            const modelId = getGeneratedMediaModelId(mediaNode)
-            const modelProvider = getGeneratedMediaModelProvider(mediaNode, modelId)
-            const mediaType = mediaNode.generatedBy?.mediaType ?? mediaNode.type
-            addDescriptor(mediaType === 'video' ? 'Video' : 'Image', { modelId, modelProvider })
+        for (const descriptor of getBranchMarkerMediaModelCircleDescriptors(node, currentCanvasState?.nodes ?? [])) {
+            descriptorsByLabel.set(descriptor.label, [
+                ...(descriptorsByLabel.get(descriptor.label) ?? []),
+                {
+                    modelId: descriptor.modelId,
+                    ...(descriptor.modelProvider ? { modelProvider: descriptor.modelProvider } : {}),
+                },
+            ])
         }
 
         return Array.from(descriptorsByLabel.entries())
@@ -9777,32 +9942,37 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .join(' · ')
     }
 
-    function getBranchMarkerMediaModelTooltipEntries(
-        details: BranchMarkerModelDetail[],
-    ): Array<{ label: string; entry: BranchMarkerModelEntry }> {
-        return details.flatMap(detail => detail.entries.map(entry => ({ label: detail.label, entry })))
+    function getBranchMarkerMediaModelTooltipEntries(node: BranchMarkerNode): Array<{ label: string; entry: BranchMarkerModelEntry }> {
+        return getBranchMarkerMediaModelCircleDescriptors(node, currentCanvasState?.nodes ?? [])
+            .map((descriptor) => {
+                const entry = getBranchMarkerModelEntry(descriptor.modelId, descriptor.modelProvider ?? '')
+                return entry ? { label: descriptor.label, entry } : null
+            })
+            .filter((entry): entry is { label: string; entry: BranchMarkerModelEntry } => Boolean(entry))
     }
 
     function getBranchMarkerMediaModelDefaultIcon(label: string): string {
         return label === 'Video' ? videoPlayGlyphIcon : imageIcon
     }
 
-    function createBranchMarkerMediaModelTooltip(nodeId: string, label: string, entry: BranchMarkerModelEntry): HTMLElement {
+    function createBranchMarkerMediaModelTooltip(nodeId: string, label: string, entry: BranchMarkerModelEntry, index: number): HTMLElement {
         const icon = entry.icon ?? getBranchMarkerMediaModelDefaultIcon(label)
         const triggerContent = html`
-            <span
-                className="workspace-branch-marker-message-icon workspace-branch-marker-media-model-icon"
-                innerHTML=${icon}
-                aria-hidden="true"
-            ></span>
+            <span className="workspace-branch-marker-media-model-circle" data=${{ mediaModelCircleIndex: String(index) }}>
+                <span
+                    className="workspace-branch-marker-message-icon workspace-branch-marker-media-model-icon"
+                    innerHTML=${icon}
+                    aria-hidden="true"
+                ></span>
+            </span>
         ` as HTMLElement
         const tooltip = createHelpTooltip({
             label: `${label} model: ${entry.title}`,
             text: `${label}: ${entry.title}`,
             triggerContent,
             preferredPlacement: 'left',
-            className: 'workspace-branch-marker-reasoning-tooltip nopan',
-            triggerClassName: 'workspace-branch-marker-reasoning-tooltip-trigger',
+            className: 'workspace-branch-marker-media-model-tooltip workspace-branch-marker-reasoning-tooltip nopan',
+            triggerClassName: 'workspace-branch-marker-media-model-tooltip-trigger workspace-branch-marker-reasoning-tooltip-trigger',
             contentClassName: 'workspace-branch-marker-reasoning-tooltip-content',
         })
         const tooltips = branchMarkerMediaModelTooltips.get(nodeId) ?? []
@@ -9843,11 +10013,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const threadPreview = getBranchMarkerConversationPreview(node)
         const promptText = (threadPreview?.userText ?? '').trim()
         const promptPreview = getBranchMarkerPromptPreview(promptText)
-        // In-flight (pending) markers show only the user message. Resolved branch
-        // lineage markers surface the media models that were actually used as a
-        // stacked column of hover-labeled icons on the right side.
-        const modelDetails = node.pendingState ? [] : getBranchMarkerModelDetails(node)
-        const mediaModelEntries = getBranchMarkerMediaModelTooltipEntries(modelDetails)
+        // Media models render as a separate stacked circle rail to the right of
+        // the text pill once generated media descendants exist.
+        const modelDetails = getBranchMarkerModelDetails(node)
+        const mediaModelEntries = getBranchMarkerMediaModelTooltipEntries(node)
         const modelSummary = getBranchMarkerModelSummary(modelDetails)
         const reasoningModelEntry = getBranchMarkerReasoningModelEntry(node)
         const reasoningModelIcon = reasoningModelEntry ? reasoningModelEntry.icon ?? atomIcon : null
@@ -9858,8 +10027,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const responseText = threadPreview?.responseText || ''
         const responsePhase = threadPreview?.phase ?? 'preamble'
         const responseIsReceiving = Boolean(threadPreview?.isReceiving)
-        const showResponseLine = Boolean(responseText)
-        const responsePreview = responseText ? getBranchMarkerResponsePreview(responseText, { isReceiving: responseIsReceiving }) : ''
+        const showResponseLine = shouldShowBranchMarkerResponseLine(node, threadPreview)
+        const responsePreview = showResponseLine
+            ? getBranchMarkerResponsePreview(responseText, { isReceiving: responseIsReceiving })
+            : ''
         const spinnerOnUserLine = Boolean(node.pendingState) && !showResponseLine
         const spinnerOnResponseLine = Boolean(node.pendingState) && showResponseLine && responseIsReceiving
         const responseIsEnhancing = responseIsReceiving && responsePhase === 'enhancement'
@@ -9901,7 +10072,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 </div>
                 ${mediaModelEntries.length > 0 ? html`
                     <div className="workspace-branch-marker-media-models">
-                        ${mediaModelEntries.map(({ label: mediaLabel, entry }) => createBranchMarkerMediaModelTooltip(node.nodeId, mediaLabel, entry))}
+                        ${mediaModelEntries.map(({ label: mediaLabel, entry }, index) =>
+                            createBranchMarkerMediaModelTooltip(node.nodeId, mediaLabel, entry, index)
+                        )}
                     </div>
                 ` : null}
             </div>
@@ -10377,9 +10550,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         if (!materialized.fileId || !materialized.url) return false
                         const width = settings.mediaNode.image.defaultInsertionWidth
                         const imageNodeId = `node-${materialized.fileId}`
-                        // Reuse the description copied into the library item so the media is
-                        // self-contained — only re-analyze when no ready descriptor travelled with it.
-                        const savedDescriptor = materialized.descriptor?.status === 'ready' ? materialized.descriptor : undefined
+                        // Reuse only VLM-authored descriptions copied into the library item.
+                        const savedDescriptor = isReadyAnalysisDescriptor(materialized.descriptor) ? materialized.descriptor : undefined
                         const imageNode: Omit<ImageCanvasNode, 'position'> = {
                             nodeId: imageNodeId,
                             type: 'image',
@@ -10391,8 +10563,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             descriptor: savedDescriptor ?? buildAnalyzingDescriptor(),
                         }
                         insertNodeAtViewportCenterInternal(imageNode)
-                        // Only caption when no stored description came back with the item.
-                        if (!savedDescriptor) void analyzeUploadedMedia(imageNodeId, materialized.fileId)
                         return true
                     } catch (error) {
                         console.error('Failed to add Media Library image to canvas:', error)
@@ -10412,8 +10582,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         const aspectRatio = item.aspectRatio || 1
                         const videoNodeId = `node-${materialized.video.fileId}`
                         const posterFileId = materialized.poster?.fileId ?? ''
-                        // Reuse the saved description so the media is self-contained.
-                        const savedDescriptor = materialized.descriptor?.status === 'ready' ? materialized.descriptor : undefined
+                        // Reuse only VLM-authored descriptions copied into the library item.
+                        const savedDescriptor = isReadyAnalysisDescriptor(materialized.descriptor) ? materialized.descriptor : undefined
                         const videoNode: Omit<VideoCanvasNode, 'position'> = {
                             nodeId: videoNodeId,
                             type: 'video',
@@ -10429,8 +10599,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             descriptor: savedDescriptor ?? buildAnalyzingDescriptor(),
                         }
                         insertNodeAtViewportCenterInternal(videoNode)
-                        // Only caption (from the poster still, never the MP4) when no stored description travelled with the item.
-                        if (!savedDescriptor) void analyzeUploadedMedia(videoNodeId, posterFileId)
                         return true
                     } catch (error) {
                         console.error('Failed to add Media Library video to canvas:', error)
@@ -10525,22 +10693,29 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ...node,
             position: getCenteredInsertionPosition(node.dimensions),
         } as CanvasNode
+        const mediaNodeNeedsAnalysis = (positionedNode.type === 'image' || positionedNode.type === 'video')
+            && shouldAnalyzeMediaDescriptor((positionedNode as ImageCanvasNode | VideoCanvasNode).descriptor)
+        const preparedNode = mediaNodeNeedsAnalysis
+            ? { ...(positionedNode as ImageCanvasNode | VideoCanvasNode), descriptor: buildAnalyzingDescriptor() } as CanvasNode
+            : positionedNode
         const newCanvasState: CanvasState = {
             ...baseCanvasState,
             ...statePatch,
             viewport: baseCanvasState.viewport,
             edges: baseCanvasState.edges ?? [],
-            nodes: resolveTopLevelNodeCollisions([...baseCanvasState.nodes, positionedNode]),
+            nodes: resolveTopLevelNodeCollisions([...baseCanvasState.nodes, preparedNode]),
         }
 
         onCanvasStateChange?.(newCanvasState)
 
         // A newly inserted document node gets an initial descriptor from any
         // existing content; a fresh, empty node is skipped until it's edited.
-        if (positionedNode.type === 'document') {
+        if (preparedNode.type === 'document') {
             const docs = documentsStore.getData() as Document[] | undefined
-            const doc = docs?.find((d) => d.documentId === (positionedNode as DocumentCanvasNode).referenceId)
-            if (doc?.content !== undefined) scheduleTextNodeDescriptor(positionedNode.nodeId, doc.content, doc.title)
+            const doc = docs?.find((d) => d.documentId === (preparedNode as DocumentCanvasNode).referenceId)
+            if (doc?.content !== undefined) scheduleTextNodeDescriptor(preparedNode.nodeId, doc.content, doc.title)
+        } else if (mediaNodeNeedsAnalysis && (preparedNode.type === 'image' || preparedNode.type === 'video')) {
+            queueCanvasMediaAnalysis(preparedNode.nodeId, getMediaDescriptorStillFileId(preparedNode))
         }
 
         return newCanvasState

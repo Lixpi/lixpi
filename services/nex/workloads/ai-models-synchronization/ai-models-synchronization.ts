@@ -277,16 +277,14 @@ export class AiModelsSync {
         Anthropic: {
             exact: [],
             prefix: [
-                'claude-3-haiku',
                 'claude-3-opus',
-                'claude-3-5',
+                'claude-3-5-sonnet',
                 'claude-3-7',
                 'claude-sonnet-4-5',
                 'claude-sonnet-4-20',
                 'claude-opus-4-5',
                 'claude-opus-4-1',
                 'claude-opus-4-20',
-                'claude-haiku-4-5',
             ],
             contains: []
         },
@@ -439,6 +437,7 @@ export class AiModelsSync {
                 { prefix: 'claude-opus-4-1', values: { contextWindow: 200000, maxCompletionSize: 32000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
                 { prefix: 'claude-opus-4', values: { contextWindow: 200000, maxCompletionSize: 32000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
                 { prefix: 'claude-sonnet-4', values: { contextWindow: 200000, maxCompletionSize: 64000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
+                { prefix: 'claude-haiku-4', values: { contextWindow: 200000, maxCompletionSize: 8192, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
                 { prefix: 'claude-3-7-sonnet', values: { contextWindow: 200000, maxCompletionSize: 64000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
                 { prefix: 'claude-3-5-haiku', values: { contextWindow: 200000, maxCompletionSize: 8192, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
                 { prefix: 'claude-3-haiku', values: { contextWindow: 200000, maxCompletionSize: 4096, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },

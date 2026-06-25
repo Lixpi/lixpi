@@ -58,28 +58,22 @@ export type MediaDescriptor = ContentDescriptor
 | `summary` | `string` | 1-2 sentences naming the dominant subjects and overall look/content |
 | `entityTags` | `string[]` | A few concrete subjects, objects, people, or concepts |
 | `styleTags` | `string[]` | A few medium, palette, mood, lighting, or document-style descriptors |
-| `source` | `'generation' \| 'analysis'` | Whether it came from generation metadata or an analysis pass |
+| `source` | `'generation' \| 'analysis'` | `analysis` for new descriptors; `generation` is legacy persisted data and must not be newly written or rendered as media description |
 | `version` | `string` | `MEDIA_DESCRIPTOR_VERSION` |
 | `updatedAt` | `number` | Last write timestamp |
 
 ## How It Is Sourced
 
-There are three sourcing paths, and they are deliberately arranged so the same
-artifact is never analyzed twice. The cost of a descriptor ranges from free
-(generation metadata already exists) to a single Vision-Language-Model (VLM)
-caption (uploaded media) to a text summarization pass (documents and threads).
+There are two sourcing paths. Media is always described from the actual pixels
+with a single Vision-Language-Model (VLM) pass; documents and threads use a text
+summarization pass. Generation prompts, revised prompts, and branch resolver
+summaries are never used as media descriptions.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
-    subgraph Generated["Generated Media — free"]
-        Gen[Branch resolver summaries + tags]
-        GenBuild[buildDescriptorFromGeneratedBy]
-        Gen --> GenBuild
-    end
-
-    subgraph Uploaded["Uploaded Media — one VLM caption"]
-        Up[Library / upload / import]
+    subgraph Media["Generated / Uploaded Media — one VLM caption"]
+        Up[Final generated frame / upload / import / library insert]
         UpAnalyze[status: analyzing]
         UpDescribe[describeMediaStill on still/poster]
         Up --> UpAnalyze --> UpDescribe
@@ -91,27 +85,22 @@ flowchart TB
         Txt --> TxtSummary
     end
 
-    GenBuild --> Ready[(ContentDescriptor<br/>status: ready)]
     UpDescribe --> Ready
     TxtSummary --> Ready
 ```
 
-### Generated media — free
+### Media — one VLM caption
 
-When an AI-generated image or video finalizes, `buildDescriptorFromGeneratedBy`
-(`services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`) composes the
-descriptor from the branch resolver's existing `visualEntitySummary`,
-`visualStyleSummary`, `entityTags`, and `styleTags`. No extra model call is
-made. The descriptor is `source: 'generation'` and `status: 'ready'`.
-
-### Uploaded media — one VLM caption
-
-Media added from the Media Library or uploaded/imported onto the canvas has no
-generation metadata, so the node is inserted with a `status: 'analyzing'`
-descriptor. The browser requests `MEDIA_DESCRIBE`, and the API handler
+When an AI-generated image finalizes, when a generated video completes, or when
+media is uploaded/imported/materialized onto the canvas, the node is inserted or
+updated with a `status: 'analyzing'` descriptor. The browser requests
+`MEDIA_DESCRIBE`, and the API handler
 (`services/api/src/NATS/subscriptions/media-descriptor-subjects.ts`) calls
-`describeMediaStill` (`services/api/src/llm/media-descriptor.ts`). For a video,
-captioning runs on its representative still or poster, never the MP4.
+`describeMediaStill` (`services/api/src/llm/media-descriptor.ts`) against the
+stored image, final frame, representative frame, or poster. The media-analysis
+model is API-owned through `settings.mediaDescriptor.defaultVlmModelId` in
+`services/api/src/settings.ts`, not selected by the browser. For video,
+captioning runs on the representative still/poster, never the MP4.
 
 ### Documents and threads — text analysis
 
@@ -168,7 +157,7 @@ and VEO anchoring.
 
 - [Workspace Context Relevance](./CONTEXT-RELEVANCE.md) — workspace relevance, self-heal, and automatic selections
 - [Branch Lineage](../media-generation/BRANCH-LINEAGE.md) — how descriptors/tags feed branch grounding
-- [Image Generation](../media-generation/IMAGE-GENERATION.md) — the generation trace generated-media descriptors derive from
+- [Image Generation](../media-generation/IMAGE-GENERATION.md) — generated-image completion and final-frame storage
 - [Video Generation](../media-generation/VIDEO-GENERATION.md) — mid-frame extraction and VEO image-to-video anchoring
 - [Workspace Model](../canvas/WORKSPACE-MODEL.md) — canvas media nodes and chrome
 - [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md) — the `resolveWorkspaceContext` workflow node that drives self-heal
