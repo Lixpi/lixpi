@@ -5,6 +5,16 @@ import {
     Texture,
 } from 'pixi.js'
 import { Easing } from '$src/utils/animations/easing.ts'
+import {
+    TravelingSnakeGlassMaterial,
+    interpolateTravelingOutlineColor,
+    type GlassMaterialStyle,
+} from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
+
+// Re-exported for back-compat with existing call sites and tests that import
+// these names from the renderer.
+export { interpolateTravelingOutlineColor }
+export type PixiTravelingOutlineGlassMaterialStyle = GlassMaterialStyle
 
 export type PixiTravelingOutlineStyle = {
     radius: number
@@ -22,43 +32,6 @@ export type PixiTravelingOutlineStyle = {
 }
 
 export type PixiTravelingOutlineDirection = 'clockwise' | 'counterclockwise'
-
-export type PixiTravelingOutlineGlassMaterialStyle = {
-    shadowColor: string
-    tailOpacityPower: number
-    tailFadeFraction: number
-    minTailOpacity: number
-    edgeFeatherFraction: number
-    edgeFeatherPower: number
-    lensCorePower: number
-    upperSpecularCenter: number
-    upperSpecularDrift: number
-    upperSpecularWidth: number
-    upperSpecularFadeStart: number
-    upperSpecularFadeEnd: number
-    upperSpecularStrength: number
-    headSpecularProgressCenter: number
-    headSpecularProgressWidth: number
-    headSpecularCrossSectionCenter: number
-    headSpecularCrossSectionWidth: number
-    headSpecularStrength: number
-    lowerEdgeShadowCenter: number
-    lowerEdgeShadowWidth: number
-    lowerEdgeShadowStrength: number
-    upperEdgeShadowCenter: number
-    upperEdgeShadowWidth: number
-    upperEdgeShadowStrength: number
-    edgeShadowPower: number
-    edgeShadowStrength: number
-    lensHighlightStrength: number
-    highlightWhiteMixMax: number
-    shadowMixMax: number
-    materialAlphaBase: number
-    materialAlphaMax: number
-    lensAlphaStrength: number
-    upperSpecularAlphaStrength: number
-    headSpecularAlphaStrength: number
-}
 
 export type PixiTravelingOutlineDatum = {
     id: string
@@ -112,11 +85,6 @@ type TravelingSnakeMeshGeometry = {
     uvs: Float32Array
     indices: Uint32Array
 }
-
-type GradientCanvas = OffscreenCanvas | HTMLCanvasElement
-type GradientCanvasContext = OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D
-
-type RgbColor = { r: number; g: number; b: number }
 
 export function getRoundedOutlinePerimeter(width: number, height: number, radius: number): number {
     const boundedRadius = Math.max(0, Math.min(radius, width / 2, height / 2))
@@ -227,169 +195,6 @@ export function getTravelingOutlineHeadDistance(
     if (durationMs <= 0 || perimeter <= 0) return 0
     const lapProgress = (((elapsed % durationMs) + durationMs) % durationMs) / durationMs
     return ease(lapProgress) * perimeter
-}
-
-export function interpolateTravelingOutlineColor(colors: ReadonlyArray<string>, progress: number): number {
-    if (colors.length === 0) return 0xffffff
-    if (colors.length === 1) return Number.parseInt(colors[0].slice(1), 16)
-
-    const bounded = Math.max(0, Math.min(1, progress))
-    const scaled = bounded * (colors.length - 1)
-    const index = Math.min(colors.length - 2, Math.floor(scaled))
-    const blend = scaled - index
-    const from = Number.parseInt(colors[index].slice(1), 16)
-    const to = Number.parseInt(colors[index + 1].slice(1), 16)
-    const channel = (shift: number) => Math.round(((from >> shift) & 0xff) + (((to >> shift) & 0xff) - ((from >> shift) & 0xff)) * blend)
-    return (channel(16) << 16) | (channel(8) << 8) | channel(0)
-}
-
-function getTravelingOutlineColorChannels(colors: ReadonlyArray<string>, progress: number): RgbColor {
-    const color = interpolateTravelingOutlineColor(colors, progress)
-    return {
-        r: (color >> 16) & 0xff,
-        g: (color >> 8) & 0xff,
-        b: color & 0xff,
-    }
-}
-
-function parseHexColor(hex: string): RgbColor {
-    const normalized = hex.trim().replace(/^#/, '')
-    if (!/^[\da-f]{6}$/i.test(normalized)) return { r: 78, g: 91, b: 108 }
-    const value = Number.parseInt(normalized, 16)
-    return {
-        r: (value >> 16) & 0xff,
-        g: (value >> 8) & 0xff,
-        b: value & 0xff,
-    }
-}
-
-function mixChannel(from: number, to: number, amount: number): number {
-    return Math.round(from + (to - from) * Math.max(0, Math.min(1, amount)))
-}
-
-function mixColor(from: RgbColor, to: RgbColor, amount: number): RgbColor {
-    return {
-        r: mixChannel(from.r, to.r, amount),
-        g: mixChannel(from.g, to.g, amount),
-        b: mixChannel(from.b, to.b, amount),
-    }
-}
-
-function gaussian(position: number, center: number, width: number): number {
-    return Math.exp(-((position - center) ** 2) / (2 * width ** 2))
-}
-
-function smoothstep(edge0: number, edge1: number, value: number): number {
-    if (edge0 === edge1) return value >= edge1 ? 1 : 0
-    const progress = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)))
-    return progress * progress * (3 - 2 * progress)
-}
-
-function getTextureEdgeFeatherFraction(edgeFeatherFraction: number): number {
-    const boundedFeather = Math.max(0, edgeFeatherFraction)
-    return Math.min(0.49, boundedFeather / (1 + 2 * boundedFeather))
-}
-
-function getTextureOpacityProgress(
-    progress: number,
-    tailAlpha: number,
-    glassMaterial: PixiTravelingOutlineGlassMaterialStyle
-): number {
-    const configuredOpacity = tailAlpha + (1 - tailAlpha) * Math.pow(progress, glassMaterial.tailOpacityPower)
-    const tailFade = smoothstep(0, glassMaterial.tailFadeFraction, progress)
-    return tailFade * Math.max(glassMaterial.minTailOpacity, Math.min(1, configuredOpacity))
-}
-
-function getGlassTexturePixel(
-    colors: ReadonlyArray<string>,
-    progress: number,
-    crossSection: number,
-    tailAlpha: number,
-    glassMaterial: PixiTravelingOutlineGlassMaterialStyle
-): { color: RgbColor; alpha: number } {
-    const white = { r: 255, g: 255, b: 255 }
-    const glassShadow = parseHexColor(glassMaterial.shadowColor)
-    const baseColor = getTravelingOutlineColorChannels(colors, progress)
-    const opacityProgress = getTextureOpacityProgress(progress, tailAlpha, glassMaterial)
-    const textureEdgeFeather = getTextureEdgeFeatherFraction(glassMaterial.edgeFeatherFraction)
-    const coreSpan = Math.max(0.001, 1 - textureEdgeFeather * 2)
-    const coreCrossSection = Math.max(0, Math.min(1, (crossSection - textureEdgeFeather) / coreSpan))
-    const edgeDistance = Math.abs(coreCrossSection - 0.5) * 2
-    const edgeFeather = textureEdgeFeather <= 0
-        ? 1
-        : smoothstep(0, textureEdgeFeather, crossSection) * smoothstep(0, textureEdgeFeather, 1 - crossSection)
-    const roundedBody = Math.max(0, Math.sin(Math.PI * coreCrossSection))
-    const lensCore = Math.pow(roundedBody, glassMaterial.lensCorePower)
-    const upperSpecular = gaussian(
-        coreCrossSection,
-        glassMaterial.upperSpecularCenter + glassMaterial.upperSpecularDrift * Math.sin(progress * Math.PI),
-        glassMaterial.upperSpecularWidth
-    ) * smoothstep(glassMaterial.upperSpecularFadeStart, glassMaterial.upperSpecularFadeEnd, progress)
-    const headSpecular = gaussian(progress, glassMaterial.headSpecularProgressCenter, glassMaterial.headSpecularProgressWidth)
-        * gaussian(coreCrossSection, glassMaterial.headSpecularCrossSectionCenter, glassMaterial.headSpecularCrossSectionWidth)
-    const lowerEdgeShadow = gaussian(coreCrossSection, glassMaterial.lowerEdgeShadowCenter, glassMaterial.lowerEdgeShadowWidth)
-    const upperEdgeShadow = gaussian(coreCrossSection, glassMaterial.upperEdgeShadowCenter, glassMaterial.upperEdgeShadowWidth)
-    const edgeShadow = lowerEdgeShadow * glassMaterial.lowerEdgeShadowStrength
-        + upperEdgeShadow * glassMaterial.upperEdgeShadowStrength
-        + Math.pow(edgeDistance, glassMaterial.edgeShadowPower) * glassMaterial.edgeShadowStrength
-    const highlight = upperSpecular * glassMaterial.upperSpecularStrength
-        + headSpecular * glassMaterial.headSpecularStrength
-        + lensCore * glassMaterial.lensHighlightStrength
-
-    const litColor = mixColor(baseColor, white, Math.min(glassMaterial.highlightWhiteMixMax, highlight))
-    const color = mixColor(litColor, glassShadow, Math.min(glassMaterial.shadowMixMax, edgeShadow))
-    const materialAlpha = Math.min(
-        glassMaterial.materialAlphaMax,
-        glassMaterial.materialAlphaBase
-            + lensCore * glassMaterial.lensAlphaStrength
-            + upperSpecular * glassMaterial.upperSpecularAlphaStrength
-            + headSpecular * glassMaterial.headSpecularAlphaStrength
-    )
-    const alpha = opacityProgress * materialAlpha * Math.pow(edgeFeather, glassMaterial.edgeFeatherPower)
-    return {
-        color,
-        alpha: Math.min(0.99, alpha),
-    }
-}
-
-function createGradientCanvas(width: number, height: number): GradientCanvas {
-    if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(width, height)
-    const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
-    return canvas
-}
-
-function createTravelingSnakeTexture(
-    colors: ReadonlyArray<string>,
-    tailAlpha: number,
-    glassMaterial: PixiTravelingOutlineGlassMaterialStyle
-): Texture {
-    const width = 256
-    const height = 64
-    const canvas = createGradientCanvas(width, height)
-    const context = canvas.getContext('2d') as GradientCanvasContext | null
-    if (!context) return Texture.WHITE
-    const safeColors = colors.length > 0 ? colors : ['#ffffff']
-
-    const imageData = context.createImageData(width, height)
-    for (let y = 0; y < height; y++) {
-        const crossSection = y / (height - 1)
-        for (let x = 0; x < width; x++) {
-            const progress = x / (width - 1)
-            const { color, alpha } = getGlassTexturePixel(safeColors, progress, crossSection, tailAlpha, glassMaterial)
-            const offset = (y * width + x) * 4
-            imageData.data[offset] = color.r
-            imageData.data[offset + 1] = color.g
-            imageData.data[offset + 2] = color.b
-            imageData.data[offset + 3] = Math.round(Math.max(0, Math.min(1, alpha)) * 255)
-        }
-    }
-
-    context.clearRect(0, 0, width, height)
-    context.putImageData(imageData, 0, 0)
-
-    return Texture.from(canvas as HTMLCanvasElement, true)
 }
 
 function getTravelingSnakeSampleCount(snakeLength: number, snakeHeadWidth: number): number {
@@ -639,7 +444,11 @@ export class PixiTravelingOutlineRenderer {
         this.onFrame = options.onFrame
         this.ease = options.ease ?? Easing.travelingOutlineTransition
         this.getStrokeScale = options.getStrokeScale ?? (() => 1)
-        this.texture = createTravelingSnakeTexture(this.style.snakeColors, this.style.snakeTailAlpha, this.style.glassMaterial)
+        this.texture = new TravelingSnakeGlassMaterial(
+            this.style.snakeColors,
+            this.style.snakeTailAlpha,
+            this.style.glassMaterial
+        ).bake()
     }
 
     sync(datums: ReadonlyArray<PixiTravelingOutlineDatum>): void {
