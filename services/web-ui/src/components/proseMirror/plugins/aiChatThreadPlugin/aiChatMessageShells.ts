@@ -28,8 +28,8 @@ export function createAiUserMessageShell(options: MessageShellOptions = {}): AiU
     const wrapperClassName = ['ai-user-message-wrapper', options.wrapperClassName].filter(Boolean).join(' ')
     const wrapper = html`
         <div className=${wrapperClassName}>
+            <div className="ai-user-message-reference-previews" contenteditable="false" hidden="true"></div>
             <div className="ai-user-message">
-                <div className="ai-user-message-reference-previews" contenteditable="false" hidden="true"></div>
                 <div className="ai-user-message-content"></div>
             </div>
         </div>
