@@ -1224,7 +1224,7 @@ export const settings: Settings = {
         // Canvas-unit horizontal gap from a temporary branchOrigin marker to its first generated media node.
         branchOriginToFirstMediaGap: 312,
         // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
-        branchFanoutExtraGap: 96,
+        branchFanoutExtraGap: 200,
         // Screen-pixel vertical gap between the global prompt input and the pending branch marker shown immediately after canvas prompt submit.
         pendingMarkerInputGap: 8,
         // Milliseconds for moving and scaling a pending branch marker from the global prompt input to its API-planned canvas position.
