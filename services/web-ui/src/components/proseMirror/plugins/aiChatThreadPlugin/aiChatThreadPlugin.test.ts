@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { beforeEach, beforeAll } from 'vitest'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
 import { EditorState } from 'prosemirror-state'
 import { STOP_AI_CHAT_META, USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
@@ -11,6 +11,15 @@ import {
     findNodePosition,
     schema,
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
+import { nodes as sharedNodes } from '$src/components/proseMirror/components/schema.ts'
+
+const schemaWithFeatureReference = new Schema({
+    nodes: {
+        ...(schema.spec.nodes.toObject() as Record<string, any>),
+        feature_reference: sharedNodes.feature_reference,
+    },
+    marks: schema.spec.marks.toObject(),
+})
 
 function createPlugin(sendAiRequestHandler = vi.fn(), stopAiRequestHandler = vi.fn()) {
     return createAiChatThreadPlugin({
@@ -84,6 +93,44 @@ function makeVideoRef(overrides: Record<string, unknown> = {}): ProseMirrorNode 
         variantIndex: null,
         ...overrides,
     })
+}
+
+function makeFeatureReference(overrides: Record<string, unknown> = {}): ProseMirrorNode {
+    return schemaWithFeatureReference.nodes.feature_reference.create({
+        featureId: 'feature-1',
+        featureName: 'Feature One',
+        category: 'default',
+        ...overrides,
+    })
+}
+
+function makeParagraphMessage(
+    nodeType: 'aiUserMessage' | 'aiResponseMessage',
+    text: string,
+    inlineChildren: ProseMirrorNode[] = [],
+): ProseMirrorNode {
+    const creator = nodeType === 'aiUserMessage'
+        ? schema.nodes.aiUserMessage
+        : schema.nodes.aiResponseMessage
+    return creator.create({}, [
+        schema.nodes.paragraph.create(null, [schema.text(text), ...inlineChildren]),
+    ])
+}
+
+function makeFeatureReferenceParagraphMessage(
+    nodeType: 'aiUserMessage' | 'aiResponseMessage',
+    text: string,
+    inlineChildren: ProseMirrorNode[] = [],
+): ProseMirrorNode {
+    const creator = nodeType === 'aiUserMessage'
+        ? schemaWithFeatureReference.nodes.aiUserMessage
+        : schemaWithFeatureReference.nodes.aiResponseMessage
+    return creator.create({}, [
+        schemaWithFeatureReference.nodes.paragraph.create(
+            null,
+            [schemaWithFeatureReference.text(text), ...inlineChildren],
+        ),
+    ])
 }
 
 function makeThread(attrs: Record<string, unknown> = {}, children: ProseMirrorNode[] = []): ProseMirrorNode {
@@ -217,6 +264,165 @@ describe('aiChatThreadPlugin — request payload construction', () => {
             },
         ])
         expect(payload.referencedFeatureIds).toEqual([])
+    })
+
+    it('forwards valid image generation config groups to imageOptions', async () => {
+        const sendAiRequestHandler = vi.fn()
+        const plugin = createPlugin(sendAiRequestHandler)
+        const imageGenerationConfigGroups = JSON.stringify([
+            {
+                groupId: 'image-quality',
+                modelIds: ['Google:gemini-2.5-flash-image'],
+                values: {
+                    quality: 'high',
+                    style: 'cinematic',
+                },
+            },
+        ])
+
+        const state = EditorState.create({
+            doc: doc(
+                makeThread(
+                    {
+                        threadId: 'thread-image-config',
+                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        useMultipleImageModels: true,
+                        aiImageModel: 'Google:gemini-2.5-flash-image',
+                        aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
+                        imageGenerationConfigGroups,
+                    },
+                    [makeUserMessage('Image config group test')]
+                )
+            ),
+            schema,
+            plugins: [plugin],
+        })
+
+        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
+            threadId: 'thread-image-config',
+            nodePos: findNodePosition(state.doc, 'aiChatThread'),
+        })
+        state.applyTransaction(trigger)
+
+        await Promise.resolve()
+
+        const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
+        expect(payload.imageOptions).toMatchObject({
+            configGroups: [
+                {
+                    groupId: 'image-quality',
+                    modelIds: ['Google:gemini-2.5-flash-image'],
+                    values: {
+                        quality: 'high',
+                        style: 'cinematic',
+                    },
+                },
+            ],
+        })
+    })
+
+    it('forwards valid video generation config groups to videoOptions', async () => {
+        const sendAiRequestHandler = vi.fn()
+        const plugin = createPlugin(sendAiRequestHandler)
+        const videoGenerationConfigGroups = JSON.stringify([
+            {
+                groupId: 'video-options',
+                modelIds: ['OpenAI:o4-mini'],
+                values: {
+                    style: 'cinematic',
+                },
+            },
+        ])
+
+        const state = EditorState.create({
+            doc: doc(
+                makeThread(
+                    {
+                        threadId: 'thread-video-config',
+                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        useMultipleVideoModels: true,
+                        aiVideoModel: 'OpenAI:o4-mini',
+                        aiVideoModels: JSON.stringify(['OpenAI:o4-mini']),
+                        videoGenerationConfigGroups,
+                        videoAspectRatio: '16:9',
+                        videoResolution: '1080p',
+                    },
+                    [makeUserMessage('Video config group test')]
+                )
+            ),
+            schema,
+            plugins: [plugin],
+        })
+
+        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
+            threadId: 'thread-video-config',
+            nodePos: findNodePosition(state.doc, 'aiChatThread'),
+        })
+        state.applyTransaction(trigger)
+
+        await Promise.resolve()
+
+        const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
+        expect(payload.videoOptions).toMatchObject({
+            configGroups: [
+                {
+                    groupId: 'video-options',
+                    modelIds: ['OpenAI:o4-mini'],
+                    values: {
+                        style: 'cinematic',
+                    },
+                },
+            ],
+        })
+    })
+
+    it('deduplicates referenced feature ids across user and assistant messages', async () => {
+        const sendAiRequestHandler = vi.fn()
+        const plugin = createPlugin(sendAiRequestHandler)
+
+        const state = EditorState.create({
+            doc: schemaWithFeatureReference.nodes.doc.create(null, [
+                schemaWithFeatureReference.nodes.aiChatThread.create(
+                    {
+                        threadId: 'thread-featured-refs',
+                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                    },
+                    [
+                        makeFeatureReferenceParagraphMessage(
+                            'aiUserMessage',
+                            'User message references ',
+                            [
+                                makeFeatureReference({ featureId: 'feature-a', featureName: 'Feature A' }),
+                                schemaWithFeatureReference.text(' and '),
+                                makeFeatureReference({ featureId: 'feature-b', featureName: 'Feature B' }),
+                            ],
+                        ),
+                        makeFeatureReferenceParagraphMessage(
+                            'aiResponseMessage',
+                            'Assistant message references ',
+                            [
+                                makeFeatureReference({ featureId: 'feature-a', featureName: 'Feature A' }),
+                                schemaWithFeatureReference.text(' and '),
+                                makeFeatureReference({ featureId: 'feature-c', featureName: 'Feature C' }),
+                            ],
+                        ),
+                    ],
+                ),
+            ]),
+            schema: schemaWithFeatureReference,
+            plugins: [plugin],
+        })
+
+        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
+            threadId: 'thread-featured-refs',
+            nodePos: findNodePosition(state.doc, 'aiChatThread'),
+        })
+        state.applyTransaction(trigger)
+
+        await Promise.resolve()
+
+        const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
+        expect(payload.referencedFeatureIds).toEqual(['feature-a', 'feature-b', 'feature-c'])
     })
 
     it('extracts and merges consecutive text-only messages while preserving text order', async () => {
@@ -421,6 +627,37 @@ describe('aiChatThreadPlugin — request payload construction', () => {
             aiImageModel: 'Google:gemini-2.5-flash-image',
             aiImageModels: [],
         })
+    })
+
+    it('rejects video multi-model payloads with invalid JSON and alerts the user', async () => {
+        const sendAiRequestHandler = vi.fn()
+        const plugin = createPlugin(sendAiRequestHandler)
+
+        const state = EditorState.create({
+            doc: doc(
+                makeThread(
+                    {
+                        threadId: 'thread-invalid-video-models',
+                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        useMultipleVideoModels: true,
+                        aiVideoModel: 'OpenAI:o4-mini',
+                        aiVideoModels: 'not-json',
+                    },
+                    [makeUserMessage('Video model payload validation')]
+                )
+            ),
+            schema,
+            plugins: [plugin],
+        })
+
+        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
+            threadId: 'thread-invalid-video-models',
+            nodePos: findNodePosition(state.doc, 'aiChatThread'),
+        })
+        state.applyTransaction(trigger)
+
+        expect(alertMock).toHaveBeenCalledWith('Please select at least 1 video model.')
+        expect(sendAiRequestHandler).not.toHaveBeenCalled()
     })
 
     it('dispatches stop request payload when STOP_AI_CHAT_META is present', () => {

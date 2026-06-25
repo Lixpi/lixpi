@@ -480,3 +480,174 @@ describe('aiChatThreadContentUtils', () => {
         expect(turnInfo?.responseText).toBe('Gemini media reply.')
     })
 })
+
+describe('buildGeneratedMediaTurnProjectionFromThreadContent — projection filtering and metadata edge cases', () => {
+    it('can override threadId from options when source metadata has no threadId', () => {
+        const content = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'aiChatThread',
+                    content: [
+                        {
+                            type: 'aiUserMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Prompt one' }] },
+                        ]},
+                        {
+                            type: 'aiResponseMessage',
+                            attrs: { id: 'response-1' },
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Answer one' }] }],
+                        },
+                    ],
+                },
+            ],
+        }
+
+        const projection = buildGeneratedMediaTurnProjectionFromThreadContent(
+            content,
+            { responseMessageId: 'response-1' },
+            { threadId: 'thread-override' },
+        )
+
+        expect(projection?.threadId).toBe('thread-override')
+    })
+
+    it('returns null when no threadId can be resolved', () => {
+        const content = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'aiChatThread',
+                    content: [
+                        {
+                            type: 'aiUserMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Prompt one' }] },
+                        ]},
+                        {
+                            type: 'aiResponseMessage',
+                            attrs: { id: 'response-1' },
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Answer one' }] }],
+                        },
+                    ],
+                },
+            ],
+        }
+
+        const projection = buildGeneratedMediaTurnProjectionFromThreadContent(content, { responseMessageId: 'response-1' })
+        expect(projection).toBeNull()
+    })
+
+    it('filters media nodes to a specific fileId when limitToLocatorMedia is enabled', () => {
+        const content = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'aiChatThread',
+                    attrs: { threadId: 'thread-1' },
+                    content: [
+                        {
+                            type: 'aiUserMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Generate two files' }] },
+                        ]},
+                        {
+                            type: 'aiResponseMessage',
+                            attrs: { id: 'response-1', aiProvider: 'OpenAI' },
+                            content: [
+                                { type: 'paragraph', content: [{ type: 'text', text: 'Here are both images.' }] },
+                                {
+                                    type: 'aiCollapsibleBlock',
+                                    attrs: {
+                                        imageGenerationTrace: createTrace(),
+                                    },
+                                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Trace prompt.' }] },
+                                ]},
+                                { type: 'aiGeneratedImage', attrs: { fileId: 'file-a', mediaType: 'image', mediaRunId: 'run-a' } },
+                                { type: 'aiGeneratedImage', attrs: { fileId: 'file-b', mediaType: 'image', mediaRunId: 'run-b' } },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+
+        const allMediaProjection = buildGeneratedMediaTurnProjectionFromThreadContent(
+            content,
+            { responseMessageId: 'response-1' },
+            { limitToLocatorMedia: false },
+        )
+        const filteredProjection = buildGeneratedMediaTurnProjectionFromThreadContent(
+            content,
+            { responseMessageId: 'response-1', fileId: 'file-b', mediaType: 'image' },
+            { limitToLocatorMedia: true },
+        )
+
+        const collectMediaFileIds = (root: any) => {
+            const files: any[] = []
+            function walk(node: any) {
+                if (node?.type === 'aiGeneratedImage' || node?.type === 'aiGeneratedVideo') {
+                    files.push(node.attrs?.fileId)
+                    return
+                }
+                (node?.content ?? []).forEach((child: any) => walk(child))
+            }
+            walk(root)
+            return files
+        }
+
+        expect(collectMediaFileIds(allMediaProjection?.content)).toHaveLength(2)
+        expect(collectMediaFileIds(filteredProjection?.content)).toEqual(['file-b'])
+    })
+})
+
+describe('getGeneratedImageTurnInfoFromThreadContent — locator edge cases', () => {
+    it('resolves media by fileId and variantIndex', () => {
+        const content = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'aiChatThread',
+                    attrs: { threadId: 'thread-1' },
+                    content: [
+                        {
+                            type: 'aiUserMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Create multiple variants' }] },
+                        ]},
+                        {
+                            type: 'aiResponseMessage',
+                            attrs: { id: 'response-1', aiProvider: 'OpenAI' },
+                            content: [
+                                { type: 'paragraph', content: [{ type: 'text', text: 'Candidate text.' }] },
+                                {
+                                    type: 'aiCollapsibleBlock',
+                                    attrs: {
+                                        imageGenerationTrace: createTrace(),
+                                    },
+                                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Seed prompt one.' }] },
+                                ]},
+                                { type: 'aiGeneratedImage', attrs: { fileId: 'file-a', variantIndex: 1, mediaType: 'image', mediaRunId: 'run-a', revisedPrompt: 'variant one' } },
+                                { type: 'aiGeneratedImage', attrs: { fileId: 'file-a', variantIndex: 2, mediaType: 'image', mediaRunId: 'run-b', revisedPrompt: 'variant two' } },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+
+        const exactMatch = getGeneratedImageTurnInfoFromThreadContent(content, {
+            responseMessageId: 'response-1',
+            fileId: 'file-a',
+            variantIndex: '2',
+        })
+
+        const noMatch = getGeneratedImageTurnInfoFromThreadContent(content, {
+            responseMessageId: 'response-1',
+            fileId: 'file-a',
+            variantIndex: '9',
+        })
+
+        expect(exactMatch?.imageGenerationTrace).toBeTruthy()
+        expect(exactMatch?.responseText).toBe('Candidate text.')
+        expect(exactMatch?.userPromptText).toBe('Create multiple variants')
+        expect(noMatch).toBeNull()
+    })
+})

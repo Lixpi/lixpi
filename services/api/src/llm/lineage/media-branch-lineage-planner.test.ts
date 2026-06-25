@@ -204,12 +204,27 @@ describe('MediaBranchLineagePlanner', () => {
         })
 
         expect(plan.branchForks).toHaveLength(2)
-        expect(plan.branchOrigin).toBeDefined()
+        expect(plan.branchOrigin).toBeUndefined()
         const forkIds = plan.branchForks.map((fork) => fork.nodeId)
         expect(forkIds).toEqual([
             'branch-fork-request-3-reasoning-0',
             'branch-fork-request-3-reasoning-1',
         ])
+        expect(plan.branchForks.every((fork) => fork.parentBranchNodeId === undefined)).toBe(true)
+        expect(plan.branchForks[0]).toMatchObject({
+            provenance: {
+                kind: 'reasoning-run',
+                reasoningRunId: 'request-3:reasoning:0',
+                reasoningIndex: 0,
+            },
+        })
+        expect(plan.branchForks[1]).toMatchObject({
+            provenance: {
+                kind: 'reasoning-run',
+                reasoningRunId: 'request-3:reasoning:1',
+                reasoningIndex: 1,
+            },
+        })
 
         expect(plan.runAssignments).toHaveLength(2)
         expect(plan.runAssignments[0]).toMatchObject({
@@ -268,9 +283,11 @@ describe('MediaBranchLineagePlanner', () => {
         })
 
         expect(plan.referenceNodeIds).toEqual(['candidate-1', 'candidate-2'])
-        expect(plan.branchOrigin?.provenance.providedReferenceNodeIds).toEqual(['chip-1', 'chip-3'])
-        expect(plan.branchOrigin?.provenance.referenceNodeIds).toEqual(['candidate-1', 'candidate-2'])
+        expect(plan.branchOrigin).toBeUndefined()
+        expect(plan.branchForks[0]?.provenance.providedReferenceNodeIds).toEqual(['chip-1', 'chip-3'])
+        expect(plan.branchForks[0]?.provenance.referenceNodeIds).toEqual(['candidate-1', 'candidate-2'])
         expect(plan.branchForks).toHaveLength(2)
+        expect(plan.branchForks.every((fork) => fork.parentBranchNodeId === undefined)).toBe(true)
         expect(plan.runAssignments[1]).toMatchObject({
             lineageParentNodeId: plan.branchForks[1]?.nodeId,
             createdAt: 1700000003001,
@@ -301,11 +318,11 @@ describe('MediaBranchLineagePlanner', () => {
         // so each generation gets its own branchFork flat under the branch origin.
         expect(plan.branchLines).toEqual([])
         expect(plan.branchForks).toHaveLength(1)
-        expect(plan.branchOrigin).toBeDefined()
+        expect(plan.branchOrigin).toBeUndefined()
         expect(plan.branchForks.map((fork) => fork.nodeId)).toEqual([
             'branch-fork-request-5-reasoning-0',
         ])
-        expect(plan.branchForks.every((fork) => fork.parentBranchNodeId === plan.branchOrigin?.nodeId)).toBe(true)
+        expect(plan.branchForks.every((fork) => fork.parentBranchNodeId === undefined)).toBe(true)
 
         expect(plan.runAssignments).toHaveLength(2)
         expect(plan.runAssignments[0]).toMatchObject({

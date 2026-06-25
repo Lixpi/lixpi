@@ -1,0 +1,263 @@
+'use strict'
+
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { NATS_SUBJECTS } from '@lixpi/constants'
+
+const mocks = vi.hoisted(() => ({
+    workspace: {
+        getWorkspace: vi.fn(),
+    },
+    aiModel: {
+        getAiModel: vi.fn(),
+    },
+    nats: {
+        instance: { connectionId: 'nats-1' },
+    },
+    mediaDescriptor: {
+        describeMediaStill: vi.fn(),
+        describeTextContent: vi.fn(),
+    },
+    settings: {
+        mediaDescriptor: {
+            defaultVlmModelId: 'Anthropic:claude-haiku-4-5',
+            defaultVlmMaxTokens: 8192,
+        },
+    },
+    debug: {
+        err: vi.fn(),
+    },
+}))
+
+vi.mock('@lixpi/debug-tools', () => ({ err: mocks.debug.err }))
+
+vi.mock('@lixpi/nats-service', () => ({
+    default: {
+        getInstance: () => mocks.nats.instance,
+    },
+}))
+
+vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
+vi.mock('../../models/ai-model.ts', () => ({ default: mocks.aiModel }))
+vi.mock('../../llm/media-descriptor.ts', () => ({
+    describeMediaStill: mocks.mediaDescriptor.describeMediaStill,
+    describeTextContent: mocks.mediaDescriptor.describeTextContent,
+}))
+vi.mock('../../settings.ts', () => ({ settings: mocks.settings }))
+
+import { mediaDescriptorSubjects } from './media-descriptor-subjects.ts'
+
+const getHandler = () => {
+    const subscription = mediaDescriptorSubjects.find((candidate) =>
+        candidate.subject === NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.MEDIA_DESCRIBE
+    )
+    if (!subscription) {
+        throw new Error('Missing MEDIA_DESCRIBE subject')
+    }
+    return subscription.handler
+}
+
+describe('MEDIA_DESCRIBE request handling', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1' })
+        mocks.nats.instance = { connectionId: 'nats-1' }
+        mocks.settings.mediaDescriptor.defaultVlmMaxTokens = 8192
+        mocks.aiModel.getAiModel.mockResolvedValue({
+            provider: 'Anthropic',
+            model: 'claude-haiku-4-5',
+            maxCompletionSize: 4096,
+        })
+        mocks.mediaDescriptor.describeMediaStill.mockResolvedValue({
+            summary: 'A cat sleeping',
+            entityTags: ['cat'],
+            styleTags: ['soft'],
+        })
+        mocks.mediaDescriptor.describeTextContent.mockResolvedValue({
+            summary: 'A user note',
+            entityTags: ['note'],
+            styleTags: ['plain'],
+        })
+    })
+
+    it('describes image inputs with default model settings when the caller omits aiModel', async () => {
+        const handler = getHandler()
+        const result = await handler({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            fileId: 'frame-1',
+        })
+
+        expect(mocks.workspace.getWorkspace).toHaveBeenCalledWith({
+            userId: 'user-1',
+            workspaceId: 'workspace-1',
+        })
+        expect(mocks.aiModel.getAiModel).toHaveBeenCalledWith({
+            provider: 'Anthropic',
+            model: 'claude-haiku-4-5',
+            omitPricing: true,
+        })
+        expect(mocks.mediaDescriptor.describeMediaStill).toHaveBeenCalledWith({
+            provider: 'Anthropic',
+            modelVersion: 'claude-haiku-4-5',
+            imageUrl: 'nats-obj://workspace-workspace-1-files/frame-1',
+            natsService: { connectionId: 'nats-1' },
+            maxTokens: 4096,
+        })
+        expect(result).toEqual({
+            summary: 'A cat sleeping',
+            entityTags: ['cat'],
+            styleTags: ['soft'],
+        })
+    })
+
+    it('describes a text node when `text` is provided and uses explicit text aiModel', async () => {
+        mocks.aiModel.getAiModel.mockResolvedValue({
+            provider: 'OpenAI',
+            model: 'gpt-4.1',
+            maxCompletionSize: 2048,
+        })
+
+        const handler = getHandler()
+        const result = await handler({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            text: 'Launch notes and priorities',
+            title: 'Roadmap',
+            aiModel: 'OpenAI:gpt-4.1',
+        })
+
+        expect(mocks.mediaDescriptor.describeTextContent).toHaveBeenCalledWith({
+            provider: 'OpenAI',
+            modelVersion: 'gpt-4.1',
+            text: 'Launch notes and priorities',
+            title: 'Roadmap',
+            natsService: { connectionId: 'nats-1' },
+            maxTokens: 2048,
+        })
+        expect(result).toEqual({
+            summary: 'A user note',
+            entityTags: ['note'],
+            styleTags: ['plain'],
+        })
+    })
+
+    it('does not describe anything when neither text nor fileId are present', async () => {
+        const handler = getHandler()
+        const result = await handler({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+        })
+
+        expect(result).toEqual({ error: 'WORKSPACE_ACCESS_DENIED' })
+        expect(mocks.workspace.getWorkspace).not.toHaveBeenCalled()
+        expect(mocks.aiModel.getAiModel).not.toHaveBeenCalled()
+        expect(mocks.mediaDescriptor.describeMediaStill).not.toHaveBeenCalled()
+        expect(mocks.mediaDescriptor.describeTextContent).not.toHaveBeenCalled()
+    })
+
+    it('returns AI_MODEL_REQUIRED when caller text model id is missing provider:version shape', async () => {
+        const handler = getHandler()
+        const result = await handler({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            text: 'some prompt',
+            aiModel: 'gpt-4',
+        })
+
+        expect(result).toEqual({ error: 'AI_MODEL_REQUIRED' })
+        expect(mocks.aiModel.getAiModel).not.toHaveBeenCalled()
+    })
+
+    it('returns AI_MODEL_NOT_FOUND when the selected model cannot be loaded', async () => {
+        mocks.settings.mediaDescriptor.defaultVlmMaxTokens = undefined
+        mocks.aiModel.getAiModel.mockResolvedValue(undefined)
+        const handler = getHandler()
+        const result = await handler({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            fileId: 'frame-1',
+        })
+
+        expect(result).toEqual({ error: 'AI_MODEL_NOT_FOUND:Anthropic:claude-haiku-4-5' })
+        expect(mocks.mediaDescriptor.describeMediaStill).not.toHaveBeenCalled()
+    })
+
+    it('falls back to default VLM token max when media model metadata has no maxCompletionSize', async () => {
+        mocks.aiModel.getAiModel.mockResolvedValue({
+            provider: 'Anthropic',
+            model: 'claude-haiku-4-5',
+        })
+        const handler = getHandler()
+        await handler({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            fileId: 'frame-2',
+        })
+
+        expect(mocks.mediaDescriptor.describeMediaStill).toHaveBeenCalledWith(expect.objectContaining({
+            provider: 'Anthropic',
+            modelVersion: 'claude-haiku-4-5',
+            maxTokens: 8192,
+        }))
+    })
+
+    it('returns an empty descriptor error when media captions are blank', async () => {
+        mocks.mediaDescriptor.describeMediaStill.mockResolvedValue({
+            summary: '  ',
+            entityTags: [],
+            styleTags: [],
+        })
+        const handler = getHandler()
+        const result = await handler({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            fileId: 'frame-1',
+        })
+
+        expect(result).toEqual({ error: 'MEDIA_DESCRIPTOR_EMPTY' })
+        expect(mocks.debug.err).toHaveBeenCalled()
+    })
+
+    it('returns NATS_UNAVAILABLE when the NATS service instance is missing', async () => {
+        mocks.nats.instance = null as any
+        const handler = getHandler()
+        const result = await handler({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            fileId: 'frame-1',
+        })
+
+        expect(result).toEqual({ error: 'NATS_UNAVAILABLE' })
+        expect(mocks.mediaDescriptor.describeMediaStill).not.toHaveBeenCalled()
+    })
+
+    it('short-circuits with workspace access denied when access check fails', async () => {
+        mocks.workspace.getWorkspace.mockResolvedValue({ error: 'PERMISSION_DENIED' })
+        const handler = getHandler()
+
+        const result = await handler({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            text: 'hello',
+            aiModel: 'OpenAI:gpt-4.1',
+        })
+
+        expect(result).toEqual({ error: 'WORKSPACE_ACCESS_DENIED' })
+        expect(mocks.mediaDescriptor.describeTextContent).not.toHaveBeenCalled()
+    })
+
+    it('returns the underlying VLM failure message as error', async () => {
+        mocks.mediaDescriptor.describeTextContent.mockRejectedValue(new Error('vlm-unavailable'))
+        const handler = getHandler()
+        const result = await handler({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            text: 'hello',
+            aiModel: 'OpenAI:gpt-4.1',
+        })
+
+        expect(result).toEqual({ error: 'vlm-unavailable' })
+        expect(mocks.debug.err).toHaveBeenCalled()
+    })
+})
