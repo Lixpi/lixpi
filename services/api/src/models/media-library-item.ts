@@ -43,11 +43,12 @@ export const canReadMediaLibraryItem = (
     requesterContext: MediaLibraryRequesterContext
 ): boolean => {
     if (item.status !== MEDIA_LIBRARY_ITEM_STATUS.ACTIVE) return false
-    if (item.ownerUserId === requesterContext.userId) return true
-    if (item.scope === MEDIA_LIBRARY_SCOPE.PUBLIC) return true
-    if (item.scope === MEDIA_LIBRARY_SCOPE.USER) return item.scopeOwnerId === requesterContext.userId
-    if (item.scope === MEDIA_LIBRARY_SCOPE.WORKSPACE) return requesterContext.workspaceIds?.includes(item.scopeOwnerId) ?? false
-    return requesterContext.organizationIds?.includes(item.scopeOwnerId) ?? false
+    // Media is org-wide: any member of the owning organization can read it.
+    // 'shared' (external sharing) has no allow path yet — deferred to a future release.
+    if (item.scope === MEDIA_LIBRARY_SCOPE.ORGANIZATION) {
+        return requesterContext.organizationIds?.includes(item.scopeOwnerId) ?? false
+    }
+    return false
 }
 
 const buildMeta = (item: MediaLibraryImageItem): MediaLibraryImageMeta => ({
@@ -221,52 +222,6 @@ export default {
             .sort((left, right) => right.updatedAt - left.updatedAt)
     },
 
-    changeScope: async ({
-        item,
-        newScope,
-        newScopeOwnerId,
-        newAsset,
-    }: {
-        item: MediaLibraryImageItem
-        newScope: MediaLibraryScope
-        newScopeOwnerId: string
-        newAsset: MediaLibraryImageItem['asset']
-    }): Promise<MediaLibraryImageItem> => {
-        const updatedItem: MediaLibraryImageItem = {
-            ...item,
-            scope: newScope,
-            scopeOwnerId: newScopeOwnerId,
-            scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(newScope, newScopeOwnerId),
-            asset: newAsset,
-            updatedAt: Date.now(),
-        }
-        try {
-            await dynamoDBService.putItem({
-                tableName: itemTableName(),
-                item: updatedItem,
-                origin: 'MediaLibraryItem.changeScope',
-            })
-            await dynamoDBService.putItem({
-                tableName: metaTableName(),
-                item: buildMeta(updatedItem),
-                origin: 'MediaLibraryItem.changeScope:meta',
-            })
-        } catch (error) {
-            await dynamoDBService.putItem({
-                tableName: itemTableName(),
-                item,
-                origin: 'MediaLibraryItem.changeScope:rollback',
-            }).catch(() => {})
-            await dynamoDBService.putItem({
-                tableName: metaTableName(),
-                item: buildMeta(item),
-                origin: 'MediaLibraryItem.changeScope:metaRollback',
-            }).catch(() => {})
-            throw error
-        }
-        return updatedItem
-    },
-
     deleteImageItem: async ({ item }: { item: MediaLibraryImageItem }): Promise<void> => {
         await dynamoDBService.deleteItems({
             tableName: itemTableName(),
@@ -285,45 +240,30 @@ export default {
         })
     },
 
-    // Dedup lookup: a workspace save always lands at scope='workspace', so the same
-    // source image re-saved into the same workspace by the same owner is reused, not copied again.
-    findActiveWorkspaceImageBySource: async ({
-        workspaceId,
+    // Dedup lookup: a save always lands at scope='organization', so the same source
+    // image re-saved into the same org by the same owner is reused, not copied again.
+    findActiveOrgImageBySource: async ({
+        organizationId,
         sourceFileId,
         userId,
     }: {
-        workspaceId: string
+        organizationId: string
         sourceFileId: string
         userId: string
     }): Promise<MediaLibraryImageItem | undefined> => {
         const result = await dynamoDBService.queryItems({
             tableName: itemTableName(),
             indexName: 'scopeAndOwner',
-            keyConditions: { scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(MEDIA_LIBRARY_SCOPE.WORKSPACE, workspaceId) },
+            keyConditions: { scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(MEDIA_LIBRARY_SCOPE.ORGANIZATION, organizationId) },
             fetchAllItems: true,
             scanIndexForward: false,
-            origin: `MediaLibraryItem.findActiveWorkspaceImageBySource(${workspaceId})`,
+            origin: `MediaLibraryItem.findActiveOrgImageBySource(${organizationId})`,
         })
         return ((result?.items ?? []) as MediaLibraryImageItem[])
             .find((existing) => existing.status === MEDIA_LIBRARY_ITEM_STATUS.ACTIVE
+                && existing.kind === 'image'
                 && existing.sourceFileId === sourceFileId
                 && existing.ownerUserId === userId)
-    },
-
-    listWorkspaceItemsForCleanup: async (workspaceId: string): Promise<MediaLibraryItem[]> => {
-        // Workspace cleanup must reap both kinds of items — the item table is
-        // kind-mixed, so we widen to the union and downstream callers branch
-        // on `item.kind` to pick the right asset-deletion helper.
-        const result = await dynamoDBService.queryItems({
-            tableName: itemTableName(),
-            indexName: 'scopeAndOwner',
-            keyConditions: { scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(MEDIA_LIBRARY_SCOPE.WORKSPACE, workspaceId) },
-            fetchAllItems: true,
-            scanIndexForward: false,
-            origin: `MediaLibraryItem.listWorkspaceItemsForCleanup(${workspaceId})`,
-        })
-        return ((result?.items ?? []) as MediaLibraryItem[])
-            .filter((item) => item.status === MEDIA_LIBRARY_ITEM_STATUS.ACTIVE && item.scope === MEDIA_LIBRARY_SCOPE.WORKSPACE)
     },
 
     // =============================================================================
@@ -471,55 +411,6 @@ export default {
         return item
     },
 
-    changeScopeVideo: async ({
-        item,
-        newScope,
-        newScopeOwnerId,
-        newAsset,
-        newPoster,
-    }: {
-        item: MediaLibraryVideoItem
-        newScope: MediaLibraryScope
-        newScopeOwnerId: string
-        newAsset: MediaLibraryVideoItem['asset']
-        newPoster: MediaLibraryVideoItem['poster']
-    }): Promise<MediaLibraryVideoItem> => {
-        const updatedItem: MediaLibraryVideoItem = {
-            ...item,
-            scope: newScope,
-            scopeOwnerId: newScopeOwnerId,
-            scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(newScope, newScopeOwnerId),
-            asset: newAsset,
-            ...(newPoster ? { poster: newPoster } : { poster: undefined }),
-            updatedAt: Date.now(),
-        }
-        try {
-            await dynamoDBService.putItem({
-                tableName: itemTableName(),
-                item: updatedItem,
-                origin: 'MediaLibraryItem.changeScopeVideo',
-            })
-            await dynamoDBService.putItem({
-                tableName: metaTableName(),
-                item: buildVideoMeta(updatedItem),
-                origin: 'MediaLibraryItem.changeScopeVideo:meta',
-            })
-        } catch (error) {
-            await dynamoDBService.putItem({
-                tableName: itemTableName(),
-                item,
-                origin: 'MediaLibraryItem.changeScopeVideo:rollback',
-            }).catch(() => {})
-            await dynamoDBService.putItem({
-                tableName: metaTableName(),
-                item: buildVideoMeta(item),
-                origin: 'MediaLibraryItem.changeScopeVideo:metaRollback',
-            }).catch(() => {})
-            throw error
-        }
-        return updatedItem
-    },
-
     deleteVideoItem: async ({ item }: { item: MediaLibraryVideoItem }): Promise<void> => {
         await dynamoDBService.deleteItems({
             tableName: itemTableName(),
@@ -538,22 +429,22 @@ export default {
         })
     },
 
-    findActiveWorkspaceVideoBySource: async ({
-        workspaceId,
+    findActiveOrgVideoBySource: async ({
+        organizationId,
         sourceFileId,
         userId,
     }: {
-        workspaceId: string
+        organizationId: string
         sourceFileId: string
         userId: string
     }): Promise<MediaLibraryVideoItem | undefined> => {
         const result = await dynamoDBService.queryItems({
             tableName: itemTableName(),
             indexName: 'scopeAndOwner',
-            keyConditions: { scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(MEDIA_LIBRARY_SCOPE.WORKSPACE, workspaceId) },
+            keyConditions: { scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(MEDIA_LIBRARY_SCOPE.ORGANIZATION, organizationId) },
             fetchAllItems: true,
             scanIndexForward: false,
-            origin: `MediaLibraryItem.findActiveWorkspaceVideoBySource(${workspaceId})`,
+            origin: `MediaLibraryItem.findActiveOrgVideoBySource(${organizationId})`,
         })
         return ((result?.items ?? []) as MediaLibraryItem[])
             .filter((it): it is MediaLibraryVideoItem => it.kind === 'video')

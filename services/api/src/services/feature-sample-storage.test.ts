@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
     getObject: vi.fn(),
     getObjectStream: vi.fn(),
     putObjectFromReadable: vi.fn(),
+    getObjectStore: vi.fn(),
+    createObjectStore: vi.fn(),
 }))
 
 vi.mock('@lixpi/nats-service', () => ({
@@ -28,8 +30,8 @@ const feature: Feature = {
     instructions: '',
     parameters: {},
     sampleImages: [{ idx: 0, subject: 'reference', ext: 'png', fileId: 'features/feature-1/sample-0.png' }],
-    scope: 'public',
-    scopeOwnerId: 'public',
+    scope: 'organization',
+    scopeOwnerId: 'org-1',
     status: 'active',
     ownerUserId: 'user-1',
     workspaceId: 'workspace-1',
@@ -47,39 +49,60 @@ describe('Feature sample storage', () => {
         vi.clearAllMocks()
     })
 
-    it('falls back to the source workspace for legacy promoted samples', async () => {
+    it('reads sample bytes only from the durable, org-scoped bucket', async () => {
         const data = new Uint8Array([1, 2, 3])
-        mocks.getObject
-            .mockRejectedValueOnce(new Error('missing durable copy'))
-            .mockResolvedValueOnce(data)
+        mocks.getObject.mockResolvedValueOnce(data)
 
         const result = await readFeatureSampleObject({ feature, sample: feature.sampleImages[0] })
 
-        expect(mocks.getObject).toHaveBeenNthCalledWith(1, 'user-user-1-features', 'features/feature-1/sample-0.png')
-        expect(mocks.getObject).toHaveBeenNthCalledWith(2, 'workspace-workspace-1-files', 'features/feature-1/sample-0.png')
         expect(result).toBe(data)
+        expect(mocks.getObject).toHaveBeenCalledTimes(1)
+        expect(mocks.getObject).toHaveBeenCalledWith('feature-organization-org-1-files', 'features/feature-1/sample-0.png')
     })
 
-    it('copies workspace samples into durable user-owned storage before promotion', async () => {
-        const workspaceFeature = { ...feature, scope: 'workspace' as const, scopeOwnerId: 'workspace-1' }
+    it('never falls back to the workspace bucket when the durable object is missing', async () => {
+        mocks.getObject.mockRejectedValueOnce(new Error('missing durable copy'))
+
+        const result = await readFeatureSampleObject({ feature, sample: feature.sampleImages[0] })
+
+        expect(result).toBeNull()
+        // Only the durable bucket is consulted — features are decoupled from the workspace.
+        expect(mocks.getObject).toHaveBeenCalledTimes(1)
+        expect(mocks.getObject).toHaveBeenCalledWith('feature-organization-org-1-files', 'features/feature-1/sample-0.png')
+    })
+
+    it('copies extraction scratch bytes into the durable bucket at creation, creating it on demand', async () => {
         const stream = { readable: true }
+        mocks.getObjectStore.mockRejectedValueOnce(new Error('object store not found'))
+        mocks.createObjectStore.mockResolvedValueOnce({})
         mocks.getObject.mockRejectedValueOnce(new Error('missing destination'))
         mocks.getObjectStream.mockResolvedValueOnce(stream)
 
-        await ensureFeatureSamplesForScope({
-            feature: workspaceFeature,
-            newScope: 'public',
-            newScopeOwnerId: 'public',
-        })
+        await ensureFeatureSamplesForScope({ feature })
 
-        expect(mocks.getObject).toHaveBeenCalledWith('user-user-1-features', 'features/feature-1/sample-0.png')
+        // Durable bucket is created on demand the first time samples are saved for the org.
+        expect(mocks.createObjectStore).toHaveBeenCalledWith(
+            'feature-organization-org-1-files',
+            expect.objectContaining({ description: expect.any(String) }),
+        )
+        // Source bytes are pulled from the origin workspace scratch bucket...
         expect(mocks.getObjectStream).toHaveBeenCalledWith('workspace-workspace-1-files', 'features/feature-1/sample-0.png')
+        // ...and written into the durable, workspace-independent bucket.
         expect(mocks.putObjectFromReadable).toHaveBeenCalledWith(
-            'user-user-1-features',
+            'feature-organization-org-1-files',
             'features/feature-1/sample-0.png',
             stream,
             { name: 'features/feature-1/sample-0.png', description: 'reference' },
         )
+    })
+
+    it('throws when a sample has no source bytes to make durable', async () => {
+        mocks.getObjectStore.mockResolvedValueOnce({})
+        mocks.getObject.mockRejectedValueOnce(new Error('missing destination'))
+        mocks.getObjectStream.mockRejectedValueOnce(new Error('not in workspace'))
+
+        await expect(ensureFeatureSamplesForScope({ feature }))
+            .rejects.toThrow('Feature sample object not found')
     })
 
     it('resolves samples beyond the former three-preview limit by stored index', () => {

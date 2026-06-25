@@ -44,38 +44,42 @@ const makeItem = (
 
 describe('Media Library access rules', () => {
     it('uses a stable scope and owner lookup key', () => {
-        expect(buildMediaLibraryScopeAndOwnerKey('workspace', 'workspace-1'))
-            .toBe('workspace#workspace-1')
+        expect(buildMediaLibraryScopeAndOwnerKey('organization', 'organization-1'))
+            .toBe('organization#organization-1')
     })
 
-    it('allows active owner, workspace, organization, and public access', () => {
-        expect(canReadMediaLibraryItem(makeItem('user', 'owner-1'), { userId: 'owner-1' })).toBe(true)
-        expect(canReadMediaLibraryItem(makeItem('workspace', 'workspace-1'), {
-            userId: 'member-1',
-            workspaceIds: ['workspace-1'],
-        })).toBe(true)
+    it('grants access to a member of the owning organization', () => {
+        // A different user than the owner, but same org, can read it.
         expect(canReadMediaLibraryItem(makeItem('organization', 'organization-1'), {
             userId: 'member-1',
             organizationIds: ['organization-1'],
         })).toBe(true)
-        expect(canReadMediaLibraryItem(makeItem('public', 'public'), { userId: 'member-1' })).toBe(true)
     })
 
-    it('does not expose user-private or unrelated scoped items', () => {
-        expect(canReadMediaLibraryItem(makeItem('user', 'owner-1'), { userId: 'member-1' })).toBe(false)
-        expect(canReadMediaLibraryItem(makeItem('workspace', 'workspace-1'), {
-            userId: 'member-1',
-            workspaceIds: ['workspace-2'],
-        })).toBe(false)
+    it('denies access to members of a different organization', () => {
         expect(canReadMediaLibraryItem(makeItem('organization', 'organization-1'), {
             userId: 'member-1',
             organizationIds: ['organization-2'],
         })).toBe(false)
     })
 
-    it('does not expose deleted items, including to their owner', () => {
-        expect(canReadMediaLibraryItem(makeItem('user', 'owner-1', { status: 'deleted' }), {
+    it('denies access when no organization context is supplied', () => {
+        expect(canReadMediaLibraryItem(makeItem('organization', 'organization-1'), {
             userId: 'owner-1',
+        })).toBe(false)
+    })
+
+    it('denies access to shared-scoped items (deferred to a future release)', () => {
+        expect(canReadMediaLibraryItem(makeItem('shared', 'organization-1'), {
+            userId: 'owner-1',
+            organizationIds: ['organization-1'],
+        })).toBe(false)
+    })
+
+    it('does not expose deleted items, including to a member of the owning org', () => {
+        expect(canReadMediaLibraryItem(makeItem('organization', 'organization-1', { status: 'deleted' }), {
+            userId: 'owner-1',
+            organizationIds: ['organization-1'],
         })).toBe(false)
     })
 })

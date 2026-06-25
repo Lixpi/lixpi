@@ -2,9 +2,9 @@
 
 import {
     NATS_SUBJECTS,
+    type MediaDescriptor,
     type MediaLibraryImageMeta,
     type MediaLibraryMeta,
-    type MediaLibraryScope,
     type MediaLibraryVideoMeta,
 } from '@lixpi/constants'
 
@@ -22,10 +22,9 @@ const request = async <T>(subject: string, data: Record<string, unknown>): Promi
     }) as Promise<T>
 }
 
+// Media items are org-scoped and resolved server-side from the authenticated user,
+// so listing takes no scope/workspace arguments — only an optional name filter.
 export type MediaLibraryListImagesOptions = {
-    workspaceId: string
-    scopes: MediaLibraryScope[]
-    includeAllAvailable: boolean
     query?: string
 }
 
@@ -33,7 +32,7 @@ export default class MediaLibraryService {
     // listItems returns both image and video meta records (kind-mixed). Pre-Phase-8
     // callers that used `listImages` should switch to `listItems` and filter by
     // `kind` when only images are expected.
-    async listItems(options: MediaLibraryListImagesOptions): Promise<MediaLibraryMeta[]> {
+    async listItems(options: MediaLibraryListImagesOptions = {}): Promise<MediaLibraryMeta[]> {
         const result = await request<{ items?: MediaLibraryMeta[] }>(
             MEDIA_LIBRARY_SUBJECTS.LIST_AVAILABLE,
             options,
@@ -43,18 +42,18 @@ export default class MediaLibraryService {
 
     // Back-compat shim — emits only image meta so existing Media Library panel
     // call-sites that haven't been updated to handle the union don't break.
-    async listImages(options: MediaLibraryListImagesOptions): Promise<MediaLibraryImageMeta[]> {
+    async listImages(options: MediaLibraryListImagesOptions = {}): Promise<MediaLibraryImageMeta[]> {
         const items = await this.listItems(options)
         return items.filter((item): item is MediaLibraryImageMeta => item.kind === 'image')
     }
 
-    async listVideos(options: MediaLibraryListImagesOptions): Promise<MediaLibraryVideoMeta[]> {
+    async listVideos(options: MediaLibraryListImagesOptions = {}): Promise<MediaLibraryVideoMeta[]> {
         const items = await this.listItems(options)
         return items.filter((item): item is MediaLibraryVideoMeta => item.kind === 'video')
     }
 
-    async addCanvasImage({ workspaceId, fileId }: { workspaceId: string; fileId: string }): Promise<{ itemId?: string; displayName?: string; deduplicated?: boolean; error?: string }> {
-        return request(MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_IMAGE, { workspaceId, fileId })
+    async addCanvasImage({ workspaceId, fileId, descriptor }: { workspaceId: string; fileId: string; descriptor?: MediaDescriptor }): Promise<{ itemId?: string; displayName?: string; deduplicated?: boolean; error?: string }> {
+        return request(MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_IMAGE, { workspaceId, fileId, descriptor })
     }
 
     async addCanvasVideo({
@@ -64,6 +63,7 @@ export default class MediaLibraryService {
         durationSeconds,
         aspectRatio,
         hasAudio,
+        descriptor,
     }: {
         workspaceId: string
         fileId: string
@@ -71,6 +71,7 @@ export default class MediaLibraryService {
         durationSeconds: number
         aspectRatio: number
         hasAudio: boolean
+        descriptor?: MediaDescriptor
     }): Promise<{ itemId?: string; displayName?: string; deduplicated?: boolean; error?: string }> {
         return request(MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_VIDEO, {
             workspaceId,
@@ -79,6 +80,7 @@ export default class MediaLibraryService {
             durationSeconds,
             aspectRatio,
             hasAudio,
+            descriptor,
         })
     }
 
@@ -88,7 +90,7 @@ export default class MediaLibraryService {
     }: {
         workspaceId: string
         itemId: string
-    }): Promise<{ fileId?: string; url?: string; width?: number; height?: number; error?: string }> {
+    }): Promise<{ fileId?: string; url?: string; width?: number; height?: number; descriptor?: MediaDescriptor; error?: string }> {
         return request(MEDIA_LIBRARY_SUBJECTS.MATERIALIZE_IMAGE_TO_WORKSPACE, { workspaceId, itemId })
     }
 
@@ -107,48 +109,10 @@ export default class MediaLibraryService {
         hasAudio?: boolean
         width?: number
         height?: number
+        descriptor?: MediaDescriptor
         error?: string
     }> {
         return request(MEDIA_LIBRARY_SUBJECTS.MATERIALIZE_VIDEO_TO_WORKSPACE, { workspaceId, itemId })
-    }
-
-    async changeImageScope({
-        workspaceId,
-        itemId,
-        newScope,
-        organizationId,
-    }: {
-        workspaceId: string
-        itemId: string
-        newScope: MediaLibraryScope
-        organizationId?: string
-    }): Promise<{ success?: boolean; error?: string }> {
-        return request(MEDIA_LIBRARY_SUBJECTS.CHANGE_SCOPE, {
-            workspaceId,
-            itemId,
-            newScope,
-            organizationId,
-        })
-    }
-
-    // Either-kind scope change. Server discriminates via `getOwnedAnyItem`.
-    async changeItemScope({
-        workspaceId,
-        itemId,
-        newScope,
-        organizationId,
-    }: {
-        workspaceId: string
-        itemId: string
-        newScope: MediaLibraryScope
-        organizationId?: string
-    }): Promise<{ success?: boolean; error?: string }> {
-        return request(MEDIA_LIBRARY_SUBJECTS.CHANGE_SCOPE, {
-            workspaceId,
-            itemId,
-            newScope,
-            organizationId,
-        })
     }
 
     async deleteImage(itemId: string): Promise<{ success?: boolean; error?: string }> {

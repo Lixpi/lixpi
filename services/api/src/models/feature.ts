@@ -139,18 +139,6 @@ const FeatureModel = {
         }
     },
 
-    listPromotedByOriginWorkspaceForCleanup: async (workspaceId: string): Promise<Feature[]> => {
-        const result = await dynamoDBService.scanItems({
-            tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
-            limit: 1000,
-            fetchAllItems: true,
-            origin: `Feature.listPromotedByOriginWorkspaceForCleanup(${workspaceId})`,
-        })
-        return ((result?.items ?? []) as Feature[]).filter((feature) =>
-            feature.workspaceId === workspaceId,
-        )
-    },
-
     updateFeature: async ({ featureId, ownerUserId, updates }: {
         featureId: string; ownerUserId: string
         updates: Partial<Pick<Feature, 'summary' | 'tags' | 'instructions' | 'parameters' | 'sampleImages'>>

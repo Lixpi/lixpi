@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
     putObjectFromReadable: vi.fn(),
     deleteObject: vi.fn(),
     deleteObjectStore: vi.fn(),
+    getObjectStore: vi.fn(),
+    createObjectStore: vi.fn(),
     storeWorkspaceImage: vi.fn(),
     storeWorkspaceVideo: vi.fn(),
 }))
@@ -23,6 +25,8 @@ vi.mock('@lixpi/nats-service', () => ({
             putObjectFromReadable: mocks.putObjectFromReadable,
             deleteObject: mocks.deleteObject,
             deleteObjectStore: mocks.deleteObjectStore,
+            getObjectStore: mocks.getObjectStore,
+            createObjectStore: mocks.createObjectStore,
         }),
     },
 }))
@@ -44,9 +48,7 @@ vi.mock('./video-storage.ts', () => ({
 
 import {
     copyWorkspaceVideoToLibrary,
-    copyLibraryImageToScope,
     copyWorkspaceImageToLibrary,
-    deleteMediaLibraryWorkspaceBucket,
     materializeLibraryImageToWorkspace,
     materializeLibraryVideoToWorkspace,
 } from './media-library-storage.ts'
@@ -64,9 +66,9 @@ const makeItem = (): MediaLibraryImageItem => ({
     ownerUserId: 'user-1',
     originWorkspaceId: 'workspace-1',
     sourceFileId: 'source-file-1',
-    scope: 'workspace',
-    scopeOwnerId: 'workspace-1',
-    scopeAndOwner: 'workspace#workspace-1',
+    scope: 'organization',
+    scopeOwnerId: 'organization-1',
+    scopeAndOwner: 'organization#organization-1',
     status: 'active',
     asset: {
         bucketName: 'media-library-workspace-workspace-1-files',
@@ -89,9 +91,9 @@ const makeVideoItem = (): MediaLibraryVideoItem => ({
     originWorkspaceId: 'workspace-1',
     sourceFileId: 'source-video-1',
     sourcePosterFileId: 'source-poster-1',
-    scope: 'workspace',
-    scopeOwnerId: 'workspace-1',
-    scopeAndOwner: 'workspace#workspace-1',
+    scope: 'organization',
+    scopeOwnerId: 'organization-1',
+    scopeAndOwner: 'organization#organization-1',
     status: 'active',
     asset: {
         bucketName: 'media-library-workspace-workspace-1-files',
@@ -136,6 +138,9 @@ describe('Media Library storage ownership', () => {
         mocks.getObject.mockResolvedValue(pngBytes)
         mocks.getObjectStream.mockResolvedValue({ readable: true })
         mocks.putObjectFromReadable.mockResolvedValue(undefined)
+        // Destination org bucket already exists, so no on-demand creation is needed.
+        mocks.getObjectStore.mockResolvedValue({})
+        mocks.createObjectStore.mockResolvedValue({})
         mocks.storeWorkspaceImage.mockResolvedValue({
             fileId: 'restored-file-1',
             url: '/api/images/workspace-2/restored-file-1',
@@ -152,20 +157,20 @@ describe('Media Library storage ownership', () => {
         })
     })
 
-    it('saves a canvas image into an independent workspace-scoped library object', async () => {
+    it('saves a canvas image into an independent org-scoped library object', async () => {
         const copied = await copyWorkspaceImageToLibrary({
             workspaceId: 'workspace-1',
             fileId: 'source-file-1',
-            scope: 'workspace',
-            scopeOwnerId: 'workspace-1',
+            scope: 'organization',
+            scopeOwnerId: 'organization-1',
         })
 
         expect(copied.itemId).not.toBe('source-file-1')
         expect(copied.image).toEqual({ width: 1, height: 1, aspectRatio: 1 })
-        expect(copied.asset.bucketName).toBe('media-library-workspace-workspace-1-files')
+        expect(copied.asset.bucketName).toBe('media-library-organization-organization-1-files')
         expect(copied.asset.objectKey).toBe(copied.itemId)
         expect(mocks.putObjectFromReadable).toHaveBeenCalledWith(
-            'media-library-workspace-workspace-1-files',
+            'media-library-organization-organization-1-files',
             copied.itemId,
             { readable: true },
             { name: copied.itemId, description: 'saved.png' }
@@ -184,27 +189,23 @@ describe('Media Library storage ownership', () => {
         })
     })
 
-    it('copies an item to its new scope bucket and deletes workspace scope buckets explicitly', async () => {
-        const item = makeItem()
-        const asset = await copyLibraryImageToScope({
-            item,
-            newScope: 'user',
-            newScopeOwnerId: 'user-1',
+    it('creates the destination org bucket on demand before saving', async () => {
+        mocks.getObjectStore.mockRejectedValueOnce(new Error('object store not found'))
+
+        await copyWorkspaceImageToLibrary({
+            workspaceId: 'workspace-1',
+            fileId: 'source-file-1',
+            scope: 'organization',
+            scopeOwnerId: 'organization-1',
         })
 
-        expect(asset.bucketName).toBe('media-library-user-user-1-files')
-        expect(mocks.putObjectFromReadable).toHaveBeenCalledWith(
-            'media-library-user-user-1-files',
-            item.itemId,
-            { readable: true },
-            { name: item.itemId, description: 'saved.png' }
+        expect(mocks.createObjectStore).toHaveBeenCalledWith(
+            'media-library-organization-organization-1-files',
+            expect.objectContaining({ description: expect.any(String) }),
         )
-
-        await deleteMediaLibraryWorkspaceBucket('workspace-1')
-        expect(mocks.deleteObjectStore).toHaveBeenCalledWith('media-library-workspace-workspace-1-files')
     })
 
-    it('saves a canvas video and its poster into independent workspace-scoped library objects', async () => {
+    it('saves a canvas video and its poster into independent org-scoped library objects', async () => {
         const copied = await copyWorkspaceVideoToLibrary({
             workspaceId: 'workspace-1',
             fileId: 'source-video-1',
@@ -212,26 +213,26 @@ describe('Media Library storage ownership', () => {
             durationSeconds: 4,
             aspectRatio: 1,
             hasAudio: false,
-            scope: 'workspace',
-            scopeOwnerId: 'workspace-1',
+            scope: 'organization',
+            scopeOwnerId: 'organization-1',
         })
 
         expect(copied.itemId).not.toBe('source-video-1')
-        expect(copied.asset.bucketName).toBe('media-library-workspace-workspace-1-files')
+        expect(copied.asset.bucketName).toBe('media-library-organization-organization-1-files')
         expect(copied.asset.objectKey).toBe(copied.itemId)
         expect(copied.poster).toEqual(expect.objectContaining({
-            bucketName: 'media-library-workspace-workspace-1-files',
+            bucketName: 'media-library-organization-organization-1-files',
             objectKey: `${copied.itemId}-poster`,
             originalName: 'saved-poster.png',
         }))
         expect(mocks.putObjectFromReadable).toHaveBeenCalledWith(
-            'media-library-workspace-workspace-1-files',
+            'media-library-organization-organization-1-files',
             copied.itemId,
             { readable: true },
             { name: copied.itemId, description: 'saved.mp4' }
         )
         expect(mocks.putObjectFromReadable).toHaveBeenCalledWith(
-            'media-library-workspace-workspace-1-files',
+            'media-library-organization-organization-1-files',
             `${copied.itemId}-poster`,
             { readable: true },
             { name: `${copied.itemId}-poster`, description: 'saved-poster.png' }

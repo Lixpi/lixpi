@@ -5,7 +5,6 @@ import { v4 as uuid } from 'uuid'
 
 import NATS_Service from '@lixpi/nats-service'
 import {
-    MEDIA_LIBRARY_SCOPE,
     type DocumentFile,
     type MediaLibraryAssetRef,
     type MediaLibraryImageData,
@@ -20,12 +19,7 @@ import { storeWorkspaceImage, type StoreImageResult } from './image-storage.ts'
 import { storeWorkspaceVideo, type StoreVideoResult } from './video-storage.ts'
 
 const getMediaLibraryBucketName = (scope: MediaLibraryScope, scopeOwnerId: string): string =>
-    scope === MEDIA_LIBRARY_SCOPE.PUBLIC
-        ? 'media-library-public-files'
-        : `media-library-${scope}-${scopeOwnerId}-files`
-
-export const getMediaLibraryWorkspaceBucketName = (workspaceId: string): string =>
-    getMediaLibraryBucketName(MEDIA_LIBRARY_SCOPE.WORKSPACE, workspaceId)
+    `media-library-${scope}-${scopeOwnerId}-files`
 
 const getStorageService = (): NATS_Service => {
     const natsService = NATS_Service.getInstance()
@@ -33,6 +27,19 @@ const getStorageService = (): NATS_Service => {
         throw new Error('NATS service unavailable')
     }
     return natsService
+}
+
+// Org-scoped media buckets are created on demand (the first time anything is saved
+// into an organization) rather than up front, since orgs are not tied to a single
+// workspace lifecycle. open() rejects when the bucket is missing, so we create it then.
+const ensureMediaLibraryBucket = async (natsService: NATS_Service, bucketName: string): Promise<void> => {
+    try {
+        await natsService.getObjectStore(bucketName)
+    } catch {
+        await natsService.createObjectStore(bucketName, {
+            description: `Media Library files for ${bucketName}`,
+        }).catch(() => {})
+    }
 }
 
 const getImageDimensions = async (data: Uint8Array): Promise<MediaLibraryImageData> => {
@@ -81,6 +88,7 @@ export const copyWorkspaceImageToLibrary = async ({
 
     const itemId = uuid()
     const destinationBucket = getMediaLibraryBucketName(scope, scopeOwnerId)
+    await ensureMediaLibraryBucket(natsService, destinationBucket)
     const sourceStream = await natsService.getObjectStream(sourceBucket, fileId)
     if (!sourceStream) {
         throw new Error('Canvas image object stream not found')
@@ -124,38 +132,8 @@ export const materializeLibraryImageToWorkspace = async ({
     })
 }
 
-export const copyLibraryImageToScope = async ({
-    item,
-    newScope,
-    newScopeOwnerId,
-}: {
-    item: MediaLibraryImageItem
-    newScope: MediaLibraryScope
-    newScopeOwnerId: string
-}): Promise<MediaLibraryAssetRef> => {
-    const natsService = getStorageService()
-    const destinationBucket = getMediaLibraryBucketName(newScope, newScopeOwnerId)
-    const sourceStream = await natsService.getObjectStream(item.asset.bucketName, item.asset.objectKey)
-    if (!sourceStream) {
-        throw new Error('Media Library image object not found')
-    }
-    await natsService.putObjectFromReadable(destinationBucket, item.itemId, sourceStream, {
-        name: item.itemId,
-        description: item.asset.originalName,
-    })
-    return {
-        ...item.asset,
-        bucketName: destinationBucket,
-        objectKey: item.itemId,
-    }
-}
-
 export const deleteLibraryImageObject = async (item: MediaLibraryImageItem): Promise<void> => {
     await getStorageService().deleteObject(item.asset.bucketName, item.asset.objectKey)
-}
-
-export const deleteMediaLibraryWorkspaceBucket = async (workspaceId: string): Promise<void> => {
-    await getStorageService().deleteObjectStore(getMediaLibraryWorkspaceBucketName(workspaceId))
 }
 
 // =============================================================================
@@ -217,6 +195,7 @@ export const copyWorkspaceVideoToLibrary = async ({
 
     const itemId = uuid()
     const destinationBucket = getMediaLibraryBucketName(scope, scopeOwnerId)
+    await ensureMediaLibraryBucket(natsService, destinationBucket)
     const videoStream = await natsService.getObjectStream(sourceBucket, fileId)
     if (!videoStream) {
         throw new Error('Canvas video object stream not found')
@@ -319,53 +298,6 @@ export const materializeLibraryVideoToWorkspace = async ({
         }
     }
     return { video, poster }
-}
-
-export const copyLibraryVideoToScope = async ({
-    item,
-    newScope,
-    newScopeOwnerId,
-}: {
-    item: MediaLibraryVideoItem
-    newScope: MediaLibraryScope
-    newScopeOwnerId: string
-}): Promise<{ asset: MediaLibraryAssetRef; poster?: MediaLibraryAssetRef }> => {
-    const natsService = getStorageService()
-    const destinationBucket = getMediaLibraryBucketName(newScope, newScopeOwnerId)
-    const videoStream = await natsService.getObjectStream(item.asset.bucketName, item.asset.objectKey)
-    if (!videoStream) {
-        throw new Error('Media Library video object not found')
-    }
-    await natsService.putObjectFromReadable(destinationBucket, item.itemId, videoStream, {
-        name: item.itemId,
-        description: item.asset.originalName,
-    })
-
-    let poster: MediaLibraryAssetRef | undefined
-    if (item.poster) {
-        const posterStream = await natsService.getObjectStream(item.poster.bucketName, item.poster.objectKey)
-        if (posterStream) {
-            const posterKey = `${item.itemId}-poster`
-            await natsService.putObjectFromReadable(destinationBucket, posterKey, posterStream, {
-                name: posterKey,
-                description: item.poster.originalName,
-            })
-            poster = {
-                ...item.poster,
-                bucketName: destinationBucket,
-                objectKey: posterKey,
-            }
-        }
-    }
-
-    return {
-        asset: {
-            ...item.asset,
-            bucketName: destinationBucket,
-            objectKey: item.itemId,
-        },
-        poster,
-    }
 }
 
 export const deleteLibraryVideoObject = async (item: MediaLibraryVideoItem): Promise<void> => {
