@@ -60,16 +60,22 @@ type RebalanceLayoutProxyPlan = {
 
 const PLANNED_MEDIA_LAYOUT_PROXY_NODE_ID_SUFFIX = ':planned-media-layout-proxy'
 
+// Canvas node arrays are the pipeline boundary. A local map gives every stage
+// deterministic lookup without depending on WorkspaceCanvas closure helpers.
 function getNodesById(nodes: CanvasNode[]): Map<string, CanvasNode> {
     return new Map(nodes.map((node: CanvasNode) => [node.nodeId, node]))
 }
 
+// Reasoning order is the canonical order for multi-model marker stacks. Falling
+// back to position and id keeps reflow deterministic for older or partial state.
 function getBranchMarkerReasoningIndex(marker: BranchMarkerNode): number | undefined {
     return marker.type === 'branchFork' || marker.type === 'branchLine'
         ? marker.reasoningIndex
         : marker.pendingState?.reasoningIndex
 }
 
+// Pending marker stacks must not jitter when text changes size. This comparator
+// preserves the current visual top-to-bottom order before using semantic order.
 function compareBranchMarkersByReasoningOrder(a: BranchMarkerNode, b: BranchMarkerNode): number {
     const indexDelta = (getBranchMarkerReasoningIndex(a) ?? Number.MAX_SAFE_INTEGER)
         - (getBranchMarkerReasoningIndex(b) ?? Number.MAX_SAFE_INTEGER)
@@ -79,12 +85,16 @@ function compareBranchMarkersByReasoningOrder(a: BranchMarkerNode, b: BranchMark
     return a.nodeId.localeCompare(b.nodeId)
 }
 
+// Stack reflow starts from current geometry so live preview updates resize
+// markers without reordering them underneath the user.
 function compareBranchMarkersByStackPosition(a: BranchMarkerNode, b: BranchMarkerNode): number {
     const positionDelta = a.position.y - b.position.y
     if (positionDelta !== 0) return positionDelta
     return compareBranchMarkersByReasoningOrder(a, b)
 }
 
+// The reflow code centers a group around its previous occupied band unless a
+// branch-origin parent gives it a stronger anchor below the origin marker.
 function getBranchMarkerStackHeight(markers: BranchMarkerNode[], gap: number): number {
     if (markers.length === 0) return 0
     return markers.reduce((height: number, marker: BranchMarkerNode) => height + marker.dimensions.height, 0)
@@ -102,6 +112,8 @@ export type ReflowStackedBranchMarkersOptions = {
     getNodeWorldRect: (node: CanvasNode, nodesById: Map<string, CanvasNode>) => Rect
 }
 
+// Pending branch markers stack by their immediate lineage parent. Root markers
+// use generationRequestId so unrelated root prompts never reflow together.
 function getBranchMarkerStackGroupKey(marker: BranchMarkerNode): string | null {
     if (marker.pendingState?.phase === 'preflight') return null
     if (marker.type !== 'branchFork' && marker.type !== 'branchLine') return null
@@ -110,6 +122,8 @@ function getBranchMarkerStackGroupKey(marker: BranchMarkerNode): string | null {
     return null
 }
 
+// Only pending, non-manual stacks are eligible for automatic reflow. Started
+// markers are excluded because generated-media layout owns their final midpoint.
 function getBranchMarkerStackGroups(options: ReflowStackedBranchMarkersOptions): BranchMarkerStackGroup[] {
     const groupsByKey = new Map<string, BranchMarkerNode[]>()
     const { markerIdsWithGeneratedChildren } = getStartedLineageMarkerState(options.allNodes)
@@ -132,6 +146,8 @@ function getBranchMarkerStackGroups(options: ReflowStackedBranchMarkersOptions):
         }))
 }
 
+// Branch-origin stacks have a semantic anchor below the origin; other stacks
+// keep their previous center so response-text growth does not drift the group.
 function getBranchMarkerStackAnchorTop(
     group: BranchMarkerStackGroup,
     options: ReflowStackedBranchMarkersOptions,
@@ -154,6 +170,8 @@ function getBranchMarkerStackAnchorTop(
     return ((top + bottom) / 2) - getBranchMarkerStackHeight(group.markers, options.branchMarkerStackGap) / 2
 }
 
+// Reflows live branch-marker previews into a deterministic stack while leaving
+// started and manually positioned markers untouched.
 export function reflowStackedBranchMarkers(options: ReflowStackedBranchMarkersOptions): Map<string, BranchMarkerNode> {
     const reflowedMarkers = new Map<string, BranchMarkerNode>()
     const groups = getBranchMarkerStackGroups(options)
@@ -181,6 +199,8 @@ export function reflowStackedBranchMarkers(options: ReflowStackedBranchMarkersOp
     return reflowedMarkers
 }
 
+// Planned branch-origin child markers are restored to a compact stack below the
+// origin. This offset mirrors the rendered marker body, not future media size.
 function getBranchMarkerStackOffset(
     markerIds: string[],
     nodesById: Map<string, CanvasNode>,
@@ -197,6 +217,8 @@ function getBranchMarkerStackOffset(
     return null
 }
 
+// Proxy IDs should be stable but must not collide with real or already-proxied
+// nodes. A deterministic suffix keeps test snapshots and persisted diffs legible.
 function getUniquePlannedMediaLayoutProxyNodeId(markerNodeId: string, nodesById: Map<string, CanvasNode>): string {
     const baseNodeId = `${markerNodeId}${PLANNED_MEDIA_LAYOUT_PROXY_NODE_ID_SUFFIX}`
     if (!nodesById.has(baseNodeId)) return baseNodeId
@@ -210,6 +232,8 @@ function getUniquePlannedMediaLayoutProxyNodeId(markerNodeId: string, nodesById:
     return nodeId
 }
 
+// Planned proxy media needs enough provenance to participate in branch-tree
+// parentage exactly like the future generated node would, without persisting it.
 function getPlannedMediaProxyLineageParentAttrs(
     parentNode: CanvasNode,
     markerNode: BranchForkCanvasNode | BranchLineCanvasNode,
@@ -239,9 +263,16 @@ function getPlannedMediaProxyLineageParentAttrs(
     return attrs
 }
 
+// Deterministic generated-media rebalance pipeline. WorkspaceCanvas supplies
+// geometry adapters; this class owns the ordered data transforms so add/remove,
+// pending-frame, and final-frame updates all pass through the same sequence.
 export class GeneratedMediaRebalancePipeline {
+    // All canvas-specific measurements are injected so the pipeline stays pure
+    // and reusable across image/video dimensions, marker sizes, and node types.
     constructor(private readonly config: GeneratedMediaRebalancePipelineConfig) {}
 
+    // Public entry point: normalize transient geometry, run branch-tree layout
+    // and rigid collision resolution, then restore persisted geometry.
     rebalance(nodes: CanvasNode[], edges: WorkspaceEdge[]): GeneratedMediaRebalanceResult {
         const proxyPlan = this.prepareLayoutProxyPlan(nodes)
         const resolvedNodes = rebalanceBranchTreesAndResolve(proxyPlan.nodes, edges, {
@@ -264,6 +295,9 @@ export class GeneratedMediaRebalancePipeline {
         }
     }
 
+    // Layout should use what the user can see. Pending media before the first
+    // frame is rendered as a small circle, so this stage swaps in circle geometry
+    // and adds temporary future-media proxies for planned sibling markers.
     private prepareLayoutProxyPlan(nodes: CanvasNode[]): RebalanceLayoutProxyPlan {
         const pendingMediaProxiesByNodeId = new Map<string, PendingMediaGeometryProxy>()
         const plannedMarkerProxiesByMarkerId = new Map<string, PlannedMarkerMediaProxy>()
@@ -316,6 +350,8 @@ export class GeneratedMediaRebalancePipeline {
         }
     }
 
+    // A planned marker with started siblings needs a placeholder media box so
+    // the tidy tree reserves its future row before any real media node exists.
     private createPlannedBranchMarkerMediaLayoutProxy(
         markerNode: BranchForkCanvasNode | BranchLineCanvasNode,
         parentNode: CanvasNode,
@@ -371,6 +407,9 @@ export class GeneratedMediaRebalancePipeline {
         }
     }
 
+    // The branch-tree resolver may move proxy geometry. This stage removes
+    // temporary nodes and maps pending media back to persisted full-node geometry
+    // while preserving the visual circle position that layout just resolved.
     private restorePersistedGeometry(
         nodes: CanvasNode[],
         proxyPlan: RebalanceLayoutProxyPlan,

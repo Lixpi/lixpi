@@ -298,7 +298,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		const activeBlock = extractBlock(infoButtonBlock, '&.is-active')
 
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl, pendingBranchMarkerOverlayEl],')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
 		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
 		expectSourceToContain(ts, 'getCanvasChromeScreenLayout({')
 		expectSourceToContain(ts, 'baseGap: settings.mediaNode.generatedMediaChrome.topGap,')
@@ -528,14 +528,19 @@ describe('Workspace canvas — generated image preview rendering', () => {
 	})
 
 	it('routes generated-media add/remove through the centralized tree rebalance', () => {
-		// One helper re-tidies every branch tree and rigid-separates trees + loose
-		// nodes via the unchanged resolver, replacing the per-handler collision block.
-		expectSourceToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
+		// WorkspaceCanvas supplies canvas-specific geometry, but the generated-media
+		// rebalance sequence lives in the extracted deterministic pipeline.
+		expectSourceToContain(ts, "from '$src/infographics/workspace/generatedMediaRebalancePipeline.ts'")
+		expectSourceToContain(ts, "import { getStartedLineageMarkerState } from '$src/infographics/workspace/branchLineageState.ts'")
+		expectSourceToContain(ts, 'function createGeneratedMediaRebalancePipeline(): GeneratedMediaRebalancePipeline')
 		expectSourceToContain(ts, 'function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[]')
-		expectSourceToContain(ts, 'const resolvedNodes = rebalanceBranchTreesAndResolve(layoutProxyPlan.nodes, edges, {')
+		expectSourceToContain(ts, 'const result = createGeneratedMediaRebalancePipeline().rebalance(nodes, edges)')
+		expectSourceToContain(ts, 'clearStartedBranchMarkerProjectionOverrides(result.startedMarkerNodeIds)')
 		expectSourceToContain(ts, 'depthGap: settings.mediaBranchLineage.mediaToMediaGap,')
 		expectSourceToContain(ts, 'siblingGap: settings.mediaBranchLineage.branchRowGap,')
 		expectSourceToContain(ts, 'branchFanoutExtraGap: settings.mediaBranchLineage.branchFanoutExtraGap,')
+		expectSourceToContain(ts, 'getPendingGeneratedMediaLayoutGeometry: (node: ImageCanvasNode | VideoCanvasNode) =>')
+		expectSourceNotToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
 		// Wired into every generated-media add path (image partial + complete, video).
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithImage, newEdges)')
 		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, edges)')
@@ -673,7 +678,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const panelPosition = ts.slice(panelPositionStart, panelPositionEnd)
 
 		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl = createGeneratedMediaInfoPanelLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl, pendingBranchMarkerOverlayEl],')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
 		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
 		expectSourceToContain(ts, 'function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode)')
 		expectSourceToContain(ts, "panel.setAttribute('data-media-info-panel-node-id', node.nodeId)")
@@ -1986,10 +1991,11 @@ describe('Workspace canvas — collision resolution ownership', () => {
 	})
 
 	it('builds rectangular collision boxes from node world bounds', () => {
-		expectSourceToContain(ts, 'function createCollisionPlan(nodes: CanvasNode[], topLevelOnly = false): CollisionPlan')
+		expectSourceToContain(ts, 'function createCollisionPlan(\n        nodes: CanvasNode[],')
 		expectSourceToContain(ts, 'const worldPosition = getNodeWorldPosition(node, nodesById)')
-		expectSourceToContain(ts, 'x: worldPosition.x,')
-		expectSourceToContain(ts, 'width: node.dimensions.width,')
+		expectSourceToContain(ts, 'const collisionRect = getCanvasNodeCollisionRect(node, worldPosition)')
+		expectSourceToContain(ts, 'x: collisionRect.x,')
+		expectSourceToContain(ts, 'width: collisionRect.width,')
 		expectSourceNotToContain(ts, ['getContext', 'Region', 'Cl', 'oudBounds'].join(''))
 	})
 
