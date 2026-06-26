@@ -229,6 +229,26 @@ export type AiPromptInputSettings = {
     modelMenu: AiPromptInputModelMenuSettings
 }
 
+export type CanvasChromeSettings = {
+    glassBorder: {
+        enabled: boolean
+        widthPx: number
+        displacementScalePx: number
+        displacementTextureSizePx: number
+        displacementFrequencyX: number
+        displacementFrequencyY: number
+        bodyColor: string
+        bodyAlpha: number
+        highlightColor: string
+        highlightAlpha: number
+        shadowColor: string
+        shadowAlpha: number
+        materialColors: string[]
+        materialTailAlpha: number
+        glassMaterial: GenerationBorderGlassMaterialSettings
+    }
+}
+
 export type ConnectorSettings = {
     lineCurve: WorkspaceEdgePathType
     useZoomCompensatedScaling: boolean
@@ -593,6 +613,8 @@ export type Settings = {
 
     canvasBubbleMenu: CanvasBubbleMenuSettings
 
+    canvasChrome: CanvasChromeSettings
+
     rightSidePanel: RightSidePanelSettings
 
     aiChatThread: AiChatThreadSettings
@@ -655,6 +677,111 @@ export const settings: Settings = {
         // opt this config into the shared adaptive low-zoom curve, which defaults
         // to 0.45 unless this object provides `lowZoomPower`.
         zoomScaling: { minZoom: 0.4 },
+    },
+
+    // Screen-fixed canvas chrome shared by the bottom composer and adjacent action panels.
+    canvasChrome: {
+        // Pixi glass border for bottom canvas controls.
+        glassBorder: {
+            // Enables the Pixi render-texture refraction border around composer controls.
+            enabled: true,
+            // Width of the refractive ring in screen pixels.
+            widthPx: 10,
+            // Pixel offset strength used by the Pixi displacement filter that refracts captured canvas content.
+            displacementScalePx: 7,
+            // Procedural displacement-map size. Larger values add detail but cost more texture memory.
+            displacementTextureSizePx: 128,
+            // Horizontal wave frequency for the procedural glass displacement map.
+            displacementFrequencyX: 3.2,
+            // Vertical wave frequency for the procedural glass displacement map.
+            displacementFrequencyY: 2.6,
+            // Transparent body tint drawn only inside the ring; keep low so white backgrounds read as no-op.
+            bodyColor: '#ffffff',
+            // Body tint alpha inside the ring.
+            bodyAlpha: 0,
+            // Specular rim color.
+            highlightColor: '#ffffff',
+            // Specular rim alpha.
+            highlightAlpha: 0.07,
+            // Subtle inner-shadow rim color.
+            shadowColor: '#415061',
+            // Subtle inner-shadow rim alpha.
+            shadowAlpha: 0.018,
+            // Baked Pixi glass material colors for the closed border mesh.
+            materialColors: ['#ffffff', '#f7fbff', '#edf4ff', '#ffffff'],
+            // Closed border meshes do not tail-fade; this stays fully present before material alpha is applied.
+            materialTailAlpha: 1,
+            glassMaterial: {
+                // Dark tint mixed into the soft lower rim of the glass.
+                shadowColor: '#415061',
+                // Kept for shared material compatibility; closed strip opacity is forced by the material subclass.
+                tailOpacityPower: 1,
+                // Disabled so the rounded-rectangle border has no tail seam.
+                tailFadeFraction: 0,
+                // Closed strip minimum opacity.
+                minTailOpacity: 1,
+                // Extra transparent feather width as a fraction of the visible border width.
+                edgeFeatherFraction: 0.22,
+                // Exponent applied to the feather mask.
+                edgeFeatherPower: 1.34,
+                // Cross-section lens exponent.
+                lensCorePower: 0.5,
+                // Vertical center of the main specular highlight, from outer edge 0 to inner edge 1.
+                upperSpecularCenter: 0.24,
+                // Subtle drift along the closed outline path.
+                upperSpecularDrift: 0.02,
+                // Width of the main specular highlight across the border body.
+                upperSpecularWidth: 0.18,
+                // Closed strips have no tail, so the highlight is present immediately.
+                upperSpecularFadeStart: 0,
+                // Closed strips have no tail, so the highlight is present immediately.
+                upperSpecularFadeEnd: 0.01,
+                // Brightness contribution from the main specular highlight.
+                upperSpecularStrength: 0.13,
+                // Longitudinal center of the inherited head glint.
+                headSpecularProgressCenter: 0.52,
+                // Longitudinal width of the inherited head glint.
+                headSpecularProgressWidth: 0.42,
+                // Cross-section center of the inherited head glint.
+                headSpecularCrossSectionCenter: 0.48,
+                // Cross-section width of the inherited head glint.
+                headSpecularCrossSectionWidth: 0.28,
+                // Brightness contribution from the inherited head glint.
+                headSpecularStrength: 0.04,
+                // Cross-section center of the lower glass shadow rim.
+                lowerEdgeShadowCenter: 0.86,
+                // Width of the lower glass shadow rim.
+                lowerEdgeShadowWidth: 0.22,
+                // Darkness contribution from the lower glass shadow rim.
+                lowerEdgeShadowStrength: 0.12,
+                // Cross-section center of the upper glass shadow rim.
+                upperEdgeShadowCenter: 0.08,
+                // Width of the upper glass shadow rim.
+                upperEdgeShadowWidth: 0.18,
+                // Darkness contribution from the upper glass shadow rim.
+                upperEdgeShadowStrength: 0.05,
+                // Power curve for the broad edge shadow.
+                edgeShadowPower: 2.1,
+                // Darkness contribution from the broad edge shadow.
+                edgeShadowStrength: 0.035,
+                // Brightness contribution from the rounded lens core.
+                lensHighlightStrength: 0.06,
+                // Maximum amount of white mixed into highlights.
+                highlightWhiteMixMax: 0.14,
+                // Maximum amount of shadow color mixed into edge shadows.
+                shadowMixMax: 0.04,
+                // Baseline material opacity before cross-section highlights are added.
+                materialAlphaBase: 0.006,
+                // Maximum material opacity before the feathered edge mask is applied.
+                materialAlphaMax: 0.04,
+                // Opacity contribution from the rounded lens core.
+                lensAlphaStrength: 0.014,
+                // Opacity contribution from the main specular highlight.
+                upperSpecularAlphaStrength: 0.012,
+                // Opacity contribution from the inherited head glint.
+                headSpecularAlphaStrength: 0.006,
+            },
+        },
     },
 
     // Right side panel surface, resize, toggle, and slide settings.

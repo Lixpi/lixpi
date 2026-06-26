@@ -72,7 +72,7 @@ export type OutlinePoint = {
     y: number
 }
 
-type OutlineFrame = {
+export type OutlineFrame = {
     point: OutlinePoint
     tangent: OutlinePoint
 }
@@ -100,7 +100,7 @@ export function getRoundedOutlinePoint(
     return getRoundedOutlineFrame(width, height, radius, distance).point
 }
 
-function getRoundedOutlineFrame(
+export function getRoundedOutlineFrame(
     width: number,
     height: number,
     radius: number,

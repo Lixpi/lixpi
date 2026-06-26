@@ -41,6 +41,10 @@ import {
     type PixiTravelingOutlineDirection,
 } from '$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts'
 import {
+    PixiGlassBorderRenderer,
+    type PixiGlassBorderDatum,
+} from '$src/utils/animations/gradients/pixiGlassBorderRenderer.ts'
+import {
     getAdaptiveBoundedZoomScalingOptions,
     scaleCanvasChromeWorldSizeForZoom,
 } from '$src/infographics/utils/zoomScaling.ts'
@@ -118,6 +122,9 @@ export type PixiMediaLayer = {
     setPixiEdges: (edges: PixiEdgeRenderDatum[]) => void
     renderNow: () => void
     getHealth: () => PixiRendererHealth
+    getMediaNodeRegistry?: () => MediaNodeRegistry
+    getVideoLayer?: () => Container
+    scheduleRender?: () => void
     destroy: () => void
 }
 
@@ -211,6 +218,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     const generatingBorderLayer = new Container({ label: 'workspace-pixi-generating-borders' })
     const fgLayer = new Container({ label: 'workspace-pixi-fg' })
     const edgeLayer = new Container({ label: 'workspace-pixi-edges' })
+    const screenGlassLayer = new Container({ label: 'workspace-pixi-screen-glass' })
     const mediaNodeRegistry: MediaNodeRegistry = createMediaNodeRegistry()
     // Tracks which non-image nodes the registry currently owns so sync() can
     // detect removal (when a node leaves canvasState we dispatch remove).
@@ -256,6 +264,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         getStrokeScale: () => scaleCanvasChromeWorldSizeForZoom(1, currentViewport.zoom, inProgressOutlineZoomScaling),
         onFrame: scheduleRender,
     })
+    const glassBorderRenderer = new PixiGlassBorderRenderer({
+        container: screenGlassLayer,
+        style: settings.canvasChrome.glassBorder,
+    })
 
     function setHealth(next: PixiRendererHealth): void {
         if (health === next) return
@@ -298,6 +310,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
             app.stage.addChild(edgeLayer)
             app.stage.addChild(world)
+            app.stage.addChild(screenGlassLayer)
             world.addChild(imageLayer)
             world.addChild(videoLayer)
             world.addChild(generatingBorderLayer)
@@ -437,7 +450,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         renderRaf = requestAnimationFrame(() => {
             renderRaf = null
             if (destroyed || health !== 'ready') return
-            app.render()
+            renderPixiStage()
         })
     }
 
@@ -447,7 +460,105 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             cancelAnimationFrame(renderRaf)
             renderRaf = null
         }
+        renderPixiStage()
+    }
+
+    function renderPixiStage(): void {
+        syncScreenGlassBorders()
+        const captureTexture = glassBorderRenderer.getCaptureTexture()
+        if (captureTexture) {
+            glassBorderRenderer.setCapturing(true)
+            try {
+                app.renderer.render({
+                    container: app.stage,
+                    target: captureTexture,
+                    clear: true,
+                    clearColor: [0, 0, 0, 0],
+                })
+            } finally {
+                glassBorderRenderer.setCapturing(false)
+            }
+        }
         app.render()
+    }
+
+    function syncScreenGlassBorders(): void {
+        glassBorderRenderer.sync(getScreenGlassBorderDatums(), getPaneViewportSize())
+    }
+
+    function getPaneViewportSize(): { width: number; height: number } {
+        if (paneEl.clientWidth > 0 && paneEl.clientHeight > 0) {
+            return {
+                width: paneEl.clientWidth,
+                height: paneEl.clientHeight,
+            }
+        }
+        const rect = paneEl.getBoundingClientRect()
+        return {
+            width: rect.width,
+            height: rect.height,
+        }
+    }
+
+    function getScreenGlassBorderDatums(): PixiGlassBorderDatum[] {
+        const glassBorder = settings.canvasChrome.glassBorder
+        if (!glassBorder.enabled) return []
+
+        const paneRect = paneEl.getBoundingClientRect()
+        const rootEl = paneEl.closest<HTMLElement>('.workspace-canvas')
+        const targets: { id: string; element: HTMLElement | null | undefined }[] = [
+            {
+                id: 'workspace-action-panel-left',
+                element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-action-panel-left'),
+            },
+            {
+                id: 'workspace-global-composer',
+                element: paneEl.querySelector<HTMLElement>('.workspace-canvas-global-composer'),
+            },
+            {
+                id: 'workspace-action-panel-right',
+                element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-action-panel-right'),
+            },
+        ]
+        const datums: PixiGlassBorderDatum[] = []
+
+        for (const target of targets) {
+            if (!target.element) continue
+            const rect = target.element.getBoundingClientRect()
+            if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) continue
+            datums.push({
+                id: target.id,
+                x: rect.left - paneRect.left,
+                y: rect.top - paneRect.top,
+                width: rect.width,
+                height: rect.height,
+                radius: getElementBorderRadius(target.element, rect.width, rect.height),
+                visible: true,
+            })
+        }
+
+        return datums
+    }
+
+    function getElementBorderRadius(element: HTMLElement, width: number, height: number): number {
+        const styles = window.getComputedStyle(element)
+        const radius = Math.max(
+            parseCssRadius(styles.borderTopLeftRadius, width, height),
+            parseCssRadius(styles.borderTopRightRadius, width, height),
+            parseCssRadius(styles.borderBottomRightRadius, width, height),
+            parseCssRadius(styles.borderBottomLeftRadius, width, height)
+        )
+        return Math.max(0, Math.min(radius, width / 2, height / 2))
+    }
+
+    function parseCssRadius(value: string, width: number, height: number): number {
+        const firstRadius = value.trim().split(/\s+/)[0]
+        if (firstRadius.endsWith('%')) {
+            const percent = Number.parseFloat(firstRadius)
+            return Number.isFinite(percent) ? Math.min(width, height) * percent / 100 : 0
+        }
+        const pixels = Number.parseFloat(firstRadius)
+        return Number.isFinite(pixels) ? pixels : 0
     }
 
     function destroyForegroundGraphics(graphics: Graphics | null): null {
@@ -1124,6 +1235,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             visibilityRaf = null
         }
         generatingBorderRenderer.destroy()
+        glassBorderRenderer.destroy()
         generatingImageNodeOutlines.clear()
         mediaNodeRegistry.destroy()
         registryDispatchedNodes.clear()

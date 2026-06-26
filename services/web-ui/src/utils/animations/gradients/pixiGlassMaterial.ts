@@ -475,6 +475,40 @@ export class TravelingSnakeGlassMaterial extends GlassMaterial {
     }
 }
 
+export type ClosedGlassStripMaterialOptions = {
+    width?: number
+    height?: number
+}
+
+// Closed strips use the same glass shader as traveling outlines, but with the
+// tail fade disabled so a full rounded-rectangle border has no visible seam.
+export class ClosedGlassStripMaterial extends GlassMaterial {
+    private readonly width: number
+    private readonly height: number
+
+    constructor(
+        colors: ReadonlyArray<string>,
+        tailAlpha: number,
+        style: GlassMaterialStyle,
+        options: ClosedGlassStripMaterialOptions = {}
+    ) {
+        super(colors, tailAlpha, {
+            ...style,
+            tailFadeFraction: 0,
+            minTailOpacity: 1,
+        })
+        this.width = Math.max(2, Math.round(options.width ?? 256))
+        this.height = Math.max(2, Math.round(options.height ?? 64))
+    }
+
+    bake(): Texture {
+        return this.bakeTexture(this.width, this.height, (px, py) => ({
+            progress: px / (this.width - 1),
+            crossSection: py / (this.height - 1),
+        }))
+    }
+}
+
 export type CircularGlassMaterialOptions = {
     // Texture resolution in pixels (square). Higher = crisper at large zoom.
     size?: number

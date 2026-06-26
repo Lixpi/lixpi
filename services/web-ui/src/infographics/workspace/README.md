@@ -519,5 +519,6 @@ During thread resizing, the gradient canvas keeps the existing bitmap visible wh
 The thread node gradient and the bottom-center composer gradient are controlled by feature flags in `settings.ts`:
 
 - `settings.aiPromptInput.useShiftingGradientBackground` (default `true`) — gradient on AI prompt input surfaces, including the bottom-center canvas composer.
+- `settings.canvasChrome.glassBorder` — 10px screen-space Pixi glass border for the bottom-center composer and adjacent action panels. `pixiMediaLayer` captures the Pixi stage into a render texture and refracts that capture through a masked displacement border, so Pixi edges, media sprites, generation outlines, and foreground overlays distort under the ring while flat background remains visually quiet.
 
 For the shared freeform/SVG gradient architecture, shifting-background technical details, color customization, and the color analysis tool, see [Visual Effects](../../../../../documentation/canvas/VISUAL-EFFECTS.md).
