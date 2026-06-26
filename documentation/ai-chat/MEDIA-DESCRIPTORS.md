@@ -139,6 +139,11 @@ and its title/aria-label explains what is happening. Opening the panel shows an
 "Analyzing media..." note. When ready, the same panel renders the summary and
 tags via `buildMediaDescriptorSection`.
 
+When canvas state is loaded, persisted media descriptors that still have
+`status: 'analyzing'` are reset to `failed`. This keeps canceled browser
+requests, incomplete reloads, and unreachable caption replies from pinning the
+media chrome in an active analysis state.
+
 Documents and thread nodes use descriptors for relevance, not media chrome —
 they do not render the analyzing pulse. See
 [Workspace Model](../canvas/WORKSPACE-MODEL.md) for the canvas node chrome these

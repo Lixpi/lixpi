@@ -111,6 +111,10 @@ function videoNode(nodeId: string, generatedBy: Record<string, unknown>): VideoC
     } as VideoCanvasNode
 }
 
+function moveMediaNode<T extends ImageCanvasNode | VideoCanvasNode>(node: T, position: { x: number; y: number }): T {
+    return { ...node, position }
+}
+
 describe('branchMarkerMediaModelCircles — node collection and shape helpers', () => {
     it('identifies branch-marker and generated-media nodes', () => {
         const marker: BranchOriginCanvasNode = branchOriginNode('origin')
@@ -131,7 +135,7 @@ describe('branchMarkerMediaModelCircles — node collection and shape helpers', 
         expect(isGeneratedMediaNodeForMediaModelCircles(doc)).toBe(false)
     })
 
-    it('filters branch lineage nodes and sorts generated media by generation order', () => {
+    it('filters branch lineage nodes and sorts generated media by connector row order', () => {
         const origin = branchOriginNode('origin')
         const originNodeA = imageNode('origin-a', { branchOriginNodeId: 'origin', createdAt: 40, variantIndex: 2 })
         const originNodeB = imageNode('origin-b', { branchOriginNodeId: 'origin', createdAt: 10 })
@@ -155,14 +159,50 @@ describe('branchMarkerMediaModelCircles — node collection and shape helpers', 
         ])
     })
 
+    it('keeps media-model circles in the same top-to-bottom order as generated output rows', () => {
+        const forkMarker = branchForkNode('fork', 'origin')
+        const topRowNode = moveMediaNode(
+            imageNode('top-row-node', {
+                branchForkNodeId: 'fork',
+                mediaRunId: 'run-top',
+                mediaModelId: 'provider:top-model',
+                createdAt: 200,
+                variantIndex: 2,
+            }),
+            { x: 600, y: 100 },
+        )
+        const bottomRowNode = moveMediaNode(
+            imageNode('bottom-row-node', {
+                branchForkNodeId: 'fork',
+                mediaRunId: 'run-bottom',
+                mediaModelId: 'provider:bottom-model',
+                createdAt: 10,
+                variantIndex: 0,
+            }),
+            { x: 600, y: 620 },
+        )
+        const nodes: CanvasNode[] = [bottomRowNode, topRowNode, forkMarker]
+
+        expect(getBranchMarkerGeneratedMediaNodesForModelCircles(forkMarker, nodes).map((node) => node.nodeId)).toEqual([
+            'top-row-node',
+            'bottom-row-node',
+        ])
+        expect(getBranchMarkerMediaModelCircleDescriptors(forkMarker, nodes).map((descriptor) => descriptor.modelId)).toEqual([
+            'provider:top-model',
+            'provider:bottom-model',
+        ])
+        expect(getBranchMarkerMediaModelCircleIndexForGeneratedMedia(forkMarker, nodes, topRowNode)).toBe(0)
+        expect(getBranchMarkerMediaModelCircleIndexForGeneratedMedia(forkMarker, nodes, bottomRowNode)).toBe(1)
+    })
+
     it('dedupes media model circles by media type + model id and normalizes case', () => {
         const origin = branchOriginNode('origin')
         const nodes: CanvasNode[] = [
-            imageNode('image-a', { branchOriginNodeId: 'origin', mediaRunId: 'run-a', mediaModelId: 'ProviderA:Model-1' }),
-            imageNode('image-b', { branchOriginNodeId: 'origin', mediaRunId: 'run-b', mediaModelId: 'providera:MODEL-1' }),
-            imageNode('image-c', { branchOriginNodeId: 'origin', mediaRunId: 'run-c', aiModel: 'providerB:Model-2' }),
-            videoNode('video-a', { branchOriginNodeId: 'origin', mediaRunId: 'run-d', videoModel: 'providerC:Model-3' }),
-            videoNode('video-b', { branchOriginNodeId: 'origin', mediaRunId: 'run-e', videoModel: 'providerC:model-3' }),
+            moveMediaNode(imageNode('image-a', { branchOriginNodeId: 'origin', mediaRunId: 'run-a', mediaModelId: 'ProviderA:Model-1' }), { x: 500, y: 100 }),
+            moveMediaNode(imageNode('image-b', { branchOriginNodeId: 'origin', mediaRunId: 'run-b', mediaModelId: 'providera:MODEL-1' }), { x: 500, y: 120 }),
+            moveMediaNode(imageNode('image-c', { branchOriginNodeId: 'origin', mediaRunId: 'run-c', aiModel: 'providerB:Model-2' }), { x: 500, y: 260 }),
+            moveMediaNode(videoNode('video-a', { branchOriginNodeId: 'origin', mediaRunId: 'run-d', videoModel: 'providerC:Model-3' }), { x: 500, y: 420 }),
+            moveMediaNode(videoNode('video-b', { branchOriginNodeId: 'origin', mediaRunId: 'run-e', videoModel: 'providerC:model-3' }), { x: 500, y: 440 }),
         ]
 
         const descriptors = getBranchMarkerMediaModelCircleDescriptors(origin, nodes)
@@ -229,9 +269,9 @@ describe('branchMarkerMediaModelCircles — node collection and shape helpers', 
     it('maps generated media to the matching media model badge index', () => {
         const origin = branchOriginNode('origin')
         const nodes: CanvasNode[] = [
-            imageNode('image-1', { branchOriginNodeId: 'origin', mediaRunId: 'run-a', mediaModelId: 'ProviderA:model-1' }),
-            imageNode('image-2', { branchOriginNodeId: 'origin', mediaRunId: 'run-b', mediaModelId: 'ProviderA:model-2' }),
-            videoNode('video-1', { branchOriginNodeId: 'origin', mediaRunId: 'run-c', videoModel: 'ProviderC:model-3' }),
+            moveMediaNode(imageNode('image-1', { branchOriginNodeId: 'origin', mediaRunId: 'run-a', mediaModelId: 'ProviderA:model-1' }), { x: 500, y: 100 }),
+            moveMediaNode(imageNode('image-2', { branchOriginNodeId: 'origin', mediaRunId: 'run-b', mediaModelId: 'ProviderA:model-2' }), { x: 500, y: 260 }),
+            moveMediaNode(videoNode('video-1', { branchOriginNodeId: 'origin', mediaRunId: 'run-c', videoModel: 'ProviderC:model-3' }), { x: 500, y: 420 }),
         ]
         const targetNodeByRun = imageNode('target-run', { branchOriginNodeId: 'origin', mediaRunId: 'run-b', mediaModelId: 'ProviderA:model-2' })
         const targetNodeFallback = imageNode('target-fallback', { branchOriginNodeId: 'origin', mediaModelId: 'providera:MODEL-1' })

@@ -29,14 +29,25 @@ export function isGeneratedMediaNodeForMediaModelCircles(node: CanvasNode | unde
     return node?.type === 'image' || node?.type === 'video'
 }
 
-function compareGeneratedMediaByGenerationOrder(
+function getGeneratedMediaCenterY(node: ImageCanvasNode | VideoCanvasNode): number {
+    return node.position.y + node.dimensions.height / 2
+}
+
+function compareGeneratedMediaByConnectorOrder(
     a: ImageCanvasNode | VideoCanvasNode,
     b: ImageCanvasNode | VideoCanvasNode,
 ): number {
+    const yDelta = getGeneratedMediaCenterY(a) - getGeneratedMediaCenterY(b)
+    if (yDelta !== 0) return yDelta
+
     const aVariant = a.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
     const bVariant = b.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
     if (aVariant !== bVariant) return aVariant - bVariant
-    return (a.generatedBy?.createdAt ?? 0) - (b.generatedBy?.createdAt ?? 0)
+
+    const createdAtDelta = (a.generatedBy?.createdAt ?? 0) - (b.generatedBy?.createdAt ?? 0)
+    if (createdAtDelta !== 0) return createdAtDelta
+
+    return a.nodeId.localeCompare(b.nodeId)
 }
 
 function getGeneratedMediaModelId(node: ImageCanvasNode | VideoCanvasNode): string {
@@ -96,7 +107,7 @@ export function getBranchMarkerGeneratedMediaNodesForModelCircles(
             if (markerNode.type === 'branchFork') return node.generatedBy?.branchForkNodeId === markerNode.nodeId
             return node.generatedBy?.branchLineNodeId === markerNode.nodeId
         })
-        .sort(compareGeneratedMediaByGenerationOrder)
+        .sort(compareGeneratedMediaByConnectorOrder)
 }
 
 export function getBranchMarkerMediaModelCircleDescriptors(

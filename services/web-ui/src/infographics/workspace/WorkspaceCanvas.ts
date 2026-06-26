@@ -436,6 +436,31 @@ function normalizeBranchMarkerDimensions(canvasState: CanvasState): CanvasState 
     return changed ? { ...canvasState, nodes } : canvasState
 }
 
+function resetStaleAnalyzingMediaDescriptors(canvasState: CanvasState): { state: CanvasState; changed: boolean } {
+    let changed = false
+    const resetAt = Date.now()
+    const nodes = canvasState.nodes.map((node: CanvasNode): CanvasNode => {
+        if ((node.type !== 'image' && node.type !== 'video') || node.descriptor?.status !== 'analyzing') return node
+
+        changed = true
+        return {
+            ...node,
+            descriptor: {
+                ...node.descriptor,
+                status: 'failed',
+                summary: node.descriptor.summary ?? '',
+                entityTags: node.descriptor.entityTags ?? [],
+                styleTags: node.descriptor.styleTags ?? [],
+                source: node.descriptor.source ?? 'analysis',
+                version: node.descriptor.version ?? MEDIA_DESCRIPTOR_VERSION,
+                updatedAt: resetAt,
+            },
+        } as CanvasNode
+    })
+
+    return changed ? { state: { ...canvasState, nodes }, changed } : { state: canvasState, changed: false }
+}
+
 function getBranchMarkerPromptText(node: BranchMarkerNode): string {
     return (node.provenance?.promptText ?? node.pendingState?.promptText ?? '').trim().replace(/\s+/g, ' ')
 }
@@ -913,9 +938,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const normalizedInitialCanvasState: CanvasState | null = options.canvasState
         ? normalizeBranchMarkerDimensions(options.canvasState)
         : options.canvasState
-    const initialFeatureExtractionState = pruneUnconfirmedFeatureExtractionRuns(normalizedInitialCanvasState)
+    const initialMediaAnalysisState = normalizedInitialCanvasState
+        ? resetStaleAnalyzingMediaDescriptors(normalizedInitialCanvasState)
+        : { state: normalizedInitialCanvasState, changed: false }
+    const initialFeatureExtractionState = pruneUnconfirmedFeatureExtractionRuns(initialMediaAnalysisState.state)
     let currentCanvasState: CanvasState | null = initialFeatureExtractionState.state
     let initialUnconfirmedFeatureExtractionRunsPruned = initialFeatureExtractionState.removed
+    let initialStaleMediaAnalysisReset = initialMediaAnalysisState.changed
     let currentDocuments: Document[] = options.documents
     let currentAiChatThreads: AiChatThread[] = options.aiChatThreads
     let panZoom: PanZoomInstance | null = null
@@ -10946,8 +10975,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     ensureConnectionManager()
     renderNodes()
     syncPixiMediaLayer(currentCanvasState)
-    if (initialUnconfirmedFeatureExtractionRunsPruned && currentCanvasState) {
+    if ((initialUnconfirmedFeatureExtractionRunsPruned || initialStaleMediaAnalysisReset) && currentCanvasState) {
         initialUnconfirmedFeatureExtractionRunsPruned = false
+        initialStaleMediaAnalysisReset = false
+        pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(currentCanvasState)
         onCanvasStateChange?.(currentCanvasState)
     }
 
@@ -10984,6 +11015,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             nodes: resolveTopLevelNodeCollisions([...baseCanvasState.nodes, preparedNode]),
         }
 
+        pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(newCanvasState)
         onCanvasStateChange?.(newCanvasState)
 
         // A newly inserted document node gets an initial descriptor from any
@@ -11015,10 +11047,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const normalizedCanvasState = renderStatePlan.state
                 ? normalizeBranchMarkerDimensions(renderStatePlan.state)
                 : renderStatePlan.state
-            const prunedCanvasState = pruneUnconfirmedFeatureExtractionRuns(normalizedCanvasState)
-            const effectiveCanvasState = prunedCanvasState.state
-            if (prunedCanvasState.removed && effectiveCanvasState) onCanvasStateChange?.(effectiveCanvasState)
             pendingLocalCanvasVisualCommit = renderStatePlan.pendingVisualCommit
+            const incomingMatchesLocalVisualCommit = renderStatePlan.usedPendingVisualState || renderStatePlan.acknowledgedPendingVisualState
+            const shouldResetStaleMediaAnalysis = workspaceChanged || (!currentCanvasState && Boolean(normalizedCanvasState) && !incomingMatchesLocalVisualCommit)
+            const mediaAnalysisState = shouldResetStaleMediaAnalysis && normalizedCanvasState
+                ? resetStaleAnalyzingMediaDescriptors(normalizedCanvasState)
+                : { state: normalizedCanvasState, changed: false }
+            const prunedCanvasState = pruneUnconfirmedFeatureExtractionRuns(mediaAnalysisState.state)
+            const effectiveCanvasState = prunedCanvasState.state
+            if ((mediaAnalysisState.changed || prunedCanvasState.removed) && effectiveCanvasState) {
+                pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(effectiveCanvasState)
+                onCanvasStateChange?.(effectiveCanvasState)
+            }
 
             // Stale drag/resize positions from a previous workspace would corrupt
             // getNodeWorldPosition for the new workspace's nodes.
