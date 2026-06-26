@@ -142,6 +142,8 @@ The PIXI media canvas sits **above** the DOM viewport and the generated-media ic
 
 Screen-fixed composer chrome has an additional PIXI glass layer: `workspace-pixi-screen-glass` sits above the PIXI edge/world stack and below the DOM composer/action controls. Before each PIXI render, `pixiMediaLayer` hides that glass layer, captures the current PIXI stage into a render texture, then shows the layer and draws the captured pixels back through a rounded 10px border mask with a per-target liquid normal-map displacement filter and baked closed-strip glass material. Because the source is the PIXI stage, the border refracts PIXI-rendered edges, image/video sprites, generating outlines, and foreground overlays; browser DOM surfaces remain outside the PIXI refraction source.
 
+The screen-glass renderer is intentionally a capture-and-replay pass, not a CSS backdrop filter. The DOM controls provide hit testing and text/icons. PIXI provides the visual refraction by sampling the already-rendered stage. The displacement map is a single stable canvas-backed texture for the renderer lifetime: sync writes new image data into that canvas, resizes the existing `TextureSource` when pane size changes, and calls `texture.source.update()`. The renderer does not swap `displacementSprite.texture` during normal sync, because Pixi filter resources can be retained by GPU bind groups between frames.
+
 1. They host core interaction chrome — drag overlay and resize handles.
 2. They provide stable DOM geometry for selection, drag, resize, and bubble-menu integration.
 

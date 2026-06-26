@@ -53,10 +53,21 @@ const edgeRendererInstances: Array<{
     render: ReturnType<typeof vi.fn>
     destroy: ReturnType<typeof vi.fn>
 }> = []
+const glassBorderRendererInstances: Array<{
+    sync: ReturnType<typeof vi.fn>
+    getCaptureTexture: ReturnType<typeof vi.fn>
+    setCapturing: ReturnType<typeof vi.fn>
+    destroy: ReturnType<typeof vi.fn>
+    container: unknown
+    style: unknown
+}> = []
 const pixiApplicationInstances: Array<{
     destroy: ReturnType<typeof vi.fn>
+    render: ReturnType<typeof vi.fn>
+    renderer: { render: ReturnType<typeof vi.fn> }
     stage: { addChild: ReturnType<typeof vi.fn> }
 }> = []
+let glassCaptureTexture: unknown = null
 
 vi.mock('pixi.js', () => {
     const fakeFrameRequest = { x: 0, y: 0 }
@@ -148,6 +159,9 @@ vi.mock('pixi.js', () => {
         public canvas = document.createElement('canvas') as HTMLCanvasElement
         public init = vi.fn(async () => undefined)
         public render = vi.fn()
+        public renderer = {
+            render: vi.fn(),
+        }
         public destroy = vi.fn()
 
         constructor() {
@@ -163,6 +177,26 @@ vi.mock('pixi.js', () => {
         Texture: FakeTexture,
     }
 })
+
+vi.mock('$src/utils/animations/gradients/pixiGlassBorderRenderer.ts', () => ({
+    PixiGlassBorderRenderer: class FakePixiGlassBorderRenderer {
+        public sync = vi.fn()
+        public getCaptureTexture = vi.fn(() => glassCaptureTexture)
+        public setCapturing = vi.fn()
+        public destroy = vi.fn()
+
+        public constructor(public options: { container: unknown; style: unknown }) {
+            glassBorderRendererInstances.push({
+                sync: this.sync,
+                getCaptureTexture: this.getCaptureTexture,
+                setCapturing: this.setCapturing,
+                destroy: this.destroy,
+                container: options.container,
+                style: options.style,
+            })
+        }
+    },
+}))
 
 vi.mock('$src/utils/domTemplates.ts', () => ({
     html: (_template: unknown, ..._values: unknown[]) => document.createElement('div'),
@@ -281,6 +315,28 @@ vi.mock('$src/settings.ts', () => ({
                 zoomScaling: { minZoom: 0.4 },
             },
         },
+        canvasChrome: {
+            glassBorder: {
+                enabled: true,
+                widthPx: 10,
+                displacementScalePx: 34,
+                displacementMapMaxDimensionPx: 1600,
+                edgeRefractionStrength: 0.95,
+                surfaceWaveStrength: 0.26,
+                causticBandStrength: 0.34,
+                displacementFrequencyX: 4.8,
+                displacementFrequencyY: 3.9,
+                bodyColor: '#ffffff',
+                bodyAlpha: 0.035,
+                highlightColor: '#ffffff',
+                highlightAlpha: 0.2,
+                shadowColor: '#415061',
+                shadowAlpha: 0.1,
+                materialColors: ['#ffffff', '#f7fbff'],
+                materialTailAlpha: 1,
+                glassMaterial: {},
+            },
+        },
         aiChatThread: {
             panel: {
                 actions: {
@@ -375,6 +431,75 @@ function createTestLayer(): ReturnType<typeof createPixiMediaLayer> {
     })
 }
 
+function setElementRect(
+    element: HTMLElement,
+    rect: { left: number; top: number; width: number; height: number }
+): void {
+    Object.defineProperty(element, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => ({
+            ...rect,
+            right: rect.left + rect.width,
+            bottom: rect.top + rect.height,
+            x: rect.left,
+            y: rect.top,
+            toJSON: () => rect,
+        }),
+    })
+}
+
+function createLayerWithScreenGlassTargets(): ReturnType<typeof createPixiMediaLayer> {
+    const rootEl = document.createElement('div')
+    rootEl.className = 'workspace-canvas'
+    const leftPanel = document.createElement('div')
+    leftPanel.className = 'workspace-canvas-action-panel-left'
+    leftPanel.style.borderRadius = '50%'
+    leftPanel.style.borderTopLeftRadius = '50%'
+    leftPanel.style.borderTopRightRadius = '50%'
+    leftPanel.style.borderBottomRightRadius = '50%'
+    leftPanel.style.borderBottomLeftRadius = '50%'
+    const paneEl = document.createElement('div')
+    const viewportEl = document.createElement('div')
+    const composerEl = document.createElement('div')
+    composerEl.className = 'workspace-canvas-global-composer'
+    composerEl.style.borderRadius = '999px'
+    composerEl.style.borderTopLeftRadius = '999px'
+    composerEl.style.borderTopRightRadius = '999px'
+    composerEl.style.borderBottomRightRadius = '999px'
+    composerEl.style.borderBottomLeftRadius = '999px'
+    const rightPanel = document.createElement('div')
+    rightPanel.className = 'workspace-canvas-action-panel-right'
+    rightPanel.style.borderRadius = '22px'
+    rightPanel.style.borderTopLeftRadius = '22px'
+    rightPanel.style.borderTopRightRadius = '22px'
+    rightPanel.style.borderBottomRightRadius = '22px'
+    rightPanel.style.borderBottomLeftRadius = '22px'
+
+    setElementRect(paneEl, { left: 10, top: 20, width: 500, height: 300 })
+    setElementRect(leftPanel, { left: 30, top: 260, width: 80, height: 56 })
+    setElementRect(composerEl, { left: 140, top: 250, width: 300, height: 64 })
+    setElementRect(rightPanel, { left: 460, top: 260, width: 56, height: 56 })
+
+    paneEl.appendChild(composerEl)
+    paneEl.appendChild(viewportEl)
+    rootEl.appendChild(leftPanel)
+    rootEl.appendChild(paneEl)
+    rootEl.appendChild(rightPanel)
+    document.body.appendChild(rootEl)
+
+    return createPixiMediaLayer({
+        paneEl,
+        viewportEl,
+        getWorkspaceId: () => 'workspace-1',
+        selectionColors: {
+            marqueeStroke: '#000',
+            marqueeFill: '#000',
+            groupOverlayStroke: '#000',
+            groupOverlayFill: '#000',
+        },
+    })
+}
+
 function clearMocks(): void {
     mediaNodeRegistryCalls.dispatchSync.mockReset()
     mediaNodeRegistryCalls.dispatchRemove.mockReset()
@@ -384,6 +509,8 @@ function clearMocks(): void {
     edgeRendererInstances.length = 0
     pixiApplicationInstances.length = 0
     outlineRendererInstances.length = 0
+    glassBorderRendererInstances.length = 0
+    glassCaptureTexture = null
 }
 
 describe('createPixiMediaLayer runtime behavior', () => {
@@ -399,6 +526,7 @@ describe('createPixiMediaLayer runtime behavior', () => {
 
     afterEach(() => {
         vi.restoreAllMocks()
+        document.body.innerHTML = ''
     })
 
     it('initializes asynchronously and transitions health to ready', async () => {
@@ -518,6 +646,78 @@ describe('createPixiMediaLayer runtime behavior', () => {
         expect(generated?.snakeLengthFraction).toBeGreaterThan(0)
     })
 
+    it('syncs screen-glass border geometry from pane-local composer and action-panel targets', async () => {
+        const layer = createLayerWithScreenGlassTargets()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const glassRenderer = glassBorderRendererInstances.at(-1)
+        expect(glassRenderer).toBeTruthy()
+        glassRenderer!.sync.mockReset()
+
+        layer.renderNow()
+
+        const syncCall = glassRenderer!.sync.mock.calls.at(-1)
+        expect(syncCall).toBeTruthy()
+        expect(syncCall?.[1]).toEqual({ width: 500, height: 300 })
+        expect(syncCall?.[0]).toEqual([
+            {
+                id: 'workspace-action-panel-left',
+                x: 20,
+                y: 240,
+                width: 80,
+                height: 56,
+                radius: 28,
+                visible: true,
+            },
+            {
+                id: 'workspace-global-composer',
+                x: 130,
+                y: 230,
+                width: 300,
+                height: 64,
+                radius: 32,
+                visible: true,
+            },
+            {
+                id: 'workspace-action-panel-right',
+                x: 450,
+                y: 240,
+                width: 56,
+                height: 56,
+                radius: 22,
+                visible: true,
+            },
+        ])
+    })
+
+    it('captures the Pixi stage with screen glass hidden, restores it, then renders the final stage', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const glassRenderer = glassBorderRendererInstances.at(-1)!
+        const app = pixiApplicationInstances.at(-1)!
+        glassCaptureTexture = { label: 'capture-texture' }
+        glassRenderer.setCapturing.mockClear()
+        glassRenderer.getCaptureTexture.mockClear()
+        app.renderer.render.mockClear()
+        app.render.mockClear()
+
+        layer.renderNow()
+
+        expect(glassRenderer.getCaptureTexture).toHaveBeenCalled()
+        expect(glassRenderer.setCapturing.mock.calls.map((call) => call[0])).toEqual([true, false])
+        expect(app.renderer.render).toHaveBeenCalledWith({
+            container: app.stage,
+            target: glassCaptureTexture,
+            clear: true,
+            clearColor: [0, 0, 0, 0],
+        })
+        expect(app.render).toHaveBeenCalledTimes(1)
+        expect(glassRenderer.setCapturing.mock.invocationCallOrder[0]).toBeLessThan(app.renderer.render.mock.invocationCallOrder[0])
+        expect(app.renderer.render.mock.invocationCallOrder[0]).toBeLessThan(glassRenderer.setCapturing.mock.invocationCallOrder[1])
+        expect(glassRenderer.setCapturing.mock.invocationCallOrder[1]).toBeLessThan(app.render.mock.invocationCallOrder[0])
+    })
+
     it('forwards viewport changes to the edge renderer', async () => {
         const layer = createTestLayer()
         await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
@@ -561,6 +761,7 @@ describe('createPixiMediaLayer runtime behavior', () => {
         expect(mediaNodeRegistryCalls.destroy).toHaveBeenCalled()
         expect(app?.destroy).toHaveBeenCalledWith(true, { children: true, texture: false, textureSource: false })
         expect(outlineRendererInstances.at(-1)?.destroy).toHaveBeenCalled()
+        expect(glassBorderRendererInstances.at(-1)?.destroy).toHaveBeenCalled()
         expect(layer.getHealth()).toBe('destroyed')
         const edgeRenderer = edgeRendererInstances.at(-1)
         expect(edgeRenderer?.destroy).toHaveBeenCalled()

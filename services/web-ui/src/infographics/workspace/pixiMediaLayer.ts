@@ -218,6 +218,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     const generatingBorderLayer = new Container({ label: 'workspace-pixi-generating-borders' })
     const fgLayer = new Container({ label: 'workspace-pixi-fg' })
     const edgeLayer = new Container({ label: 'workspace-pixi-edges' })
+    // Screen-fixed glass sits in the Pixi stage, not in CSS. It is above the
+    // world/edge/foreground layers so it can refract those pixels, but below the
+    // DOM composer/buttons that remain normal interactive controls.
     const screenGlassLayer = new Container({ label: 'workspace-pixi-screen-glass' })
     const mediaNodeRegistry: MediaNodeRegistry = createMediaNodeRegistry()
     // Tracks which non-image nodes the registry currently owns so sync() can
@@ -467,6 +470,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         syncScreenGlassBorders()
         const captureTexture = glassBorderRenderer.getCaptureTexture()
         if (captureTexture) {
+            // Capture the stage with the glass layer hidden. If the layer stayed
+            // visible, the next frame would sample and distort the previous
+            // glass result, causing feedback and stale-resource pressure.
             glassBorderRenderer.setCapturing(true)
             try {
                 app.renderer.render({
@@ -479,13 +485,21 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 glassBorderRenderer.setCapturing(false)
             }
         }
+        // Final render draws the live stage, including the restored glass layer
+        // that samples the captureTexture generated above.
         app.render()
     }
 
+    // Screen-glass geometry is resolved at render time from DOM client rects
+    // because the composer/action panels are screen-fixed DOM controls, not
+    // world-space canvas nodes.
     function syncScreenGlassBorders(): void {
         glassBorderRenderer.sync(getScreenGlassBorderDatums(), getPaneViewportSize())
     }
 
+    // Prefer client dimensions because the Pixi canvas is resized to the pane.
+    // getBoundingClientRect is a fallback for test DOMs and transient layout
+    // states where clientWidth/clientHeight are not populated yet.
     function getPaneViewportSize(): { width: number; height: number } {
         if (paneEl.clientWidth > 0 && paneEl.clientHeight > 0) {
             return {
@@ -500,6 +514,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
     }
 
+    // Build one screen-space datum per glass target. The left/right action
+    // panels are searched from the workspace root because they are siblings of
+    // the pane, while the global composer is inside the pane.
     function getScreenGlassBorderDatums(): PixiGlassBorderDatum[] {
         const glassBorder = settings.canvasChrome.glassBorder
         if (!glassBorder.enabled) return []
@@ -526,6 +543,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             if (!target.element) continue
             const rect = target.element.getBoundingClientRect()
             if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) continue
+            // Renderer coordinates are pane-local screen pixels. That keeps the
+            // glass fixed to the DOM chrome while the world pans/zooms below it.
             datums.push({
                 id: target.id,
                 x: rect.left - paneRect.left,
@@ -540,6 +559,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         return datums
     }
 
+    // Use the largest corner radius so a pill-shaped composer and circular
+    // action buttons get matching rounded glass. Clamp to half size to avoid
+    // invalid Pixi rounded-rect geometry.
     function getElementBorderRadius(element: HTMLElement, width: number, height: number): number {
         const styles = window.getComputedStyle(element)
         const radius = Math.max(
@@ -551,6 +573,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         return Math.max(0, Math.min(radius, width / 2, height / 2))
     }
 
+    // CSS allows radii like `999px`, `50%`, and two-value elliptical syntax.
+    // The glass renderer needs one circular radius, so take the first radius
+    // component and resolve percentages against the smaller box dimension.
     function parseCssRadius(value: string, width: number, height: number): number {
         const firstRadius = value.trim().split(/\s+/)[0]
         if (firstRadius.endsWith('%')) {

@@ -69,16 +69,24 @@ type GlassBorderMeshGeometry = {
 type TextureCanvas = OffscreenCanvas | HTMLCanvasElement
 type TextureCanvasContext = OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D
 
+// Local numeric clamp used in the pixel baker. Keeping it tiny and local avoids
+// pulling broader utility code into this Pixi-only renderer.
 function clamp01(value: number): number {
     return Math.max(0, Math.min(1, value))
 }
 
+// Settings accept CSS-like hex strings, while Pixi drawing APIs want packed
+// numeric colors. Invalid values intentionally fall back instead of throwing so
+// a bad tuning token cannot break canvas rendering.
 function parseHexColor(value: string, fallback: number): number {
     const normalized = value.trim().replace(/^#/, '')
     if (!/^[\da-f]{6}$/i.test(normalized)) return fallback
     return Number.parseInt(normalized, 16)
 }
 
+// The displacement map is CPU-baked into a tiny canvas and uploaded into one
+// stable Pixi texture. OffscreenCanvas is preferred when available; happy-dom
+// and older browsers fall back to an HTML canvas.
 function createTextureCanvas(width: number, height: number): TextureCanvas {
     if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(width, height)
     const canvas = document.createElement('canvas')
@@ -87,6 +95,9 @@ function createTextureCanvas(width: number, height: number): TextureCanvas {
     return canvas
 }
 
+// Canvas context creation can throw in some restricted canvas implementations.
+// Treat that as "glass refraction unavailable" while leaving the visual overlay
+// and renderer lifecycle intact.
 function getTextureCanvasContext(canvas: TextureCanvas): TextureCanvasContext | null {
     try {
         return canvas.getContext('2d') as TextureCanvasContext | null
@@ -95,11 +106,17 @@ function getTextureCanvasContext(canvas: TextureCanvas): TextureCanvasContext | 
     }
 }
 
+// Neutral displacement is encoded as 128/128. A neutral map must move no source
+// pixels, which keeps the border invisible over flat backgrounds and gives the
+// filter valid texture data before the first geometry sync.
 function fillNeutralDisplacementCanvas(context: TextureCanvasContext, width: number, height: number): void {
     context.fillStyle = 'rgb(128, 128, 128)'
     context.fillRect(0, 0, width, height)
 }
 
+// Signed-distance field for a rounded rectangle in screen space. Negative is
+// inside the rectangle, zero is the centerline of the visible border, positive
+// is outside. The displacement baker uses this as the glass cross-section.
 function getRoundedRectSignedDistance(
     px: number,
     py: number,
@@ -115,6 +132,9 @@ function getRoundedRectSignedDistance(
     return Math.hypot(outsideX, outsideY) + Math.min(Math.max(qx, qy), 0) - radius
 }
 
+// Numerical gradient of the rounded-rect SDF. This gives a stable outward
+// normal on straight sides and corners, which is what creates edge refraction
+// that follows the actual input/button shape instead of a generic screen wave.
 function getRoundedRectNormal(
     px: number,
     py: number,
@@ -130,11 +150,16 @@ function getRoundedRectNormal(
     return { x: dx / length, y: dy / length }
 }
 
+// The border mesh is a closed strip around the rounded perimeter. Sampling more
+// densely for wider/longer borders keeps corners smooth without allowing a huge
+// prompt bar to create unbounded geometry.
 function getGlassBorderSampleCount(perimeter: number, borderWidth: number): number {
     const spacing = Math.max(1, borderWidth * 0.35)
     return Math.max(48, Math.min(1600, Math.ceil(perimeter / spacing)))
 }
 
+// MeshGeometry is updated by replacing typed arrays. Pixi v8 accepts this shape
+// for dynamic meshes and avoids rebuilding DisplayObjects for every sync.
 function setMeshVertex(
     geometry: GlassBorderMeshGeometry,
     vertexIndex: number,
@@ -150,6 +175,10 @@ function setMeshVertex(
     geometry.uvs[positionIndex + 1] = v
 }
 
+// Builds the visible closed glass strip. The strip is separate from the
+// displacement mask: the mask refracts captured canvas pixels, while this mesh
+// adds the faint specular body that makes the border read as glass on top of
+// busy imagery without becoming visible on plain white.
 function buildClosedRoundedBorderGeometry(
     datum: PixiGlassBorderDatum,
     borderWidth: number,
@@ -208,6 +237,9 @@ function buildClosedRoundedBorderGeometry(
     return geometry
 }
 
+// Draws a ring into Graphics by filling the outer rounded rect and cutting the
+// inner one out. This mask is applied to the refraction sprite so only the 10px
+// border refracts the captured Pixi stage.
 function drawGlassBorderMask(graphics: Graphics, datum: PixiGlassBorderDatum, borderWidth: number, color: number, alpha: number): void {
     const halfWidth = borderWidth / 2
     const outerX = datum.x - halfWidth
@@ -229,6 +261,9 @@ function drawGlassBorderMask(graphics: Graphics, datum: PixiGlassBorderDatum, bo
     }
 }
 
+// One-pixel highlight/shadow strokes ride the inner and outer rim. They are
+// intentionally subtle; the heavy lifting is the displaced captured content,
+// not an opaque decorative outline.
 function drawGlassBorderStroke(graphics: Graphics, datum: PixiGlassBorderDatum, offset: number, color: number, alpha: number): void {
     const width = Math.max(1, datum.width + offset * 2)
     const height = Math.max(1, datum.height + offset * 2)
@@ -237,12 +272,18 @@ function drawGlassBorderStroke(graphics: Graphics, datum: PixiGlassBorderDatum, 
     graphics.stroke({ color, alpha, width: 1 })
 }
 
+// The map is screen-space, but it does not need to match full retina canvas
+// size. Capping the longest side keeps CPU image-data writes bounded while the
+// displacement sprite stretches the map across the viewport.
 function getDisplacementMapScale(viewport: ViewportSize, style: PixiGlassBorderStyle): number {
     const maxDimension = Math.max(256, Math.round(style.displacementMapMaxDimensionPx || 1400))
     const longestSide = Math.max(1, viewport.width, viewport.height)
     return Math.min(1, maxDimension / longestSide)
 }
 
+// The displacement map is expensive enough to avoid rewriting when geometry and
+// tuning values have not materially changed. Geometry is rounded to tenths of a
+// pixel so tiny DOM layout noise does not force a full image-data repaint.
 function getDisplacementSignature(
     datums: ReadonlyArray<PixiGlassBorderDatum>,
     viewport: ViewportSize,
@@ -271,6 +312,10 @@ function getDisplacementSignature(
     ].join(',')
 }
 
+// CPU-bakes a two-channel normal/displacement map for every visible glass ring.
+// R/G are signed displacement vectors centered on 128. B carries rim volume for
+// debugging/future material use, and A stays opaque so Pixi samples defined data
+// across the whole map. Pixels outside every ring stay neutral 128/128/128/255.
 function writeLiquidGlassDisplacementMap(
     imageData: ImageData,
     mapWidth: number,
@@ -294,6 +339,9 @@ function writeLiquidGlassDisplacementMap(
     const frequencyY = Number.isFinite(style.displacementFrequencyY) ? style.displacementFrequencyY : 3.8
 
     for (const datum of datums) {
+        // Iterate only the expanded border bounds for each target. The map can
+        // cover the whole pane, but most pixels are not near glass and should
+        // remain untouched neutral values.
         const outerBounds = {
             minX: Math.max(0, Math.floor((datum.x - halfBorderWidth - 1) * mapScale)),
             minY: Math.max(0, Math.floor((datum.y - halfBorderWidth - 1) * mapScale)),
@@ -315,6 +363,10 @@ function writeLiquidGlassDisplacementMap(
                 const centerDistance = getRoundedRectSignedDistance(screenX, screenY, centerRect)
                 if (centerDistance < -halfBorderWidth || centerDistance > halfBorderWidth) continue
 
+                // ringProgress is the border cross-section: 0 = inner edge,
+                // 0.5 = centerline, 1 = outer edge. The normal term pinches
+                // source pixels across edges while tangential waves smear
+                // content around the perimeter like liquid glass.
                 const ringProgress = clamp01((centerDistance + halfBorderWidth) / borderWidth)
                 const rimVolume = Math.sin(ringProgress * Math.PI)
                 const edgePinch = Math.cos(ringProgress * Math.PI)
@@ -340,6 +392,17 @@ function writeLiquidGlassDisplacementMap(
     }
 }
 
+// Screen-space Pixi glass border renderer for DOM chrome that sits over the
+// canvas, such as the bottom composer and the adjacent action buttons.
+//
+// Important split:
+// - pixiMediaLayer captures the Pixi stage into `renderTexture`.
+// - `refractionSprite` draws that capture back through `DisplacementFilter`.
+// - `maskGraphics` limits the refraction to a rounded 10px ring.
+// - `materialContainer` overlays a faint baked closed-strip glass texture.
+//
+// Browser DOM is never sampled by this renderer. Only Pixi-rendered canvas
+// layers below the screen glass layer can distort under the ring.
 export class PixiGlassBorderRenderer {
     private readonly container: Container
     private readonly style: PixiGlassBorderStyle
@@ -364,6 +427,11 @@ export class PixiGlassBorderRenderer {
     private hasTargets = false
     private destroyed = false
 
+    // Constructor wires long-lived Pixi resources once. The displacement
+    // texture is intentionally stable for the entire renderer lifetime because
+    // Pixi filter bind groups can keep references to texture resources between
+    // frames; swapping and destroying that texture can leave WebGPU/WebGL with a
+    // null bind-group resource.
     constructor(options: PixiGlassBorderRendererOptions) {
         this.container = options.container
         this.style = options.style
@@ -376,6 +444,7 @@ export class PixiGlassBorderRenderer {
         this.displacementSprite = new Sprite(this.displacementTexture)
         this.displacementSprite.label = 'workspace-pixi-glass-displacement-map'
         this.displacementSprite.eventMode = 'none'
+        this.displacementSprite.renderable = false
         this.displacementFilter = new DisplacementFilter({
             sprite: this.displacementSprite,
             scale: Math.max(0, this.style.displacementScalePx),
@@ -408,6 +477,9 @@ export class PixiGlassBorderRenderer {
         this.container.eventMode = 'none'
     }
 
+    // Sync receives screen-space rectangles from pixiMediaLayer. It decides
+    // whether there is any visible glass, sizes the stage capture, refreshes the
+    // displacement map only when needed, and updates mask/material geometry.
     sync(datums: ReadonlyArray<PixiGlassBorderDatum>, viewport: ViewportSize): void {
         if (this.destroyed) return
         const visibleDatums = this.style.enabled
@@ -418,6 +490,9 @@ export class PixiGlassBorderRenderer {
         this.container.renderable = this.hasTargets
 
         if (!this.hasTargets) {
+            // Leave long-lived textures in place, but clear draw state and mark
+            // the displacement signature dirty so the next visible sync writes a
+            // fresh map for the new geometry.
             this.maskGraphics.clear()
             this.highlightGraphics.clear()
             this.displacementSignature = ''
@@ -437,15 +512,22 @@ export class PixiGlassBorderRenderer {
         this.syncMaterialMeshes(visibleDatums)
     }
 
+    // The media layer asks for this capture texture before rendering. Returning
+    // null when there are no visible targets skips the extra stage capture.
     getCaptureTexture(): RenderTexture | null {
         return this.hasTargets ? this.renderTexture : null
     }
 
+    // During stage capture, the glass layer must hide itself or it would capture
+    // and refract its own previous frame. The caller restores it in a finally
+    // block before the final app.render().
     setCapturing(capturing: boolean): void {
         if (this.destroyed) return
         this.container.renderable = this.hasTargets && !capturing
     }
 
+    // Destroy releases resources that this renderer owns. The displacement
+    // texture is destroyed exactly once here, not during sync, for filter safety.
     destroy(): void {
         if (this.destroyed) return
         this.destroyed = true
@@ -467,6 +549,8 @@ export class PixiGlassBorderRenderer {
         this.renderTexture = null
     }
 
+    // Capture texture mirrors the pane in CSS pixels and caps resolution at 2x.
+    // Resizing the existing RenderTexture preserves the sprite/filter wiring.
     private syncRenderTexture(viewport: ViewportSize): void {
         const width = Math.max(1, Math.ceil(viewport.width))
         const height = Math.max(1, Math.ceil(viewport.height))
@@ -492,6 +576,9 @@ export class PixiGlassBorderRenderer {
         this.renderTextureResolution = resolution
     }
 
+    // Rebuilds the CPU displacement map in place. This is the runtime-crash
+    // sensitive path: update the existing canvas/source, do not assign a new
+    // texture to `displacementSprite.texture` and do not destroy an old texture.
     private syncDisplacementMap(datums: ReadonlyArray<PixiGlassBorderDatum>, viewport: ViewportSize): void {
         const signature = getDisplacementSignature(datums, viewport, this.style)
         if (signature === this.displacementSignature) return
@@ -500,17 +587,22 @@ export class PixiGlassBorderRenderer {
         const mapWidth = Math.max(1, Math.ceil(viewport.width * mapScale))
         const mapHeight = Math.max(1, Math.ceil(viewport.height * mapScale))
         if (mapWidth !== this.displacementMapWidth || mapHeight !== this.displacementMapHeight) {
+            // Canvas resize clears bitmap contents and can invalidate context
+            // state. Pixi's source resize must see the same dimensions before
+            // the context writes and source.update() uploads the new pixels.
             this.displacementCanvas.width = mapWidth
             this.displacementCanvas.height = mapHeight
             this.displacementMapWidth = mapWidth
             this.displacementMapHeight = mapHeight
-            this.displacementContext = getTextureCanvasContext(this.displacementCanvas)
             this.displacementTexture.source.resize(mapWidth, mapHeight)
+            this.displacementContext = getTextureCanvasContext(this.displacementCanvas)
         }
 
         const context = this.displacementContext
         if (!context) return
 
+        // Create fresh ImageData each time so the neutral fill starts from a
+        // clean buffer and no stale ring pixels remain after targets move.
         const imageData = context.createImageData(mapWidth, mapHeight)
         writeLiquidGlassDisplacementMap(imageData, mapWidth, mapHeight, mapScale, datums, this.style)
         context.putImageData(imageData, 0, 0)
@@ -518,6 +610,8 @@ export class PixiGlassBorderRenderer {
         this.displacementSignature = signature
     }
 
+    // The mask defines the actual refractive area; highlights draw extra
+    // low-alpha rim cues on top of the refraction and material mesh.
     private syncMaskAndHighlights(datums: ReadonlyArray<PixiGlassBorderDatum>): void {
         const borderWidth = Math.max(0, this.style.widthPx)
         const bodyColor = parseHexColor(this.style.bodyColor, 0xffffff)
@@ -533,6 +627,9 @@ export class PixiGlassBorderRenderer {
         }
     }
 
+    // Keeps one mesh per target id so stable composer/buttons do not churn Pixi
+    // DisplayObjects. Geometry arrays are replaced because target dimensions and
+    // radius can change with responsive layout.
     private syncMaterialMeshes(datums: ReadonlyArray<PixiGlassBorderDatum>): void {
         const activeIds = new Set(datums.map((datum) => datum.id))
         this.destroyStaleEntries(activeIds)
@@ -550,6 +647,8 @@ export class PixiGlassBorderRenderer {
         }
     }
 
+    // Create the material mesh for one target. The baked texture is shared by
+    // all border meshes; only geometry differs per rounded rectangle.
     private createEntry(id: string): GlassBorderEntry {
         const geometry = new MeshGeometry()
         const mesh = new Mesh({ geometry, texture: this.materialTexture })
@@ -561,12 +660,16 @@ export class PixiGlassBorderRenderer {
         return entry
     }
 
+    // Any target missing from the latest visible set must release its mesh so it
+    // stops drawing and the material container does not retain stale buttons.
     private destroyStaleEntries(activeIds: Set<string>): void {
         for (const id of Array.from(this.entries.keys())) {
             if (!activeIds.has(id)) this.destroyEntry(id)
         }
     }
 
+    // Remove the mesh from the material container before destroying the mesh and
+    // geometry. This mirrors Pixi's ownership tree and keeps destroy idempotent.
     private destroyEntry(id: string): void {
         const entry = this.entries.get(id)
         if (!entry) return
@@ -576,6 +679,8 @@ export class PixiGlassBorderRenderer {
         this.entries.delete(id)
     }
 
+    // Cheap screen-space culling. Offscreen glass targets do not need mask,
+    // material, capture, or displacement work.
     private isInViewport(datum: PixiGlassBorderDatum, viewport: ViewportSize): boolean {
         const borderWidth = Math.max(0, this.style.widthPx)
         return datum.x + datum.width + borderWidth >= 0
