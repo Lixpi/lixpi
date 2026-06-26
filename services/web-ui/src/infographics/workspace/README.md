@@ -244,7 +244,7 @@ Image pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [Rendering Engin
 
 New PIXI image entries must initialize their sprite position, size, and placeholder rectangle during the same first `sync()` that inserts them into the spatial index. They should not need a later viewport change, click, or store render before their pixels line up with the DOM node.
 
-PIXI renderers must not destroy or replace GPU-backed buffers during ordinary canvas sync, selection, edge, or outline animation work. Image-entry removal and texture eviction defer actual disposal for several animation frames, edge and foreground `Graphics` objects hide/reuse instead of being recreated, and dynamic mesh renderers use fixed-size buffers with in-place updates so Pixi does not recreate WebGPU buffers when outline or glass geometry changes. The media layer disables Pixi's automatic renderer resource GC and wraps native `GPUBuffer.destroy()` with a short rAF deferral because Pixi can resize or unload internal batch buffers during the same render turn that submits WebGPU commands. This keeps WebGPU command buffers from referencing resources that a newer canvas update has already destroyed.
+PIXI renderers must not destroy or replace GPU-backed buffers during ordinary canvas sync, selection, edge, or outline animation work. Edge and foreground `Graphics` objects hide/reuse instead of being recreated, and dynamic mesh renderers use fixed-size buffers with in-place updates so Pixi does not recreate WebGPU buffers when outline or glass geometry changes. The media layer disables Pixi's automatic renderer resource GC and wraps native `GPUBuffer.destroy()` with a short rAF deferral because Pixi can resize or unload internal batch buffers during the same render turn that submits WebGPU commands. This keeps WebGPU command buffers from referencing resources that a newer canvas update has already destroyed.
 
 ### PIXI Media Debug Dump
 
@@ -256,9 +256,9 @@ Copy a dump from DevTools:
 copy(JSON.stringify(window.__lixpiPixiMediaDebugDump?.(), null, 2))
 ```
 
-The dump contains the workspace id, renderer health, viewport, pane dimensions, cache counters, one snapshot per PIXI image entry, recent media-layer events, and native `GPUBuffer.destroy()` stack traces. URLs are sanitized so object-store auth tokens are not pasted into bug reports.
+The dump contains the workspace id, renderer health, viewport, pane dimensions, cache counters, one snapshot per PIXI image entry, recent compact media-layer events, and native `GPUBuffer.destroy()` stack traces. URLs are sanitized so object-store auth tokens are not pasted into bug reports.
 
-For live event streaming while reproducing a flaky case:
+For verbose event payloads and live console streaming while reproducing a flaky case:
 
 ```js
 localStorage.setItem('lixpi.debug.pixiMedia', '1')

@@ -189,7 +189,7 @@ export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
     // across renders; geometry is only rebuilt when the datum fingerprint
     // changes. This avoids the original O(edges) destroy+alloc+GPU-upload
     // cycle on every `scheduleEdgesRender` call.
-    const edgeGraphics = new Map<string, { g: Graphics; key: string; active: boolean }>()
+    const edgeGraphics = new Map<string, { g: Graphics; key: string }>()
 
     // Teardown-only destruction path. Normal render hides missing edges so Pixi
     // does not destroy Graphics buffers while WebGPU may still be submitting.
@@ -200,8 +200,7 @@ export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
 
     // Keep the DisplayObject and GPU allocations around for reuse, but remove
     // it from drawing and hit-testing.
-    function hideEntry(entry: { g: Graphics; active: boolean }): void {
-        entry.active = false
+    function hideEntry(entry: { g: Graphics }): void {
         entry.g.renderable = false
     }
 
@@ -248,7 +247,6 @@ export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
             const existing = edgeGraphics.get(edge.id)
 
             if (existing) {
-                existing.active = true
                 existing.g.renderable = true
                 // Reuse Graphics object. Only repaint if the edge actually changed.
                 if (existing.key !== key) {
@@ -259,7 +257,7 @@ export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
                 const g = new Graphics()
                 container.addChild(g)
                 paintEdge(g, edge, viewport)
-                edgeGraphics.set(edge.id, { g, key, active: true })
+                edgeGraphics.set(edge.id, { g, key })
             }
         }
     }

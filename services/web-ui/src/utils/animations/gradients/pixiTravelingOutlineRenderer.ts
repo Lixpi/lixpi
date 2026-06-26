@@ -54,7 +54,7 @@ export type PixiTravelingOutlineRendererOptions = {
     getStrokeScale?: () => number
 }
 
-const OUTLINE_GEOMETRY_RING_SIZE = 8
+const OUTLINE_GEOMETRY_RING_SIZE = 3
 const TRAVELING_SNAKE_MIN_SAMPLE_COUNT = 32
 const TRAVELING_SNAKE_MAX_SAMPLE_COUNT = 1440
 
@@ -488,9 +488,10 @@ function buildTravelingSnakeMeshGeometry(
 }
 
 // Owns animated Pixi meshes for generated-media progress outlines. Each entry
-// keeps a small ring of fixed-size mesh slots so WebGPU can render one slot
-// while the next frame writes another slot, avoiding same-buffer overwrite and
-// buffer replacement during rapid prompt/drag/model updates.
+// keeps a small ring of fixed-size mesh slots so WebGPU can render a submitted
+// slot while later frames write other slots. Three slots covers the current,
+// previous, and next-frame buffers without multiplying geometry memory by an
+// arbitrary safety factor.
 export class PixiTravelingOutlineRenderer {
     private readonly container: Container
     private readonly style: PixiTravelingOutlineStyle
@@ -676,8 +677,8 @@ export class PixiTravelingOutlineRenderer {
         this.syncSlotVisibility(entry)
     }
 
-    // Only the latest painted slot renders. Older slots stay allocated so their
-    // GPU buffers can safely retire before being reused.
+    // Only the latest painted slot renders. Older slots stay allocated briefly
+    // so their GPU buffers can retire before being reused.
     private syncSlotVisibility(entry: OutlineEntry): void {
         for (let index = 0; index < entry.slots.length; index++) {
             entry.slots[index].mesh.renderable = entry.active && entry.renderable && index === entry.activeSlotIndex
