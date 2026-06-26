@@ -54,7 +54,7 @@ export const getTableDefinitions = () => [
             { name: 'updatedAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
         ],
         // Reverse lookup "members of an organization" (base key is per-user, so it
-        // can't answer that). Used by the billing allowance projection's
+        // can't answer that). Used by the metrics allowance projection's
         // Organization.getOrganizationMembers (query indexName: 'organizationId').
         globalSecondaryIndexes: [
             { name: 'organizationId', hashKey: 'organizationId', projectionType: 'ALL' as const },

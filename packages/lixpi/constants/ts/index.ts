@@ -17,7 +17,7 @@ export const STREAM_STATUS = AI_INTERACTION_CONSTANTS.STREAM_STATUS as {
 export type StreamStatus = typeof STREAM_STATUS[keyof typeof STREAM_STATUS]
 
 
-export const BILLING_CONFIG: Record<string, string> = {
+export const METRICS_CONFIG: Record<string, string> = {
     defaultCurrency: 'usd',
 }
 

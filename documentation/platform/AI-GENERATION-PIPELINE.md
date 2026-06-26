@@ -106,7 +106,7 @@ The workflow's state is a `TypedDict` (`ProviderState`) that flows through every
 | `generated_image_prompt` | `str` | Enhanced prompt extracted from the text model's `generate_image` tool call. |
 | `reference_images` | `list[str]` | Data URLs of selected reference images, extracted after the tool call. |
 | `image_size` | `str` | Requested size (`1024x1024`, `auto`, etc.). |
-| `image_usage` | `dict` | Image generation usage stats for billing. |
+| `image_usage` | `dict` | Image generation usage stats for metrics. |
 
 ### Video-Specific Fields
 
@@ -124,7 +124,7 @@ The workflow's state is a `TypedDict` (`ProviderState`) that flows through every
 | `videoReferenceImages` | `string[]` | VLM-selected style/content references (≤3). |
 | `videoSourceForExtension` | `string` | `nats-obj://…` URI of a source MP4 to extend (multi-turn). |
 | `generatedVideos` | `string[]` | Resulting video URLs/ids. |
-| `videoUsage` | `VideoUsage` | `{ durationSeconds, resolution, aspectRatio }` for billing. |
+| `videoUsage` | `VideoUsage` | `{ durationSeconds, resolution, aspectRatio }` for metrics. |
 
 ## Dual-Model Architecture
 
@@ -336,7 +336,7 @@ sequenceDiagram
 - **Video** — `reportVideoUsage` ([`usage-reporter.ts`](../../services/api/src/llm/usage/usage-reporter.ts)) computes per-second cost from the model's video pricing metadata and returns a `VideoUsageReport`.
 
 {% callout type="note" %}
-Usage is computed by the reporter and, when billing is enabled (`BILLING_ENABLED=true`), published to NATS as `metrics.usage.ai` usage events — one per modality, keyed by the run's `workflowId` with a 1-based `workflowSeq`. The publish happens in `calculateUsage` ([`base-provider.ts`](../../services/api/src/llm/providers/base-provider.ts)) via the billing client ([`services/api/src/billing/`](../../services/api/src/billing/)); it is fire-and-forget and never on the response latency path. `END_STREAM` still does not carry usage — usage travels on the billing subject, not the token stream. When billing is disabled the reporter still computes and logs, with no publish.
+Usage is computed by the reporter and, when metrics is enabled (`METRICS_ENABLED=true`), published to NATS as `metrics.usage.ai` usage events — one per modality, keyed by the run's `workflowId` with a 1-based `workflowSeq`. The publish happens in `calculateUsage` ([`base-provider.ts`](../../services/api/src/llm/providers/base-provider.ts)) via the metrics client ([`services/api/src/metrics/`](../../services/api/src/metrics/)); it is fire-and-forget and never on the response latency path. `END_STREAM` still does not carry usage — usage travels on the metrics subject, not the token stream. When metrics is disabled the reporter still computes and logs, with no publish.
 {% /callout %}
 
 ## Adding a Provider

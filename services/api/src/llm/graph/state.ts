@@ -32,7 +32,7 @@ export type VideoUsage = {
     resolution: string
     aspectRatio: string
     // Vendor token usage for token-metered video providers (e.g. Seedance via
-    // ModelArk). Absent for per-second providers like VEO. Billing branches on
+    // ModelArk). Absent for per-second providers like VEO. Metrics branches on
     // pricing.video.measuringUnit (see usage-reporter.reportVideoUsage).
     completionTokens?: number
     totalTokens?: number
@@ -166,9 +166,9 @@ export type ProviderState = {
     referencedFeatureIds?: string[] | undefined
     featureUsagePrompt?: string | undefined
 
-    // Billing — transient per-run identity. workflowId is minted in validateRequest
+    // Metrics — transient per-run identity. workflowId is minted in validateRequest
     // and groups this run's start signal + usage events; workflowSeq is a 1-based
-    // counter incremented per emitted usage event (gap detection on the billing side).
+    // counter incremented per emitted usage event (gap detection on the metrics side).
     workflowId?: string | undefined
     workflowSeq?: number | undefined
     

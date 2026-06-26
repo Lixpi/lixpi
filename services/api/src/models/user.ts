@@ -78,11 +78,11 @@ export default {
         }
     },
 
-    // setBillingAllowance projects the billing allowance onto the user record so the
-    // pre-flight gate is a local field read (see billing/allowance-projection.ts).
-    // Billing is per-org; at launch a user maps 1:1 to a default org, so the flat
+    // setMetricsAllowance projects the metrics allowance onto the user record so the
+    // pre-flight gate is a local field read (see metrics/allowance-projection.ts).
+    // Metrics is per-org; at launch a user maps 1:1 to a default org, so the flat
     // fields are unambiguous. When multi-member / multi-org lands, scope these by org.
-    setBillingAllowance: async ({
+    setMetricsAllowance: async ({
         userId,
         allowed,
         balance,
@@ -96,14 +96,14 @@ export default {
                 tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
                 key: { userId },
                 updates: {
-                    billingAllowed: allowed,
-                    billingBalance: balance,
-                    billingUpdatedAt: new Date().getTime(),
+                    metricsAllowed: allowed,
+                    metricsBalance: balance,
+                    metricsUpdatedAt: new Date().getTime(),
                 },
-                origin: 'model::User->setBillingAllowance()',
+                origin: 'model::User->setMetricsAllowance()',
             })
         } catch (e) {
-            console.error('Error setting billing allowance:', e)
+            console.error('Error setting metrics allowance:', e)
         }
     },
 

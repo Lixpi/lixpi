@@ -11,7 +11,7 @@ fi
 
 # Non-interactive selection: an explicit arg wins, then a single env auto-selects;
 # otherwise fall back to the interactive prompt. This keeps `./start.sh` scriptable
-# (e.g. from lixpi-billing/dev-up.sh) while preserving the menu for humans.
+# (e.g. from an external dev-up.sh) while preserving the menu for humans.
 if [ -n "${1:-}" ] && [ -f "$1" ]; then
     selected_env="$1"
 elif [ ${#env_files[@]} -eq 1 ]; then

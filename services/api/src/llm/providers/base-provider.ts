@@ -7,8 +7,8 @@ import type NatsService from '@lixpi/nats-service'
 import { info, warn, err } from '@lixpi/debug-tools'
 import type { MediaGenerationRunMeta, ProviderName } from '@lixpi/constants'
 
-import type { BillingClient } from '../../billing/billing-client.ts'
-import type { Allowance } from '../../billing/contracts.ts'
+import type { MetricsClient } from '../../metrics/metrics-client.ts'
+import type { Allowance } from '../../metrics/contracts.ts'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
@@ -36,9 +36,9 @@ export type BaseProviderDeps = {
     usageReporter: UsageReporter
     runImageRouter: (state: ProviderState) => Promise<Partial<ProviderState>>
     runVideoRouter: (state: ProviderState) => Promise<Partial<ProviderState>>
-    // Billing (optional — absent/disabled means today's behavior). The gate reads
-    // the allowance locally; it never calls billing on the workflow path.
-    billing?: BillingClient
+    // Metrics (optional — absent/disabled means today's behavior). The gate reads
+    // the allowance locally; it never calls metrics on the workflow path.
+    metrics?: MetricsClient
     getOrgAllowance?: (userId: string) => Promise<Allowance | undefined>
 }
 
@@ -334,17 +334,17 @@ export abstract class BaseProvider {
         if (!state.messages?.length) throw new Error('messages list is required')
         if (!state.workspaceId) throw new Error('workspaceId is required')
         if (!state.aiChatThreadId) throw new Error('aiChatThreadId is required')
-        return this.billingGate(state)
+        return this.metricsGate(state)
     }
 
-    // Async spend gate: a local read of the allowance billing maintains via
-    // billing.balance.changed (projected onto the user record). No call to billing
-    // on this path, so billing latency/availability never affects the workflow.
+    // Async spend gate: a local read of the allowance metrics maintains via
+    // metrics.balance.changed (projected onto the user record). No call to metrics
+    // on this path, so metrics latency/availability never affects the workflow.
     // On admission, mints the per-run workflowId and emits a fire-and-forget
-    // run-start signal for billing's usage-leak check.
-    private async billingGate(state: ProviderState): Promise<Partial<ProviderState>> {
-        const billing = this.deps.billing
-        if (!billing?.enabled) return {}
+    // run-start signal for metrics's usage-leak check.
+    private async metricsGate(state: ProviderState): Promise<Partial<ProviderState>> {
+        const metrics = this.deps.metrics
+        if (!metrics?.enabled) return {}
 
         const userId = state.eventMeta?.userId ?? ''
         const orgId = (state.eventMeta?.organizationId as string) ?? ''
@@ -355,15 +355,15 @@ export abstract class BaseProvider {
             allowance = await this.deps.getOrgAllowance?.(userId)
         } catch (e: any) {
             // Read failure falls through to the configured cold-start default below.
-            warn(`[billing] allowance read failed for ${userId}: ${e?.message ?? String(e)}`)
+            warn(`[metrics] allowance read failed for ${userId}: ${e?.message ?? String(e)}`)
         }
 
-        if (!billing.gateAllows(allowance, workflowKind)) {
-            throw new Error(`Billing: balance does not cover this workflow (${workflowKind})`)
+        if (!metrics.gateAllows(allowance, workflowKind)) {
+            throw new Error(`Metrics: balance does not cover this workflow (${workflowKind})`)
         }
 
         const workflowId = uuid()
-        billing.publishWorkflowStarted({ workflowId, orgId, userId, workflowKind })
+        metrics.publishWorkflowStarted({ workflowId, orgId, userId, workflowKind })
         return { workflowId, workflowSeq: 0 }
     }
 
@@ -739,10 +739,10 @@ export abstract class BaseProvider {
     protected async calculateUsage(state: ProviderState): Promise<Partial<ProviderState>> {
         if (state.error) return {}
 
-        // Publish one billing usage event per provider call (modality), each with a
-        // 1-based workflowSeq under the run's workflowId so billing can gap-detect.
-        // workflowId is only set when the billing gate admitted the run (enabled).
-        const billingOn = !!(this.deps.billing?.enabled && state.workflowId)
+        // Publish one metrics usage event per provider call (modality), each with a
+        // 1-based workflowSeq under the run's workflowId so metrics can gap-detect.
+        // workflowId is only set when the metrics gate admitted the run (enabled).
+        const metricsOn = !!(this.deps.metrics?.enabled && state.workflowId)
         let seq = state.workflowSeq ?? 0
 
         if (state.usage) {
@@ -755,8 +755,8 @@ export abstract class BaseProvider {
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
-            if (billingOn && report) {
-                this.deps.billing!.publishUsage(tokenUsageEvent(report, state.workflowId!, ++seq))
+            if (metricsOn && report) {
+                this.deps.metrics!.publishUsage(tokenUsageEvent(report, state.workflowId!, ++seq))
             }
         }
         if (state.imageUsage) {
@@ -769,8 +769,8 @@ export abstract class BaseProvider {
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
-            if (billingOn && report) {
-                this.deps.billing!.publishUsage(imageUsageEvent(report, state.workflowId!, ++seq))
+            if (metricsOn && report) {
+                this.deps.metrics!.publishUsage(imageUsageEvent(report, state.workflowId!, ++seq))
             }
         }
         if (state.videoUsage) {
@@ -786,8 +786,8 @@ export abstract class BaseProvider {
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
-            if (billingOn && report) {
-                this.deps.billing!.publishUsage(videoUsageEvent(report, state.workflowId!, ++seq))
+            if (metricsOn && report) {
+                this.deps.metrics!.publishUsage(videoUsageEvent(report, state.workflowId!, ++seq))
             }
         }
         return { workflowSeq: seq }

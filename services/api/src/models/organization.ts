@@ -70,7 +70,7 @@ export default {
     },
 
     // getOrganizationMembers returns the userIds with access to an organization.
-    // Used by the billing allowance projection to fan a balance change out to the
+    // Used by the metrics allowance projection to fan a balance change out to the
     // org's members' user records (1:1 with the owner at launch).
     getOrganizationMembers: async ({
         organizationId

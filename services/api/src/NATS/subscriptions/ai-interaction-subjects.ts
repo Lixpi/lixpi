@@ -89,14 +89,14 @@ export const aiInteractionSubjects = [
             } & AiInteractionChatSendMessagePayload
 
             // organizationId may be absent from the client payload (e.g. the web-ui user store
-            // not yet hydrated with `organizations`). Billing keys spend by org, so fall back to
+            // not yet hydrated with `organizations`). Metrics keys spend by org, so fall back to
             // the user's organization from their record. 1:1 user:org at launch → first entry.
             let resolvedOrganizationId = organizationId
             if (!resolvedOrganizationId) {
                 const userRecord = await User.get(userId)
                 resolvedOrganizationId = (userRecord as any)?.organizations?.[0] ?? ''
                 if (!resolvedOrganizationId) {
-                    warn(`[billing] no organizationId for user ${userId}; billing events will be dropped until an organization is provisioned`)
+                    warn(`[metrics] no organizationId for user ${userId}; metrics events will be dropped until an organization is provisioned`)
                 }
             }
 

@@ -45,8 +45,8 @@ import { storeWorkspaceVideo } from './services/video-storage.ts'
 
 import User from './models/user.ts'
 import Organization from './models/organization.ts'
-import { BillingClient, billingConfigFromEnv, type BillingNats } from './billing/billing-client.ts'
-import { startAllowanceProjection } from './billing/allowance-projection.ts'
+import { MetricsClient, metricsConfigFromEnv, type MetricsNats } from './metrics/metrics-client.ts'
+import { startAllowanceProjection } from './metrics/allowance-projection.ts'
 
 const env = process.env
 
@@ -264,15 +264,15 @@ await startNatsAuthCalloutService({
     serviceAuthConfigs,
 })
 
-// Billing client. The spend gate is async — the client never sits on the workflow
+// Metrics client. The spend gate is async — the client never sits on the workflow
 // path. publish goes through the NATS service; balance.changed is subscribed on the
-// raw connection so it bypasses the global JWT middleware (an internal billing
-// subject carries no user token). Off (BILLING_ENABLED!=true) → today's behavior.
-const billingNatsConn = (await NATS_Service.getInstance())!
-const billingNats: BillingNats = {
-    publish: (subject, data) => billingNatsConn.publish(subject, data),
+// raw connection so it bypasses the global JWT middleware (an internal metrics
+// subject carries no user token). Off (METRICS_ENABLED!=true) → today's behavior.
+const metricsNatsConn = (await NATS_Service.getInstance())!
+const metricsNats: MetricsNats = {
+    publish: (subject, data) => metricsNatsConn.publish(subject, data),
     subscribe: (subject, handler) => {
-        const conn = billingNatsConn.getConnection()
+        const conn = metricsNatsConn.getConnection()
         if (!conn) return undefined
         const sub = conn.subscribe(subject)
         ;(async () => {
@@ -280,19 +280,19 @@ const billingNats: BillingNats = {
                 try {
                     await handler(JSON.parse(new TextDecoder().decode(msg.data)))
                 } catch (e: any) {
-                    warn(`[billing] balance.changed handler error: ${e?.message ?? String(e)}`)
+                    warn(`[metrics] balance.changed handler error: ${e?.message ?? String(e)}`)
                 }
             }
         })()
         return sub
     },
 }
-const billing = new BillingClient(billingNats, billingConfigFromEnv())
+const metrics = new MetricsClient(metricsNats, metricsConfigFromEnv())
 
 // Project balance.changed onto user records so the pre-flight gate is a local read.
-startAllowanceProjection(billing, {
+startAllowanceProjection(metrics, {
     getOrganizationMembers: (organizationId) => Organization.getOrganizationMembers({ organizationId }),
-    setUserAllowance: (args) => User.setBillingAllowance(args),
+    setUserAllowance: (args) => User.setMetricsAllowance(args),
 })
 
 // Initialize the in-process LLM module. The LangGraph workflow that previously
@@ -301,10 +301,10 @@ const llmModule = createLlmModule({
     natsService: await NATS_Service.getInstance(),
     storeWorkspaceImage,
     storeWorkspaceVideo,
-    billing,
-    // Gate read: the allowance billing projected onto the user record. Re-reads the
+    metrics,
+    // Gate read: the allowance metrics projected onto the user record. Re-reads the
     // user here (auth already loaded it; threading it through is the prod optimization).
-    getOrgAllowance: async (userId: string) => (await User.get(userId) as any)?.billingAllowed,
+    getOrgAllowance: async (userId: string) => (await User.get(userId) as any)?.metricsAllowed,
 })
 setLlmModule(llmModule)
 setExtractionLlmModule(llmModule)

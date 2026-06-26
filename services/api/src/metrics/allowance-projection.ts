@@ -2,7 +2,7 @@
 
 import { info, warn } from '@lixpi/debug-tools'
 
-import type { BillingClient } from './billing-client.ts'
+import type { MetricsClient } from './metrics-client.ts'
 import type { BalanceChanged } from './contracts.ts'
 
 // Dependencies the projection needs, injected so the core logic stays testable
@@ -14,7 +14,7 @@ export interface AllowanceProjectionDeps {
 
 // projectBalanceChange fans a single balance.changed event out to the org's
 // members' user records, where the pre-flight gate later reads it as a field.
-// Billing is per-org; the gate reads the user record, so the org's allowance is
+// Metrics is per-org; the gate reads the user record, so the org's allowance is
 // denormalized onto each member (a single owner at launch).
 export async function projectBalanceChange(ev: BalanceChanged, deps: AllowanceProjectionDeps): Promise<void> {
     if (!ev?.orgId) return
@@ -26,17 +26,17 @@ export async function projectBalanceChange(ev: BalanceChanged, deps: AllowancePr
     )
 }
 
-// startAllowanceProjection subscribes to billing.balance.changed and keeps the
+// startAllowanceProjection subscribes to metrics.balance.changed and keeps the
 // user-record allowance up to date. A projection failure is logged, never thrown —
 // a stale flag must not take down the subscriber.
-export function startAllowanceProjection(billing: BillingClient, deps: AllowanceProjectionDeps): void {
-    if (!billing.enabled) return
-    billing.subscribeBalanceChanged(async (ev: BalanceChanged) => {
+export function startAllowanceProjection(metrics: MetricsClient, deps: AllowanceProjectionDeps): void {
+    if (!metrics.enabled) return
+    metrics.subscribeBalanceChanged(async (ev: BalanceChanged) => {
         try {
             await projectBalanceChange(ev, deps)
         } catch (error: any) {
-            warn(`[billing] allowance projection failed: ${error?.message ?? String(error)}`)
+            warn(`[metrics] allowance projection failed: ${error?.message ?? String(error)}`)
         }
     })
-    info('[billing] allowance projection subscribed to billing.balance.changed')
+    info('[metrics] allowance projection subscribed to metrics.balance.changed')
 }

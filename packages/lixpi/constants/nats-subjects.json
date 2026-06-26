@@ -104,10 +104,10 @@
 		"TOP_UP_CUSTOMER_BALANCE": "top-up-customer-balance",
 		"GET_CUSTOMER": "get-customer"
 	},
-	"BILLING_SUBJECTS": {
-		"WORKFLOW_STARTED": "billing.workflow.started",
+	"METRICS_SUBJECTS": {
+		"WORKFLOW_STARTED": "metrics.workflow.started",
 		"USAGE": "metrics.usage.ai",
-		"BALANCE_GET": "billing.balance.get",
-		"BALANCE_CHANGED": "billing.balance.changed"
+		"BALANCE_GET": "metrics.balance.get",
+		"BALANCE_CHANGED": "metrics.balance.changed"
 	}
 }

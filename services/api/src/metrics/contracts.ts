@@ -1,11 +1,11 @@
 'use strict'
 
-// Billing contract types shared with the lixpi-billing service.
+// Metrics contract types shared with the lixpi-metrics service.
 // Money fields are integer micro-dollars (see ./money.ts).
 
 // WorkflowStarted is the fire-and-forget run-start signal. It is NOT a gate —
 // the spend gate is the async allowance flag projected from BalanceChanged.
-// Billing records it so a run with zero usage events can be leak-detected.
+// Metrics records it so a run with zero usage events can be leak-detected.
 export interface WorkflowStarted {
     workflowId: string
     orgId: string
@@ -14,10 +14,10 @@ export interface WorkflowStarted {
 }
 
 // Allowance maps each workflow kind to whether the org's balance can cover it
-// (balance >= maxCost[kind], computed by billing). The gate reads allowed[kind].
+// (balance >= maxCost[kind], computed by metrics). The gate reads allowed[kind].
 export type Allowance = Record<string, boolean>
 
-// BalanceChanged is emitted by billing on every balance change. It carries the
+// BalanceChanged is emitted by metrics on every balance change. It carries the
 // recomputed allowance the gate runs on, plus the balance for display.
 export interface BalanceChanged {
     orgId: string

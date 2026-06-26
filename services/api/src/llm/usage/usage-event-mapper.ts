@@ -1,16 +1,16 @@
 'use strict'
 
-import { toMicroDollars } from '../../billing/money.ts'
-import type { UsageEvent } from '../../billing/contracts.ts'
+import { toMicroDollars } from '../../metrics/money.ts'
+import type { UsageEvent } from '../../metrics/contracts.ts'
 import type { UsageReport, ImageUsageReport, VideoUsageReport } from './usage-reporter.ts'
 
-// Maps the usage reporter's decimal-dollar reports to billing UsageEvents with
-// integer micro-dollar amounts (the wire encoding billing expects). One event per
-// provider call; the resaleCost is the authoritative debit on the billing side.
+// Maps the usage reporter's decimal-dollar reports to metrics UsageEvents with
+// integer micro-dollar amounts (the wire encoding metrics expects). One event per
+// provider call; the resaleCost is the authoritative debit on the metrics side.
 
 // perUnit derives an integer micro-dollar unit price from a total resale cost and
 // quantity. For token calls (prompt + completion priced differently) this is a
-// blended figure — informational only; billing debits resaleCost, not this.
+// blended figure — informational only; metrics debits resaleCost, not this.
 const perUnit = (resaleMicro: number, quantity: number): number =>
     quantity > 0 ? Math.round(resaleMicro / quantity) : 0
 
@@ -67,7 +67,7 @@ export function videoUsageEvent(report: VideoUsageReport, workflowId: string, wo
     const resaleCost = toMicroDollars(v.soldToClientFor)
 
     // Token-metered (Seedance) vs per-second (VEO). Modality stays 'video' either way;
-    // only the measuring unit + quantity differ. Billing accepts video+tokens.
+    // only the measuring unit + quantity differ. Metrics accepts video+tokens.
     if (v.measuringUnit === 'tokens') {
         const quantity = v.totalTokens ?? 0
         return {

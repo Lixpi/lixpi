@@ -9,12 +9,12 @@ import type { ProviderState } from '../graph/state.ts'
 import type { StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
 import type { StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
-import type { BillingClient } from '../../billing/billing-client.ts'
-import type { Allowance } from '../../billing/contracts.ts'
+import type { MetricsClient } from '../../metrics/metrics-client.ts'
+import type { Allowance } from '../../metrics/contracts.ts'
 
-// Billing dependencies threaded into every provider's graph deps.
-export type BillingDeps = {
-    billing?: BillingClient
+// Metrics dependencies threaded into every provider's graph deps.
+export type MetricsDeps = {
+    metrics?: MetricsClient
     getOrgAllowance?: (userId: string) => Promise<Allowance | undefined>
 }
 
@@ -40,7 +40,7 @@ export class ProviderRegistry {
         // (e.g. a video-only provider added before its class lands). Unregistered
         // providers throw "Unsupported provider" on lookup in getOrCreate/createTransient.
         ctors: Partial<Record<ProviderName, ProviderConstructor>>,
-        private readonly billingDeps: BillingDeps = {},
+        private readonly metricsDeps: MetricsDeps = {},
     ) {
         this.providerCtors = new Map(Object.entries(ctors) as Array<[ProviderName, ProviderConstructor]>)
         this.usageReporter = new UsageReporter()
@@ -74,8 +74,8 @@ export class ProviderRegistry {
                 }
                 return this.videoRouter(state)
             },
-            billing: this.billingDeps.billing,
-            getOrgAllowance: this.billingDeps.getOrgAllowance,
+            metrics: this.metricsDeps.metrics,
+            getOrgAllowance: this.metricsDeps.getOrgAllowance,
         }
     }
 

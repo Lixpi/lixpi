@@ -17,8 +17,8 @@ import { MediaGenerationMatrixOrchestrator, type MatrixRequestData } from './orc
 import type { StoreWorkspaceImageFn } from './graph/image-publisher.ts'
 import type { StoreWorkspaceVideoFn } from './graph/video-publisher.ts'
 import type { ExtractionInput, ExtractionResult } from './extraction/types.ts'
-import type { BillingClient } from '../billing/billing-client.ts'
-import type { Allowance } from '../billing/contracts.ts'
+import type { MetricsClient } from '../metrics/metrics-client.ts'
+import type { Allowance } from '../metrics/contracts.ts'
 
 export type LlmModule = {
     process: (instanceKey: string, providerName: ProviderName, requestData: Record<string, any>) => Promise<void>
@@ -36,8 +36,8 @@ export type LlmModuleDeps = {
     natsService: NatsService
     storeWorkspaceImage: StoreWorkspaceImageFn
     storeWorkspaceVideo: StoreWorkspaceVideoFn
-    // Billing integration (optional — absent/disabled keeps today's behavior).
-    billing?: BillingClient
+    // Metrics integration (optional — absent/disabled keeps today's behavior).
+    metrics?: MetricsClient
     getOrgAllowance?: (userId: string) => Promise<Allowance | undefined>
 }
 
@@ -54,7 +54,7 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
             BytePlus: BytePlusProvider,
         },
         {
-            billing: deps.billing,
+            metrics: deps.metrics,
             getOrgAllowance: deps.getOrgAllowance,
         },
     )
