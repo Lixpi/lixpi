@@ -1,5 +1,7 @@
 import type { CanvasNode } from '@lixpi/constants'
 
+import { isBranchLineageMarkerNode } from '$src/infographics/workspace/branchLineageState.ts'
+
 type WorkspaceDragPlanInput = {
     nodes: CanvasNode[]
     primaryNodeId: string
@@ -22,10 +24,6 @@ function isParentContainerNode(_node: CanvasNode | undefined): boolean {
 
 function isGeneratedOutputImageNode(node: CanvasNode | undefined): boolean {
     return node?.type === 'image' && Boolean(node.generatedBy?.aiChatThreadId)
-}
-
-function isBranchLineageMarkerNode(node: CanvasNode | undefined): boolean {
-    return node?.type === 'branchOrigin' || node?.type === 'branchFork' || node?.type === 'branchLine'
 }
 
 function includeParentContainerDescendants(nodeIds: string[], nodes: CanvasNode[]): string[] {

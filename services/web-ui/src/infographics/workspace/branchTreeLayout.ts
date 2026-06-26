@@ -19,18 +19,21 @@ import type {
     BranchOriginCanvasNode,
     BranchForkCanvasNode,
     BranchLineCanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
     WorkspaceEdge,
 } from '@lixpi/constants'
 
 import { layoutTree, type TreeLayoutNode } from '$src/infographics/utils/layoutTree.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { computeWorldPosition, buildNodesById } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
+import {
+    getGeneratedMediaMidpointMarkerId,
+    getStartedLineageMarkerState,
+    isBranchLineageMarkerNode,
+    type BranchLineageMarkerNode,
+    type GeneratedMediaNode,
+} from '$src/infographics/workspace/branchLineageState.ts'
 
-type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
 type BranchTreeMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
-type BranchLineageMarkerNode = BranchTreeMarkerNode
 type BranchTreeMemberNode = GeneratedMediaNode | BranchTreeMarkerNode
 type Point = { x: number; y: number }
 type Rect = { x: number; y: number; width: number; height: number }
@@ -110,10 +113,6 @@ function isMidpointMarker(node: CanvasNode | undefined): node is BranchForkCanva
     return Boolean(node) && (node!.type === 'branchFork' || node!.type === 'branchLine')
 }
 
-function isBranchLineageMarker(node: CanvasNode): node is BranchLineageMarkerNode {
-    return node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
-}
-
 function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<string | undefined> {
     return [
         node.generatedBy?.parentMediaNodeId,
@@ -126,10 +125,6 @@ function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<stri
 function getBranchMarkerParentCandidates(node: BranchTreeMarkerNode): Array<string | undefined> {
     if (node.type !== 'branchFork' && node.type !== 'branchLine') return []
     return [node.parentBranchNodeId]
-}
-
-function getGeneratedMediaLineageMarkerId(node: GeneratedMediaNode): string | undefined {
-    return node.generatedBy?.branchForkNodeId ?? node.generatedBy?.branchLineNodeId
 }
 
 function firstExistingMemberId(candidates: Array<string | undefined>, memberIds: Set<string>): string | null {
@@ -309,20 +304,6 @@ function buildMarkerCollisionEntry(
     }
 }
 
-function buildMarkerIdsWithGeneratedMediaChildren(nodes: CanvasNode[]): Set<string> {
-    const markerIds = new Set<string>()
-    for (const node of nodes) {
-        if (node.type !== 'image' && node.type !== 'video') continue
-        const branchOriginNodeId = node.generatedBy?.branchOriginNodeId
-        const branchForkNodeId = node.generatedBy?.branchForkNodeId
-        const branchLineNodeId = node.generatedBy?.branchLineNodeId
-        if (branchOriginNodeId) markerIds.add(branchOriginNodeId)
-        if (branchForkNodeId) markerIds.add(branchForkNodeId)
-        if (branchLineNodeId) markerIds.add(branchLineNodeId)
-    }
-    return markerIds
-}
-
 function compareMarkerCollisionEntries(a: MarkerCollisionEntry, b: MarkerCollisionEntry): number {
     const yDelta = a.rect.y - b.rect.y
     if (yDelta !== 0) return yDelta
@@ -435,11 +416,11 @@ function resolveLineageMarkerOverlaps(
     options: BranchTreeLayoutOptions,
 ): void {
     const markerEntries: MarkerCollisionEntry[] = []
-    const markerIdsWithGeneratedMediaChildren = buildMarkerIdsWithGeneratedMediaChildren(nodes)
+    const { markerIdsWithGeneratedChildren } = getStartedLineageMarkerState(nodes)
     for (const [index, node] of nodes.entries()) {
-        if (!isBranchLineageMarker(node)) continue
+        if (!isBranchLineageMarkerNode(node)) continue
         if (!node.pendingState) continue
-        if (markerIdsWithGeneratedMediaChildren.has(node.nodeId)) continue
+        if (markerIdsWithGeneratedChildren.has(node.nodeId)) continue
         markerEntries.push(buildMarkerCollisionEntry(node, nodesById, nextPositionById, index, options))
     }
     if (markerEntries.length <= 1) return
@@ -540,10 +521,10 @@ function positionLineageMarkers(
     const childrenByMarkerId = new Map<string, GeneratedMediaNode[]>()
     for (const node of nodes) {
         if (node.type !== 'image' && node.type !== 'video') continue
-        const markerId = getGeneratedMediaLineageMarkerId(node)
+        const markerId = getGeneratedMediaMidpointMarkerId(node)
         if (!markerId) continue
         const children = childrenByMarkerId.get(markerId) ?? []
-        children.push(node as GeneratedMediaNode)
+        children.push(node)
         childrenByMarkerId.set(markerId, children)
     }
 

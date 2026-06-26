@@ -82,7 +82,13 @@ import { getAdaptiveBoundedZoomScalingOptions, getCanvasChromeScreenLayout, getR
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { createSidePanel, type SidePanelInstance } from '$src/components/sidePanel/index.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
-import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'
+import {
+    GeneratedMediaRebalancePipeline,
+    reflowStackedBranchMarkers,
+    type BranchMarkerNode,
+    type CanvasGeometry,
+} from '$src/infographics/workspace/generatedMediaRebalancePipeline.ts'
+import { getStartedLineageMarkerState } from '$src/infographics/workspace/branchLineageState.ts'
 import { getBranchMarkerMediaModelCircleDescriptors } from '$src/infographics/workspace/branchMarkerMediaModelCircles.ts'
 import {
     computeLineageContinuationPositionToRightOfRect,
@@ -289,61 +295,8 @@ const MEDIA_DESCRIPTOR_ANALYSIS_RETRY_DELAYS_MS = [1000, 3000, 8000] as const
 const BRANCH_MARKER_VISIBLE_VIEWPORT_PADDING_SCREEN = 24
 const branchMarkerMediaModelCircleGlassCssImageByColor = new Map<string, string>()
 const branchMarkerMediaModelCircleTextureCssImageByColor = new Map<string, string>()
-type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
-type CanvasGeometry = { position: { x: number; y: number }; dimensions: { width: number; height: number } }
-type PendingGeneratedMediaLayoutProxy = { offset: { x: number; y: number }; dimensions: { width: number; height: number } }
-type PlannedBranchMarkerMediaLayoutProxy = {
-    markerNodeId: string
-    proxyNodeId: string
-    parentBranchNodeId: string
-}
-type BranchMarkerStackGroup = {
-    markers: BranchMarkerNode[]
-}
-
 function getBranchMarkerMinWidth(): number {
     return Math.round(settings.mediaBranchLineage.branchOrigin.size * settings.mediaBranchLineage.marker.minWidthMultiplier)
-}
-
-function compareBranchMarkersByReasoningOrder(a: BranchMarkerNode, b: BranchMarkerNode): number {
-    const getReasoningIndex = (marker: BranchMarkerNode): number | undefined =>
-        marker.type === 'branchFork' || marker.type === 'branchLine'
-            ? marker.reasoningIndex
-            : marker.pendingState?.reasoningIndex
-    const indexDelta = (getReasoningIndex(a) ?? Number.MAX_SAFE_INTEGER)
-        - (getReasoningIndex(b) ?? Number.MAX_SAFE_INTEGER)
-    if (indexDelta !== 0) return indexDelta
-    const positionDelta = a.position.y - b.position.y
-    if (positionDelta !== 0) return positionDelta
-    return a.nodeId.localeCompare(b.nodeId)
-}
-
-function compareBranchMarkersByStackPosition(a: BranchMarkerNode, b: BranchMarkerNode): number {
-    const positionDelta = a.position.y - b.position.y
-    if (positionDelta !== 0) return positionDelta
-    return compareBranchMarkersByReasoningOrder(a, b)
-}
-
-function getBranchMarkerStackOffset(
-    markerIds: string[],
-    nodesById: Map<string, CanvasNode>,
-    markerNodeId: string,
-    gap: number,
-): number | null {
-    let offset = gap
-    for (const id of markerIds) {
-        if (id === markerNodeId) return offset
-        const markerNode = nodesById.get(id)
-        if (!markerNode) continue
-        offset += markerNode.dimensions.height + gap
-    }
-    return null
-}
-
-function getBranchMarkerStackHeight(markers: BranchMarkerNode[], gap: number): number {
-    if (markers.length === 0) return 0
-    return markers.reduce((height, marker) => height + marker.dimensions.height, 0)
-        + Math.max(0, markers.length - 1) * gap
 }
 
 function getBranchMarkerWidthForText(promptText: string): number {
@@ -3215,23 +3168,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function clearStartedBranchMarkerProjectionOverrides(nodes: CanvasNode[]): void {
-        const { markerIdsWithGeneratedChildren } = getStartedLineageMarkerState(nodes)
-        for (const markerId of markerIdsWithGeneratedChildren) {
+    function clearStartedBranchMarkerProjectionOverrides(startedMarkerNodeIds: Iterable<string>): void {
+        for (const markerId of startedMarkerNodeIds) {
             liveNodeOverrides.delete(markerId)
             branchMarkerProjectionOverrideNodeIds.delete(markerId)
             manuallyPositionedBranchMarkerNodeIds.delete(markerId)
         }
     }
 
-    // Single entry point for the generated-media add/remove paths: re-tidy every
-    // branch-lineage tree and rigid-separate trees + loose nodes through the
-    // shared resolver. Depth/sibling gaps come from mediaBranchLineage so
-    // spacing matches the rest of the lineage placement.
-    function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[] {
-        const layoutProxyPlan = createPendingGeneratedMediaLayoutProxyPlan(nodes)
+    function createGeneratedMediaRebalancePipeline(): GeneratedMediaRebalancePipeline {
         const collisionSettings = settings.workspaceCollision.branchTree
-        const resolvedNodes = rebalanceBranchTreesAndResolve(layoutProxyPlan.nodes, edges, {
+        return new GeneratedMediaRebalancePipeline({
+            workspaceId,
+            mediaSize: getGeneratedMediaInsertionSize(),
             depthGap: settings.mediaBranchLineage.mediaToMediaGap,
             branchOriginDepthGap: getBranchOriginOutputGap(),
             rootMarkerDepthGap: getRootBranchMarkerOutputGap(),
@@ -3240,18 +3189,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             branchOriginMarkerStackGap: getBranchMarkerStackGap(),
             collisionIterations: getWorkspaceCollisionFlowIterations(collisionSettings),
             collisionMargin: 0,
+            getPendingGeneratedMediaLayoutGeometry: (node: ImageCanvasNode | VideoCanvasNode) =>
+                getPendingGeneratedMediaBeforeFrameCircleGeometry(node.nodeId, node.position, node.dimensions),
+            getPendingGeneratedMediaCircleInset: getPendingGeneratedMediaBeforeFrameCircleInset,
+            getNodeWorldPosition,
+            getNodeWorldRect,
             getNodeCollisionRect: getCanvasNodeCollisionRect,
             getNodeCollisionMargin: (node: CanvasNode) => getCanvasNodeCollisionSettings(node, collisionSettings).margin,
             getNodeCollisionOverlapThreshold: (node: CanvasNode) =>
                 getCanvasNodeCollisionSettings(node, collisionSettings).overlapThreshold,
         })
-        const restoredNodes = restorePendingGeneratedMediaLayoutProxyPlan(
-            resolvedNodes,
-            layoutProxyPlan.proxiesByNodeId,
-            layoutProxyPlan.plannedMarkerProxiesByMarkerId,
-        )
-        clearStartedBranchMarkerProjectionOverrides(restoredNodes)
-        return restoredNodes
+    }
+
+    // Single entry point for the generated-media add/remove paths: re-tidy every
+    // branch-lineage tree and rigid-separate trees + loose nodes through the
+    // shared resolver. Depth/sibling gaps come from mediaBranchLineage so
+    // spacing matches the rest of the lineage placement.
+    function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[] {
+        const result = createGeneratedMediaRebalancePipeline().rebalance(nodes, edges)
+        clearStartedBranchMarkerProjectionOverrides(result.startedMarkerNodeIds)
+        return result.nodes
     }
 
     function getPendingGeneratedMediaBeforeFrameCircleGeometry(
@@ -3468,252 +3425,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ...markerNode,
             position: getPendingBranchMarkerPositionBeforeGeneratedMedia(parentNode, markerNode.dimensions, siblingSlot),
         }
-    }
-
-    function getGeneratedMediaLineageMarkerId(node: ImageCanvasNode | VideoCanvasNode): string | undefined {
-        return node.generatedBy?.branchForkNodeId ?? node.generatedBy?.branchLineNodeId
-    }
-
-    function getStartedLineageMarkerState(nodes: CanvasNode[]): {
-        markerIdsWithGeneratedChildren: Set<string>
-        parentIdsWithStartedMarkerChildren: Set<string>
-    } {
-        const nodesById = getCanvasNodesById(nodes)
-        const markerIdsWithGeneratedChildren = new Set<string>()
-        const parentIdsWithStartedMarkerChildren = new Set<string>()
-
-        for (const node of nodes) {
-            if (!isGeneratedMediaNode(node)) continue
-            const markerId = getGeneratedMediaLineageMarkerId(node)
-            if (!markerId) continue
-            markerIdsWithGeneratedChildren.add(markerId)
-
-            const markerNode = nodesById.get(markerId)
-            if ((markerNode?.type === 'branchFork' || markerNode?.type === 'branchLine') && markerNode.parentBranchNodeId) {
-                parentIdsWithStartedMarkerChildren.add(markerNode.parentBranchNodeId)
-            }
-        }
-
-        return { markerIdsWithGeneratedChildren, parentIdsWithStartedMarkerChildren }
-    }
-
-    function getPlannedMediaProxyLineageParentAttrs(
-        parentNode: CanvasNode,
-        markerNode: BranchForkCanvasNode | BranchLineCanvasNode,
-    ): Pick<
-        NonNullable<ImageCanvasNode['generatedBy']>,
-        'parentMediaNodeId' | 'parentImageNodeId' | 'branchOriginNodeId' | 'branchForkNodeId' | 'branchLineNodeId'
-    > {
-        const attrs: Pick<
-            NonNullable<ImageCanvasNode['generatedBy']>,
-            'parentMediaNodeId' | 'parentImageNodeId' | 'branchOriginNodeId' | 'branchForkNodeId' | 'branchLineNodeId'
-        > = {}
-
-        if (parentNode.type === 'image' || parentNode.type === 'video') {
-            attrs.parentMediaNodeId = parentNode.nodeId
-            attrs.parentImageNodeId = parentNode.nodeId
-        } else if (parentNode.type === 'branchOrigin') {
-            attrs.branchOriginNodeId = parentNode.nodeId
-        } else if (parentNode.type === 'branchFork') {
-            attrs.branchForkNodeId = parentNode.nodeId
-        } else if (parentNode.type === 'branchLine') {
-            attrs.branchLineNodeId = parentNode.nodeId
-        }
-
-        if (markerNode.type === 'branchFork') attrs.branchForkNodeId = markerNode.nodeId
-        else attrs.branchLineNodeId = markerNode.nodeId
-
-        return attrs
-    }
-
-    function createPlannedBranchMarkerMediaLayoutProxy(
-        markerNode: BranchForkCanvasNode | BranchLineCanvasNode,
-        parentNode: CanvasNode,
-        nodesById: Map<string, CanvasNode>,
-    ): ImageCanvasNode {
-        const mediaSize = getGeneratedMediaInsertionSize()
-        const mediaDimensions = { width: mediaSize, height: mediaSize }
-        const circleInset = getPendingGeneratedMediaBeforeFrameCircleInset(mediaDimensions)
-        const parentRect = getNodeWorldRect(parentNode, nodesById)
-        const mediaGap = parentNode.type === 'branchOrigin'
-            ? getBranchOriginOutputGap()
-            : settings.mediaBranchLineage.mediaToMediaGap
-        const futureMediaPosition = computeLineageContinuationPositionToRightOfRect(
-            parentRect,
-            mediaDimensions.height,
-            mediaGap,
-        )
-        const reasoningModelId = markerNode.reasoningModelId
-            ?? markerNode.pendingState?.reasoningModelId
-            ?? markerNode.pendingState?.reasoningModelIds[0]
-            ?? 'unknown:planned-media-layout-proxy'
-        const reasoningIndex = markerNode.reasoningIndex ?? markerNode.pendingState?.reasoningIndex ?? 0
-        const promptText = markerNode.pendingState?.promptText ?? markerNode.provenance?.promptText
-
-        return {
-            nodeId: `${markerNode.nodeId}:planned-media-layout-proxy`,
-            type: 'image',
-            fileId: `${markerNode.nodeId}:planned-media-layout-proxy`,
-            workspaceId,
-            src: '',
-            aspectRatio: 1,
-            position: {
-                x: futureMediaPosition.x,
-                y: futureMediaPosition.y + circleInset.y,
-            },
-            dimensions: { width: circleInset.size, height: circleInset.size },
-            generatedBy: {
-                aiChatThreadId: markerNode.aiChatThreadId ?? '',
-                responseId: '',
-                aiModel: reasoningModelId,
-                revisedPrompt: promptText ?? '',
-                generationRequestId: markerNode.generationRequestId,
-                ...(markerNode.reasoningRunId ? { reasoningRunId: markerNode.reasoningRunId } : {}),
-                reasoningModelId,
-                reasoningIndex,
-                variantIndex: reasoningIndex,
-                branchId: markerNode.branchId,
-                ...(promptText ? { promptText } : {}),
-                ...(markerNode.promptFingerprint ? { promptFingerprint: markerNode.promptFingerprint } : {}),
-                createdAt: reasoningIndex,
-                ...getPlannedMediaProxyLineageParentAttrs(parentNode, markerNode),
-            },
-        }
-    }
-
-    function createPendingGeneratedMediaLayoutProxyPlan(nodes: CanvasNode[]): {
-        nodes: CanvasNode[]
-        proxiesByNodeId: Map<string, PendingGeneratedMediaLayoutProxy>
-        plannedMarkerProxiesByMarkerId: Map<string, PlannedBranchMarkerMediaLayoutProxy>
-    } {
-        const proxiesByNodeId = new Map<string, PendingGeneratedMediaLayoutProxy>()
-        const plannedMarkerProxiesByMarkerId = new Map<string, PlannedBranchMarkerMediaLayoutProxy>()
-        const proxyNodes = nodes.map((node: CanvasNode) => {
-            if (node.type !== 'image' && node.type !== 'video') return node
-            const proxyGeometry = getPendingGeneratedMediaBeforeFrameCircleGeometry(node.nodeId, node.position, node.dimensions)
-            if (!proxyGeometry) return node
-
-            proxiesByNodeId.set(node.nodeId, {
-                offset: {
-                    x: proxyGeometry.position.x - node.position.x,
-                    y: proxyGeometry.position.y - node.position.y,
-                },
-                dimensions: node.dimensions,
-            })
-            return {
-                ...node,
-                position: proxyGeometry.position,
-                dimensions: proxyGeometry.dimensions,
-            }
-        })
-        const nodesById = getCanvasNodesById(proxyNodes)
-        const { markerIdsWithGeneratedChildren, parentIdsWithStartedMarkerChildren } = getStartedLineageMarkerState(proxyNodes)
-        const plannedProxyNodes: ImageCanvasNode[] = []
-
-        for (const node of proxyNodes) {
-            if (node.type !== 'branchFork' && node.type !== 'branchLine') continue
-            if (node.pendingState?.phase !== 'planned' || !node.parentBranchNodeId) continue
-            if (markerIdsWithGeneratedChildren.has(node.nodeId)) continue
-            if (!parentIdsWithStartedMarkerChildren.has(node.parentBranchNodeId)) continue
-
-            const parentNode = nodesById.get(node.parentBranchNodeId)
-            if (!parentNode) continue
-
-            const proxyNode = createPlannedBranchMarkerMediaLayoutProxy(node, parentNode, nodesById)
-            plannedMarkerProxiesByMarkerId.set(node.nodeId, {
-                markerNodeId: node.nodeId,
-                proxyNodeId: proxyNode.nodeId,
-                parentBranchNodeId: node.parentBranchNodeId,
-            })
-            plannedProxyNodes.push(proxyNode)
-            nodesById.set(proxyNode.nodeId, proxyNode)
-        }
-
-        return {
-            nodes: plannedProxyNodes.length > 0 ? [...proxyNodes, ...plannedProxyNodes] : proxyNodes,
-            proxiesByNodeId,
-            plannedMarkerProxiesByMarkerId,
-        }
-    }
-
-    function restorePendingGeneratedMediaLayoutProxyPlan(
-        nodes: CanvasNode[],
-        proxiesByNodeId: Map<string, PendingGeneratedMediaLayoutProxy>,
-        plannedMarkerProxiesByMarkerId: Map<string, PlannedBranchMarkerMediaLayoutProxy>,
-    ): CanvasNode[] {
-        if (proxiesByNodeId.size === 0 && plannedMarkerProxiesByMarkerId.size === 0) return nodes
-
-        const nodesById = getCanvasNodesById(nodes)
-        const plannedProxyNodeIds = new Set<string>()
-        const plannedMarkerPositionsById = new Map<string, { x: number; y: number }>()
-        const branchOriginMarkerIdsByParentId = new Map<string, string[]>()
-        for (const node of nodes) {
-            if (node.type !== 'branchFork' && node.type !== 'branchLine') continue
-            if (!node.parentBranchNodeId) continue
-            const parentNode = nodesById.get(node.parentBranchNodeId)
-            if (parentNode?.type !== 'branchOrigin') continue
-            const markerIds = branchOriginMarkerIdsByParentId.get(node.parentBranchNodeId) ?? []
-            markerIds.push(node.nodeId)
-            branchOriginMarkerIdsByParentId.set(node.parentBranchNodeId, markerIds)
-        }
-        for (const markerIds of branchOriginMarkerIdsByParentId.values()) {
-            markerIds.sort((a, b) => {
-                const aNode = nodesById.get(a) as BranchForkCanvasNode | BranchLineCanvasNode | undefined
-                const bNode = nodesById.get(b) as BranchForkCanvasNode | BranchLineCanvasNode | undefined
-                if (aNode && bNode) return compareBranchMarkersByStackPosition(aNode, bNode)
-                return a.localeCompare(b)
-            })
-        }
-        for (const proxy of plannedMarkerProxiesByMarkerId.values()) {
-            plannedProxyNodeIds.add(proxy.proxyNodeId)
-
-            const markerNode = nodesById.get(proxy.markerNodeId)
-            const parentNode = nodesById.get(proxy.parentBranchNodeId)
-            const proxyNode = nodesById.get(proxy.proxyNodeId)
-            if (!markerNode || !parentNode || !proxyNode) continue
-
-            const parentRect = getNodeWorldRect(parentNode, nodesById)
-            const proxyPosition = getNodeWorldPosition(proxyNode, nodesById)
-            const parentAnchorX = parentRect.x + parentRect.width
-            const parentAnchorY = parentRect.y + parentRect.height / 2
-            const proxyAnchorX = proxyPosition.x
-            const proxyAnchorY = proxyPosition.y + proxyNode.dimensions.height / 2
-            const branchOriginMarkerIds = parentNode.type === 'branchOrigin'
-                ? branchOriginMarkerIdsByParentId.get(parentNode.nodeId)
-                : undefined
-            const branchOriginStackIndex = branchOriginMarkerIds?.indexOf(proxy.markerNodeId) ?? -1
-            const stackGap = getBranchMarkerStackGap()
-            const branchOriginStackOffset = branchOriginStackIndex >= 0 && branchOriginMarkerIds
-                ? getBranchMarkerStackOffset(branchOriginMarkerIds, nodesById, proxy.markerNodeId, stackGap)
-                : null
-            plannedMarkerPositionsById.set(proxy.markerNodeId, {
-                x: (parentAnchorX + proxyAnchorX) / 2 - markerNode.dimensions.width / 2,
-                y: branchOriginStackOffset !== null
-                    ? parentRect.y + parentRect.height + branchOriginStackOffset
-                    : (parentAnchorY + proxyAnchorY) / 2 - markerNode.dimensions.height / 2,
-            })
-        }
-
-        return nodes.flatMap((node: CanvasNode) => {
-            if (plannedProxyNodeIds.has(node.nodeId)) return []
-            const proxy = proxiesByNodeId.get(node.nodeId)
-            const markerPosition = plannedMarkerPositionsById.get(node.nodeId)
-            let restoredNode = proxy ? {
-                ...node,
-                position: {
-                    x: node.position.x - proxy.offset.x,
-                    y: node.position.y - proxy.offset.y,
-                },
-                dimensions: proxy.dimensions,
-            } : node
-            if (markerPosition) {
-                restoredNode = {
-                    ...restoredNode,
-                    position: markerPosition,
-                }
-            }
-            return [restoredNode]
-        })
     }
 
     function getPendingGeneratedMediaBeforeFrameVisualGeometry(
@@ -7891,92 +7602,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         } as T
     }
 
-    function getBranchMarkerStackGroupKey(marker: BranchMarkerNode): string | null {
-        if (marker.pendingState?.phase === 'preflight') return null
-        if (marker.type !== 'branchFork' && marker.type !== 'branchLine') return null
-        if (marker.parentBranchNodeId) return `parent:${marker.parentBranchNodeId}`
-        if (marker.type === 'branchFork') return `root:${marker.generationRequestId}`
-        return null
-    }
-
-    function getBranchMarkerStackGroups(
-        markers: BranchMarkerNode[],
-        allNodes: CanvasNode[],
-    ): BranchMarkerStackGroup[] {
-        const groupsByKey = new Map<string, BranchMarkerNode[]>()
-        const { markerIdsWithGeneratedChildren } = getStartedLineageMarkerState(allNodes)
-        for (const marker of markers) {
-            if (markerIdsWithGeneratedChildren.has(marker.nodeId)) continue
-            const key = getBranchMarkerStackGroupKey(marker)
-            if (!key) continue
-            const group = groupsByKey.get(key) ?? []
-            group.push(marker)
-            groupsByKey.set(key, group)
-        }
-        return [...groupsByKey.values()]
-            .filter((markersInGroup) => markersInGroup.length > 1)
-            .filter((markersInGroup) => markersInGroup.some(marker => Boolean(marker.pendingState)))
-            .filter((markersInGroup) =>
-                !markersInGroup.some(marker => manuallyPositionedBranchMarkerNodeIds.has(marker.nodeId))
-            )
-            .map((markersInGroup) => ({
-                markers: [...markersInGroup].sort(compareBranchMarkersByStackPosition),
-            }))
-    }
-
-    function getBranchMarkerStackAnchorTop(
-        group: BranchMarkerStackGroup,
-        nodesById: Map<string, CanvasNode>,
-        gap: number,
-    ): number {
-        const firstMarker = group.markers[0]
-        const parentBranchNodeId = firstMarker && (firstMarker.type === 'branchFork' || firstMarker.type === 'branchLine')
-            ? firstMarker.parentBranchNodeId
-            : undefined
-        const parentNode = parentBranchNodeId
-            ? nodesById.get(parentBranchNodeId)
-            : undefined
-        if (parentNode?.type === 'branchOrigin') {
-            const parentRect = getNodeWorldRect(parentNode, nodesById)
-            return parentRect.y + parentRect.height + gap
-        }
-
-        const top = Math.min(...group.markers.map(marker => marker.position.y))
-        const bottom = Math.max(...group.markers.map(marker => marker.position.y + marker.dimensions.height))
-        return ((top + bottom) / 2) - getBranchMarkerStackHeight(group.markers, gap) / 2
-    }
-
-    function reflowStackedBranchMarkers(
-        markers: BranchMarkerNode[],
-        allNodes: CanvasNode[],
-    ): Map<string, BranchMarkerNode> {
-        const reflowedMarkers = new Map<string, BranchMarkerNode>()
-        const groups = getBranchMarkerStackGroups(markers, allNodes)
-        if (groups.length === 0) return reflowedMarkers
-
-        const nodesById = new Map<string, CanvasNode>(allNodes.map((node: CanvasNode) => [node.nodeId, node]))
-        for (const marker of markers) nodesById.set(marker.nodeId, marker)
-
-        const gap = getBranchMarkerStackGap()
-        for (const group of groups) {
-            let y = getBranchMarkerStackAnchorTop(group, nodesById, gap)
-            for (const marker of group.markers) {
-                const nextMarker = {
-                    ...marker,
-                    position: {
-                        ...marker.position,
-                        y,
-                    },
-                }
-                reflowedMarkers.set(marker.nodeId, nextMarker)
-                nodesById.set(marker.nodeId, nextMarker)
-                y += marker.dimensions.height + gap
-            }
-        }
-
-        return reflowedMarkers
-    }
-
     function refreshBranchMarkersForAiChatThread(threadId: string): void {
         if (!currentCanvasState) return
 
@@ -7997,10 +7622,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             markerIdsToSync.push(node.nodeId)
         }
 
-        const reflowedMarkersById = reflowStackedBranchMarkers(
-            [...nextMarkersById.values()],
-            currentCanvasState.nodes,
-        )
+        const reflowedMarkersById = reflowStackedBranchMarkers({
+            markers: [...nextMarkersById.values()],
+            allNodes: currentCanvasState.nodes,
+            manuallyPositionedMarkerNodeIds: manuallyPositionedBranchMarkerNodeIds,
+            branchMarkerStackGap: getBranchMarkerStackGap(),
+            getNodeWorldRect,
+        })
 
         for (const node of currentCanvasState.nodes) {
             if (!isBranchMarkerNode(node) || getBranchMarkerThreadId(node) !== threadId) continue
