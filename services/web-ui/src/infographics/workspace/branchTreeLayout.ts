@@ -53,6 +53,11 @@ type MarkerCollisionEntry = {
     rect: Rect
     originalIndex: number
 }
+type LayoutBox = {
+    width: number
+    height: number
+    offset: Point
+}
 
 export type BranchTree = {
     rootId: string
@@ -264,14 +269,34 @@ function expandRect(rect: Rect, margin: number): Rect {
     }
 }
 
-function getNodeLayoutDimensions(
+function getNodeLayoutBox(
     node: CanvasNode,
     options: BranchTreeLayoutOptions,
-): { width: number; height: number } {
+): LayoutBox {
     const rect = getNodeCollisionRect(node, { x: 0, y: 0 }, options)
+    const visualCenter = {
+        x: node.dimensions.width / 2,
+        y: node.dimensions.height / 2,
+    }
+    const halfWidth = Math.max(
+        1,
+        visualCenter.x - rect.x,
+        rect.x + rect.width - visualCenter.x,
+        node.dimensions.width / 2,
+    )
+    const halfHeight = Math.max(
+        1,
+        visualCenter.y - rect.y,
+        rect.y + rect.height - visualCenter.y,
+        node.dimensions.height / 2,
+    )
     return {
-        width: rect.width,
-        height: rect.height,
+        width: halfWidth * 2,
+        height: halfHeight * 2,
+        offset: {
+            x: halfWidth - visualCenter.x,
+            y: halfHeight - visualCenter.y,
+        },
     }
 }
 
@@ -448,6 +473,7 @@ export function applyBranchTreeLayout(
     const nodesById = buildNodesById(nodes)
     const nextPositionById = new Map<string, Point>()
     const treeMemberIdsByRootId = new Map<string, string[]>()
+    const layoutBoxesById = new Map<string, LayoutBox>()
 
     for (const tree of trees) {
         treeMemberIdsByRootId.set(tree.rootId, tree.memberIds)
@@ -463,12 +489,13 @@ export function applyBranchTreeLayout(
             .map((id: string) => {
                 const node = nodesById.get(id) as BranchTreeMemberNode
                 const parentId = parentByChild.get(id)
-                const dimensions = getNodeLayoutDimensions(node, options)
+                const layoutBox = getNodeLayoutBox(node, options)
+                layoutBoxesById.set(id, layoutBox)
                 return {
                     id,
                     parentId: parentId && layoutMemberIds.has(parentId) ? parentId : null,
-                    width: dimensions.width,
-                    height: dimensions.height,
+                    width: layoutBox.width,
+                    height: layoutBox.height,
                 }
             })
 
@@ -490,9 +517,11 @@ export function applyBranchTreeLayout(
                 : undefined
         const rootDepthAdjustment = rootDepthGap !== undefined ? options.depthGap - rootDepthGap : 0
         for (const [id, relative] of result.positions) {
+            const layoutBox = layoutBoxesById.get(id) ?? { width: 0, height: 0, offset: { x: 0, y: 0 } }
+            const rootLayoutBox = layoutBoxesById.get(tree.rootId) ?? { width: 0, height: 0, offset: { x: 0, y: 0 } }
             nextPositionById.set(id, {
-                x: anchor.x + relative.x - (id === tree.rootId ? 0 : rootDepthAdjustment),
-                y: anchor.y + relative.y,
+                x: anchor.x - rootLayoutBox.offset.x + relative.x + layoutBox.offset.x - (id === tree.rootId ? 0 : rootDepthAdjustment),
+                y: anchor.y - rootLayoutBox.offset.y + relative.y + layoutBox.offset.y,
             })
         }
     }

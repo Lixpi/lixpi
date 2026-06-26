@@ -7331,6 +7331,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         else if (placed.type === 'branchLine') appendBranchLineNodeToDOM(placed as BranchLineCanvasNode)
     }
 
+    // Pending generated-media updates preserve active ProseMirror editors by
+    // appending nodes manually instead of running a full renderNodes() pass. If
+    // the marker already exists from preflight streaming, its DOM coordinates can
+    // still be stale after the rebalance pipeline moves it into the final
+    // connector midpoint. Sync geometry and content together so visible marker,
+    // connection anchors, and canvas state stay on the same coordinate frame.
+    function syncExistingBranchMarkerNodeToDOM(branchMarkerNode: BranchMarkerNode): void {
+        syncCanvasNodeDomGeometry([branchMarkerNode])
+        syncBranchMarkerNodeContent(branchMarkerNode)
+        syncConnectionsAfterManualNodeAppend()
+    }
+
     function setGeneratingReferenceNodeIds(threadId: string, nodeIds: Iterable<string | null | undefined>): void {
         const referenceNodeIds = getExistingMediaNodeIds(nodeIds)
         if (referenceNodeIds.length === 0) {
@@ -8290,8 +8302,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function appendBranchOriginNodeToDOM(branchOriginNode: BranchOriginCanvasNode): void {
         if (findBranchMarkerNodeEl(branchOriginNode.nodeId)) {
-            syncBranchMarkerNodeContent(branchOriginNode)
-            syncConnectionsAfterManualNodeAppend()
+            syncExistingBranchMarkerNodeToDOM(branchOriginNode)
             return
         }
         const nodeEl = createBranchOriginNode(branchOriginNode)
@@ -8303,8 +8314,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function appendBranchForkNodeToDOM(branchForkNode: BranchForkCanvasNode): void {
         if (findBranchMarkerNodeEl(branchForkNode.nodeId)) {
-            syncBranchMarkerNodeContent(branchForkNode)
-            syncConnectionsAfterManualNodeAppend()
+            syncExistingBranchMarkerNodeToDOM(branchForkNode)
             return
         }
         const nodeEl = createBranchForkNode(branchForkNode)
@@ -8316,8 +8326,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function appendBranchLineNodeToDOM(branchLineNode: BranchLineCanvasNode): void {
         if (findBranchMarkerNodeEl(branchLineNode.nodeId)) {
-            syncBranchMarkerNodeContent(branchLineNode)
-            syncConnectionsAfterManualNodeAppend()
+            syncExistingBranchMarkerNodeToDOM(branchLineNode)
             return
         }
         const nodeEl = createBranchLineNode(branchLineNode)

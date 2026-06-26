@@ -237,6 +237,10 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 - `collapsible_start`
 - `collapsible_end`
 
+Image and video completion/error events finalize the generated media node state
+and close the matching receiving run so prompt inputs leave stop mode when the
+media run finishes.
+
 `generationRun` metadata scopes parallel model outputs:
 
 - Matrix text responses are grouped by `reasoningRunId`.

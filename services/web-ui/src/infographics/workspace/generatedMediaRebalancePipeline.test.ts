@@ -212,6 +212,56 @@ describe('GeneratedMediaRebalancePipeline', () => {
         expect(result.startedMarkerNodeIds).toEqual(new Set<string>())
     })
 
+    it('keeps a single pending branch-line continuation straight through the visible circle', () => {
+        const parent = image({
+            nodeId: 'parent',
+            position: { x: 0, y: 0 },
+            dimensions: { width: 100, height: 100 },
+            generatedBy: { createdAt: 1 },
+        })
+        const marker = branchLine({
+            nodeId: 'line',
+            parentBranchNodeId: 'parent',
+            position: { x: 20, y: 500 },
+            dimensions: { width: 50, height: 20 },
+        })
+        const pending = image({
+            nodeId: 'pending',
+            position: { x: 1000, y: 1000 },
+            dimensions: { width: 100, height: 100 },
+            generatedBy: {
+                parentMediaNodeId: 'parent',
+                branchLineNodeId: 'line',
+                createdAt: 2,
+            },
+        })
+        const pipeline = new GeneratedMediaRebalancePipeline(config({
+            getPendingGeneratedMediaLayoutGeometry: (node: CanvasNode) =>
+                node.nodeId === 'pending'
+                    ? {
+                        position: {
+                            x: node.position.x + 40,
+                            y: node.position.y + 40,
+                        },
+                        dimensions: { width: 20, height: 20 },
+                    }
+                    : null,
+        }))
+
+        const result = pipeline.rebalance([parent, marker, pending], [])
+        const out = nodesById(result.nodes)
+        const resolvedParent = out.get('parent')!
+        const resolvedMarker = out.get('line')!
+        const resolvedPending = out.get('pending')!
+        const parentCenterY = resolvedParent.position.y + resolvedParent.dimensions.height / 2
+        const markerCenterY = resolvedMarker.position.y + resolvedMarker.dimensions.height / 2
+        const visibleCircleCenterY = resolvedPending.position.y + 40 + 10
+
+        expect(markerCenterY).toBe(parentCenterY)
+        expect(visibleCircleCenterY).toBe(parentCenterY)
+        expect(result.startedMarkerNodeIds).toEqual(new Set(['line']))
+    })
+
     it('uses planned media proxies to place not-yet-started sibling markers and removes proxy nodes afterward', () => {
         const origin = branchOrigin({
             nodeId: 'origin',

@@ -290,6 +290,27 @@ describe('applyBranchTreeLayout', () => {
         expect(posOf(out, 'A')).toEqual({ x: 500 + SIZE + OPTS.depthGap, y: 300 })
     })
 
+    it('keeps a single continuation on the media centerline when collision chrome extends below media', () => {
+        const parent = genMedia('R', 500, 300, { createdAt: 1, width: 400, height: 400 })
+        const child = genMedia('A', 9999, 9999, { parentMediaNodeId: 'R', createdAt: 2, width: 80, height: 80 })
+        const out = applyBranchTreeLayout([parent, child], [], {
+            ...OPTS,
+            getNodeCollisionRect: (node, worldPosition) => ({
+                x: worldPosition.x,
+                y: worldPosition.y,
+                width: node.dimensions.width,
+                height: node.dimensions.height + (node.nodeId === 'R' ? 40 : 0),
+            }),
+        })
+        const parentOut = out.find(node => node.nodeId === 'R')!
+        const childOut = out.find(node => node.nodeId === 'A')!
+        const parentCenterY = parentOut.position.y + parentOut.dimensions.height / 2
+        const childCenterY = childOut.position.y + childOut.dimensions.height / 2
+
+        expect(parentOut.position).toEqual({ x: 500, y: 300 })
+        expect(childCenterY).toBe(parentCenterY)
+    })
+
     it('fans a two-child fork symmetrically around the anchored root', () => {
         const nodes = [
             genMedia('R', 0, 0, { createdAt: 1 }),

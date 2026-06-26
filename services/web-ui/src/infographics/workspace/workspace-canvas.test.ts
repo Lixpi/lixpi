@@ -840,6 +840,25 @@ describe('Workspace canvas — parent-child world positioning', () => {
 		expectExcerptNotToContain(ts, 'connectionManager.syncNodes(currentCanvasState.nodes)')
 	})
 
+	it('keeps existing branch-marker DOM geometry in lockstep with rebalanced pending media', () => {
+		const syncMatch = ts.match(/function\s+syncExistingBranchMarkerNodeToDOM[\s\S]*?^    \}/m)
+		expect(syncMatch).not.toBeNull()
+		const syncBody = syncMatch![0]
+		expectExcerptToContain(syncBody, 'syncCanvasNodeDomGeometry([branchMarkerNode])')
+		expectExcerptToContain(syncBody, 'syncBranchMarkerNodeContent(branchMarkerNode)')
+		expectExcerptToContain(syncBody, 'syncConnectionsAfterManualNodeAppend()')
+
+		const originMatch = ts.match(/function\s+appendBranchOriginNodeToDOM[\s\S]*?^    \}/m)
+		const forkMatch = ts.match(/function\s+appendBranchForkNodeToDOM[\s\S]*?^    \}/m)
+		const lineMatch = ts.match(/function\s+appendBranchLineNodeToDOM[\s\S]*?^    \}/m)
+		expect(originMatch).not.toBeNull()
+		expect(forkMatch).not.toBeNull()
+		expect(lineMatch).not.toBeNull()
+		expectExcerptToContain(originMatch![0], 'syncExistingBranchMarkerNodeToDOM(branchOriginNode)')
+		expectExcerptToContain(forkMatch![0], 'syncExistingBranchMarkerNodeToDOM(branchForkNode)')
+		expectExcerptToContain(lineMatch![0], 'syncExistingBranchMarkerNodeToDOM(branchLineNode)')
+	})
+
 	it('checks viewport visibility against world-space node rectangles', () => {
 		const fnMatch = ts.match(/function\s+isNodeInViewport[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()

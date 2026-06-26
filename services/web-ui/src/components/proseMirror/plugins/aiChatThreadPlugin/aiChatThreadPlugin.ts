@@ -1835,6 +1835,7 @@ class AiChatThreadPluginClass {
         // Delegate image placement to the canvas (chat-doc message id is passed
         // through so the canvas node can cross-reference the chat message).
         routeSegmentEventToCanvas(event, { responseMessageId })
+        this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), aiChatThreadId, event.generationRun)
     }
 
     // Video segment handlers. Chat history gets a compact aiGeneratedVideo node
@@ -1857,6 +1858,7 @@ class AiChatThreadPluginClass {
         if (!aiChatThreadId || !videoUrl) return
         const responseMessageId = this.upsertVideoCompleteInChat(view, event)
         routeSegmentEventToCanvas(event, { responseMessageId })
+        this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), aiChatThreadId, event.generationRun)
     }
 
     private handleVideoError(view: EditorView, event: SegmentEvent): void {
@@ -1864,6 +1866,7 @@ class AiChatThreadPluginClass {
         if (!aiChatThreadId) return
         this.upsertVideoErrorInChat(view, event)
         routeSegmentEventToCanvas(event)
+        this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), aiChatThreadId, event.generationRun)
     }
 
     // Enrich (or insert) the response's collapsible block with a generation
