@@ -335,8 +335,8 @@ sequenceDiagram
 - **Image** — per-image-tier cost from `image_usage` (tier by resolution/quality).
 - **Video** — `reportVideoUsage` ([`usage-reporter.ts`](../../services/api/src/llm/usage/usage-reporter.ts)) computes per-second cost from the model's video pricing metadata and returns a `VideoUsageReport`.
 
-{% callout type="warning" %}
-Usage is computed and logged, but the current reporter does not publish token, image, or video usage events to NATS and `END_STREAM` does not carry usage. The reporter methods are shaped so publishing can be wired later.
+{% callout type="note" %}
+Usage is computed by the reporter and, when billing is enabled (`BILLING_ENABLED=true`), published to NATS as `metrics.usage.ai` usage events — one per modality, keyed by the run's `workflowId` with a 1-based `workflowSeq`. The publish happens in `calculateUsage` ([`base-provider.ts`](../../services/api/src/llm/providers/base-provider.ts)) via the billing client ([`services/api/src/billing/`](../../services/api/src/billing/)); it is fire-and-forget and never on the response latency path. `END_STREAM` still does not carry usage — usage travels on the billing subject, not the token stream. When billing is disabled the reporter still computes and logs, with no publish.
 {% /callout %}
 
 ## Adding a Provider
