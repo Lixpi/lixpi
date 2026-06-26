@@ -22,7 +22,7 @@ The visual-effects system has four rendering families:
 | Freeform bitmap gradient | `FreeformGradientRenderer` | Canvas `ImageData` generated from four color anchors, eight phase positions, inverse-distance blending, and swirl distortion | AI chat thread and floating prompt shifting backgrounds |
 | SVG linear gradient | `SvgGradientRenderer` | D3-created `<linearGradient>` stops and rotating endpoint animation | Document context selection, document thread border |
 | PIXI traveling outline | `PixiTravelingOutlineRenderer` + `GlassMaterial` | Single PIXI mesh snake with a continuous tapered colored-glass droplet texture traveling around a rounded perimeter while active | Generated-media progress border and future PIXI outlined progress surfaces |
-| PIXI screen glass border | `PixiGlassBorderRenderer` + `ClosedGlassStripMaterial` | Screen-space PIXI render-texture capture masked to a rounded border, displaced by a procedural glass map, then overlaid with a baked glass-material mesh | Bottom-center canvas composer and adjacent action panels |
+| PIXI screen glass border | `PixiGlassBorderRenderer` + `ClosedGlassStripMaterial` | Screen-space PIXI render-texture capture masked to a rounded border, displaced by a per-target liquid-glass normal map, then overlaid with a baked glass-material mesh | Bottom-center canvas composer and adjacent action panels |
 
 Animation curves are centralized in `Easing` where a surface uses shared easing, while surface-specific lifecycle remains with each consumer:
 
@@ -40,7 +40,7 @@ Animation curves are centralized in `Easing` where a surface uses shared easing,
 | `SvgGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/svgGradient.ts`](../../services/web-ui/src/utils/animations/gradients/svgGradient.ts) | Linear gradient stop construction, repeating border stops, and rotating linear-gradient animation |
 | `GlassMaterial` | [`services/web-ui/src/utils/animations/gradients/pixiGlassMaterial.ts`](../../services/web-ui/src/utils/animations/gradients/pixiGlassMaterial.ts) | Shared per-pixel glass material used by PIXI traveling snake textures and shallow glass branch-lineage media-model circle backgrounds |
 | `PixiTravelingOutlineRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts) | Reusable PIXI rounded-path snake renderer with active-only animation lifecycle |
-| `PixiGlassBorderRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiGlassBorderRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiGlassBorderRenderer.ts) | Reusable PIXI screen-space glass border renderer that captures the PIXI stage into a render texture, refracts it through a masked displacement filter, and draws closed glass-material border meshes |
+| `PixiGlassBorderRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiGlassBorderRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiGlassBorderRenderer.ts) | Reusable PIXI screen-space glass border renderer that captures the PIXI stage into a render texture, generates rounded-border normal-map displacement from each target's geometry, and draws closed glass-material border meshes |
 
 ### Reuse Rules
 
@@ -59,7 +59,7 @@ The system intentionally has separate palettes for different visual roles:
 |---|---|---|
 | `settings.gradient.styles.shiftingColors` | Dreamy pastel canvas/SVG accent palette | AI chat thread and floating prompt backgrounds, document thread border, document context selection |
 | `settings.mediaNode.inProgressOutlineAnimation.styles.snakeColors` | Bright traveling in-progress outline palette | PIXI media progress outline |
-| `settings.canvasChrome.glassBorder` | Transparent screen-space Pixi glass ring geometry, displacement strength, and baked material highlight/shadow | Bottom-center composer and adjacent action panels |
+| `settings.canvasChrome.glassBorder` | Transparent screen-space Pixi glass ring geometry, liquid-refraction strength, and baked material highlight/shadow | Bottom-center composer and adjacent action panels |
 
 ## Gradient Consumers
 

@@ -234,7 +234,10 @@ export type CanvasChromeSettings = {
         enabled: boolean
         widthPx: number
         displacementScalePx: number
-        displacementTextureSizePx: number
+        displacementMapMaxDimensionPx: number
+        edgeRefractionStrength: number
+        surfaceWaveStrength: number
+        causticBandStrength: number
         displacementFrequencyX: number
         displacementFrequencyY: number
         bodyColor: string
@@ -688,25 +691,31 @@ export const settings: Settings = {
             // Width of the refractive ring in screen pixels.
             widthPx: 10,
             // Pixel offset strength used by the Pixi displacement filter that refracts captured canvas content.
-            displacementScalePx: 7,
-            // Procedural displacement-map size. Larger values add detail but cost more texture memory.
-            displacementTextureSizePx: 128,
-            // Horizontal wave frequency for the procedural glass displacement map.
-            displacementFrequencyX: 3.2,
-            // Vertical wave frequency for the procedural glass displacement map.
-            displacementFrequencyY: 2.6,
-            // Transparent body tint drawn only inside the ring; keep low so white backgrounds read as no-op.
+            displacementScalePx: 34,
+            // Upper bound for the generated screen-space displacement map.
+            displacementMapMaxDimensionPx: 1600,
+            // Normal-direction edge pinch strength. Higher values pull pixels harder across the glass edge.
+            edgeRefractionStrength: 0.95,
+            // Tangential wave strength for the liquid smear inside the ring.
+            surfaceWaveStrength: 0.26,
+            // Secondary bright-band distortion strength along the border thickness.
+            causticBandStrength: 0.34,
+            // Horizontal wave frequency for the procedural liquid displacement.
+            displacementFrequencyX: 4.8,
+            // Vertical wave frequency for the procedural liquid displacement.
+            displacementFrequencyY: 3.9,
+            // Transparent body tint drawn only inside the ring.
             bodyColor: '#ffffff',
             // Body tint alpha inside the ring.
-            bodyAlpha: 0,
+            bodyAlpha: 0.035,
             // Specular rim color.
             highlightColor: '#ffffff',
             // Specular rim alpha.
-            highlightAlpha: 0.07,
+            highlightAlpha: 0.2,
             // Subtle inner-shadow rim color.
             shadowColor: '#415061',
             // Subtle inner-shadow rim alpha.
-            shadowAlpha: 0.018,
+            shadowAlpha: 0.1,
             // Baked Pixi glass material colors for the closed border mesh.
             materialColors: ['#ffffff', '#f7fbff', '#edf4ff', '#ffffff'],
             // Closed border meshes do not tail-fade; this stays fully present before material alpha is applied.
@@ -767,19 +776,19 @@ export const settings: Settings = {
                 // Brightness contribution from the rounded lens core.
                 lensHighlightStrength: 0.06,
                 // Maximum amount of white mixed into highlights.
-                highlightWhiteMixMax: 0.14,
+                highlightWhiteMixMax: 0.24,
                 // Maximum amount of shadow color mixed into edge shadows.
-                shadowMixMax: 0.04,
+                shadowMixMax: 0.1,
                 // Baseline material opacity before cross-section highlights are added.
-                materialAlphaBase: 0.006,
+                materialAlphaBase: 0.018,
                 // Maximum material opacity before the feathered edge mask is applied.
-                materialAlphaMax: 0.04,
+                materialAlphaMax: 0.14,
                 // Opacity contribution from the rounded lens core.
-                lensAlphaStrength: 0.014,
+                lensAlphaStrength: 0.05,
                 // Opacity contribution from the main specular highlight.
-                upperSpecularAlphaStrength: 0.012,
+                upperSpecularAlphaStrength: 0.035,
                 // Opacity contribution from the inherited head glint.
-                headSpecularAlphaStrength: 0.006,
+                headSpecularAlphaStrength: 0.016,
             },
         },
     },

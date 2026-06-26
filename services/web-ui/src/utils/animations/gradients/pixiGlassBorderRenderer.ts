@@ -18,7 +18,10 @@ export type PixiGlassBorderStyle = {
     enabled: boolean
     widthPx: number
     displacementScalePx: number
-    displacementTextureSizePx: number
+    displacementMapMaxDimensionPx: number
+    edgeRefractionStrength: number
+    surfaceWaveStrength: number
+    causticBandStrength: number
     displacementFrequencyX: number
     displacementFrequencyY: number
     bodyColor: string
@@ -63,6 +66,9 @@ type GlassBorderMeshGeometry = {
     indices: Uint32Array
 }
 
+type TextureCanvas = OffscreenCanvas | HTMLCanvasElement
+type TextureCanvasContext = OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D
+
 function clamp01(value: number): number {
     return Math.max(0, Math.min(1, value))
 }
@@ -73,7 +79,7 @@ function parseHexColor(value: string, fallback: number): number {
     return Number.parseInt(normalized, 16)
 }
 
-function createTextureCanvas(width: number, height: number): OffscreenCanvas | HTMLCanvasElement {
+function createTextureCanvas(width: number, height: number): TextureCanvas {
     if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(width, height)
     const canvas = document.createElement('canvas')
     canvas.width = width
@@ -81,35 +87,47 @@ function createTextureCanvas(width: number, height: number): OffscreenCanvas | H
     return canvas
 }
 
-function createDisplacementTexture(style: PixiGlassBorderStyle): Texture {
-    const size = Math.max(8, Math.round(style.displacementTextureSizePx || 128))
-    const frequencyX = Number.isFinite(style.displacementFrequencyX) ? style.displacementFrequencyX : 3.2
-    const frequencyY = Number.isFinite(style.displacementFrequencyY) ? style.displacementFrequencyY : 2.6
-    const canvas = createTextureCanvas(size, size)
-    const context = canvas.getContext('2d')
-    if (!context) return Texture.WHITE
-
-    const imageData = context.createImageData(size, size)
-    const twoPi = Math.PI * 2
-    for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-            const u = x / Math.max(1, size - 1)
-            const v = y / Math.max(1, size - 1)
-            const horizontalWave = Math.sin((u * frequencyX + v * 0.65) * twoPi)
-            const verticalWave = Math.cos((v * frequencyY - u * 0.5) * twoPi)
-            const fineWave = Math.sin((u * 9.5 + v * 7.25) * twoPi) * 0.22
-            const red = 128 + Math.round((horizontalWave * 0.62 + fineWave) * 76)
-            const green = 128 + Math.round((verticalWave * 0.62 - fineWave) * 76)
-            const offset = (y * size + x) * 4
-            imageData.data[offset] = Math.max(0, Math.min(255, red))
-            imageData.data[offset + 1] = Math.max(0, Math.min(255, green))
-            imageData.data[offset + 2] = 128
-            imageData.data[offset + 3] = 255
-        }
+function getTextureCanvasContext(canvas: TextureCanvas): TextureCanvasContext | null {
+    try {
+        return canvas.getContext('2d') as TextureCanvasContext | null
+    } catch {
+        return null
     }
+}
 
-    context.putImageData(imageData, 0, 0)
-    return Texture.from(canvas as HTMLCanvasElement, true)
+function fillNeutralDisplacementCanvas(context: TextureCanvasContext, width: number, height: number): void {
+    context.fillStyle = 'rgb(128, 128, 128)'
+    context.fillRect(0, 0, width, height)
+}
+
+function getRoundedRectSignedDistance(
+    px: number,
+    py: number,
+    rect: { x: number; y: number; width: number; height: number; radius: number }
+): number {
+    const halfWidth = rect.width / 2
+    const halfHeight = rect.height / 2
+    const radius = Math.max(0, Math.min(rect.radius, halfWidth, halfHeight))
+    const qx = Math.abs(px - (rect.x + halfWidth)) - (halfWidth - radius)
+    const qy = Math.abs(py - (rect.y + halfHeight)) - (halfHeight - radius)
+    const outsideX = Math.max(qx, 0)
+    const outsideY = Math.max(qy, 0)
+    return Math.hypot(outsideX, outsideY) + Math.min(Math.max(qx, qy), 0) - radius
+}
+
+function getRoundedRectNormal(
+    px: number,
+    py: number,
+    rect: { x: number; y: number; width: number; height: number; radius: number }
+): { x: number; y: number } {
+    const epsilon = 0.75
+    const dx = getRoundedRectSignedDistance(px + epsilon, py, rect)
+        - getRoundedRectSignedDistance(px - epsilon, py, rect)
+    const dy = getRoundedRectSignedDistance(px, py + epsilon, rect)
+        - getRoundedRectSignedDistance(px, py - epsilon, rect)
+    const length = Math.hypot(dx, dy)
+    if (length <= 0.0001) return { x: 0, y: -1 }
+    return { x: dx / length, y: dy / length }
 }
 
 function getGlassBorderSampleCount(perimeter: number, borderWidth: number): number {
@@ -219,6 +237,109 @@ function drawGlassBorderStroke(graphics: Graphics, datum: PixiGlassBorderDatum, 
     graphics.stroke({ color, alpha, width: 1 })
 }
 
+function getDisplacementMapScale(viewport: ViewportSize, style: PixiGlassBorderStyle): number {
+    const maxDimension = Math.max(256, Math.round(style.displacementMapMaxDimensionPx || 1400))
+    const longestSide = Math.max(1, viewport.width, viewport.height)
+    return Math.min(1, maxDimension / longestSide)
+}
+
+function getDisplacementSignature(
+    datums: ReadonlyArray<PixiGlassBorderDatum>,
+    viewport: ViewportSize,
+    style: PixiGlassBorderStyle
+): string {
+    const geometry = datums
+        .map((datum) => [
+            datum.id,
+            Math.round(datum.x * 10) / 10,
+            Math.round(datum.y * 10) / 10,
+            Math.round(datum.width * 10) / 10,
+            Math.round(datum.height * 10) / 10,
+            Math.round(datum.radius * 10) / 10,
+        ].join(':'))
+        .join('|')
+    return [
+        Math.round(viewport.width),
+        Math.round(viewport.height),
+        Math.round(style.widthPx * 10) / 10,
+        Math.round(style.edgeRefractionStrength * 100) / 100,
+        Math.round(style.surfaceWaveStrength * 100) / 100,
+        Math.round(style.causticBandStrength * 100) / 100,
+        Math.round(style.displacementFrequencyX * 100) / 100,
+        Math.round(style.displacementFrequencyY * 100) / 100,
+        geometry,
+    ].join(',')
+}
+
+function writeLiquidGlassDisplacementMap(
+    imageData: ImageData,
+    mapWidth: number,
+    mapHeight: number,
+    mapScale: number,
+    datums: ReadonlyArray<PixiGlassBorderDatum>,
+    style: PixiGlassBorderStyle
+): void {
+    imageData.data.fill(128)
+    for (let offset = 3; offset < imageData.data.length; offset += 4) {
+        imageData.data[offset] = 255
+    }
+
+    const borderWidth = Math.max(1, style.widthPx)
+    const halfBorderWidth = borderWidth / 2
+    const twoPi = Math.PI * 2
+    const edgeRefractionStrength = Math.max(0, style.edgeRefractionStrength)
+    const surfaceWaveStrength = Math.max(0, style.surfaceWaveStrength)
+    const causticBandStrength = Math.max(0, style.causticBandStrength)
+    const frequencyX = Number.isFinite(style.displacementFrequencyX) ? style.displacementFrequencyX : 4.6
+    const frequencyY = Number.isFinite(style.displacementFrequencyY) ? style.displacementFrequencyY : 3.8
+
+    for (const datum of datums) {
+        const outerBounds = {
+            minX: Math.max(0, Math.floor((datum.x - halfBorderWidth - 1) * mapScale)),
+            minY: Math.max(0, Math.floor((datum.y - halfBorderWidth - 1) * mapScale)),
+            maxX: Math.min(mapWidth - 1, Math.ceil((datum.x + datum.width + halfBorderWidth + 1) * mapScale)),
+            maxY: Math.min(mapHeight - 1, Math.ceil((datum.y + datum.height + halfBorderWidth + 1) * mapScale)),
+        }
+        const centerRect = {
+            x: datum.x,
+            y: datum.y,
+            width: datum.width,
+            height: datum.height,
+            radius: datum.radius,
+        }
+
+        for (let mapY = outerBounds.minY; mapY <= outerBounds.maxY; mapY++) {
+            const screenY = (mapY + 0.5) / mapScale
+            for (let mapX = outerBounds.minX; mapX <= outerBounds.maxX; mapX++) {
+                const screenX = (mapX + 0.5) / mapScale
+                const centerDistance = getRoundedRectSignedDistance(screenX, screenY, centerRect)
+                if (centerDistance < -halfBorderWidth || centerDistance > halfBorderWidth) continue
+
+                const ringProgress = clamp01((centerDistance + halfBorderWidth) / borderWidth)
+                const rimVolume = Math.sin(ringProgress * Math.PI)
+                const edgePinch = Math.cos(ringProgress * Math.PI)
+                const normal = getRoundedRectNormal(screenX, screenY, centerRect)
+                const tangent = { x: -normal.y, y: normal.x }
+                const localU = datum.width > 0 ? (screenX - datum.x) / datum.width : 0
+                const localV = datum.height > 0 ? (screenY - datum.y) / datum.height : 0
+                const liquidWave = Math.sin((localU * frequencyX + localV * frequencyY) * twoPi)
+                const crossWave = Math.cos((localU * (frequencyY + 1.7) - localV * (frequencyX + 0.9)) * twoPi)
+                const causticBand = Math.sin((ringProgress * 2.2 + localU * 0.8 - localV * 0.35) * twoPi)
+                const normalStrength = edgePinch * edgeRefractionStrength
+                    + rimVolume * causticBand * causticBandStrength
+                const tangentStrength = rimVolume * (liquidWave * surfaceWaveStrength + crossWave * surfaceWaveStrength * 0.45)
+                const vectorX = normal.x * normalStrength + tangent.x * tangentStrength
+                const vectorY = normal.y * normalStrength + tangent.y * tangentStrength
+                const offset = (mapY * mapWidth + mapX) * 4
+                imageData.data[offset] = Math.max(0, Math.min(255, 128 + Math.round(vectorX * 127)))
+                imageData.data[offset + 1] = Math.max(0, Math.min(255, 128 + Math.round(vectorY * 127)))
+                imageData.data[offset + 2] = Math.max(0, Math.min(255, 128 + Math.round(rimVolume * 70)))
+                imageData.data[offset + 3] = 255
+            }
+        }
+    }
+}
+
 export class PixiGlassBorderRenderer {
     private readonly container: Container
     private readonly style: PixiGlassBorderStyle
@@ -227,10 +348,15 @@ export class PixiGlassBorderRenderer {
     private readonly highlightGraphics: Graphics
     private readonly materialContainer: Container
     private readonly displacementSprite: Sprite
+    private readonly displacementCanvas: TextureCanvas
+    private displacementContext: TextureCanvasContext | null
     private readonly displacementTexture: Texture
     private readonly displacementFilter: DisplacementFilter
     private readonly materialTexture: Texture
     private readonly entries = new Map<string, GlassBorderEntry>()
+    private displacementSignature = ''
+    private displacementMapWidth = 8
+    private displacementMapHeight = 8
     private renderTexture: RenderTexture | null = null
     private renderTextureWidth = 0
     private renderTextureHeight = 0
@@ -241,7 +367,12 @@ export class PixiGlassBorderRenderer {
     constructor(options: PixiGlassBorderRendererOptions) {
         this.container = options.container
         this.style = options.style
-        this.displacementTexture = createDisplacementTexture(this.style)
+        this.displacementCanvas = createTextureCanvas(this.displacementMapWidth, this.displacementMapHeight)
+        this.displacementContext = getTextureCanvasContext(this.displacementCanvas)
+        if (this.displacementContext) {
+            fillNeutralDisplacementCanvas(this.displacementContext, this.displacementMapWidth, this.displacementMapHeight)
+        }
+        this.displacementTexture = Texture.from(this.displacementCanvas as HTMLCanvasElement, true)
         this.displacementSprite = new Sprite(this.displacementTexture)
         this.displacementSprite.label = 'workspace-pixi-glass-displacement-map'
         this.displacementSprite.eventMode = 'none'
@@ -289,6 +420,7 @@ export class PixiGlassBorderRenderer {
         if (!this.hasTargets) {
             this.maskGraphics.clear()
             this.highlightGraphics.clear()
+            this.displacementSignature = ''
             this.destroyStaleEntries(new Set())
             return
         }
@@ -297,13 +429,10 @@ export class PixiGlassBorderRenderer {
         this.refractionSprite.position.set(0, 0)
         this.refractionSprite.width = viewport.width
         this.refractionSprite.height = viewport.height
+        this.syncDisplacementMap(visibleDatums, viewport)
         this.displacementSprite.position.set(0, 0)
         this.displacementSprite.width = viewport.width
         this.displacementSprite.height = viewport.height
-        this.displacementFilter.scale.set(
-            Math.max(0, this.style.displacementScalePx),
-            Math.max(0, this.style.displacementScalePx)
-        )
         this.syncMaskAndHighlights(visibleDatums)
         this.syncMaterialMeshes(visibleDatums)
     }
@@ -361,6 +490,32 @@ export class PixiGlassBorderRenderer {
         this.renderTextureWidth = width
         this.renderTextureHeight = height
         this.renderTextureResolution = resolution
+    }
+
+    private syncDisplacementMap(datums: ReadonlyArray<PixiGlassBorderDatum>, viewport: ViewportSize): void {
+        const signature = getDisplacementSignature(datums, viewport, this.style)
+        if (signature === this.displacementSignature) return
+
+        const mapScale = getDisplacementMapScale(viewport, this.style)
+        const mapWidth = Math.max(1, Math.ceil(viewport.width * mapScale))
+        const mapHeight = Math.max(1, Math.ceil(viewport.height * mapScale))
+        if (mapWidth !== this.displacementMapWidth || mapHeight !== this.displacementMapHeight) {
+            this.displacementCanvas.width = mapWidth
+            this.displacementCanvas.height = mapHeight
+            this.displacementMapWidth = mapWidth
+            this.displacementMapHeight = mapHeight
+            this.displacementContext = getTextureCanvasContext(this.displacementCanvas)
+            this.displacementTexture.source.resize(mapWidth, mapHeight)
+        }
+
+        const context = this.displacementContext
+        if (!context) return
+
+        const imageData = context.createImageData(mapWidth, mapHeight)
+        writeLiquidGlassDisplacementMap(imageData, mapWidth, mapHeight, mapScale, datums, this.style)
+        context.putImageData(imageData, 0, 0)
+        this.displacementTexture.source.update()
+        this.displacementSignature = signature
     }
 
     private syncMaskAndHighlights(datums: ReadonlyArray<PixiGlassBorderDatum>): void {
