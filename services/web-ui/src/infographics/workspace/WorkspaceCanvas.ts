@@ -2052,7 +2052,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             content: projection.content,
             threadId: projection.threadId,
             className: rendererClassName,
-            contextPreview: getAiUserMessageContextPreviewRenderer(),
+            contextPreview: getAiUserMessageContextPreviewRenderer({ inlinePopover: true }),
             traceDetailsOptions: createCanvasTraceDetailsOptions(traceDetailsClassName, previewTiles),
         })
     }
@@ -4364,10 +4364,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function getAiUserMessageContextPreviewRenderer() {
+    function getAiUserMessageContextPreviewRenderer(options: { inlinePopover?: boolean } = {}) {
         return {
             getNodeById: (nodeId: string) => findCanvasNodeById(nodeId),
             environment: getContextPreviewEnvironment(),
+            inlinePopover: options.inlinePopover,
         }
     }
 
