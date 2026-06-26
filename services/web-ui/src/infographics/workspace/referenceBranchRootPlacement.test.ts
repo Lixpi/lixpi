@@ -24,10 +24,10 @@ describe('computeReferenceBranchRootMarkerPosition', () => {
             mediaHeight: 800,
             rootToFirstMediaGap: 384,
             markerToMediaGap: 312,
-            referenceToMarkerMinGap: 8,
+            referenceToMarkerMinGap: 64,
         })
 
-        expect(position.x).toBe(referenceGroupRect.x + referenceGroupRect.width + 8)
+        expect(position.x).toBe(referenceGroupRect.x + referenceGroupRect.width + 64)
         expect(position.y).toBe(494)
     })
 

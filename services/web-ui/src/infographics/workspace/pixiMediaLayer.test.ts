@@ -62,10 +62,19 @@ const glassBorderRendererInstances: Array<{
     style: unknown
 }> = []
 const pixiApplicationInstances: Array<{
+    init: ReturnType<typeof vi.fn>
     destroy: ReturnType<typeof vi.fn>
     render: ReturnType<typeof vi.fn>
-    renderer: { render: ReturnType<typeof vi.fn> }
+    renderer: { render: ReturnType<typeof vi.fn>; gc: { enabled: boolean; maxUnusedTime?: number } }
     stage: { addChild: ReturnType<typeof vi.fn> }
+}> = []
+const pixiSpriteInstances: Array<{
+    label: string
+    destroy: ReturnType<typeof vi.fn>
+}> = []
+const pixiGraphicsInstances: Array<{
+    label: string
+    destroy: ReturnType<typeof vi.fn>
 }> = []
 let glassCaptureTexture: unknown = null
 
@@ -113,6 +122,11 @@ vi.mock('pixi.js', () => {
         public beginPath = vi.fn()
         public moveTo = vi.fn()
         public lineTo = vi.fn()
+
+        constructor() {
+            super()
+            pixiGraphicsInstances.push(this)
+        }
     }
 
     class FakeTexture {
@@ -142,6 +156,7 @@ vi.mock('pixi.js', () => {
         constructor(texture: any = FakeTexture.EMPTY) {
             super()
             this.texture = texture
+            pixiSpriteInstances.push(this)
         }
 
         public destroy = vi.fn()
@@ -161,6 +176,7 @@ vi.mock('pixi.js', () => {
         public render = vi.fn()
         public renderer = {
             render: vi.fn(),
+            gc: { enabled: true },
         }
         public destroy = vi.fn()
 
@@ -500,6 +516,28 @@ function createLayerWithScreenGlassTargets(): ReturnType<typeof createPixiMediaL
     })
 }
 
+function getDebugDump(): {
+    entries: Array<Record<string, any>>
+    events: Array<{ event: string; details: Record<string, any> }>
+    gpuBufferDestroys: Array<Record<string, any>>
+} {
+    const dump = (window as typeof window & {
+        __lixpiPixiMediaDebugDump?: () => {
+            entries: Array<Record<string, any>>
+            events: Array<{ event: string; details: Record<string, any> }>
+            gpuBufferDestroys: Array<Record<string, any>>
+        }
+    }).__lixpiPixiMediaDebugDump
+    expect(dump, 'PIXI media debug dump should be installed').toBeTypeOf('function')
+    return dump!()
+}
+
+function findLatestDebugEvent(eventName: string): { event: string; details: Record<string, any> } {
+    const events = getDebugDump().events.filter((event) => event.event === eventName)
+    expect(events.length, `${eventName} debug event should exist`).toBeGreaterThan(0)
+    return events.at(-1)!
+}
+
 function clearMocks(): void {
     mediaNodeRegistryCalls.dispatchSync.mockReset()
     mediaNodeRegistryCalls.dispatchRemove.mockReset()
@@ -511,6 +549,31 @@ function clearMocks(): void {
     outlineRendererInstances.length = 0
     glassBorderRendererInstances.length = 0
     glassCaptureTexture = null
+    pixiSpriteInstances.length = 0
+    pixiGraphicsInstances.length = 0
+    window.localStorage.removeItem('lixpi.debug.pixiMedia')
+    const debugWindow = window as typeof window & {
+        __lixpiPixiMediaDebug?: boolean
+        __lixpiPixiMediaDebugEvents?: unknown[]
+        __lixpiPixiMediaDebugDump?: unknown
+        __lixpiGpuBufferDestroyEvents?: unknown[]
+        __lixpiGpuBufferDestroyDebugInstalled?: boolean
+        __lixpiGpuBufferDestroyDebugVersion?: number
+        __lixpiGpuBufferDestroyOriginal?: (this: unknown) => void
+        __lixpiGpuBufferDestroyQueue?: unknown[]
+        __lixpiGpuBufferDestroyQueued?: WeakSet<object>
+        __lixpiGpuBufferDestroyRaf?: number | null
+    }
+    delete debugWindow.__lixpiPixiMediaDebug
+    delete debugWindow.__lixpiPixiMediaDebugEvents
+    delete debugWindow.__lixpiPixiMediaDebugDump
+    delete debugWindow.__lixpiGpuBufferDestroyEvents
+    delete debugWindow.__lixpiGpuBufferDestroyDebugInstalled
+    delete debugWindow.__lixpiGpuBufferDestroyDebugVersion
+    delete debugWindow.__lixpiGpuBufferDestroyOriginal
+    debugWindow.__lixpiGpuBufferDestroyQueue = []
+    debugWindow.__lixpiGpuBufferDestroyQueued = new WeakSet<object>()
+    debugWindow.__lixpiGpuBufferDestroyRaf = null
 }
 
 describe('createPixiMediaLayer runtime behavior', () => {
@@ -537,6 +600,123 @@ describe('createPixiMediaLayer runtime behavior', () => {
         await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
     })
 
+    it('initializes Pixi as WebGPU with renderer GC disabled', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const app = pixiApplicationInstances.at(-1)
+        expect(app?.init).toHaveBeenCalledWith(expect.objectContaining({
+            preference: 'webgpu',
+            gcActive: false,
+            webgpu: expect.objectContaining({ powerPreference: 'high-performance' }),
+        }))
+        expect(app?.renderer.gc.enabled).toBe(false)
+    })
+
+    it('defers and deduplicates native GPUBuffer.destroy calls before forwarding them', async () => {
+        const previousGpuBufferDescriptor = Object.getOwnPropertyDescriptor(window, 'GPUBuffer')
+        const rafCallbacks: FrameRequestCallback[] = []
+        const nativeDestroy = vi.fn()
+        class FakeGpuBuffer {
+            public destroy(): void {
+                nativeDestroy(this)
+            }
+        }
+        Object.defineProperty(window, 'GPUBuffer', {
+            configurable: true,
+            value: FakeGpuBuffer,
+        })
+        ;(globalThis as any).requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+            rafCallbacks.push(cb)
+            return rafCallbacks.length
+        })
+
+        try {
+            const layer = createTestLayer()
+            await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+            rafCallbacks.length = 0
+
+            const buffer = new FakeGpuBuffer()
+            buffer.destroy()
+            buffer.destroy()
+
+            expect(nativeDestroy).not.toHaveBeenCalled()
+            expect(getDebugDump().gpuBufferDestroys.map((event) => event.deferred)).toEqual([true, false])
+            expect(getDebugDump().gpuBufferDestroys.map((event) => event.queueLength)).toEqual([1, 1])
+
+            for (let frame = 1; frame <= 3; frame++) {
+                const callback = rafCallbacks.shift()
+                expect(callback, `deferred destroy frame ${frame} should be queued`).toBeTypeOf('function')
+                callback!(frame)
+                expect(nativeDestroy).not.toHaveBeenCalled()
+            }
+
+            const finalCallback = rafCallbacks.shift()
+            expect(finalCallback, 'final deferred destroy frame should be queued').toBeTypeOf('function')
+            finalCallback!(4)
+            expect(nativeDestroy).toHaveBeenCalledTimes(1)
+            expect(nativeDestroy).toHaveBeenCalledWith(buffer)
+        } finally {
+            if (previousGpuBufferDescriptor) {
+                Object.defineProperty(window, 'GPUBuffer', previousGpuBufferDescriptor)
+            } else {
+                Reflect.deleteProperty(window, 'GPUBuffer')
+            }
+        }
+    })
+
+    it('keeps always-on debug events compact while dump snapshots still expose entry state', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        layer.sync(makeCanvasState({ nodes: [makeImageNode('debug-image')] }))
+
+        const syncStart = findLatestDebugEvent('sync-start')
+        const visibilityEnd = findLatestDebugEvent('visibility-pass-end')
+        const dump = getDebugDump()
+
+        expect(syncStart.details.imageNodes).toEqual(['debug-image'])
+        expect(syncStart.details.entriesBefore).toBe(0)
+        expect(visibilityEnd.details.changedCount).toBeGreaterThan(0)
+        expect(visibilityEnd.details).not.toHaveProperty('entries')
+        expect(visibilityEnd.details).not.toHaveProperty('changed')
+        expect(dump.entries).toHaveLength(1)
+        expect(dump.entries[0]).toMatchObject({
+            nodeId: 'debug-image',
+            fileId: 'debug-image-file',
+            worldRect: {
+                minX: 10,
+                minY: 20,
+                maxX: 110,
+                maxY: 90,
+            },
+            sprite: expect.objectContaining({
+                renderable: true,
+            }),
+        })
+    })
+
+    it('records verbose debug payloads only when the reproduction flag is enabled', async () => {
+        const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => undefined)
+        window.localStorage.setItem('lixpi.debug.pixiMedia', '1')
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        layer.sync(makeCanvasState({ nodes: [makeImageNode('verbose-image')] }))
+
+        const syncStart = findLatestDebugEvent('sync-start')
+        const visibilityEnd = findLatestDebugEvent('visibility-pass-end')
+
+        expect(syncStart.details.imageNodes).toEqual([expect.objectContaining({
+            nodeId: 'verbose-image',
+            sourceKey: 'workspace-1|verbose-image-file|/verbose-image.png',
+        })])
+        expect(Array.isArray(syncStart.details.entriesBefore)).toBe(true)
+        expect(Array.isArray(visibilityEnd.details.entries)).toBe(true)
+        expect(Array.isArray(visibilityEnd.details.changed)).toBe(true)
+        expect(debugSpy).toHaveBeenCalled()
+    })
+
     it('dispatches non-image nodes to the registry and removes stale node ids on sync', async () => {
         const layer = createTestLayer()
         await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
@@ -556,6 +736,29 @@ describe('createPixiMediaLayer runtime behavior', () => {
         expect(mediaNodeRegistryCalls.dispatchRemove).toHaveBeenCalledTimes(2)
         expect(mediaNodeRegistryCalls.dispatchRemove).toHaveBeenCalledWith('video-1')
         expect(mediaNodeRegistryCalls.dispatchRemove).toHaveBeenCalledWith('doc-1')
+    })
+
+    it('destroys removed image display objects during the sync that removes the image node', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        layer.sync(makeCanvasState({ nodes: [makeImageNode('removed-image')] }))
+
+        const sprite = pixiSpriteInstances.find((instance) => instance.label === 'pixi-image-removed-image')
+        const mask = pixiGraphicsInstances.find((instance) => instance.label === 'pixi-image-mask-removed-image')
+        const colorRect = pixiGraphicsInstances.find((instance) => instance.label === 'pixi-image-color-removed-image')
+        expect(sprite).toBeTruthy()
+        expect(mask).toBeTruthy()
+        expect(colorRect).toBeTruthy()
+        expect(sprite?.destroy).not.toHaveBeenCalled()
+        expect(mask?.destroy).not.toHaveBeenCalled()
+        expect(colorRect?.destroy).not.toHaveBeenCalled()
+
+        layer.sync(makeCanvasState({ nodes: [] }))
+
+        expect(sprite?.destroy).toHaveBeenCalledTimes(1)
+        expect(mask?.destroy).toHaveBeenCalledTimes(1)
+        expect(colorRect?.destroy).toHaveBeenCalledTimes(1)
     })
 
     it('forwards live transforms to registry for non-image nodes', async () => {

@@ -95,6 +95,10 @@ import {
     computeNextBranchRowPositionToRightOfRect,
     computeViewportCenterInsertionPosition,
 } from '$src/infographics/workspace/imagePositioning.ts'
+import {
+    applyBranchLineageNodeGap,
+    normalizeBranchLineageNodeGap,
+} from '$src/infographics/workspace/branchLineageNodeSpacing.ts'
 import { computeReferenceBranchRootMarkerPosition } from '$src/infographics/workspace/referenceBranchRootPlacement.ts'
 import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
 import { computeWorkspaceDragPlan } from '$src/infographics/workspace/workspaceDragPlan.ts'
@@ -284,9 +288,18 @@ function getBranchMarkerResponseLineHeight(): number {
 function getBranchMarkerMinHeight(): number {
     return BRANCH_MARKER_VERTICAL_PADDING + getBranchMarkerMessageLineHeight()
 }
-function getBranchMarkerStackGap(): number {
+
+function getPendingBranchMarkerInputGap(): number {
     const gap = Number(settings.mediaBranchLineage.pendingMarkerInputGap)
     return Number.isFinite(gap) ? Math.max(0, gap) : 0
+}
+
+function getBranchLineageNodeGap(): number {
+    return normalizeBranchLineageNodeGap(settings.mediaBranchLineage.nodeGap)
+}
+
+function getBranchMarkerStackGap(): number {
+    return getBranchLineageNodeGap()
 }
 // Must match the `workspace-branch-marker-spin` animation duration in
 // workspace-canvas.scss (0.8s). Used to phase-align recreated spinners to a
@@ -3083,6 +3096,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function getBranchLineageCollisionSettings(
+        nodeSettings: WorkspaceCollisionNodeTypeSettings,
+    ): WorkspaceCollisionNodeTypeSettings {
+        return applyBranchLineageNodeGap(nodeSettings, getBranchLineageNodeGap())
+    }
+
     function getCanvasNodeCollisionSettings(
         node: CanvasNode,
         collisionSettings: WorkspaceCollisionFlowSettings,
@@ -3093,11 +3112,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             case 'video':
                 return collisionSettings.nodeTypes.video
             case 'branchOrigin':
-                return collisionSettings.nodeTypes.branchOrigin
+                return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchOrigin)
             case 'branchFork':
-                return collisionSettings.nodeTypes.branchFork
+                return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchFork)
             case 'branchLine':
-                return collisionSettings.nodeTypes.branchLine
+                return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchLine)
             case 'document':
             default:
                 return collisionSettings.nodeTypes.document
@@ -6293,7 +6312,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // those items to push the marker. The marker stays pinned just above the
         // input and overlaps the context tray instead.
         const composerBounds = (globalCanvasComposer?.element ?? globalCanvasComposerHostEl)?.getBoundingClientRect()
-        const gap = settings.mediaBranchLineage.pendingMarkerInputGap
+        const gap = getPendingBranchMarkerInputGap()
         if (!composerBounds) {
             const screenRight = paneBounds.width / 2 + dimensions.width / 2
             const screenBottom = paneBounds.height - 24 - gap - stackOffsetY
@@ -6373,7 +6392,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return a.nodeId.localeCompare(b.nodeId)
             })
         let stackOffsetY = 0
-        const stackGap = getBranchMarkerStackGap()
+        const stackGap = getPendingBranchMarkerInputGap()
         for (const node of pendingNodes) {
             // The docked pose is laid out at its own compact, single-line size — not
             // the (taller, possibly wrapped) on-canvas dimensions the node carries.
@@ -6393,7 +6412,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const pendingStates = getPendingBranchMarkerModelStates(data, promptText)
         const pendingNodes: BranchLineCanvasNode[] = []
         let stackOffsetY = 0
-        const stackGap = getBranchMarkerStackGap()
+        const stackGap = getPendingBranchMarkerInputGap()
         pendingStates.forEach((pendingState, index) => {
             const dimensions = getBranchMarkerContentDimensions(promptText)
             // The node carries on-canvas dimensions, but its initial docked pose is
@@ -7803,7 +7822,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             markerDimensions,
             rootToFirstMediaGap: getRootBranchMarkerOutputGap(),
             markerToMediaGap,
-            referenceToMarkerMinGap: getBranchMarkerStackGap(),
+            referenceToMarkerMinGap: getBranchLineageNodeGap(),
         })
     }
 

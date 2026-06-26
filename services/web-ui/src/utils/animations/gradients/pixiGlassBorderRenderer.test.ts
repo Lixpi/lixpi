@@ -112,8 +112,16 @@ const {
         public uvs = new Float32Array(0)
         public indices = new Uint32Array(0)
         public destroy = vi.fn()
+        public attributes = {
+            aPosition: { buffer: { update: vi.fn() } },
+            aUV: { buffer: { update: vi.fn() } },
+        }
+        public indexBuffer = { update: vi.fn() }
 
-        constructor() {
+        constructor(options: { positions?: Float32Array; uvs?: Float32Array; indices?: Uint32Array } = {}) {
+            this.positions = options.positions ?? this.positions
+            this.uvs = options.uvs ?? this.uvs
+            this.indices = options.indices ?? this.indices
             geometryInstances.push(this)
         }
     }
@@ -586,7 +594,7 @@ describe('PixiGlassBorderRenderer — visibility, capture, and meshes', () => {
         expect(renderer.getCaptureTexture()).toBeNull()
     })
 
-    it('reuses target meshes by id and destroys stale entries', () => {
+    it('reuses target meshes by id, hides stale entries during sync, and destroys on teardown', () => {
         const renderer = createRenderer()
 
         renderer.sync([{
@@ -633,16 +641,39 @@ describe('PixiGlassBorderRenderer — visibility, capture, and meshes', () => {
         }], { width: 220, height: 110 })
 
         expect(meshInstances).toHaveLength(2)
+        expect(firstMesh?.renderable).toBe(false)
+        expect(meshInstances.at(-1)?.renderable).toBe(true)
+        expect(firstMesh?.destroy).not.toHaveBeenCalled()
+        expect(firstGeometry?.destroy).not.toHaveBeenCalled()
+        expect((renderer as any).entries.has('composer')).toBe(true)
+        expect((renderer as any).entries.has('button')).toBe(true)
+
+        renderer.destroy()
         expect(firstMesh?.destroy).toHaveBeenCalled()
         expect(firstGeometry?.destroy).toHaveBeenCalled()
-        expect((renderer as any).entries.has('composer')).toBe(false)
-        expect((renderer as any).entries.has('button')).toBe(true)
+        expect(meshInstances.at(-1)?.destroy).toHaveBeenCalled()
+        expect(geometryInstances.at(-1)?.destroy).toHaveBeenCalled()
     })
 
     it('clears draw state and stale meshes when style disables the glass border', () => {
-        const renderer = createRenderer(makeStyle({ enabled: false }))
+        const style = makeStyle()
+        const renderer = createRenderer(style)
         const container = (renderer as any).container as MockContainer
 
+        renderer.sync([{
+            id: 'composer',
+            x: 10,
+            y: 20,
+            width: 100,
+            height: 44,
+            radius: 22,
+            visible: true,
+        }], { width: 200, height: 100 })
+        expect(meshInstances).toHaveLength(1)
+
+        ;(style as { enabled: boolean }).enabled = false
+        ;((renderer as any).maskGraphics as MockGraphics).clear.mockClear()
+        ;((renderer as any).highlightGraphics as MockGraphics).clear.mockClear()
         renderer.sync([{
             id: 'composer',
             x: 10,
@@ -655,7 +686,8 @@ describe('PixiGlassBorderRenderer — visibility, capture, and meshes', () => {
 
         expect(container.renderable).toBe(false)
         expect(renderer.getCaptureTexture()).toBeNull()
-        expect(meshInstances).toHaveLength(0)
+        expect(meshInstances).toHaveLength(1)
+        expect(meshInstances[0].renderable).toBe(false)
         expect(((renderer as any).maskGraphics as MockGraphics).clear).toHaveBeenCalled()
         expect(((renderer as any).highlightGraphics as MockGraphics).clear).toHaveBeenCalled()
     })
