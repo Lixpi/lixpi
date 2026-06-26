@@ -15,6 +15,9 @@ export type PixiEdgeRenderer = {
 
 const MAX_PIXI_RESOLUTION = 2
 
+// Mirrors the media-layer canvas resolution cap. Edge coordinates snap against
+// this value so thin strokes stay crisp on retina displays without overfitting
+// to devicePixelRatio values above the Pixi renderer cap.
 function getPixiScreenResolution(): number {
     if (typeof window === 'undefined') return 1
     return Math.min(window.devicePixelRatio || 1, MAX_PIXI_RESOLUTION)
@@ -186,13 +189,24 @@ export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
     // across renders; geometry is only rebuilt when the datum fingerprint
     // changes. This avoids the original O(edges) destroy+alloc+GPU-upload
     // cycle on every `scheduleEdgesRender` call.
-    const edgeGraphics = new Map<string, { g: Graphics; key: string }>()
+    const edgeGraphics = new Map<string, { g: Graphics; key: string; active: boolean }>()
 
+    // Teardown-only destruction path. Normal render hides missing edges so Pixi
+    // does not destroy Graphics buffers while WebGPU may still be submitting.
     function destroyEntry(entry: { g: Graphics }): void {
         container.removeChild(entry.g)
         entry.g.destroy()
     }
 
+    // Keep the DisplayObject and GPU allocations around for reuse, but remove
+    // it from drawing and hit-testing.
+    function hideEntry(entry: { g: Graphics; active: boolean }): void {
+        entry.active = false
+        entry.g.renderable = false
+    }
+
+    // Rebuilds one edge Graphics object from the latest projected path. This is
+    // only called when the stable datum key changes.
     function paintEdge(g: Graphics, edge: PixiEdgeRenderDatum, viewport: CanvasViewport): void {
         // `edgeLayer` is already screen-space. The SVG path points are projected
         // manually in `drawSvgPath`, so stroke width must be computed as a final
@@ -216,15 +230,16 @@ export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
         if (edge.arrowStart) drawArrowhead(g, edge.arrowStart, edge.strokeColor, viewport)
     }
 
+    // Reconciles all visible edges. Existing Graphics objects are reused and
+    // hidden when absent so edge sync remains cheap during drag/pan/zoom.
     function render(edges: PixiEdgeRenderDatum[], viewport: CanvasViewport): void {
         const incomingIds = new Set(edges.map((e) => e.id))
 
-        // Remove Graphics for edges that no longer exist.
+        // Hide Graphics for edges that no longer exist. Destroying PIXI
+        // buffers during the same frame WebGPU is submitting can invalidate
+        // queued command buffers, so normal sync keeps objects reusable.
         for (const [id, entry] of edgeGraphics) {
-            if (!incomingIds.has(id)) {
-                destroyEntry(entry)
-                edgeGraphics.delete(id)
-            }
+            if (!incomingIds.has(id)) hideEntry(entry)
         }
 
         // Update or create Graphics for each incoming edge.
@@ -233,6 +248,8 @@ export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
             const existing = edgeGraphics.get(edge.id)
 
             if (existing) {
+                existing.active = true
+                existing.g.renderable = true
                 // Reuse Graphics object. Only repaint if the edge actually changed.
                 if (existing.key !== key) {
                     paintEdge(existing.g, edge, viewport)
@@ -242,11 +259,12 @@ export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
                 const g = new Graphics()
                 container.addChild(g)
                 paintEdge(g, edge, viewport)
-                edgeGraphics.set(edge.id, { g, key })
+                edgeGraphics.set(edge.id, { g, key, active: true })
             }
         }
     }
 
+    // Releases every edge object when the whole renderer is torn down.
     function destroy(): void {
         for (const entry of edgeGraphics.values()) destroyEntry(entry)
         edgeGraphics.clear()

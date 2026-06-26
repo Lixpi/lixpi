@@ -95,6 +95,7 @@ import {
     computeNextBranchRowPositionToRightOfRect,
     computeViewportCenterInsertionPosition,
 } from '$src/infographics/workspace/imagePositioning.ts'
+import { computeReferenceBranchRootMarkerPosition } from '$src/infographics/workspace/referenceBranchRootPlacement.ts'
 import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
 import { computeWorkspaceDragPlan } from '$src/infographics/workspace/workspaceDragPlan.ts'
 import {
@@ -3335,12 +3336,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         mediaHeight: number,
         siblingSlot?: { index: number; count: number },
     ): { x: number; y: number } {
-        const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)
-        const basePosition = referencePosition
-            ? {
-                x: referencePosition.x - getRootBranchMarkerOutputGap() - markerDimensions.width,
-                y: referencePosition.y + (mediaHeight - markerDimensions.height) / 2,
-            }
+        const referenceRootPosition = getReferenceBranchRootMarkerPositionForGeneratedMedia(
+            threadId,
+            generationRun,
+            markerDimensions,
+            mediaHeight,
+            getRootBranchMarkerOutputGap(),
+        )
+        const basePosition = referenceRootPosition
+            ? referenceRootPosition
             : getCenteredFreshRootBranchMarkerPosition(markerDimensions, mediaHeight)
 
         if (!siblingSlot) return basePosition
@@ -7168,12 +7172,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const nodeId = plannedBranchOriginNodeId
         const dimensions = getBranchMarkerContentDimensions(branchOriginPlan.provenance?.promptText ?? '')
-        const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)
-        const position = referencePosition
-            ? {
-                x: referencePosition.x - getBranchOriginOutputGap() - dimensions.width,
-                y: referencePosition.y + (mediaHeight - dimensions.height) / 2,
-            }
+        const referenceRootPosition = getReferenceBranchRootMarkerPositionForGeneratedMedia(
+            threadId,
+            generationRun,
+            dimensions,
+            mediaHeight,
+            getBranchOriginOutputGap(),
+        )
+        const position = referenceRootPosition
+            ? referenceRootPosition
             : getCenteredFreshBranchOriginPosition(dimensions, mediaHeight)
 
         const branchOriginNode: BranchOriginCanvasNode = {
@@ -7781,14 +7788,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
     }
 
-    function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number, generationRun?: MediaGenerationRunMeta): { x: number; y: number } | undefined {
+    function getReferenceBranchRootMarkerPositionForGeneratedMedia(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        markerDimensions: { width: number; height: number },
+        mediaHeight: number,
+        markerToMediaGap: number,
+    ): { x: number; y: number } | undefined {
         const referenceGroupRect = getReferenceGroupRectForGeneratedMedia(threadId, generationRun)
         if (!referenceGroupRect) return undefined
-        return computeLineageContinuationPositionToRightOfRect(
+        return computeReferenceBranchRootMarkerPosition({
             referenceGroupRect,
             mediaHeight,
-            settings.mediaBranchLineage.rootToFirstMediaGap
-        )
+            markerDimensions,
+            rootToFirstMediaGap: getRootBranchMarkerOutputGap(),
+            markerToMediaGap,
+            referenceToMarkerMinGap: getBranchMarkerStackGap(),
+        })
     }
 
     function getNextGeneratedMediaPosition(sourceNode: CanvasNode, mediaHeight: number): { x: number; y: number } {

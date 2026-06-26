@@ -86,6 +86,106 @@ type TextureEntry = {
     lastUsed: number
 }
 
+type PixiMediaDebugImageSnapshot = {
+    nodeId: string
+    fileId: string
+    src: string
+    sourceKey: string
+    loadedTier: LodTier | null
+    requestedTier: LodTier | null
+    requestId: number
+    textureKey: string | null
+    isVisible: boolean
+    worldRect: IndexedImage
+    nodeDimensions: { width: number; height: number }
+    sprite: {
+        renderable: boolean
+        visible: boolean
+        x: number
+        y: number
+        width: number
+        height: number
+        textureWidth: number
+        textureHeight: number
+    }
+    colorRect: {
+        renderable: boolean
+        visible: boolean
+        x: number
+        y: number
+    }
+}
+
+type PixiMediaDebugEvent = {
+    t: number
+    event: string
+    workspaceId: string
+    health: PixiRendererHealth
+    destroyed: boolean
+    viewport: CanvasViewport
+    pane: {
+        clientWidth: number
+        clientHeight: number
+        rectWidth: number
+        rectHeight: number
+    }
+    cache: {
+        textures: number
+        bytes: number
+        requestCounter: number
+    }
+    details: Record<string, unknown>
+}
+
+type PixiGpuBufferDestroyEvent = {
+    t: number
+    stack: string | undefined
+    // True when this call queued a native GPUBuffer.destroy for a later frame.
+    // False means the same GPUBuffer was already queued and this call only
+    // records another stack that tried to destroy it.
+    deferred: boolean
+    queueLength: number
+}
+
+type PixiMediaDebugDump = {
+    t: number
+    workspaceId: string
+    health: PixiRendererHealth
+    destroyed: boolean
+    viewport: CanvasViewport
+    pane: PixiMediaDebugEvent['pane']
+    cache: PixiMediaDebugEvent['cache']
+    entries: PixiMediaDebugImageSnapshot[]
+    events: PixiMediaDebugEvent[]
+    gpuBufferDestroys: PixiGpuBufferDestroyEvent[]
+}
+
+type PixiMediaDebugWindow = typeof window & {
+    // Set to true, or set localStorage `lixpi.debug.pixiMedia` to `1`, to print
+    // every debug event as it happens. The dump function exists regardless.
+    __lixpiPixiMediaDebug?: boolean
+    __lixpiPixiMediaDebugEvents?: PixiMediaDebugEvent[]
+    __lixpiGpuBufferDestroyDebugInstalled?: boolean
+    __lixpiGpuBufferDestroyDebugVersion?: number
+    __lixpiGpuBufferDestroyEvents?: PixiGpuBufferDestroyEvent[]
+    __lixpiGpuBufferDestroyOriginal?: (this: unknown) => void
+    __lixpiGpuBufferDestroyQueue?: DeferredGpuBufferDestroy[]
+    __lixpiGpuBufferDestroyQueued?: WeakSet<object>
+    __lixpiGpuBufferDestroyRaf?: number | null
+    __lixpiPixiMediaDebugDump?: () => PixiMediaDebugDump
+}
+
+type DeferredPixiDestroy = {
+    label: string
+    framesRemaining: number
+    run: () => void
+}
+
+type DeferredGpuBufferDestroy = {
+    buffer: object
+    framesRemaining: number
+}
+
 export type SelectionColors = {
     marqueeStroke: string
     marqueeFill: string
@@ -108,32 +208,52 @@ export type GeneratingMediaOutlineTarget = GeneratingMediaOutlineDirection | Gen
 export type GeneratingMediaOutlineTargets = Set<string> | Map<string, GeneratingMediaOutlineTarget>
 
 export type PixiMediaLayer = {
+    // Reconciles canvas state into Pixi image/video/display objects.
     sync: (canvasState: CanvasState | null) => void
+    // Updates animated generation/reference outlines for image-like media nodes.
     setGeneratingImageNodes: (nodeTargets: GeneratingMediaOutlineTargets) => void
+    // Applies the current pan/zoom transform and schedules culling/prefetch.
     setViewport: (viewport: CanvasViewport) => void
+    // Applies drag/resize geometry before persisted canvas state catches up.
     setNodeLiveTransform: (
         nodeId: string,
         worldPosition: WorldPosition,
         dimensions: { width: number; height: number }
     ) => void
+    // Shows or hides selected image outlines.
     setSelectedImageNodes: (selectedNodeIds: Set<string>) => void
+    // Draws the drag-selection marquee in world coordinates.
     setMarqueeRect: (worldRect: { x: number; y: number; width: number; height: number } | null) => void
+    // Draws the multi-selection group bounds overlay in world coordinates.
     setSelectionOverlayBounds: (worldBounds: { x: number; y: number; width: number; height: number } | null, options?: SelectionOverlayOptions) => void
+    // Sends connector edge geometry to the Pixi edge layer.
     setPixiEdges: (edges: PixiEdgeRenderDatum[]) => void
+    // Forces an immediate Pixi render when callers need a synchronous paint.
     renderNow: () => void
+    // Reports whether Pixi initialization/rendering is ready, failed, or gone.
     getHealth: () => PixiRendererHealth
+    // Exposes non-image media handlers for integration code that owns video DOM.
     getMediaNodeRegistry?: () => MediaNodeRegistry
+    // Exposes the Pixi video layer so video handlers can align poster geometry.
     getVideoLayer?: () => Container
+    // Requests a coalesced render on the next animation frame.
     scheduleRender?: () => void
+    // Tears down Pixi resources and removes the media-layer host.
     destroy: () => void
 }
 
 type PixiMediaLayerOptions = {
+    // Pane that owns the Pixi host and defines renderer resize bounds.
     paneEl: HTMLDivElement
+    // DOM viewport element used as the insertion anchor for the Pixi host.
     viewportEl: HTMLDivElement
+    // Late-bound workspace id so debug dumps and image URLs match workspace switches.
     getWorkspaceId: () => string
+    // Selection colors are supplied by the canvas host theme/settings.
     selectionColors: SelectionColors
+    // Reports natural image size corrections back to canvas state.
     onImageIntrinsicSize?: (size: { nodeId: string; width: number; height: number }) => void
+    // Lets the Svelte host react to Pixi health transitions.
     onHealthChange?: (health: PixiRendererHealth) => void
 }
 
@@ -154,6 +274,10 @@ const PREFETCH_MARGIN = 4000
 // We therefore cache aggressively: 2k textures @ ~768MB worst case.
 const MAX_TEXTURES = 2000
 const MAX_TEXTURE_BYTES = 768 * 1024 * 1024
+const PIXI_MEDIA_DEBUG_BUFFER_LIMIT = 2500
+const PIXI_DEFERRED_DESTROY_FRAMES = 12
+const PIXI_GPU_BUFFER_DESTROY_DEFER_FRAMES = 4
+const PIXI_GPU_BUFFER_DESTROY_DEBUG_VERSION = 2
 
 // Schedule a low-priority callback. requestIdleCallback is the right tool;
 // fall back to setTimeout on browsers that lack it (Safari before ~16.4).
@@ -244,7 +368,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let latestPixiEdges: PixiEdgeRenderDatum[] = []
     let renderRaf: number | null = null
     let visibilityRaf: number | null = null
+    let deferredDestroyRaf: number | null = null
     let prefetchScheduled = false
+    const deferredPixiDestroys: DeferredPixiDestroy[] = []
     const inProgressOutlineAnimation = settings.mediaNode.inProgressOutlineAnimation
     const inProgressOutlineAnimationStyles = inProgressOutlineAnimation.styles
     const inProgressOutlineZoomScaling = getAdaptiveBoundedZoomScalingOptions(inProgressOutlineAnimation.zoomScaling ?? { minZoom: 0.4 })
@@ -276,17 +402,333 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         if (health === next) return
         health = next
         onHealthChange?.(next)
+        debugLog('health-change', { next })
+    }
+
+    // Keep debug collection installed in normal builds. The dump is cheap when
+    // nobody calls it, and it gives reproducible state when flaky canvas issues
+    // happen outside a debugger session.
+    installDebugDump()
+    installGpuBufferDestroyDebug()
+    debugLog('layer-created', {
+        pane: getDebugPaneSnapshot(),
+        initialViewport: currentViewport,
+    })
+
+    // Reads the browser global through a typed boundary. Keeping this isolated
+    // avoids leaking debug-only window fields into renderer logic.
+    function getDebugHost(): PixiMediaDebugWindow | null {
+        if (typeof window === 'undefined') return null
+        return window as PixiMediaDebugWindow
+    }
+
+    // Captures both layout APIs because disappearing-media bugs often involve a
+    // stale zero-sized pane during panel open/close or resize.
+    function getDebugPaneSnapshot(): PixiMediaDebugEvent['pane'] {
+        const rect = paneEl.getBoundingClientRect()
+        return {
+            clientWidth: paneEl.clientWidth,
+            clientHeight: paneEl.clientHeight,
+            rectWidth: rect.width,
+            rectHeight: rect.height,
+        }
+    }
+
+    // Debug events may include signed object-store URLs. Strip auth tokens and
+    // shorten data URLs so dumps are safe enough to paste into an issue/thread.
+    function cleanDebugUrl(value: string | null | undefined): string {
+        if (!value) return ''
+        if (value.startsWith('data:')) return `${value.slice(0, 32)}...len=${value.length}`
+        return value.replace(/[?&]token=[^&]+/, '')
+    }
+
+    // Texture-cache summary used in every event. It keeps dumps small while
+    // still showing whether disappearing images are cache pressure, request
+    // churn, or renderer visibility state.
+    function getDebugCacheSnapshot(): PixiMediaDebugEvent['cache'] {
+        return {
+            textures: textureCache.size,
+            bytes: textureBytes,
+            requestCounter,
+        }
+    }
+
+    // Per-image state snapshot. This is the main diagnostic payload for blank
+    // media cards: it separates app state, PIXI sprite state, culling state,
+    // texture request state, and placeholder visibility.
+    function getDebugEntrySnapshot(entry: PixiImageEntry): PixiMediaDebugImageSnapshot {
+        return {
+            nodeId: entry.nodeRef.nodeId,
+            fileId: entry.nodeRef.fileId,
+            src: cleanDebugUrl(entry.nodeRef.src),
+            sourceKey: cleanDebugUrl(entry.sourceKey),
+            loadedTier: entry.loadedTier,
+            requestedTier: entry.requestedTier,
+            requestId: entry.requestId,
+            textureKey: cleanDebugUrl(entry.textureKey),
+            isVisible: entry.isVisible,
+            worldRect: { ...entry.worldRect },
+            nodeDimensions: { ...entry.nodeRef.dimensions },
+            sprite: {
+                renderable: entry.sprite.renderable,
+                visible: entry.sprite.visible,
+                x: entry.sprite.x,
+                y: entry.sprite.y,
+                width: entry.sprite.width,
+                height: entry.sprite.height,
+                textureWidth: entry.sprite.texture.width,
+                textureHeight: entry.sprite.texture.height,
+            },
+            colorRect: {
+                renderable: entry.colorRect.renderable,
+                visible: entry.colorRect.visible,
+                x: entry.colorRect.x,
+                y: entry.colorRect.y,
+            },
+        }
+    }
+
+    // Snapshot all live image entries at the moment of the dump. The dump avoids
+    // retaining entry references so pasted output cannot mutate after capture.
+    function getDebugEntrySnapshots(): PixiMediaDebugImageSnapshot[] {
+        return Array.from(entries.values()).map((entry) => getDebugEntrySnapshot(entry))
+    }
+
+    // Exposes `window.__lixpiPixiMediaDebugDump()`. Use it after a canvas
+    // rendering failure, before reloading, to capture entries/cache/events and
+    // WebGPU buffer destroy stacks in one serializable object.
+    function installDebugDump(): void {
+        const host = getDebugHost()
+        if (!host) return
+        host.__lixpiPixiMediaDebugEvents ??= []
+        host.__lixpiPixiMediaDebugDump = () => ({
+            t: Date.now(),
+            workspaceId: getWorkspaceId(),
+            health,
+            destroyed,
+            viewport: { ...currentViewport },
+            pane: getDebugPaneSnapshot(),
+            cache: getDebugCacheSnapshot(),
+            entries: getDebugEntrySnapshots(),
+            events: [...(host.__lixpiPixiMediaDebugEvents ?? [])],
+            gpuBufferDestroys: [...(host.__lixpiGpuBufferDestroyEvents ?? [])],
+        })
+    }
+
+    // WebGPU validation fails if a GPUBuffer is destroyed while a command
+    // buffer submitted earlier in the same render turn still references it.
+    // Pixi can resize/unload internal buffers during normal Graphics/batcher
+    // work, so this wrapper records the stack and delays the native destroy a
+    // few rAFs. This preserves WebGPU and avoids downgrading to WebGL.
+    function installGpuBufferDestroyDebug(): void {
+        const host = getDebugHost()
+        const gpuBufferPrototype = (host as unknown as { GPUBuffer?: { prototype?: { destroy?: () => void } } } | null)
+            ?.GPUBuffer
+            ?.prototype
+        if (!host || !gpuBufferPrototype?.destroy) return
+        if (
+            host.__lixpiGpuBufferDestroyDebugInstalled
+            && host.__lixpiGpuBufferDestroyDebugVersion === PIXI_GPU_BUFFER_DESTROY_DEBUG_VERSION
+        ) {
+            return
+        }
+        const originalDestroy = gpuBufferPrototype.destroy
+        host.__lixpiGpuBufferDestroyOriginal = originalDestroy
+        host.__lixpiGpuBufferDestroyQueue = []
+        host.__lixpiGpuBufferDestroyQueued = new WeakSet<object>()
+        host.__lixpiGpuBufferDestroyRaf = null
+        host.__lixpiGpuBufferDestroyEvents ??= []
+        host.__lixpiGpuBufferDestroyDebugInstalled = true
+        host.__lixpiGpuBufferDestroyDebugVersion = PIXI_GPU_BUFFER_DESTROY_DEBUG_VERSION
+        gpuBufferPrototype.destroy = function destroyWithDebug(this: unknown): void {
+            if (typeof this !== 'object' || this === null) {
+                originalDestroy.call(this)
+                return
+            }
+            const buffer = this
+            host.__lixpiGpuBufferDestroyQueue ??= []
+            host.__lixpiGpuBufferDestroyQueued ??= new WeakSet<object>()
+            const queue = host.__lixpiGpuBufferDestroyQueue
+            const queued = host.__lixpiGpuBufferDestroyQueued
+            const alreadyQueued = queued.has(buffer)
+            if (!alreadyQueued) {
+                queued.add(buffer)
+                queue.push({
+                    buffer,
+                    framesRemaining: PIXI_GPU_BUFFER_DESTROY_DEFER_FRAMES,
+                })
+            }
+            host.__lixpiGpuBufferDestroyEvents ??= []
+            host.__lixpiGpuBufferDestroyEvents.push({
+                t: typeof performance === 'undefined' ? Date.now() : performance.now(),
+                stack: new Error().stack,
+                deferred: !alreadyQueued,
+                queueLength: queue.length,
+            })
+            while (host.__lixpiGpuBufferDestroyEvents.length > PIXI_MEDIA_DEBUG_BUFFER_LIMIT) {
+                host.__lixpiGpuBufferDestroyEvents.shift()
+            }
+            scheduleDeferredGpuBufferDestroys(host)
+        }
+    }
+
+    // Starts the one global drain loop for deferred native GPUBuffer.destroy().
+    // A single loop avoids scheduling one rAF per buffer when Pixi resizes many
+    // batch resources in the same frame.
+    function scheduleDeferredGpuBufferDestroys(host: PixiMediaDebugWindow): void {
+        if (host.__lixpiGpuBufferDestroyRaf !== null && host.__lixpiGpuBufferDestroyRaf !== undefined) return
+        host.__lixpiGpuBufferDestroyRaf = requestAnimationFrame(() => runDeferredGpuBufferDestroys(host))
+    }
+
+    // Drains queued native GPUBuffer.destroy calls only after enough frames have
+    // passed for the browser to retire the submitted command buffers that may
+    // still reference the old Pixi buffer.
+    function runDeferredGpuBufferDestroys(host: PixiMediaDebugWindow): void {
+        host.__lixpiGpuBufferDestroyRaf = null
+        const originalDestroy = host.__lixpiGpuBufferDestroyOriginal
+        const queue = host.__lixpiGpuBufferDestroyQueue
+        const queued = host.__lixpiGpuBufferDestroyQueued
+        if (!originalDestroy || !queue || !queued) return
+        for (let index = queue.length - 1; index >= 0; index--) {
+            const item = queue[index]
+            item.framesRemaining -= 1
+            if (item.framesRemaining > 0) continue
+            queue.splice(index, 1)
+            queued.delete(item.buffer)
+            originalDestroy.call(item.buffer)
+        }
+        if (queue.length > 0) scheduleDeferredGpuBufferDestroys(host)
+    }
+
+    // Pixi's shared GC can call Buffer.unload() during renderer postrender.
+    // This canvas owns a bounded texture cache and explicit disposal path, so
+    // automatic GPU-resource GC adds the exact class of mid-submit destroys
+    // that blanked image sprites.
+    function disablePixiRendererResourceGc(): void {
+        const renderer = app.renderer as typeof app.renderer & {
+            gc?: { enabled: boolean; maxUnusedTime?: number }
+        }
+        const gcWasEnabled = renderer.gc?.enabled
+        if (renderer.gc) renderer.gc.enabled = false
+        debugLog('renderer-resource-gc-disabled', {
+            gcWasEnabled,
+            gcEnabled: renderer.gc?.enabled,
+        })
+    }
+
+    // Runtime switch for verbose event streaming. The dump is always installed;
+    // this only controls console noise while reproducing a flaky issue.
+    function shouldPrintDebug(host: PixiMediaDebugWindow): boolean {
+        try {
+            return host.__lixpiPixiMediaDebug === true || window.localStorage.getItem('lixpi.debug.pixiMedia') === '1'
+        } catch {
+            return host.__lixpiPixiMediaDebug === true
+        }
+    }
+
+    // Appends one bounded event record. The ring buffer prevents a long canvas
+    // session from retaining unbounded debug state while still preserving the
+    // recent path into a failure.
+    function debugLog(event: string, details: Record<string, unknown> = {}): void {
+        const host = getDebugHost()
+        if (!host) return
+        host.__lixpiPixiMediaDebugEvents ??= []
+        const record: PixiMediaDebugEvent = {
+            t: typeof performance === 'undefined' ? Date.now() : performance.now(),
+            event,
+            workspaceId: getWorkspaceId(),
+            health,
+            destroyed,
+            viewport: { ...currentViewport },
+            pane: getDebugPaneSnapshot(),
+            cache: getDebugCacheSnapshot(),
+            details,
+        }
+        host.__lixpiPixiMediaDebugEvents.push(record)
+        while (host.__lixpiPixiMediaDebugEvents.length > PIXI_MEDIA_DEBUG_BUFFER_LIMIT) {
+            host.__lixpiPixiMediaDebugEvents.shift()
+        }
+        if (shouldPrintDebug(host)) console.debug('[PixiMediaLayer]', event, record)
+    }
+
+    // Defers Pixi DisplayObject/Texture destruction that we control. This is a
+    // separate layer from the native GPUBuffer wrapper because Pixi object
+    // destruction can fan out into texture, geometry, and buffer disposal.
+    function scheduleDeferredPixiDestroy(label: string, run: () => void): void {
+        if (destroyed) {
+            run()
+            return
+        }
+        deferredPixiDestroys.push({
+            label,
+            framesRemaining: PIXI_DEFERRED_DESTROY_FRAMES,
+            run,
+        })
+        debugLog('deferred-destroy-scheduled', {
+            label,
+            queued: deferredPixiDestroys.length,
+            frames: PIXI_DEFERRED_DESTROY_FRAMES,
+        })
+        if (deferredDestroyRaf !== null) return
+        deferredDestroyRaf = requestAnimationFrame(runDeferredPixiDestroys)
+    }
+
+    // Advances the app-owned Pixi destroy queue one frame. The queue is small
+    // and reverse iteration lets completed items be spliced without allocating.
+    function runDeferredPixiDestroys(): void {
+        deferredDestroyRaf = null
+        for (let index = deferredPixiDestroys.length - 1; index >= 0; index--) {
+            const item = deferredPixiDestroys[index]
+            item.framesRemaining -= 1
+            if (item.framesRemaining > 0) continue
+            deferredPixiDestroys.splice(index, 1)
+            item.run()
+            debugLog('deferred-destroy-ran', {
+                label: item.label,
+                queued: deferredPixiDestroys.length,
+            })
+        }
+        if (deferredPixiDestroys.length > 0 && !destroyed) {
+            deferredDestroyRaf = requestAnimationFrame(runDeferredPixiDestroys)
+        }
+    }
+
+    // On layer teardown we stop waiting and release app-owned resources
+    // immediately; no command buffers should be submitted after health becomes
+    // destroyed.
+    function flushDeferredPixiDestroys(): void {
+        if (deferredDestroyRaf !== null) {
+            cancelAnimationFrame(deferredDestroyRaf)
+            deferredDestroyRaf = null
+        }
+        while (deferredPixiDestroys.length > 0) {
+            const item = deferredPixiDestroys.shift()
+            item?.run()
+        }
+    }
+
+    // CanvasState persisted by older code paths may not carry a viewport field.
+    // Falling back to the current viewport keeps sync compatible with both
+    // shapes without adding migration logic to the renderer.
+    function getCanvasStateViewport(canvasState: CanvasState): CanvasViewport {
+        return (canvasState as CanvasState & { viewport?: CanvasViewport }).viewport ?? currentViewport
     }
 
     void (async () => {
         try {
-            await app.init({
+            debugLog('app-init-start', {
+                preference: 'webgpu',
+                gcActive: false,
+                resolution: Math.min(window.devicePixelRatio || 1, 2),
+            })
+            const pixiInitOptions = {
                 preference: 'webgpu',
                 backgroundAlpha: 0,
                 antialias: true,
                 autoDensity: true,
                 resolution: Math.min(window.devicePixelRatio || 1, 2),
                 resizeTo: paneEl,
+                gcActive: false,
                 // We render on demand via `scheduleRender`. Letting PIXI's
                 // ticker run autoStart at 60fps wastes CPU/GPU on every frame
                 // even when the canvas is idle, and also doubles the work
@@ -301,12 +743,16 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     antialias: true,
                     powerPreference: 'high-performance',
                 },
-            })
+            } as const
+            await app.init(pixiInitOptions)
+            installGpuBufferDestroyDebug()
 
             // Keep the ticker stopped so it never auto-renders behind our backs.
             app.ticker.stop()
+            disablePixiRendererResourceGc()
 
             if (destroyed) {
+                debugLog('app-init-destroyed-before-ready')
                 app.destroy(true, { children: true, texture: true, textureSource: true })
                 return
             }
@@ -333,9 +779,18 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             world.position.set(currentViewport.x, currentViewport.y)
             world.scale.set(currentViewport.zoom, currentViewport.zoom)
             setHealth('ready')
+            debugLog('app-init-ready', {
+                canvasWidth: app.canvas.width,
+                canvasHeight: app.canvas.height,
+                pane: getDebugPaneSnapshot(),
+            })
             sync(lastState)
             scheduleRender()
         } catch (error) {
+            debugLog('app-init-error', {
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+            })
             console.error('[PixiMediaLayer] Failed to initialize PIXI media layer.', error)
             throw error
         }
@@ -343,6 +798,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function setViewport(viewport: CanvasViewport): void {
         if (destroyed) return
+        const previousViewport = currentViewport
         currentViewport = viewport
         // Tier is recomputed on every viewport change so newly visible
         // sprites get the right tier on demand. Sprites that already have a
@@ -352,6 +808,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         world.position.set(viewport.x, viewport.y)
         world.scale.set(viewport.zoom, viewport.zoom)
         edgeRenderer?.render(latestPixiEdges, viewport)
+        debugLog('set-viewport', {
+            previousViewport,
+            nextViewport: viewport,
+            tier: currentTier,
+            entries: entries.size,
+        })
         // Visibility update is rAF-coalesced so a 60Hz wheel-zoom doesn't
         // run the spatial-index scan + per-entry iteration 60 times per
         // second — once per frame is enough.
@@ -361,7 +823,15 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function scheduleVisibilityUpdate(): void {
-        if (destroyed || visibilityRaf !== null) return
+        if (destroyed) {
+            debugLog('visibility-schedule-skipped', { reason: 'destroyed' })
+            return
+        }
+        if (visibilityRaf !== null) {
+            debugLog('visibility-schedule-skipped', { reason: 'already-scheduled' })
+            return
+        }
+        debugLog('visibility-scheduled')
         visibilityRaf = requestAnimationFrame(() => {
             visibilityRaf = null
             if (destroyed) return
@@ -371,12 +841,19 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function sync(canvasState: CanvasState | null): void {
         lastState = canvasState
-        if (!canvasState || health !== 'ready' || destroyed) return
+        if (!canvasState || health !== 'ready' || destroyed) {
+            debugLog('sync-skipped', {
+                hasCanvasState: Boolean(canvasState),
+                health,
+                destroyed,
+            })
+            return
+        }
 
         // On workspace switch the external setViewport call arrives after sync.
         // Apply the state's viewport directly so culling and world transform are
         // correct before any sprites are positioned or made renderable.
-        const vp = canvasState.viewport
+        const vp = getCanvasStateViewport(canvasState)
         if (vp.x !== currentViewport.x || vp.y !== currentViewport.y || vp.zoom !== currentViewport.zoom) {
             currentViewport = vp
             currentTier = getPixiLodTier(vp.zoom)
@@ -387,9 +864,28 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
         const imageNodes = canvasState.nodes.filter((node: CanvasState['nodes'][number]): node is ImageCanvasNode => node.type === 'image')
         const activeIds = new Set<string>(imageNodes.map((node: ImageCanvasNode) => node.nodeId))
+        debugLog('sync-start', {
+            nodeCount: canvasState.nodes.length,
+            imageCount: imageNodes.length,
+            nonImageCount: canvasState.nodes.length - imageNodes.length,
+            canvasViewport: vp,
+            imageNodes: imageNodes.map((node) => ({
+                nodeId: node.nodeId,
+                fileId: node.fileId,
+                src: cleanDebugUrl(node.src),
+                dimensions: node.dimensions,
+                position: node.position,
+                sourceKey: makeSourceKey(node),
+            })),
+            entriesBefore: getDebugEntrySnapshots(),
+        })
 
         for (const [nodeId, entry] of entries) {
             if (!activeIds.has(nodeId)) {
+                debugLog('entry-remove', {
+                    nodeId,
+                    entry: getDebugEntrySnapshot(entry),
+                })
                 releaseTexture(entry.textureKey)
                 // Remove from spatial index before destroying the entry.
                 spatialIndex.remove(entry.worldRect, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
@@ -397,9 +893,14 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 imageLayer.removeChild(entry.spriteMask)
                 imageLayer.removeChild(entry.colorRect)
                 entry.sprite.mask = null
-                entry.sprite.destroy()
-                entry.spriteMask.destroy()
-                entry.colorRect.destroy()
+                entry.sprite.renderable = false
+                entry.spriteMask.renderable = false
+                entry.colorRect.renderable = false
+                scheduleDeferredPixiDestroy(`image-entry:${nodeId}`, () => {
+                    entry.sprite.destroy()
+                    entry.spriteMask.destroy()
+                    entry.colorRect.destroy()
+                })
                 entries.delete(nodeId)
             }
         }
@@ -414,23 +915,36 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         updateVisibleImages()
         schedulePrefetch()
         scheduleRender()
+        debugLog('sync-end', {
+            entriesAfter: getDebugEntrySnapshots(),
+            registryDispatchedNodes: [...registryDispatchedNodes],
+        })
     }
 
     function dispatchNonImageMediaNodes(canvasState: CanvasState): void {
         const nodesById = buildNodesById(canvasState.nodes)
         const currentRegistryNodes = new Set<string>()
+        let handledCount = 0
         for (const node of canvasState.nodes) {
             if (node.type === 'image') continue
             const worldPosition = computeWorldPosition(node, nodesById)
             const handled = mediaNodeRegistry.dispatchSync(node, worldPosition, canvasState)
-            if (handled) currentRegistryNodes.add(node.nodeId)
+            if (handled) {
+                handledCount++
+                currentRegistryNodes.add(node.nodeId)
+            }
         }
         for (const nodeId of registryDispatchedNodes) {
             if (!currentRegistryNodes.has(nodeId)) {
+                debugLog('non-image-remove', { nodeId })
                 mediaNodeRegistry.dispatchRemove(nodeId)
             }
         }
         registryDispatchedNodes = currentRegistryNodes
+        debugLog('non-image-dispatch', {
+            handledCount,
+            handledNodeIds: [...currentRegistryNodes],
+        })
     }
 
     function upsertAllEntries(canvasState: CanvasState): void {
@@ -448,8 +962,22 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function scheduleRender(): void {
-        if (destroyed || health !== 'ready') return
-        if (renderRaf !== null) return
+        if (destroyed || health !== 'ready') {
+            debugLog('render-schedule-skipped', {
+                destroyed,
+                health,
+            })
+            return
+        }
+        if (renderRaf !== null) {
+            debugLog('render-schedule-skipped', {
+                reason: 'already-scheduled',
+            })
+            return
+        }
+        debugLog('render-scheduled', {
+            entries: entries.size,
+        })
         renderRaf = requestAnimationFrame(() => {
             renderRaf = null
             if (destroyed || health !== 'ready') return
@@ -458,15 +986,25 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function renderNow(): void {
-        if (destroyed || health !== 'ready') return
+        if (destroyed || health !== 'ready') {
+            debugLog('render-now-skipped', {
+                destroyed,
+                health,
+            })
+            return
+        }
         if (renderRaf !== null) {
             cancelAnimationFrame(renderRaf)
             renderRaf = null
         }
+        debugLog('render-now')
         renderPixiStage()
     }
 
     function renderPixiStage(): void {
+        debugLog('render-stage-start', {
+            entries: getDebugEntrySnapshots(),
+        })
         syncScreenGlassBorders()
         const captureTexture = glassBorderRenderer.getCaptureTexture()
         if (captureTexture) {
@@ -488,6 +1026,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         // Final render draws the live stage, including the restored glass layer
         // that samples the captureTexture generated above.
         app.render()
+        debugLog('render-stage-end', {
+            entries: getDebugEntrySnapshots(),
+        })
     }
 
     // Screen-glass geometry is resolved at render time from DOM client rects
@@ -586,11 +1127,23 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         return Number.isFinite(pixels) ? pixels : 0
     }
 
-    function destroyForegroundGraphics(graphics: Graphics | null): null {
-        if (!graphics) return null
-        graphics.parent?.removeChild(graphics)
-        graphics.destroy()
-        return null
+    function getForegroundGraphics(graphics: Graphics | null, label: string): Graphics {
+        if (graphics) {
+            graphics.clear()
+            graphics.renderable = true
+            return graphics
+        }
+        const next = new Graphics()
+        next.label = label
+        next.eventMode = 'none'
+        fgLayer.addChild(next)
+        return next
+    }
+
+    function hideForegroundGraphics(graphics: Graphics | null): void {
+        if (!graphics) return
+        graphics.clear()
+        graphics.renderable = false
     }
 
     // Live drag/resize updates push the new world position straight to the
@@ -608,6 +1161,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         const h = dimensions.height
         const entry = entries.get(nodeId)
         if (!entry) {
+            debugLog('live-transform-missing-image-entry', {
+                nodeId,
+                worldPosition,
+                dimensions,
+                registryHasNode: registryDispatchedNodes.has(nodeId),
+            })
             // Non-image (e.g. video) nodes flow through the registry so their
             // sprite transforms stay in lockstep with DOM hitboxes during drag/resize.
             if (registryDispatchedNodes.has(nodeId)) {
@@ -620,10 +1179,22 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     height: h,
                     radius: getGeneratingBorderRadius(node, w, h),
                 })
+                debugLog('live-transform-non-image', {
+                    nodeId,
+                    worldPosition,
+                    dimensions,
+                })
                 scheduleRender()
             }
             return
         }
+
+        debugLog('live-transform-image', {
+            nodeId,
+            before: getDebugEntrySnapshot(entry),
+            worldPosition,
+            dimensions,
+        })
 
         entry.sprite.position.set(x, y)
         entry.sprite.width = w
@@ -643,6 +1214,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         entry.worldRect = newRect
         spatialIndex.insert(newRect)
 
+        debugLog('live-transform-image-applied', {
+            nodeId,
+            after: getDebugEntrySnapshot(entry),
+        })
         scheduleRender()
     }
 
@@ -727,6 +1302,14 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         let entry = entries.get(node.nodeId)
 
         if (!entry) {
+            debugLog('entry-create-start', {
+                nodeId: node.nodeId,
+                fileId: node.fileId,
+                src: cleanDebugUrl(node.src),
+                sourceKey: newSourceKey,
+                worldPosition,
+                dimensions: node.dimensions,
+            })
             const sprite = new Sprite(Texture.EMPTY)
             sprite.label = `pixi-image-${node.nodeId}`
             sprite.eventMode = 'none'
@@ -762,10 +1345,25 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             }
             entries.set(node.nodeId, entry)
             spatialIndex.insert(rect)
+            debugLog('entry-create-end', {
+                entry: getDebugEntrySnapshot(entry),
+            })
         } else if (entry.sourceKey !== newSourceKey) {
             // Source image replaced. Keep the currently rendered texture visible
             // until the replacement texture loads, otherwise final generated
             // frames can briefly blank while PIXI refetches the stored object.
+            debugLog('entry-source-change', {
+                nodeId: node.nodeId,
+                oldSourceKey: cleanDebugUrl(entry.sourceKey),
+                newSourceKey: cleanDebugUrl(newSourceKey),
+                before: getDebugEntrySnapshot(entry),
+                nextNode: {
+                    fileId: node.fileId,
+                    src: cleanDebugUrl(node.src),
+                    dimensions: node.dimensions,
+                    position: node.position,
+                },
+            })
             entry.loadedTier = null
             entry.requestedTier = null
             entry.requestId++
@@ -773,6 +1371,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
 
         entry.nodeRef = node
+        if (entry.sourceKey === newSourceKey) {
+            debugLog('entry-upsert-node-ref-applied', {
+                nodeId: node.nodeId,
+                entry: getDebugEntrySnapshot(entry),
+            })
+        }
 
         const x = worldPosition.x
         const y = worldPosition.y
@@ -797,10 +1401,18 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         // Spatial index — incremental: remove old rect only if position/size changed.
         const old = entry.worldRect
         if (old.minX !== x || old.minY !== y || old.maxX !== x + w || old.maxY !== y + h) {
+            debugLog('entry-geometry-change', {
+                nodeId: node.nodeId,
+                oldRect: { ...old },
+                newRect: { minX: x, minY: y, maxX: x + w, maxY: y + h, nodeId: node.nodeId },
+            })
             spatialIndex.remove(old, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
             const newRect = makeIndexedImage(node, worldPosition)
             entry.worldRect = newRect
             spatialIndex.insert(newRect)
+            debugLog('entry-geometry-change-applied', {
+                entry: getDebugEntrySnapshot(entry),
+            })
         }
 
         // IMPORTANT: do NOT trigger texture loading here. Texture loading is
@@ -852,6 +1464,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function setGeneratingImageNodes(nodeIds: Set<string>): void
     function setGeneratingImageNodes(nodeIds: Map<string, GeneratingMediaOutlineTarget>): void
+    function setGeneratingImageNodes(nodeIds: GeneratingMediaOutlineTargets): void
     function setGeneratingImageNodes(nodeIds: GeneratingMediaOutlineTargets): void {
         generatingImageNodeOutlines = nodeIds instanceof Map
             ? new Map(Array.from(nodeIds, ([nodeId, target]) => [nodeId, normalizeGeneratingOutlineTarget(target)]))
@@ -882,11 +1495,21 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     //      then schedule a background upgrade to the desired tier in idle time.
     function ensureTextureForEntry(entry: PixiImageEntry, desiredTier: LodTier): void {
         const isPreFrameCircle = isPreFrameCircleGeneratingNode(entry.nodeRef.nodeId)
+        debugLog('ensure-texture-start', {
+            nodeId: entry.nodeRef.nodeId,
+            desiredTier,
+            isPreFrameCircle,
+            entry: getDebugEntrySnapshot(entry),
+        })
         if (desiredTier === 'color') {
             // Extreme zoom-out: tinted rectangle suffices. Keep any existing
             // texture cached on the sprite for when the user zooms back in.
             entry.sprite.visible = entry.loadedTier !== null
             entry.colorRect.visible = entry.loadedTier === null && !isPreFrameCircle
+            debugLog('ensure-texture-color-tier', {
+                nodeId: entry.nodeRef.nodeId,
+                entry: getDebugEntrySnapshot(entry),
+            })
             return
         }
 
@@ -897,6 +1520,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             entry.sprite.visible = true
             syncSpriteMask(entry, entry.worldRect.minX, entry.worldRect.minY, entry.nodeRef.dimensions.width, entry.nodeRef.dimensions.height)
             entry.colorRect.visible = false
+            debugLog('ensure-texture-loaded-tier-sufficient', {
+                nodeId: entry.nodeRef.nodeId,
+                desiredTier,
+                entry: getDebugEntrySnapshot(entry),
+            })
             return
         }
 
@@ -904,11 +1532,21 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         if (entry.requestedTier !== null) {
             if (tierRank(entry.requestedTier) >= tierRank(desiredTier)) {
                 // In-flight request already covers our needs.
+                debugLog('ensure-texture-request-sufficient', {
+                    nodeId: entry.nodeRef.nodeId,
+                    desiredTier,
+                    entry: getDebugEntrySnapshot(entry),
+                })
                 return
             }
             // In-flight is a lower tier (typically the progressive thumb-256
             // first step). Don't race the network with a duplicate fetch —
             // schedule an idle upgrade and let the in-flight one finish.
+            debugLog('ensure-texture-schedule-upgrade-from-inflight', {
+                nodeId: entry.nodeRef.nodeId,
+                desiredTier,
+                entry: getDebugEntrySnapshot(entry),
+            })
             scheduleProgressiveUpgrade(entry, desiredTier)
             return
         }
@@ -932,20 +1570,51 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
 
         const node = entry.nodeRef
+        debugLog('texture-request-start', {
+            nodeId: node.nodeId,
+            fileId: node.fileId,
+            src: cleanDebugUrl(node.src),
+            desiredTier,
+            fetchTier,
+            requestId,
+            hasTexture,
+            entry: getDebugEntrySnapshot(entry),
+        })
 
         void (async () => {
             let acquiredKey: string | null = null
             try {
                 const url = await resolveImageSrc(node, getWorkspaceId())
                 const resolved = addPixiLodSizeParam(url, fetchTier)
+                debugLog('texture-request-resolved-url', {
+                    nodeId: node.nodeId,
+                    requestId,
+                    fetchTier,
+                    url: cleanDebugUrl(url),
+                    resolved: cleanDebugUrl(resolved),
+                })
                 const texture = await acquireTexture(resolved)
                 acquiredKey = resolved
                 if (destroyed || entry.requestId !== requestId) {
+                    debugLog('texture-request-stale', {
+                        nodeId: node.nodeId,
+                        requestId,
+                        currentRequestId: entry.requestId,
+                        destroyed,
+                        resolved: cleanDebugUrl(resolved),
+                    })
                     releaseTexture(resolved)
                     return
                 }
                 // Don't downgrade if a parallel request already loaded a higher tier.
                 if (entry.loadedTier !== null && tierRank(entry.loadedTier) > tierRank(fetchTier)) {
+                    debugLog('texture-request-skip-downgrade', {
+                        nodeId: node.nodeId,
+                        requestId,
+                        fetchTier,
+                        loadedTier: entry.loadedTier,
+                        resolved: cleanDebugUrl(resolved),
+                    })
                     releaseTexture(resolved)
                     entry.requestedTier = null
                     return
@@ -966,6 +1635,17 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 entry.colorRect.visible = false
                 if (oldKey && oldKey !== resolved) releaseTexture(oldKey)
                 scheduleRender()
+                debugLog('texture-request-loaded', {
+                    nodeId: node.nodeId,
+                    requestId,
+                    fetchTier,
+                    desiredTier,
+                    resolved: cleanDebugUrl(resolved),
+                    oldKey: cleanDebugUrl(oldKey),
+                    textureWidth: texture.width,
+                    textureHeight: texture.height,
+                    entry: getDebugEntrySnapshot(entry),
+                })
 
                 // If the user actually wants a higher tier than we just loaded,
                 // schedule a background upgrade in an idle slot. The user sees
@@ -976,6 +1656,16 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 }
             } catch (error) {
                 console.error('[PixiMediaLayer] Failed to load image texture.', error)
+                debugLog('texture-request-error', {
+                    nodeId: node.nodeId,
+                    requestId,
+                    fetchTier,
+                    desiredTier,
+                    acquiredKey: cleanDebugUrl(acquiredKey),
+                    message: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined,
+                    entry: getDebugEntrySnapshot(entry),
+                })
                 if (acquiredKey) releaseTexture(acquiredKey)
                 if (entry.requestId === requestId) {
                     entry.requestedTier = null
@@ -991,13 +1681,54 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function scheduleProgressiveUpgrade(entry: PixiImageEntry, targetTier: LodTier): void {
         if (destroyed) return
+        debugLog('progressive-upgrade-scheduled', {
+            nodeId: entry.nodeRef.nodeId,
+            targetTier,
+            entry: getDebugEntrySnapshot(entry),
+        })
         scheduleIdle(() => {
-            if (destroyed) return
+            if (destroyed) {
+                debugLog('progressive-upgrade-skipped', {
+                    nodeId: entry.nodeRef.nodeId,
+                    targetTier,
+                    reason: 'destroyed',
+                })
+                return
+            }
             // Skip if entry is no longer visible OR already has equal/better tier
             // OR another request has already taken over.
-            if (!entry.isVisible) return
-            if (entry.loadedTier !== null && tierRank(entry.loadedTier) >= tierRank(targetTier)) return
-            if (entry.requestedTier !== null && tierRank(entry.requestedTier) >= tierRank(targetTier)) return
+            if (!entry.isVisible) {
+                debugLog('progressive-upgrade-skipped', {
+                    nodeId: entry.nodeRef.nodeId,
+                    targetTier,
+                    reason: 'not-visible',
+                    entry: getDebugEntrySnapshot(entry),
+                })
+                return
+            }
+            if (entry.loadedTier !== null && tierRank(entry.loadedTier) >= tierRank(targetTier)) {
+                debugLog('progressive-upgrade-skipped', {
+                    nodeId: entry.nodeRef.nodeId,
+                    targetTier,
+                    reason: 'loaded-tier-sufficient',
+                    entry: getDebugEntrySnapshot(entry),
+                })
+                return
+            }
+            if (entry.requestedTier !== null && tierRank(entry.requestedTier) >= tierRank(targetTier)) {
+                debugLog('progressive-upgrade-skipped', {
+                    nodeId: entry.nodeRef.nodeId,
+                    targetTier,
+                    reason: 'request-tier-sufficient',
+                    entry: getDebugEntrySnapshot(entry),
+                })
+                return
+            }
+            debugLog('progressive-upgrade-run', {
+                nodeId: entry.nodeRef.nodeId,
+                targetTier,
+                entry: getDebugEntrySnapshot(entry),
+            })
             ensureTextureForEntry(entry, targetTier)
         }, 2000)
     }
@@ -1007,10 +1738,26 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         if (cached) {
             cached.refCount++
             cached.lastUsed = ++textureClock
+            debugLog('texture-cache-hit', {
+                url: cleanDebugUrl(url),
+                refCount: cached.refCount,
+                textureWidth: cached.texture.width,
+                textureHeight: cached.texture.height,
+                cache: getDebugCacheSnapshot(),
+            })
             return cached.texture
         }
 
+        debugLog('texture-cache-miss', {
+            url: cleanDebugUrl(url),
+            cache: getDebugCacheSnapshot(),
+        })
         const bitmap = await decodeImageInWorker(url)
+        debugLog('texture-decode-complete', {
+            url: cleanDebugUrl(url),
+            bitmapWidth: bitmap.width,
+            bitmapHeight: bitmap.height,
+        })
         const texture = Texture.from(bitmap)
 
         // CRITICAL for zoom-out performance. Without mipmaps, every zoomed-out
@@ -1036,18 +1783,40 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         })
         textureBytes += bytes
         evictTextures()
+        debugLog('texture-cache-insert', {
+            url: cleanDebugUrl(url),
+            bytes,
+            textureWidth: texture.width,
+            textureHeight: texture.height,
+            cache: getDebugCacheSnapshot(),
+        })
         return texture
     }
 
     function releaseTexture(url: string | null): void {
         if (!url) return
         const entry = textureCache.get(url)
-        if (!entry) return
+        if (!entry) {
+            debugLog('texture-release-missing-cache-entry', {
+                url: cleanDebugUrl(url),
+            })
+            return
+        }
         entry.refCount = Math.max(0, entry.refCount - 1)
+        debugLog('texture-release', {
+            url: cleanDebugUrl(url),
+            refCount: entry.refCount,
+            cache: getDebugCacheSnapshot(),
+        })
     }
 
     function evictTextures(): void {
         if (textureCache.size <= MAX_TEXTURES && textureBytes <= MAX_TEXTURE_BYTES) return
+        debugLog('texture-evict-start', {
+            cache: getDebugCacheSnapshot(),
+            maxTextures: MAX_TEXTURES,
+            maxBytes: MAX_TEXTURE_BYTES,
+        })
 
         // First pass: evict textures with no live references (already
         // detached or never bound). LRU within that pool.
@@ -1059,10 +1828,21 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             if (textureCache.size <= MAX_TEXTURES && textureBytes <= MAX_TEXTURE_BYTES) break
             textureCache.delete(key)
             textureBytes -= entry.bytes
-            entry.texture.destroy(true)
+            scheduleDeferredPixiDestroy(`texture-evict-idle:${cleanDebugUrl(key)}`, () => entry.texture.destroy(true))
+            debugLog('texture-evict-idle', {
+                key: cleanDebugUrl(key),
+                bytes: entry.bytes,
+                cache: getDebugCacheSnapshot(),
+            })
         }
 
-        if (textureCache.size <= MAX_TEXTURES && textureBytes <= MAX_TEXTURE_BYTES) return
+        if (textureCache.size <= MAX_TEXTURES && textureBytes <= MAX_TEXTURE_BYTES) {
+            debugLog('texture-evict-end', {
+                reason: 'after-idle-eviction',
+                cache: getDebugCacheSnapshot(),
+            })
+            return
+        }
 
         // Second pass: under genuine memory pressure, detach textures from
         // *non-visible* sprites (LRU first) so their cache slot can be
@@ -1084,6 +1864,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             if (textureCache.size <= MAX_TEXTURES && textureBytes <= MAX_TEXTURE_BYTES) break
             const key = e.textureKey
             if (!key) continue
+            debugLog('texture-evict-offscreen-entry', {
+                nodeId: e.nodeRef.nodeId,
+                key: cleanDebugUrl(key),
+                entry: getDebugEntrySnapshot(e),
+            })
             e.sprite.texture = Texture.EMPTY
             e.textureKey = null
             e.loadedTier = null
@@ -1093,10 +1878,20 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 if (cached.refCount === 0) {
                     textureCache.delete(key)
                     textureBytes -= cached.bytes
-                    cached.texture.destroy(true)
+                    scheduleDeferredPixiDestroy(`texture-evict-offscreen:${cleanDebugUrl(key)}`, () => cached.texture.destroy(true))
+                    debugLog('texture-evict-offscreen-cache', {
+                        nodeId: e.nodeRef.nodeId,
+                        key: cleanDebugUrl(key),
+                        bytes: cached.bytes,
+                        cache: getDebugCacheSnapshot(),
+                    })
                 }
             }
         }
+        debugLog('texture-evict-end', {
+            reason: 'after-offscreen-eviction',
+            cache: getDebugCacheSnapshot(),
+        })
     }
 
     // Drive sprite renderable flags + texture loading from spatial-index
@@ -1104,16 +1899,24 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     // any cached texture they have. This is the hot path during pan/zoom so
     // it is intentionally lean: spatial index search + map iteration only.
     function updateVisibleImages(): void {
-        if (health !== 'ready' || !lastState || destroyed) return
+        if (health !== 'ready' || !lastState || destroyed) {
+            debugLog('visibility-pass-skipped', {
+                health,
+                hasLastState: Boolean(lastState),
+                destroyed,
+            })
+            return
+        }
         const paneBounds = paneEl.clientWidth > 0 && paneEl.clientHeight > 0
             ? null
             : paneEl.getBoundingClientRect()
+        const paneSize = {
+            width: paneEl.clientWidth || paneBounds?.width || 0,
+            height: paneEl.clientHeight || paneBounds?.height || 0,
+        }
         const visibleRect = getVisibleWorldRect(
             currentViewport,
-            {
-                width: paneEl.clientWidth || paneBounds?.width || 0,
-                height: paneEl.clientHeight || paneBounds?.height || 0,
-            },
+            paneSize,
             VISIBILITY_MARGIN
         )
         const visibleNodeIds = new Set(
@@ -1121,7 +1924,26 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         )
 
         const tier = currentTier
+        const changed: Record<string, unknown>[] = []
+        const blankVisibleCandidates: PixiMediaDebugImageSnapshot[] = []
+        debugLog('visibility-pass-start', {
+            paneSize,
+            visibleRect,
+            visibleNodeIds: [...visibleNodeIds],
+            tier,
+            entryCount: entries.size,
+        })
         for (const [nodeId, entry] of entries) {
+            const before = {
+                isVisible: entry.isVisible,
+                spriteRenderable: entry.sprite.renderable,
+                spriteVisible: entry.sprite.visible,
+                colorRectRenderable: entry.colorRect.renderable,
+                colorRectVisible: entry.colorRect.visible,
+                loadedTier: entry.loadedTier,
+                requestedTier: entry.requestedTier,
+                textureKey: entry.textureKey,
+            }
             const isVisible = visibleNodeIds.has(nodeId)
             const shouldRenderColorRect = isVisible && !isPreFrameCircleGeneratingNode(nodeId)
             if (isVisible !== entry.isVisible) {
@@ -1136,7 +1958,46 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             if (isVisible) {
                 ensureTextureForEntry(entry, tier)
             }
+            const after = {
+                isVisible: entry.isVisible,
+                spriteRenderable: entry.sprite.renderable,
+                spriteVisible: entry.sprite.visible,
+                colorRectRenderable: entry.colorRect.renderable,
+                colorRectVisible: entry.colorRect.visible,
+                loadedTier: entry.loadedTier,
+                requestedTier: entry.requestedTier,
+                textureKey: entry.textureKey,
+            }
+            if (JSON.stringify(before) !== JSON.stringify(after)) {
+                changed.push({
+                    nodeId,
+                    before: {
+                        ...before,
+                        textureKey: cleanDebugUrl(before.textureKey),
+                    },
+                    after: {
+                        ...after,
+                        textureKey: cleanDebugUrl(after.textureKey),
+                    },
+                })
+            }
+            if (
+                isVisible
+                && entry.sprite.renderable
+                && !entry.sprite.visible
+                && entry.colorRect.renderable
+                && !entry.colorRect.visible
+                && entry.textureKey === null
+                && entry.requestedTier === null
+            ) {
+                blankVisibleCandidates.push(getDebugEntrySnapshot(entry))
+            }
         }
+        debugLog('visibility-pass-end', {
+            changed,
+            blankVisibleCandidates,
+            entries: getDebugEntrySnapshots(),
+        })
     }
 
     // Idle-time prefetch — cache `thumb-256` for the entire workspace,
@@ -1153,11 +2014,28 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     // `updateVisibleImages` so the user's actual focus area never waits
     // behind prefetch in the worker queue.
     function schedulePrefetch(): void {
-        if (destroyed || health !== 'ready' || prefetchScheduled) return
+        if (destroyed || health !== 'ready' || prefetchScheduled) {
+            debugLog('prefetch-schedule-skipped', {
+                destroyed,
+                health,
+                prefetchScheduled,
+            })
+            return
+        }
         prefetchScheduled = true
+        debugLog('prefetch-scheduled', {
+            entryCount: entries.size,
+        })
         scheduleIdle(() => {
             prefetchScheduled = false
-            if (destroyed || health !== 'ready' || !lastState) return
+            if (destroyed || health !== 'ready' || !lastState) {
+                debugLog('prefetch-skipped', {
+                    destroyed,
+                    health,
+                    hasLastState: Boolean(lastState),
+                })
+                return
+            }
 
             // Center of the current viewport in world coordinates — used to
             // sort the prefetch order. Sprites near the user's focus get
@@ -1175,6 +2053,15 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 candidates.push({ entry, d2: dx * dx + dy * dy })
             }
             candidates.sort((a, b) => a.d2 - b.d2)
+            debugLog('prefetch-candidates', {
+                center: { x: cx, y: cy },
+                candidateCount: candidates.length,
+                batch: candidates.slice(0, 20).map(({ entry, d2 }) => ({
+                    nodeId: entry.nodeRef.nodeId,
+                    d2,
+                    entry: getDebugEntrySnapshot(entry),
+                })),
+            })
 
             // Process at most PREFETCH_BATCH_SIZE images per idle tick so one
             // callback can't queue thousands of concurrent decode requests.
@@ -1199,14 +2086,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     function setMarqueeRect(worldRect: { x: number; y: number; width: number; height: number } | null): void {
         if (destroyed) return
         if (!worldRect || !Number.isFinite(worldRect.width) || !Number.isFinite(worldRect.height) || worldRect.width <= 0 || worldRect.height <= 0) {
-            marqueeGraphics = destroyForegroundGraphics(marqueeGraphics)
+            hideForegroundGraphics(marqueeGraphics)
             scheduleRender()
             return
         }
 
-        marqueeGraphics = destroyForegroundGraphics(marqueeGraphics)
-        marqueeGraphics = new Graphics()
-        fgLayer.addChild(marqueeGraphics)
+        marqueeGraphics = getForegroundGraphics(marqueeGraphics, 'workspace-pixi-marquee')
 
         marqueeGraphics.roundRect(worldRect.x, worldRect.y, worldRect.width, worldRect.height, 8 / (currentViewport.zoom || 1))
         marqueeGraphics.fill({ color: selectionColors.marqueeFill })
@@ -1226,14 +2111,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     function setSelectionOverlayBounds(worldBounds: { x: number; y: number; width: number; height: number } | null, options: SelectionOverlayOptions = {}): void {
         if (destroyed) return
         if (!worldBounds || !Number.isFinite(worldBounds.width) || !Number.isFinite(worldBounds.height) || worldBounds.width <= 0 || worldBounds.height <= 0) {
-            groupOverlayGraphics = destroyForegroundGraphics(groupOverlayGraphics)
+            hideForegroundGraphics(groupOverlayGraphics)
             scheduleRender()
             return
         }
 
-        groupOverlayGraphics = destroyForegroundGraphics(groupOverlayGraphics)
-        groupOverlayGraphics = new Graphics()
-        fgLayer.addChild(groupOverlayGraphics)
+        groupOverlayGraphics = getForegroundGraphics(groupOverlayGraphics, 'workspace-pixi-group-overlay')
 
         const r = 18 / (currentViewport.zoom || 1)
         groupOverlayGraphics.roundRect(worldBounds.x, worldBounds.y, worldBounds.width, worldBounds.height, r)
@@ -1248,6 +2131,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function destroy(): void {
+        debugLog('destroy-start', {
+            wasReady: health === 'ready',
+            entries: getDebugEntrySnapshots(),
+            cache: getDebugCacheSnapshot(),
+        })
         const wasReady = health === 'ready'
         destroyed = true
         setHealth('destroyed')
@@ -1259,6 +2147,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             cancelAnimationFrame(visibilityRaf)
             visibilityRaf = null
         }
+        flushDeferredPixiDestroys()
         generatingBorderRenderer.destroy()
         glassBorderRenderer.destroy()
         generatingImageNodeOutlines.clear()
@@ -1288,6 +2177,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         if (wasReady) {
             app.destroy(true, { children: true, texture: false, textureSource: false })
         }
+        debugLog('destroy-end', {
+            wasReady,
+            entries: entries.size,
+            cache: getDebugCacheSnapshot(),
+        })
     }
 
     return {

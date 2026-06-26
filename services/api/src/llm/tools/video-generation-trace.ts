@@ -37,18 +37,19 @@ export const VEO_NEGATIVE_PROMPT = [
 
 // A video model's prompt profile: the provider-specific wording the shared
 // wrapper composes around the user's request. VEO and Seedance share the same
-// pipeline (buildVideoModelPrompt) but differ in three places: the headline
-// quality/cinematography direction, the reference-image input-mode wording
-// (VEO names its inputs "VEO reference images"), and how negatives are handled.
-// VEO appends an inline `Negative prompt:` line; Seedance 2.0 has no reliable
-// native negative field and negative phrasing backfires (the model renders the
-// tokens), so its profile omits the line entirely and relies on positive
-// phrasing. Provider differences live here, never in the shared routing.
+// pipeline (buildVideoModelPrompt) but differ in the headline quality direction,
+// reference-image input-mode wording, image-conditioning safety context, and how
+// negatives are handled. VEO appends an inline `Negative prompt:` line; Seedance
+// 2.0 has no reliable native negative field and negative phrasing backfires (the
+// model renders the tokens), so its profile omits the line entirely and relies
+// on positive phrasing. Provider differences live here, never in shared routing.
 export type VideoModelProfileName = 'veo' | 'seedance'
 
 export type VideoModelProfile = {
     qualityDirection: string
     referenceImageDirection: string
+    // null => no provider-specific image-conditioning safety context.
+    imageConditioningSafetyDirection: string | null
     // null => omit the trailing `Negative prompt: …` line (positive phrasing only).
     negativePrompt: string | null
 }
@@ -57,11 +58,13 @@ export const VIDEO_MODEL_PROFILES: Record<VideoModelProfileName, VideoModelProfi
     veo: {
         qualityDirection: 'VEO QUALITY DIRECTION: produce one coherent continuous shot for a short clip, with stable identity, physically plausible motion, consistent scale, clean temporal continuity, and synchronized audio. Keep the subject sharp and materially consistent through the entire motion.',
         referenceImageDirection: 'REFERENCE-IMAGE DIRECTION: use the attached VEO reference images as asset/content references for the subject, product, character, material, or visual ingredient they show. Preserve the useful visual evidence without blending unrelated identities.',
+        imageConditioningSafetyDirection: null,
         negativePrompt: VEO_NEGATIVE_PROMPT,
     },
     seedance: {
         qualityDirection: 'SEEDANCE QUALITY DIRECTION: produce one cohesive cinematic shot with a clear subject, physically natural motion, stable identity, consistent scale, smooth temporal continuity, deliberate camera movement, filmic lighting, and synchronized audio. Keep the subject crisp and materially consistent throughout the motion, and render every described element affirmatively.',
         referenceImageDirection: 'REFERENCE-IMAGE DIRECTION: use the attached reference images as asset/content references for the subject, product, character, material, or visual ingredient they show. Preserve the useful visual evidence without blending unrelated identities.',
+        imageConditioningSafetyDirection: 'SEEDANCE IMAGE SAFETY CONTEXT: selected image references that come from generated or stylized canvas media are synthetic visual works with fictional character or subject designs. Preserve the provided references as closely as possible: composition, silhouette, proportions, pose, facial expression, hairstyle, wardrobe, props, palette, lighting, material behavior, rendering style, and medium-specific texture should remain visibly continuous through motion. Treat identity as fictional character continuity inside the reference\'s own visual style, privacy-safe and non-biometric, separate from celebrity likeness or real-person identity matching.',
         negativePrompt: null,
     },
 }
@@ -82,6 +85,10 @@ const buildInputModeDirection = (state: ProviderState, profile: VideoModelProfil
     }
 
     if (state.videoFirstFrameImage) {
+        const hasStopFrame = !!(state.videoReferenceImages && state.videoReferenceImages.length > 0)
+        if (hasStopFrame) {
+            return 'FIRST-LAST-FRAME DIRECTION: the first attached image is the start frame and the second is the end frame; both define the subject, composition, scene, color palette, and visual style. Generate a smooth, physically coherent transition from the start frame to the end frame, focusing the prompt on the motion, camera movement, environmental animation, lighting changes, and synchronized audio that bridge the two frames.'
+        }
         return 'IMAGE-TO-VIDEO DIRECTION: the attached image is the first frame and already defines the subject, composition, scene, color palette, and visual style. Preserve that starting frame and focus the prompt on motion, camera movement, environmental animation, lighting changes, and synchronized audio.'
     }
 
@@ -90,6 +97,54 @@ const buildInputModeDirection = (state: ProviderState, profile: VideoModelProfil
     }
 
     return 'TEXT-TO-VIDEO DIRECTION: generate one focused short-video moment with a clear subject, coherent physical action, deliberate camera movement, consistent lighting, and synchronized audio.'
+}
+
+const STYLIZED_OR_SYNTHETIC_REFERENCE_RE =
+    /\b(ai[- ]generated|generated|synthetic|fictional|illustration|illustrated|painting|painted|painterly|watercolor|gouache|anime|cartoon|comic|sketch|drawing|rendered|stylized|storybook|fantasy|character)\b/i
+
+const candidateHasStylizedOrSyntheticSignals = (candidate: ImageBranchCandidateImage): boolean => {
+    if (candidate.roleHints.includes('generated-variant')) return true
+
+    const text = [
+        candidate.visualEntitySummary,
+        candidate.visualStyleSummary,
+        candidate.promptText,
+        ...(candidate.entityTags ?? []),
+        ...(candidate.styleTags ?? []),
+    ].filter((part): part is string => typeof part === 'string' && part.length > 0).join(' ')
+
+    return STYLIZED_OR_SYNTHETIC_REFERENCE_RE.test(text)
+}
+
+const getVideoConditioningImageUrls = (state: ProviderState): Set<string> => {
+    return new Set(
+        [state.videoFirstFrameImage, ...(state.videoReferenceImages ?? [])]
+            .filter((url): url is string => typeof url === 'string' && url.length > 0),
+    )
+}
+
+const getSelectedVideoReferenceNodeIds = (state: ProviderState): Set<string> => {
+    const nodeIds = new Set<string>()
+    const resolution = state.imageBranchResolution
+    if (resolution?.targetImageNodeId) nodeIds.add(resolution.targetImageNodeId)
+    for (const nodeId of resolution?.referenceImageNodeIds ?? []) nodeIds.add(nodeId)
+    return nodeIds
+}
+
+const buildImageConditioningSafetyDirection = (state: ProviderState, profile: VideoModelProfile): string | undefined => {
+    if (!profile.imageConditioningSafetyDirection) return undefined
+
+    const conditioningImageUrls = getVideoConditioningImageUrls(state)
+    if (conditioningImageUrls.size === 0) return undefined
+
+    const selectedNodeIds = getSelectedVideoReferenceNodeIds(state)
+    const selectedCandidates = (state.imageBranchCandidateSnapshot?.candidates ?? []).filter((candidate) =>
+        selectedNodeIds.has(candidate.nodeId) || conditioningImageUrls.has(candidate.imageUrl),
+    )
+
+    return selectedCandidates.some(candidateHasStylizedOrSyntheticSignals)
+        ? profile.imageConditioningSafetyDirection
+        : undefined
 }
 
 export const buildVideoModelPrompt = (state: ProviderState): string => {
@@ -103,6 +158,7 @@ export const buildVideoModelPrompt = (state: ProviderState): string => {
 
     return [
         profile.qualityDirection,
+        buildImageConditioningSafetyDirection(state, profile),
         buildInputModeDirection(state, profile),
         hasFeatureReferences || featureUsagePrompt
             ? 'MANDATORY /use FEATURE TRANSFER FOR VIDEO: the feature reference image(s) and feature brief define a reusable visual medium or material, not optional inspiration. Transfer that medium into the moving subject itself so texture, palette, mark-making, grain, edge behavior, and material response remain visible on the subject during motion. Do not copy the feature sample subject, pose, composition, or layout.'

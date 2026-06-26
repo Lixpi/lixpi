@@ -58,6 +58,8 @@ type ViewportSize = {
 type GlassBorderEntry = {
     mesh: Mesh
     geometry: MeshGeometry
+    buffers: GlassBorderMeshGeometry
+    geometrySignature: string
 }
 
 type GlassBorderMeshGeometry = {
@@ -65,6 +67,8 @@ type GlassBorderMeshGeometry = {
     uvs: Float32Array
     indices: Uint32Array
 }
+
+const GLASS_BORDER_MAX_SAMPLE_COUNT = 1600
 
 type TextureCanvas = OffscreenCanvas | HTMLCanvasElement
 type TextureCanvasContext = OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D
@@ -155,11 +159,39 @@ function getRoundedRectNormal(
 // prompt bar to create unbounded geometry.
 function getGlassBorderSampleCount(perimeter: number, borderWidth: number): number {
     const spacing = Math.max(1, borderWidth * 0.35)
-    return Math.max(48, Math.min(1600, Math.ceil(perimeter / spacing)))
+    return Math.max(48, Math.min(GLASS_BORDER_MAX_SAMPLE_COUNT, Math.ceil(perimeter / spacing)))
 }
 
-// MeshGeometry is updated by replacing typed arrays. Pixi v8 accepts this shape
-// for dynamic meshes and avoids rebuilding DisplayObjects for every sync.
+// Allocates the maximum closed-strip buffers once per material mesh. Sync
+// rewrites these arrays in place so changing composer/button geometry does not
+// force Pixi to replace WebGPU buffers.
+function createGlassBorderMeshGeometry(): GlassBorderMeshGeometry {
+    const vertexCount = (GLASS_BORDER_MAX_SAMPLE_COUNT + 1) * 2
+    const positions = new Float32Array(vertexCount * 2)
+    const uvs = new Float32Array(positions.length)
+    const indices = new Uint32Array(GLASS_BORDER_MAX_SAMPLE_COUNT * 6)
+    return { positions, uvs, indices }
+}
+
+// Tells Pixi that existing mesh buffers have new contents. Using `update()`
+// keeps buffer identity stable; replacing arrays would trigger Pixi
+// `setDataWithSize()` and can destroy GPU buffers during submit.
+function updateMeshGeometryBuffers(geometry: MeshGeometry): void {
+    const dynamicGeometry = geometry as MeshGeometry & {
+        attributes: {
+            aPosition: { buffer: { update: () => void } }
+            aUV: { buffer: { update: () => void } }
+        }
+        indexBuffer: { update: () => void }
+    }
+    dynamicGeometry.attributes.aPosition.buffer.update()
+    dynamicGeometry.attributes.aUV.buffer.update()
+    dynamicGeometry.indexBuffer.update()
+}
+
+// MeshGeometry buffers stay fixed-size for WebGPU. Replacing typed arrays can
+// make Pixi destroy and recreate GPU buffers while the previous submit still
+// references them.
 function setMeshVertex(
     geometry: GlassBorderMeshGeometry,
     vertexIndex: number,
@@ -179,21 +211,18 @@ function setMeshVertex(
 // displacement mask: the mask refracts captured canvas pixels, while this mesh
 // adds the faint specular body that makes the border read as glass on top of
 // busy imagery without becoming visible on plain white.
-function buildClosedRoundedBorderGeometry(
+function writeClosedRoundedBorderGeometry(
+    geometry: GlassBorderMeshGeometry,
     datum: PixiGlassBorderDatum,
     borderWidth: number,
     edgeFeatherFraction: number
-): GlassBorderMeshGeometry {
+): void {
     const boundedWidth = Math.max(0, datum.width)
     const boundedHeight = Math.max(0, datum.height)
     const radius = Math.max(0, Math.min(datum.radius, boundedWidth / 2, boundedHeight / 2))
     const perimeter = getRoundedOutlinePerimeter(boundedWidth, boundedHeight, radius)
     const sampleCount = getGlassBorderSampleCount(perimeter, borderWidth)
-    const vertexCount = (sampleCount + 1) * 2
-    const positions = new Float32Array(vertexCount * 2)
-    const uvs = new Float32Array(positions.length)
-    const indices = new Uint32Array(sampleCount * 6)
-    const geometry = { positions, uvs, indices }
+    const indices = geometry.indices
     const meshWidthScale = 1 + Math.max(0, edgeFeatherFraction) * 2
     const halfWidth = borderWidth * meshWidthScale / 2
     let indexOffset = 0
@@ -234,7 +263,7 @@ function buildClosedRoundedBorderGeometry(
         }
     }
 
-    return geometry
+    indices.fill(0, indexOffset)
 }
 
 // Draws a ring into Graphics by filling the outer rounded rect and cutting the
@@ -308,6 +337,53 @@ function getDisplacementSignature(
         Math.round(style.causticBandStrength * 100) / 100,
         Math.round(style.displacementFrequencyX * 100) / 100,
         Math.round(style.displacementFrequencyY * 100) / 100,
+        geometry,
+    ].join(',')
+}
+
+// Fingerprint for one material mesh. It is intentionally rounded so tiny
+// DOM-measurement jitter does not rewrite buffers every render.
+function getMaterialGeometrySignature(
+    datum: PixiGlassBorderDatum,
+    borderWidth: number,
+    edgeFeatherFraction: number
+): string {
+    return [
+        Math.round(datum.x * 10) / 10,
+        Math.round(datum.y * 10) / 10,
+        Math.round(datum.width * 10) / 10,
+        Math.round(datum.height * 10) / 10,
+        Math.round(datum.radius * 10) / 10,
+        Math.round(borderWidth * 10) / 10,
+        Math.round(edgeFeatherFraction * 1000) / 1000,
+    ].join(',')
+}
+
+// Fingerprint for Graphics mask/highlight rebuilds. Graphics.clear() causes
+// Pixi to rebuild internal graphics buffers, so this keeps that path out of
+// steady-state renders when layout did not actually change.
+function getMaskAndHighlightSignature(
+    datums: ReadonlyArray<PixiGlassBorderDatum>,
+    style: PixiGlassBorderStyle
+): string {
+    const geometry = datums
+        .map((datum) => [
+            datum.id,
+            Math.round(datum.x * 10) / 10,
+            Math.round(datum.y * 10) / 10,
+            Math.round(datum.width * 10) / 10,
+            Math.round(datum.height * 10) / 10,
+            Math.round(datum.radius * 10) / 10,
+        ].join(':'))
+        .join('|')
+    return [
+        Math.round(Math.max(0, style.widthPx) * 10) / 10,
+        style.bodyColor,
+        Math.round(clamp01(style.bodyAlpha) * 1000) / 1000,
+        style.highlightColor,
+        Math.round(clamp01(style.highlightAlpha) * 1000) / 1000,
+        style.shadowColor,
+        Math.round(clamp01(style.shadowAlpha) * 1000) / 1000,
         geometry,
     ].join(',')
 }
@@ -418,6 +494,7 @@ export class PixiGlassBorderRenderer {
     private readonly materialTexture: Texture
     private readonly entries = new Map<string, GlassBorderEntry>()
     private displacementSignature = ''
+    private maskAndHighlightSignature = ''
     private displacementMapWidth = 8
     private displacementMapHeight = 8
     private renderTexture: RenderTexture | null = null
@@ -493,10 +570,13 @@ export class PixiGlassBorderRenderer {
             // Leave long-lived textures in place, but clear draw state and mark
             // the displacement signature dirty so the next visible sync writes a
             // fresh map for the new geometry.
-            this.maskGraphics.clear()
-            this.highlightGraphics.clear()
+            if (this.maskAndHighlightSignature) {
+                this.maskGraphics.clear()
+                this.highlightGraphics.clear()
+                this.maskAndHighlightSignature = ''
+            }
             this.displacementSignature = ''
-            this.destroyStaleEntries(new Set())
+            this.hideInactiveEntries(new Set())
             return
         }
 
@@ -613,6 +693,8 @@ export class PixiGlassBorderRenderer {
     // The mask defines the actual refractive area; highlights draw extra
     // low-alpha rim cues on top of the refraction and material mesh.
     private syncMaskAndHighlights(datums: ReadonlyArray<PixiGlassBorderDatum>): void {
+        const signature = getMaskAndHighlightSignature(datums, this.style)
+        if (signature === this.maskAndHighlightSignature) return
         const borderWidth = Math.max(0, this.style.widthPx)
         const bodyColor = parseHexColor(this.style.bodyColor, 0xffffff)
         const highlightColor = parseHexColor(this.style.highlightColor, 0xffffff)
@@ -625,46 +707,57 @@ export class PixiGlassBorderRenderer {
             drawGlassBorderStroke(this.highlightGraphics, datum, borderWidth / 2, highlightColor, clamp01(this.style.highlightAlpha))
             drawGlassBorderStroke(this.highlightGraphics, datum, -borderWidth / 2, shadowColor, clamp01(this.style.shadowAlpha))
         }
+        this.maskAndHighlightSignature = signature
     }
 
     // Keeps one mesh per target id so stable composer/buttons do not churn Pixi
-    // DisplayObjects. Geometry arrays are replaced because target dimensions and
-    // radius can change with responsive layout.
+    // DisplayObjects or WebGPU buffers on every render. Geometry is rewritten
+    // only when the screen-space target actually moves/resizes.
     private syncMaterialMeshes(datums: ReadonlyArray<PixiGlassBorderDatum>): void {
         const activeIds = new Set(datums.map((datum) => datum.id))
-        this.destroyStaleEntries(activeIds)
+        this.hideInactiveEntries(activeIds)
+        const borderWidth = Math.max(0, this.style.widthPx)
+        const edgeFeatherFraction = this.style.glassMaterial.edgeFeatherFraction
         for (const datum of datums) {
             const entry = this.entries.get(datum.id) ?? this.createEntry(datum.id)
-            const geometry = buildClosedRoundedBorderGeometry(
-                datum,
-                Math.max(0, this.style.widthPx),
-                this.style.glassMaterial.edgeFeatherFraction
-            )
-            entry.geometry.positions = geometry.positions
-            entry.geometry.uvs = geometry.uvs
-            entry.geometry.indices = geometry.indices
+            const signature = getMaterialGeometrySignature(datum, borderWidth, edgeFeatherFraction)
             entry.mesh.renderable = true
+            if (entry.geometrySignature === signature) continue
+            writeClosedRoundedBorderGeometry(
+                entry.buffers,
+                datum,
+                borderWidth,
+                edgeFeatherFraction
+            )
+            updateMeshGeometryBuffers(entry.geometry)
+            entry.geometrySignature = signature
         }
     }
 
     // Create the material mesh for one target. The baked texture is shared by
     // all border meshes; only geometry differs per rounded rectangle.
     private createEntry(id: string): GlassBorderEntry {
-        const geometry = new MeshGeometry()
+        const buffers = createGlassBorderMeshGeometry()
+        const geometry = new MeshGeometry({
+            positions: buffers.positions,
+            uvs: buffers.uvs,
+            indices: buffers.indices,
+        })
         const mesh = new Mesh({ geometry, texture: this.materialTexture })
         mesh.label = `workspace-pixi-glass-border-${id}`
         mesh.eventMode = 'none'
         this.materialContainer.addChild(mesh)
-        const entry = { mesh, geometry }
+        const entry = { mesh, geometry, buffers, geometrySignature: '' }
         this.entries.set(id, entry)
         return entry
     }
 
-    // Any target missing from the latest visible set must release its mesh so it
-    // stops drawing and the material container does not retain stale buttons.
-    private destroyStaleEntries(activeIds: Set<string>): void {
-        for (const id of Array.from(this.entries.keys())) {
-            if (!activeIds.has(id)) this.destroyEntry(id)
+    // Any target missing from the latest visible set stops drawing but keeps
+    // its mesh/geometry alive. Destroying geometry during sync can invalidate
+    // GPU buffers still referenced by the current WebGPU submit.
+    private hideInactiveEntries(activeIds: Set<string>): void {
+        for (const [id, entry] of this.entries) {
+            if (!activeIds.has(id)) entry.mesh.renderable = false
         }
     }
 
