@@ -15,13 +15,14 @@ This page is part of the canvas domain. The shifting gradient is used by legacy 
 
 ## System Overview
 
-The visual-effects system has three rendering families:
+The visual-effects system has four rendering families:
 
 | Family | Renderer | Output | Consumers |
 |---|---|---|---|
 | Freeform bitmap gradient | `FreeformGradientRenderer` | Canvas `ImageData` generated from four color anchors, eight phase positions, inverse-distance blending, and swirl distortion | AI chat thread and floating prompt shifting backgrounds |
 | SVG linear gradient | `SvgGradientRenderer` | D3-created `<linearGradient>` stops and rotating endpoint animation | Document context selection, document thread border |
 | PIXI traveling outline | `PixiTravelingOutlineRenderer` + `GlassMaterial` | Single PIXI mesh snake with a continuous tapered colored-glass droplet texture traveling around a rounded perimeter while active | Generated-media progress border and future PIXI outlined progress surfaces |
+| PIXI screen glass border | `PixiGlassBorderRenderer` + `ClosedGlassStripMaterial` | Screen-space PIXI render-texture capture masked to a rounded border, displaced by a per-target liquid-glass normal map, then overlaid with a baked glass-material mesh | Bottom-center canvas composer and adjacent action panels |
 
 Animation curves are centralized in `Easing` where a surface uses shared easing, while surface-specific lifecycle remains with each consumer:
 
@@ -39,12 +40,14 @@ Animation curves are centralized in `Easing` where a surface uses shared easing,
 | `SvgGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/svgGradient.ts`](../../services/web-ui/src/utils/animations/gradients/svgGradient.ts) | Linear gradient stop construction, repeating border stops, and rotating linear-gradient animation |
 | `GlassMaterial` | [`services/web-ui/src/utils/animations/gradients/pixiGlassMaterial.ts`](../../services/web-ui/src/utils/animations/gradients/pixiGlassMaterial.ts) | Shared per-pixel glass material used by PIXI traveling snake textures and shallow glass branch-lineage media-model circle backgrounds |
 | `PixiTravelingOutlineRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts) | Reusable PIXI rounded-path snake renderer with active-only animation lifecycle |
+| `PixiGlassBorderRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiGlassBorderRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiGlassBorderRenderer.ts) | Reusable PIXI screen-space glass border renderer that captures the PIXI stage into a render texture, generates rounded-border normal-map displacement from each target's geometry, and draws closed glass-material border meshes |
 
 ### Reuse Rules
 
 - New Canvas or PIXI freeform gradient surfaces should call `FreeformGradientRenderer`; they should not copy the pixel sampling, phase, or swirl algorithm into consumer files.
 - New SVG animated gradient borders should call `SvgGradientRenderer` for stop construction and rotation.
 - New PIXI traveling progress outlines should call `PixiTravelingOutlineRenderer` and supply their own style and active bounds. New glass surfaces should reuse `GlassMaterial` instead of duplicating texture sampling.
+- New screen-fixed glass borders over PIXI canvas layers should use `PixiGlassBorderRenderer`; it samples the PIXI stage, so browser DOM overlays stay outside the refraction source.
 - Runtime JavaScript animations that match existing interaction motion should use `Easing`, not reimplement cubic-bezier calculations.
 - Visual color choices belong in `settings.ts`; renderer classes consume configured colors rather than owning product palettes.
 
@@ -56,6 +59,7 @@ The system intentionally has separate palettes for different visual roles:
 |---|---|---|
 | `settings.gradient.styles.shiftingColors` | Dreamy pastel canvas/SVG accent palette | AI chat thread and floating prompt backgrounds, document thread border, document context selection |
 | `settings.mediaNode.inProgressOutlineAnimation.styles.snakeColors` | Bright traveling in-progress outline palette | PIXI media progress outline |
+| `settings.canvasChrome.glassBorder` | Transparent screen-space Pixi glass ring geometry, liquid-refraction strength, and baked material highlight/shadow | Bottom-center composer and adjacent action panels |
 
 ## Gradient Consumers
 
@@ -72,6 +76,23 @@ These SVG consumers use `settings.gradient.styles.shiftingColors`; they reuse th
 ### PIXI Generated-Media Progress Outline
 
 `PixiTravelingOutlineRenderer` renders a continuous tapered snake moving around a rounded perimeter with a single PIXI mesh textured as a raised colored-glass droplet: solid tinted core, one broad specular streak, and one soft shadowed edge are baked into one material. It is **not** tied to generated images: consumers synchronize arbitrary active outline bounds, media corner radius, and style data into it. The workspace media layer uses it for media work in progress with the palette and glass-material parameters configured in `settings.mediaNode.inProgressOutlineAnimation`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
+
+### PIXI Screen Glass Border
+
+`PixiGlassBorderRenderer` draws the transparent liquid-glass border around the bottom-center composer and the adjacent action panels. It is screen-space PIXI, not CSS. The DOM controls stay as interactive HTML, while the glass pixels live in `pixiMediaLayer.ts` inside the `workspace-pixi-screen-glass` layer.
+
+The runtime path is:
+
+1. `pixiMediaLayer.ts` reads the pane-local client rects for `.workspace-canvas-action-panel-left`, `.workspace-canvas-global-composer`, and `.workspace-canvas-action-panel-right`.
+2. The glass renderer receives those rects as `PixiGlassBorderDatum` values with screen-pixel `x`, `y`, `width`, `height`, and a clamped rounded radius parsed from the target's CSS border radius.
+3. Before the final PIXI render, the media layer hides the glass layer and captures the current PIXI stage into a `RenderTexture`.
+4. The renderer draws that captured texture back through a rounded-ring mask and a `DisplacementFilter`.
+5. A per-target CPU-baked displacement map bends only the border pixels. Neutral map pixels stay at 128/128 so plain backgrounds remain visually invisible, while images, edges, generation outlines, selection overlays, and other PIXI content below the border distort.
+6. A faint `ClosedGlassStripMaterial` mesh adds specular/highlight cues over the same rounded ring without becoming an opaque CSS-looking stroke.
+
+The displacement texture is deliberately long-lived. `sync()` rewrites the canvas pixels and calls `texture.source.update()` instead of replacing `displacementSprite.texture`. Pixi filters can hold GPU bind-group references across frames; swapping and destroying the map texture during sync can leave the filter pointing at a null resource. The renderer only destroys that texture in `destroy()`.
+
+Because the capture source is the PIXI stage, browser-composited DOM elements and video playback surfaces are outside the refraction source. New chrome that must distort under this border has to render through PIXI before the `workspace-pixi-screen-glass` layer.
 
 ### Static CSS Gradient Surfaces
 
@@ -106,6 +127,7 @@ Do not route ordinary CSS background treatments through `FreeformGradientRendere
 | [`freeformGradient.test.ts`](../../services/web-ui/src/utils/animations/gradients/freeformGradient.test.ts) | Colors, phases, sampling, bitmap painting, and context drawing |
 | [`svgGradient.test.ts`](../../services/web-ui/src/utils/animations/gradients/svgGradient.test.ts) | Stop creation, repeated stops, rotating transitions, and shared default easing |
 | [`pixiTravelingOutlineRenderer.test.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.test.ts) | Rounded perimeter sampling, default eased travel, and snake color interpolation |
+| [`pixiGlassBorderRenderer.test.ts`](../../services/web-ui/src/utils/animations/gradients/pixiGlassBorderRenderer.test.ts) | Screen-space target lifecycle, stable displacement texture/source updates, capture visibility toggling, ring-only displacement pixels, and mesh cleanup |
 | [`shiftingGradientRenderer.test.ts`](../../services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.test.ts) | Singleton lifecycle, animation phase changes, pixels, subscriptions, resize redraw, patterns, and teardown |
 
 Run the web UI suite inside its container:

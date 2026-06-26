@@ -5,7 +5,10 @@ import { writable } from 'svelte/store'
 import {
     LoadingStatus,
     type AiModel,
+    type AiModelId,
     type AiModelsCatalogResponse,
+    type DefaultAiModelCapability,
+    type DefaultAiModelSelection,
     type MediaGenerationConfigMatrix,
 } from '@lixpi/constants'
 
@@ -18,6 +21,15 @@ type AiModelsStore = {
     meta: Meta;
     data: AiModel[];
     mediaGenerationConfigMatrix: MediaGenerationConfigMatrix;
+    // API-projected default model selection per capability (configured in
+    // ai-models-synchronization). Empty ids mean "no configured default".
+    defaultModels: DefaultAiModelSelection;
+}
+
+const emptyDefaultModels: DefaultAiModelSelection = {
+    reasoning: '' as AiModelId,
+    image: '' as AiModelId,
+    video: '' as AiModelId,
 }
 
 const aiModels: AiModelsStore = {
@@ -29,6 +41,7 @@ const aiModels: AiModelsStore = {
         version: 'media-generation-config-matrix-v1',
         groups: [],
     },
+    defaultModels: { ...emptyDefaultModels },
 }
 
 const store = writable(aiModels);
@@ -68,6 +81,18 @@ export const aiModelsStore = {
         return returnValue;
     },
 
+    // Returns the API-configured default model id for a capability, or '' when
+    // none is configured. Used to pre-select model dropdowns.
+    getDefaultModelId: (capability: DefaultAiModelCapability): AiModelId => {
+        let returnValue: AiModelId = aiModels.defaultModels[capability];
+        const unsubscribe = store.subscribe(store => {
+            returnValue = store.defaultModels[capability];
+        });
+        unsubscribe();
+
+        return returnValue;
+    },
+
     setMetaValues: (values: Partial<Meta> = {}): void => store.update(state => ({
         ...state,
         meta: {
@@ -93,6 +118,7 @@ export const aiModelsStore = {
             version: 'media-generation-config-matrix-v1',
             groups: [],
         },
+        defaultModels: { ...emptyDefaultModels },
     })),
 
     setAiModelsCatalog: (catalog: AiModelsCatalogResponse): void => store.update(state => ({
@@ -101,6 +127,7 @@ export const aiModelsStore = {
             ...(catalog.models as AiModel[]),
         ],
         mediaGenerationConfigMatrix: catalog.mediaGenerationConfigMatrix ?? aiModels.mediaGenerationConfigMatrix,
+        defaultModels: catalog.defaultModels ?? { ...emptyDefaultModels },
     })),
 
     resetStore: (): void => store.set(aiModels),

@@ -108,6 +108,7 @@ Sent user message bubble inserted by `AiPromptInputController`.
 - DOM parse target: `div.ai-user-message`
 - NodeView shell comes from `createAiUserMessageShell()`.
 - Explicit composer references are stored in `referenceNodeIds` at submit time and render above the message text through `components/contextPreview` when `renderContext.contextPreview` is available; those tiles re-resolve the current canvas node on hover so late descriptor self-heal metadata appears without rebuilding the message.
+- Scaled projection surfaces can set `renderContext.contextPreview.inlinePopover` so hover cards stay inside the projection's DOM context; unscaled panels omit it and use the default viewport-clamped tooltip.
 
 ### `aiResponseMessage`
 
@@ -235,6 +236,10 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 - `video_generation_trace`
 - `collapsible_start`
 - `collapsible_end`
+
+Image and video completion/error events finalize the generated media node state
+and close the matching receiving run so prompt inputs leave stop mode when the
+media run finishes.
 
 `generationRun` metadata scopes parallel model outputs:
 

@@ -28,6 +28,7 @@ import {
 import type { PixiEdgeRenderDatum, PixiEdgeArrow } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
 import { getAdaptiveBoundedZoomScalingOptions, getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
+import { isBranchLineageMarkerNode } from '$src/infographics/workspace/branchLineageState.ts'
 import { applyStyle } from '$src/utils/domTemplates.ts'
 import {
 	getBranchMarkerMediaModelCircleDescriptors,
@@ -255,10 +256,6 @@ function computeTFromPointerPosition(
 	const relativeY = pointerY - nodeTop
 	const t = Math.max(0, Math.min(1, relativeY / nodeHeight))
 	return t
-}
-
-function isBranchLineageMarkerNode(node: CanvasNode | undefined): boolean {
-	return node?.type === 'branchOrigin' || node?.type === 'branchFork' || node?.type === 'branchLine'
 }
 
 // Media nodes and branch lineage markers always anchor edges to the middle of

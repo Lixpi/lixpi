@@ -84,6 +84,14 @@ describe('AiModel.getAvailableAiModels', () => {
             options: [{ value: '768x768', label: '768x768' }],
             defaultValue: '768x768',
         }])
+        // With no model flagged via isDefaultFor, defaults fall back to the first
+        // available model of each capability (reasoning = first non-generation model).
+        expect(result.defaultModels).toEqual({
+            reasoning: 'Anthropic:claude-3-opus-20240229',
+            image: 'Google:gemini-image-1',
+            video: 'Google:veo-3.1-generate-preview',
+        })
+
         expect(videoGroup?.groupId).toBe('video:Google')
         expect(videoGroup?.controls).toEqual(expect.arrayContaining([
             expect.objectContaining({
@@ -105,6 +113,56 @@ describe('AiModel.getAvailableAiModels', () => {
                 options: [{ value: '8', label: '8' }],
             }),
         ]))
+    })
+
+    it('derives defaultModels from the isDefaultFor flag regardless of sort order', async () => {
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [
+                {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet',
+                    modelVersion: 'claude-sonnet',
+                    sortingPosition: 1,
+                    modalities: [{ modality: 'text' }],
+                    pricing: {},
+                },
+                {
+                    provider: 'Anthropic',
+                    model: 'claude-haiku-4-5',
+                    modelVersion: 'claude-haiku-4-5',
+                    sortingPosition: 2,
+                    modalities: [{ modality: 'text' }],
+                    isDefaultFor: ['reasoning'],
+                    pricing: {},
+                },
+                {
+                    provider: 'Google',
+                    model: 'gemini-2.5-flash-image',
+                    modelVersion: 'gemini-2.5-flash-image',
+                    sortingPosition: 3,
+                    modalities: [{ modality: 'image_generation' }],
+                    isDefaultFor: ['image'],
+                    pricing: {},
+                },
+                {
+                    provider: 'Google',
+                    model: 'veo-3.1-lite-generate-preview',
+                    modelVersion: 'veo-3.1-lite-generate-preview',
+                    sortingPosition: 4,
+                    modalities: [{ modality: 'video_generation' }],
+                    isDefaultFor: ['video'],
+                    pricing: {},
+                },
+            ],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+
+        expect(result.defaultModels).toEqual({
+            reasoning: 'Anthropic:claude-haiku-4-5',
+            image: 'Google:gemini-2.5-flash-image',
+            video: 'Google:veo-3.1-lite-generate-preview',
+        })
     })
 })
 

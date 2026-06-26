@@ -54,9 +54,21 @@ export type PixiTravelingOutlineRendererOptions = {
     getStrokeScale?: () => number
 }
 
-type OutlineEntry = {
+const OUTLINE_GEOMETRY_RING_SIZE = 3
+const TRAVELING_SNAKE_MIN_SAMPLE_COUNT = 32
+const TRAVELING_SNAKE_MAX_SAMPLE_COUNT = 1440
+
+type OutlineMeshSlot = {
     mesh: Mesh
     geometry: MeshGeometry
+    buffers: TravelingSnakeMeshGeometry
+}
+
+type OutlineEntry = {
+    slots: OutlineMeshSlot[]
+    activeSlotIndex: number
+    active: boolean
+    renderable: boolean
     x: number
     y: number
     width: number
@@ -72,7 +84,7 @@ export type OutlinePoint = {
     y: number
 }
 
-type OutlineFrame = {
+export type OutlineFrame = {
     point: OutlinePoint
     tangent: OutlinePoint
 }
@@ -86,11 +98,16 @@ type TravelingSnakeMeshGeometry = {
     indices: Uint32Array
 }
 
+// Rounded-rectangle perimeter in local media coordinates. Shared by branch
+// outline placement and tests so the moving head travels at a consistent speed
+// across rectangles and pre-frame circles.
 export function getRoundedOutlinePerimeter(width: number, height: number, radius: number): number {
     const boundedRadius = Math.max(0, Math.min(radius, width / 2, height / 2))
     return 2 * (width + height - 4 * boundedRadius) + 2 * Math.PI * boundedRadius
 }
 
+// Convenience wrapper for callers that only need the sampled point and not the
+// tangent. The full frame function below owns the actual path math.
 export function getRoundedOutlinePoint(
     width: number,
     height: number,
@@ -100,7 +117,9 @@ export function getRoundedOutlinePoint(
     return getRoundedOutlineFrame(width, height, radius, distance).point
 }
 
-function getRoundedOutlineFrame(
+// Samples a rounded rectangle at a wrapped path distance. The tangent is kept
+// with the point because the mesh builder needs a stable normal for strip width.
+export function getRoundedOutlineFrame(
     width: number,
     height: number,
     radius: number,
@@ -186,6 +205,8 @@ function getRoundedOutlineFrame(
     }
 }
 
+// Converts elapsed animation time into a path distance for the snake head. The
+// easing curve lives here so every outline shape uses the same lap timing.
 export function getTravelingOutlineHeadDistance(
     elapsed: number,
     durationMs: number,
@@ -197,11 +218,41 @@ export function getTravelingOutlineHeadDistance(
     return ease(lapProgress) * perimeter
 }
 
+// Picks enough samples for smooth tapered geometry while clamping the maximum
+// count so a huge media node cannot allocate unbounded WebGPU buffers.
 function getTravelingSnakeSampleCount(snakeLength: number, snakeHeadWidth: number): number {
     const spacing = Math.max(0.5, snakeHeadWidth * 0.05)
-    return Math.max(32, Math.min(1440, Math.ceil(snakeLength / spacing)))
+    return Math.max(TRAVELING_SNAKE_MIN_SAMPLE_COUNT, Math.min(TRAVELING_SNAKE_MAX_SAMPLE_COUNT, Math.ceil(snakeLength / spacing)))
 }
 
+// Allocates the maximum typed arrays once per mesh slot. Runtime paints mutate
+// these arrays in place instead of replacing them, which avoids Pixi destroying
+// and recreating GPU buffers during WebGPU submits.
+function createTravelingSnakeMeshGeometry(): TravelingSnakeMeshGeometry {
+    const stripVertexCount = (TRAVELING_SNAKE_MAX_SAMPLE_COUNT + 1) * 2
+    const positions = new Float32Array(stripVertexCount * 2)
+    const uvs = new Float32Array(positions.length)
+    const indices = new Uint32Array(TRAVELING_SNAKE_MAX_SAMPLE_COUNT * 6)
+    return { positions, uvs, indices }
+}
+
+// Notifies Pixi that the existing buffers changed. This is intentionally
+// `update()` rather than assigning new `positions`/`uvs`/`indices` arrays.
+function updateMeshGeometryBuffers(geometry: MeshGeometry): void {
+    const dynamicGeometry = geometry as MeshGeometry & {
+        attributes: {
+            aPosition: { buffer: { update: () => void } }
+            aUV: { buffer: { update: () => void } }
+        }
+        indexBuffer: { update: () => void }
+    }
+    dynamicGeometry.attributes.aPosition.buffer.update()
+    dynamicGeometry.attributes.aUV.buffer.update()
+    dynamicGeometry.indexBuffer.update()
+}
+
+// Writes one vertex into the fixed typed arrays. Keeping this tiny prevents the
+// mesh-building loop from repeating offset math for position and UV arrays.
 function setMeshVertex(
     geometry: TravelingSnakeMeshGeometry,
     vertexIndex: number,
@@ -217,6 +268,8 @@ function setMeshVertex(
     geometry.uvs[positionIndex + 1] = v
 }
 
+// Rounds the snake head cap by narrowing the final samples near the head. This
+// keeps the droplet from ending in a square cut while preserving fixed geometry.
 function getTravelingSnakeHeadRoundFactor(
     progress: number,
     snakeLength: number,
@@ -229,6 +282,8 @@ function getTravelingSnakeHeadRoundFactor(
     return Math.sqrt(Math.max(0, 1 - (1 - roundProgress) ** 2))
 }
 
+// Tapers tail width according to the configured thin-tail fraction and power.
+// The returned value is 0..1 and is later mixed between tail and head width.
 function getTravelingSnakeWidthProgress(
     progress: number,
     thinTailLengthFraction: number,
@@ -245,10 +300,15 @@ function getTravelingSnakeWidthProgress(
     return Math.pow(taperProgress, boundedTaperPower)
 }
 
+// Converts semantic direction into a signed path offset. Geometry code only
+// deals with multiplying distances by 1 or -1.
 function getTravelingOutlineDirectionSign(direction?: PixiTravelingOutlineDirection): 1 | -1 {
     return direction === 'counterclockwise' ? -1 : 1
 }
 
+// Samples the visible outline while letting the head and body use different
+// outsets. That keeps the snake centered on the configured media border even
+// when head width differs from the thinner tail width.
 function getInsetAlignedRoundedOutlineFrame(
     mediaWidth: number,
     mediaHeight: number,
@@ -346,7 +406,11 @@ function getInsetAlignedRoundedOutlineFrame(
     )
 }
 
+// Rewrites the active mesh slot for one frame of the traveling snake. The mesh
+// uses zero-filled unused indices so fixed-size buffers can represent shorter
+// snakes without changing buffer shape.
 function buildTravelingSnakeMeshGeometry(
+    geometry: TravelingSnakeMeshGeometry,
     mediaWidth: number,
     mediaHeight: number,
     mediaRadius: number,
@@ -361,19 +425,16 @@ function buildTravelingSnakeMeshGeometry(
     travelDirection: 1 | -1,
     edgeFeatherFraction: number,
     snakeHeadRoundLengthFraction: number
-): TravelingSnakeMeshGeometry {
-    const stripVertexCount = (sampleCount + 1) * 2
-    const positions = new Float32Array(stripVertexCount * 2)
-    const uvs = new Float32Array(positions.length)
-    const indices = new Uint32Array(sampleCount * 6)
-    const geometry = { positions, uvs, indices }
+): void {
+    const boundedSampleCount = Math.min(sampleCount, TRAVELING_SNAKE_MAX_SAMPLE_COUNT)
+    const indices = geometry.indices
     let indexOffset = 0
     const headOutset = outlineGap + snakeHeadWidth / 2
     const meshWidthScale = 1 + Math.max(0, edgeFeatherFraction) * 2
     const headRoundLength = snakeHeadWidth * meshWidthScale * Math.max(0, snakeHeadRoundLengthFraction)
 
-    for (let index = 0; index <= sampleCount; index++) {
-        const progress = index / sampleCount
+    for (let index = 0; index <= boundedSampleCount; index++) {
+        const progress = index / boundedSampleCount
         const widthProgress = getTravelingSnakeWidthProgress(progress, snakeTailThinLengthFraction, snakeWidthTaperPower)
         const sampleWidth = snakeTailWidth + (snakeHeadWidth - snakeTailWidth) * widthProgress
         const headRoundFactor = getTravelingSnakeHeadRoundFactor(progress, snakeLength, headRoundLength)
@@ -411,7 +472,7 @@ function buildTravelingSnakeMeshGeometry(
             crossSectionEnd
         )
 
-        if (index < sampleCount) {
+        if (index < boundedSampleCount) {
             const nextLeftVertex = leftVertex + 2
             const nextRightVertex = leftVertex + 3
             indices[indexOffset++] = leftVertex
@@ -423,9 +484,14 @@ function buildTravelingSnakeMeshGeometry(
         }
     }
 
-    return { positions, uvs, indices }
+    indices.fill(0, indexOffset)
 }
 
+// Owns animated Pixi meshes for generated-media progress outlines. Each entry
+// keeps a small ring of fixed-size mesh slots so WebGPU can render a submitted
+// slot while later frames write other slots. Three slots covers the current,
+// previous, and next-frame buffers without multiplying geometry memory by an
+// arbitrary safety factor.
 export class PixiTravelingOutlineRenderer {
     private readonly container: Container
     private readonly style: PixiTravelingOutlineStyle
@@ -438,6 +504,8 @@ export class PixiTravelingOutlineRenderer {
     private animationStartedAt: number | null = null
     private destroyed = false
 
+    // Constructor bakes the shared glass texture once. Per-target animation only
+    // changes geometry, so all outlines use the same material resource.
     constructor(options: PixiTravelingOutlineRendererOptions) {
         this.container = options.container
         this.style = options.style
@@ -451,25 +519,32 @@ export class PixiTravelingOutlineRenderer {
         ).bake()
     }
 
+    // Reconciles caller datums with renderer entries. Missing datums are hidden,
+    // not destroyed, so transient selection/reference changes do not churn Pixi
+    // DisplayObjects or GPU resources.
     sync(datums: ReadonlyArray<PixiTravelingOutlineDatum>): void {
         if (this.destroyed) return
         const activeIds = new Set(datums.map((datum) => datum.id))
-        for (const id of this.entries.keys()) {
-            if (!activeIds.has(id)) this.destroyEntry(id)
+        for (const [id, entry] of this.entries) {
+            if (!activeIds.has(id)) this.hideEntry(entry)
         }
 
         for (const datum of datums) {
             const entry = this.entries.get(datum.id) ?? this.createEntry(datum)
             this.entries.set(datum.id, entry)
+            entry.active = true
             this.updateEntryGeometry(entry, datum)
             this.setEntryRenderable(entry, datum.visible)
         }
 
         this.stopIfIdle()
-        this.start()
+        if (this.hasRenderableEntries()) this.start()
         this.onFrame()
     }
 
+    // Updates geometry for one existing entry without changing visibility. This
+    // lets live node transforms move outlines during drag without rebuilding the
+    // whole target set.
     updateGeometry(
         id: string,
         geometry: OutlineGeometryUpdate
@@ -479,12 +554,16 @@ export class PixiTravelingOutlineRenderer {
         this.updateEntryGeometry(entry, geometry)
     }
 
+    // Flips one entry between drawn and hidden while keeping its mesh slots
+    // alive. Used when a target remains known but should stop rendering.
     setVisible(id: string, visible: boolean): void {
         const entry = this.entries.get(id)
         if (!entry) return
         this.setEntryRenderable(entry, visible)
     }
 
+    // Releases all renderer-owned Pixi resources. This path runs on layer
+    // teardown, not normal sync, so destroying meshes is safe here.
     destroy(): void {
         this.destroyed = true
         if (this.animationRaf !== null) {
@@ -496,7 +575,11 @@ export class PixiTravelingOutlineRenderer {
         if (this.texture !== Texture.WHITE) this.texture.destroy(true)
     }
 
+    // Paints one animation frame into the next mesh slot. Slot rotation prevents
+    // editing the same GPU buffer that a just-submitted frame may still read.
     private paint(entry: OutlineEntry, elapsed: number): void {
+        const activeSlotIndex = (entry.activeSlotIndex + 1) % entry.slots.length
+        const activeSlot = entry.slots[activeSlotIndex]
         const strokeScale = this.getSafeStrokeScale()
         const snakeHeadWidth = this.style.snakeHeadWidth * strokeScale
         const outlineGap = this.style.gap * strokeScale
@@ -517,7 +600,8 @@ export class PixiTravelingOutlineRenderer {
             : this.style.snakeLengthFraction
         const snakeLength = perimeter * snakeLengthFraction
         const sampleCount = getTravelingSnakeSampleCount(snakeLength, snakeHeadWidth)
-        const geometry = buildTravelingSnakeMeshGeometry(
+        buildTravelingSnakeMeshGeometry(
+            activeSlot.buffers,
             entry.width,
             entry.height,
             mediaRadius,
@@ -534,27 +618,43 @@ export class PixiTravelingOutlineRenderer {
             this.style.snakeHeadRoundLengthFraction
         )
 
-        entry.mesh.position.set(entry.x - headOutset, entry.y - headOutset)
-        entry.geometry.positions = geometry.positions
-        entry.geometry.uvs = geometry.uvs
-        entry.geometry.indices = geometry.indices
+        activeSlot.mesh.position.set(entry.x - headOutset, entry.y - headOutset)
+        updateMeshGeometryBuffers(activeSlot.geometry)
+        entry.activeSlotIndex = activeSlotIndex
+        this.syncSlotVisibility(entry)
     }
 
+    // Guards against bad zoom-scaling callbacks so one invalid value cannot
+    // collapse the outline mesh or create NaN vertex data.
     private getSafeStrokeScale(): number {
         const scale = this.getStrokeScale()
         return Number.isFinite(scale) && scale > 0 ? scale : 1
     }
 
+    // Creates one outline entry with preallocated mesh slots. The initial paint
+    // uploads valid geometry before the entry becomes visible.
     private createEntry(datum: PixiTravelingOutlineDatum): OutlineEntry {
-        const geometry = new MeshGeometry()
-        const mesh = new Mesh({ geometry, texture: this.texture })
-        mesh.label = 'pixi-traveling-outline-glass'
-        mesh.eventMode = 'none'
-        this.container.addChild(mesh)
+        const slots: OutlineMeshSlot[] = []
+        for (let index = 0; index < OUTLINE_GEOMETRY_RING_SIZE; index++) {
+            const buffers = createTravelingSnakeMeshGeometry()
+            const geometry = new MeshGeometry({
+                positions: buffers.positions,
+                uvs: buffers.uvs,
+                indices: buffers.indices,
+            })
+            const mesh = new Mesh({ geometry, texture: this.texture })
+            mesh.label = `pixi-traveling-outline-glass-${index}`
+            mesh.eventMode = 'none'
+            mesh.renderable = false
+            this.container.addChild(mesh)
+            slots.push({ mesh, geometry, buffers })
+        }
 
         const entry = {
-            mesh,
-            geometry,
+            slots,
+            activeSlotIndex: -1,
+            active: true,
+            renderable: false,
             x: datum.x,
             y: datum.y,
             width: datum.width,
@@ -570,10 +670,30 @@ export class PixiTravelingOutlineRenderer {
         return entry
     }
 
+    // Records desired visibility separately from `active` so stale entries can
+    // remain allocated but render nothing.
     private setEntryRenderable(entry: OutlineEntry, renderable: boolean): void {
-        entry.mesh.renderable = renderable
+        entry.renderable = renderable
+        this.syncSlotVisibility(entry)
     }
 
+    // Only the latest painted slot renders. Older slots stay allocated briefly
+    // so their GPU buffers can retire before being reused.
+    private syncSlotVisibility(entry: OutlineEntry): void {
+        for (let index = 0; index < entry.slots.length; index++) {
+            entry.slots[index].mesh.renderable = entry.active && entry.renderable && index === entry.activeSlotIndex
+        }
+    }
+
+    // Marks an entry absent from the latest sync while preserving its resources
+    // for reuse if the same id returns.
+    private hideEntry(entry: OutlineEntry): void {
+        entry.active = false
+        this.setEntryRenderable(entry, false)
+    }
+
+    // Copies caller geometry into the entry. Optional fields only update when
+    // present, which lets drag updates avoid clobbering per-run animation data.
     private updateEntryGeometry(
         entry: OutlineEntry,
         geometry: OutlineGeometryUpdate
@@ -588,17 +708,23 @@ export class PixiTravelingOutlineRenderer {
         if ('snakeLengthFraction' in geometry) entry.snakeLengthFraction = geometry.snakeLengthFraction
     }
 
+    // Fully destroys one entry. Normal sync avoids this path; teardown uses it
+    // because no further WebGPU frames will reference these buffers.
     private destroyEntry(id: string): void {
         const entry = this.entries.get(id)
         if (!entry) return
-        this.container.removeChild(entry.mesh)
-        entry.mesh.destroy()
-        entry.geometry.destroy()
+        for (const slot of entry.slots) {
+            this.container.removeChild(slot.mesh)
+            slot.mesh.destroy()
+            slot.geometry.destroy()
+        }
         this.entries.delete(id)
     }
 
+    // Stops rAF work when nothing is visible. This keeps idle work at zero while
+    // preserving entries for future reuse.
     private stopIfIdle(): void {
-        if (this.entries.size > 0) return
+        if (this.hasRenderableEntries()) return
         if (this.animationRaf !== null) {
             cancelAnimationFrame(this.animationRaf)
             this.animationRaf = null
@@ -606,9 +732,19 @@ export class PixiTravelingOutlineRenderer {
         this.animationStartedAt = null
     }
 
+    // Fast visibility predicate used by both sync and the animation tick.
+    private hasRenderableEntries(): boolean {
+        for (const entry of this.entries.values()) {
+            if (entry.active && entry.renderable) return true
+        }
+        return false
+    }
+
+    // Animation tick paints every visible entry, requests one media-layer render,
+    // and schedules the next tick only while visible entries remain.
     private updateFrame = (timestamp: number): void => {
         this.animationRaf = null
-        if (this.destroyed || this.entries.size === 0) {
+        if (this.destroyed || !this.hasRenderableEntries()) {
             this.stopIfIdle()
             return
         }
@@ -616,15 +752,17 @@ export class PixiTravelingOutlineRenderer {
         this.animationStartedAt ??= timestamp
         const elapsed = timestamp - this.animationStartedAt
         for (const entry of this.entries.values()) {
-            if (entry.mesh.renderable) this.paint(entry, elapsed)
+            if (entry.active && entry.renderable) this.paint(entry, elapsed)
         }
 
         this.onFrame()
         this.animationRaf = requestAnimationFrame(this.updateFrame)
     }
 
+    // Starts the animation loop once. Repeated sync calls can happen every
+    // canvas update, so this guard prevents duplicate rAF loops.
     private start(): void {
-        if (this.destroyed || this.entries.size === 0 || this.animationRaf !== null) return
+        if (this.destroyed || !this.hasRenderableEntries() || this.animationRaf !== null) return
         this.animationRaf = requestAnimationFrame(this.updateFrame)
     }
 }

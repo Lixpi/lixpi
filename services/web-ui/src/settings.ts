@@ -229,6 +229,29 @@ export type AiPromptInputSettings = {
     modelMenu: AiPromptInputModelMenuSettings
 }
 
+export type CanvasChromeSettings = {
+    glassBorder: {
+        enabled: boolean
+        widthPx: number
+        displacementScalePx: number
+        displacementMapMaxDimensionPx: number
+        edgeRefractionStrength: number
+        surfaceWaveStrength: number
+        causticBandStrength: number
+        displacementFrequencyX: number
+        displacementFrequencyY: number
+        bodyColor: string
+        bodyAlpha: number
+        highlightColor: string
+        highlightAlpha: number
+        shadowColor: string
+        shadowAlpha: number
+        materialColors: string[]
+        materialTailAlpha: number
+        glassMaterial: GenerationBorderGlassMaterialSettings
+    }
+}
+
 export type ConnectorSettings = {
     lineCurve: WorkspaceEdgePathType
     useZoomCompensatedScaling: boolean
@@ -508,8 +531,32 @@ export type MediaBranchLineageMediaModelCircleSettings = {
     }
 }
 
+export type WorkspaceCollisionNodeTypeSettings = {
+    iterations: number
+    margin: number
+    overlapThreshold: number
+}
+
+export type WorkspaceCollisionFlowSettings = {
+    nodeTypes: {
+        document: WorkspaceCollisionNodeTypeSettings
+        image: WorkspaceCollisionNodeTypeSettings
+        video: WorkspaceCollisionNodeTypeSettings
+        branchOrigin: WorkspaceCollisionNodeTypeSettings
+        branchFork: WorkspaceCollisionNodeTypeSettings
+        branchLine: WorkspaceCollisionNodeTypeSettings
+    }
+}
+
+export type WorkspaceCollisionSettings = {
+    insertion: WorkspaceCollisionFlowSettings
+    dragRelease: WorkspaceCollisionFlowSettings
+    branchTree: WorkspaceCollisionFlowSettings
+}
+
 export type MediaBranchLineageSettings = {
     generatedMediaSize: number
+    nodeGap: number
     rootToFirstMediaGap: number
     branchRowGap: number
     mediaToMediaGap: number
@@ -570,6 +617,8 @@ export type Settings = {
 
     canvasBubbleMenu: CanvasBubbleMenuSettings
 
+    canvasChrome: CanvasChromeSettings
+
     rightSidePanel: RightSidePanelSettings
 
     aiChatThread: AiChatThreadSettings
@@ -579,6 +628,8 @@ export type Settings = {
     connector: ConnectorSettings
 
     selection: SelectionSettings
+
+    workspaceCollision: WorkspaceCollisionSettings
 
     mediaNode: MediaNodeSettings
 
@@ -630,6 +681,117 @@ export const settings: Settings = {
         // opt this config into the shared adaptive low-zoom curve, which defaults
         // to 0.45 unless this object provides `lowZoomPower`.
         zoomScaling: { minZoom: 0.4 },
+    },
+
+    // Screen-fixed canvas chrome shared by the bottom composer and adjacent action panels.
+    canvasChrome: {
+        // Pixi glass border for bottom canvas controls.
+        glassBorder: {
+            // Enables the Pixi render-texture refraction border around composer controls.
+            enabled: true,
+            // Width of the refractive ring in screen pixels.
+            widthPx: 10,
+            // Pixel offset strength used by the Pixi displacement filter that refracts captured canvas content.
+            displacementScalePx: 34,
+            // Upper bound for the generated screen-space displacement map.
+            displacementMapMaxDimensionPx: 1600,
+            // Normal-direction edge pinch strength. Higher values pull pixels harder across the glass edge.
+            edgeRefractionStrength: 0.95,
+            // Tangential wave strength for the liquid smear inside the ring.
+            surfaceWaveStrength: 0.26,
+            // Secondary bright-band distortion strength along the border thickness.
+            causticBandStrength: 0.34,
+            // Horizontal wave frequency for the procedural liquid displacement.
+            displacementFrequencyX: 4.8,
+            // Vertical wave frequency for the procedural liquid displacement.
+            displacementFrequencyY: 3.9,
+            // Transparent body tint drawn only inside the ring.
+            bodyColor: '#ffffff',
+            // Body tint alpha inside the ring.
+            bodyAlpha: 0.035,
+            // Specular rim color.
+            highlightColor: '#ffffff',
+            // Specular rim alpha.
+            highlightAlpha: 0.2,
+            // Subtle inner-shadow rim color.
+            shadowColor: '#415061',
+            // Subtle inner-shadow rim alpha.
+            shadowAlpha: 0.1,
+            // Baked Pixi glass material colors for the closed border mesh.
+            materialColors: ['#ffffff', '#f7fbff', '#edf4ff', '#ffffff'],
+            // Closed border meshes do not tail-fade; this stays fully present before material alpha is applied.
+            materialTailAlpha: 1,
+            glassMaterial: {
+                // Dark tint mixed into the soft lower rim of the glass.
+                shadowColor: '#415061',
+                // Kept for shared material compatibility; closed strip opacity is forced by the material subclass.
+                tailOpacityPower: 1,
+                // Disabled so the rounded-rectangle border has no tail seam.
+                tailFadeFraction: 0,
+                // Closed strip minimum opacity.
+                minTailOpacity: 1,
+                // Extra transparent feather width as a fraction of the visible border width.
+                edgeFeatherFraction: 0.22,
+                // Exponent applied to the feather mask.
+                edgeFeatherPower: 1.34,
+                // Cross-section lens exponent.
+                lensCorePower: 0.5,
+                // Vertical center of the main specular highlight, from outer edge 0 to inner edge 1.
+                upperSpecularCenter: 0.24,
+                // Subtle drift along the closed outline path.
+                upperSpecularDrift: 0.02,
+                // Width of the main specular highlight across the border body.
+                upperSpecularWidth: 0.18,
+                // Closed strips have no tail, so the highlight is present immediately.
+                upperSpecularFadeStart: 0,
+                // Closed strips have no tail, so the highlight is present immediately.
+                upperSpecularFadeEnd: 0.01,
+                // Brightness contribution from the main specular highlight.
+                upperSpecularStrength: 0.13,
+                // Longitudinal center of the inherited head glint.
+                headSpecularProgressCenter: 0.52,
+                // Longitudinal width of the inherited head glint.
+                headSpecularProgressWidth: 0.42,
+                // Cross-section center of the inherited head glint.
+                headSpecularCrossSectionCenter: 0.48,
+                // Cross-section width of the inherited head glint.
+                headSpecularCrossSectionWidth: 0.28,
+                // Brightness contribution from the inherited head glint.
+                headSpecularStrength: 0.04,
+                // Cross-section center of the lower glass shadow rim.
+                lowerEdgeShadowCenter: 0.86,
+                // Width of the lower glass shadow rim.
+                lowerEdgeShadowWidth: 0.22,
+                // Darkness contribution from the lower glass shadow rim.
+                lowerEdgeShadowStrength: 0.12,
+                // Cross-section center of the upper glass shadow rim.
+                upperEdgeShadowCenter: 0.08,
+                // Width of the upper glass shadow rim.
+                upperEdgeShadowWidth: 0.18,
+                // Darkness contribution from the upper glass shadow rim.
+                upperEdgeShadowStrength: 0.05,
+                // Power curve for the broad edge shadow.
+                edgeShadowPower: 2.1,
+                // Darkness contribution from the broad edge shadow.
+                edgeShadowStrength: 0.035,
+                // Brightness contribution from the rounded lens core.
+                lensHighlightStrength: 0.06,
+                // Maximum amount of white mixed into highlights.
+                highlightWhiteMixMax: 0.24,
+                // Maximum amount of shadow color mixed into edge shadows.
+                shadowMixMax: 0.1,
+                // Baseline material opacity before cross-section highlights are added.
+                materialAlphaBase: 0.018,
+                // Maximum material opacity before the feathered edge mask is applied.
+                materialAlphaMax: 0.14,
+                // Opacity contribution from the rounded lens core.
+                lensAlphaStrength: 0.05,
+                // Opacity contribution from the main specular highlight.
+                upperSpecularAlphaStrength: 0.035,
+                // Opacity contribution from the inherited head glint.
+                headSpecularAlphaStrength: 0.016,
+            },
+        },
     },
 
     // Right side panel surface, resize, toggle, and slide settings.
@@ -897,6 +1059,48 @@ export const settings: Settings = {
             overlayBackgroundColor: 'rgba(230, 233, 246, 0.42)',
             // Outline color for a selected thread's floating prompt input.
             outlineColor: 'rgba(197, 192, 238, 0.75)',
+        },
+    },
+
+    // Workspace collision resolution settings. Resolver iterations, spacing,
+    // and trigger thresholds are configured per canvas node type. Branch-lineage
+    // marker margins are replaced at runtime by mediaBranchLineage.nodeGap so one
+    // spacing knob controls every marker type across placement, drag, and rebalance.
+    workspaceCollision: {
+        // Viewport-centered insertions use wider breathing room.
+        insertion: {
+            nodeTypes: {
+                document: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
+                image: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
+                video: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
+                branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
+                branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
+                branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            },
+        },
+        // Drag-release cleanup keeps manually positioned nodes tight while runtime
+        // marker margins still prevent branch-lineage marker bodies from overlapping.
+        dragRelease: {
+            nodeTypes: {
+                document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
+                branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
+                branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            },
+        },
+        // Branch-tree rebalancing combines normal media/document breathing room
+        // with runtime branch-marker clearance from mediaBranchLineage.nodeGap.
+        branchTree: {
+            nodeTypes: {
+                document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+                branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
+                branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
+                branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            },
         },
     },
 
@@ -1215,6 +1419,8 @@ export const settings: Settings = {
     mediaBranchLineage: {
         // Canvas-unit base width and height for new generated media nodes. Increasing it makes each generated branch artifact larger when inserted.
         generatedMediaSize: 800,
+        // Canvas-unit minimum empty space reserved around every branchOrigin, branchFork, and branchLine marker during placement, drag release, and branch-tree rebalance.
+        nodeGap: 64,
         // Canvas-unit horizontal gap between a chat root or reference group and the first generated media node in that branch.
         rootToFirstMediaGap: 384,
         // Canvas-unit vertical gap between separate branch rows spawned from the same chat root. Increasing it moves new branches farther below the previous branch.
@@ -1225,7 +1431,7 @@ export const settings: Settings = {
         branchOriginToFirstMediaGap: 312,
         // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
         branchFanoutExtraGap: 200,
-        // Screen-pixel vertical gap between the global prompt input and the pending branch marker shown immediately after canvas prompt submit.
+        // Vertical gap between the global prompt input and pending branch marker; the same numeric gap separates stacked pending branch markers.
         pendingMarkerInputGap: 8,
         // Milliseconds for moving and scaling a pending branch marker from the global prompt input to its API-planned canvas position.
         pendingMarkerMoveDurationMs: 420,

@@ -16,7 +16,6 @@ import type {
 import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from '../extraction/vlm-client.ts'
 import { resolveImageUrls } from '../utils/attachments.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
-import { getVideoMaxReferenceImages } from './state.ts'
 import type { StreamPublisher } from './stream-publisher.ts'
 
 type ResolveImageBranchDeps = {
@@ -210,13 +209,15 @@ const getResolverModel = (state: ProviderState): { provider: ProviderName; model
     return { provider, modelVersion }
 }
 
-const compactCandidateForPrompt = (candidate: ImageBranchCandidateImage): Record<string, unknown> => ({
+const compactCandidateForPrompt = (
+    candidate: ImageBranchCandidateImage,
+    candidateNodeIds: Set<string>,
+): Record<string, unknown> => ({
     nodeId: candidate.nodeId,
     roleHints: candidate.roleHints,
     branchId: candidate.branchId ?? '',
-    parentImageNodeId: candidate.parentImageNodeId ?? '',
-    ancestorNodeIds: candidate.ancestorNodeIds,
-    sourceContextNodeIds: candidate.sourceContextNodeIds,
+    ancestorNodeIds: (candidate.ancestorNodeIds ?? []).filter((nodeId) => candidateNodeIds.has(nodeId)),
+    sourceContextNodeIds: (candidate.sourceContextNodeIds ?? []).filter((nodeId) => candidateNodeIds.has(nodeId)),
     sourceMessageId: candidate.sourceMessageId ?? '',
     promptText: candidate.promptText ?? '',
     visualEntitySummary: candidate.visualEntitySummary ?? '',
@@ -247,6 +248,7 @@ const resolveCandidateImageUrls = async (
 const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
     const snapshot = state.imageBranchCandidateSnapshot
     if (!snapshot) throw new Error('Image branch candidate snapshot is required')
+    const candidateNodeIds = new Set(snapshot.candidates.map((candidate) => candidate.nodeId))
 
     const blocks: Array<Record<string, any>> = [{
         type: 'input_text',
@@ -258,7 +260,7 @@ const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
             snapshot.activeTargetNodeId ? `Active target node ID: ${snapshot.activeTargetNodeId}` : undefined,
             '',
             'Candidate metadata JSON:',
-            JSON.stringify(snapshot.candidates.map(compactCandidateForPrompt), null, 2),
+            JSON.stringify(snapshot.candidates.map((candidate) => compactCandidateForPrompt(candidate, candidateNodeIds)), null, 2),
             '',
             'Transcript/candidate context:',
             snapshot.transcriptContext,
@@ -295,6 +297,9 @@ const assertKnownNodeIds = (label: string, nodeIds: string[], candidateByNodeId:
         throw new Error(`Image branch resolver returned unknown ${label}: ${unknown.join(', ')}`)
     }
 }
+
+const appendRationale = (rationale: string, guardMessage: string): string =>
+    [rationale, guardMessage].filter(Boolean).join(' ')
 
 const sanitizeDecisions = (
     decisions: unknown,
@@ -394,11 +399,24 @@ const sanitizeResolution = (args: {
             mode = 'edit-active-branch'
             if (operationKind === 'new_image' || operationKind === 'fresh_branch') operationKind = 'style_transfer'
             excludedNodeIds = excludedNodeIds.filter((nodeId) => nodeId !== generatedTarget.nodeId)
-            rationale = [
+            rationale = appendRationale(
                 rationale,
                 `Resolver guard continued generated branch via selected target reference ${generatedTarget.nodeId}.`,
-            ].filter(Boolean).join(' ')
+            )
         }
+    }
+
+    if (parentImageNodeId && !candidateByNodeId.has(parentImageNodeId)) {
+        const unknownParentImageNodeId = parentImageNodeId
+        parentImageNodeId = targetImageNodeId && candidateByNodeId.has(targetImageNodeId)
+            ? targetImageNodeId
+            : undefined
+        rationale = appendRationale(
+            rationale,
+            parentImageNodeId
+                ? `Resolver guard replaced unknown parentImageNodeId ${unknownParentImageNodeId} with targetImageNodeId ${parentImageNodeId}.`
+                : `Resolver guard ignored unknown parentImageNodeId ${unknownParentImageNodeId}.`,
+        )
     }
 
     assertKnownNodeIds('targetImageNodeId', targetImageNodeId ? [targetImageNodeId] : [], candidateByNodeId)
@@ -635,26 +653,30 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
         }, null, 0)}`)
 
         // For video generation, map the VLM-selected references onto the video
-        // provider's inputs. The first-frame (image-to-video) and reference-image
-        // (up to the provider's reference cap) paths are MUTUALLY EXCLUSIVE in
-        // both VEO and Seedance, so we pick one based on whether the resolver
-        // identified a target:
-        //   - target set (edit / style_transfer / continuation) -> first-frame mode
-        //   - no target, refs present                            -> referenceImages mode
-        //   - no refs at all                                     -> text-to-video (both undefined)
+        // provider's inputs as FRAME CONDITIONING ONLY (never asset/style refs):
+        //   - 1 image  -> start frame (image-to-video)
+        //   - 2 images -> start frame + stop frame (first/last-frame interpolation)
+        // We collect the selected images in a stable order — the resolver target
+        // (edit / continuation anchor) first, then the remaining references in
+        // selection order — and surface the first as the start frame and the
+        // second as the stop frame. videoReferenceImages now carries the OPTIONAL
+        // stop frame (at most one), not asset references. (Per-user-config of how
+        // each reference is used is planned but out of scope here.)
         let videoFirstFrameImage: string | undefined
         let videoReferenceImages: string[] | undefined
         if (state.videoModelVersion && resolution.referenceImageNodeIds.length > 0) {
             const urlByNodeId = new Map(resolvedCandidates.map(c => [c.nodeId, c.imageUrl]))
-            const orderedUrls = resolution.referenceImageNodeIds
-                .map(nodeId => urlByNodeId.get(nodeId))
-                .filter((url): url is string => typeof url === 'string' && url.length > 0)
-
-            if (resolution.targetImageNodeId) {
-                videoFirstFrameImage = urlByNodeId.get(resolution.targetImageNodeId) ?? orderedUrls[0]
-            } else if (orderedUrls.length > 0) {
-                videoReferenceImages = orderedUrls.slice(0, getVideoMaxReferenceImages(state.videoModelMetaInfo))
+            const orderedFrames: string[] = []
+            const pushFrame = (url: string | undefined): void => {
+                if (typeof url === 'string' && url.length > 0 && !orderedFrames.includes(url)) {
+                    orderedFrames.push(url)
+                }
             }
+            if (resolution.targetImageNodeId) pushFrame(urlByNodeId.get(resolution.targetImageNodeId))
+            for (const nodeId of resolution.referenceImageNodeIds) pushFrame(urlByNodeId.get(nodeId))
+
+            videoFirstFrameImage = orderedFrames[0]
+            videoReferenceImages = orderedFrames.slice(1, 2)
         }
 
         return {

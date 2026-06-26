@@ -93,8 +93,8 @@ export class BytePlusProvider extends BaseProvider {
             watermark: false,
         }
 
-        const referenceCount = content.filter((c) => c.type === 'image_url' && c.role === 'reference_image').length
         const hasFirstFrame = content.some((c) => c.type === 'image_url' && c.role === 'first_frame')
+        const hasLastFrame = content.some((c) => c.type === 'image_url' && c.role === 'last_frame')
         info(`[BytePlus:${this.instanceKey}] Seedance submit ${JSON.stringify({
             model: modelVersion,
             ratio: payload.ratio,
@@ -102,7 +102,7 @@ export class BytePlusProvider extends BaseProvider {
             duration: payload.duration,
             promptLen: prompt.length,
             hasFirstFrame,
-            referenceCount,
+            hasLastFrame,
         }, null, 0)}`)
 
         try {

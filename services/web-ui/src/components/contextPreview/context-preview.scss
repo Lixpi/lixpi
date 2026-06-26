@@ -280,6 +280,7 @@
     position: relative;
     width: 58px;
     height: 42px;
+    overflow: visible;
 }
 
 .context-preview-inline-trigger {
@@ -288,10 +289,6 @@
 
 .context-preview-inline-popover {
     position: absolute;
-    // Anchor the card's left edge to the thumbnail and grow rightward into the panel.
-    // Centering would push the left half past the panel edge, where it gets clipped.
-    left: 0;
-    bottom: calc(100% + 10px);
     z-index: var(--help-tooltip-content-z-index, 10120);
     visibility: hidden;
     opacity: 0;
@@ -304,7 +301,47 @@
     pointer-events: none;
 }
 
+.context-preview-inline-popover-top {
+    left: 0;
+    bottom: calc(100% + 10px);
+}
+
+.context-preview-inline-popover-bottom {
+    left: 0;
+    top: calc(100% + 10px);
+}
+
+.context-preview-inline-popover-left {
+    right: calc(100% + 10px);
+    top: 0;
+}
+
+.context-preview-inline-popover-right {
+    left: calc(100% + 10px);
+    top: 0;
+}
+
+.ai-user-message-reference-previews .context-preview-inline-popover-top,
+.ai-user-message-reference-previews .context-preview-inline-popover-bottom {
+    right: 0;
+    left: auto;
+}
+
 .context-preview-inline-popover.is-open {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.context-preview-inline:hover,
+.context-preview-inline:focus-within,
+.context-preview-inline.is-open {
+    z-index: var(--help-tooltip-content-z-index, 10120);
+}
+
+.context-preview-inline:hover .context-preview-inline-popover,
+.context-preview-inline:focus-within .context-preview-inline-popover,
+.context-preview-inline.is-open .context-preview-inline-popover {
     visibility: visible;
     opacity: 1;
     pointer-events: auto;

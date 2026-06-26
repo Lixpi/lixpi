@@ -7,6 +7,8 @@ import {
     type AiModel,
     type AiModelId,
     type AiModelsCatalogResponse,
+    type DefaultAiModelCapability,
+    type DefaultAiModelSelection,
     type ImageSizeOption,
     type MediaGenerationConfigControl,
     type MediaGenerationConfigGroup,
@@ -182,6 +184,27 @@ const appendMatrixGroup = (
     })
 }
 
+// Derive the default model id per capability from the catalog. The configured
+// default (flagged via isDefaultFor by ai-models-synchronization) wins; when no
+// catalog model is flagged for a capability it falls back to the first available
+// model with the matching modality so the projected default is always selectable.
+const resolveDefaultModels = (models: Array<Omit<AiModel, 'pricing'>>): DefaultAiModelSelection => {
+    const isReasoningModel = (model: Omit<AiModel, 'pricing'>): boolean =>
+        !modelHasGenerationModality(model, 'image_generation') && !modelHasGenerationModality(model, 'video_generation')
+
+    const resolve = (capability: DefaultAiModelCapability, matches: (model: Omit<AiModel, 'pricing'>) => boolean): AiModelId => {
+        const flagged = models.find(model => model.isDefaultFor?.includes(capability))
+        const resolved = flagged ?? models.find(matches)
+        return resolved ? modelIdFor(resolved) : ('' as AiModelId)
+    }
+
+    return {
+        reasoning: resolve('reasoning', isReasoningModel),
+        image: resolve('image', model => modelHasGenerationModality(model, 'image_generation')),
+        video: resolve('video', model => modelHasGenerationModality(model, 'video_generation')),
+    }
+}
+
 const buildMediaGenerationConfigMatrix = (models: Array<Omit<AiModel, 'pricing'>>): MediaGenerationConfigMatrix => {
     const groupsByKey = new Map<string, MediaGenerationConfigGroup>()
     for (const model of models) {
@@ -217,6 +240,7 @@ export default {
         return {
             models,
             mediaGenerationConfigMatrix: buildMediaGenerationConfigMatrix(models),
+            defaultModels: resolveDefaultModels(models),
         }
     },
 

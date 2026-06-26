@@ -161,9 +161,19 @@ export type MediaGenerationConfigSelectionGroup = {
     values: Partial<Record<MediaGenerationConfigControlKey, string>>
 }
 
+// Capabilities a model can be marked as the catalog default for.
+export type DefaultAiModelCapability = 'reasoning' | 'image' | 'video'
+
+// Default model selection per capability. Configured in
+// ai-models-synchronization (which flags the matching catalog records), derived
+// by the API, and projected to the UI so dropdowns pre-select a sensible model
+// instead of falling back to whatever happens to sort first.
+export type DefaultAiModelSelection = Record<DefaultAiModelCapability, AiModelId>
+
 export type AiModelsCatalogResponse = {
     models: Omit<AiModel, 'pricing'>[]
     mediaGenerationConfigMatrix: MediaGenerationConfigMatrix
+    defaultModels: DefaultAiModelSelection
 }
 
 export type ImageGenerationOperationKind = 'new_image' | 'edit_existing' | 'style_transfer' | 'compare_branches' | 'fresh_branch'
@@ -1439,6 +1449,10 @@ export type AiModel = {
     videoDurations?: ImageSizeOption[]
     // Max reference images this video model accepts (VEO 3, Seedance 9). Absent => 3.
     videoMaxReferenceImages?: number
+    // Capabilities for which this model is the catalog default, set by
+    // ai-models-synchronization. The API derives AiModelsCatalogResponse.defaultModels
+    // from these flags so the UI can pre-select the configured defaults.
+    isDefaultFor?: DefaultAiModelCapability[]
     pricing: {
         currency: string
         resaleMargin: string

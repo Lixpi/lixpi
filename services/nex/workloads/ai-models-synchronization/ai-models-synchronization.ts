@@ -11,6 +11,8 @@ import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 import type {
     AiModel,
+    AiModelId,
+    DefaultAiModelCapability,
     ImageSizeMode,
     ImageSizeOption,
 } from '@lixpi/constants'
@@ -236,6 +238,30 @@ export class AiModelsSync {
 
         this.aiModelsListTableName = getDynamoDbTableStageName('AI_MODELS_LIST', env.ORG_NAME!, env.STAGE!)
         this.serviceName = 'ai-models-sync-service'
+    }
+
+    // Default model selection per capability, projected to the UI via the catalog.
+    // The matching synced model is flagged with `isDefaultFor` so the API can derive
+    // AiModelsCatalogResponse.defaultModels. Keep each id (`provider:model`) present
+    // in the synced catalog and out of the blacklist above.
+    private static readonly DEFAULT_MODELS: Record<DefaultAiModelCapability, AiModelId> = {
+        // Anthropic Claude Haiku — default reasoning/chat model.
+        reasoning: 'Anthropic:claude-haiku-4-5',
+        // Google Gemini 2.5 Flash Image — default image generation model.
+        image: 'Google:gemini-2.5-flash-image',
+        // Google Veo 3.1 Lite — default video generation model.
+        video: 'Google:veo-3.1-lite-generate-preview',
+    }
+
+    // Tag a mapped model with the capabilities it is the catalog default for.
+    private applyDefaultModelFlags(model: AiModel): AiModel {
+        const modelId = `${model.provider}:${model.model}` as AiModelId
+        const isDefaultFor = (Object.keys(AiModelsSync.DEFAULT_MODELS) as DefaultAiModelCapability[])
+            .filter(capability => AiModelsSync.DEFAULT_MODELS[capability] === modelId)
+        if (isDefaultFor.length > 0) {
+            model.isDefaultFor = isDefaultFor
+        }
+        return model
     }
 
     // Blacklist rules per provider: exact, prefix, and contains (partial-name) patterns
@@ -1158,7 +1184,7 @@ export class AiModelsSync {
 
             // Map OpenAI models to our format
             const mappedModels: AiModel[] = openAIModels.map((model, index) =>
-                this.mapOpenAIModelToAiModel(model, index + 1)
+                this.applyDefaultModelFlags(this.mapOpenAIModelToAiModel(model, index + 1))
             )
 
             info(`🔧 Mapped ${mappedModels.length} models to our format:`)
@@ -1264,7 +1290,7 @@ export class AiModelsSync {
 
             // Map Anthropic models to our format
             const mappedModels: AiModel[] = anthropicModels.map((model, index) =>
-                this.mapAnthropicModelToAiModel(model, index + 1)
+                this.applyDefaultModelFlags(this.mapAnthropicModelToAiModel(model, index + 1))
             )
 
             info(`🔧 Mapped ${mappedModels.length} Anthropic models to our format:`)
@@ -1365,7 +1391,7 @@ export class AiModelsSync {
             })
 
             const mappedModels: AiModel[] = googleModels.map((model, index) =>
-                this.mapGoogleModelToAiModel(model, index + 1)
+                this.applyDefaultModelFlags(this.mapGoogleModelToAiModel(model, index + 1))
             )
 
             info(`🔧 Mapped ${mappedModels.length} Google models to our format:`)
@@ -1505,7 +1531,7 @@ export class AiModelsSync {
             info(`📡 Using ${stabilityModels.length} hardcoded Stability AI models`)
 
             const mappedModels: AiModel[] = stabilityModels.map((model, index) =>
-                this.mapStabilityModelToAiModel(model, index + 1)
+                this.applyDefaultModelFlags(this.mapStabilityModelToAiModel(model, index + 1))
             )
 
             info(`🔧 Mapped ${mappedModels.length} Stability AI models to our format:`)
@@ -1652,7 +1678,7 @@ export class AiModelsSync {
             info(`📡 Using ${bytePlusModels.length} hardcoded BytePlus models`)
 
             const mappedModels: AiModel[] = bytePlusModels.map((model, index) =>
-                this.mapBytePlusModelToAiModel(model, index + 1)
+                this.applyDefaultModelFlags(this.mapBytePlusModelToAiModel(model, index + 1))
             )
 
             info(`🔧 Mapped ${mappedModels.length} BytePlus models to our format:`)

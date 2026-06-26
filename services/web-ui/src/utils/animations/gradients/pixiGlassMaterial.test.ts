@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+    ClosedGlassStripMaterial,
     CircularGlassMaterial,
     type GlassMaterialStyle,
     TravelingSnakeGlassMaterial,
@@ -230,6 +231,44 @@ describe('TravelingSnakeGlassMaterial', () => {
         expect(source?.width).toBe(256)
         expect(source?.height).toBe(64)
         expect(call?.mipmap).toBe(true)
+    })
+})
+
+describe('ClosedGlassStripMaterial', () => {
+    it('bakes a closed strip without the traveling-snake tail seam', () => {
+        const material = new ClosedGlassStripMaterial(
+            ['#000000', '#ffffff'],
+            0.05,
+            makeBaseGlassMaterialStyle({
+                materialAlphaBase: 0.5,
+                materialAlphaMax: 0.8,
+                tailFadeFraction: 0.4,
+                minTailOpacity: 0.02,
+            }),
+            {
+                width: 32,
+                height: 16,
+            },
+        )
+        const texture = material.bake()
+
+        expect(texture).toEqual(expect.any(Object))
+        expect((Texture as { from: typeof vi.fn }).from).toHaveBeenCalledTimes(1)
+
+        const call = textureFromCalls[0]
+        const canvas = call?.source as { width: number; height: number; getContext: (type: string) => MockCanvasContext | null }
+        expect(canvas.width).toBe(32)
+        expect(canvas.height).toBe(16)
+        expect(call?.mipmap).toBe(true)
+
+        const centerY = Math.floor(canvas.height / 2)
+        const firstAlpha = readPixelAlpha(canvas, 0, centerY)
+        const middleAlpha = readPixelAlpha(canvas, Math.floor(canvas.width / 2), centerY)
+        const lastAlpha = readPixelAlpha(canvas, canvas.width - 1, centerY)
+
+        expect(firstAlpha).toBeGreaterThan(0)
+        expect(lastAlpha).toBeGreaterThan(0)
+        expect(firstAlpha).toBeGreaterThanOrEqual(Math.floor(middleAlpha * 0.5))
     })
 })
 

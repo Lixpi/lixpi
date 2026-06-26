@@ -8,6 +8,8 @@ import {
     type AiModelDropdownOption,
 } from '$src/components/aiModelControls/aiModelControls.ts'
 
+import type { DefaultAiModelCapability } from '@lixpi/constants'
+
 export type AiModelMultiSelectControls = {
     getCurrentAiModel: () => string
     setAiModel: (aiModel: string) => void
@@ -43,6 +45,9 @@ type ModelMultiSelectConfig = {
     requireSelection: boolean
     autoSelectFirst: boolean
     filterModels: (models: any[]) => any[]
+    // Capability whose API-configured default model should be auto-selected
+    // (instead of the first option) when nothing is selected yet.
+    defaultCapability?: DefaultAiModelCapability
 }
 
 function modelHasGenerationModality(model: any, modality: 'image_generation' | 'video_generation'): boolean {
@@ -215,6 +220,17 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
         }
     }
 
+    // The option to auto-select when nothing is selected. The API owns the
+    // default model per capability; the UI only renders it (no UI-side fallback).
+    // When no capability is configured, the first option is used as before.
+    private getAutoSelectOption(): AiModelDropdownOption | undefined {
+        if (this.config.defaultCapability) {
+            const defaultModelId = aiModelsStore.getDefaultModelId(this.config.defaultCapability)
+            return this.options.find((option) => option.aiModel === defaultModelId)
+        }
+        return this.options[0]
+    }
+
     private getControlSelection(): string[] {
         const multiSelection = this.config.controls.getCurrentAiModels?.()
         if (multiSelection) return uniqueModelIds(multiSelection)
@@ -247,11 +263,12 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
         }
 
         const controlSelection = this.getNormalizedControlSelection()
-        const shouldAutoSelectFirst = commitChanges && this.config.requireSelection && this.options[0]
+        const autoSelectOption = this.getAutoSelectOption()
+        const shouldAutoSelectFirst = commitChanges && this.config.requireSelection && autoSelectOption
         const nextSelection = controlSelection.length > 0
             ? controlSelection
             : shouldAutoSelectFirst
-                ? [this.options[0].aiModel]
+                ? [autoSelectOption.aiModel]
                 : []
 
         const changed = !sameModelIds(this.getControlSelection(), nextSelection)
@@ -396,6 +413,7 @@ export function createGenericAiModelMultiSelect(
         requireSelection: true,
         autoSelectFirst: true,
         filterModels: filterReasoningModels,
+        defaultCapability: 'reasoning',
     })
 }
 
@@ -411,6 +429,7 @@ export function createGenericImageModelMultiSelect(
         requireSelection: true,
         autoSelectFirst: true,
         filterModels: filterImageModels,
+        defaultCapability: 'image',
     })
 }
 
@@ -423,8 +442,9 @@ export function createGenericVideoModelMultiSelect(
         controls: adaptVideoModelControls(controls),
         placeholderTitle: 'Video models',
         emptySelectionErrorTitle: 'Select at least 1 model',
-        requireSelection: false,
-        autoSelectFirst: false,
+        requireSelection: true,
+        autoSelectFirst: true,
         filterModels: filterVideoModels,
+        defaultCapability: 'video',
     })
 }
