@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import { aiChatThreadNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
+import { aiChatThreadNodeType } from '@lixpi/prosemirror'
 
 export const insertAiChatThread = (state, dispatch) => {
     const attrs = {

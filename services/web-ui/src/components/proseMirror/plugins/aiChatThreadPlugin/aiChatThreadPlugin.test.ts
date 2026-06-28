@@ -1,7 +1,7 @@
 'use strict'
 
 import { describe, expect, it, vi } from 'vitest'
-import { beforeEach, beforeAll } from 'vitest'
+import { afterEach, beforeEach, beforeAll } from 'vitest'
 import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
 import { EditorState } from 'prosemirror-state'
 import { STOP_AI_CHAT_META, USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
@@ -12,6 +12,18 @@ import {
     schema,
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
 import { nodes as sharedNodes } from '$src/components/proseMirror/components/schema.ts'
+
+vi.mock('prosemirror-transform', () => ({
+    Step: {
+        fromJSON: vi.fn(() => ({
+            apply: vi.fn((doc: unknown) => ({
+                doc,
+                failed: null,
+                maps: [],
+            })),
+        })),
+    },
+}))
 
 const schemaWithFeatureReference = new Schema({
     nodes: {
@@ -30,11 +42,21 @@ function createPlugin(sendAiRequestHandler = vi.fn(), stopAiRequestHandler = vi.
 }
 
 const alertMock = vi.fn()
+let consoleWarnSpy: { mockRestore: () => void } | null = null
+let consoleErrorSpy: { mockRestore: () => void } | null = null
 beforeAll(() => {
     ;(globalThis as any).alert = alertMock
 })
 beforeEach(() => {
     alertMock.mockReset()
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+})
+afterEach(() => {
+    consoleWarnSpy?.mockRestore()
+    consoleWarnSpy = null
+    consoleErrorSpy?.mockRestore()
+    consoleErrorSpy = null
 })
 
 function collectNodes(state: EditorState, nodeType: string): ProseMirrorNode[] {

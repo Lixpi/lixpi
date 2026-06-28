@@ -18,6 +18,7 @@ COPY ./services/web-ui/ .
 COPY ./packages/lixpi/constants ./packages/lixpi/constants
 COPY ./packages/lixpi/nats-service ./packages/lixpi/nats-service
 COPY ./packages/lixpi/debug-tools ./packages/lixpi/debug-tools
+COPY ./packages/lixpi/prosemirror ./packages/lixpi/prosemirror
 COPY ./packages-vendor/shadcn-svelte/docs/src/lib ./packages/shadcn-svelte/lib
 COPY ./services/web-ui/pnpm-workspace.yaml ./pnpm-workspace.yaml
 

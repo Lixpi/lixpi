@@ -6,6 +6,7 @@ packages:
   - "packages/lixpi/lambda-service"
   - "packages/lixpi/nats-auth-callout-service"
   - "packages/lixpi/nats-service/ts"
+  - "packages/lixpi/prosemirror"
   - "packages/lixpi/sns-service"
   - "packages/lixpi/sqs-service"
   - "packages/lixpi/ssm-service"

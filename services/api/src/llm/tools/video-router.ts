@@ -4,6 +4,7 @@ import { info, warn, err } from '@lixpi/debug-tools'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
+import type { ProseMirrorContentHandler } from '../graph/stream-publisher.ts'
 import { getVideoMaxReferenceImages } from '../graph/state.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import { buildVideoModelPrompt } from './video-generation-trace.ts'
@@ -29,6 +30,10 @@ const addUniqueReferenceImages = (target: string[], source: string[], max: numbe
     return target
 }
 
+type VideoRouterOptions = {
+    onProseMirrorContent?: ProseMirrorContentHandler
+}
+
 const buildRoutedVideoReferenceImages = (state: ProviderState): string[] | undefined => {
     // Provider-aware cap from the selected video model's metadata (VEO 3,
     // Seedance 9); defaults to 3 so VEO and any model without the field are
@@ -51,7 +56,7 @@ export class VideoRouter {
 
     constructor(private readonly registry: ProviderRegistry) {}
 
-    async execute(state: ProviderState): Promise<Partial<ProviderState>> {
+    async execute(state: ProviderState, options: VideoRouterOptions = {}): Promise<Partial<ProviderState>> {
         const videoProvider = state.videoProviderName
         const videoModel = state.videoModelVersion
         const videoMeta = state.videoModelMetaInfo ?? ({} as any)
@@ -129,6 +134,7 @@ export class VideoRouter {
                 videoSourceForExtension: state.videoSourceForExtension,
                 generationRun,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
+                proseMirrorContentHandler: options.onProseMirrorContent,
             }
 
             const finalState = await provider.process(requestData)

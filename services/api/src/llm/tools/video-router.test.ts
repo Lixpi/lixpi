@@ -1,6 +1,8 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import * as debugTools from '@lixpi/debug-tools'
 
 import { VideoRouter } from './video-router.ts'
 import type { ProviderState } from '../graph/state.ts'
@@ -38,6 +40,25 @@ const createRouter = (processResult: { generatedVideos?: string[]; error?: strin
     return { router, createTransient, process }
 }
 
+let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
+
+beforeEach(() => {
+    debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
+    debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
+    debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+    debugInfoSpy?.mockRestore()
+    debugInfoSpy = null
+    debugWarnSpy?.mockRestore()
+    debugWarnSpy = null
+    debugErrSpy?.mockRestore()
+    debugErrSpy = null
+})
+
 describe('VideoRouter', () => {
     it('returns empty object when required routing inputs are missing', async () => {
         const { router, process } = createRouter()
@@ -48,6 +69,19 @@ describe('VideoRouter', () => {
 
         expect(result).toEqual({})
         expect(process).not.toHaveBeenCalled()
+    })
+
+    it('passes onProseMirrorContent through to the transient video provider request', async () => {
+        const { router, process } = createRouter()
+        const state = createState()
+        const onProseMirrorContent = vi.fn()
+
+        await router.execute(state, { onProseMirrorContent })
+
+        const requestData = process.mock.calls[0]?.[0]
+        expect(requestData).toMatchObject({
+            proseMirrorContentHandler: onProseMirrorContent,
+        })
     })
 
     it('routes the final VEO prompt and attaches feature references when reference images are allowed', async () => {
@@ -62,6 +96,20 @@ describe('VideoRouter', () => {
         expect(requestData.messages[0].content).toContain('MANDATORY /use FEATURE TRANSFER FOR VIDEO')
         expect(requestData.messages[0].content).toContain('Negative prompt:')
         expect(requestData.videoReferenceImages).toEqual(['data:image/png;base64,feature-inline'])
+    })
+
+    it('omits videoReferenceImages when no source or first-frame references are available', async () => {
+        const { router, process } = createRouter()
+
+        await router.execute(createState({
+            videoReferenceImages: [],
+            featureReferenceImages: [],
+            featureUsagePrompt: undefined,
+        }))
+
+        expect(process).toHaveBeenCalledOnce()
+        const requestData = process.mock.calls[0]?.[0]
+        expect(requestData.videoReferenceImages).toBeUndefined()
     })
 
     it('keeps feature references in the prompt only when VEO first-frame mode is active', async () => {

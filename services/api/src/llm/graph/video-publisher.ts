@@ -4,6 +4,7 @@ import type NatsService from '@lixpi/nats-service'
 import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
 
 import type { StoreWorkspaceImageFn } from './image-publisher.ts'
+import type { ChunkPayload, ProseMirrorContentHandler } from './stream-publisher.ts'
 import type { StoreVideoInput, StoreVideoResult } from '../../services/video-storage.ts'
 
 export type StoreWorkspaceVideoFn = (input: StoreVideoInput) => Promise<StoreVideoResult>
@@ -26,31 +27,34 @@ export class VideoPublisher {
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
         private readonly generationRun?: MediaGenerationRunMeta,
+        private readonly onProseMirrorContent?: ProseMirrorContentHandler,
     ) {}
+
+    private publish(content: ChunkPayload['content']): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content,
+            aiChatThreadId: this.aiChatThreadId,
+        })
+        this.onProseMirrorContent?.(content)
+    }
 
     // Placeholder event: UI creates the pending video node + traveling outline.
     pending(): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.VIDEO_PENDING,
-                videoUrl: '',
-                fileId: '',
-                aiProvider: this.provider,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publish({
+            status: STREAM_STATUS.VIDEO_PENDING,
+            videoUrl: '',
+            fileId: '',
+            aiProvider: this.provider,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }
 
     // Keepalive ping during the (minutes-long) poll so the UI is not frozen.
     generating(): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.VIDEO_GENERATING,
-                aiProvider: this.provider,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publish({
+            status: STREAM_STATUS.VIDEO_GENERATING,
+            aiProvider: this.provider,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }
 
@@ -111,38 +115,32 @@ export class VideoPublisher {
         const poster = await storeFrameImage(posterBuffer, 'generated-video-poster.png')
         const frame = await storeFrameImage(frameBuffer, 'generated-video-frame.png')
 
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.VIDEO_COMPLETE,
-                videoUrl: videoResult.url,
-                fileId: videoResult.fileId,
-                posterUrl: poster.url,
-                posterFileId: poster.fileId,
-                frameUrl: frame.url,
-                frameFileId: frame.fileId,
-                durationSeconds,
-                aspectRatio,
-                hasAudio,
-                responseId,
-                revisedPrompt,
-                aiProvider: this.provider,
-                videoModelProvider: this.provider,
-                videoModelId,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publish({
+            status: STREAM_STATUS.VIDEO_COMPLETE,
+            videoUrl: videoResult.url,
+            fileId: videoResult.fileId,
+            posterUrl: poster.url,
+            posterFileId: poster.fileId,
+            frameUrl: frame.url,
+            frameFileId: frame.fileId,
+            durationSeconds,
+            aspectRatio,
+            hasAudio,
+            responseId,
+            revisedPrompt,
+            aiProvider: this.provider,
+            videoModelProvider: this.provider,
+            videoModelId,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }
 
     error(message: string): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.VIDEO_ERROR,
-                error: message,
-                aiProvider: this.provider,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publish({
+            status: STREAM_STATUS.VIDEO_ERROR,
+            error: message,
+            aiProvider: this.provider,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }
 }

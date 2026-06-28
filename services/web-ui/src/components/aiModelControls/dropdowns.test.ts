@@ -302,16 +302,32 @@ describe('createGenericImageModelDropdown', () => {
         resetMockDropdown()
     })
 
-    it('auto-selects first image model when current model is empty', () => {
-        aiModelsStore.setAiModels([
+    it('auto-selects configured default image model when current model is empty', () => {
+        const imageModels = [
             {
                 provider: 'google',
                 model: 'imagen-3',
                 iconName: 'gpt',
                 modalities: [{ modality: 'image_generation' }],
                 imageSizes: [],
-            },
-        ] as any)
+            } as any,
+            {
+                provider: 'google',
+                model: 'imagen-lite',
+                iconName: 'gpt',
+                modalities: [{ modality: 'image_generation' }],
+                imageSizes: [],
+            } as any,
+        ]
+
+        aiModelsStore.setAiModelsCatalog({
+            models: imageModels,
+            defaultModels: {
+                reasoning: '',
+                image: 'google:imagen-3',
+                video: '',
+            } as any,
+        } as any)
 
         const controls = {
             getCurrentImageModel: vi.fn(() => ''),
@@ -324,6 +340,36 @@ describe('createGenericImageModelDropdown', () => {
         vi.useRealTimers()
 
         expect(controls.setImageModel).toHaveBeenCalledWith('google:imagen-3')
+        dropdown.destroy()
+    })
+
+    it('does not auto-select when default image model is unavailable', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [{
+                provider: 'google',
+                model: 'imagen-3',
+                iconName: 'gpt',
+                modalities: [{ modality: 'image_generation' }],
+                imageSizes: [],
+            } as any],
+            defaultModels: {
+                reasoning: '',
+                image: 'google:imagen-missing',
+                video: '',
+            } as any,
+        } as any)
+
+        const controls = {
+            getCurrentImageModel: vi.fn(() => ''),
+            setImageModel: vi.fn(),
+        }
+
+        vi.useFakeTimers()
+        const dropdown = createGenericImageModelDropdown(controls, 'image-model')
+        vi.advanceTimersToNextTimer()
+        vi.useRealTimers()
+
+        expect(controls.setImageModel).not.toHaveBeenCalled()
         dropdown.destroy()
     })
 })

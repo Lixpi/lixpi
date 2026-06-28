@@ -215,6 +215,10 @@ type GeneratedMediaProjectionTarget = {
     lineageProjectionScope: AiLineageProjectionScope
     limitProjectionToSelectedMedia: boolean
 }
+type BranchMarkerProjectionTarget = {
+    marker: BranchMarkerNode
+    lineageProjectionScope: AiLineageProjectionScope
+}
 type MountGeneratedMediaProjectionOptions = {
     mount: HTMLElement
     node: ImageCanvasNode | VideoCanvasNode
@@ -2100,6 +2104,145 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
+    function cloneBranchMarkerProjectionNode(
+        node: ProseMirrorJsonNode,
+        forceGenerationDetailsOpen: boolean,
+    ): ProseMirrorJsonNode {
+        const cloned: ProseMirrorJsonNode = {
+            ...node,
+            attrs: node.attrs ? structuredClone(node.attrs) : undefined,
+            content: node.content?.map((child) => cloneBranchMarkerProjectionNode(child, forceGenerationDetailsOpen)),
+        }
+        if (forceGenerationDetailsOpen && cloned.type === 'aiCollapsibleBlock') {
+            cloned.attrs = {
+                ...(cloned.attrs ?? {}),
+                isOpen: true,
+            }
+        }
+        return cloned
+    }
+
+    function createBranchMarkerProjectionDocument(
+        threadId: string,
+        threadAttrs: Record<string, any> | undefined,
+        messages: ProseMirrorJsonNode[],
+    ): ProseMirrorJsonNode {
+        return {
+            type: 'doc',
+            content: [
+                {
+                    type: 'documentTitle',
+                    content: [{ type: 'text', text: 'Generated media provenance' }],
+                },
+                {
+                    type: 'aiChatThread',
+                    attrs: {
+                        ...(threadAttrs ?? {}),
+                        threadId,
+                    },
+                    content: messages,
+                },
+            ],
+        }
+    }
+
+    function cloneBranchMarkerResponseForProjection(
+        responseMessage: ProseMirrorJsonNode,
+        marker: BranchMarkerNode,
+        lineageProjectionScope: AiLineageProjectionScope,
+    ): ProseMirrorJsonNode {
+        const responseContainer = getBranchMarkerResponseContainer(responseMessage, marker) ?? responseMessage
+        if (responseContainer === responseMessage) {
+            return cloneBranchMarkerProjectionNode(responseMessage, true)
+        }
+
+        const clonedSection = cloneBranchMarkerProjectionNode(responseContainer, true)
+        if (clonedSection.type === 'aiReasoningSection') {
+            clonedSection.attrs = {
+                ...(clonedSection.attrs ?? {}),
+                lineageProjectionScope,
+            }
+        }
+
+        return {
+            ...cloneBranchMarkerProjectionNode(responseMessage, true),
+            content: [clonedSection],
+        }
+    }
+
+    function buildBranchMarkerTurnProjectionContent(
+        marker: BranchMarkerNode,
+        lineageProjectionScope: AiLineageProjectionScope,
+    ): { threadId: string; content: ProseMirrorJsonNode } | null {
+        const threadId = getBranchMarkerThreadId(marker)
+        if (!threadId) return null
+
+        const root = parseProseMirrorJsonContent(getAiChatThreadContentForBranchMarker(threadId))
+        if (!root) return null
+
+        const threadNode = findAiChatThreadContentNode(root, threadId)
+        if (!threadNode) return null
+
+        let latestUserMessage: ProseMirrorJsonNode | null = null
+        let responseMessage: ProseMirrorJsonNode | null = null
+
+        for (const child of threadNode.content ?? []) {
+            if (child.type === 'aiUserMessage') {
+                latestUserMessage = child
+                continue
+            }
+
+            if (child.type === 'aiResponseMessage') {
+                responseMessage = child
+            }
+        }
+
+        if (!latestUserMessage) return null
+
+        const messages = [
+            cloneBranchMarkerProjectionNode(latestUserMessage, true),
+            responseMessage
+                ? cloneBranchMarkerResponseForProjection(responseMessage, marker, lineageProjectionScope)
+                : null,
+        ].filter((message): message is ProseMirrorJsonNode => Boolean(message))
+
+        return {
+            threadId,
+            content: createBranchMarkerProjectionDocument(threadId, threadNode.attrs, messages),
+        }
+    }
+
+    function mountBranchMarkerChatProjection({
+        mount,
+        marker,
+        rendererClassName,
+        traceDetailsClassName,
+        previewTiles,
+        lineageProjectionScope,
+    }: {
+        mount: HTMLElement
+        marker: BranchMarkerNode
+        rendererClassName: string
+        traceDetailsClassName: string
+        previewTiles: Set<ContextPreviewTileInstance>
+        lineageProjectionScope: AiLineageProjectionScope
+    }): ReadOnlyAiChatThreadRendererInstance | null {
+        const projection = buildBranchMarkerTurnProjectionContent(marker, lineageProjectionScope)
+        if (!projection) return null
+
+        const projectionMount = html`<div className="canvas-generated-media-projection"></div>` as HTMLElement
+        mount.appendChild(projectionMount)
+
+        return mountReadOnlyAiChatThreadProjection({
+            mount: projectionMount,
+            content: projection.content,
+            threadId: projection.threadId,
+            className: rendererClassName,
+            contextPreview: getAiUserMessageContextPreviewRenderer({ inlinePopover: true }),
+            traceDetailsOptions: createCanvasTraceDetailsOptions(traceDetailsClassName, previewTiles),
+        })
+    }
+
     // The node's compact descriptor (summary + tags) — shown for all media,
     // including uploads with no generation metadata. Failed analysis still gets
     // a visible row so the info panel never collapses into an empty surface.
@@ -2177,6 +2320,33 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (descriptorSection) panel.appendChild(descriptorSection)
         }
 
+        return panel
+    }
+
+    function hasPanelContent(panel: HTMLElement | null): panel is HTMLElement {
+        return Boolean(panel && panel.hasChildNodes())
+    }
+
+    function createBranchMarkerInfoPanel(
+        marker: BranchMarkerNode,
+        options: GeneratedMediaInfoPanelOptions = {},
+    ): HTMLElement | null {
+        const panelClassName = ['canvas-generated-media-info-panel', options.className, 'nopan'].filter(Boolean).join(' ')
+        const panel = html`<div className=${panelClassName}></div>` as HTMLElement
+        const rendererKey = options.rendererKey ?? `branch-marker:${marker.nodeId}`
+        destroyGeneratedMediaInfoRenderer(rendererKey)
+
+        const renderer = mountBranchMarkerChatProjection({
+            mount: panel,
+            marker,
+            rendererClassName: 'canvas-generated-media-projection-editor',
+            traceDetailsClassName: 'canvas-generated-media-trace-details',
+            previewTiles: generatedMediaInfoPreviewTiles,
+            lineageProjectionScope: options.lineageProjectionScope ?? 'media-run',
+        })
+        if (!renderer) return null
+
+        generatedMediaInfoRenderers.set(rendererKey, renderer)
         return panel
     }
 
@@ -2295,6 +2465,33 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return null
     }
 
+    function getOpenBranchMarkerProjectionTarget(threadId: string): BranchMarkerProjectionTarget | null {
+        const nodesById = getCanvasNodesById(currentCanvasState?.nodes ?? [])
+
+        for (const branchOriginNodeId of expandedBranchOriginInfoNodeIds) {
+            const marker = nodesById.get(branchOriginNodeId)
+            if (marker && isBranchMarkerNode(marker) && marker.aiChatThreadId === threadId) {
+                return { marker, lineageProjectionScope: 'branch-origin' }
+            }
+        }
+
+        for (const branchForkNodeId of expandedBranchForkInfoNodeIds) {
+            const marker = nodesById.get(branchForkNodeId)
+            if (marker && isBranchMarkerNode(marker) && marker.aiChatThreadId === threadId) {
+                return { marker, lineageProjectionScope: 'branch-fork' }
+            }
+        }
+
+        for (const branchLineNodeId of expandedBranchLineInfoNodeIds) {
+            const marker = nodesById.get(branchLineNodeId)
+            if (marker && isBranchMarkerNode(marker) && marker.aiChatThreadId === threadId) {
+                return { marker, lineageProjectionScope: 'media-run' }
+            }
+        }
+
+        return null
+    }
+
     function getSelectedGeneratedMediaProjectionTarget(threadId: string): GeneratedMediaProjectionTarget | null {
         const nodesById = getCanvasNodesById(currentCanvasState?.nodes ?? [])
         for (const nodeId of selectedNodeIds) {
@@ -2359,14 +2556,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createBranchOriginInfoPanel(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
         const generatedMediaNode = getBranchOriginGeneratedMediaNodes(branchOriginNode.nodeId)[0]
-        if (!generatedMediaNode) return null
-        return createGeneratedMediaInfoPanel(generatedMediaNode, {
+        const panelOptions: GeneratedMediaInfoPanelOptions = {
             className: 'canvas-branch-origin-info-panel',
             includeDescriptor: false,
             rendererKey: `branch-origin:${branchOriginNode.nodeId}`,
             limitProjectionToSelectedMedia: false,
             lineageProjectionScope: 'branch-origin',
-        })
+        }
+        const generatedMediaPanel = generatedMediaNode
+            ? createGeneratedMediaInfoPanel(generatedMediaNode, panelOptions)
+            : null
+        if (hasPanelContent(generatedMediaPanel)) return generatedMediaPanel
+        return createBranchMarkerInfoPanel(branchOriginNode, panelOptions)
     }
 
     function createBranchOriginInfoChrome(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
@@ -2392,14 +2593,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createBranchForkInfoPanel(branchForkNode: BranchForkCanvasNode): HTMLElement | null {
         const generatedMediaNode = getBranchForkGeneratedMediaNodes(branchForkNode.nodeId)[0]
-        if (!generatedMediaNode) return null
-        return createGeneratedMediaInfoPanel(generatedMediaNode, {
+        const panelOptions: GeneratedMediaInfoPanelOptions = {
             className: 'canvas-branch-fork-info-panel',
             includeDescriptor: false,
             rendererKey: `branch-fork:${branchForkNode.nodeId}`,
             limitProjectionToSelectedMedia: false,
             lineageProjectionScope: 'branch-fork',
-        })
+        }
+        const generatedMediaPanel = generatedMediaNode
+            ? createGeneratedMediaInfoPanel(generatedMediaNode, panelOptions)
+            : null
+        if (hasPanelContent(generatedMediaPanel)) return generatedMediaPanel
+        return createBranchMarkerInfoPanel(branchForkNode, panelOptions)
     }
 
     function createBranchForkInfoChrome(branchForkNode: BranchForkCanvasNode): HTMLElement | null {
@@ -2425,14 +2630,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createBranchLineInfoPanel(branchLineNode: BranchLineCanvasNode): HTMLElement | null {
         const generatedMediaNode = getBranchLineGeneratedMediaNodes(branchLineNode.nodeId)[0]
-        if (!generatedMediaNode) return null
-        return createGeneratedMediaInfoPanel(generatedMediaNode, {
+        const panelOptions: GeneratedMediaInfoPanelOptions = {
             className: 'canvas-branch-line-info-panel',
             includeDescriptor: false,
             rendererKey: `branch-line:${branchLineNode.nodeId}`,
             limitProjectionToSelectedMedia: true,
             lineageProjectionScope: 'media-run',
-        })
+        }
+        const generatedMediaPanel = generatedMediaNode
+            ? createGeneratedMediaInfoPanel(generatedMediaNode, panelOptions)
+            : null
+        if (hasPanelContent(generatedMediaPanel)) return generatedMediaPanel
+        return createBranchMarkerInfoPanel(branchLineNode, panelOptions)
     }
 
     function createBranchLineInfoChrome(branchLineNode: BranchLineCanvasNode): HTMLElement | null {
@@ -5465,7 +5674,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const projectionTarget = showingThread && panelThreadId
             ? getActiveAiChatPanelProjectionTarget(panelThreadId)
             : null
-        const showingGeneratedMediaProjection = Boolean(projectionTarget)
+        const branchMarkerProjectionTarget = showingThread && panelThreadId
+            ? getOpenBranchMarkerProjectionTarget(panelThreadId)
+            : null
+        const showingGeneratedMediaProjection = Boolean(projectionTarget || branchMarkerProjectionTarget)
         const emptyBodyText = 'Reopen a session from the history, or start a new chat from the prompt below the canvas.'
         const editorContainer = html`<div className=${`ai-chat-thread-node-editor workspace-ai-chat-panel-body-pane nopan${showingThread && !showingGeneratedMediaProjection ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
         const projectionContainer = html`<div className=${`workspace-ai-chat-panel-projection workspace-ai-chat-panel-body-pane nopan${showingGeneratedMediaProjection ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
@@ -5487,10 +5699,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 lineageProjectionScope: projectionTarget.lineageProjectionScope,
                 limitProjectionToSelectedMedia: projectionTarget.limitProjectionToSelectedMedia,
             })
-            if (!activeAiChatPanelProjectionRenderer) {
-                projectionContainer.classList.add('workspace-ai-chat-panel-body-pane-hidden')
-                editorContainer.classList.remove('workspace-ai-chat-panel-body-pane-hidden')
-            }
+        }
+
+        if (!activeAiChatPanelProjectionRenderer && branchMarkerProjectionTarget) {
+            activeAiChatPanelProjectionRenderer = mountBranchMarkerChatProjection({
+                mount: projectionContainer,
+                marker: branchMarkerProjectionTarget.marker,
+                rendererClassName: 'canvas-generated-media-projection-editor workspace-ai-chat-panel-projection-editor',
+                traceDetailsClassName: 'canvas-generated-media-trace-details workspace-ai-chat-panel-trace-details',
+                previewTiles: activeAiChatPanelTracePreviewTiles,
+                lineageProjectionScope: branchMarkerProjectionTarget.lineageProjectionScope,
+            })
+        }
+
+        if (showingGeneratedMediaProjection && !activeAiChatPanelProjectionRenderer) {
+            projectionContainer.classList.add('workspace-ai-chat-panel-body-pane-hidden')
+            editorContainer.classList.remove('workspace-ai-chat-panel-body-pane-hidden')
         }
 
         if (showingExtraction && activeSidebarTab) {
@@ -5557,7 +5781,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     useMultipleVideoModels,
                     imageOptions,
                     videoOptions,
-                    referencedFeatureIds
+                    referencedFeatureIds,
+                    proseMirrorInitialDoc,
+                    proseMirrorBaseVersion,
                 }: any) => {
                     gradient?.triggerAnimation()
 
@@ -5635,6 +5861,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             referencedFeatureIds,
                             imageBranchCandidateSnapshot,
                             workspaceContextSnapshot,
+                            proseMirrorInitialDoc,
+                            proseMirrorBaseVersion,
                         })
                         clearExplicitContextChips()
                     } catch (error) {
@@ -5897,7 +6125,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 useMultipleVideoModels,
                 imageOptions,
                 videoOptions,
-                referencedFeatureIds
+                referencedFeatureIds,
+                proseMirrorInitialDoc,
+                proseMirrorBaseVersion,
             }: any) => {
                 try {
                     const currentDoc = editor.editorView?.state?.doc
@@ -5984,6 +6214,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         referencedFeatureIds,
                         imageBranchCandidateSnapshot,
                         workspaceContextSnapshot,
+                        proseMirrorInitialDoc,
+                        proseMirrorBaseVersion,
                     })
                     clearExplicitContextChips()
                 } catch (error) {
@@ -7753,8 +7985,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return true
             }
 
-            if ((node.type === 'branchFork' || node.type === 'branchLine')
+            if ((node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine')
                 && node.aiChatThreadId === threadId) {
+                if (node.type === 'branchOrigin') return expandedBranchOriginInfoNodeIds.has(node.nodeId)
                 return node.type === 'branchFork'
                     ? expandedBranchForkInfoNodeIds.has(node.nodeId)
                     : expandedBranchLineInfoNodeIds.has(node.nodeId)

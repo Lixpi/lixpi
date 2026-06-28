@@ -1,20 +1,25 @@
 'use strict'
 
 import { v4 as uuidv4 } from 'uuid'
-import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
-import type {
-    AiInteractionChatSendMessagePayload,
-    AiInteractionChatStopMessagePayload,
-    ImageGenerationTrace,
-    ImageGenerationSize,
-    MediaBranchLineagePlan,
-    MediaGenerationConfigSelectionGroup,
-    MediaGenerationRunMeta,
-    VideoGenerationTrace,
-    WorkspaceContextResolution
+import {
+    NATS_SUBJECTS,
+    STREAM_STATUS,
+    type AiInteractionChatSendMessagePayload,
+    type AiInteractionChatStopMessagePayload,
+    type ImageGenerationTrace,
+    type ImageGenerationSize,
+    type MediaBranchLineagePlan,
+    type MediaGenerationConfigSelectionGroup,
+    type MediaGenerationRunMeta,
+    type VideoGenerationTrace,
+    type WorkspaceContextResolution
 } from '@lixpi/constants'
-
-const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
+import {
+    DOCUMENT_TYPE,
+    getDocumentStepSubject,
+    type DocResumeResult,
+    type StepStreamEvent,
+} from '@lixpi/prosemirror'
 
 import AuthService from '$src/services/auth-service.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
@@ -23,6 +28,8 @@ import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
+
+const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 
 type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadId'> & {
     useMultipleReasoningModels?: boolean
@@ -36,6 +43,8 @@ type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadI
     videoResolution?: string
     videoDuration?: string
     videoConfigGroups?: MediaGenerationConfigSelectionGroup[]
+    proseMirrorInitialDoc?: object
+    proseMirrorBaseVersion?: number
     // Workspace Object Store URI of an existing generated video that VEO should
     // extend (continuation generation). Built by WorkspaceCanvas from the
     // source VideoCanvasNode's fileId + workspaceId when the thread is rooted
@@ -56,6 +65,7 @@ export default class AiInteractionService {
     segmentsReceiver: any
     markdownParserContexts: Map<string, MarkdownParserContext>
     currentAiProvider: string | null
+    proseMirrorLocalVersion: number
 
     constructor({ workspaceId, aiChatThreadId }: { workspaceId: string; aiChatThreadId: string }) {
         this.workspaceId = workspaceId
@@ -63,6 +73,7 @@ export default class AiInteractionService {
         this.segmentsReceiver = SegmentsReceiver
         this.markdownParserContexts = new Map()
         this.currentAiProvider = null
+        this.proseMirrorLocalVersion = 0
 
         this.initNatsSubscriptions()
     }
@@ -79,6 +90,22 @@ export default class AiInteractionService {
         return content?.generationRun
             ?? content?.imageGenerationTrace?.generationRun
             ?? content?.videoGenerationTrace?.generationRun
+    }
+
+    getChatResponseSubject(): string {
+        return `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
+    }
+
+    getStepSubject(): string {
+        return getDocumentStepSubject({
+            workspaceId: this.workspaceId,
+            docType: DOCUMENT_TYPE.AI_CHAT_THREAD,
+            docId: this.aiChatThreadId,
+        })
+    }
+
+    shouldUseLegacyRawParser(generationRun?: MediaGenerationRunMeta): boolean {
+        return generationRun?.requestKind === 'media-generation-matrix'
     }
 
     cleanupMarkdownParserContext(runKey: string): void {
@@ -149,20 +176,23 @@ export default class AiInteractionService {
             if (!this.workspaceId || !this.aiChatThreadId)
                 throw new Error('AiInteractionService requires workspaceId and aiChatThreadId')
 
-            const subject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
+            const subject = this.getChatResponseSubject()
+            const stepSubject = this.getStepSubject()
 
             // Only unsubscribe previous subscriptions for THIS specific thread, not all threads
-            servicesStore.getData('nats')!.getSubscriptions([subject]).forEach(sub => sub.unsubscribe())
+            servicesStore.getData('nats')!.getSubscriptions([subject, stepSubject]).forEach(sub => sub.unsubscribe())
 
             console.log(`[AI_INTERACTION] Subscribing to NATS response channel: ${subject}`)
             this.subscribeToChatMessages()
+            this.subscribeToProseMirrorSteps()
+            void this.resumeProseMirrorStepStream()
         } catch (error) {
             console.error('Failed to initialize NATS service:', error)
         }
     }
 
     async subscribeToChatMessages() {
-        const subject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
+        const subject = this.getChatResponseSubject()
         // Subscribe to responses for this specific workspace and thread
         servicesStore.getData('nats')!.subscribe(
             subject,
@@ -170,6 +200,73 @@ export default class AiInteractionService {
                 this.onChatMessageResponse(data)
             }
         )
+    }
+
+    async subscribeToProseMirrorSteps() {
+        const subject = this.getStepSubject()
+        servicesStore.getData('nats')!.subscribe(
+            subject,
+            (data) => {
+                this.onProseMirrorStepEvent(data as StepStreamEvent)
+            }
+        )
+    }
+
+    onProseMirrorStepEvent(event: StepStreamEvent) {
+        if (!event || event.docId !== this.aiChatThreadId) return
+        if (!this.shouldReceiveProseMirrorEvent(event)) return
+
+        this.segmentsReceiver.receiveSegment({
+            type: 'prosemirror_step_event',
+            proseMirrorStepEvent: event,
+            aiProvider: event.aiProvider ?? this.currentAiProvider,
+            aiChatThreadId: this.aiChatThreadId,
+            ...(event.generationRun ? { generationRun: event.generationRun } : {}),
+        })
+        this.updateProseMirrorLocalVersion(event)
+    }
+
+    async resumeProseMirrorStepStream(): Promise<void> {
+        try {
+            const result = await servicesStore.getData('nats')!.request(
+                NATS_SUBJECTS.DOCUMENT_STEP_SUBJECTS.DOC_RESUME,
+                {
+                    token: await AuthService.getTokenSilently(),
+                    workspaceId: this.workspaceId,
+                    docType: DOCUMENT_TYPE.AI_CHAT_THREAD,
+                    docId: this.aiChatThreadId,
+                    localVersion: this.proseMirrorLocalVersion,
+                },
+            ) as DocResumeResult
+            const snapshotVersion = result.snapshot?.version ?? 0
+            const shouldReplayEvents = this.proseMirrorLocalVersion > 0 || snapshotVersion > 0
+            this.proseMirrorLocalVersion = Math.max(
+                this.proseMirrorLocalVersion,
+                snapshotVersion,
+            )
+            if (!shouldReplayEvents) return
+            for (const event of result.events ?? []) {
+                this.onProseMirrorStepEvent(event)
+            }
+        } catch (error) {
+            console.error('[AI_INTERACTION] DOC_RESUME failed:', error)
+        }
+    }
+
+    shouldReceiveProseMirrorEvent(event: StepStreamEvent): boolean {
+        if (event.kind === 'START') return this.proseMirrorLocalVersion <= event.baseVersion
+        if (event.kind === 'END') return this.proseMirrorLocalVersion < event.finalVersion
+        if (event.kind === 'ERROR') return true
+        return event.version > this.proseMirrorLocalVersion
+    }
+
+    updateProseMirrorLocalVersion(event: StepStreamEvent): void {
+        if (event.kind === 'START' || event.kind === 'ERROR') return
+        if (event.kind === 'END') {
+            this.proseMirrorLocalVersion = Math.max(this.proseMirrorLocalVersion, event.finalVersion)
+            return
+        }
+        this.proseMirrorLocalVersion = Math.max(this.proseMirrorLocalVersion, event.version)
     }
 
 
@@ -190,9 +287,11 @@ export default class AiInteractionService {
             const generationRun = this.getGenerationRun(content)
             const runKey = this.getRunKey(generationRun)
             const aiProvider = this.updateRunProvider(runKey, content.aiProvider)
+            const useLegacyRawParser = this.shouldUseLegacyRawParser(generationRun)
             const segmentBase = {
                 aiProvider,
                 aiChatThreadId: this.aiChatThreadId,
+                usesServerProseMirror: !useLegacyRawParser,
                 ...(generationRun ? { generationRun } : {}),
             }
 
@@ -296,6 +395,7 @@ export default class AiInteractionService {
                     responseId: content.responseId,
                     revisedPrompt: content.revisedPrompt,
                     aiProvider: aiProvider || '',
+                    usesServerProseMirror: !useLegacyRawParser,
                     imageModelProvider: content.imageModelProvider || content.aiProvider || '',
                     imageModelId: content.imageModelId || '',
                     ...(generationRun ? { generationRun } : {}),
@@ -393,6 +493,7 @@ export default class AiInteractionService {
             }
 
             if (content.status === STREAM_STATUS.COLLAPSIBLE_START) {
+                if (!useLegacyRawParser) return
                 this.segmentsReceiver.receiveSegment({
                     type: 'collapsible_start',
                     collapsibleTitle: content.collapsibleTitle || 'Image generation prompt',
@@ -402,6 +503,7 @@ export default class AiInteractionService {
             }
 
             if (content.status === STREAM_STATUS.COLLAPSIBLE_END) {
+                if (!useLegacyRawParser) return
                 this.segmentsReceiver.receiveSegment({
                     type: 'collapsible_end',
                     ...segmentBase,
@@ -411,14 +513,17 @@ export default class AiInteractionService {
 
             // Route raw tokens through markdown parser (exact replication of backend pattern)
             if (content.status === STREAM_STATUS.START_STREAM) {
+                if (!useLegacyRawParser) return
                 // Initialize fresh parser instance for this stream
                 this.initMarkdownParser(generationRun, aiProvider || undefined)
                 // startParsing() emits START_STREAM event via subscribeToTokenParse callback
                 this.markdownParserContexts.get(runKey)?.parser.startParsing()
             } else if (content.status === STREAM_STATUS.STREAMING && content.text) {
+                if (!useLegacyRawParser) return
                 // Feed raw token to parser - it will emit parsed segments via subscribeToTokenParse callback
                 this.markdownParserContexts.get(runKey)?.parser.parseToken(content.text)
             } else if (content.status === STREAM_STATUS.END_STREAM) {
+                if (!useLegacyRawParser) return
                 // stopParsing() will emit END_STREAM event internally via subscribeToTokenParse callback
                 this.markdownParserContexts.get(runKey)?.parser.stopParsing()
             }
@@ -445,6 +550,8 @@ export default class AiInteractionService {
         referencedFeatureIds,
         imageBranchCandidateSnapshot,
         workspaceContextSnapshot,
+        proseMirrorInitialDoc,
+        proseMirrorBaseVersion,
     }: SendChatMessageOptions) {
         const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
@@ -482,6 +589,14 @@ export default class AiInteractionService {
         // every turn (text-only included); the API consumes it in a later phase.
         if (workspaceContextSnapshot) {
             payload.workspaceContextSnapshot = workspaceContextSnapshot
+        }
+
+        if (proseMirrorInitialDoc) {
+            payload.proseMirrorInitialDoc = proseMirrorInitialDoc
+        }
+
+        if (typeof proseMirrorBaseVersion === 'number') {
+            payload.proseMirrorBaseVersion = proseMirrorBaseVersion
         }
 
         // Add image model routing options if an image model is selected
@@ -558,11 +673,12 @@ export default class AiInteractionService {
     }
 
     disconnect() {
-        const subject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
+        const subject = this.getChatResponseSubject()
+        const stepSubject = this.getStepSubject()
         for (const runKey of Array.from(this.markdownParserContexts.keys())) {
             this.cleanupMarkdownParserContext(runKey)
         }
-        servicesStore.getData('nats')?.getSubscriptions([subject]).forEach(sub => sub.unsubscribe())
+        servicesStore.getData('nats')?.getSubscriptions([subject, stepSubject]).forEach(sub => sub.unsubscribe())
         this.currentAiProvider = null
     }
 

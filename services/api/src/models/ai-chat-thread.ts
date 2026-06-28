@@ -86,8 +86,9 @@ export default {
         threadId,
         content,
         aiModel,
-        status
-    }: Pick<AiChatThread, 'workspaceId' | 'threadId'> & Partial<Pick<AiChatThread, 'content' | 'aiModel' | 'status'>>): Promise<void> => {
+        status,
+        proseMirrorVersion,
+    }: Pick<AiChatThread, 'workspaceId' | 'threadId'> & Partial<Pick<AiChatThread, 'content' | 'aiModel' | 'status'>> & { proseMirrorVersion?: number }): Promise<void> => {
         const currentDate = new Date().getTime()
 
         try {
@@ -96,6 +97,7 @@ export default {
             if (content !== undefined) updates.content = content
             if (aiModel !== undefined) updates.aiModel = aiModel
             if (status !== undefined) updates.status = status
+            if (proseMirrorVersion !== undefined) updates.proseMirrorVersion = proseMirrorVersion
 
             await dynamoDBService.updateItem({
                 tableName: getDynamoDbTableStageName('AI_CHAT_THREADS', ORG_NAME, STAGE),
@@ -105,6 +107,7 @@ export default {
             })
         } catch (e) {
             console.error(e)
+            throw e
         }
     },
 

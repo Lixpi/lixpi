@@ -26,6 +26,17 @@ const flatTexts = (published: Published[]): string =>
 const statuses = (published: Published[]): string[] =>
     published.map(p => p.payload.content.status)
 
+const generationRun = {
+    generationRequestId: 'request-1',
+    reasoningRunId: 'reasoning-1',
+    reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+    mediaModelId: 'Google:gemini-2.5-flash-image',
+    mediaType: 'image',
+    reasoningIndex: 0,
+    mediaIndex: 0,
+    variantIndex: 0,
+} as const
+
 describe('TagAwareStream', () => {
     let nats: ReturnType<typeof makeFakeNats>
     let stream: TagAwareStream
@@ -339,5 +350,137 @@ describe('StreamPublisher trace payloads', () => {
             }),
             generationRun,
         })
+    })
+
+    it('publishes feature cards as structured stream updates', () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+
+        const payload = { title: 'A feature', value: 'details' }
+        publisher.featureCard(payload)
+
+        expect(nats.published).toHaveLength(1)
+        expect(nats.published[0]?.payload.content).toEqual({
+            status: STREAM_STATUS.STREAMING,
+            aiProvider: 'Anthropic',
+            featureCard: payload,
+        })
+    })
+
+    it('publishes image branch and lineage resolution events with generation-run defaults and overrides', () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+            generationRun,
+        )
+        publisher.imageBranchResolved({ resolved: true } as any)
+        publisher.mediaLineagePlanned({ lineage: 'plan' } as any, {
+            ...generationRun,
+            mediaRunId: 'reasoning-1:image:override',
+        })
+
+        expect(nats.published).toHaveLength(2)
+        expect(nats.published[0]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
+            resolution: { resolved: true },
+            generationRun,
+        })
+        expect(nats.published[1]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.MEDIA_LINEAGE_PLANNED,
+            lineagePlan: { lineage: 'plan' },
+            generationRun: {
+                ...generationRun,
+                mediaRunId: 'reasoning-1:image:override',
+            },
+        })
+    })
+})
+
+describe('StreamPublisher ProseMirror integration options', () => {
+    it('forwards publishProseMirrorContent payloads to the active assembler', () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+        ;(publisher as any).proseMirrorAssembler = { handleContent: vi.fn() }
+        const publisherSpy = vi.spyOn((publisher as any).proseMirrorAssembler, 'handleContent')
+
+        publisher.publishProseMirrorContent({
+            status: STREAM_STATUS.STREAMING,
+            text: 'streaming hint',
+            aiProvider: 'Anthropic',
+        })
+        publisher.publishProseMirrorContent({
+            status: STREAM_STATUS.ERROR,
+            error: 'temporary failure',
+            aiProvider: 'Anthropic',
+        })
+        expect(publisherSpy).toHaveBeenCalledTimes(2)
+        expect(publisherSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            status: STREAM_STATUS.STREAMING,
+            text: 'streaming hint',
+        }))
+        expect(publisherSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            status: STREAM_STATUS.ERROR,
+            error: 'temporary failure',
+        }))
+    })
+
+    it('delegates prose-mirror end strategy based on deferProseMirrorEnd', async () => {
+        const nats = makeFakeNats()
+        const finishTextPhase = vi.fn(() => Promise.resolve())
+        const end = vi.fn(() => Promise.resolve())
+        const publisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+            undefined,
+            {
+                enableProseMirrorStream: false,
+                deferProseMirrorEnd: true,
+            },
+        )
+        ;(publisher as any).proseMirrorAssembler = {
+            handleContent: vi.fn(),
+            finishTextPhase,
+            end,
+        }
+
+        publisher.start()
+        publisher.end()
+        expect(finishTextPhase).toHaveBeenCalledTimes(1)
+        expect(end).not.toHaveBeenCalled()
+
+        const nonDeferredFinishTextPhase = vi.fn(() => Promise.resolve())
+        const nonDeferredEnd = vi.fn(() => Promise.resolve())
+        const nonDeferred = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', undefined, {
+            enableProseMirrorStream: false,
+            deferProseMirrorEnd: false,
+        })
+        ;(nonDeferred as any).proseMirrorAssembler = {
+            handleContent: vi.fn(),
+            finishTextPhase: nonDeferredFinishTextPhase,
+            end: nonDeferredEnd,
+        }
+        nonDeferred.start()
+        nonDeferred.end()
+        expect(nonDeferredFinishTextPhase).toHaveBeenCalledTimes(0)
+        expect(nonDeferredEnd).toHaveBeenCalledTimes(1)
+    })
+
+    it('returns immediately from finishProseMirrorStream when prose mirror assembler is absent', async () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+            undefined,
+            { enableProseMirrorStream: false },
+        )
+        await expect(publisher.finishProseMirrorStream()).resolves.toBeUndefined()
+        expect(nats.published).toHaveLength(0)
     })
 })

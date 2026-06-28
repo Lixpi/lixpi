@@ -1,7 +1,9 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
+
+import * as debugTools from '@lixpi/debug-tools'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
@@ -23,6 +25,25 @@ const makeImageModel = (model: string): AiModelMetaInfo => ({
     provider: 'Google',
     model,
     modelVersion: model,
+})
+
+let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
+
+beforeEach(() => {
+    debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
+    debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
+    debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+    debugInfoSpy?.mockRestore()
+    debugInfoSpy = null
+    debugWarnSpy?.mockRestore()
+    debugWarnSpy = null
+    debugErrSpy?.mockRestore()
+    debugErrSpy = null
 })
 
 const createFanoutState = (overrides: Partial<ProviderState> = {}): ProviderState => ({
@@ -415,5 +436,109 @@ describe('BaseProvider fanout', () => {
         expect(result).toEqual({ generatedVideos: ['only-video', 'only-video'] })
         expect((deps.runVideoRouter as any)).toHaveBeenCalledTimes(2)
         expect((deps.runImageRouter as any)).not.toHaveBeenCalled()
+    })
+})
+
+describe('BaseProvider usage lifecycle', () => {
+    it('skips usage reporter calls when the workflow failed upstream', async () => {
+        const reportTokensUsage = vi.fn()
+        const reportImageUsage = vi.fn()
+        const reportVideoUsage = vi.fn()
+        const provider = new TestProvider('ws1:thread1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {
+                reportTokensUsage,
+                reportImageUsage,
+                reportVideoUsage,
+            },
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+
+        await (provider as any).calculateUsage({
+            workspaceId: 'ws1',
+            aiChatThreadId: 'thread1',
+            instanceKey: 'ws1:thread1',
+            provider: 'Anthropic',
+            modelVersion: 'claude-sonnet-4-6',
+            aiModelMetaInfo: { provider: 'Anthropic', model: 'claude-sonnet-4-6' },
+            temperature: 0.7,
+            streamActive: false,
+            aiRequestReceivedAt: 10,
+            error: 'provider failed',
+            usage: { promptTokens: 4 },
+            eventMeta: {},
+        } as any)
+
+        expect(reportTokensUsage).not.toHaveBeenCalled()
+        expect(reportImageUsage).not.toHaveBeenCalled()
+        expect(reportVideoUsage).not.toHaveBeenCalled()
+    })
+
+    it('reports token, image, and video usage with generated metadata', async () => {
+        const reportTokensUsage = vi.fn()
+        const reportImageUsage = vi.fn()
+        const reportVideoUsage = vi.fn()
+        const provider = new TestProvider('ws1:thread1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {
+                reportTokensUsage,
+                reportImageUsage,
+                reportVideoUsage,
+            },
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+
+        await (provider as any).calculateUsage({
+            workspaceId: 'ws1',
+            aiChatThreadId: 'thread1',
+            instanceKey: 'ws1:thread1',
+            provider: 'Anthropic',
+            modelVersion: 'claude-sonnet-4.6',
+            aiModelMetaInfo: { provider: 'Anthropic', model: 'claude-sonnet-4.6', modelVersion: 'claude-sonnet-4.6' },
+            videoModelMetaInfo: { provider: 'Google', model: 'veo-3.1-generate-preview', modelVersion: 'veo-3.1-generate-preview' },
+            temperature: 0.7,
+            streamActive: false,
+            aiRequestReceivedAt: 10,
+            usage: { promptTokens: 12, completionTokens: 8, totalTokens: 20 },
+            imageUsage: { size: '1024x1024', quality: 'high' },
+            videoUsage: {
+                durationSeconds: 8,
+                resolution: '720p',
+                aspectRatio: '16:9',
+                totalTokens: 456,
+                completionTokens: 123,
+            },
+            eventMeta: { requestId: 'req-1' },
+        } as any)
+
+        expect(reportTokensUsage).toHaveBeenCalledOnce()
+        expect(reportImageUsage).toHaveBeenCalledOnce()
+        expect(reportVideoUsage).toHaveBeenCalledOnce()
+    })
+
+    it('finishes prose-mirror stream during cleanup', async () => {
+        const finishProseMirrorStream = vi.fn().mockResolvedValue(undefined)
+        const provider = new TestProvider('ws1:thread1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        ;(provider as any).streamPublisher = {
+            finishProseMirrorStream,
+        } as StreamPublisher
+
+        const result = await (provider as any).cleanup({} as any)
+
+        expect(finishProseMirrorStream).toHaveBeenCalledOnce()
+        expect(result).toEqual({})
     })
 })

@@ -13,6 +13,7 @@
 
 - Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiLineageEvent`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
 - Streams parsed text, image, video, context-resolution, branch-resolution, and trace events from `SegmentsReceiver`.
+- In server-authoritative mode, applies only ProseMirror step events to the thread document; raw media/control events are routed to canvas placement without locally mutating the same ProseMirror doc.
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
 - Delegates generated-image and generated-video canvas side effects through callback surfaces registered by `createAiChatThreadPlugin`.
 - Preserves API media-lineage assignments on durable response/media nodes, then projects those ids into reusable lineage-event markers for the live thread, branch-root panels, branch-fork panels, and generated-media provenance.
@@ -56,10 +57,10 @@ sequenceDiagram
     Prompt->>Controller: onSubmit(contentJSON, model attrs, media opts)
     Controller->>Thread: insert aiUserMessage + USE_AI_CHAT_META
     Thread->>Thread: extract thread messages
-    Thread->>Service: sendAiRequestHandler(payload)
-    Service->>Receiver: stream events for workspaceId + threadId
-    Receiver->>Thread: START_STREAM / STREAMING / END_STREAM
-    Thread->>Thread: insert or update response/media nodes
+    Thread->>Service: sendAiRequestHandler(payload + post-placeholder doc JSON)
+    Service->>Receiver: live step events for workspaceId + threadId
+    Receiver->>Thread: START / STEP / END
+    Thread->>Thread: apply Step.fromJSON(schema, step)
 ```
 
 ## Schema Nodes
@@ -202,6 +203,7 @@ Media configuration group attrs are JSON strings parsed through `parseMediaGener
 
 The plugin subscribes through `SegmentsReceiver` and handles these event families:
 
+- `prosemirror_step_event`
 - `START_STREAM`
 - `STREAMING`
 - `END_STREAM`
@@ -222,6 +224,13 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 - `video_generation_trace`
 - `collapsible_start`
 - `collapsible_end`
+
+Single-writer text streams use `prosemirror_step_event`: `START` and `END`
+update receiving state, while `STEP` is applied directly with
+`Step.fromJSON(view.state.schema, stepEvent.step)`. The legacy
+`START_STREAM` / `STREAMING` / `END_STREAM` parser path is kept for media
+matrix streams until parallel reasoning runs share one server-side document
+authority.
 
 Image and video completion/error events finalize the generated media node state
 and close the matching receiving run so prompt inputs leave stop mode when the
@@ -314,9 +323,9 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 
 ## Extension Points
 
-Add new streamed block types in `StreamingInserter.insertBlockContent()`.
+Add new streamed block types in `packages/lixpi/prosemirror/src/stream-assembly.ts`.
 
-Add new inline stream segment behavior in `StreamingInserter.insertInlineContent()`.
+Add new inline stream segment behavior in `packages/lixpi/prosemirror/src/stream-assembly.ts`.
 
 Add provider/model attribution in the generation trace block or the shared shell helpers.
 

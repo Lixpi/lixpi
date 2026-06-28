@@ -1,8 +1,29 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import * as debugTools from '@lixpi/debug-tools'
 
 import { ProviderRegistry } from './provider-registry.ts'
+
+let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
+
+beforeEach(() => {
+    debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
+    debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
+    debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+    debugInfoSpy?.mockRestore()
+    debugInfoSpy = null
+    debugWarnSpy?.mockRestore()
+    debugWarnSpy = null
+    debugErrSpy?.mockRestore()
+    debugErrSpy = null
+})
 
 const makeDeps = () => ({
     natsService: { publish: vi.fn() } as any,
@@ -117,5 +138,24 @@ describe('ProviderRegistry', () => {
         expect(providerB.stop).toHaveBeenCalledOnce()
         expect(registry.get('ws:thread:image')).toBeUndefined()
         expect(registry.get('ws:thread:video')).toBeUndefined()
+    })
+
+    it('stops requests by inferred media key from instanceKey when no request group is passed', async () => {
+        const resolver = { release: () => undefined as void }
+        const { stop, ctor } = createFakeProvider(resolver)
+        const deps = makeDeps()
+        const registry = new ProviderRegistry(deps.natsService, deps.storeWorkspaceImage, deps.storeWorkspaceVideo, { Anthropic: ctor as any })
+
+        registry.createTransient('ws-1:thread-1:reasoning:alpha', 'Anthropic')
+        await registry.stopGroupsWithPrefix('ws-1:thread-1')
+
+        expect(stop).toHaveBeenCalledOnce()
+    })
+
+    it('does not stop unknown groups, and no-op is safe', async () => {
+        const deps = makeDeps()
+        const registry = new ProviderRegistry(deps.natsService, deps.storeWorkspaceImage, deps.storeWorkspaceVideo, {})
+        await expect(registry.stopGroup('missing-group')).resolves.toBeUndefined()
+        await expect(registry.stopGroupsWithPrefix('never-present')).resolves.toBeUndefined()
     })
 })

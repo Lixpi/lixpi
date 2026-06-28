@@ -127,4 +127,70 @@ describe('ImagePublisher', () => {
         }))
         expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.IMAGE_COMPLETE)
     })
+
+    it('passes generation-run metadata through partial and complete image events', async () => {
+        const generationRun = {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'Google:gemini-2.5-flash-image',
+            mediaType: 'image',
+            reasoningIndex: 0,
+            mediaIndex: 0,
+            variantIndex: 0,
+        } as const
+        const onProseMirrorContent = vi.fn()
+        const storeImage = vi.fn(async (input: any) => ({
+            fileId: 'file-1',
+            url: '/api/images/ws-1/file-1',
+            isDuplicate: false,
+            size: input.buffer.length,
+            mimeType: input.mimeType,
+        }))
+        const published: { subject: string, payload: any }[] = []
+        const nats = {
+            publish: (subject: string, payload: any) => {
+                published.push({ subject, payload })
+            },
+        } as any
+        const publisher = new ImagePublisher(
+            nats,
+            storeImage,
+            'ws-1',
+            'thread-1',
+            'Google',
+            generationRun,
+            onProseMirrorContent,
+        )
+
+        const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
+        await publisher.partial(pngBase64, 2)
+        await publisher.complete({
+            imageBase64: pngBase64,
+            responseId: 'resp-1',
+            revisedPrompt: 'cat prompt',
+            imageModelId: 'gemini-2.5-flash-image',
+        })
+
+        expect(published[0]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            partialIndex: 2,
+            generationRun,
+        })
+        expect(published[1]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.IMAGE_COMPLETE,
+            responseId: 'resp-1',
+            revisedPrompt: 'cat prompt',
+            generationRun,
+        })
+        expect(onProseMirrorContent).toHaveBeenCalledTimes(2)
+        expect(onProseMirrorContent.mock.calls[0]?.[0]).toMatchObject({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            generationRun,
+        })
+        expect(onProseMirrorContent.mock.calls[1]?.[0]).toMatchObject({
+            status: STREAM_STATUS.IMAGE_COMPLETE,
+            generationRun,
+        })
+    })
 })

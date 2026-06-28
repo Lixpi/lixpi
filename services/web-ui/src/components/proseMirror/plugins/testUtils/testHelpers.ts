@@ -100,12 +100,16 @@ export function createMockViewWithImage(
 }
 
 // Mock AuthService for image URL building tests
+const mockGetTokenSilently = vi.fn(() => Promise.resolve('mock-auth-token'))
+
+vi.mock('$src/services/auth-service.ts', () => ({
+    default: {
+        getTokenSilently: mockGetTokenSilently,
+    },
+}))
+
 export function mockAuthService(): void {
-    vi.mock('$src/services/auth-service.ts', () => ({
-        default: {
-            getTokenSilently: vi.fn(() => Promise.resolve('mock-auth-token')),
-        },
-    }))
+    mockGetTokenSilently.mockClear()
 }
 
 // Reset all mocks

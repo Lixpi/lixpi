@@ -1,9 +1,11 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { STREAM_STATUS } from '@lixpi/constants'
 import type { ImageBranchCandidateImage, WorkspaceContextSnapshot } from '@lixpi/constants'
+
+import * as debugTools from '@lixpi/debug-tools'
 
 import { resolveWorkspaceContext } from './workspace-context-resolver.ts'
 import type { ProviderState } from './state.ts'
@@ -14,6 +16,25 @@ const tinyPngBytes = Buffer.from(
     'base64',
 )
 const resolvedTinyPngUrl = `data:image/png;base64,${tinyPngBytes.toString('base64')}`
+
+let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
+
+beforeEach(() => {
+    debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
+    debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
+    debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+    debugInfoSpy?.mockRestore()
+    debugInfoSpy = null
+    debugWarnSpy?.mockRestore()
+    debugWarnSpy = null
+    debugErrSpy?.mockRestore()
+    debugErrSpy = null
+})
 
 const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
     resolverVersion: 'workspace-context-v1',

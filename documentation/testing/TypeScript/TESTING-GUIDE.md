@@ -107,6 +107,41 @@ function expectSourceNotToContain(source: string, snippet: string, label = 'sour
 Use these helpers for extracted handlers, function bodies, config blocks, and full-file source strings. This keeps failures focused on the missing or unexpected snippet instead of dumping the entire source excerpt.
 If a test can be written as a runtime behavior test, prefer that over source-shape checks.
 
+## Test Noise Hygiene
+
+When tests hit expected failure paths, do **not** let `console` spam leak into test output.
+
+Use per-test spies with strict restore in `beforeEach`/`afterEach`, and restore every spy before the test suite exits.
+
+```typescript
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+let consoleWarnSpy: ReturnType<typeof vi.spyOn> | null = null
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null
+
+describe('AiChatThreadService', () => {
+    beforeEach(() => {
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    })
+
+    afterEach(() => {
+        consoleWarnSpy?.mockRestore()
+        consoleWarnSpy = null
+        consoleErrorSpy?.mockRestore()
+        consoleErrorSpy = null
+    })
+
+    it('logs and returns null when backend transport fails', () => {
+        // ...
+    })
+})
+```
+
+If the behavior under test expects specific warnings or errors, assert against those spies instead of printing to stdout/stderr.
+
+For noisy external side effects (Auth/token refresh, fetch retries, third-party SDK logs), mock the underlying dependency so the test controls the failure mode and does not generate real environment noise.
+
 ## Helper Factory Patterns
 
 For tests that need structured input data, create typed factory functions that build it with sensible defaults:

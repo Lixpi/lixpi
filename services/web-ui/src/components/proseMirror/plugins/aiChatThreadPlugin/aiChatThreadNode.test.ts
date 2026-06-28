@@ -1,6 +1,6 @@
 'use strict'
 
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EditorState } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
 import { applyStyle } from '$src/utils/domTemplates.ts'
@@ -22,6 +22,41 @@ import { AI_CHAT_THREAD_PLUGIN_KEY } from '$src/components/proseMirror/plugins/a
 import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.js'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import type { ImageGenerationTrace } from '@lixpi/constants'
+
+const authTokenMock = vi.hoisted(() => vi.fn(async () => 'token-123'))
+
+vi.mock('$src/services/auth-service.ts', () => ({
+    default: {
+        getTokenSilently: authTokenMock,
+    },
+}))
+
+let consoleErrorSpy: { mockRestore: () => void } | null = null
+let consoleWarnSpy: { mockRestore: () => void } | null = null
+
+vi.mock('prosemirror-transform', () => ({
+    Step: {
+        fromJSON: vi.fn(() => ({
+            apply: vi.fn((doc: unknown) => ({
+                doc,
+                failed: null,
+                maps: [],
+            })),
+        })),
+    },
+}))
+
+beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+})
+
+afterEach(() => {
+    consoleErrorSpy?.mockRestore()
+    consoleWarnSpy?.mockRestore()
+    consoleErrorSpy = null
+    consoleWarnSpy = null
+})
 
 function createImageGenerationTrace(overrides: Partial<ImageGenerationTrace> = {}): ImageGenerationTrace {
     return {
@@ -540,6 +575,16 @@ describe('aiChatThreadPlugin — image generation trace', () => {
 // =============================================================================
 
 describe('aiChatThreadPlugin — generated image completion', () => {
+    function getCollapsibleNodes(view: EditorView): any[] {
+        const collapsibleNodes: any[] = []
+        view.state.doc.descendants((node: any) => {
+            if (node.type.name === 'aiCollapsibleBlock') {
+                collapsibleNodes.push(node)
+            }
+        })
+        return collapsibleNodes
+    }
+
     function createView(
         onImageCompleteToCanvas = vi.fn(),
         onImagePartialToCanvas = vi.fn(),
@@ -724,7 +769,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
         })
 
         const imageNodes = getGeneratedImageNodes(view)
-        const persistedContent = onPersist.mock.calls[onPersist.mock.calls.length - 1]?.[0]
+        const collapsibleNodes = getCollapsibleNodes(view)
 
         expect(imageNodes).toHaveLength(1)
         expect(imageNodes[0].attrs).toMatchObject({
@@ -732,8 +777,9 @@ describe('aiChatThreadPlugin — generated image completion', () => {
             isPartial: false,
             partialIndex: 2,
         })
-        expect(onPersist).toHaveBeenCalledTimes(1)
-        expect(JSON.stringify(persistedContent)).toContain(trace.toolPrompt)
+        expect(collapsibleNodes).toHaveLength(1)
+        expect(collapsibleNodes[0].attrs.imageGenerationTrace.toolPrompt).toBe(trace.toolPrompt)
+        expect(onPersist).not.toHaveBeenCalled()
 
         view.destroy()
         mount.remove()

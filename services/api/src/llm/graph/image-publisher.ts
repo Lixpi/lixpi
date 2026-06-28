@@ -4,6 +4,7 @@ import type NatsService from '@lixpi/nats-service'
 import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
 
 import type { StoreImageInput, StoreImageResult } from '../../services/image-storage.ts'
+import type { ChunkPayload, ProseMirrorContentHandler } from './stream-publisher.ts'
 
 export type StoreWorkspaceImageFn = (input: StoreImageInput) => Promise<StoreImageResult>
 
@@ -18,22 +19,28 @@ export class ImagePublisher {
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
         private readonly generationRun?: MediaGenerationRunMeta,
+        private readonly onProseMirrorContent?: ProseMirrorContentHandler,
     ) {}
+
+    private publish(content: ChunkPayload['content']): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content,
+            aiChatThreadId: this.aiChatThreadId,
+        })
+        this.onProseMirrorContent?.(content)
+    }
 
     // Empty imageBase64 publishes a placeholder event (UI shows animated border).
     // Non-empty uploads to NATS Object Store with content-hash dedup, then publishes IMAGE_PARTIAL.
     async partial(imageBase64: string, partialIndex: number): Promise<void> {
         if (!imageBase64) {
-            this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-                content: {
-                    status: STREAM_STATUS.IMAGE_PARTIAL,
-                    imageUrl: '',
-                    fileId: '',
-                    partialIndex,
-                    aiProvider: this.provider,
-                    ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-                },
-                aiChatThreadId: this.aiChatThreadId,
+            this.publish({
+                status: STREAM_STATUS.IMAGE_PARTIAL,
+                imageUrl: '',
+                fileId: '',
+                partialIndex,
+                aiProvider: this.provider,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             })
             return
         }
@@ -48,16 +55,13 @@ export class ImagePublisher {
                 useContentHash: true,
             })
 
-            this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-                content: {
-                    status: STREAM_STATUS.IMAGE_PARTIAL,
-                    imageUrl: result.url,
-                    fileId: result.fileId,
-                    partialIndex,
-                    aiProvider: this.provider,
-                    ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-                },
-                aiChatThreadId: this.aiChatThreadId,
+            this.publish({
+                status: STREAM_STATUS.IMAGE_PARTIAL,
+                imageUrl: result.url,
+                fileId: result.fileId,
+                partialIndex,
+                aiProvider: this.provider,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             })
         } catch {
             // Match Python behavior: log-and-skip on partial failure rather than
@@ -97,19 +101,16 @@ export class ImagePublisher {
             useContentHash: true,
         })
 
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.IMAGE_COMPLETE,
-                imageUrl: result.url,
-                fileId: result.fileId,
-                responseId,
-                revisedPrompt,
-                aiProvider: this.provider,
-                imageModelProvider: this.provider,
-                imageModelId,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publish({
+            status: STREAM_STATUS.IMAGE_COMPLETE,
+            imageUrl: result.url,
+            fileId: result.fileId,
+            responseId,
+            revisedPrompt,
+            aiProvider: this.provider,
+            imageModelProvider: this.provider,
+            imageModelId,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }
 }

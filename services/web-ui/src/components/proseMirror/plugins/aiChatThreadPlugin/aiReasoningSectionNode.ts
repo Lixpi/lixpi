@@ -6,69 +6,16 @@
 // concurrently-streaming models never interleave their content.
 import { html } from '$src/utils/domTemplates.ts'
 import {
-    createAiLineageEventMarker,
+    aiReasoningSectionNodeSpec,
+    aiReasoningSectionNodeType,
     getReasoningSectionLineageEvents,
     normalizeAiLineageProjectionScope,
-} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
+} from '@lixpi/prosemirror'
+import { createAiLineageEventMarker } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 
-export const aiReasoningSectionNodeType = 'aiReasoningSection'
-
-export const aiReasoningSectionNodeSpec = {
-    attrs: {
-        generationRequestId: { default: '' },
-        reasoningRunId: { default: '' },
-        reasoningModelId: { default: '' },
-        reasoningIndex: { default: null },
-        branchOriginNodeId: { default: '' },
-        branchForkNodeId: { default: '' },
-        branchLineNodeId: { default: '' },
-        lineageProjectionScope: { default: 'conversation' },
-        isReceivingAnimation: { default: false },
-    },
-    content: '(paragraph | block)*',
-    group: 'block',
-    draggable: false,
-    parseDOM: [
-        {
-            tag: 'div.ai-reasoning-section',
-            getAttrs(dom) {
-                return {
-                    generationRequestId: dom.getAttribute('data-generation-request-id') || '',
-                    reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
-                    reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
-                    reasoningIndex: parseReasoningIndex(dom.getAttribute('data-reasoning-index')),
-                    branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
-                    branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
-                    branchLineNodeId: dom.getAttribute('data-branch-line-node-id') || '',
-                    lineageProjectionScope: normalizeAiLineageProjectionScope(dom.getAttribute('data-lineage-projection-scope')),
-                    isReceivingAnimation: false,
-                }
-            },
-        },
-    ],
-    toDOM(node) {
-        return [
-            'div',
-            {
-                class: 'ai-reasoning-section',
-                'data-generation-request-id': node.attrs.generationRequestId,
-                'data-reasoning-run-id': node.attrs.reasoningRunId,
-                'data-reasoning-model-id': node.attrs.reasoningModelId,
-                'data-reasoning-index': node.attrs.reasoningIndex == null ? '' : String(node.attrs.reasoningIndex),
-                'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
-                'data-branch-fork-node-id': node.attrs.branchForkNodeId,
-                'data-branch-line-node-id': node.attrs.branchLineNodeId,
-                'data-lineage-projection-scope': node.attrs.lineageProjectionScope,
-            },
-            0,
-        ]
-    },
-}
-
-function parseReasoningIndex(value) {
-    if (value === null || value === undefined || value === '') return null
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : null
+export {
+    aiReasoningSectionNodeSpec,
+    aiReasoningSectionNodeType,
 }
 
 export const aiReasoningSectionNodeView = (node) => {

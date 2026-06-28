@@ -6,6 +6,7 @@ import { info, warn } from '@lixpi/debug-tools'
 import type { BaseProvider, BaseProviderDeps } from './base-provider.ts'
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
+import type { ProseMirrorContentHandler } from '../graph/stream-publisher.ts'
 import type { StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
 import type { StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
@@ -15,14 +16,18 @@ export type ProviderConstructor = new (
     deps: BaseProviderDeps,
 ) => BaseProvider
 
+type MediaRouterOptions = {
+    onProseMirrorContent?: ProseMirrorContentHandler
+}
+
 export class ProviderRegistry {
     private readonly instances = new Map<string, BaseProvider>()
     private readonly activeTasks = new Map<string, Promise<void>>()
     private readonly requestGroups = new Map<string, Set<string>>()
     private readonly providerCtors: Map<ProviderName, ProviderConstructor>
     private readonly usageReporter: UsageReporter
-    private imageRouter?: (state: ProviderState) => Promise<Partial<ProviderState>>
-    private videoRouter?: (state: ProviderState) => Promise<Partial<ProviderState>>
+    private imageRouter?: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
+    private videoRouter?: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
 
     constructor(
         private readonly natsService: NatsService,
@@ -38,12 +43,12 @@ export class ProviderRegistry {
     }
 
     // late-bound to break the registry↔image-router circular dependency
-    setImageRouter(router: (state: ProviderState) => Promise<Partial<ProviderState>>): void {
+    setImageRouter(router: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>): void {
         this.imageRouter = router
     }
 
     // late-bound to break the registry↔video-router circular dependency
-    setVideoRouter(router: (state: ProviderState) => Promise<Partial<ProviderState>>): void {
+    setVideoRouter(router: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>): void {
         this.videoRouter = router
     }
 
@@ -53,17 +58,17 @@ export class ProviderRegistry {
             storeWorkspaceImage: this.storeWorkspaceImage,
             storeWorkspaceVideo: this.storeWorkspaceVideo,
             usageReporter: this.usageReporter,
-            runImageRouter: async (state: ProviderState) => {
+            runImageRouter: async (state: ProviderState, options?: MediaRouterOptions) => {
                 if (!this.imageRouter) {
                     throw new Error('ImageRouter not initialized')
                 }
-                return this.imageRouter(state)
+                return this.imageRouter(state, options)
             },
-            runVideoRouter: async (state: ProviderState) => {
+            runVideoRouter: async (state: ProviderState, options?: MediaRouterOptions) => {
                 if (!this.videoRouter) {
                     throw new Error('VideoRouter not initialized')
                 }
-                return this.videoRouter(state)
+                return this.videoRouter(state, options)
             },
         }
     }

@@ -1,18 +1,25 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
+import { DOCUMENT_TYPE, getDocumentStepSubject } from '@lixpi/prosemirror'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 const workspaceId = 'workspace-1'
 const aiChatThreadId = 'thread-1'
 const responseSubject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`
+const stepSubject = getDocumentStepSubject({
+    workspaceId,
+    docType: DOCUMENT_TYPE.AI_CHAT_THREAD,
+    docId: aiChatThreadId,
+})
 
 const getDataMock = vi.hoisted(() => vi.fn())
 const natsPublishMock = vi.hoisted(() => vi.fn())
 const natsSubscribeMock = vi.hoisted(() => vi.fn())
 const natsGetSubscriptionsMock = vi.hoisted(() => vi.fn())
+const natsRequestMock = vi.hoisted(() => vi.fn())
 const getTokenSilentlyMock = vi.hoisted(() => vi.fn())
 const receiveSegmentMock = vi.hoisted(() => vi.fn())
 const uuidMock = vi.hoisted(() => vi.fn(() => 'matrix-request-id'))
@@ -25,6 +32,10 @@ let parserStartParsingMock = vi.fn()
 let parserParseTokenMock = vi.fn()
 let parserStopParsingMock = vi.fn()
 let parserRemoveInstanceMock = vi.fn()
+let consoleErrorSpy: { mockRestore: () => void } | null = null
+let consoleLogSpy: { mockRestore: () => void } | null = null
+let consoleWarnSpy: { mockRestore: () => void } | null = null
+let consoleInfoSpy: { mockRestore: () => void } | null = null
 let parserInstance: {
     subscribeToTokenParse: typeof parserSubscribeMock
     startParsing: typeof parserStartParsingMock
@@ -75,6 +86,11 @@ describe('AiInteractionService', () => {
     let service: AiInteractionService
 
     beforeEach(async () => {
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+        consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
         vi.clearAllMocks()
 
         parserTokenCallback = undefined
@@ -97,11 +113,13 @@ describe('AiInteractionService', () => {
             publish: natsPublishMock,
             subscribe: natsSubscribeMock,
             getSubscriptions: natsGetSubscriptionsMock,
+            request: natsRequestMock,
         })
         getTokenSilentlyMock.mockResolvedValue('auth-token')
         organizationGetMock.mockReturnValue('org-1')
         userGetMock.mockReturnValue({ userId: 'user-1' })
         natsGetSubscriptionsMock.mockReturnValue([])
+        natsRequestMock.mockResolvedValue({ events: [], snapshot: { version: 0 } })
 
         service = new AiInteractionService({
             workspaceId,
@@ -111,9 +129,20 @@ describe('AiInteractionService', () => {
         await Promise.resolve()
     })
 
+    afterEach(() => {
+        consoleErrorSpy?.mockRestore()
+        consoleWarnSpy?.mockRestore()
+        consoleInfoSpy?.mockRestore()
+        consoleLogSpy?.mockRestore()
+        consoleErrorSpy = null
+        consoleWarnSpy = null
+        consoleInfoSpy = null
+        consoleLogSpy = null
+    })
+
     it('subscribes to the thread response subject when initialized', () => {
         expect(getDataMock).toHaveBeenCalledWith('nats')
-        expect(natsGetSubscriptionsMock).toHaveBeenCalledWith([responseSubject])
+        expect(natsGetSubscriptionsMock).toHaveBeenCalledWith([responseSubject, stepSubject])
         expect(natsSubscribeMock).toHaveBeenCalledWith(responseSubject, expect.any(Function))
     })
 
@@ -207,7 +236,10 @@ describe('AiInteractionService', () => {
             content: {
                 status: STREAM_STATUS.START_STREAM,
                 aiProvider: 'provider-stream',
-                generationRun: { reasoningRunId: 'run-stream' },
+                generationRun: {
+                    requestKind: 'media-generation-matrix',
+                    reasoningRunId: 'run-stream',
+                },
             },
         })
         expect(parserStartParsingMock).toHaveBeenCalled()
@@ -216,7 +248,7 @@ describe('AiInteractionService', () => {
             content: {
                 status: STREAM_STATUS.STREAMING,
                 text: 'hello',
-                generationRun: { reasoningRunId: 'run-stream' },
+                generationRun: { requestKind: 'media-generation-matrix', reasoningRunId: 'run-stream' },
             },
         })
         expect(parserParseTokenMock).toHaveBeenCalledWith('hello')
@@ -225,7 +257,7 @@ describe('AiInteractionService', () => {
         service.onChatMessageResponse({
             content: {
                 status: STREAM_STATUS.END_STREAM,
-                generationRun: { reasoningRunId: 'run-stream' },
+                generationRun: { requestKind: 'media-generation-matrix', reasoningRunId: 'run-stream' },
             },
         })
         expect(parserStopParsingMock).toHaveBeenCalled()
@@ -236,6 +268,35 @@ describe('AiInteractionService', () => {
         expect(callbackUnsubscribe).toHaveBeenCalled()
         expect(parserRemoveInstanceMock).toHaveBeenCalledWith(`${aiChatThreadId}:run-stream`)
         expect(service.markdownParserContexts.has('run-stream')).toBe(false)
+    })
+
+    it('does not route markdown tokens for non-matrix generation runs', () => {
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.START_STREAM,
+                aiProvider: 'provider-stream',
+                generationRun: { reasoningRunId: 'legacy-run' },
+            },
+        })
+
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.STREAMING,
+                text: 'hello',
+                generationRun: { reasoningRunId: 'legacy-run' },
+            },
+        })
+
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.END_STREAM,
+                generationRun: { reasoningRunId: 'legacy-run' },
+            },
+        })
+
+        expect(parserStartParsingMock).not.toHaveBeenCalled()
+        expect(parserParseTokenMock).not.toHaveBeenCalled()
+        expect(parserStopParsingMock).not.toHaveBeenCalled()
     })
 
     it('sends rich payloads and matrix metadata for multi-model requests', async () => {
