@@ -41,22 +41,20 @@
 
 
     type ImageOptions = {
-        aiImageModel: string
+        aiImageModels: string[]
         imageGenerationSize: ImageGenerationSize
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
 
     type VideoOptions = {
-        aiVideoModel?: string
+        aiVideoModels: string[]
         videoAspectRatio?: string
         videoResolution?: string
         videoDuration?: string
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
 
-    const onAiChatSubmit = ({ messages, aiModel, threadId, imageOptions, videoOptions, referencedFeatureIds }: AiChatSendMessagePayload & { imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => {
-        // console.log('onAiChatSubmit', {messages, aiModel, threadId, aiInteractionInstance})
-
+    const onAiChatSubmit = ({ messages, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, threadId, imageOptions, videoOptions, referencedFeatureIds }: AiChatSendMessagePayload & { aiReasoningModels?: string[]; useMultipleReasoningModels?: boolean; useMultipleImageModels?: boolean; useMultipleVideoModels?: boolean; imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => {
         if (!aiInteractionInstance) {
             console.log('call->onAiChatSubmit', {aiInteractionInstance, projectKey: $routerStore.data.currentRoute?.routeParams.key})
             alert('🚫 call->onAiChatSubmit :: aiInteractionInstance is not initialized...');
@@ -66,11 +64,14 @@
 
         aiInteractionInstance.sendChatMessage({
             messages,
-            aiModel,
-            aiImageModel: imageOptions?.aiImageModel,
+            aiReasoningModels: aiReasoningModels ?? [],
+            useMultipleReasoningModels,
+            useMultipleImageModels,
+            useMultipleVideoModels,
+            aiImageModels: imageOptions?.aiImageModels,
             imageSize: imageOptions?.imageGenerationSize,
             imageConfigGroups: imageOptions?.configGroups,
-            aiVideoModel: videoOptions?.aiVideoModel,
+            aiVideoModels: videoOptions?.aiVideoModels,
             videoAspectRatio: videoOptions?.videoAspectRatio,
             videoResolution: videoOptions?.videoResolution,
             videoDuration: videoOptions?.videoDuration,

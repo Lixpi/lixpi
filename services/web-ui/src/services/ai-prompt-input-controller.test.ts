@@ -45,16 +45,12 @@ function createPromptSchema() {
                 attrs: {
                     threadId: { default: '' },
                     referenceId: { default: '' },
-                    aiModel: { default: '' },
-                    aiModels: { default: '' },
-                    useMultipleModels: { default: false },
+                    aiReasoningModels: { default: '' },
                     useMultipleReasoningModels: { default: false },
                     useMultipleImageModels: { default: false },
                     useMultipleVideoModels: { default: false },
-                    aiImageModel: { default: '' },
                     aiImageModels: { default: '' },
                     imageGenerationSize: { default: 'auto' },
-                    aiVideoModel: { default: '' },
                     aiVideoModels: { default: '' },
                     videoAspectRatio: { default: '' },
                     videoResolution: { default: '' },
@@ -123,16 +119,13 @@ function createThreadEditorEntry(params: {
         {
             threadId: params.threadId,
             referenceId: `reference-${params.threadId}`,
-            aiModel: 'existing-model',
-            useMultipleModels: false,
+            aiReasoningModels: serializeAiModelSelectionAttr(['existing-model']),
             useMultipleReasoningModels: false,
             useMultipleImageModels: false,
             useMultipleVideoModels: false,
-            aiImageModel: 'existing-image',
-            aiImageModels: '[]',
+            aiImageModels: serializeAiModelSelectionAttr(['existing-image']),
             imageGenerationSize: 'auto',
-            aiVideoModel: 'existing-video',
-            aiVideoModels: '[]',
+            aiVideoModels: serializeAiModelSelectionAttr(['existing-video']),
             videoAspectRatio: '',
             videoResolution: '',
             videoDuration: '',
@@ -242,7 +235,7 @@ describe('AiPromptInputController', () => {
 
         await controller.submitMessage({
             contentJSON: [{ type: 'paragraph' }],
-            aiModel: 'text-model',
+            aiReasoningModels: ['text-model'],
         })
 
         expect(warnSpy).toHaveBeenCalledWith('[AiPromptInputController] No target set, cannot submit')
@@ -261,7 +254,7 @@ describe('AiPromptInputController', () => {
 
         await controller.submitMessage({
             contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: 'Draft prompt' }] }],
-            aiModel: 'text-model',
+            aiReasoningModels: ['text-model'],
         })
 
         expect(warnSpy).toHaveBeenCalledWith('[AiPromptInputController] Could not find aiChatThread node in editor')
@@ -275,7 +268,7 @@ describe('AiPromptInputController', () => {
         const editorEntry = createThreadEditorEntry({
             threadId: 'thread-parse-error',
             threadAttrs: {
-                aiModel: 'existing-model',
+                aiReasoningModels: serializeAiModelSelectionAttr(['existing-model']),
             },
         })
 
@@ -287,7 +280,7 @@ describe('AiPromptInputController', () => {
 
         await controller.submitMessage({
             contentJSON: [{ type: 'invalid-node-type' }],
-            aiModel: 'text-model',
+            aiReasoningModels: ['text-model'],
         })
 
         expect(warnSpy).toHaveBeenCalledWith(
@@ -307,7 +300,7 @@ describe('AiPromptInputController', () => {
         controller.setTarget({ nodeId: 'thread-1', type: 'aiChatThread', referenceId: 'thread-1' })
         await controller.submitMessage({
             contentJSON: [{ type: 'paragraph' }],
-            aiModel: '',
+            aiReasoningModels: [],
         })
 
         expect(alertSpy).toHaveBeenCalledWith('Please select an AI model from the dropdown before submitting.')
@@ -318,7 +311,7 @@ describe('AiPromptInputController', () => {
         const { controller } = createController()
         const editorEntry = createThreadEditorEntry({
             threadId: 'thread-1',
-            threadAttrs: { aiModel: 'existing-model' },
+            threadAttrs: { aiReasoningModels: serializeAiModelSelectionAttr(['existing-model']) },
         })
 
         controller.setTarget({ nodeId: 'thread-node-1', type: 'aiChatThread', referenceId: 'thread-1' })
@@ -327,7 +320,7 @@ describe('AiPromptInputController', () => {
                 type: 'paragraph',
                 content: [{ type: 'text', text: 'Draft prompt' }],
             }],
-            aiModel: 'text-model',
+            aiReasoningModels: ['text-model'],
         })
 
         expect(editorEntry.dispatch).not.toHaveBeenCalled()
@@ -350,16 +343,13 @@ describe('AiPromptInputController', () => {
         const editorEntry = createThreadEditorEntry({
             threadId: 'thread-2',
             threadAttrs: {
-                aiModel: 'existing-model',
                 useMultipleReasoningModels: false,
                 useMultipleImageModels: false,
                 useMultipleVideoModels: false,
-                aiModels: serializeAiModelSelectionAttr(['legacy']) ,
-                aiImageModel: 'old-img',
-                aiImageModels: '[]',
+                aiReasoningModels: serializeAiModelSelectionAttr(['legacy']),
+                aiImageModels: serializeAiModelSelectionAttr(['old-img']),
                 imageGenerationSize: 'auto',
-                aiVideoModel: 'old-video',
-                aiVideoModels: '[]',
+                aiVideoModels: serializeAiModelSelectionAttr(['old-video']),
                 videoAspectRatio: '',
                 videoResolution: '',
                 videoDuration: '',
@@ -379,17 +369,15 @@ describe('AiPromptInputController', () => {
 
         await controller.submitMessage({
             contentJSON: [{ type: 'paragraph' }],
-            aiModel: 'next-text-model',
-            aiModels: ['model-alpha', 'model-alpha', 'model-beta'],
-            useMultipleModels: true,
+            aiReasoningModels: ['model-alpha', 'model-alpha', 'model-beta'],
+            useMultipleReasoningModels: true,
             useMultipleImageModels: true,
+            useMultipleVideoModels: true,
             imageOptions: {
-                aiImageModel: 'new-img',
                 aiImageModels: ['img-a', 'img-b'],
                 imageGenerationSize: '1024x1024',
             },
             videoOptions: {
-                aiVideoModel: 'new-video',
                 aiVideoModels: ['video-a'],
                 videoAspectRatio: '16:9',
                 videoResolution: '1080p',
@@ -400,16 +388,12 @@ describe('AiPromptInputController', () => {
         expect(editorEntry.transaction.setNodeMarkup).toHaveBeenCalled()
         const updatedAttrs = editorEntry.nodeMarkupCalls.at(-1)?.attrs as Record<string, unknown> | undefined
         expect(updatedAttrs).toMatchObject({
-            aiModel: 'next-text-model',
-            aiModels: serializeAiModelSelectionAttr(['model-alpha', 'model-beta']),
-            useMultipleModels: true,
+            aiReasoningModels: serializeAiModelSelectionAttr(['model-alpha', 'model-beta']),
             useMultipleReasoningModels: true,
             useMultipleImageModels: true,
             useMultipleVideoModels: true,
-            aiImageModel: 'new-img',
             aiImageModels: serializeAiModelSelectionAttr(['img-a', 'img-b']),
             imageGenerationSize: '1024x1024',
-            aiVideoModel: 'new-video',
             aiVideoModels: serializeAiModelSelectionAttr(['video-a']),
             videoAspectRatio: '16:9',
             videoResolution: '1080p',
@@ -449,10 +433,12 @@ describe('AiPromptInputController', () => {
                 type: 'paragraph',
                 content: [{ type: 'text', text: 'Start a new thread' }],
             }],
-            aiModel: 'text-model',
-            useMultipleModels: true,
+            aiReasoningModels: ['text-model'],
+            useMultipleReasoningModels: true,
+            useMultipleImageModels: true,
+            useMultipleVideoModels: true,
             imageOptions: {
-                aiImageModel: 'thread-image-model',
+                aiImageModels: ['thread-image-model'],
                 imageGenerationSize: 'auto',
             },
         })
@@ -467,12 +453,11 @@ describe('AiPromptInputController', () => {
                         type: 'aiChatThread',
                         attrs: expect.objectContaining({
                             threadId: 'thread-id',
-                            aiModel: 'text-model',
-                            useMultipleModels: true,
+                            aiReasoningModels: serializeAiModelSelectionAttr(['text-model']),
                             useMultipleReasoningModels: true,
                             useMultipleImageModels: true,
                             useMultipleVideoModels: true,
-                            aiImageModel: 'thread-image-model',
+                            aiImageModels: serializeAiModelSelectionAttr(['thread-image-model']),
                         }),
                     }),
                 ]),
@@ -541,7 +526,7 @@ describe('AiPromptInputController', () => {
         controller.setTarget({ nodeId: 'target-doc', type: 'document', referenceId: 'doc-1' })
         await controller.submitMessage({
             contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: 'Start a new thread' }] }],
-            aiModel: 'text-model',
+            aiReasoningModels: ['text-model'],
         })
 
         expect(createAiChatThread).toHaveBeenCalled()
@@ -557,7 +542,7 @@ describe('AiPromptInputController', () => {
         controller.setTarget({ nodeId: 'thread-node-destroy', type: 'aiChatThread', referenceId: 'thread-destroy' })
         await controller.submitMessage({
             contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: 'Draft prompt' }] }],
-            aiModel: 'text-model',
+            aiReasoningModels: ['text-model'],
         })
         controller.destroy()
 

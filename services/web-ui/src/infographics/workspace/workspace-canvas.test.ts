@@ -298,7 +298,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		const activeBlock = extractBlock(infoButtonBlock, '&.is-active')
 
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl, pendingBranchMarkerOverlayEl],')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
 		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
 		expectSourceToContain(ts, 'getCanvasChromeScreenLayout({')
 		expectSourceToContain(ts, 'baseGap: settings.mediaNode.generatedMediaChrome.topGap,')
@@ -459,10 +459,12 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(outlineRendererTs, 'export class PixiTravelingOutlineRenderer {')
 		expectSourceToContain(pixiLayerTs, 'new PixiTravelingOutlineRenderer({')
 		expectSourceToContain(pixiLayerTs, 'generatingBorderRenderer.sync(datums)')
-		expectSourceToContain(outlineRendererTs, "mesh.label = 'pixi-traveling-outline-glass'")
+		expectSourceToContain(outlineRendererTs, 'const OUTLINE_GEOMETRY_RING_SIZE = 3')
+		expectSourceToContain(outlineRendererTs, 'mesh.label = `pixi-traveling-outline-glass-${index}`')
 		expectSourceToContain(outlineRendererTs, 'private paint(entry: OutlineEntry, elapsed: number)')
 		expectSourceToContain(outlineRendererTs, 'const headDistance = getTravelingOutlineHeadDistance(elapsed, durationMs, perimeter, this.ease)')
-		expectSourceToContain(outlineRendererTs, 'new MeshGeometry()')
+		expectSourceToContain(outlineRendererTs, 'new MeshGeometry({')
+		expectSourceToContain(outlineRendererTs, 'positions: buffers.positions')
 		expectSourceToContain(outlineRendererTs, 'new Mesh({ geometry, texture: this.texture })')
 		expectSourceToContain(outlineRendererTs, 'new TravelingSnakeGlassMaterial(')
 		expectSourceToContain(outlineRendererTs, 'this.ease = options.ease ?? Easing.travelingOutlineTransition')
@@ -528,14 +530,21 @@ describe('Workspace canvas — generated image preview rendering', () => {
 	})
 
 	it('routes generated-media add/remove through the centralized tree rebalance', () => {
-		// One helper re-tidies every branch tree and rigid-separates trees + loose
-		// nodes via the unchanged resolver, replacing the per-handler collision block.
-		expectSourceToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
+		// WorkspaceCanvas supplies canvas-specific geometry, but the generated-media
+		// rebalance sequence lives in the extracted deterministic pipeline.
+		expectSourceToContain(ts, "from '$src/infographics/workspace/generatedMediaRebalancePipeline.ts'")
+		expectSourceToContain(ts, "import { getStartedLineageMarkerState } from '$src/infographics/workspace/branchLineageState.ts'")
+		expectSourceToContain(ts, 'function createGeneratedMediaRebalancePipeline(): GeneratedMediaRebalancePipeline')
 		expectSourceToContain(ts, 'function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[]')
-		expectSourceToContain(ts, 'const resolvedNodes = rebalanceBranchTreesAndResolve(layoutProxyPlan.nodes, edges, {')
+		expectSourceToContain(ts, 'const result = createGeneratedMediaRebalancePipeline().rebalance(nodes, edges)')
+		expectSourceToContain(ts, 'clearStartedBranchMarkerProjectionOverrides(result.startedMarkerNodeIds)')
 		expectSourceToContain(ts, 'depthGap: settings.mediaBranchLineage.mediaToMediaGap,')
 		expectSourceToContain(ts, 'siblingGap: settings.mediaBranchLineage.branchRowGap,')
 		expectSourceToContain(ts, 'branchFanoutExtraGap: settings.mediaBranchLineage.branchFanoutExtraGap,')
+		expectSourceToContain(ts, 'branchOriginMarkerStackGap: getBranchMarkerStackGap(),')
+		expectSourceToContain(ts, 'getNodeCollisionMargin: (node: CanvasNode) => getCanvasNodeCollisionSettings(node, collisionSettings).margin,')
+		expectSourceToContain(ts, 'getPendingGeneratedMediaLayoutGeometry: (node: ImageCanvasNode | VideoCanvasNode) =>')
+		expectSourceNotToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
 		// Wired into every generated-media add path (image partial + complete, video).
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithImage, newEdges)')
 		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, edges)')
@@ -673,7 +682,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const panelPosition = ts.slice(panelPositionStart, panelPositionEnd)
 
 		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl = createGeneratedMediaInfoPanelLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl, pendingBranchMarkerOverlayEl],')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
 		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
 		expectSourceToContain(ts, 'function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode)')
 		expectSourceToContain(ts, "panel.setAttribute('data-media-info-panel-node-id', node.nodeId)")
@@ -833,6 +842,25 @@ describe('Workspace canvas — parent-child world positioning', () => {
 		expectExcerptToContain(fnBody, 'delete nodeForConnection.extent')
 		expectExcerptNotToContain(ts, 'connectionManager?.syncNodes(nextState.nodes)')
 		expectExcerptNotToContain(ts, 'connectionManager.syncNodes(currentCanvasState.nodes)')
+	})
+
+	it('keeps existing branch-marker DOM geometry in lockstep with rebalanced pending media', () => {
+		const syncMatch = ts.match(/function\s+syncExistingBranchMarkerNodeToDOM[\s\S]*?^    \}/m)
+		expect(syncMatch).not.toBeNull()
+		const syncBody = syncMatch![0]
+		expectExcerptToContain(syncBody, 'syncCanvasNodeDomGeometry([branchMarkerNode])')
+		expectExcerptToContain(syncBody, 'syncBranchMarkerNodeContent(branchMarkerNode)')
+		expectExcerptToContain(syncBody, 'syncConnectionsAfterManualNodeAppend()')
+
+		const originMatch = ts.match(/function\s+appendBranchOriginNodeToDOM[\s\S]*?^    \}/m)
+		const forkMatch = ts.match(/function\s+appendBranchForkNodeToDOM[\s\S]*?^    \}/m)
+		const lineMatch = ts.match(/function\s+appendBranchLineNodeToDOM[\s\S]*?^    \}/m)
+		expect(originMatch).not.toBeNull()
+		expect(forkMatch).not.toBeNull()
+		expect(lineMatch).not.toBeNull()
+		expectExcerptToContain(originMatch![0], 'syncExistingBranchMarkerNodeToDOM(branchOriginNode)')
+		expectExcerptToContain(forkMatch![0], 'syncExistingBranchMarkerNodeToDOM(branchForkNode)')
+		expectExcerptToContain(lineMatch![0], 'syncExistingBranchMarkerNodeToDOM(branchLineNode)')
 	})
 
 	it('checks viewport visibility against world-space node rectangles', () => {
@@ -1399,6 +1427,8 @@ describe('Right side panel — TS infrastructure', () => {
 	})
 
 	it('prepares standalone panel media generations for canvas placeholders and branch origins', () => {
+		const settingsTs = loadSettings()
+
 		expectSourceToContain(ts, 'function rememberStandaloneGeneratedImagePlacement(')
 		expectSourceToContain(ts, 'const referenceNodeIds = getStandaloneGeneratedMediaReferenceNodeIds()')
 		expectSourceToContain(ts, '...aiChatPanelState.contextChips,')
@@ -1426,9 +1456,24 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds([')
 		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(getGeneratedMediaPlacementKey(threadId, generationRun), referenceNodeIds)')
 		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string, generationRun?: MediaGenerationRunMeta): Rect | undefined')
-		expectSourceToContain(ts, 'function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number, generationRun?: MediaGenerationRunMeta): { x: number; y: number } | undefined')
+		expectSourceToContain(ts, "import {\n    applyBranchLineageNodeGap,\n    normalizeBranchLineageNodeGap,\n} from '$src/infographics/workspace/branchLineageNodeSpacing.ts'")
+		expectSourceToContain(ts, "import { computeReferenceBranchRootMarkerPosition } from '$src/infographics/workspace/referenceBranchRootPlacement.ts'")
+		expectSourceToContain(ts, 'function getBranchLineageNodeGap(): number')
+		expectSourceToContain(ts, 'return normalizeBranchLineageNodeGap(settings.mediaBranchLineage.nodeGap)')
+		expectSourceToContain(ts, 'function getBranchLineageCollisionSettings(')
+		expectSourceToContain(ts, 'return applyBranchLineageNodeGap(nodeSettings, getBranchLineageNodeGap())')
+		expectSourceToContain(ts, 'return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchOrigin)')
+		expectSourceToContain(ts, 'return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchFork)')
+		expectSourceToContain(ts, 'return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchLine)')
+		expectSourceToContain(ts, 'function getReferenceBranchRootMarkerPositionForGeneratedMedia(')
+		expectSourceToContain(ts, 'referenceToMarkerMinGap: getBranchLineageNodeGap(),')
 		expectSourceToContain(ts, 'settings.mediaBranchLineage.rootToFirstMediaGap')
-		expectSourceToContain(ts, 'const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)')
+		expectSourceToContain(settingsTs, 'nodeGap: number')
+		expectSourceToContain(settingsTs, 'nodeGap: 64')
+		expectSourceToContain(settingsTs, 'mediaBranchLineage.nodeGap')
+		expectSourceToContain(ts, 'const referenceRootPosition = getReferenceBranchRootMarkerPositionForGeneratedMedia(')
+		expectSourceNotToContain(ts, 'referencePosition.x - getRootBranchMarkerOutputGap() - markerDimensions.width')
+		expectSourceNotToContain(ts, 'referencePosition.x - getBranchOriginOutputGap() - dimensions.width')
 		expectSourceNotToContain(ts, 'if (!sourceThread) return\n            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)')
 	})
 
@@ -1986,10 +2031,11 @@ describe('Workspace canvas — collision resolution ownership', () => {
 	})
 
 	it('builds rectangular collision boxes from node world bounds', () => {
-		expectSourceToContain(ts, 'function createCollisionPlan(nodes: CanvasNode[], topLevelOnly = false): CollisionPlan')
+		expectSourceToContain(ts, 'function createCollisionPlan(\n        nodes: CanvasNode[],')
 		expectSourceToContain(ts, 'const worldPosition = getNodeWorldPosition(node, nodesById)')
-		expectSourceToContain(ts, 'x: worldPosition.x,')
-		expectSourceToContain(ts, 'width: node.dimensions.width,')
+		expectSourceToContain(ts, 'const collisionRect = getCanvasNodeCollisionRect(node, worldPosition)')
+		expectSourceToContain(ts, 'x: collisionRect.x,')
+		expectSourceToContain(ts, 'width: collisionRect.width,')
 		expectSourceNotToContain(ts, ['getContext', 'Region', 'Cl', 'oudBounds'].join(''))
 	})
 

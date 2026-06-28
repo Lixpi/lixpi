@@ -193,12 +193,13 @@ const toModelArkImageUrl = (url: string, label: string): string => {
     return url
 }
 
-// Build the ModelArk content[] array. Order: text first, then ONE input family —
-// first-frame OR reference-images. first_frame and reference_image are mutually
-// exclusive in Seedance, and the shared resolver only ever populates one of
-// videoFirstFrameImage / videoReferenceImages. Source-video extension has no
-// provider-fetchable asset handoff yet, so it is rejected with a capability error.
-// References are assumed already capped to the provider budget upstream.
+// Build the ModelArk content[] array. Order: text first, then FRAME CONDITIONING
+// ONLY — provided images become the start frame and (optionally) the stop frame,
+// never asset/style `reference_image`s. The selected images arrive in a stable
+// order via videoFirstFrameImage (start frame) followed by videoReferenceImages
+// (the optional stop frame): the first becomes role=first_frame, the second
+// role=last_frame. Source-video extension has no provider-fetchable asset handoff
+// yet, so it is rejected with a capability error.
 export const buildSeedanceContent = (prompt: string, inputs: SeedanceContentInputs): SeedanceContentItem[] => {
     const content: SeedanceContentItem[] = [{ type: 'text', text: prompt }]
 
@@ -206,20 +207,21 @@ export const buildSeedanceContent = (prompt: string, inputs: SeedanceContentInpu
         throw new Error(SEEDANCE_EXTENSION_UNSUPPORTED_MESSAGE)
     }
 
-    if (inputs.videoFirstFrameImage) {
+    const frameUrls = [inputs.videoFirstFrameImage, ...(inputs.videoReferenceImages ?? [])]
+        .filter((url): url is string => typeof url === 'string' && url.length > 0)
+
+    if (frameUrls[0]) {
         content.push({
             type: 'image_url',
-            image_url: { url: toModelArkImageUrl(inputs.videoFirstFrameImage, 'first frame') },
+            image_url: { url: toModelArkImageUrl(frameUrls[0], 'first frame') },
             role: 'first_frame',
         })
-        return content
     }
-
-    for (const ref of inputs.videoReferenceImages ?? []) {
+    if (frameUrls[1]) {
         content.push({
             type: 'image_url',
-            image_url: { url: toModelArkImageUrl(ref, 'reference image') },
-            role: 'reference_image',
+            image_url: { url: toModelArkImageUrl(frameUrls[1], 'last frame') },
+            role: 'last_frame',
         })
     }
     return content

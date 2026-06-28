@@ -1,5 +1,7 @@
 import type { CanvasNode } from '@lixpi/constants'
 
+import { isBranchLineageMarkerNode } from '$src/infographics/workspace/branchLineageState.ts'
+
 type WorkspaceDragPlanInput = {
     nodes: CanvasNode[]
     primaryNodeId: string
@@ -64,13 +66,16 @@ export function computeWorkspaceDragPlan(input: WorkspaceDragPlanInput): Workspa
     }
 
     const draggedNodeIds = includeParentContainerDescendants(baseDraggedNodeIds, input.nodes)
+    const isBranchLineageMarkerDrag = draggedNodeIds.every((nodeId: string) =>
+        isBranchLineageMarkerNode(nodesById.get(nodeId))
+    )
 
     return {
         resolvedNodeId,
         draggedNodeIds,
         isParentContainerDrag,
         allowProximityConnection: !isParentContainerDrag,
-        allowCollisionResolution: draggedNodeIds.length === 1 || isParentContainerDrag,
+        allowCollisionResolution: draggedNodeIds.length === 1 || isParentContainerDrag || isBranchLineageMarkerDrag,
     }
 }
 

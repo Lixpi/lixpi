@@ -32,9 +32,9 @@ const createRegistry = () => {
 const createRequest = (overrides: Partial<MatrixRequestData> = {}): MatrixRequestData => ({
     workspaceId: 'ws-1',
     aiChatThreadId: 'thread-1',
-    aiModel: 'Anthropic:claude-sonnet-4-6',
-    aiImageModel: 'Google:gemini-2.5-flash-image',
-    aiVideoModel: 'Google:veo-3.1-generate-preview',
+    aiReasoningModels: ['Anthropic:claude-sonnet-4-6'],
+    aiImageModels: ['Google:gemini-2.5-flash-image'],
+    aiVideoModels: ['Google:veo-3.1-generate-preview'],
     imageSize: '1024x1024',
     videoAspectRatio: '16:9',
     videoResolution: '720p',
@@ -102,9 +102,9 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         resolveImageBranchSpy.mockResolvedValue({})
 
         await orchestrator.process(createRequest({
-            aiModel: undefined,
-            aiImageModel: 'Google:gemini-2.5-flash-image',
-            aiVideoModel: undefined,
+            aiReasoningModels: undefined,
+            aiImageModels: ['Google:gemini-2.5-flash-image'],
+            aiVideoModels: undefined,
             mediaGenerationRequest: {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: 'request-2',
@@ -142,9 +142,9 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         await expect(
             orchestrator.process(
                 createRequest({
-                    aiModel: 'Anthropic:claude-sonnet-4-6',
-                    aiImageModel: undefined,
-                    aiVideoModel: undefined,
+                    aiReasoningModels: ['Anthropic:claude-sonnet-4-6'],
+                    aiImageModels: undefined,
+                    aiVideoModels: undefined,
                     mediaGenerationRequest: {
                         requestVersion: 'media-generation-matrix-v1',
                         generationRequestId: 'request-3',
@@ -406,9 +406,9 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         } as any)
 
         await orchestrator.process(createRequest({
-            aiModel: undefined,
-            aiImageModel: 'Google:gemini-2.5-flash-image',
-            aiVideoModel: undefined,
+            aiReasoningModels: undefined,
+            aiImageModels: ['Google:gemini-2.5-flash-image'],
+            aiVideoModels: undefined,
             mediaGenerationRequest: {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: 'req-probe',
@@ -472,9 +472,9 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         vi.spyOn(imageBranchResolver, 'resolveImageBranch').mockResolvedValue({})
 
         await orchestrator.process(createRequest({
-            aiModel: undefined,
-            aiImageModel: undefined,
-            aiVideoModel: undefined,
+            aiReasoningModels: undefined,
+            aiImageModels: undefined,
+            aiVideoModels: undefined,
             mediaGenerationRequest: {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: 'request-normalize',
@@ -547,9 +547,9 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         vi.spyOn(imageBranchResolver, 'resolveImageBranch').mockResolvedValue({})
 
         await orchestrator.process(createRequest({
-            aiModel: undefined,
-            aiImageModel: undefined,
-            aiVideoModel: undefined,
+            aiReasoningModels: undefined,
+            aiImageModels: undefined,
+            aiVideoModels: undefined,
             mediaGenerationRequest: {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: 'request-options',

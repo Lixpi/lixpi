@@ -241,11 +241,9 @@ describe('AiInteractionService', () => {
     it('sends rich payloads and matrix metadata for multi-model requests', async () => {
         await service.sendChatMessage({
             messages: [{ role: 'user', content: 'paint me' }],
-            aiModel: 'reasoner',
-            aiModels: ['reasoner-a', 'reasoner-b'],
-            aiImageModel: 'img-model',
+            aiReasoningModels: ['reasoner-a', 'reasoner-b'],
             aiImageModels: ['img-a', 'img-b'],
-            aiVideoModel: 'video-model',
+            aiVideoModels: ['video-model'],
             videoDuration: '12',
             videoResolution: '1080p',
             imageSize: '1024x1024',
@@ -274,11 +272,11 @@ describe('AiInteractionService', () => {
             token: 'auth-token',
             workspaceId,
             aiChatThreadId,
-            aiModel: 'reasoner',
+            aiReasoningModels: ['reasoner-a', 'reasoner-b'],
             imageSize: '1024x1024',
             referencedFeatureIds: ['feature-a'],
-            aiImageModel: 'img-model',
-            aiVideoModel: 'video-model',
+            aiImageModels: ['img-a', 'img-b'],
+            aiVideoModels: ['video-model'],
             videoResolution: '1080p',
             videoDuration: '12',
             imageBranchCandidateSnapshot: {
@@ -305,9 +303,9 @@ describe('AiInteractionService', () => {
     it('omits matrix payload when only single models are used', async () => {
         await service.sendChatMessage({
             messages: [{ role: 'user', content: 'hello' }],
-            aiModel: 'reasoner',
-            aiImageModel: 'img-model',
-            aiVideoModel: 'video-model',
+            aiReasoningModels: ['reasoner'],
+            aiImageModels: ['img-model'],
+            aiVideoModels: ['video-model'],
         })
 
         const payload = natsPublishMock.mock.calls.at(-1)?.[1] as Record<string, unknown>

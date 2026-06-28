@@ -318,6 +318,7 @@ function createInlineContextPreviewTile({
     node,
     getNode,
     environment,
+    preferredPlacement = 'top',
 }: CreateContextPreviewTileOptions): ContextPreviewTileInstance {
     const resolveNode = (): CanvasNode => getNode?.() ?? node
     const renderState = () => {
@@ -329,12 +330,18 @@ function createInlineContextPreviewTile({
     }
 
     const { latestNode, title, text, accessibleLabel } = renderState()
+    const getInlinePopoverClassName = (popoverNode: CanvasNode, hasPopoverMeta: boolean, isOpen: boolean): string => [
+        getContextPreviewPopoverClassName(popoverNode, hasPopoverMeta),
+        'context-preview-inline-popover',
+        `context-preview-inline-popover-${preferredPlacement}`,
+        isOpen ? 'is-open' : '',
+    ].filter(Boolean).join(' ')
     const trigger = html`<div
         className="workspace-ai-chat-panel-context-preview-trigger context-preview-inline-trigger"
         tabindex="0"
         aria-label=${accessibleLabel}
     >${renderContextPreviewVisual(latestNode, accessibleLabel, text, environment, 'mini')}</div>` as HTMLElement
-    const popover = html`<div className=${`${getContextPreviewPopoverClassName(latestNode, Boolean(title || text))} context-preview-inline-popover`} role="tooltip">
+    const popover = html`<div className=${getInlinePopoverClassName(latestNode, Boolean(title || text), false)} role="tooltip">
         ${renderContextPreviewPopoverContent(latestNode, title, text, accessibleLabel, environment)}
     </div>` as HTMLElement
     const dom = html`<div className="workspace-ai-chat-panel-context-preview-main context-preview-inline">
@@ -344,7 +351,7 @@ function createInlineContextPreviewTile({
 
     const syncLatestContent = (): void => {
         const next = renderState()
-        popover.className = `${getContextPreviewPopoverClassName(next.latestNode, Boolean(next.title || next.text))} context-preview-inline-popover${dom.classList.contains('is-open') ? ' is-open' : ''}`
+        popover.className = getInlinePopoverClassName(next.latestNode, Boolean(next.title || next.text), dom.classList.contains('is-open'))
         popover.replaceChildren(renderContextPreviewPopoverContent(next.latestNode, next.title, next.text, next.accessibleLabel, environment))
         trigger.setAttribute('aria-label', next.accessibleLabel)
     }
@@ -383,7 +390,7 @@ export function createContextPreviewTile({
     inlinePopover = false,
 }: CreateContextPreviewTileOptions): ContextPreviewTileInstance {
     if (inlinePopover) {
-        return createInlineContextPreviewTile({ node, getNode, environment })
+        return createInlineContextPreviewTile({ node, getNode, environment, preferredPlacement })
     }
 
     const resolveNode = (): CanvasNode => getNode?.() ?? node

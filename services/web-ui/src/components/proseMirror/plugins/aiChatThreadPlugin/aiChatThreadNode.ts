@@ -20,15 +20,16 @@ export const aiChatThreadNodeSpec = {
     attrs: {
         threadId: { default: null },
         status: { default: 'active' }, // active, paused, completed
-        // Leave aiModel blank initially; we'll assign first available model from store when models load
-        aiModel: { default: '' },
-        aiModels: { default: '' },
-        useMultipleModels: { default: false },
+        // Single source of truth per model section: a JSON-serialized ordered
+        // model-id array. Length 1 means a singular selection; the matching
+        // useMultiple* flag is the safeguard that gates multi-model submission.
+        // Leave blank initially; the first available model is assigned from the
+        // store when models load.
+        aiReasoningModels: { default: '' },
         useMultipleReasoningModels: { default: false },
         useMultipleImageModels: { default: false },
         useMultipleVideoModels: { default: false },
-        // Image model for image generation routing (Provider:model format)
-        aiImageModel: { default: '' },
+        // Image models for image generation routing (Provider:model format)
         aiImageModels: { default: '' },
         // Image generation settings
         imageGenerationEnabled: { default: false },
@@ -36,8 +37,7 @@ export const aiChatThreadNodeSpec = {
         imageGenerationConfigGroups: { default: '' },
         // Previous response ID for multi-turn image editing
         previousResponseId: { default: '' },
-        // Video model for video generation routing (Provider:model format)
-        aiVideoModel: { default: '' },
+        // Video models for video generation routing (Provider:model format)
         aiVideoModels: { default: '' },
         // Video generation parameters (VEO 3)
         videoAspectRatio: { default: '' },   // e.g. '16:9' | '9:16'
@@ -54,27 +54,18 @@ export const aiChatThreadNodeSpec = {
         {
             tag: 'div.ai-chat-thread-wrapper',
             getAttrs: (dom) => {
-                const combinedMultiModelFlag = dom.getAttribute('data-use-multiple-models') === 'true'
-                const hasSectionModeAttrs = dom.hasAttribute('data-use-multiple-reasoning-models')
-                    || dom.hasAttribute('data-use-multiple-image-models')
-                    || dom.hasAttribute('data-use-multiple-video-models')
-                const shouldExpandCombinedModelFlag = combinedMultiModelFlag && !hasSectionModeAttrs
                 return {
                     threadId: dom.getAttribute('data-thread-id'),
                     status: dom.getAttribute('data-status') || 'active',
-                    aiModel: dom.getAttribute('data-ai-model') || '',
-                    aiModels: dom.getAttribute('data-ai-models') || '',
-                    useMultipleModels: combinedMultiModelFlag,
-                    useMultipleReasoningModels: dom.getAttribute('data-use-multiple-reasoning-models') === 'true' || shouldExpandCombinedModelFlag,
-                    useMultipleImageModels: dom.getAttribute('data-use-multiple-image-models') === 'true' || shouldExpandCombinedModelFlag,
-                    useMultipleVideoModels: dom.getAttribute('data-use-multiple-video-models') === 'true' || shouldExpandCombinedModelFlag,
-                    aiImageModel: dom.getAttribute('data-ai-image-model') || '',
+                    aiReasoningModels: dom.getAttribute('data-ai-reasoning-models') || '',
+                    useMultipleReasoningModels: dom.getAttribute('data-use-multiple-reasoning-models') === 'true',
+                    useMultipleImageModels: dom.getAttribute('data-use-multiple-image-models') === 'true',
+                    useMultipleVideoModels: dom.getAttribute('data-use-multiple-video-models') === 'true',
                     aiImageModels: dom.getAttribute('data-ai-image-models') || '',
                     imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
                     imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
                     imageGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-image-generation-config-groups')),
                     previousResponseId: dom.getAttribute('data-previous-response-id') || '',
-                    aiVideoModel: dom.getAttribute('data-ai-video-model') || '',
                     aiVideoModels: dom.getAttribute('data-ai-video-models') || '',
                     videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
                     videoResolution: dom.getAttribute('data-video-resolution') || '',
@@ -86,42 +77,27 @@ export const aiChatThreadNodeSpec = {
         }
     ],
     toDOM: (node) => {
-        const combinedMultiModelFlag = node.attrs.useMultipleModels === true || node.attrs.useMultipleModels === 'true'
-        const hasSectionMode = node.attrs.useMultipleReasoningModels === true
-            || node.attrs.useMultipleReasoningModels === 'true'
-            || node.attrs.useMultipleImageModels === true
-            || node.attrs.useMultipleImageModels === 'true'
-            || node.attrs.useMultipleVideoModels === true
-            || node.attrs.useMultipleVideoModels === 'true'
-        const shouldExpandCombinedModelFlag = combinedMultiModelFlag && !hasSectionMode
         const useMultipleReasoningModels = node.attrs.useMultipleReasoningModels === true
             || node.attrs.useMultipleReasoningModels === 'true'
-            || shouldExpandCombinedModelFlag
         const useMultipleImageModels = node.attrs.useMultipleImageModels === true
             || node.attrs.useMultipleImageModels === 'true'
-            || shouldExpandCombinedModelFlag
         const useMultipleVideoModels = node.attrs.useMultipleVideoModels === true
             || node.attrs.useMultipleVideoModels === 'true'
-            || shouldExpandCombinedModelFlag
         return [
             'div',
             {
                 class: 'ai-chat-thread-wrapper',
                 'data-thread-id': node.attrs.threadId,
                 'data-status': node.attrs.status,
-                'data-ai-model': node.attrs.aiModel,
-                'data-ai-models': node.attrs.aiModels,
-                'data-use-multiple-models': String(useMultipleReasoningModels || useMultipleImageModels || useMultipleVideoModels),
+                'data-ai-reasoning-models': node.attrs.aiReasoningModels,
                 'data-use-multiple-reasoning-models': String(useMultipleReasoningModels),
                 'data-use-multiple-image-models': String(useMultipleImageModels),
                 'data-use-multiple-video-models': String(useMultipleVideoModels),
-                'data-ai-image-model': node.attrs.aiImageModel,
                 'data-ai-image-models': node.attrs.aiImageModels,
                 'data-image-generation-enabled': node.attrs.imageGenerationEnabled,
                 'data-image-generation-size': node.attrs.imageGenerationSize,
                 'data-image-generation-config-groups': normalizeMediaGenerationConfigSelectionAttr(node.attrs.imageGenerationConfigGroups),
                 'data-previous-response-id': node.attrs.previousResponseId,
-                'data-ai-video-model': node.attrs.aiVideoModel,
                 'data-ai-video-models': node.attrs.aiVideoModels,
                 'data-video-aspect-ratio': node.attrs.videoAspectRatio,
                 'data-video-resolution': node.attrs.videoResolution,

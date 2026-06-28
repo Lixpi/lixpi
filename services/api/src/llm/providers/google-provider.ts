@@ -427,12 +427,12 @@ export class GoogleProvider extends BaseProvider {
     // VEO_POLL_INTERVAL_MS, then VIDEO_COMPLETE on success (or VIDEO_ERROR +
     // throws on failure, which the streamImpl catch converts to update.error).
     //
-    // Image-to-video first frame and reference-conditioned generation are wired
-    // through state.videoFirstFrameImage / state.videoReferenceImages, which the
-    // structured VLM resolver populates from the candidate snapshot. VEO's
-    // `image` (top-level) and `referenceImages` (config) are MUTUALLY EXCLUSIVE
-    // per the SDK — the resolver picks ONE based on whether it identified a
-    // target image (edit/style operations) vs. a set of style references.
+    // Provided reference images are used as FRAME CONDITIONING ONLY (never asset
+    // or style references): the first selected image is the start frame (VEO's
+    // top-level `image`) and the second, when present, is the stop frame (config
+    // `lastFrame`, first/last-frame interpolation). They arrive in a stable order
+    // via state.videoFirstFrameImage (start) followed by state.videoReferenceImages
+    // (the optional stop frame), populated by the structured VLM resolver.
     private async runVeoGeneration(state: ProviderState): Promise<void> {
         const modelVersion = state.modelVersion
         // VideoRouter passes the prompt as the first user message's string content.
@@ -470,28 +470,25 @@ export class GoogleProvider extends BaseProvider {
             }
         }
 
-        // First-frame (image-to-video) takes precedence over reference images —
-        // they're mutually exclusive. The resolver should only populate one.
-        // When extension is active, both are suppressed.
-        let firstFrameImage: { imageBytes: string; mimeType: string } | undefined
-        if (!extensionVideo && state.videoFirstFrameImage) {
-            const parsed = this.dataUrlToImageBytes(state.videoFirstFrameImage)
-            if (parsed) firstFrameImage = parsed
+        // Provided reference images are used as FRAME CONDITIONING ONLY — never as
+        // asset/style references. The selected images arrive in a stable order via
+        // videoFirstFrameImage (start frame) followed by videoReferenceImages
+        // (the optional stop frame); we feed the first as VEO's `image` (start
+        // frame) and the second as config.lastFrame (stop frame, first/last-frame
+        // interpolation). When extension is active, both are suppressed.
+        let firstFrameImage: VeoImageInput | undefined
+        let lastFrameImage: VeoImageInput | undefined
+        if (!extensionVideo) {
+            const frameUrls = [state.videoFirstFrameImage, ...(state.videoReferenceImages ?? [])]
+                .filter((url): url is string => typeof url === 'string' && url.length > 0)
+            if (frameUrls[0]) firstFrameImage = this.dataUrlToImageBytes(frameUrls[0])
+            if (frameUrls[1]) lastFrameImage = this.dataUrlToImageBytes(frameUrls[1])
         }
-        if (!extensionVideo && !firstFrameImage && state.videoReferenceImages && state.videoReferenceImages.length > 0) {
-            const refs = state.videoReferenceImages
-                .map(url => this.dataUrlToImageBytes(url))
-                .filter((r): r is VeoImageInput => !!r)
-                .slice(0, 3)
-            if (refs.length > 0) {
-                veoConfig.referenceImages = buildVeoReferenceImages(refs)
-            }
-        }
+        if (lastFrameImage) veoConfig.lastFrame = lastFrameImage
 
-        const referenceImagesCount = (veoConfig.referenceImages as any[] | undefined)?.length ?? 0
-        const usesImageConditioning = !!firstFrameImage || referenceImagesCount > 0
+        const usesImageConditioning = !!firstFrameImage || !!lastFrameImage
         // VEO validates personGeneration by input mode: text-to-video and extension
-        // require allow_all, while image/reference-conditioned requests require allow_adult.
+        // require allow_all, while image/frame-conditioned requests require allow_adult.
         veoConfig.personGeneration = usesImageConditioning ? 'allow_adult' : 'allow_all'
 
         info(`[Google:${this.instanceKey}] VEO submit ${JSON.stringify({
@@ -502,7 +499,7 @@ export class GoogleProvider extends BaseProvider {
             personGeneration: veoConfig.personGeneration,
             promptLen: prompt.length,
             hasFirstFrame: !!firstFrameImage,
-            referenceImagesCount,
+            hasLastFrame: !!lastFrameImage,
             hasExtensionSource: !!extensionVideo,
         }, null, 0)}`)
 

@@ -13,9 +13,15 @@ import {
 
 const meshInstances: Array<{
     destroy: ReturnType<typeof vi.fn>
+    renderable: boolean
 }> = []
 const geometryInstances: Array<{
     destroy: ReturnType<typeof vi.fn>
+    attributes: {
+        aPosition: { buffer: { update: ReturnType<typeof vi.fn> } }
+        aUV: { buffer: { update: ReturnType<typeof vi.fn> } }
+    }
+    indexBuffer: { update: ReturnType<typeof vi.fn> }
 }> = []
 
 vi.mock('pixi.js', () => {
@@ -38,8 +44,16 @@ vi.mock('pixi.js', () => {
         public uvs = new Float32Array(0)
         public indices = new Uint32Array(0)
         public destroy = vi.fn()
+        public attributes = {
+            aPosition: { buffer: { update: vi.fn() } },
+            aUV: { buffer: { update: vi.fn() } },
+        }
+        public indexBuffer = { update: vi.fn() }
 
-        constructor() {
+        constructor(options: { positions?: Float32Array; uvs?: Float32Array; indices?: Uint32Array } = {}) {
+            this.positions = options.positions ?? this.positions
+            this.uvs = options.uvs ?? this.uvs
+            this.indices = options.indices ?? this.indices
             geometryInstances.push(this)
         }
     }
@@ -193,21 +207,39 @@ describe('PixiTravelingOutlineRenderer', () => {
         expect(getTravelingOutlineHeadDistance(250, 1000, perimeter, ease)).toBeCloseTo(ease(0.25) * perimeter)
     })
 
-    it('synchronizes outline entries, replacing stale ones and preserving only the latest set', () => {
+    it('creates a three-slot fixed geometry ring for each outline entry', () => {
+        const { renderer } = createRenderer()
+
+        renderer.sync([{ id: 'a', x: 0, y: 0, width: 100, height: 50, visible: true }])
+
+        const entry = (renderer as any).entries.get('a')
+        expect(entry.slots).toHaveLength(3)
+        expect(meshInstances).toHaveLength(3)
+        expect(geometryInstances).toHaveLength(3)
+        expect(geometryInstances.every((geometry) => geometry.positions.length > 0)).toBe(true)
+        expect(geometryInstances.every((geometry) => geometry.uvs.length === geometry.positions.length)).toBe(true)
+        expect(geometryInstances.every((geometry) => geometry.indices.length > 0)).toBe(true)
+        expect(entry.slots.filter((slot: { mesh: { renderable: boolean } }) => slot.mesh.renderable)).toHaveLength(1)
+    })
+
+    it('keeps stale outline entries allocated but hidden for future reuse', () => {
         const { renderer, onFrame } = createRenderer()
         ;(globalThis as any).requestAnimationFrame = vi.fn(() => 101)
         ;(globalThis as any).cancelAnimationFrame = vi.fn()
 
         renderer.sync([{ id: 'a', x: 0, y: 0, width: 100, height: 50, visible: true }])
+        const firstEntry = (renderer as any).entries.get('a')
         renderer.sync([{ id: 'b', x: 5, y: 6, width: 42, height: 12, visible: false }])
 
         const internalEntries = (renderer as any).entries
-        expect(internalEntries.size).toBe(1)
-        expect(internalEntries.has('a')).toBe(false)
+        expect(internalEntries.size).toBe(2)
+        expect(internalEntries.get('a')).toBe(firstEntry)
         expect(internalEntries.has('b')).toBe(true)
         expect(onFrame).toHaveBeenCalledTimes(2)
-        expect(geometryInstances[0]?.destroy).toHaveBeenCalled()
-        expect(meshInstances[0]?.destroy).toHaveBeenCalled()
+        expect(firstEntry.active).toBe(false)
+        expect(firstEntry.slots.every((slot: { mesh: { renderable: boolean } }) => !slot.mesh.renderable)).toBe(true)
+        expect(geometryInstances.every((geometry) => geometry.destroy.mock.calls.length === 0)).toBe(true)
+        expect(meshInstances.every((mesh) => mesh.destroy.mock.calls.length === 0)).toBe(true)
     })
 
     it('updates only explicit entry geometry and visibility for known ids', () => {
@@ -235,15 +267,15 @@ describe('PixiTravelingOutlineRenderer', () => {
         expect(entry?.direction).toBe('counterclockwise')
         expect(entry?.durationMs).toBe(1200)
         expect(entry?.snakeLengthFraction).toBe(0.4)
-        expect(entry?.mesh.renderable).toBe(false)
+        expect(entry?.slots.every((slot: { mesh: { renderable: boolean } }) => !slot.mesh.renderable)).toBe(true)
     })
 
     it('reuses the same mesh and geometry when syncing an existing id', () => {
         const { renderer } = createRenderer()
         renderer.sync([{ id: 'a', x: 1, y: 2, width: 10, height: 10, visible: true }])
 
-        const meshAtStart = meshInstances.at(-1)
-        const geometryAtStart = geometryInstances.at(-1)
+        const meshesAtStart = [...meshInstances]
+        const geometriesAtStart = [...geometryInstances]
 
         renderer.sync([{
             id: 'a',
@@ -259,8 +291,8 @@ describe('PixiTravelingOutlineRenderer', () => {
 
         const entry = (renderer as any).entries.get('a')
 
-        expect(meshInstances.at(-1)).toBe(meshAtStart)
-        expect(geometryInstances.at(-1)).toBe(geometryAtStart)
+        expect(meshInstances).toEqual(meshesAtStart)
+        expect(geometryInstances).toEqual(geometriesAtStart)
         expect(entry?.x).toBe(4)
         expect(entry?.y).toBe(8)
         expect(entry?.width).toBe(9)
@@ -268,12 +300,33 @@ describe('PixiTravelingOutlineRenderer', () => {
         expect(entry?.direction).toBe('counterclockwise')
         expect(entry?.durationMs).toBe(1500)
         expect(entry?.snakeLengthFraction).toBe(0.9)
-        expect(entry?.mesh.renderable).toBe(false)
-        expect(meshInstances).toHaveLength(1)
-        expect(geometryInstances).toHaveLength(1)
+        expect(entry?.slots.every((slot: { mesh: { renderable: boolean } }) => !slot.mesh.renderable)).toBe(true)
+        expect(meshInstances).toHaveLength(3)
+        expect(geometryInstances).toHaveLength(3)
     })
 
-    it('stops animating when no entries remain and destroys all meshes', () => {
+    it('rotates rendering across the fixed mesh slots and only exposes the latest slot', () => {
+        const { renderer } = createRenderer()
+        renderer.sync([{ id: 'a', x: 0, y: 0, width: 20, height: 20, visible: true }])
+        const entry = (renderer as any).entries.get('a')
+
+        expect(entry.activeSlotIndex).toBe(0)
+        expect(entry.slots.map((slot: { mesh: { renderable: boolean } }) => slot.mesh.renderable)).toEqual([true, false, false])
+
+        ;(renderer as any).updateFrame(16)
+        expect(entry.activeSlotIndex).toBe(1)
+        expect(entry.slots.map((slot: { mesh: { renderable: boolean } }) => slot.mesh.renderable)).toEqual([false, true, false])
+
+        ;(renderer as any).updateFrame(32)
+        expect(entry.activeSlotIndex).toBe(2)
+        expect(entry.slots.map((slot: { mesh: { renderable: boolean } }) => slot.mesh.renderable)).toEqual([false, false, true])
+
+        ;(renderer as any).updateFrame(48)
+        expect(entry.activeSlotIndex).toBe(0)
+        expect(entry.slots.map((slot: { mesh: { renderable: boolean } }) => slot.mesh.renderable)).toEqual([true, false, false])
+    })
+
+    it('stops animating when no entries are renderable without destroying reusable slots', () => {
         ;(globalThis as any).requestAnimationFrame = vi.fn(() => 42)
         ;(globalThis as any).cancelAnimationFrame = vi.fn()
         const { renderer } = createRenderer()
@@ -282,11 +335,18 @@ describe('PixiTravelingOutlineRenderer', () => {
         expect((renderer as any).entries.size).toBe(1)
 
         renderer.sync([])
-        expect((renderer as any).entries.size).toBe(0)
+        const entry = (renderer as any).entries.get('a')
+        expect((renderer as any).entries.size).toBe(1)
+        expect(entry.active).toBe(false)
+        expect(entry.slots.every((slot: { mesh: { renderable: boolean } }) => !slot.mesh.renderable)).toBe(true)
         expect((globalThis as any).cancelAnimationFrame).toHaveBeenCalledWith(42)
         expect((globalThis as any).cancelAnimationFrame).toHaveBeenCalledTimes(1)
+        expect(meshInstances.every((mesh) => mesh.destroy.mock.calls.length === 0)).toBe(true)
+        expect(geometryInstances.every((geometry) => geometry.destroy.mock.calls.length === 0)).toBe(true)
 
         renderer.destroy()
+        expect(meshInstances.every((mesh) => mesh.destroy.mock.calls.length === 1)).toBe(true)
+        expect(geometryInstances.every((geometry) => geometry.destroy.mock.calls.length === 1)).toBe(true)
         expect((renderer as any).animationRaf).toBe(null)
     })
 
@@ -298,11 +358,9 @@ describe('PixiTravelingOutlineRenderer', () => {
         renderer.sync([{ id: 'a', x: 0, y: 0, width: 20, height: 20, visible: true }])
         renderer.destroy()
 
-        const mesh = meshInstances.at(-1)
-        const geometry = geometryInstances.at(-1)
         expect((renderer as any).entries.size).toBe(0)
-        expect(geometry?.destroy).toHaveBeenCalled()
-        expect(mesh?.destroy).toHaveBeenCalled()
+        expect(geometryInstances.every((geometry) => geometry.destroy.mock.calls.length === 1)).toBe(true)
+        expect(meshInstances.every((mesh) => mesh.destroy.mock.calls.length === 1)).toBe(true)
         expect((globalThis as any).cancelAnimationFrame).toHaveBeenCalledWith(77)
     })
 })

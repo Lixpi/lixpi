@@ -306,7 +306,7 @@ describe('aiChatThreadNodeSpec — schema', () => {
                 const attrs: Record<string, string> = {
                     'data-thread-id': 'thread-parsed-1',
                     'data-status': 'paused',
-                    'data-ai-model': 'claude-3-5-sonnet',
+                    'data-ai-reasoning-models': '["claude-3-5-sonnet"]',
                     'data-image-generation-enabled': 'true',
                     'data-image-generation-size': '1536x1024',
                     'data-previous-response-id': 'resp-prev',
@@ -316,7 +316,7 @@ describe('aiChatThreadNodeSpec — schema', () => {
             hasAttribute: (attr: string) => [
                 'data-thread-id',
                 'data-status',
-                'data-ai-model',
+                'data-ai-reasoning-models',
                 'data-image-generation-enabled',
                 'data-image-generation-size',
                 'data-previous-response-id',
@@ -326,7 +326,7 @@ describe('aiChatThreadNodeSpec — schema', () => {
         const parsed = parseRule.getAttrs(mockDom)
         expect(parsed.threadId).toBe('thread-parsed-1')
         expect(parsed.status).toBe('paused')
-        expect(parsed.aiModel).toBe('claude-3-5-sonnet')
+        expect(parsed.aiReasoningModels).toBe('["claude-3-5-sonnet"]')
         expect(parsed.imageGenerationEnabled).toBe(true)
         expect(parsed.imageGenerationSize).toBe('1536x1024')
         expect(parsed.previousResponseId).toBe('resp-prev')

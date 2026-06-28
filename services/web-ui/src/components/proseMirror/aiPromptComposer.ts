@@ -26,21 +26,17 @@ import { settings } from '$src/settings.ts'
 // SubmitHandler shape in aiPromptInputPlugin.ts so every host consumes one type.
 export type AiPromptComposerSubmitData = {
     contentJSON: any[]
-    aiModel: string
-    aiModels: string[]
-    useMultipleModels: boolean
+    aiReasoningModels: string[]
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
     useMultipleVideoModels: boolean
     imageOptions?: {
-        aiImageModel?: string
-        aiImageModels?: string[]
+        aiImageModels: string[]
         imageGenerationSize: string
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
     videoOptions?: {
-        aiVideoModel?: string
-        aiVideoModels?: string[]
+        aiVideoModels: string[]
         videoAspectRatio?: string
         videoResolution?: string
         videoDuration?: string

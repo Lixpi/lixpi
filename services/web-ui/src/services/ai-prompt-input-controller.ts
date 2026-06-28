@@ -21,29 +21,27 @@ type ThreadEditorEntry = {
 }
 
 type VideoOptions = {
-    aiVideoModel?: string
-    aiVideoModels?: string[]
+    aiVideoModels: string[]
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string
     configGroups?: MediaGenerationConfigSelectionGroup[]
 }
 
+type ImageOptions = {
+    aiImageModels: string[]
+    imageGenerationSize: ImageGenerationSize
+    configGroups?: MediaGenerationConfigSelectionGroup[]
+}
+
 type AiSubmitPayload = {
     messages: any[]
-    aiModel: string
-    aiModels?: string[]
-    useMultipleModels?: boolean
+    aiReasoningModels: string[]
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
     threadId: string
-    imageOptions?: {
-        aiImageModel?: string
-        aiImageModels?: string[]
-        imageGenerationSize: ImageGenerationSize
-        configGroups?: MediaGenerationConfigSelectionGroup[]
-    }
+    imageOptions?: ImageOptions
     videoOptions?: VideoOptions
     referenceNodeIds?: string[]
 }
@@ -57,18 +55,11 @@ type TargetNode = {
 
 type PendingMessage = {
     content: any
-    aiModel: string
-    aiModels?: string[]
-    useMultipleModels?: boolean
+    aiReasoningModels: string[]
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
-    imageOptions?: {
-        aiImageModel?: string
-        aiImageModels?: string[]
-        imageGenerationSize: ImageGenerationSize
-        configGroups?: MediaGenerationConfigSelectionGroup[]
-    }
+    imageOptions?: ImageOptions
     videoOptions?: VideoOptions
     referenceNodeIds?: string[]
 }
@@ -164,26 +155,17 @@ export class AiPromptInputController {
 
     async submitMessage(params: {
         contentJSON: any
-        aiModel: string
-        aiModels?: string[]
-        useMultipleModels?: boolean
+        aiReasoningModels: string[]
         useMultipleReasoningModels?: boolean
         useMultipleImageModels?: boolean
         useMultipleVideoModels?: boolean
-        imageOptions?: {
-            aiImageModel?: string
-            aiImageModels?: string[]
-            imageGenerationSize: ImageGenerationSize
-            configGroups?: MediaGenerationConfigSelectionGroup[]
-        }
+        imageOptions?: ImageOptions
         videoOptions?: VideoOptions
         referenceNodeIds?: string[]
     }): Promise<void> {
         const {
             contentJSON,
-            aiModel,
-            aiModels,
-            useMultipleModels,
+            aiReasoningModels,
             useMultipleReasoningModels,
             useMultipleImageModels,
             useMultipleVideoModels,
@@ -197,7 +179,7 @@ export class AiPromptInputController {
             return
         }
 
-        if (!aiModel) {
+        if (!aiReasoningModels[0]) {
             alert('Please select an AI model from the dropdown before submitting.')
             return
         }
@@ -207,9 +189,7 @@ export class AiPromptInputController {
             const threadId = this.target.referenceId
             this.injectMessageAndSubmit(threadId, {
                 content: contentJSON,
-                aiModel,
-                aiModels,
-                useMultipleModels,
+                aiReasoningModels,
                 useMultipleReasoningModels,
                 useMultipleImageModels,
                 useMultipleVideoModels,
@@ -221,9 +201,7 @@ export class AiPromptInputController {
             // Target is a document or image — auto-create a new AI chat thread
             await this.createThreadAndSubmit({
                 contentJSON,
-                aiModel,
-                aiModels,
-                useMultipleModels,
+                aiReasoningModels,
                 useMultipleReasoningModels,
                 useMultipleImageModels,
                 useMultipleVideoModels,
@@ -297,31 +275,20 @@ export class AiPromptInputController {
 
         // Update the AI model, image options, and video options on the thread node
         const currentAttrs = (threadNode as ProseMirrorNode).attrs
-        const legacyPendingUseMultipleModels = Boolean(pending.useMultipleModels)
-        const pendingUseMultipleReasoningModels = pending.useMultipleReasoningModels ?? legacyPendingUseMultipleModels
-        const pendingUseMultipleImageModels = pending.useMultipleImageModels ?? legacyPendingUseMultipleModels
-        const pendingUseMultipleVideoModels = pending.useMultipleVideoModels ?? legacyPendingUseMultipleModels
-        const pendingUseMultipleModels = pendingUseMultipleReasoningModels
-            || pendingUseMultipleImageModels
-            || pendingUseMultipleVideoModels
-        const pendingAiModels = serializeAiModelSelectionAttr(
-            pendingUseMultipleReasoningModels
-                ? pending.aiModels ?? []
-                : pending.aiModel ? [pending.aiModel] : []
+        const pendingUseMultipleReasoningModels = Boolean(pending.useMultipleReasoningModels)
+        const pendingUseMultipleImageModels = Boolean(pending.useMultipleImageModels)
+        const pendingUseMultipleVideoModels = Boolean(pending.useMultipleVideoModels)
+        // Multi disabled → collapse the section's selection to its first model.
+        const collapseForMode = (models: string[], useMultiple: boolean): string[] =>
+            useMultiple ? models : models.slice(0, 1)
+        const pendingReasoningModels = serializeAiModelSelectionAttr(
+            collapseForMode(pending.aiReasoningModels, pendingUseMultipleReasoningModels)
         )
         const pendingImageModels = pending.imageOptions
-            ? serializeAiModelSelectionAttr(
-                pendingUseMultipleImageModels
-                    ? pending.imageOptions.aiImageModels ?? []
-                    : pending.imageOptions.aiImageModel ? [pending.imageOptions.aiImageModel] : []
-            )
+            ? serializeAiModelSelectionAttr(collapseForMode(pending.imageOptions.aiImageModels, pendingUseMultipleImageModels))
             : undefined
         const pendingVideoModels = pending.videoOptions
-            ? serializeAiModelSelectionAttr(
-                pendingUseMultipleVideoModels
-                    ? pending.videoOptions.aiVideoModels ?? []
-                    : pending.videoOptions.aiVideoModel ? [pending.videoOptions.aiVideoModel] : []
-            )
+            ? serializeAiModelSelectionAttr(collapseForMode(pending.videoOptions.aiVideoModels, pendingUseMultipleVideoModels))
             : undefined
         const pendingImageConfigGroups = pending.imageOptions
             ? serializeMediaGenerationConfigSelectionAttr(
@@ -333,30 +300,19 @@ export class AiPromptInputController {
                 pendingUseMultipleVideoModels ? pending.videoOptions.configGroups ?? [] : []
             )
             : undefined
-        const legacyCurrentUseMultipleModels = currentAttrs.useMultipleModels === true || currentAttrs.useMultipleModels === 'true'
-        const rawCurrentUseMultipleReasoningModels = currentAttrs.useMultipleReasoningModels === true
+        const currentUseMultipleReasoningModels = currentAttrs.useMultipleReasoningModels === true
             || currentAttrs.useMultipleReasoningModels === 'true'
-        const rawCurrentUseMultipleImageModels = currentAttrs.useMultipleImageModels === true
+        const currentUseMultipleImageModels = currentAttrs.useMultipleImageModels === true
             || currentAttrs.useMultipleImageModels === 'true'
-        const rawCurrentUseMultipleVideoModels = currentAttrs.useMultipleVideoModels === true
+        const currentUseMultipleVideoModels = currentAttrs.useMultipleVideoModels === true
             || currentAttrs.useMultipleVideoModels === 'true'
-        const hasCurrentSectionModelMode = rawCurrentUseMultipleReasoningModels
-            || rawCurrentUseMultipleImageModels
-            || rawCurrentUseMultipleVideoModels
-        const useCurrentLegacyModeFallback = legacyCurrentUseMultipleModels && !hasCurrentSectionModelMode
-        const currentUseMultipleReasoningModels = rawCurrentUseMultipleReasoningModels || useCurrentLegacyModeFallback
-        const currentUseMultipleImageModels = rawCurrentUseMultipleImageModels || useCurrentLegacyModeFallback
-        const currentUseMultipleVideoModels = rawCurrentUseMultipleVideoModels || useCurrentLegacyModeFallback
-        const needsUpdate = currentAttrs.aiModel !== pending.aiModel
+        const needsUpdate = currentAttrs.aiReasoningModels !== pendingReasoningModels
             || currentUseMultipleReasoningModels !== pendingUseMultipleReasoningModels
             || currentUseMultipleImageModels !== pendingUseMultipleImageModels
             || currentUseMultipleVideoModels !== pendingUseMultipleVideoModels
-            || (pendingAiModels !== undefined && currentAttrs.aiModels !== pendingAiModels)
-            || (pending.imageOptions?.aiImageModel && currentAttrs.aiImageModel !== pending.imageOptions.aiImageModel)
             || (pendingImageModels !== undefined && currentAttrs.aiImageModels !== pendingImageModels)
             || (pending.imageOptions?.imageGenerationSize && currentAttrs.imageGenerationSize !== pending.imageOptions.imageGenerationSize)
             || (pendingImageConfigGroups !== undefined && currentAttrs.imageGenerationConfigGroups !== pendingImageConfigGroups)
-            || (pending.videoOptions?.aiVideoModel && currentAttrs.aiVideoModel !== pending.videoOptions.aiVideoModel)
             || (pendingVideoModels !== undefined && currentAttrs.aiVideoModels !== pendingVideoModels)
             || (pending.videoOptions?.videoAspectRatio && currentAttrs.videoAspectRatio !== pending.videoOptions.videoAspectRatio)
             || (pending.videoOptions?.videoResolution && currentAttrs.videoResolution !== pending.videoOptions.videoResolution)
@@ -367,20 +323,16 @@ export class AiPromptInputController {
             const mappedThreadPos = tr.mapping.map(threadPos)
             tr = tr.setNodeMarkup(mappedThreadPos, undefined, {
                 ...currentAttrs,
-                aiModel: pending.aiModel,
-                useMultipleModels: pendingUseMultipleModels,
+                aiReasoningModels: pendingReasoningModels,
                 useMultipleReasoningModels: pendingUseMultipleReasoningModels,
                 useMultipleImageModels: pendingUseMultipleImageModels,
                 useMultipleVideoModels: pendingUseMultipleVideoModels,
-                aiModels: pendingAiModels,
                 ...(pending.imageOptions ? {
-                    aiImageModel: pending.imageOptions.aiImageModel || '',
                     ...(pendingImageModels !== undefined ? { aiImageModels: pendingImageModels } : {}),
                     imageGenerationSize: pending.imageOptions.imageGenerationSize,
                     ...(pendingImageConfigGroups !== undefined ? { imageGenerationConfigGroups: pendingImageConfigGroups } : {}),
                 } : {}),
                 ...(pending.videoOptions ? {
-                    aiVideoModel: pending.videoOptions.aiVideoModel || '',
                     ...(pendingVideoModels !== undefined ? { aiVideoModels: pendingVideoModels } : {}),
                     videoAspectRatio: pending.videoOptions.videoAspectRatio || '',
                     videoResolution: pending.videoOptions.videoResolution || '',
@@ -400,9 +352,7 @@ export class AiPromptInputController {
 
     private async createThreadAndSubmit(params: {
         contentJSON: any
-        aiModel: string
-        aiModels?: string[]
-        useMultipleModels?: boolean
+        aiReasoningModels: string[]
         useMultipleReasoningModels?: boolean
         useMultipleImageModels?: boolean
         useMultipleVideoModels?: boolean
@@ -412,9 +362,7 @@ export class AiPromptInputController {
     }): Promise<void> {
         const {
             contentJSON,
-            aiModel,
-            aiModels,
-            useMultipleModels,
+            aiReasoningModels,
             useMultipleReasoningModels,
             useMultipleImageModels,
             useMultipleVideoModels,
@@ -425,26 +373,19 @@ export class AiPromptInputController {
         if (!this.target) return
 
         const threadId = uuidv4()
-        const legacyUseMultipleModels = Boolean(useMultipleModels)
-        const threadUseMultipleReasoningModels = useMultipleReasoningModels ?? legacyUseMultipleModels
-        const threadUseMultipleImageModels = useMultipleImageModels ?? legacyUseMultipleModels
-        const threadUseMultipleVideoModels = useMultipleVideoModels ?? legacyUseMultipleModels
-        const threadUseMultipleModels = threadUseMultipleReasoningModels
-            || threadUseMultipleImageModels
-            || threadUseMultipleVideoModels
+        const threadUseMultipleReasoningModels = Boolean(useMultipleReasoningModels)
+        const threadUseMultipleImageModels = Boolean(useMultipleImageModels)
+        const threadUseMultipleVideoModels = Boolean(useMultipleVideoModels)
+        const collapseForMode = (models: string[], useMultiple: boolean): string[] =>
+            useMultiple ? models : models.slice(0, 1)
+        const threadReasoningModels = serializeAiModelSelectionAttr(
+            collapseForMode(aiReasoningModels, threadUseMultipleReasoningModels)
+        )
         const threadImageModels = imageOptions
-            ? serializeAiModelSelectionAttr(
-                threadUseMultipleImageModels
-                    ? imageOptions.aiImageModels ?? []
-                    : imageOptions.aiImageModel ? [imageOptions.aiImageModel] : []
-            )
+            ? serializeAiModelSelectionAttr(collapseForMode(imageOptions.aiImageModels, threadUseMultipleImageModels))
             : ''
         const threadVideoModels = videoOptions
-            ? serializeAiModelSelectionAttr(
-                threadUseMultipleVideoModels
-                    ? videoOptions.aiVideoModels ?? []
-                    : videoOptions.aiVideoModel ? [videoOptions.aiVideoModel] : []
-            )
+            ? serializeAiModelSelectionAttr(collapseForMode(videoOptions.aiVideoModels, threadUseMultipleVideoModels))
             : ''
         const threadImageConfigGroups = threadUseMultipleImageModels
             ? serializeMediaGenerationConfigSelectionAttr(imageOptions?.configGroups ?? [])
@@ -453,7 +394,7 @@ export class AiPromptInputController {
             ? serializeMediaGenerationConfigSelectionAttr(videoOptions?.configGroups ?? [])
             : ''
 
-        // Create the initial thread content (without aiUserInput since we removed it)
+        // Create the initial thread content
         const initialContent = {
             type: 'doc',
             content: [
@@ -465,21 +406,13 @@ export class AiPromptInputController {
                     type: 'aiChatThread',
                     attrs: {
                         threadId,
-                        aiModel,
-                        useMultipleModels: threadUseMultipleModels,
+                        aiReasoningModels: threadReasoningModels,
                         useMultipleReasoningModels: threadUseMultipleReasoningModels,
                         useMultipleImageModels: threadUseMultipleImageModels,
                         useMultipleVideoModels: threadUseMultipleVideoModels,
-                        aiModels: serializeAiModelSelectionAttr(
-                            threadUseMultipleReasoningModels
-                                ? aiModels ?? []
-                                : aiModel ? [aiModel] : []
-                        ),
-                        ...(imageOptions?.aiImageModel ? { aiImageModel: imageOptions.aiImageModel } : {}),
                         ...(threadImageModels ? { aiImageModels: threadImageModels } : {}),
                         ...(imageOptions?.imageGenerationSize ? { imageGenerationSize: imageOptions.imageGenerationSize } : {}),
                         ...(threadImageConfigGroups ? { imageGenerationConfigGroups: threadImageConfigGroups } : {}),
-                        ...(videoOptions?.aiVideoModel ? { aiVideoModel: videoOptions.aiVideoModel } : {}),
                         ...(threadVideoModels ? { aiVideoModels: threadVideoModels } : {}),
                         ...(videoOptions?.videoAspectRatio ? { videoAspectRatio: videoOptions.videoAspectRatio } : {}),
                         ...(videoOptions?.videoResolution ? { videoResolution: videoOptions.videoResolution } : {}),
@@ -503,7 +436,7 @@ export class AiPromptInputController {
                 workspaceId: this.workspaceId,
                 threadId,
                 content: initialContent,
-                aiModel,
+                aiModel: aiReasoningModels[0] ?? '',
                 owner: { type: 'standalone' }
             })
 
@@ -518,9 +451,7 @@ export class AiPromptInputController {
             // so we just need to trigger the AI request.
             this.pendingMessages.set(threadId, {
                 content: contentJSON,
-                aiModel,
-                aiModels,
-                useMultipleModels: threadUseMultipleModels,
+                aiReasoningModels,
                 useMultipleReasoningModels: threadUseMultipleReasoningModels,
                 useMultipleImageModels: threadUseMultipleImageModels,
                 useMultipleVideoModels: threadUseMultipleVideoModels,

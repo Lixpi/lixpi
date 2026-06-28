@@ -36,6 +36,7 @@ const { FakeContainer, FakeGraphics } = vi.hoisted(() => {
 
     class FakeGraphics extends FakeContainer {
         public readonly calls: SpyCall[] = []
+        public renderable = true
 
         private record(name: string, args: unknown[]): void {
             this.calls.push({ name, args })
@@ -257,7 +258,7 @@ describe('pixiEdgeRenderer', () => {
         expect(graphics.calls.filter((entry) => entry.name === 'clear').length).toBeGreaterThan(clearCountAfterFirstRender)
     })
 
-    it('removes stale edges and destroys remaining graphics during teardown', () => {
+    it('hides stale edges for reuse and destroys graphics only during teardown', () => {
         const renderer = createPixiEdgeRenderer(container)
         const viewport = makeViewport()
         const first = makeEdge('first')
@@ -270,13 +271,20 @@ describe('pixiEdgeRenderer', () => {
         const secondGraphics = container.children[1] as FakeGraphics
 
         renderer.render([second], viewport)
-        expect(container.children).toHaveLength(1)
-        expect(container.children[0]).toBe(secondGraphics)
-        expect(container.children).not.toContain(firstGraphics)
-        expect(firstGraphics.calls.some((entry) => entry.name === 'destroy')).toBe(true)
+        expect(container.children).toHaveLength(2)
+        expect(container.children[0]).toBe(firstGraphics)
+        expect(container.children[1]).toBe(secondGraphics)
+        expect(firstGraphics.renderable).toBe(false)
+        expect(secondGraphics.renderable).toBe(true)
+        expect(firstGraphics.calls.some((entry) => entry.name === 'destroy')).toBe(false)
+
+        renderer.render([first, second], viewport)
+        expect(firstGraphics.renderable).toBe(true)
+        expect(container.children[0]).toBe(firstGraphics)
 
         renderer.destroy()
         expect(container.children).toHaveLength(0)
+        expect(firstGraphics.calls.some((entry) => entry.name === 'destroy')).toBe(true)
         expect(secondGraphics.calls.some((entry) => entry.name === 'destroy')).toBe(true)
     })
 })

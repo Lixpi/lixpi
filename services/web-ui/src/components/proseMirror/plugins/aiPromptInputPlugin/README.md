@@ -8,7 +8,7 @@
 2. Cmd/Ctrl+Enter, the injected submit button, or `SUBMIT_AI_PROMPT_META` starts submission.
 3. `extractContentJSON()` returns the input node children as ProseMirror JSON.
 4. `getInputAttrs()` reads reasoning, image, video, and multi-model attrs from the input node.
-5. `onSubmit()` receives `{ contentJSON, aiModel, aiModels, useMultipleModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }`. Media options include API-authored configuration matrix group selections when image or video multi-model mode is active.
+5. `onSubmit()` receives `{ contentJSON, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }` (where `imageOptions.aiImageModels` / `videoOptions.aiVideoModels` are ordered arrays). Each section's array is collapsed to its first model when its multi flag is off. Media options include API-authored configuration matrix group selections when image or video multi-model mode is active.
 6. Keyboard and button submission clear the input to one empty paragraph and place the cursor at the start.
 7. `AiPromptInputController` routes the submitted content to an existing AI chat thread or creates a thread and queues the submit until that thread editor is registered.
 
@@ -72,26 +72,22 @@ Prompt composer node.
 
 Attrs declared in `aiPromptInputNode.ts`:
 
-- `aiModel`
-- `aiModels`
-- `useMultipleModels`
+- `aiReasoningModels`
 - `useMultipleReasoningModels`
 - `useMultipleImageModels`
 - `useMultipleVideoModels`
-- `aiImageModel`
 - `aiImageModels`
 - `imageGenerationSize`
 - `imageGenerationConfigGroups`
-- `aiVideoModel`
 - `aiVideoModels`
 - `videoAspectRatio`
 - `videoResolution`
 - `videoDuration`
 - `videoGenerationConfigGroups`
 
-`aiModels`, `aiImageModels`, and `aiVideoModels` are JSON-serialized ordered model-id arrays. `parseAiModelSelectionAttr()` accepts array values or serialized arrays and filters empty entries. `serializeAiModelSelectionAttr()` deduplicates non-empty model ids.
+`aiReasoningModels`, `aiImageModels`, and `aiVideoModels` are JSON-serialized ordered model-id arrays — each section's single source of truth, with an array of length 1 meaning a singular selection. `parseAiModelSelectionAttr()` accepts array values or serialized arrays and filters empty entries. `serializeAiModelSelectionAttr()` deduplicates non-empty model ids.
 
-`useMultipleModels` is the aggregate multi-model flag. The section-specific flags control reasoning, image, and video sections independently. When a section switch is enabled and its model-list attr is empty, the scalar model attr is used as the single selected model for that section.
+The section-specific flags `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels` control reasoning, image, and video sections independently. When a section switch is enabled and its model-list attr is empty, the scalar model attr is used as the single selected model for that section.
 When a section switch is disabled, its model-list attr is collapsed back to the scalar model; image/video config group attrs are cleared for disabled media sections so stale provider-matrix values cannot be submitted or restored.
 
 ## NodeView Structure

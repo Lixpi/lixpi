@@ -13,6 +13,7 @@ export const aiUserMessageNodeType = 'aiUserMessage'
 export type AiUserMessageContextPreviewRenderer = {
     getNodeById: (nodeId: string) => CanvasNode | undefined
     environment: ContextPreviewEnvironment
+    inlinePopover?: boolean
 }
 
 export type AiUserMessageNodeViewOptions = {
@@ -123,6 +124,7 @@ export const aiUserMessageNodeView = (
                 getNode: () => contextPreview.getNodeById(nodeId) ?? canvasNode,
                 environment: contextPreview.environment,
                 preferredPlacement: 'bottom',
+                inlinePopover: contextPreview.inlinePopover,
             })
             tileInstances.push(tile)
             shell.referencePreviewsEl.appendChild(tile.dom)
