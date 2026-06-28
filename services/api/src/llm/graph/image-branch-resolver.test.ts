@@ -1,6 +1,8 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import * as debugTools from '@lixpi/debug-tools'
 
 import { resolveImageBranch } from './image-branch-resolver.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
@@ -16,6 +18,25 @@ const tinyPngBytes = Buffer.from(
     'base64',
 )
 const resolvedTinyPngUrl = `data:image/png;base64,${tinyPngBytes.toString('base64')}`
+
+let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
+
+beforeEach(() => {
+    debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
+    debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
+    debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+    debugInfoSpy?.mockRestore()
+    debugInfoSpy = null
+    debugWarnSpy?.mockRestore()
+    debugWarnSpy = null
+    debugErrSpy?.mockRestore()
+    debugErrSpy = null
+})
 
 function getImageUrls(messages: ChatMessage[]): string[] {
     return messages.flatMap((message) => {

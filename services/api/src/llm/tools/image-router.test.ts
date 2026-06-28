@@ -1,6 +1,8 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import * as debugTools from '@lixpi/debug-tools'
 
 import { ImageRouter } from './image-router.ts'
 import type { ProviderState } from '../graph/state.ts'
@@ -42,6 +44,25 @@ const createRouter = (processResult: { generatedImages?: string[]; error?: strin
     return { router, createTransient, process }
 }
 
+let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
+
+beforeEach(() => {
+    debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
+    debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
+    debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+    debugInfoSpy?.mockRestore()
+    debugInfoSpy = null
+    debugWarnSpy?.mockRestore()
+    debugWarnSpy = null
+    debugErrSpy?.mockRestore()
+    debugErrSpy = null
+})
+
 describe('ImageRouter', () => {
     it('returns empty update when provider, model, or prompt is missing', async () => {
         const { router, createTransient } = createRouter()
@@ -54,6 +75,19 @@ describe('ImageRouter', () => {
 
         expect(result).toEqual({})
         expect(createTransient).not.toHaveBeenCalled()
+    })
+
+    it('passes onProseMirrorContent through to the transient image provider request', async () => {
+        const { router, process } = createRouter()
+        const state = createState()
+        const onProseMirrorContent = vi.fn()
+
+        await router.execute(state, { onProseMirrorContent })
+
+        const requestData = process.mock.calls[0]?.[0]
+        expect(requestData).toMatchObject({
+            proseMirrorContentHandler: onProseMirrorContent,
+        })
     })
 
     it('routes image generation and applies provider mapping defaults', async () => {
@@ -91,6 +125,21 @@ describe('ImageRouter', () => {
             size: '1:1',
             quality: 'high',
         })
+    })
+
+    it('submits plain text content when no reference images are present', async () => {
+        const { router, createTransient, process } = createRouter()
+
+        await router.execute(createState({
+            referenceImages: [],
+        }))
+
+        expect(createTransient).toHaveBeenCalledWith('workspace-1:thread-1:image', 'Google')
+        const requestData = process.mock.calls[0]?.[0]
+        expect(requestData.messages).toEqual([{
+            role: 'user',
+            content: expect.any(String),
+        }])
     })
 
     it('returns an error when the transient provider fails without images', async () => {

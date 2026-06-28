@@ -1,8 +1,14 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
+import * as debugTools from '@lixpi/debug-tools'
 
 import { extractPosterFrame, extractRepresentativeFrame } from './video-storage.ts'
+
+let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
 
 // =============================================================================
 // FRAME EXTRACTION — best-effort contract
@@ -13,6 +19,21 @@ import { extractPosterFrame, extractRepresentativeFrame } from './video-storage.
 // when ffmpeg is missing or the bytes are not a decodable video. This guards
 // the shared ffmpeg wrapper and its temp-dir cleanup against regressions.
 describe('video frame extraction — graceful failure', () => {
+    beforeEach(() => {
+        debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
+        debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
+        debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+    })
+
+    afterEach(() => {
+        debugInfoSpy?.mockRestore()
+        debugInfoSpy = null
+        debugWarnSpy?.mockRestore()
+        debugWarnSpy = null
+        debugErrSpy?.mockRestore()
+        debugErrSpy = null
+    })
+
     const notAVideo = Buffer.from('this is definitely not an mp4 container')
 
     it('extractPosterFrame returns null for non-video bytes', async () => {

@@ -153,4 +153,135 @@ describe('VideoPublisher', () => {
             aiProvider: 'Google',
         })
     })
+
+    it('forwards onProseMirrorContent callbacks for the full life-cycle', async () => {
+        const generationRun = {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'Google:veo-3.1-generate-preview',
+            mediaType: 'video',
+            reasoningIndex: 0,
+            mediaIndex: 0,
+            variantIndex: 0,
+        } as const
+        const onProseMirrorContent = vi.fn()
+        const published: Published[] = []
+        const nats = {
+            publish: (subject: string, payload: any) => {
+                published.push({ subject, payload })
+            },
+        } as any
+        const publisher = new VideoPublisher(
+            nats,
+            async () => ({
+                fileId: 'video-file-id',
+                url: '/api/videos/ws-1/video-file-id',
+                isDuplicate: false,
+                size: 1234,
+                mimeType: 'video/mp4',
+            }),
+            async () => ({
+                fileId: 'image-file-id',
+                url: '/api/images/ws-1/image-file-id',
+                isDuplicate: false,
+                size: 456,
+                mimeType: 'image/png',
+            }),
+            'ws-1',
+            'thread-1',
+            'Google',
+            generationRun,
+            onProseMirrorContent,
+        )
+
+        publisher.pending()
+        publisher.generating()
+        await publisher.complete({
+            videoBuffer: mp4Sample,
+            posterBuffer: Buffer.from('poster'),
+            frameBuffer: Buffer.from('frame'),
+            durationSeconds: 6,
+            aspectRatio: '16:9',
+            hasAudio: true,
+            responseId: 'resp-1',
+            revisedPrompt: 'Build a cat dance',
+            videoModelId: 'veo-3.1-generate-preview',
+        })
+        publisher.error('temporary provider outage')
+
+        expect(onProseMirrorContent).toHaveBeenCalledWith(expect.objectContaining({
+            status: STREAM_STATUS.VIDEO_PENDING,
+            generationRun,
+        }))
+        expect(onProseMirrorContent).toHaveBeenCalledWith(expect.objectContaining({
+            status: STREAM_STATUS.VIDEO_GENERATING,
+            generationRun,
+        }))
+        expect(onProseMirrorContent).toHaveBeenCalledWith(expect.objectContaining({
+            status: STREAM_STATUS.VIDEO_COMPLETE,
+            generationRun,
+        }))
+        expect(onProseMirrorContent).toHaveBeenCalledWith(expect.objectContaining({
+            status: STREAM_STATUS.VIDEO_ERROR,
+            generationRun,
+            error: 'temporary provider outage',
+        }))
+        expect(published).toHaveLength(4)
+        expect(published[2]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.VIDEO_COMPLETE,
+            generationRun,
+        })
+        expect(onProseMirrorContent).toHaveBeenCalledTimes(4)
+    })
+
+    it('ignores image-post-processing failures and still publishes VIDEO_COMPLETE', async () => {
+        const published: Published[] = []
+        const nats = {
+            publish: (subject: string, payload: any) => {
+                published.push({ subject, payload })
+            },
+        } as any
+        const failingStoreImage = vi.fn(async () => {
+            throw new Error('post-processing image failed')
+        })
+        const publisher = new VideoPublisher(
+            nats,
+            async () => ({
+                fileId: 'video-file-id',
+                url: '/api/videos/ws-1/video-file-id',
+                isDuplicate: false,
+                size: 1234,
+                mimeType: 'video/mp4',
+            }),
+            failingStoreImage,
+            'ws-1',
+            'thread-1',
+            'Google',
+        )
+
+        await publisher.complete({
+            videoBuffer: mp4Sample,
+            posterBuffer: Buffer.from('poster'),
+            frameBuffer: Buffer.from('frame'),
+            durationSeconds: 7,
+            aspectRatio: '16:9',
+            hasAudio: false,
+            responseId: 'resp-1',
+            revisedPrompt: 'Cat in a hat',
+            videoModelId: 'veo-3.1-generate-preview',
+        })
+
+        const complete = published.find((entry) => entry.payload.content.status === STREAM_STATUS.VIDEO_COMPLETE)?.payload.content
+        expect(complete).toMatchObject({
+            status: STREAM_STATUS.VIDEO_COMPLETE,
+            videoUrl: '/api/videos/ws-1/video-file-id',
+            fileId: 'video-file-id',
+            posterUrl: '',
+            frameUrl: '',
+        })
+        expect(complete?.posterFileId).toBe('')
+        expect(complete?.frameFileId).toBe('')
+        expect(failingStoreImage).toHaveBeenCalledTimes(2)
+    })
 })

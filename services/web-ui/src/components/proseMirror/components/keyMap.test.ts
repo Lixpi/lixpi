@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Schema } from 'prosemirror-model'
 import { EditorState, TextSelection } from 'prosemirror-state'
 import { redo } from 'prosemirror-history'
@@ -6,6 +6,9 @@ import { schema as baseSchema } from '$src/components/proseMirror/components/sch
 import { documentTitleNodeType, documentTitleNodeSpec } from '$src/components/proseMirror/customNodes/documentTitleNode.ts'
 import { insertAiChatThread } from '$src/components/proseMirror/components/commands.js'
 import { buildKeymap } from '$src/components/proseMirror/components/keyMap.js'
+
+let consoleWarnSpy: { mockRestore: () => void } | null = null
+let consoleErrorSpy: { mockRestore: () => void } | null = null
 
 function createSchema(docContent: string) {
     const nodes = {
@@ -68,6 +71,18 @@ function findTitleEndPosition(doc: any, titleNodeType: string): number {
 const defaultSchema = createSchema(`${documentTitleNodeType} block+`)
 
 describe('buildKeymap', () => {
+    beforeEach(() => {
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+        consoleWarnSpy?.mockRestore()
+        consoleErrorSpy?.mockRestore()
+        consoleWarnSpy = null
+        consoleErrorSpy = null
+    })
+
     it('supports mapKeys overriding and disabling key bindings', () => {
         const disabledDefaultUndo = buildKeymap(defaultSchema, 'document', {
             'Mod-z': false,

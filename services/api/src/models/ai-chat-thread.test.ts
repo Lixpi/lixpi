@@ -1,26 +1,36 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AiChatThread from './ai-chat-thread.ts'
 
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null
+
 // The model references a global `dynamoDBService` (set on the server at boot).
 const dynamo = {
+    getItem: vi.fn(),
     putItem: vi.fn(),
+    updateItem: vi.fn(),
     queryItems: vi.fn(),
     deleteItems: vi.fn(),
 }
 
 beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     vi.clearAllMocks()
     ;(globalThis as any).dynamoDBService = dynamo
+})
+
+afterEach(() => {
+    consoleErrorSpy?.mockRestore()
+    consoleErrorSpy = null
 })
 
 // =============================================================================
 // createAiChatThread — title metadata
 // =============================================================================
 
-describe('AiChatThread.createAiChatThread', () => {
+    describe('AiChatThread.createAiChatThread', () => {
     it('persists standalone owner and title when provided and marks the thread active', async () => {
         dynamo.putItem.mockResolvedValue(undefined)
 
@@ -57,6 +67,74 @@ describe('AiChatThread.createAiChatThread', () => {
         expect(thread).toBeDefined()
         expect(Object.hasOwn(thread as object, 'owner')).toBe(false)
         expect(Object.hasOwn(thread as object, 'title')).toBe(false)
+    })
+})
+
+describe('AiChatThread.getAiChatThread', () => {
+    it('returns NOT_FOUND when getItem returns no payload', async () => {
+        dynamo.getItem.mockResolvedValue(undefined)
+
+        const thread = await AiChatThread.getAiChatThread({
+            workspaceId: 'ws-1',
+            threadId: 'missing-thread',
+        })
+
+        expect(thread).toEqual({ error: 'NOT_FOUND' })
+        expect(dynamo.getItem).toHaveBeenCalledWith(expect.objectContaining({
+            tableName: expect.any(String),
+            key: { workspaceId: 'ws-1', threadId: 'missing-thread' },
+        }))
+    })
+
+    it('passes workspace/thread keys through to getItem', async () => {
+        const result = { workspaceId: 'ws-1', threadId: 'thread-1' }
+        dynamo.getItem.mockResolvedValue(result)
+
+        const thread = await AiChatThread.getAiChatThread({
+            workspaceId: 'ws-1',
+            threadId: 'thread-1',
+        })
+
+        expect(thread).toBe(result)
+        expect(dynamo.getItem).toHaveBeenCalledWith(expect.objectContaining({
+            key: { workspaceId: 'ws-1', threadId: 'thread-1' },
+        }))
+    })
+})
+
+describe('AiChatThread.update', () => {
+    it('updates only provided values and includes prose mirror version when provided', async () => {
+        dynamo.updateItem.mockResolvedValue(undefined)
+
+        await AiChatThread.update({
+            workspaceId: 'ws-1',
+            threadId: 'thread-1',
+            content: {},
+            aiModel: 'openai:test',
+            status: 'deleted',
+            proseMirrorVersion: 7,
+        })
+
+        expect(dynamo.updateItem).toHaveBeenCalledWith(expect.objectContaining({
+            key: { workspaceId: 'ws-1', threadId: 'thread-1' },
+            updates: expect.objectContaining({
+                content: {},
+                aiModel: 'openai:test',
+                status: 'deleted',
+                proseMirrorVersion: 7,
+                updatedAt: expect.any(Number),
+            }),
+        }))
+    })
+
+    it('propagates update errors', async () => {
+        dynamo.updateItem.mockRejectedValue(new Error('update-failed'))
+
+        await expect(AiChatThread.update({
+            workspaceId: 'ws-1',
+            threadId: 'thread-1',
+            status: 'active',
+        })).rejects.toThrow('update-failed')
     })
 })
 

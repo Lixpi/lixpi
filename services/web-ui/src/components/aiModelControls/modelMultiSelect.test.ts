@@ -94,7 +94,14 @@ describe('createGenericAiModelMultiSelect', () => {
     let removeListenerSpy: ReturnType<typeof vi.spyOn>
 
     beforeEach(() => {
-        aiModelsStore.setAiModels([...reasoningModels, ...imageModels, ...videoModels])
+        aiModelsStore.setAiModelsCatalog({
+            models: [...reasoningModels, ...imageModels, ...videoModels],
+            defaultModels: {
+                reasoning: 'openai:reasoning-a',
+                image: '',
+                video: '',
+            } as any,
+        })
         addListenerSpy = vi.spyOn(document, 'addEventListener')
         removeListenerSpy = vi.spyOn(document, 'removeEventListener')
         vi.useFakeTimers()
@@ -106,29 +113,57 @@ describe('createGenericAiModelMultiSelect', () => {
         aiModelsStore.resetStore()
     })
 
-        it('auto-selects first available reasoning model and updates title on multi-selection changes', () => {
-            const controls = createAiModelControls()
-            const control = createGenericAiModelMultiSelect(controls, 'reasoning-multi-select')
+    it('auto-selects configured default reasoning model and updates title on multi-selection changes', () => {
+        const controls = createAiModelControls()
+        const control = createGenericAiModelMultiSelect(controls, 'reasoning-multi-select')
 
         vi.advanceTimersToNextTimer()
 
-            expect(addListenerSpy).toHaveBeenCalledWith('mousedown', expect.any(Function), true)
-            expect(controls.setAiModels).toHaveBeenCalledWith(['openai:reasoning-a'])
-            expect(control.dom.querySelector('.title')?.textContent).toBe('1 model')
+        expect(addListenerSpy).toHaveBeenCalledWith('mousedown', expect.any(Function), true)
+        expect(controls.setAiModels).toHaveBeenCalledWith(['openai:reasoning-a'])
+        expect(control.dom.querySelector('.title')?.textContent).toBe('1 model')
 
-            controls.selectedModels.push('openai:reasoning-b')
-            control.update()
-            expect(controls.selectedModels).toEqual(['openai:reasoning-a', 'openai:reasoning-b'])
-            expect(control.dom.querySelector('.title')?.textContent).toBe('2 models')
+        controls.selectedModels.push('openai:reasoning-b')
+        control.update()
+        expect(controls.selectedModels).toEqual(['openai:reasoning-a', 'openai:reasoning-b'])
+        expect(control.dom.querySelector('.title')?.textContent).toBe('2 models')
 
         control.destroy()
         expect(removeListenerSpy).toHaveBeenCalledWith('mousedown', expect.any(Function), true)
+    })
+
+    it('does not auto-select when API default reasoning model is missing from available options', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [...reasoningModels],
+            defaultModels: {
+                reasoning: 'openai:reasoning-missing',
+                image: '',
+                video: '',
+            } as any,
+        })
+
+        const controls = createAiModelControls()
+        const control = createGenericAiModelMultiSelect(controls, 'reasoning-multi-select-missing-default')
+
+        vi.advanceTimersToNextTimer()
+
+        expect(controls.setAiModels).not.toHaveBeenCalled()
+        expect(control.dom.querySelector('.title')?.textContent).toBe('Select at least 1 model')
+
+        control.destroy()
     })
 })
 
 describe('createGenericImageModelMultiSelect', () => {
     beforeEach(() => {
-        aiModelsStore.setAiModels(imageModels)
+        aiModelsStore.setAiModelsCatalog({
+            models: imageModels,
+            defaultModels: {
+                reasoning: '',
+                image: 'google:imagen',
+                video: '',
+            } as any,
+        })
         vi.useFakeTimers()
     })
 
@@ -138,7 +173,7 @@ describe('createGenericImageModelMultiSelect', () => {
         aiModelsStore.resetStore()
     })
 
-    it('auto-selects first image model when empty', () => {
+    it('auto-selects configured default image model when empty', () => {
         const setImageModel = vi.fn()
         const controls = createImageControls(() => '', setImageModel)
         const control = createGenericImageModelMultiSelect(controls, 'image-multi-select')
@@ -147,6 +182,27 @@ describe('createGenericImageModelMultiSelect', () => {
 
         expect(setImageModel).toHaveBeenCalledWith('google:imagen')
         expect(control.dom.querySelector('.title')?.textContent).toBe('1 model')
+        control.destroy()
+    })
+
+    it('does not auto-select image model when default is unavailable', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: imageModels,
+            defaultModels: {
+                reasoning: '',
+                image: 'google:imagen-missing',
+                video: '',
+            } as any,
+        })
+
+        const setImageModel = vi.fn()
+        const controls = createImageControls(() => '', setImageModel)
+        const control = createGenericImageModelMultiSelect(controls, 'image-multi-select-missing-default')
+
+        vi.advanceTimersToNextTimer()
+
+        expect(setImageModel).not.toHaveBeenCalled()
+        expect(control.dom.querySelector('.title')?.textContent).toBe('Select at least 1 model')
         control.destroy()
     })
 

@@ -1,6 +1,8 @@
 'use strict'
 
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
+
+import * as debugTools from '@lixpi/debug-tools'
 
 import { callStructuredVlm, type VlmCallArgs } from './vlm-client.ts'
 
@@ -75,12 +77,29 @@ const makeOpenAiCompleted = (outputText: string, model: string, usage?: { input_
     response: { model, output_text: outputText, ...(usage ? { usage } : {}) },
 })
 
+let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
+
 describe('callStructuredVlm', () => {
     beforeEach(() => {
+        debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
+        debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
+        debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+
         process.env.ANTHROPIC_API_KEY = 'test-anthropic-key'
         process.env.OPENAI_API_KEY = 'test-openai-key'
         process.env.GOOGLE_API_KEY = 'test-google-key'
         vi.clearAllMocks()
+    })
+
+    afterEach(() => {
+        debugInfoSpy?.mockRestore()
+        debugInfoSpy = null
+        debugWarnSpy?.mockRestore()
+        debugWarnSpy = null
+        debugErrSpy?.mockRestore()
+        debugErrSpy = null
     })
 
     it('dispatches to OpenAI and parses streamed structured output', async () => {

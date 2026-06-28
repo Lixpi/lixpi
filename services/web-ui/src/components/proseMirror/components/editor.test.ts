@@ -1,6 +1,13 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('$src/components/proseMirror/plugins/aiChatThreadPlugin', () => ({
+    createAiChatThreadPlugin: vi.fn(),
+}))
+vi.mock('$src/components/proseMirror/plugins/aiPromptInputPlugin', () => ({
+    createAiPromptInputPlugin: vi.fn(),
+}))
 
 import ProseMirrorEditor from '$src/components/proseMirror/components/editor.ts'
 import * as aiChatThreadPluginModule from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
@@ -9,8 +16,12 @@ import { aiChatThreadNodeType } from '$src/components/proseMirror/plugins/aiChat
 import { aiPromptInputNodeType } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import { documentTitleNodeType } from '$src/components/proseMirror/customNodes/documentTitleNode.ts'
 
-const spyCreateAiChatThreadPlugin = vi.spyOn(aiChatThreadPluginModule, 'createAiChatThreadPlugin')
-const spyCreateAiPromptInputPlugin = vi.spyOn(aiPromptInputPluginModule, 'createAiPromptInputPlugin')
+let consoleWarnSpy: ReturnType<typeof vi.spyOn> | null = null
+let consoleLogSpy: ReturnType<typeof vi.spyOn> | null = null
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null
+
+const spyCreateAiChatThreadPlugin = vi.mocked(aiChatThreadPluginModule.createAiChatThreadPlugin)
+const spyCreateAiPromptInputPlugin = vi.mocked(aiPromptInputPluginModule.createAiPromptInputPlugin)
 
 const aiChatThreadPluginMock = { kind: 'ai-chat-thread-plugin' }
 const aiPromptInputPluginMock = { kind: 'ai-prompt-input-plugin' }
@@ -52,10 +63,22 @@ function createEditorShim(documentType: string) {
 }
 
 beforeEach(() => {
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     spyCreateAiChatThreadPlugin.mockReset()
     spyCreateAiPromptInputPlugin.mockReset()
     spyCreateAiChatThreadPlugin.mockReturnValue(aiChatThreadPluginMock as any)
     spyCreateAiPromptInputPlugin.mockReturnValue(aiPromptInputPluginMock as any)
+})
+
+afterEach(() => {
+    consoleWarnSpy?.mockRestore()
+    consoleLogSpy?.mockRestore()
+    consoleErrorSpy?.mockRestore()
+    consoleWarnSpy = null
+    consoleLogSpy = null
+    consoleErrorSpy = null
 })
 
 describe('ProseMirrorEditor — schema creation', () => {
@@ -98,7 +121,6 @@ describe('ProseMirrorEditor — createInitialDocument', () => {
 
     it('falls back to a fresh AI prompt input node for invalid draft JSON', () => {
         const editor = createEditorShim('aiPromptInput')
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
         const doc = editor.createInitialDocument({
             type: 'doc',
@@ -108,12 +130,11 @@ describe('ProseMirrorEditor — createInitialDocument', () => {
         expect(doc.type.name).toBe('doc')
         expect(doc.childCount).toBe(1)
         expect(doc.child(0).type.name).toBe(aiPromptInputNodeType)
-        expect(warnSpy).toHaveBeenCalledWith(
+        expect(consoleWarnSpy).not.toBeNull()
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
             expect.stringContaining('[EDITOR] Invalid AI prompt draft, creating fresh input:'),
             expect.any(Error),
         )
-
-        warnSpy.mockRestore()
     })
 
     it('reuses parsed AI chat thread content when it is valid', () => {
@@ -132,7 +153,6 @@ describe('ProseMirrorEditor — createInitialDocument', () => {
     it('falls back to a fresh chat thread doc with threadId when initialVal is invalid', () => {
         const editor = createEditorShim('aiChatThread')
         editor.threadId = 'fallback-thread'
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
         const doc = editor.createInitialDocument({
             type: 'doc',
@@ -143,12 +163,43 @@ describe('ProseMirrorEditor — createInitialDocument', () => {
         expect(doc.child(0).type.name).toBe(documentTitleNodeType)
         expect(doc.child(1).type.name).toBe(aiChatThreadNodeType)
         expect(doc.child(1).attrs.threadId).toBe('fallback-thread')
-        expect(warnSpy).toHaveBeenCalledWith(
+        expect(consoleWarnSpy).not.toBeNull()
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
             expect.stringContaining('📝 [EDITOR] Invalid AI chat thread content, creating fresh document:'),
             expect.any(Error),
         )
+    })
 
-        warnSpy.mockRestore()
+    it('reuses provided initial content when parsing a standard document and no fallback is needed', () => {
+        const editor = createEditorShim('document')
+        const paragraphNode = editor.editorSchema.nodes.paragraph.create(null, [
+            editor.editorSchema.text('Hello, world'),
+        ])
+        const initialDocument = editor.editorSchema.nodes.doc.create(null, [paragraphNode]).toJSON()
+
+        const doc = editor.createInitialDocument(initialDocument, undefined)
+
+        expect(doc.toJSON()).toEqual(initialDocument)
+    })
+
+    it('falls back to DOM parsing for standard documents when initialVal is empty', () => {
+        const editor = createEditorShim('document')
+        const content = document.createElement('div')
+        content.innerHTML = '<p>Fallback content</p>'
+
+        const doc = editor.createInitialDocument({}, content)
+
+        expect(doc.childCount).toBe(2)
+        expect(doc.child(0).type.name).toBe(documentTitleNodeType)
+        expect(doc.child(1).type.name).toBe('paragraph')
+        expect(doc.textContent).toBe('Fallback content')
+    })
+
+    it('throws while parsing standard documents when initialVal has unknown node shape', () => {
+        const editor = createEditorShim('document')
+        const call = () => editor.createInitialDocument({ invalid: 'document' }, undefined)
+
+        expect(call).toThrow()
     })
 })
 
@@ -196,6 +247,18 @@ describe('ProseMirrorEditor — plugin wiring', () => {
         expect(spyCreateAiChatThreadPlugin).not.toHaveBeenCalled()
         expect(plugins).not.toContain(aiChatThreadPluginMock)
         expect(plugins).not.toContain(aiPromptInputPluginMock)
+    })
+
+    it('injects ai thread render context into aiChatThread plugin creation args', () => {
+        const editor = createEditorShim('aiChatThread')
+        editor.aiChatThreadRenderContext = { custom: true, trace: 'enabled' }
+
+        const plugins = editor.createPlugins({}, false)
+
+        expect(plugins).toContain(aiChatThreadPluginMock)
+        expect(spyCreateAiChatThreadPlugin).toHaveBeenCalledOnce()
+        const args = spyCreateAiChatThreadPlugin.mock.calls[0][0]
+        expect(args.renderContext).toEqual(editor.aiChatThreadRenderContext)
     })
 })
 

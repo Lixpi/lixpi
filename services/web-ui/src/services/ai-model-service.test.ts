@@ -1,6 +1,6 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoadingStatus, NATS_SUBJECTS } from '@lixpi/constants'
 import AiModelService from '$src/services/ai-model-service.ts'
 
@@ -12,6 +12,8 @@ const getTokenSilentlyMock = vi.hoisted(() => vi.fn())
 const setAiModelsMock = vi.hoisted(() => vi.fn())
 const setAiModelsCatalogMock = vi.hoisted(() => vi.fn())
 const setMetaValuesMock = vi.hoisted(() => vi.fn())
+let consoleErrorSpy: { mockRestore: () => void } | null = null
+let consoleWarnSpy: { mockRestore: () => void } | null = null
 
 vi.mock('$src/services/auth-service.ts', () => ({
     default: {
@@ -37,6 +39,8 @@ describe('AiModelService', () => {
     let service: AiModelService
 
     beforeEach(() => {
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
         vi.clearAllMocks()
         getDataMock.mockReturnValue({
             request: requestMock,
@@ -44,6 +48,13 @@ describe('AiModelService', () => {
         getTokenSilentlyMock.mockResolvedValue('auth-token')
 
         service = new AiModelService()
+    })
+
+    afterEach(() => {
+        consoleErrorSpy?.mockRestore()
+        consoleWarnSpy?.mockRestore()
+        consoleErrorSpy = null
+        consoleWarnSpy = null
     })
 
     it('sets loading and stores direct model arrays from NATS', async () => {
