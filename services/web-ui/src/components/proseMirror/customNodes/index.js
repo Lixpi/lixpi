@@ -1,6 +1,12 @@
-import { taskRowNodeType, taskRowNodeSpec } from '$src/components/proseMirror/customNodes/taskRowNode.js'
-import { documentTitleNodeType, documentTitleNodeSpec } from '$src/components/proseMirror/customNodes/documentTitleNode.ts'
-import { codeBlockNodeType, codeBlockNodeSpec } from '$src/components/proseMirror/customNodes/codeBlockNode.js'
+import {
+    codeBlockNodeSpec,
+    codeBlockNodeType,
+    customNodeSpecs,
+    documentTitleNodeSpec,
+    documentTitleNodeType,
+    taskRowNodeSpec,
+    taskRowNodeType,
+} from '@lixpi/prosemirror'
 
 export const nodeTypes = {
     documentTitleNodeType,
@@ -13,8 +19,4 @@ export const nodeViews = {
 }
 
 // Exporting all nodes. ORDER MATTERS!
-export default {
-    [nodeTypes.documentTitleNodeType]: documentTitleNodeSpec,
-    [nodeTypes.taskRowNodeType]: taskRowNodeSpec,
-    [nodeTypes.codeBlockNodeType]: codeBlockNodeSpec
-}
+export default customNodeSpecs

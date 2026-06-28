@@ -69,6 +69,17 @@ export type SubscriptionOptions = {
 export type MessageHandler = (data: any, msg: Msg) => void | Promise<void>
 export type ReplyHandler<T = any, R = any> = (data: T, msg: Msg) => Promise<R> | R
 
+export type JetStreamPublishOptions = {
+    msgID?: string
+    expect?: Record<string, string | number>
+    headers?: any
+}
+
+export type JetStreamConsumeOptions = {
+    maxMessages?: number
+    expiresMs?: number
+}
+
 const encode = (value: any, type: 'json' | 'buffer'): any => {
     if (type === 'json') {
         return JSON.stringify(value)
@@ -388,9 +399,7 @@ export default class NatsService {
         return this.nc
     }
 
-    /**
-     * Publish JSON data to a subject
-     */
+    // Publish JSON data to a subject.
     publish<T = any>(subject: string, data: T): void {
         if (!this.nc) {
             err('NATS client is not connected.')
@@ -399,9 +408,7 @@ export default class NatsService {
         this.nc.publish(subject, JSON.stringify(data))
     }
 
-    /**
-     * Subscribe to a subject
-     */
+    // Subscribe to a subject.
     subscribe<T = any>(
         subject: string,
         handler: (data: T, msg: Msg) => void | Promise<void>,
@@ -603,6 +610,95 @@ export default class NatsService {
         }
         await jsm.streams.update(streamName, { num_replicas: replicas })
         return { name: streamName, from, to: replicas, changed: true }
+    }
+
+    async ensureJetStreamStream(config: Record<string, any>): Promise<any> {
+        const jsm = await this.getJetStreamManager()
+        try {
+            const streamInfo = await jsm.streams.info(config.name)
+            const existingSubjects = streamInfo.config.subjects ?? []
+            const nextSubjects = Array.from(new Set([...existingSubjects, ...(config.subjects ?? [])]))
+            await jsm.streams.update(config.name, {
+                ...streamInfo.config,
+                ...config,
+                subjects: nextSubjects,
+            })
+            return await jsm.streams.info(config.name)
+        } catch (e: any) {
+            if (!this.isStreamNotFoundError(e)) throw e
+            return await jsm.streams.add(config)
+        }
+    }
+
+    async getJetStreamStreamInfo(streamName: string, options: Record<string, any> = {}): Promise<any> {
+        const jsm = await this.getJetStreamManager()
+        return await (jsm.streams as any).info(streamName, options)
+    }
+
+    async getJetStreamMessage<T = any>(streamName: string, request: Record<string, any>): Promise<{ data: T; subject: string; seq: number } | null> {
+        const jsm = await this.getJetStreamManager()
+        try {
+            const message = await (jsm.streams as any).getMessage(streamName, request)
+            if (!message) return null
+            return {
+                data: JSON.parse(new TextDecoder().decode(message.data)) as T,
+                subject: message.subject,
+                seq: message.seq,
+            }
+        } catch (e: any) {
+            if (this.isStreamNotFoundError(e)) return null
+            throw e
+        }
+    }
+
+    async publishJetStream<T = any>(
+        subject: string,
+        data: T | Uint8Array,
+        options: JetStreamPublishOptions = {},
+    ): Promise<any> {
+        const payload = data instanceof Uint8Array
+            ? data
+            : new TextEncoder().encode(JSON.stringify(data))
+        return await (this.getJetStream() as any).publish(subject, payload, options)
+    }
+
+    async ensureJetStreamConsumer(streamName: string, config: Record<string, any>): Promise<any> {
+        const jsm = await this.getJetStreamManager()
+        try {
+            return await (jsm.consumers as any).info(streamName, config.durable_name)
+        } catch (e: any) {
+            if (!this.isStreamNotFoundError(e)) throw e
+            return await (jsm.consumers as any).add(streamName, config)
+        }
+    }
+
+    async consumeJetStreamMessages<T = any>(
+        streamName: string,
+        consumerName: string,
+        options: JetStreamConsumeOptions = {},
+    ): Promise<Array<{ data: T; subject: string; seq: number }>> {
+        const consumer = await (this.getJetStream() as any).consumers.get(streamName, consumerName)
+        const messages = await consumer.consume({
+            max_messages: options.maxMessages ?? 100,
+            expires: options.expiresMs ?? 1000,
+        })
+        const decodedMessages: Array<{ data: T; subject: string; seq: number }> = []
+
+        for await (const message of messages) {
+            decodedMessages.push({
+                data: JSON.parse(message.string()) as T,
+                subject: message.subject,
+                seq: message.seq,
+            })
+            message.ack()
+        }
+
+        return decodedMessages
+    }
+
+    async purgeJetStreamSubject(streamName: string, subject: string): Promise<void> {
+        const jsm = await this.getJetStreamManager()
+        await jsm.streams.purge(streamName, { filter: subject })
     }
 
     // Helper to convert Uint8Array to ReadableStream (required by @nats-io/obj)

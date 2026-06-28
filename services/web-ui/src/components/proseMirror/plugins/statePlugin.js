@@ -13,6 +13,16 @@ export const statePlugin = (initialStateContent, dispatchUpdateCallback, documen
         return inProgress
     }
 
+    const isAiChatThreadDocument = (doc) => {
+        let found = false
+        doc.descendants((node) => {
+            if (node.type.name !== 'aiChatThread') return
+            found = true
+            return false
+        })
+        return found
+    }
+
     const applyPluginState = (tr, _, oldState) => {
         const skipDispatch = tr.getMeta('skipDispatch');
         // Live consumers (e.g. branch lineage markers) need to mirror the document
@@ -25,7 +35,7 @@ export const statePlugin = (initialStateContent, dispatchUpdateCallback, documen
             dispatchLiveUpdateCallback?.(tr.doc.toJSON());
         }
         // If the transaction has the 'skipDispatch' flag set, don't call the update callback
-        if (!skipDispatch && tr.docChanged && !hasInProgressAiContent(tr.doc)) {
+        if (!skipDispatch && tr.docChanged && !hasInProgressAiContent(tr.doc) && !isAiChatThreadDocument(tr.doc)) {
             dispatchUpdateCallback(tr.doc.toJSON());
 
             // Check if 'documentTitle' node's content has changed

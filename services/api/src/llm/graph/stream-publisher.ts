@@ -14,6 +14,8 @@ import {
     type WorkspaceContextResolution,
 } from '@lixpi/constants'
 
+import { AiChatProseMirrorStreamAssembler } from '../../prosemirror/ai-chat-stream-assembler.ts'
+
 const subject = (workspaceId: string, aiChatThreadId: string): string =>
     `ai.interaction.chat.receiveMessage.${workspaceId}.${aiChatThreadId}`
 
@@ -26,10 +28,20 @@ export type ChunkPayload = {
         imageUrl?: string
         fileId?: string
         partialIndex?: number
+        videoUrl?: string
+        posterUrl?: string
+        posterFileId?: string
+        frameUrl?: string
+        frameFileId?: string
+        durationSeconds?: number
+        aspectRatio?: string | number
+        hasAudio?: boolean
         responseId?: string
         revisedPrompt?: string
         imageModelProvider?: string
         imageModelId?: string
+        videoModelProvider?: string
+        videoModelId?: string
         resolution?: ImageBranchVlmResolution
         workspaceContextResolution?: WorkspaceContextResolution
         imageGenerationTrace?: ImageGenerationTrace
@@ -44,6 +56,15 @@ export type ChunkPayload = {
     }
     aiChatThreadId: string
 }
+
+export type StreamPublisherOptions = {
+    enableProseMirrorStream?: boolean
+    proseMirrorBaseVersion?: number
+    proseMirrorInitialDoc?: object
+    deferProseMirrorEnd?: boolean
+}
+
+export type ProseMirrorContentHandler = (content: ChunkPayload['content']) => void
 
 // A collapsible-wrapped prompt tag pair. The text model wraps the enhanced
 // image/video prompt it is about to send in these XML tags so the UI can render
@@ -78,16 +99,19 @@ export class TagAwareStream {
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
         private readonly generationRun?: MediaGenerationRunMeta,
+        private readonly onContent?: (content: ChunkPayload['content']) => void,
     ) {}
 
     private publish(content: ChunkPayload['content']): void {
+        const publishedContent = {
+            ...content,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+        }
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                ...content,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
+            content: publishedContent,
             aiChatThreadId: this.aiChatThreadId,
         })
+        this.onContent?.(publishedContent)
     }
 
     reset(): void {
@@ -201,8 +225,10 @@ export class TagAwareStream {
 
 export class StreamPublisher {
     private tagBuffer: TagAwareStream
+    private readonly proseMirrorAssembler: AiChatProseMirrorStreamAssembler | null
     private hasStarted = false
     private hasEnded = false
+    private proseMirrorFinishPromise: Promise<void> | null = null
 
     constructor(
         private readonly nats: NatsService,
@@ -210,8 +236,26 @@ export class StreamPublisher {
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
         private readonly generationRun?: MediaGenerationRunMeta,
+        private readonly options: StreamPublisherOptions = {},
     ) {
-        this.tagBuffer = new TagAwareStream(nats, workspaceId, aiChatThreadId, provider, generationRun)
+        this.proseMirrorAssembler = options.enableProseMirrorStream
+            ? new AiChatProseMirrorStreamAssembler({
+                workspaceId,
+                aiChatThreadId,
+                provider,
+                generationRun,
+                baseVersion: options.proseMirrorBaseVersion,
+                initialDoc: options.proseMirrorInitialDoc,
+            })
+            : null
+        this.tagBuffer = new TagAwareStream(
+            nats,
+            workspaceId,
+            aiChatThreadId,
+            provider,
+            generationRun,
+            content => this.proseMirrorAssembler?.handleContent(content),
+        )
     }
 
     start(): void {
@@ -219,15 +263,30 @@ export class StreamPublisher {
 
         this.hasStarted = true
         this.hasEnded = false
+        this.proseMirrorFinishPromise = null
         this.tagBuffer.reset()
+        const content: ChunkPayload['content'] = {
+            status: STREAM_STATUS.START_STREAM,
+            aiProvider: this.provider,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+        }
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.START_STREAM,
-                aiProvider: this.provider,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
+            content,
             aiChatThreadId: this.aiChatThreadId,
         })
+        this.proseMirrorAssembler?.handleContent(content)
+    }
+
+    publishProseMirrorContent(content: ChunkPayload['content']): void {
+        this.proseMirrorAssembler?.handleContent(content)
+    }
+
+    finishProseMirrorStream(): Promise<void> {
+        if (!this.proseMirrorAssembler) return Promise.resolve()
+        if (this.proseMirrorFinishPromise) return this.proseMirrorFinishPromise
+
+        this.proseMirrorFinishPromise = this.proseMirrorAssembler.end()
+        return this.proseMirrorFinishPromise
     }
 
     chunk(text: string): void {
@@ -239,15 +298,21 @@ export class StreamPublisher {
 
         this.hasEnded = true
         this.tagBuffer.flush()
+        const content: ChunkPayload['content'] = {
+            text: '',
+            status: STREAM_STATUS.END_STREAM,
+            aiProvider: this.provider,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+        }
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                text: '',
-                status: STREAM_STATUS.END_STREAM,
-                aiProvider: this.provider,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
+            content,
             aiChatThreadId: this.aiChatThreadId,
         })
+        if (this.options.deferProseMirrorEnd) {
+            void this.proseMirrorAssembler?.finishTextPhase()
+        } else {
+            void this.finishProseMirrorStream()
+        }
     }
 
     extractionProgress(status: string, detail: string): void {
@@ -338,15 +403,17 @@ export class StreamPublisher {
     }
 
     imageGenerationTrace(trace: ImageGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.generationRun): void {
+        const content: ChunkPayload['content'] = {
+            status: STREAM_STATUS.IMAGE_GENERATION_TRACE,
+            aiProvider: this.provider,
+            imageGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
+            ...(generationRun ? { generationRun } : {}),
+        }
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.IMAGE_GENERATION_TRACE,
-                aiProvider: this.provider,
-                imageGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
-                ...(generationRun ? { generationRun } : {}),
-            },
+            content,
             aiChatThreadId: this.aiChatThreadId,
         })
+        this.publishProseMirrorContent(content)
     }
 
     imageGenerationError(message: string, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
@@ -362,15 +429,17 @@ export class StreamPublisher {
     }
 
     videoGenerationTrace(trace: VideoGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.generationRun): void {
+        const content: ChunkPayload['content'] = {
+            status: STREAM_STATUS.VIDEO_GENERATION_TRACE,
+            aiProvider: this.provider,
+            videoGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
+            ...(generationRun ? { generationRun } : {}),
+        }
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.VIDEO_GENERATION_TRACE,
-                aiProvider: this.provider,
-                videoGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
-                ...(generationRun ? { generationRun } : {}),
-            },
+            content,
             aiChatThreadId: this.aiChatThreadId,
         })
+        this.publishProseMirrorContent(content)
     }
 
     imageBranchResolutionError(message: string): void {
@@ -394,14 +463,16 @@ export class StreamPublisher {
         if (code) payload.errorCode = code
         if (type) payload.errorType = type
         this.nats.publish(`ai.interaction.chat.error.${instanceKey}`, payload)
+        const content: ChunkPayload['content'] = {
+            text: message,
+            status: STREAM_STATUS.ERROR,
+            aiProvider: this.provider,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+        }
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                text: message,
-                status: STREAM_STATUS.ERROR,
-                aiProvider: this.provider,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
+            content,
             aiChatThreadId: this.aiChatThreadId,
         })
+        this.proseMirrorAssembler?.handleContent(content)
     }
 }

@@ -10,26 +10,35 @@ import { Plugin, PluginKey, EditorState, Transaction } from 'prosemirror-state'
 import { Fragment, Slice } from 'prosemirror-model'
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view'
 import { Node as ProseMirrorNode, Schema as ProseMirrorSchema } from 'prosemirror-model'
-import { documentTitleNodeType } from '$src/components/proseMirror/customNodes/documentTitleNode.ts'
-import { aiChatThreadNodeType, aiChatThreadNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
-import { AI_CHAT_THREAD_PLUGIN_KEY, USE_AI_CHAT_META, STOP_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
-import { aiResponseMessageNodeType, aiResponseMessageNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponseMessageNode.ts'
-import { aiUserMessageNodeType, aiUserMessageNodeView, type AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
-import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
-import { aiReasoningSectionNodeType, aiReasoningSectionNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
-import { aiLineageEventNodeType, aiLineageEventNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEventNode.ts'
+import { Step } from 'prosemirror-transform'
 import {
+    aiChatThreadNodeType,
+    aiCollapsibleBlockNodeType,
+    aiGeneratedImageNodeType,
+    aiGeneratedVideoNodeType,
+    aiLineageEventNodeType,
+    aiReasoningSectionNodeType,
+    aiResponseMessageNodeType,
+    aiUserMessageNodeType,
+    applyStreamingSegmentToTransaction,
+    documentTitleNodeType,
     getAiLineageEventsForProjection,
+    parseAiModelSelectionAttr,
+    parseMediaGenerationConfigSelectionAttr,
+    serializeAiModelSelectionAttr,
     type AiLineageEventDescriptor,
-} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
+    type StepStreamEvent,
+} from '@lixpi/prosemirror'
+import { aiChatThreadNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
+import { AI_CHAT_THREAD_PLUGIN_KEY, USE_AI_CHAT_META, STOP_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
+import { aiResponseMessageNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponseMessageNode.ts'
+import { aiUserMessageNodeView, type AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
+import { aiCollapsibleBlockNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
+import { aiReasoningSectionNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
+import { aiLineageEventNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEventNode.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import {
-    parseAiModelSelectionAttr,
-    serializeAiModelSelectionAttr,
-    parseMediaGenerationConfigSelectionAttr,
-} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import type {
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
@@ -45,8 +54,8 @@ import type {
     WorkspaceContextResolution,
 } from '@lixpi/constants'
 
-import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
-import { setAiGeneratedVideoCallbacks, aiGeneratedVideoNodeType, aiGeneratedVideoNodeView, type AiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
+import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
+import { setAiGeneratedVideoCallbacks, aiGeneratedVideoNodeView, type AiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import { routeSegmentEventToCanvas } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedMediaCanvasRouter.ts'
 
@@ -80,7 +89,9 @@ type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & {
     useMultipleVideoModels?: boolean
     imageOptions?: ImageOptions
     videoOptions?: VideoOptions
-}) => void
+    proseMirrorInitialDoc?: object
+    proseMirrorBaseVersion?: number
+}) => void | Promise<void>
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
 export type AiChatThreadRenderContext = {
@@ -93,9 +104,10 @@ type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' 
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'
 type MediaLineageSegmentType = 'media_lineage_planned'
+type ProseMirrorStepSegmentType = 'prosemirror_step_event'
 export type SegmentEvent = {
     status?: StreamStatus
-    type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType | MediaLineageSegmentType
+    type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType | MediaLineageSegmentType | ProseMirrorStepSegmentType
     aiProvider?: string
     imageModelProvider?: string
     imageModelId?: string
@@ -129,6 +141,8 @@ export type SegmentEvent = {
     hasAudio?: boolean
     videoModel?: string
     videoGenerationTrace?: import('@lixpi/constants').VideoGenerationTrace
+    proseMirrorStepEvent?: StepStreamEvent
+    usesServerProseMirror?: boolean
     error?: string
 }
 type GeneratedRunAttrs = {
@@ -280,6 +294,10 @@ function getReasoningOnlyGenerationRun(generationRun?: MediaGenerationRunMeta): 
         reasoningIndex: generationRun.reasoningIndex,
         lineageAssignment: generationRun.lineageAssignment,
     }
+}
+
+function usesServerAuthoritativeProseMirror(event: SegmentEvent): boolean {
+    return event.usesServerProseMirror === true
 }
 
 function getReasoningModelProvider(modelId: string): string | undefined {
@@ -995,88 +1013,16 @@ class PositionFinder {
 
 // Content insertion during AI streaming
 class StreamingInserter {
-    // Insert block-level content (headers, paragraphs, code blocks)
-    static insertBlockContent(
+    static insertSegment(
         tr: Transaction,
-        type: string,
-        content: string,
-        level: number | undefined,
-        marks: any[] | null,
+        segment: MarkdownParsedSegment,
         endOfNodePos: number,
-        childCount: number
+        childCount: number,
     ): void {
         try {
-            const insertPos = endOfNodePos - 1
-            tr.doc.resolve(insertPos) // Validate position
-
-            switch (type) {
-                case 'header': {
-                    const textNode = tr.doc.type.schema.text(content)
-                    const headingNode = tr.doc.type.schema.nodes.heading.createAndFill({ level }, textNode)!
-
-                    if (childCount === 0) {
-                        tr.insert(insertPos, headingNode)
-                    } else {
-                        // Insert separator paragraph first
-                        const para = tr.doc.type.schema.nodes.paragraph.createAndFill()!
-                        tr.insert(insertPos, para)
-                        tr.insert(endOfNodePos, headingNode)
-                    }
-                    break
-                }
-
-                case 'paragraph': {
-                    if (content) {
-                        const textNode = marks
-                            ? tr.doc.type.schema.text(content, marks)
-                            : tr.doc.type.schema.text(content)
-                        const paragraphNode = tr.doc.type.schema.nodes.paragraph.createAndFill(null, textNode)!
-                        tr.insert(insertPos, paragraphNode)
-                    } else {
-                        const emptyParagraph = tr.doc.type.schema.nodes.paragraph.create()
-                        tr.insert(insertPos, emptyParagraph)
-                    }
-                    break
-                }
-
-                case 'codeBlock': {
-                    const codeText = tr.doc.type.schema.text(content)
-                    const codeBlock = tr.doc.type.schema.nodes.code_block.createAndFill(null, codeText)!
-                    tr.insert(insertPos, codeBlock)
-                    break
-                }
-            }
+            applyStreamingSegmentToTransaction(tr, segment, { endOfNodePos, childCount })
         } catch (error) {
-            console.warn(`Block content insertion failed at ${endOfNodePos - 1}:`, error)
-        }
-    }
-
-    // Insert inline content (text, marks, line breaks)
-    static insertInlineContent(
-        tr: Transaction,
-        type: string,
-        content: string,
-        marks: any[] | null,
-        endOfNodePos: number
-    ): void {
-        try {
-            const insertPos = endOfNodePos - 2
-            tr.doc.resolve(insertPos) // Validate position
-
-            if (type === 'codeBlock') {
-                const codeText = tr.doc.type.schema.text(content)
-                tr.insert(insertPos, codeText)
-            } else if (content === '\n') {
-                const newParagraph = tr.doc.type.schema.nodes.paragraph.create()
-                tr.insert(endOfNodePos - 1, newParagraph)
-            } else if (content) {
-                const textNode = marks
-                    ? tr.doc.type.schema.text(content, marks)
-                    : tr.doc.type.schema.text(content)
-                tr.insert(insertPos, textNode)
-            }
-        } catch (error) {
-            console.warn(`Inline content insertion failed at ${endOfNodePos - 2}:`, error)
+            console.warn(`[aiChatThreadPlugin] streaming segment insertion failed at ${endOfNodePos}:`, error)
         }
     }
 }
@@ -1651,8 +1597,17 @@ class AiChatThreadPluginClass {
             const effectiveThreadId = threadId || aiChatThreadId
             const { state, dispatch } = view
 
+            if (type === 'prosemirror_step_event') {
+                this.handleProseMirrorStepEvent(view, event)
+                return
+            }
+
             // Handle image generation events
             if (type === 'image_generation_trace') {
+                if (usesServerAuthoritativeProseMirror(event)) {
+                    routeSegmentEventToCanvas(event)
+                    return
+                }
                 this.ensureGenerationTraceResponseNode(view.state, (tr) => view.dispatch(tr), aiProvider, effectiveThreadId, event.generationRun)
                 this.handleImageGenerationTrace(view, event)
                 return
@@ -1697,18 +1652,30 @@ class AiChatThreadPluginClass {
             }
 
             if (type === 'video_generation_trace') {
+                if (usesServerAuthoritativeProseMirror(event)) {
+                    routeSegmentEventToCanvas(event)
+                    return
+                }
                 this.ensureGenerationTraceResponseNode(view.state, (tr) => view.dispatch(tr), aiProvider, effectiveThreadId, event.generationRun)
                 this.handleVideoGenerationTrace(view, event)
                 return
             }
 
             if (type === 'image_branch_resolved') {
+                if (usesServerAuthoritativeProseMirror(event)) {
+                    routeSegmentEventToCanvas(event)
+                    return
+                }
                 this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
                 routeSegmentEventToCanvas(event)
                 return
             }
 
             if (type === 'media_lineage_planned') {
+                if (usesServerAuthoritativeProseMirror(event)) {
+                    routeSegmentEventToCanvas(event)
+                    return
+                }
                 if (event.generationRun && effectiveThreadId) {
                     this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
 
@@ -1727,6 +1694,10 @@ class AiChatThreadPluginClass {
             }
 
             if (type === 'context_relevance_resolved') {
+                if (usesServerAuthoritativeProseMirror(event)) {
+                    routeSegmentEventToCanvas(event)
+                    return
+                }
                 this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
                 routeSegmentEventToCanvas(event)
                 return
@@ -1738,6 +1709,7 @@ class AiChatThreadPluginClass {
 
             if (type === 'image_branch_resolution_error') {
                 routeSegmentEventToCanvas(event)
+                if (usesServerAuthoritativeProseMirror(event)) return
                 this.handleStreamError(view, effectiveThreadId, event.generationRun)
                 return
             }
@@ -1763,6 +1735,7 @@ class AiChatThreadPluginClass {
                         generationRun: event.generationRun,
                     })
                 }
+                if (usesServerAuthoritativeProseMirror(event)) return
                 this.handleStreamError(view, effectiveThreadId, event.generationRun)
                 return
             }
@@ -1782,6 +1755,44 @@ class AiChatThreadPluginClass {
         })
     }
 
+    private handleProseMirrorStepEvent(view: EditorView, event: SegmentEvent): void {
+        const stepEvent = event.proseMirrorStepEvent
+        if (!stepEvent || stepEvent.docId !== event.aiChatThreadId) return
+
+        if (stepEvent.kind === 'START') {
+            view.dispatch(view.state.tr.setMeta('setReceiving', {
+                threadId: stepEvent.docId,
+                receiving: true,
+                runKey: getReasoningRunKey(stepEvent.generationRun),
+            }))
+            return
+        }
+
+        if (stepEvent.kind === 'END') {
+            view.dispatch(view.state.tr.setMeta('setReceiving', {
+                threadId: stepEvent.docId,
+                receiving: false,
+                runKey: getReasoningRunKey(stepEvent.generationRun),
+            }))
+            return
+        }
+
+        if (stepEvent.kind === 'ERROR') {
+            this.handleStreamError(view, stepEvent.docId, stepEvent.generationRun)
+            return
+        }
+
+        try {
+            const step = Step.fromJSON(view.state.schema, stepEvent.step)
+            const tr = view.state.tr.step(step)
+            tr.setMeta('skipDispatch', true)
+            tr.setMeta('proseMirrorStepVersion', stepEvent.version)
+            view.dispatch(tr)
+        } catch (error) {
+            console.warn('[aiChatThreadPlugin] ProseMirror step application failed:', error)
+        }
+    }
+
     private handleStreamError(view: EditorView, threadId?: string, generationRun?: MediaGenerationRunMeta): void {
         if (threadId) {
             this.removePartialImagesInChat(view, threadId, generationRun)
@@ -1792,6 +1803,11 @@ class AiChatThreadPluginClass {
     private handleImageError(view: EditorView, event: SegmentEvent): void {
         const threadId = event.threadId || event.aiChatThreadId
         if (!threadId) return
+
+        if (usesServerAuthoritativeProseMirror(event)) {
+            routeSegmentEventToCanvas(event)
+            return
+        }
 
         this.removePartialImagesInChat(view, threadId, event.generationRun)
         routeSegmentEventToCanvas(event)
@@ -1808,6 +1824,11 @@ class AiChatThreadPluginClass {
 
             // Only process events for threads that exist in THIS document
             if (!threadInfo) return
+
+            if (usesServerAuthoritativeProseMirror(event)) {
+                routeSegmentEventToCanvas(event)
+                return
+            }
 
             this.upsertImagePartialInChat(view, event)
 
@@ -1828,6 +1849,11 @@ class AiChatThreadPluginClass {
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
         if (!threadInfo) return
 
+        if (usesServerAuthoritativeProseMirror(event)) {
+            routeSegmentEventToCanvas(event)
+            return
+        }
+
         const responseMessageId = this.upsertImageCompleteInChat(view, event)
 
         // Delegate image placement to the canvas (chat-doc message id is passed
@@ -1841,6 +1867,10 @@ class AiChatThreadPluginClass {
     private handleVideoPending(view: EditorView, event: SegmentEvent): void {
         const { aiChatThreadId } = event
         if (!aiChatThreadId) return
+        if (usesServerAuthoritativeProseMirror(event)) {
+            routeSegmentEventToCanvas(event)
+            return
+        }
         this.upsertVideoPendingInChat(view, event)
         routeSegmentEventToCanvas(event)
     }
@@ -1854,6 +1884,10 @@ class AiChatThreadPluginClass {
     private handleVideoComplete(view: EditorView, event: SegmentEvent): void {
         const { aiChatThreadId, videoUrl } = event
         if (!aiChatThreadId || !videoUrl) return
+        if (usesServerAuthoritativeProseMirror(event)) {
+            routeSegmentEventToCanvas(event)
+            return
+        }
         const responseMessageId = this.upsertVideoCompleteInChat(view, event)
         routeSegmentEventToCanvas(event, { responseMessageId })
         this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), aiChatThreadId, event.generationRun)
@@ -1862,6 +1896,10 @@ class AiChatThreadPluginClass {
     private handleVideoError(view: EditorView, event: SegmentEvent): void {
         const { aiChatThreadId } = event
         if (!aiChatThreadId) return
+        if (usesServerAuthoritativeProseMirror(event)) {
+            routeSegmentEventToCanvas(event)
+            return
+        }
         this.upsertVideoErrorInChat(view, event)
         routeSegmentEventToCanvas(event)
         this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), aiChatThreadId, event.generationRun)
@@ -2224,19 +2262,7 @@ class AiChatThreadPluginClass {
         }
 
         const { endOfNodePos, childCount } = targetInfo
-        const { segment: content, styles, type, level, isBlockDefining } = segment
-
-        // Create text marks from styles
-        const marks = styles.length > 0
-            ? styles.map(style => this.createMark(state.schema, style)).filter(Boolean)
-            : null
-
-        // Insert content based on type
-        if (isBlockDefining) {
-            StreamingInserter.insertBlockContent(tr, type, content, level, marks, endOfNodePos!, childCount!)
-        } else {
-            StreamingInserter.insertInlineContent(tr, type, content, marks, endOfNodePos!)
-        }
+        StreamingInserter.insertSegment(tr, segment, endOfNodePos!, childCount!)
 
         if (tr.docChanged) {
             tr.setMeta('skipDispatch', true)
@@ -2384,16 +2410,6 @@ class AiChatThreadPluginClass {
         if (tr.docChanged) {
             tr.setMeta('skipDispatch', true)
             dispatch(tr)
-        }
-    }
-
-    private createMark(schema: ProseMirrorSchema, style: string): any {
-        switch (style) {
-            case 'bold': return schema.marks.strong.create()
-            case 'italic': return schema.marks.em.create()
-            case 'strikethrough': return schema.marks.strikethrough.create()
-            case 'code': return schema.marks.code.create()
-            default: return null
         }
     }
 
@@ -2673,6 +2689,14 @@ class AiChatThreadPluginClass {
         const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
         const usesMediaGenerationMatrix = totalSelectedModelCount > sectionsWithSelection
 
+        const responseTransaction = this.createLocalReceivingResponseTransaction(
+            newState,
+            threadId,
+            getReasoningModelProvider(effectiveAiModel),
+            reasoningModelIds.length > 0 ? reasoningModelIds : [effectiveAiModel],
+            usesMediaGenerationMatrix,
+        )
+
         const requestPayload = {
             messages,
             aiReasoningModels: reasoningModelIds,
@@ -2683,23 +2707,23 @@ class AiChatThreadPluginClass {
             imageOptions,
             videoOptions,
             referencedFeatureIds,
+            proseMirrorInitialDoc: responseTransaction?.doc.toJSON() ?? newState.doc.toJSON(),
+            proseMirrorBaseVersion: 0,
         }
 
-        const responseTransaction = this.createLocalReceivingResponseTransaction(
-            newState,
-            threadId,
-            getReasoningModelProvider(effectiveAiModel),
-            reasoningModelIds.length > 0 ? reasoningModelIds : [effectiveAiModel],
-            usesMediaGenerationMatrix,
-        )
-
         queueMicrotask(() => {
-            void Promise.resolve(this.sendAiRequestHandler(requestPayload)).catch((error) => {
-                console.error('[aiChatThreadPlugin] AI chat request failed:', error)
-            })
+            void this.sendAiRequest(requestPayload)
         })
 
         return responseTransaction
+    }
+
+    private async sendAiRequest(payload: Parameters<SendAiRequestHandler>[0]): Promise<void> {
+        try {
+            await this.sendAiRequestHandler(payload)
+        } catch (error) {
+            console.error('[aiChatThreadPlugin] AI chat request failed:', error)
+        }
     }
 
     private handleStopRequest(transaction: Transaction): void {

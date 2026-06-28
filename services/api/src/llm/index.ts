@@ -51,10 +51,10 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
     )
 
     const imageRouter = new ImageRouter(registry)
-    registry.setImageRouter((state) => imageRouter.execute(state))
+    registry.setImageRouter((state, options) => imageRouter.execute(state, options))
 
     const videoRouter = new VideoRouter(registry)
-    registry.setVideoRouter((state) => videoRouter.execute(state))
+    registry.setVideoRouter((state, options) => videoRouter.execute(state, options))
 
     const extractionOrchestrator = new ExtractionOrchestrator(deps.natsService, {
         runImageRouter: (state) => imageRouter.execute(state),

@@ -56,6 +56,7 @@
     "dependencies": {
         "@lixpi/constants": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
+        "@lixpi/prosemirror": "workspace:*",
         "pixi.js": "*",
         "rbush": "*",
         "@types/rbush": "*",

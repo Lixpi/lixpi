@@ -381,6 +381,8 @@ services:
             - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
+            - ./packages/lixpi/prosemirror/package.json:/usr/src/service/packages/lixpi/prosemirror/package.json:ro,cached
+            - ./packages/lixpi/prosemirror/src:/usr/src/service/packages/lixpi/prosemirror/src:ro,cached
 
             # - ./packages-vendor/bits-ui/packages/bits-ui:/usr/src/service/packages/bits-ui
             - ./packages-vendor/shadcn-svelte/docs/src/lib:/usr/src/service/packages/shadcn-svelte/lib:cached
@@ -509,6 +511,8 @@ services:
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
             - ./packages/lixpi/nats-auth-callout-service/package.json:/usr/src/service/packages/lixpi/nats-auth-callout-service/package.json:ro,cached
             - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/service/packages/lixpi/nats-auth-callout-service/src:ro,cached
+            - ./packages/lixpi/prosemirror/package.json:/usr/src/service/packages/lixpi/prosemirror/package.json:ro,cached
+            - ./packages/lixpi/prosemirror/src:/usr/src/service/packages/lixpi/prosemirror/src:ro,cached
 
         networks:
             - nats

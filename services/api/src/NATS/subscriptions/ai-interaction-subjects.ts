@@ -81,6 +81,8 @@ export const aiInteractionSubjects = [
                 referencedFeatureIds,
                 imageBranchCandidateSnapshot,
                 workspaceContextSnapshot,
+                proseMirrorInitialDoc,
+                proseMirrorBaseVersion,
                 mediaGenerationRequest,
             } = data as {
                 user: { userId: string; stripeCustomerId: string }
@@ -95,6 +97,8 @@ export const aiInteractionSubjects = [
                 videoResolution?: string
                 videoDuration?: number | string
                 videoSourceForExtension?: string
+                proseMirrorInitialDoc?: object
+                proseMirrorBaseVersion?: number
             } & AiInteractionChatSendMessagePayload
 
             // The selection is an ordered model-id array; the legacy single-model
@@ -228,6 +232,8 @@ export const aiInteractionSubjects = [
                             referencedFeatureIds,
                             imageBranchCandidateSnapshot,
                             workspaceContextSnapshot,
+                            proseMirrorInitialDoc,
+                            proseMirrorBaseVersion,
                             eventMeta: {
                                 userId,
                                 stripeCustomerId,

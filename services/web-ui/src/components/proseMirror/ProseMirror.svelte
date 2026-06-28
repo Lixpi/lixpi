@@ -25,12 +25,6 @@
 
     import Spinner from `$src/components/spinner.svelte`
 
-    /**
-     * @typedef {Object} Props
-     * @property {boolean} [isDisabled]
-     */
-
-    /** @type {Props} */
     let { isDisabled = false } = $props();
 
     let isFocused = false
@@ -54,7 +48,30 @@
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
 
-    const onAiChatSubmit = ({ messages, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, threadId, imageOptions, videoOptions, referencedFeatureIds }: AiChatSendMessagePayload & { aiReasoningModels?: string[]; useMultipleReasoningModels?: boolean; useMultipleImageModels?: boolean; useMultipleVideoModels?: boolean; imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => {
+    type AiChatSubmitOptions = AiChatSendMessagePayload & {
+        aiReasoningModels?: string[]
+        useMultipleReasoningModels?: boolean
+        useMultipleImageModels?: boolean
+        useMultipleVideoModels?: boolean
+        imageOptions?: ImageOptions
+        videoOptions?: VideoOptions
+        proseMirrorInitialDoc?: object
+        proseMirrorBaseVersion?: number
+    }
+
+    const onAiChatSubmit = ({
+        messages,
+        aiReasoningModels,
+        useMultipleReasoningModels,
+        useMultipleImageModels,
+        useMultipleVideoModels,
+        threadId,
+        imageOptions,
+        videoOptions,
+        referencedFeatureIds,
+        proseMirrorInitialDoc,
+        proseMirrorBaseVersion,
+    }: AiChatSubmitOptions) => {
         if (!aiInteractionInstance) {
             console.log('call->onAiChatSubmit', {aiInteractionInstance, projectKey: $routerStore.data.currentRoute?.routeParams.key})
             alert('🚫 call->onAiChatSubmit :: aiInteractionInstance is not initialized...');
@@ -77,6 +94,8 @@
             videoDuration: videoOptions?.videoDuration,
             videoConfigGroups: videoOptions?.configGroups,
             referencedFeatureIds,
+            proseMirrorInitialDoc,
+            proseMirrorBaseVersion,
         })
     }
 
