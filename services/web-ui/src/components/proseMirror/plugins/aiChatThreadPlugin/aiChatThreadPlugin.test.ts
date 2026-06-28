@@ -136,7 +136,7 @@ function makeFeatureReferenceParagraphMessage(
 function makeThread(attrs: Record<string, unknown> = {}, children: ProseMirrorNode[] = []): ProseMirrorNode {
     return schema.nodes.aiChatThread.create({
         threadId: 'thread-1',
-        aiModel: 'Anthropic:claude-sonnet-4-6',
+        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
         ...attrs,
     }, children)
 }
@@ -158,10 +158,9 @@ describe('aiChatThreadPlugin — local media response templates', () => {
             doc: doc(
                 makeThread(
                     {
-                        aiModel: selectedReasoningModels[0],
-                        aiModels: JSON.stringify(selectedReasoningModels),
+                        aiReasoningModels: JSON.stringify(selectedReasoningModels),
                         useMultipleReasoningModels: true,
-                        aiImageModel: imageModel,
+                        aiImageModels: JSON.stringify([imageModel]),
                         imageGenerationSize: 'auto',
                     },
                     [makeUserMessage('Swap the characters')]
@@ -194,11 +193,9 @@ describe('aiChatThreadPlugin — local media response templates', () => {
         await Promise.resolve()
 
         expect(sendAiRequestHandler).toHaveBeenCalledWith(expect.objectContaining({
-            aiModel: selectedReasoningModels[0],
-            aiModels: selectedReasoningModels,
+            aiReasoningModels: selectedReasoningModels,
             imageOptions: expect.objectContaining({
-                aiImageModel: imageModel,
-                aiImageModels: [],
+                aiImageModels: [imageModel],
                 imageGenerationSize: 'auto',
             }),
             threadId: 'thread-1',
@@ -225,7 +222,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const state = EditorState.create({
             doc: doc(
                 makeThread(
-                    { threadId: 'thread-featured', aiModel: 'Anthropic:claude-sonnet-4-6' },
+                    { threadId: 'thread-featured', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
                     [userMessage, responseMessageWithFeature]
                 )
             ),
@@ -285,9 +282,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 makeThread(
                     {
                         threadId: 'thread-image-config',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
                         useMultipleImageModels: true,
-                        aiImageModel: 'Google:gemini-2.5-flash-image',
                         aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
                         imageGenerationConfigGroups,
                     },
@@ -339,9 +335,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 makeThread(
                     {
                         threadId: 'thread-video-config',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
                         useMultipleVideoModels: true,
-                        aiVideoModel: 'OpenAI:o4-mini',
                         aiVideoModels: JSON.stringify(['OpenAI:o4-mini']),
                         videoGenerationConfigGroups,
                         videoAspectRatio: '16:9',
@@ -385,7 +380,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 schemaWithFeatureReference.nodes.aiChatThread.create(
                     {
                         threadId: 'thread-featured-refs',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
                     },
                     [
                         makeFeatureReferenceParagraphMessage(
@@ -465,11 +460,11 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const plugin = createPlugin(sendAiRequestHandler)
 
         const threadOne = makeThread(
-            { threadId: 'thread-a', aiModel: 'Anthropic:claude-sonnet-4-6' },
+            { threadId: 'thread-a', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
             [makeUserMessage('Thread one prompt')]
         )
         const threadTwo = makeThread(
-            { threadId: 'thread-b', aiModel: 'Anthropic:claude-sonnet-4-6' },
+            { threadId: 'thread-b', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
             [makeUserMessage('Thread two prompt')]
         )
 
@@ -499,7 +494,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         expect(joined).not.toContain('Thread two prompt')
     })
 
-    it('expands legacy multi-model settings into image/video request options', async () => {
+    it('passes section multi-model settings into image/video request options', async () => {
         const sendAiRequestHandler = vi.fn()
         const plugin = createPlugin(sendAiRequestHandler)
 
@@ -508,17 +503,16 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 makeThread(
                     {
                         threadId: 'thread-legacy',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
-                        aiModels: JSON.stringify([
+                        aiReasoningModels: JSON.stringify([
                             'Anthropic:claude-sonnet-4-6',
                             'OpenAI:gpt-4.1',
                         ]),
-                        useMultipleModels: true,
-                        aiImageModel: 'Google:gemini-2.5-flash-image',
+                        useMultipleReasoningModels: true,
+                        useMultipleImageModels: true,
+                        useMultipleVideoModels: true,
                         aiImageModels: JSON.stringify([
                             'Google:gemini-2.5-flash-image',
                         ]),
-                        aiVideoModel: 'OpenAI:o4-mini',
                         aiVideoModels: JSON.stringify([
                             'OpenAI:o4-mini',
                         ]),
@@ -544,17 +538,15 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         await Promise.resolve()
 
         const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
-        expect(payload.aiModels).toEqual([
+        expect(payload.aiReasoningModels).toEqual([
             'Anthropic:claude-sonnet-4-6',
             'OpenAI:gpt-4.1',
         ])
         expect(payload.imageOptions).toMatchObject({
-            aiImageModel: 'Google:gemini-2.5-flash-image',
             aiImageModels: ['Google:gemini-2.5-flash-image'],
             imageGenerationSize: '1024x1024',
         })
         expect(payload.videoOptions).toMatchObject({
-            aiVideoModel: 'OpenAI:o4-mini',
             aiVideoModels: ['OpenAI:o4-mini'],
             videoAspectRatio: '16:9',
             videoResolution: '1080p',
@@ -572,9 +564,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 makeThread(
                     {
                         threadId: 'thread-invalid-image-models',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
                         useMultipleImageModels: true,
-                        aiImageModel: 'Google:gemini-2.5-flash-image',
                         aiImageModels: 'not-json',
                     },
                     [makeUserMessage('Image model payload validation')]
@@ -594,7 +585,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         expect(sendAiRequestHandler).not.toHaveBeenCalled()
     })
 
-    it('falls back to configured single image model when multi-model list is invalid but mode is single', async () => {
+    it('collapses a multi-entry image list to the first model when image multi-mode is disabled', async () => {
         const sendAiRequestHandler = vi.fn()
         const plugin = createPlugin(sendAiRequestHandler)
 
@@ -602,12 +593,14 @@ describe('aiChatThreadPlugin — request payload construction', () => {
             doc: doc(
                 makeThread(
                     {
-                        threadId: 'thread-single-image-invalid-list',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
-                        aiImageModel: 'Google:gemini-2.5-flash-image',
-                        aiImageModels: 'not-json',
+                        threadId: 'thread-single-image-collapse',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                        aiImageModels: JSON.stringify([
+                            'Google:gemini-2.5-flash-image',
+                            'OpenAI:gpt-image-1',
+                        ]),
                     },
-                    [makeUserMessage('Single-image-model fallback')]
+                    [makeUserMessage('Single-image-model collapse')]
                 )
             ),
             schema,
@@ -615,7 +608,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         })
 
         const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
-            threadId: 'thread-single-image-invalid-list',
+            threadId: 'thread-single-image-collapse',
             nodePos: findNodePosition(state.doc, 'aiChatThread'),
         })
         state.applyTransaction(trigger)
@@ -624,8 +617,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
 
         const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
         expect(payload.imageOptions).toMatchObject({
-            aiImageModel: 'Google:gemini-2.5-flash-image',
-            aiImageModels: [],
+            aiImageModels: ['Google:gemini-2.5-flash-image'],
         })
     })
 
@@ -638,9 +630,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 makeThread(
                     {
                         threadId: 'thread-invalid-video-models',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
                         useMultipleVideoModels: true,
-                        aiVideoModel: 'OpenAI:o4-mini',
                         aiVideoModels: 'not-json',
                     },
                     [makeUserMessage('Video model payload validation')]
@@ -667,7 +658,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const state = EditorState.create({
             doc: doc(
                 makeThread(
-                    { threadId: 'thread-stop', aiModel: 'Anthropic:claude-sonnet-4-6' },
+                    { threadId: 'thread-stop', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
                     [makeUserMessage('Stopping request')]
                 )
             ),
@@ -688,7 +679,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const plugin = createPlugin()
 
         const thread = makeThread(
-            { threadId: 'thread-delete', aiModel: 'Anthropic:claude-sonnet-4-6' },
+            { threadId: 'thread-delete', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
             [makeUserMessage('Only message')]
         )
         const state = EditorState.create({

@@ -52,7 +52,6 @@ Custom nodes are intentionally split by responsibility:
 - AI chat nodes (only present in `documentType: 'aiChatThread'` via `plugins/aiChatThreadPlugin/`):
   - `aiChatThreadNode` (`aiChatThread`): conversation container. Content expression: `(aiUserMessage | aiResponseMessage)+`. Pure conversation log — no inline composer.
   - `aiUserMessageNode` (`aiUserMessage`): sent user message bubble. Content: `(paragraph | block)+`. Attributes: `id, createdAt`.
-  - `aiUserInputNode` (`aiUserInput`): **DEPRECATED** — kept in schema for legacy content migration only. Silently stripped from loaded documents.
   - `aiResponseMessageNode` (`aiResponseMessage`): assistant message. Content: `(paragraph | block)*` so it can start empty and be filled by streaming.
   - `aiReasoningSectionNode` (`aiReasoningSection`): per-reasoning-run section inside one media response message. Content: `(paragraph | block)*`.
   - `aiLineageEventNode` (`aiLineageEvent`): atom block for projected workflow events such as `Branch started` and `Branch fork created`. Live streamed content stores lineage ids on reasoning/media nodes; read-only canvas projections materialize only the lineage events that belong to the projected workflow node.
@@ -304,7 +303,6 @@ The main plugin orchestrating AI chat functionality. All AI chat logic is consol
 - `aiUserMessage` - Sent user message bubble with `id` and `createdAt` attributes
 - `aiResponseMessage` - AI response container with streaming animations; media matrix responses contain one `aiReasoningSection` per reasoning run
 - `aiReasoningSection` - Per-model media response slice with its own prose, generation details, and generated thumbnail
-- `aiUserInput` - **DEPRECATED** — kept in schema for legacy migration only, silently stripped
 
 **User input is handled separately by `aiPromptInputPlugin`** — a floating canvas element that renders below the selected node, with its own `ProseMirrorEditor` instance. An `AiPromptInputController` service coordinates message injection between the floating input and thread editors.
 
@@ -339,7 +337,7 @@ sequenceDiagram
       activate Ctrl
       Ctrl->>Plugin: Inject aiUserMessage + USE_AI_CHAT_META
       activate Plugin
-      Plugin->>S: onAiChatSubmit(messages, aiModel)
+      Plugin->>S: onAiChatSubmit(messages, aiReasoningModels)
       activate S
       deactivate Ctrl
   end
@@ -378,7 +376,7 @@ sequenceDiagram
 - Instantiates `ProseMirrorEditor` with initial doc JSON and callbacks:
   - `onEditorChange(json)`: debounced save via `DocumentService.updateDocument` and store flags.
   - `onProjectTitleChange(title)`: immediate title sync to stores and persistence.
-  - `onAiChatSubmit(messages, aiModel)`: forwards to `AiInteractionService.sendChatMessage` (which feeds `SegmentsReceiver`).
+  - `onAiChatSubmit(messages, aiReasoningModels, …)`: forwards to `AiInteractionService.sendChatMessage` (which feeds `SegmentsReceiver`).
   - `onAiChatStop()`: stops active AI streaming.
 - Manages teardown on unmount and re-creation when document metadata changes.
 
@@ -498,7 +496,6 @@ User input is handled by a separate `aiPromptInputPlugin` which renders as a flo
 - Fresh documents are created using ProseMirror's `createAndFill()` which auto-populates required nodes based on schema
 - The editor accepts a `threadId` parameter to ensure the `aiChatThread` node has the correct ID for streaming routing
 - Streaming events (START_STREAM, STREAMING, END_STREAM) are scoped by `threadId` for multi-thread support
-- Legacy `aiUserInput` nodes in old thread documents are silently stripped during load via `appendTransaction`
 
 ---
 This knowledge base is hand-audited against the current codebase (see paths above) and aims to be stable, specific, and actionable for future development.

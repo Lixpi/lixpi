@@ -27,6 +27,7 @@ import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     parseAiModelSelectionAttr,
+    serializeAiModelSelectionAttr,
     parseMediaGenerationConfigSelectionAttr,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import type {
@@ -54,15 +55,13 @@ const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 // ========== TYPE DEFINITIONS ==========
 
 type ImageOptions = {
-    aiImageModel: string
-    aiImageModels?: string[]
+    aiImageModels: string[]
     imageGenerationSize: ImageGenerationSize
     configGroups?: MediaGenerationConfigSelectionGroup[]
 }
 
 type VideoOptions = {
-    aiVideoModel: string
-    aiVideoModels?: string[]
+    aiVideoModels: string[]
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string
@@ -75,8 +74,7 @@ type VideoOptions = {
 }
 
 type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & {
-    aiModels?: string[]
-    useMultipleModels?: boolean
+    aiReasoningModels?: string[]
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
@@ -1970,7 +1968,7 @@ class AiChatThreadPluginClass {
             const n = $pos.node(d)
             if (n.type.name === aiChatThreadNodeType) {
                 threadId = n.attrs.threadId
-                aiImageModel = n.attrs.aiImageModel
+                aiImageModel = parseAiModelSelectionAttr(n.attrs.aiImageModels)[0]
                 break
             }
         }
@@ -1983,7 +1981,7 @@ class AiChatThreadPluginClass {
             threadId,
             aiChatThreadId: threadId,
             imageOptions: {
-                aiImageModel,
+                aiImageModels: [aiImageModel],
                 imageGenerationSize: '1024x1024'
             }
         })
@@ -2271,6 +2269,21 @@ class AiChatThreadPluginClass {
         // findResponseNode resolves to the per-run section for matrix runs and to
         // the message itself for unsectioned runs; clear the receiving flag on whichever.
         if (!node || (node.type.name !== aiResponseMessageNodeType && node.type.name !== aiReasoningSectionNodeType)) {
+            if (!IS_RECEIVING_TEMP_DEBUG_STATE && threadId) {
+                dispatch(state.tr.setMeta('setReceiving', { threadId, receiving: false, runKey: getReasoningRunKey(generationRun) }))
+            }
+            return
+        }
+
+        // Media generations finalize a run twice: `image_complete` / `video_complete`
+        // call handleStreamEnd, and the trailing `END_STREAM` calls it again. If this
+        // response/section is already finalized, re-applying the markup would still be
+        // recorded as a doc-changing step (setNodeMarkup never diffs attrs) and would
+        // persist a byte-identical document a second time. Clear receiving state via
+        // meta only so the redundant END_STREAM stays a no-op for persistence.
+        const alreadyFinalized = node.attrs.isReceivingAnimation === false
+            && node.attrs.isInitialRenderAnimation === false
+        if (alreadyFinalized) {
             if (!IS_RECEIVING_TEMP_DEBUG_STATE && threadId) {
                 dispatch(state.tr.setMeta('setReceiving', { threadId, receiving: false, runKey: getReasoningRunKey(generationRun) }))
             }
@@ -2567,21 +2580,20 @@ class AiChatThreadPluginClass {
             return null
         }
 
-        // Extract thread attributes including image + video generation settings
+        // Extract thread attributes including image + video generation settings.
+        // Each section's selection is a single ordered model-id array attr; the
+        // useMultiple* flag is the safeguard that gates whether the whole array
+        // is submitted (multi) or collapsed to its first model (singular).
         const {
-            aiModel = '',
-            aiModels = '',
-            useMultipleModels = false,
+            aiReasoningModels = '',
             useMultipleReasoningModels = false,
             useMultipleImageModels = false,
             useMultipleVideoModels = false,
-            aiImageModel = '',
             aiImageModels = '',
             threadContext = 'Thread',
             threadId: threadIdFromNode = '',
             imageGenerationSize = 'auto',
             imageGenerationConfigGroups = '',
-            aiVideoModel = '',
             aiVideoModels = '',
             videoAspectRatio = '',
             videoResolution = '',
@@ -2591,41 +2603,24 @@ class AiChatThreadPluginClass {
         } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
 
-        const combinedMultiModelFlag = useMultipleModels === true || useMultipleModels === 'true'
-        const rawReasoningModelsEnabled = useMultipleReasoningModels === true
+        const reasoningModelsEnabled = useMultipleReasoningModels === true
             || useMultipleReasoningModels === 'true'
-        const rawImageModelsEnabled = useMultipleImageModels === true
+        const imageModelsEnabled = useMultipleImageModels === true
             || useMultipleImageModels === 'true'
-        const rawVideoModelsEnabled = useMultipleVideoModels === true
+        const videoModelsEnabled = useMultipleVideoModels === true
             || useMultipleVideoModels === 'true'
-        const hasSectionModelMode = rawReasoningModelsEnabled || rawImageModelsEnabled || rawVideoModelsEnabled
-        const shouldExpandCombinedModelFlag = combinedMultiModelFlag && !hasSectionModelMode
-        const reasoningModelsEnabled = rawReasoningModelsEnabled || shouldExpandCombinedModelFlag
-        const imageModelsEnabled = rawImageModelsEnabled || shouldExpandCombinedModelFlag
-        const videoModelsEnabled = rawVideoModelsEnabled || shouldExpandCombinedModelFlag
-        const rawReasoningModelIds = parseAiModelSelectionAttr(aiModels)
+        const rawReasoningModelIds = parseAiModelSelectionAttr(aiReasoningModels)
         const rawImageModelIds = parseAiModelSelectionAttr(aiImageModels)
         const rawVideoModelIds = parseAiModelSelectionAttr(aiVideoModels)
         const imageConfigGroups = parseMediaGenerationConfigSelectionAttr(imageGenerationConfigGroups)
         const videoConfigGroups = parseMediaGenerationConfigSelectionAttr(videoGenerationConfigGroups)
-        const reasoningModelIds = reasoningModelsEnabled
-            ? rawReasoningModelIds
-            : []
-        const imageModelIds = imageModelsEnabled
-            ? rawImageModelIds
-            : []
-        const videoModelIds = videoModelsEnabled
-            ? rawVideoModelIds
-            : []
-        const effectiveAiModel = reasoningModelsEnabled
-            ? reasoningModelIds[0] || ''
-            : aiModel || rawReasoningModelIds[0] || ''
-        const effectiveImageModel = imageModelsEnabled
-            ? imageModelIds[0] || ''
-            : aiImageModel || rawImageModelIds[0] || ''
-        const effectiveVideoModel = videoModelsEnabled
-            ? videoModelIds[0] || ''
-            : aiVideoModel || rawVideoModelIds[0] || ''
+        // Multi disabled → only the first selected model is used for that section.
+        const reasoningModelIds = reasoningModelsEnabled ? rawReasoningModelIds : rawReasoningModelIds.slice(0, 1)
+        const imageModelIds = imageModelsEnabled ? rawImageModelIds : rawImageModelIds.slice(0, 1)
+        const videoModelIds = videoModelsEnabled ? rawVideoModelIds : rawVideoModelIds.slice(0, 1)
+        const effectiveAiModel = reasoningModelIds[0] || ''
+        const effectiveImageModel = imageModelIds[0] || ''
+        const effectiveVideoModel = videoModelIds[0] || ''
 
         if (reasoningModelsEnabled && reasoningModelIds.length === 0) {
             alert('Please select at least 1 reasoning model.')
@@ -2654,7 +2649,6 @@ class AiChatThreadPluginClass {
 
         // Build image generation options if an image model is selected
         const imageOptions = effectiveImageModel ? {
-            aiImageModel: effectiveImageModel,
             aiImageModels: imageModelIds,
             imageGenerationSize,
             ...(imageModelsEnabled && imageConfigGroups.length > 0 ? { configGroups: imageConfigGroups } : {}),
@@ -2664,7 +2658,6 @@ class AiChatThreadPluginClass {
         // sourceVideoNodeId is preserved through the thread node attrs and only
         // forwarded when present (set by the "Extend in new thread" action).
         const videoOptions = effectiveVideoModel ? {
-            aiVideoModel: effectiveVideoModel,
             aiVideoModels: videoModelIds,
             videoAspectRatio,
             videoResolution,
@@ -2673,18 +2666,16 @@ class AiChatThreadPluginClass {
             ...(sourceVideoNodeId ? { sourceVideoNodeId } : {})
         } : undefined
 
-        const selectedReasoningModelCount = reasoningModelIds.length > 0 ? reasoningModelIds.length : effectiveAiModel ? 1 : 0
-        const selectedImageModelCount = imageModelIds.length > 0 ? imageModelIds.length : effectiveImageModel ? 1 : 0
-        const selectedVideoModelCount = videoModelIds.length > 0 ? videoModelIds.length : effectiveVideoModel ? 1 : 0
-        const selectedModelCount = selectedReasoningModelCount + selectedImageModelCount + selectedVideoModelCount
-        const scalarModelCount = (effectiveAiModel ? 1 : 0) + (effectiveImageModel ? 1 : 0) + (effectiveVideoModel ? 1 : 0)
-        const usesMediaGenerationMatrix = selectedModelCount > scalarModelCount
+        // The media-generation matrix is needed only when some section carries
+        // more than one model; a single model per section runs the plain path.
+        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, videoModelIds.length]
+        const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
+        const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
+        const usesMediaGenerationMatrix = totalSelectedModelCount > sectionsWithSelection
 
         const requestPayload = {
             messages,
-            aiModel: effectiveAiModel,
-            aiModels: reasoningModelIds,
-            useMultipleModels: reasoningModelsEnabled || imageModelsEnabled || videoModelsEnabled,
+            aiReasoningModels: reasoningModelIds,
             useMultipleReasoningModels: reasoningModelsEnabled,
             useMultipleImageModels: imageModelsEnabled,
             useMultipleVideoModels: videoModelsEnabled,
@@ -2891,9 +2882,10 @@ class AiChatThreadPluginClass {
                                     }
                                 }
                             })
-                            if (threadPos !== -1 && threadNode && threadNode.attrs.aiModel !== newModel) {
+                            const currentReasoningModel = parseAiModelSelectionAttr((threadNode as ProseMirrorNode | null)?.attrs.aiReasoningModels)[0] ?? ''
+                            if (threadPos !== -1 && threadNode && currentReasoningModel !== newModel) {
                                 const tr = newState.tr
-                                const newAttrs = { ...threadNode.attrs, aiModel: newModel }
+                                const newAttrs = { ...threadNode.attrs, aiReasoningModels: serializeAiModelSelectionAttr([newModel]) }
                                 tr.setNodeMarkup(threadPos, undefined, newAttrs)
                                 documentStore.setMetaValues({ requiresSave: true })
                                 return tr

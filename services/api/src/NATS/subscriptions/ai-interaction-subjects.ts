@@ -11,6 +11,7 @@ import {
 } from '@lixpi/constants'
 
 import AiModel from '../../models/ai-model.ts'
+import Organization from '../../models/organization.ts'
 import type { LlmModule } from '../../llm/index.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
@@ -42,6 +43,16 @@ const normalizeModelOption = (
     return values[0]
 }
 
+const resolveUserOrganizationId = async (userId: string): Promise<string | undefined> => {
+    try {
+        const organizations = await Organization.getUserOrganizations({ userId })
+        return organizations[0]?.organizationId
+    } catch (e) {
+        err(`Failed to resolve organization for AI interaction user ${userId}:`, e)
+        return undefined
+    }
+}
+
 export const aiInteractionSubjects = [
     {
         subject: AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE,
@@ -56,12 +67,11 @@ export const aiInteractionSubjects = [
             const {
                 user: { userId, stripeCustomerId },
                 messages,
-                aiModel,
-                aiImageModel,
-                aiVideoModel,
+                aiReasoningModels,
+                aiImageModels,
+                aiVideoModels,
                 workspaceId,
                 aiChatThreadId,
-                organizationId,
                 enableImageGeneration,
                 imageSize,
                 videoAspectRatio,
@@ -76,18 +86,25 @@ export const aiInteractionSubjects = [
                 user: { userId: string; stripeCustomerId: string }
                 workspaceId: string
                 aiChatThreadId: string
-                organizationId: string
+                organizationId?: string
                 enableImageGeneration?: boolean
                 imageSize?: string
-                aiImageModel?: string
-                aiVideoModel?: string
+                aiImageModels?: string[]
+                aiVideoModels?: string[]
                 videoAspectRatio?: string
                 videoResolution?: string
                 videoDuration?: number | string
                 videoSourceForExtension?: string
             } & AiInteractionChatSendMessagePayload
 
+            // The selection is an ordered model-id array; the legacy single-model
+            // path below operates on the first model of each section.
+            const aiModel = aiReasoningModels?.[0]
+            const aiImageModel = aiImageModels?.[0]
+            const aiVideoModel = aiVideoModels?.[0]
+
             const natsService = await NATS_Service.getInstance()
+            const organizationId = referencedFeatureIds?.length ? await resolveUserOrganizationId(userId) : undefined
 
             if (mediaGenerationRequest) {
                 infoStr([

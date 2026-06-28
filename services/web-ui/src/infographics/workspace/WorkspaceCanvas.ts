@@ -5551,9 +5551,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 onProjectTitleChange: () => {},
                 onAiChatSubmit: async ({
                     messages,
-                    aiModel,
-                    aiModels,
-                    useMultipleModels,
+                    aiReasoningModels,
                     useMultipleReasoningModels,
                     useMultipleImageModels,
                     useMultipleVideoModels,
@@ -5584,9 +5582,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         // resolution, so the snapshot must be built whenever an image OR
                         // video model is selected.
                         const hasMediaModel = Boolean(
-                            imageOptions?.aiImageModel
-                            || imageOptions?.aiImageModels?.length
-                            || videoOptions?.aiVideoModel
+                            imageOptions?.aiImageModels?.length
                             || videoOptions?.aiVideoModels?.length
                         )
                         const imagePlacement = rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)
@@ -5623,17 +5619,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                         aiService.sendChatMessage({
                             messages: messagesWithContext,
-                            aiModel,
-                            aiModels,
-                            useMultipleModels,
+                            aiReasoningModels: aiReasoningModels ?? [],
                             useMultipleReasoningModels,
                             useMultipleImageModels,
                             useMultipleVideoModels,
-                            aiImageModel: imageOptions?.aiImageModel,
                             aiImageModels: imageOptions?.aiImageModels,
                             imageSize: imageOptions?.imageGenerationSize,
                             imageConfigGroups: imageOptions?.configGroups,
-                            aiVideoModel: videoOptions?.aiVideoModel,
                             aiVideoModels: videoOptions?.aiVideoModels,
                             videoAspectRatio: videoOptions?.videoAspectRatio,
                             videoResolution: videoOptions?.videoResolution,
@@ -5899,9 +5891,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             onProjectTitleChange: () => {},
             onAiChatSubmit: async ({
                 messages,
-                aiModel,
-                aiModels,
-                useMultipleModels,
+                aiReasoningModels,
                 useMultipleReasoningModels,
                 useMultipleImageModels,
                 useMultipleVideoModels,
@@ -5920,9 +5910,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const promptText = getPromptTextFromMessages(messages)
                     const explicitMediaReferenceNodeIds = getExistingMediaNodeIds(explicitContextNodeIds)
                     const hasMediaModel = Boolean(
-                        imageOptions?.aiImageModel
-                        || imageOptions?.aiImageModels?.length
-                        || videoOptions?.aiVideoModel
+                        imageOptions?.aiImageModels?.length
                         || videoOptions?.aiVideoModels?.length
                     )
 
@@ -5980,17 +5968,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                     await aiService.sendChatMessage({
                         messages: messagesWithContext,
-                        aiModel,
-                        aiModels,
-                        useMultipleModels,
+                        aiReasoningModels: aiReasoningModels ?? [],
                         useMultipleReasoningModels,
                         useMultipleImageModels,
                         useMultipleVideoModels,
-                        aiImageModel: imageOptions?.aiImageModel,
                         aiImageModels: imageOptions?.aiImageModels,
                         imageSize: imageOptions?.imageGenerationSize,
                         imageConfigGroups: imageOptions?.configGroups,
-                        aiVideoModel: videoOptions?.aiVideoModel,
                         aiVideoModels: videoOptions?.aiVideoModels,
                         videoAspectRatio: videoOptions?.videoAspectRatio,
                         videoResolution: videoOptions?.videoResolution,
@@ -6040,7 +6024,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // visible projection, but storage/stream parsing/persistence stays on the same
     // aiChatThreadPlugin path as the panel.
     async function submitCanvasGenerationRun(data: AiPromptComposerSubmitData): Promise<void> {
-        if (!data.aiModel) {
+        if (!data.aiReasoningModels[0]) {
             alert('Please select an AI model from the dropdown before submitting.')
             return
         }
@@ -6063,7 +6047,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             workspaceId,
             threadId,
             content: initialContent,
-            aiModel: data.aiModel,
+            aiModel: data.aiReasoningModels[0] ?? '',
             title: promptText,
             owner: { type: 'standalone' },
         })
@@ -6089,9 +6073,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
             await promptInputController.submitMessage({
                 contentJSON: data.contentJSON,
-                aiModel: data.aiModel,
-                aiModels: data.aiModels,
-                useMultipleModels: data.useMultipleModels,
+                aiReasoningModels: data.aiReasoningModels,
                 useMultipleReasoningModels: data.useMultipleReasoningModels,
                 useMultipleImageModels: data.useMultipleImageModels,
                 useMultipleVideoModels: data.useMultipleVideoModels,
@@ -6294,14 +6276,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         promptText: string,
     ): NonNullable<BranchMarkerNode['pendingState']> {
         const reasoningModelIds = data.useMultipleReasoningModels
-            ? uniqueAiModelIds(data.aiModels)
-            : uniqueAiModelIds([data.aiModel])
+            ? uniqueAiModelIds(data.aiReasoningModels)
+            : uniqueAiModelIds(data.aiReasoningModels.slice(0, 1))
         const imageModelIds = data.useMultipleImageModels
             ? uniqueAiModelIds(data.imageOptions?.aiImageModels ?? [])
-            : uniqueAiModelIds([data.imageOptions?.aiImageModel])
+            : uniqueAiModelIds((data.imageOptions?.aiImageModels ?? []).slice(0, 1))
         const videoModelIds = data.useMultipleVideoModels
             ? uniqueAiModelIds(data.videoOptions?.aiVideoModels ?? [])
-            : uniqueAiModelIds([data.videoOptions?.aiVideoModel])
+            : uniqueAiModelIds((data.videoOptions?.aiVideoModels ?? []).slice(0, 1))
         return {
             phase: 'preflight',
             promptText,

@@ -212,10 +212,10 @@ describe('aiPromptInputNodeSpec — schema definition', () => {
     })
 
     describe('default attribute values', () => {
-        it('aiModel defaults to empty string', () => {
+        it('aiReasoningModels defaults to empty string', () => {
             const state = createBaseEditorState(doc(promptInput(p())))
             const node = state.doc.firstChild!
-            expect(node.attrs.aiModel).toBe('')
+            expect(node.attrs.aiReasoningModels).toBe('')
         })
 
         it('imageGenerationSize defaults to auto', () => {
@@ -227,7 +227,7 @@ describe('aiPromptInputNodeSpec — schema definition', () => {
 
     describe('toDOM output', () => {
         it('renders a div with class ai-prompt-input-wrapper', () => {
-            const state = createBaseEditorState(doc(promptInput({ aiModel: 'gpt-4' }, p('Hello'))))
+            const state = createBaseEditorState(doc(promptInput({ aiReasoningModels: '["gpt-4"]' }, p('Hello'))))
             const node = state.doc.firstChild!
             const domSpec = aiPromptInputNodeSpec.toDOM(node) as any[]
 
@@ -237,14 +237,14 @@ describe('aiPromptInputNodeSpec — schema definition', () => {
 
         it('serializes attributes as data-* attributes', () => {
             const state = createBaseEditorState(doc(promptInput(
-                { aiModel: 'gpt-4', imageGenerationSize: '512x512' },
+                { aiReasoningModels: '["gpt-4"]', imageGenerationSize: '512x512' },
                 p('Hello'),
             )))
             const node = state.doc.firstChild!
             const domSpec = aiPromptInputNodeSpec.toDOM(node) as any[]
             const attrs = domSpec[1]
 
-            expect(attrs['data-ai-model']).toBe('gpt-4')
+            expect(attrs['data-ai-reasoning-models']).toBe('["gpt-4"]')
             expect(attrs['data-image-generation-size']).toBe('512x512')
         })
 
@@ -265,13 +265,13 @@ describe('aiPromptInputNodeSpec — schema definition', () => {
         it('extracts attributes from data-* attrs', () => {
             const el = document.createElement('div')
             el.className = 'ai-prompt-input-wrapper'
-            el.setAttribute('data-ai-model', 'claude-3')
+            el.setAttribute('data-ai-reasoning-models', '["claude-3"]')
             el.setAttribute('data-image-generation-size', '256x256')
 
             const parseRule = aiPromptInputNodeSpec.parseDOM![0]
             const attrs = parseRule.getAttrs!(el as any) as Record<string, unknown>
 
-            expect(attrs.aiModel).toBe('claude-3')
+            expect(attrs.aiReasoningModels).toBe('["claude-3"]')
             expect(attrs.imageGenerationSize).toBe('256x256')
         })
 
@@ -282,7 +282,7 @@ describe('aiPromptInputNodeSpec — schema definition', () => {
             const parseRule = aiPromptInputNodeSpec.parseDOM![0]
             const attrs = parseRule.getAttrs!(el as any) as Record<string, unknown>
 
-            expect(attrs.aiModel).toBe('')
+            expect(attrs.aiReasoningModels).toBe('')
             expect(attrs.imageGenerationSize).toBe('auto')
         })
     })
@@ -586,7 +586,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
 
         it('keeps single-select dropdowns mounted until a section toggle enables multi-select mode', () => {
             const { nv, factories, mockView } = createNodeView('Hello', {
-                aiModel: 'Anthropic:sonnet-4-6',
+                aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6']),
             })
 
             expect(factories.createModelDropdown).toHaveBeenCalledTimes(1)
@@ -602,7 +602,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(mockView.state.doc.firstChild!.attrs.useMultipleReasoningModels).toBe(true)
             expect(mockView.state.doc.firstChild!.attrs.useMultipleImageModels).toBe(false)
             expect(mockView.state.doc.firstChild!.attrs.useMultipleVideoModels).toBe(false)
-            expect(mockView.state.doc.firstChild!.attrs.aiModels).toBe(JSON.stringify(['Anthropic:sonnet-4-6']))
+            expect(mockView.state.doc.firstChild!.attrs.aiReasoningModels).toBe(JSON.stringify(['Anthropic:sonnet-4-6']))
             expect(factories.createModelMultiSelect).toHaveBeenCalledTimes(1)
             expect(nv.dom.contains(factories.modelMultiSelectDom)).toBe(true)
             expect(nv.dom.contains(factories.modelDropdownDom)).toBe(false)
@@ -631,8 +631,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             ] as any)
 
             const { nv, mockView } = createNodeView('Hello', {
-                aiModel: 'Anthropic:sonnet-4-6',
-                aiModels: JSON.stringify(['Anthropic:sonnet-4-6', 'Anthropic:opus-4-8']),
+                aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6', 'Anthropic:opus-4-8']),
                 useMultipleReasoningModels: true,
                 aiImageModels: JSON.stringify(['Anthropic:sonnet-4-6']),
             })
@@ -656,8 +655,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             reasoningTagsRow.querySelector('.tag-pill-close')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
             nv.update!(mockView.state.doc.firstChild!)
 
-            expect(mockView.state.doc.firstChild!.attrs.aiModel).toBe('Anthropic:opus-4-8')
-            expect(mockView.state.doc.firstChild!.attrs.aiModels).toBe(JSON.stringify(['Anthropic:opus-4-8']))
+            expect(mockView.state.doc.firstChild!.attrs.aiReasoningModels).toBe(JSON.stringify(['Anthropic:opus-4-8']))
             expect(reasoningLabels()).toEqual(['Opus 4.8'])
             expect(Number(reasoningTagsRow.querySelector('.tag-pill-background')!.getAttribute('width'))).toBe(initialPillWidths[1])
 
@@ -993,7 +991,7 @@ describe('createAiPromptInputNodeView — destroy', () => {
 describe('createAiPromptInputNodeView — control adapters', () => {
     it('createModelDropdown receives AiModelControls adapter', () => {
         const factories = createMockControlFactories()
-        const testDoc = doc(promptInput({ aiModel: 'gpt-4' }, p('Hello')))
+        const testDoc = doc(promptInput({ aiReasoningModels: '["gpt-4"]' }, p('Hello')))
         const state = createBaseEditorState(testDoc)
 
         createAiPromptInputNodeView({
@@ -1349,7 +1347,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const { options } = createPluginOptions()
         const plugin = createAiPromptInputPlugin(options)
 
-        const testDoc = doc(promptInput({ aiModel: 'gpt-4' }, p('Hello world')))
+        const testDoc = doc(promptInput({ aiReasoningModels: '["gpt-4"]' }, p('Hello world')))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
 
         const mockView = {
@@ -1373,14 +1371,14 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const submitCall = options.onSubmit.mock.calls[0][0]
         expect(submitCall.contentJSON).toBeInstanceOf(Array)
         expect(submitCall.contentJSON.length).toBeGreaterThan(0)
-        expect(submitCall.aiModel).toBe('gpt-4')
+        expect(submitCall.aiReasoningModels).toEqual(['gpt-4'])
     })
 
     it('Ctrl+Enter also triggers submit (Windows/Linux)', () => {
         const { options } = createPluginOptions()
         const plugin = createAiPromptInputPlugin(options)
 
-        const testDoc = doc(promptInput({ aiModel: 'claude' }, p('Hello')))
+        const testDoc = doc(promptInput({ aiReasoningModels: '["claude"]' }, p('Hello')))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
 
         const mockView = { state, dispatch: vi.fn() } as unknown as EditorView
@@ -1455,11 +1453,9 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const serializedModels = JSON.stringify(selectedModels)
 
         const testDoc = doc(promptInput({
-            aiModel: selectedModels[0],
-            aiModels: serializedModels,
-            useMultipleModels: true,
+            aiReasoningModels: serializedModels,
             useMultipleReasoningModels: true,
-            aiImageModel: 'Google:gemini-2.5-flash-image',
+            aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
             imageGenerationSize: 'auto',
         }, p('Hello world')))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
@@ -1476,11 +1472,9 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
 
         const inputNode = (mockView as any).state.doc.firstChild!
         expect(inputNode.textContent).toBe('')
-        expect(inputNode.attrs.aiModel).toBe(selectedModels[0])
-        expect(inputNode.attrs.aiModels).toBe(serializedModels)
-        expect(inputNode.attrs.useMultipleModels).toBe(true)
+        expect(inputNode.attrs.aiReasoningModels).toBe(serializedModels)
         expect(inputNode.attrs.useMultipleReasoningModels).toBe(true)
-        expect(inputNode.attrs.aiImageModel).toBe('Google:gemini-2.5-flash-image')
+        expect(inputNode.attrs.aiImageModels).toBe(JSON.stringify(['Google:gemini-2.5-flash-image']))
         expect(inputNode.attrs.imageGenerationSize).toBe('auto')
     })
 })
@@ -1495,7 +1489,7 @@ describe('createAiPromptInputPlugin — image options handling', () => {
         const plugin = createAiPromptInputPlugin(options)
 
         const testDoc = doc(promptInput(
-            { aiModel: 'dall-e-3', imageGenerationSize: '512x512' },
+            { aiReasoningModels: '["dall-e-3"]', imageGenerationSize: '512x512' },
             p('Create an image'),
         ))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
@@ -1511,7 +1505,6 @@ describe('createAiPromptInputPlugin — image options handling', () => {
 
         const submitCall = options.onSubmit.mock.calls[0][0]
         expect(submitCall.imageOptions).toEqual({
-            aiImageModel: '',
             aiImageModels: [],
             imageGenerationSize: '512x512',
         })
@@ -1522,7 +1515,7 @@ describe('createAiPromptInputPlugin — image options handling', () => {
         const plugin = createAiPromptInputPlugin(options)
 
         const testDoc = doc(promptInput(
-            { aiModel: 'gpt-4' },
+            { aiReasoningModels: '["gpt-4"]' },
             p('Hello'),
         ))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
@@ -1538,7 +1531,6 @@ describe('createAiPromptInputPlugin — image options handling', () => {
 
         const submitCall = options.onSubmit.mock.calls[0][0]
         expect(submitCall.imageOptions).toEqual({
-            aiImageModel: '',
             aiImageModels: [],
             imageGenerationSize: 'auto',
         })
@@ -1554,7 +1546,7 @@ describe('createAiPromptInputPlugin — appendTransaction meta handling', () => 
         const { options } = createPluginOptions()
         const plugin = createAiPromptInputPlugin(options)
 
-        const testDoc = doc(promptInput({ aiModel: 'gpt-4' }, p('Meta submit test')))
+        const testDoc = doc(promptInput({ aiReasoningModels: '["gpt-4"]' }, p('Meta submit test')))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
 
         const tr = state.tr.setMeta(SUBMIT_AI_PROMPT_META, true)

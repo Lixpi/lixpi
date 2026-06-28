@@ -12,18 +12,16 @@ describe('AI prompt draft model settings', () => {
     it('copies submitted reasoning multi-model settings into an empty thread composer draft', () => {
         const selectedModels = ['Google:gemini-flash-latest', 'Anthropic:sonnet-4-6']
         const attrs = buildAiPromptDraftAttrsFromSubmitData({
-            aiModel: selectedModels[0],
-            aiModels: selectedModels,
-            useMultipleModels: true,
+            aiReasoningModels: selectedModels,
             useMultipleReasoningModels: true,
             useMultipleImageModels: false,
             useMultipleVideoModels: false,
             imageOptions: {
-                aiImageModel: 'Google:gemini-2.5-flash-image',
+                aiImageModels: ['Google:gemini-2.5-flash-image'],
                 imageGenerationSize: 'auto',
             },
             videoOptions: {
-                aiVideoModel: 'Video:default',
+                aiVideoModels: ['Video:default'],
                 videoAspectRatio: '16:9',
                 videoResolution: '720p',
                 videoDuration: '8s',
@@ -31,52 +29,45 @@ describe('AI prompt draft model settings', () => {
         })
         const draftAttrs = getPromptInputAttrs(buildAiPromptDraftFromText('', attrs))
 
-        expect(draftAttrs.aiModel).toBe(selectedModels[0])
-        expect(JSON.parse(draftAttrs.aiModels)).toEqual(selectedModels)
-        expect(draftAttrs.useMultipleModels).toBe(true)
+        expect(JSON.parse(draftAttrs.aiReasoningModels)).toEqual(selectedModels)
         expect(draftAttrs.useMultipleReasoningModels).toBe(true)
         expect(draftAttrs.useMultipleImageModels).toBe(false)
         expect(draftAttrs.useMultipleVideoModels).toBe(false)
-        expect(draftAttrs.aiImageModel).toBe('Google:gemini-2.5-flash-image')
+        expect(JSON.parse(draftAttrs.aiImageModels)).toEqual(['Google:gemini-2.5-flash-image'])
         expect(draftAttrs.imageGenerationSize).toBe('auto')
-        expect(draftAttrs.aiVideoModel).toBe('Video:default')
+        expect(JSON.parse(draftAttrs.aiVideoModels)).toEqual(['Video:default'])
         expect(draftAttrs.videoAspectRatio).toBe('16:9')
         expect(draftAttrs.videoResolution).toBe('720p')
         expect(draftAttrs.videoDuration).toBe('8s')
     })
 
-    it('keeps legacy multi-model submissions compatible when section flags are absent', () => {
+    it('treats each section multi-model flag independently', () => {
         const selectedModels = ['Anthropic:sonnet-4-6', 'Google:gemini-pro-latest']
         const draftAttrs = getPromptInputAttrs(buildAiPromptDraftFromText('', buildAiPromptDraftAttrsFromSubmitData({
-            aiModel: selectedModels[0],
-            aiModels: selectedModels,
-            useMultipleModels: 'true',
+            aiReasoningModels: selectedModels,
+            useMultipleReasoningModels: 'true',
         })))
 
-        expect(JSON.parse(draftAttrs.aiModels)).toEqual(selectedModels)
-        expect(draftAttrs.useMultipleModels).toBe(true)
+        expect(JSON.parse(draftAttrs.aiReasoningModels)).toEqual(selectedModels)
         expect(draftAttrs.useMultipleReasoningModels).toBe(true)
-        expect(draftAttrs.useMultipleImageModels).toBe(true)
-        expect(draftAttrs.useMultipleVideoModels).toBe(true)
+        expect(draftAttrs.useMultipleImageModels).toBe(false)
+        expect(draftAttrs.useMultipleVideoModels).toBe(false)
     })
 
-    it('filters non-string aiModels before serializing and ignores legacy multi-select fallback when not enabled', () => {
+    it('filters non-string reasoning models before serializing and collapses to the first when multi is disabled', () => {
         const attrs = buildAiPromptDraftAttrsFromSubmitData({
-            aiModel: 'Google:gemini-flash-latest',
-            aiModels: ['Google:gemini-flash-latest', null, 'Anthropic:sonnet-4-6', undefined] as any,
+            aiReasoningModels: ['Google:gemini-flash-latest', null, 'Anthropic:sonnet-4-6', undefined] as any,
         })
 
-        expect(JSON.parse(attrs.aiModels)).toEqual(['Google:gemini-flash-latest'])
+        expect(JSON.parse(attrs.aiReasoningModels)).toEqual(['Google:gemini-flash-latest'])
     })
 
-    it('interprets "false" string flag as disabled when parsing legacy multi-model mode', () => {
+    it('interprets "false" string section flags as disabled', () => {
         const attrs = buildAiPromptDraftAttrsFromSubmitData({
-            aiModel: 'Google:gemini-flash-latest',
-            aiModels: ['Google:gemini-flash-latest'],
-            useMultipleModels: 'false',
+            aiReasoningModels: ['Google:gemini-flash-latest'],
+            useMultipleReasoningModels: 'false',
         })
 
-        expect(attrs.useMultipleModels).toBe(false)
         expect(attrs.useMultipleReasoningModels).toBe(false)
         expect(attrs.useMultipleImageModels).toBe(false)
         expect(attrs.useMultipleVideoModels).toBe(false)

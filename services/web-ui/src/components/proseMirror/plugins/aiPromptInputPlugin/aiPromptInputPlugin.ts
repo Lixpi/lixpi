@@ -13,21 +13,17 @@ import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
 
 type SubmitHandler = (data: {
     contentJSON: any[]
-    aiModel: string
-    aiModels: string[]
-    useMultipleModels: boolean
+    aiReasoningModels: string[]
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
     useMultipleVideoModels: boolean
     imageOptions?: {
-        aiImageModel?: string
-        aiImageModels?: string[]
+        aiImageModels: string[]
         imageGenerationSize: string
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
     videoOptions?: {
-        aiVideoModel?: string
-        aiVideoModels?: string[]
+        aiVideoModels: string[]
         videoAspectRatio?: string
         videoResolution?: string
         videoDuration?: string
@@ -85,17 +81,13 @@ function extractContentJSON(state: EditorState): any[] | null {
 }
 
 type InputAttrs = {
-    aiModel: string
-    aiModels: string[]
-    useMultipleModels: boolean
+    aiReasoningModels: string[]
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
     useMultipleVideoModels: boolean
-    aiImageModel: string
     aiImageModels: string[]
     imageGenerationSize: string
     imageGenerationConfigGroups: MediaGenerationConfigSelectionGroup[]
-    aiVideoModel: string
     aiVideoModels: string[]
     videoAspectRatio: string
     videoResolution: string
@@ -105,17 +97,13 @@ type InputAttrs = {
 
 function getInputAttrs(state: EditorState): InputAttrs {
     let attrs: InputAttrs = {
-        aiModel: '',
-        aiModels: [],
-        useMultipleModels: false,
+        aiReasoningModels: [],
         useMultipleReasoningModels: false,
         useMultipleImageModels: false,
         useMultipleVideoModels: false,
-        aiImageModel: '',
         aiImageModels: [],
         imageGenerationSize: 'auto',
         imageGenerationConfigGroups: [],
-        aiVideoModel: '',
         aiVideoModels: [],
         videoAspectRatio: '',
         videoResolution: '',
@@ -124,24 +112,14 @@ function getInputAttrs(state: EditorState): InputAttrs {
     }
     state.doc.descendants((node: ProseMirrorNode) => {
         if (node.type.name === aiPromptInputNodeType) {
-            const legacyUseMultipleModels = node.attrs.useMultipleModels === true || node.attrs.useMultipleModels === 'true'
-            const rawUseMultipleReasoningModels = node.attrs.useMultipleReasoningModels === true || node.attrs.useMultipleReasoningModels === 'true'
-            const rawUseMultipleImageModels = node.attrs.useMultipleImageModels === true || node.attrs.useMultipleImageModels === 'true'
-            const rawUseMultipleVideoModels = node.attrs.useMultipleVideoModels === true || node.attrs.useMultipleVideoModels === 'true'
-            const hasSectionModelMode = rawUseMultipleReasoningModels || rawUseMultipleImageModels || rawUseMultipleVideoModels
-            const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionModelMode
             attrs = {
-                aiModel: node.attrs.aiModel || '',
-                aiModels: parseAiModelSelectionAttr(node.attrs.aiModels),
-                useMultipleModels: legacyUseMultipleModels,
-                useMultipleReasoningModels: rawUseMultipleReasoningModels || useLegacyModeFallback,
-                useMultipleImageModels: rawUseMultipleImageModels || useLegacyModeFallback,
-                useMultipleVideoModels: rawUseMultipleVideoModels || useLegacyModeFallback,
-                aiImageModel: node.attrs.aiImageModel || '',
+                aiReasoningModels: parseAiModelSelectionAttr(node.attrs.aiReasoningModels),
+                useMultipleReasoningModels: node.attrs.useMultipleReasoningModels === true || node.attrs.useMultipleReasoningModels === 'true',
+                useMultipleImageModels: node.attrs.useMultipleImageModels === true || node.attrs.useMultipleImageModels === 'true',
+                useMultipleVideoModels: node.attrs.useMultipleVideoModels === true || node.attrs.useMultipleVideoModels === 'true',
                 aiImageModels: parseAiModelSelectionAttr(node.attrs.aiImageModels),
                 imageGenerationSize: node.attrs.imageGenerationSize || 'auto',
                 imageGenerationConfigGroups: parseMediaGenerationConfigSelectionAttr(node.attrs.imageGenerationConfigGroups),
-                aiVideoModel: node.attrs.aiVideoModel || '',
                 aiVideoModels: parseAiModelSelectionAttr(node.attrs.aiVideoModels),
                 videoAspectRatio: node.attrs.videoAspectRatio || '',
                 videoResolution: node.attrs.videoResolution || '',
@@ -207,41 +185,31 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
     } = options
 
     const buildSubmitPayload = (contentJSON: any[], attrs: InputAttrs) => {
-        const aiModels = attrs.useMultipleReasoningModels
-            ? (attrs.aiModels.length > 0 ? attrs.aiModels : attrs.aiModel ? [attrs.aiModel] : [])
-            : []
-        const aiImageModels = attrs.useMultipleImageModels
-            ? (attrs.aiImageModels.length > 0 ? attrs.aiImageModels : attrs.aiImageModel ? [attrs.aiImageModel] : [])
-            : []
-        const aiVideoModels = attrs.useMultipleVideoModels
-            ? (attrs.aiVideoModels.length > 0 ? attrs.aiVideoModels : attrs.aiVideoModel ? [attrs.aiVideoModel] : [])
-            : []
+        // Multi disabled → collapse the section's selection to its first model.
+        const collapseForMode = (models: string[], useMultiple: boolean): string[] =>
+            useMultiple ? models : models.slice(0, 1)
+        const aiReasoningModels = collapseForMode(attrs.aiReasoningModels, attrs.useMultipleReasoningModels)
+        const aiImageModels = collapseForMode(attrs.aiImageModels, attrs.useMultipleImageModels)
+        const aiVideoModels = collapseForMode(attrs.aiVideoModels, attrs.useMultipleVideoModels)
         const imageGenerationConfigGroups = attrs.useMultipleImageModels
             ? attrs.imageGenerationConfigGroups
             : []
         const videoGenerationConfigGroups = attrs.useMultipleVideoModels
             ? attrs.videoGenerationConfigGroups
             : []
-        const useMultipleModels = attrs.useMultipleReasoningModels
-            || attrs.useMultipleImageModels
-            || attrs.useMultipleVideoModels
 
         return {
             contentJSON,
-            aiModel: attrs.aiModel,
-            aiModels,
-            useMultipleModels,
+            aiReasoningModels,
             useMultipleReasoningModels: attrs.useMultipleReasoningModels,
             useMultipleImageModels: attrs.useMultipleImageModels,
             useMultipleVideoModels: attrs.useMultipleVideoModels,
             imageOptions: {
-                aiImageModel: attrs.aiImageModel,
                 aiImageModels,
                 imageGenerationSize: attrs.imageGenerationSize,
                 ...(imageGenerationConfigGroups.length > 0 ? { configGroups: imageGenerationConfigGroups } : {}),
             },
             videoOptions: {
-                aiVideoModel: attrs.aiVideoModel,
                 aiVideoModels,
                 videoAspectRatio: attrs.videoAspectRatio,
                 videoResolution: attrs.videoResolution,

@@ -30,34 +30,30 @@ describe('ai model selection parsing and serialization', () => {
 })
 
 describe('aiPromptInputNodeSpec', () => {
-    it('normalizes multi-model lists for toDOM serialization when multi-model mode is enabled', () => {
+    it('normalizes each section model-id array for toDOM serialization', () => {
         const promptNode = testSchema.nodes.aiPromptInput.create({
-            aiModels: '["gpt-4o", "gpt-4o", "", "claude-3"]',
+            aiReasoningModels: '["gpt-4o", "gpt-4o", "", "claude-3"]',
             aiImageModels: '["image-model", "image-model", ""]',
             aiVideoModels: '["video-model", "video-model", ""]',
             imageGenerationSize: 'auto',
             useMultipleReasoningModels: true,
             useMultipleImageModels: true,
             useMultipleVideoModels: true,
-            aiModel: 'fallback-text-model',
-            aiImageModel: 'fallback-image-model',
-            aiVideoModel: 'fallback-video-model',
         }, [testSchema.nodes.paragraph.create(null, [testSchema.text('hello')])])
 
         const domSpec = aiPromptInputNodeSpec.toDOM(promptNode as any) as any[]
         const attrs = domSpec[1]
 
-        expect(attrs['data-ai-models']).toBe('["gpt-4o","claude-3"]')
+        expect(attrs['data-ai-reasoning-models']).toBe('["gpt-4o","claude-3"]')
         expect(attrs['data-ai-image-models']).toBe('["image-model"]')
         expect(attrs['data-ai-video-models']).toBe('["video-model"]')
     })
 
-    it('uses single-model attrs in toDOM when multi-model mode is disabled', () => {
+    it('serializes the stored selection array verbatim in toDOM regardless of the multi flag', () => {
+        // toDOM is the single source of truth: it serializes whatever array is
+        // stored; the useMultiple flag only gates submission, not storage.
         const promptNode = testSchema.nodes.aiPromptInput.create({
-            aiModel: 'gpt-4o',
-            aiImageModel: 'image-model',
-            aiVideoModel: 'video-model',
-            aiModels: '["gpt-4o", "claude-3"]',
+            aiReasoningModels: '["gpt-4o", "claude-3"]',
             aiImageModels: '["image-model", "image-model"]',
             aiVideoModels: '["video-model", "video-model"]',
         }, [testSchema.nodes.paragraph.create(null, [testSchema.text('hello')])])
@@ -65,27 +61,26 @@ describe('aiPromptInputNodeSpec', () => {
         const domSpec = aiPromptInputNodeSpec.toDOM(promptNode as any) as any[]
         const attrs = domSpec[1]
 
-        expect(attrs['data-ai-model']).toBe('gpt-4o')
-        expect(attrs['data-ai-models']).toBe('["gpt-4o"]')
-        expect(attrs['data-ai-image-model']).toBe('image-model')
+        expect(attrs['data-ai-reasoning-models']).toBe('["gpt-4o","claude-3"]')
         expect(attrs['data-ai-image-models']).toBe('["image-model"]')
-        expect(attrs['data-ai-video-model']).toBe('video-model')
         expect(attrs['data-ai-video-models']).toBe('["video-model"]')
     })
 
     it('normalizes model list attrs during parseDom', () => {
         const el = document.createElement('div')
         el.className = 'ai-prompt-input-wrapper'
-        el.setAttribute('data-ai-models', '["gpt-4o", "", "claude-3", "claude-3"]')
+        el.setAttribute('data-ai-reasoning-models', '["gpt-4o", "", "claude-3", "claude-3"]')
         el.setAttribute('data-ai-image-models', '["image-model", "", "image-model"]')
         el.setAttribute('data-ai-video-models', '[]')
         el.setAttribute('data-image-generation-size', '1024x1024')
-        el.setAttribute('data-use-multiple-models', 'true')
+        el.setAttribute('data-use-multiple-reasoning-models', 'true')
+        el.setAttribute('data-use-multiple-image-models', 'true')
+        el.setAttribute('data-use-multiple-video-models', 'true')
 
         const parseRule = aiPromptInputNodeSpec.parseDOM![0]
         const attrs = parseRule.getAttrs!(el as any) as Record<string, any>
 
-        expect(attrs.aiModels).toBe('["gpt-4o","claude-3"]')
+        expect(attrs.aiReasoningModels).toBe('["gpt-4o","claude-3"]')
         expect(attrs.aiImageModels).toBe('["image-model"]')
         expect(attrs.aiVideoModels).toBe('')
         expect(attrs.useMultipleReasoningModels).toBe(true)

@@ -25,16 +25,12 @@ import { userStore } from '$src/stores/userStore.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
 
 type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadId'> & {
-    aiModels?: string[]
-    useMultipleModels?: boolean
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
-    aiImageModel?: string
     aiImageModels?: string[]
     imageSize?: ImageGenerationSize
     imageConfigGroups?: MediaGenerationConfigSelectionGroup[]
-    aiVideoModel?: string
     aiVideoModels?: string[]
     videoAspectRatio?: string
     videoResolution?: string
@@ -433,17 +429,13 @@ export default class AiInteractionService {
 
     async sendChatMessage({
         messages,
-        aiModel,
-        aiModels,
-        useMultipleModels,
+        aiReasoningModels,
         useMultipleReasoningModels,
         useMultipleImageModels,
         useMultipleVideoModels,
-        aiImageModel,
         aiImageModels,
         imageSize,
         imageConfigGroups,
-        aiVideoModel,
         aiVideoModels,
         videoAspectRatio,
         videoResolution,
@@ -457,12 +449,24 @@ export default class AiInteractionService {
         const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
 
+        // When a section flag is omitted, infer multi-model mode from the model
+        // count; otherwise multi off collapses the section to its first model.
+        const inferModeFromModels = (modelIds: string[] | undefined): boolean => (modelIds?.length ?? 0) > 1
+        const reasoningModelsEnabled = useMultipleReasoningModels ?? inferModeFromModels(aiReasoningModels)
+        const imageModelsEnabled = useMultipleImageModels ?? inferModeFromModels(aiImageModels)
+        const videoModelsEnabled = useMultipleVideoModels ?? inferModeFromModels(aiVideoModels)
+        const collapseForMode = (modelIds: string[] | undefined, useMultiple: boolean): string[] =>
+            useMultiple ? (modelIds ?? []) : (modelIds ?? []).slice(0, 1)
+        const reasoningModelIds = collapseForMode(aiReasoningModels, reasoningModelsEnabled)
+        const imageModelIds = collapseForMode(aiImageModels, imageModelsEnabled)
+        const videoModelIds = collapseForMode(aiVideoModels, videoModelsEnabled)
+
         const payload: Record<string, any> = {
             token: await AuthService.getTokenSilently(),
             workspaceId: this.workspaceId,
             aiChatThreadId: this.aiChatThreadId,
             messages,
-            aiModel,
+            aiReasoningModels: reasoningModelIds,
             organizationId
         }
 
@@ -481,40 +485,28 @@ export default class AiInteractionService {
         }
 
         // Add image model routing options if an image model is selected
-        if (aiImageModel) {
-            payload.aiImageModel = aiImageModel
+        if (imageModelIds.length > 0) {
+            payload.aiImageModels = imageModelIds
             payload.imageSize = imageSize || 'auto'
         }
 
         // Add video model routing options if a video model is selected. The
         // text model decides between generate_image vs generate_video at runtime
         // when both are present — see ImageBranchResolver + LangGraph routing.
-        if (aiVideoModel) {
-            payload.aiVideoModel = aiVideoModel
+        if (videoModelIds.length > 0) {
+            payload.aiVideoModels = videoModelIds
             if (videoAspectRatio) payload.videoAspectRatio = videoAspectRatio
             if (videoResolution) payload.videoResolution = videoResolution
             if (videoDuration) payload.videoDuration = videoDuration
             if (videoSourceForExtension) payload.videoSourceForExtension = videoSourceForExtension
         }
 
-        const legacyUseMultipleModels = Boolean(useMultipleModels)
-        const inferModeFromModels = (modelIds: string[] | undefined): boolean =>
-            useMultipleModels === undefined ? (modelIds?.length ?? 0) > 1 : legacyUseMultipleModels
-        const reasoningModelsEnabled = useMultipleReasoningModels ?? inferModeFromModels(aiModels)
-        const imageModelsEnabled = useMultipleImageModels ?? inferModeFromModels(aiImageModels)
-        const videoModelsEnabled = useMultipleVideoModels ?? inferModeFromModels(aiVideoModels)
-        const reasoningModelIds = reasoningModelsEnabled
-            ? aiModels ?? []
-            : aiModel ? [aiModel] : []
-        const imageModelIds = imageModelsEnabled
-            ? aiImageModels ?? []
-            : aiImageModel ? [aiImageModel] : []
-        const videoModelIds = videoModelsEnabled
-            ? aiVideoModels ?? []
-            : aiVideoModel ? [aiVideoModel] : []
-        const selectedModelCount = reasoningModelIds.length + imageModelIds.length + videoModelIds.length
-        const scalarModelCount = (aiModel ? 1 : 0) + (aiImageModel ? 1 : 0) + (aiVideoModel ? 1 : 0)
-        if (selectedModelCount > scalarModelCount) {
+        // The media-generation matrix is needed only when some section carries
+        // more than one model; a single model per section runs the plain path.
+        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, videoModelIds.length]
+        const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
+        const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
+        if (totalSelectedModelCount > sectionsWithSelection) {
             payload.mediaGenerationRequest = {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: uuidv4(),
@@ -541,7 +533,6 @@ export default class AiInteractionService {
         console.log(`[AI_INTERACTION] Publishing message to ${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE}`, {
             workspaceId: this.workspaceId,
             aiChatThreadId: this.aiChatThreadId,
-            aiModel,
             reasoningModelCount: reasoningModelIds.length,
             messageCount: messages.length,
             imageModelCount: imageModelIds.length,

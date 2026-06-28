@@ -12,7 +12,6 @@
 ## What It Does
 
 - Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiLineageEvent`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
-- Parses `aiUserInput` through the schema compatibility path, then removes those children in `appendTransaction()`.
 - Streams parsed text, image, video, context-resolution, branch-resolution, and trace events from `SegmentsReceiver`.
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
 - Delegates generated-image and generated-video canvas side effects through callback surfaces registered by `createAiChatThreadPlugin`.
@@ -79,20 +78,16 @@ Attrs declared in `aiChatThreadNode.ts`:
 
 - `threadId`
 - `status`
-- `aiModel`
-- `aiModels`
-- `useMultipleModels`
+- `aiReasoningModels` (JSON-serialized ordered model-id array; length 1 = singular selection)
 - `useMultipleReasoningModels`
 - `useMultipleImageModels`
 - `useMultipleVideoModels`
-- `aiImageModel`
-- `aiImageModels`
+- `aiImageModels` (JSON-serialized ordered model-id array)
 - `imageGenerationEnabled`
 - `imageGenerationSize`
 - `imageGenerationConfigGroups`
 - `previousResponseId`
-- `aiVideoModel`
-- `aiVideoModels`
+- `aiVideoModels` (JSON-serialized ordered model-id array)
 - `videoAspectRatio`
 - `videoResolution`
 - `videoDuration`
@@ -177,15 +172,6 @@ Inline generation trace block.
 - Generated prompt text uses the same left-border output treatment as extraction-stage model output.
 - The NodeView accepts `traceDetailsOptions` from `renderContext`, which lets generated-media provenance previews resolve canvas-only reference sources while still rendering the real `aiCollapsibleBlock` node.
 
-### `aiUserInput`
-
-Compatibility schema node.
-
-- `editor.ts` adds `aiUserInputNodeSpec` to the AI chat thread schema for stored thread document parsing.
-- `aiChatThreadPlugin.appendTransaction()` deletes `aiUserInput` children when they appear.
-- Thread creation inserts conversation nodes through `AiPromptInputController`.
-- The active composer lives in `aiPromptInputPlugin`.
-
 ## Request Construction
 
 `handleChatRequest()` reads model and media attrs from the `aiChatThread` node after the controller injects the submitted user message.
@@ -193,14 +179,14 @@ Compatibility schema node.
 The request payload includes:
 
 - `messages`
-- `aiModel`
-- `aiModels`
+- `aiReasoningModels` (ordered model-id array; collapsed to the first entry when `useMultipleReasoningModels` is off)
+- `useMultipleReasoningModels` / `useMultipleImageModels` / `useMultipleVideoModels`
 - `threadId`
-- `imageOptions`
-- `videoOptions`
+- `imageOptions` (carries `aiImageModels`)
+- `videoOptions` (carries `aiVideoModels`)
 - `referencedFeatureIds`
 
-Model-list attrs are JSON-like strings parsed with `parseAiModelSelectionAttr()`. `useMultipleModels` is accepted as an aggregate multi-model flag when section-specific flags are absent.
+Each section's selection is a single JSON-like model-id array parsed with `parseAiModelSelectionAttr()`. Multi-model mode is controlled independently per section through `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels`; when a flag is off, that section's array is collapsed to its first model before submit.
 
 Media configuration group attrs are JSON strings parsed through `parseMediaGenerationConfigSelectionAttr()`. They come from the API-authored media generation config matrix and are forwarded to `mediaGenerationRequest.imageOptions.configGroups` / `videoOptions.configGroups`; thread code does not derive provider-specific controls from selected model metadata.
 
@@ -316,7 +302,6 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 - `aiChatMessageShells.ts`: shared user/assistant message shells.
 - `aiChatThreadContentUtils.ts`: helpers for generated-media provenance.
 - `aiChatThreadPluginConstants.ts`: shared `PluginKey` and transaction meta constants.
-- `aiChatThreadPositionUtils.ts`, `aiChatThreadSend.ts`, `aiChatThreadControls.ts`, `aiUserInputNode.ts`: compatibility/helper modules outside the active prompt-input path.
 - `ai-chat-thread.scss`: thread-log, message, media, and compatibility styles.
 
 ## Transaction Meta

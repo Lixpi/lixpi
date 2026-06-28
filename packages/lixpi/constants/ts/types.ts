@@ -1367,7 +1367,10 @@ export type MessageContent = string | MessageContentBlock[]
 
 export type AiInteractionChatSendMessagePayload = {
     messages: Array<{ role: string; content: MessageContent }>
-    aiModel: AiModelId
+    // Ordered reasoning-model selection (length 1 = singular). The legacy
+    // single-model API path reads index 0; the matrix path reads the full list
+    // via `mediaGenerationRequest.reasoningModelIds`.
+    aiReasoningModels: AiModelId[]
     threadId: string
     referencedFeatureIds?: string[]
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
@@ -1405,7 +1408,7 @@ export type AiInteractionChatSendMessagePayloadV2 = AiInteractionChatSendMessage
 }
 
 export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {
-    aiImageModel: AiModelId
+    aiImageModels: AiModelId[]
     imageSize?: ImageGenerationSize
     previousResponseId?: string
 }
