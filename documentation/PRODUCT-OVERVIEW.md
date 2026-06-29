@@ -18,7 +18,7 @@ By treating all generated text, images, and video iterations as concrete "nodes"
 
 ## 2. Canvas Primitives
 
-The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using `@xyflow/system` for pan/zoom coordinate math. Text-bearing document nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The current renderer draws document, image, and video nodes. Older canvas state can still contain `aiChatThread` node data, but active chat sessions render in the right-side AI Chat panel instead of as visible canvas nodes.
+The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using `@xyflow/system` for pan/zoom coordinate math. Text-bearing document nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The renderer draws document, image, video, branch origin, branch fork, and branch line nodes. Older canvas state can still contain `aiChatThread` node data, but active chat sessions render in the right-side AI Chat panel instead of as visible canvas nodes.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -27,6 +27,7 @@ graph TB
         Doc[Document Node<br/>ProseMirror editor<br/>documentType: 'document']
         Img[Image Node<br/>Uploaded, imported, or AI-generated<br/>PIXI-rendered pixels]
         Vid[Video Node<br/>VEO-generated or library video<br/>DOM playback over PIXI poster]
+        Branch[Branch Lineage Markers<br/>Origin · fork · line<br/>API-planned media topology]
     end
 
     subgraph "AI Chat Panel"
@@ -59,7 +60,8 @@ graph TB
 | **Document** | ProseMirror (`documentType: 'document'`) | Free | DynamoDB Documents table |
 | **Image** | None (PIXI pixels + DOM chrome) | Aspect-ratio locked | NATS JetStream Object Store |
 | **Video** | None (PIXI poster + DOM `<video>` chrome) | Aspect-ratio locked | NATS JetStream Object Store |
-| **AI Chat Thread** | Legacy canvas node data; active sessions render as panel tabs | Free when drawn by legacy code | DynamoDB AI-Chat-Threads table |
+| **Branch Origin / Fork / Line** | None | API-positioned topology markers | Workspace `canvasState` + media lineage metadata |
+| **AI Chat Thread** | Compatibility canvas node data; active sessions render as panel tabs | Free when drawn by legacy code | DynamoDB AI-Chat-Threads table |
 
 **Edges** are directional connections stored in `canvasState.edges`. Each edge records a context relationship between canvas nodes. Edges can be created by explicit handle drag or by **Proximity Connect**, which previews and commits a connection when a node is dragged within range of a target.
 
@@ -171,7 +173,7 @@ graph TB
     end
 
     subgraph "Execution Tier"
-        LLM[In-process LangGraph workflow<br/>token streaming · image · video]
+        LLM[In-process LangGraph workflow<br/>pipeline events · image · video]
         Provider[External Models<br/>OpenAI · Anthropic · Google]
     end
 
@@ -198,13 +200,13 @@ graph TB
 | Service | Language | Role |
 |---------|----------|------|
 | **web-ui** | Svelte / TypeScript | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, context extraction |
-| **api** | Node.js / TypeScript | Gateway + in-process LangGraph workflow — JWT auth, CRUD operations, DynamoDB persistence, NATS bridge, token streaming, image generation, video generation |
-| **nats** | Go (3-node cluster) | Message bus — pub/sub, request/reply, JetStream Object Store for image and video storage |
+| **api** | Node.js / TypeScript | Gateway + in-process LangGraph workflow — JWT auth, CRUD operations, DynamoDB persistence, NATS bridge, pipeline events, ProseMirror transcript steps, image generation, video generation |
+| **nats** | Go (3-node cluster) | Message bus — pub/sub, request/reply, JetStream replay streams, JetStream Object Store for image and video storage |
 | **localauth0** | Rust (vendored `primait/localauth0`) | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 
 ### Key Architecture Decisions
 
-**NATS-native**: The entire system runs through NATS — auth, messaging, file storage (Object Store), streaming. The browser connects via WebSocket directly to NATS. The API-hosted LLM workflow publishes tokens, image events, and video events straight to per-thread NATS subjects that the browser subscribes to.
+**NATS-native**: The entire system runs through NATS — auth, messaging, file storage (Object Store), live events, and replay logs. The browser connects via WebSocket directly to NATS. The API-hosted LLM workflow publishes pipeline events to per-thread subjects, records those events to short-lived JetStream replay logs, and mirrors AI chat transcript mutations into ProseMirror document step streams.
 
 **Framework-agnostic canvas**: `WorkspaceCanvas.ts` is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks. Svelte is a thin binding layer. This insulates the canvas from framework churn.
 
@@ -267,9 +269,9 @@ sequenceDiagram
         activate API
         API->>LLM: Invoke in-process LangGraph workflow
         activate LLM
-        LLM->>NATS: Stream response/media events back
+        LLM->>NATS: Publish live events + durable replay logs
         activate NATS
-        NATS->>UI: Render directly in ProseMirror (via WebSocket)
+        NATS->>UI: Render pipeline events + ProseMirror steps
         deactivate NATS
         deactivate LLM
         deactivate API
@@ -286,45 +288,52 @@ sequenceDiagram
 
 ## 9. Streaming Architecture
 
-The complete token path from AI provider to rendered DOM:
+The complete AI response path from provider output to rendered DOM:
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph LR
     subgraph "AI Provider"
-        LLM[OpenAI / Anthropic]
+        LLM[OpenAI / Anthropic / Google]
     end
 
     subgraph "API Service"
         LG[In-process LangGraph Workflow]
-        Pub[NATS Publish]
+        Pub[StreamPublisher]
+        Asm[ProseMirror Stream Assembler]
     end
 
     subgraph "NATS"
-        Subj["ai.interaction.chat<br/>.receiveMessage<br/>.{workspaceId}.{threadId}"]
+        Live["receiveMessage<br/>.{workspaceId}.{threadId}"]
+        Pipeline["pipelineEvents<br/>.{workspaceId}.{pipelineId}"]
+        Steps["document.steps<br/>.{workspaceId}.{docType}.{docId}"]
     end
 
     subgraph "Browser"
         AIS[AiInteractionService]
-        MSP[MarkdownStreamParser]
+        Auth[ProseMirrorAuthorityService]
         Plug[aiChatThreadPlugin]
-        SI[StreamingInserter]
         DOM[ProseMirror DOM]
+        Canvas[Canvas media/lineage handlers]
     end
 
-    LLM -->|SSE tokens / operation results| LG
+    LLM -->|provider chunks / operation results| LG
     LG --> Pub
-    Pub -->|STREAMING chunks| Subj
-    Subj -->|WebSocket| AIS
-    AIS -->|raw text| MSP
-    MSP -->|structured segments| Plug
-    Plug -->|ProseMirror transactions| SI
-    SI --> DOM
+    Pub -->|pipeline side events| Pipeline
+    Pub -->|live side events| Live
+    Pub -->|text + transcript media| Asm
+    Asm -->|START / STEP / END| Steps
+    Live -->|WebSocket| AIS
+    Pipeline -.->|CHAT_PIPELINE_RESUME| AIS
+    Steps -->|live + DOC_RESUME replay| Auth
+    Auth -->|Step.fromJSON| DOM
+    AIS --> Plug
+    Plug --> Canvas
 ```
 
-**Stream events**: `START_STREAM` → `STREAMING` chunks → `END_STREAM`. Image events (`IMAGE_PARTIAL`, `IMAGE_COMPLETE`) and video events (`VIDEO_PENDING`, `VIDEO_GENERATING`, `VIDEO_COMPLETE`, `VIDEO_ERROR`) bypass the text parser and go directly to chat/canvas media handlers.
+**Pipeline events**: `START_STREAM`, `STREAMING`, `END_STREAM`, image events (`IMAGE_PARTIAL`, `IMAGE_COMPLETE`), video events (`VIDEO_PENDING`, `VIDEO_GENERATING`, `VIDEO_COMPLETE`, `VIDEO_ERROR`), branch/lineage events, traces, and errors are published live and persisted briefly for replay.
 
-**MarkdownStreamParser** converts raw token text into structured segments (headers, paragraphs, code blocks, inline marks). The `StreamingInserter` translates these into ProseMirror transactions that insert content into the editor DOM in real-time.
+**ProseMirror steps**: AI chat text is parsed on the API with `@lixpi/markdown-stream-parser`, assembled into ProseMirror transactions through `@lixpi/prosemirror`, and delivered to the browser as document step events. The browser applies those steps through `ProseMirrorAuthorityService`; it does not parse raw AI chat tokens into editor transactions.
 
 **Circuit breaker**: A 20-minute timeout prevents runaway requests from consuming resources indefinitely.
 

@@ -1,7 +1,14 @@
 'use strict'
 
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { STREAM_STATUS } from '@lixpi/constants'
+
+const projectionMocks = vi.hoisted(() => ({
+    upsertGeneratedImageToCanvas: vi.fn(async () => undefined),
+    logCanvasProjectionError: vi.fn(),
+}))
+
+vi.mock('../../services/media-generation-canvas-projection.ts', () => projectionMocks)
 
 import { ImagePublisher } from './image-publisher.ts'
 
@@ -26,6 +33,11 @@ const makePublisher = () => {
 }
 
 describe('ImagePublisher', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        projectionMocks.upsertGeneratedImageToCanvas.mockResolvedValue(undefined)
+    })
+
     it('publishes a placeholder for partial stream images with an empty base64 payload', async () => {
         const { publisher, published, storeImage } = makePublisher()
 
@@ -192,5 +204,177 @@ describe('ImagePublisher', () => {
             status: STREAM_STATUS.IMAGE_COMPLETE,
             generationRun,
         })
+    })
+
+    it('persists final generated images to API-owned canvas projection before publishing completion', async () => {
+        const generationRun = {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            mediaRunId: 'media-1',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'Google:gemini-2.5-flash-image',
+            mediaType: 'image',
+            reasoningIndex: 0,
+            mediaIndex: 0,
+            variantIndex: 0,
+            lineageAssignment: {
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                mediaRunId: 'media-1',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                mediaModelId: 'Google:gemini-2.5-flash-image',
+                mediaType: 'image',
+                branchId: 'branch-1',
+                branchForkNodeId: 'fork-1',
+                lineageParentNodeId: 'fork-1',
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                promptText: 'draw it',
+                createdAt: 1,
+            },
+        } as const
+        const published: Published[] = []
+        const nats = {
+            publish: (subject: string, payload: any) => {
+                published.push({ subject, payload })
+            },
+        } as any
+        const storeImage = vi.fn(async (input: any) => ({
+            fileId: 'file-1',
+            url: '/api/images/ws-1/file-1',
+            isDuplicate: false,
+            size: input.buffer.length,
+            mimeType: input.mimeType,
+        }))
+        const publisher = new ImagePublisher(
+            nats,
+            storeImage,
+            'ws-1',
+            'thread-1',
+            'Google',
+            generationRun,
+        )
+        const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
+
+        await publisher.complete({
+            imageBase64: pngBase64,
+            responseId: 'resp-1',
+            revisedPrompt: 'draw it clearly',
+            imageModelId: 'gemini-2.5-flash-image',
+        })
+
+        expect(projectionMocks.upsertGeneratedImageToCanvas).toHaveBeenCalledWith({
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/ws-1/file-1',
+            fileId: 'file-1',
+            responseId: 'resp-1',
+            revisedPrompt: 'draw it clearly',
+            aiProvider: 'Google',
+            imageModelProvider: 'Google',
+            imageModelId: 'gemini-2.5-flash-image',
+            generationRun,
+        })
+        expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.IMAGE_COMPLETE)
+    })
+
+    it('still publishes final image completion when canvas projection fails', async () => {
+        projectionMocks.upsertGeneratedImageToCanvas.mockRejectedValueOnce(new Error('canvas write failed'))
+        const generationRun = {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'Google:gemini-2.5-flash-image',
+            mediaType: 'image',
+            reasoningIndex: 0,
+            lineageAssignment: {
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                mediaModelId: 'Google:gemini-2.5-flash-image',
+                mediaType: 'image',
+                branchId: 'branch-1',
+                branchForkNodeId: 'fork-1',
+                lineageParentNodeId: 'fork-1',
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                promptText: 'draw it',
+                createdAt: 1,
+            },
+        } as const
+        const published: Published[] = []
+        const nats = {
+            publish: (subject: string, payload: any) => {
+                published.push({ subject, payload })
+            },
+        } as any
+        const publisher = new ImagePublisher(
+            nats,
+            vi.fn(async (input: any) => ({
+                fileId: 'file-1',
+                url: '/api/images/ws-1/file-1',
+                isDuplicate: false,
+                size: input.buffer.length,
+                mimeType: input.mimeType,
+            })),
+            'ws-1',
+            'thread-1',
+            'Google',
+            generationRun,
+        )
+        const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
+
+        await publisher.complete({
+            imageBase64: pngBase64,
+            responseId: 'resp-1',
+            revisedPrompt: 'draw it clearly',
+            imageModelId: 'gemini-2.5-flash-image',
+        })
+
+        expect(projectionMocks.logCanvasProjectionError).toHaveBeenCalledWith(
+            'failed to persist generated image to canvas',
+            expect.any(Error),
+        )
+        expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.IMAGE_COMPLETE)
+    })
+
+    it('routes image events through onPipelineContent when durable pipeline publishing is supplied', async () => {
+        const published: Published[] = []
+        const nats = {
+            publish: (subject: string, payload: any) => {
+                published.push({ subject, payload })
+            },
+        } as any
+        const storeImage = vi.fn(async (input: any) => ({
+            fileId: 'file-1',
+            url: '/api/images/ws-1/file-1',
+            isDuplicate: false,
+            size: input.buffer.length,
+            mimeType: input.mimeType,
+        }))
+        const onProseMirrorContent = vi.fn()
+        const onPipelineContent = vi.fn()
+        const publisher = new ImagePublisher(
+            nats,
+            storeImage,
+            'ws-1',
+            'thread-1',
+            'Google',
+            undefined,
+            onProseMirrorContent,
+            onPipelineContent,
+        )
+        const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
+
+        await publisher.partial(pngBase64, 3)
+
+        expect(published).toHaveLength(0)
+        expect(onProseMirrorContent).not.toHaveBeenCalled()
+        expect(onPipelineContent).toHaveBeenCalledWith(expect.objectContaining({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            fileId: 'file-1',
+            partialIndex: 3,
+            aiProvider: 'Google',
+        }))
     })
 })

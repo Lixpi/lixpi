@@ -2,18 +2,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
-import { DOCUMENT_TYPE, getDocumentStepSubject } from '@lixpi/prosemirror'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 const workspaceId = 'workspace-1'
 const aiChatThreadId = 'thread-1'
 const responseSubject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`
-const stepSubject = getDocumentStepSubject({
-    workspaceId,
-    docType: DOCUMENT_TYPE.AI_CHAT_THREAD,
-    docId: aiChatThreadId,
-})
 
 const getDataMock = vi.hoisted(() => vi.fn())
 const natsPublishMock = vi.hoisted(() => vi.fn())
@@ -26,21 +20,13 @@ const uuidMock = vi.hoisted(() => vi.fn(() => 'matrix-request-id'))
 const organizationGetMock = vi.hoisted(() => vi.fn())
 const userGetMock = vi.hoisted(() => vi.fn())
 
-let parserTokenCallback: ((segment: unknown, unsubscribe: () => void) => void) | undefined
-let parserSubscribeMock = vi.fn()
-let parserStartParsingMock = vi.fn()
-let parserParseTokenMock = vi.fn()
-let parserStopParsingMock = vi.fn()
-let parserRemoveInstanceMock = vi.fn()
 let consoleErrorSpy: { mockRestore: () => void } | null = null
 let consoleLogSpy: { mockRestore: () => void } | null = null
 let consoleWarnSpy: { mockRestore: () => void } | null = null
 let consoleInfoSpy: { mockRestore: () => void } | null = null
-let parserInstance: {
-    subscribeToTokenParse: typeof parserSubscribeMock
-    startParsing: typeof parserStartParsingMock
-    parseToken: typeof parserParseTokenMock
-    stopParsing: typeof parserStopParsingMock
+
+const flushPromises = async (): Promise<void> => {
+    await new Promise(resolve => setTimeout(resolve, 0))
 }
 
 vi.mock('uuid', () => ({ v4: uuidMock }))
@@ -75,13 +61,6 @@ vi.mock('$src/stores/userStore.ts', () => ({
     },
 }))
 
-vi.mock('@lixpi/markdown-stream-parser', () => ({
-    MarkdownStreamParser: {
-        getInstance: vi.fn(() => parserInstance),
-        removeInstance: (...args: unknown[]) => parserRemoveInstanceMock(...args),
-    },
-}))
-
 describe('AiInteractionService', () => {
     let service: AiInteractionService
 
@@ -93,22 +72,6 @@ describe('AiInteractionService', () => {
 
         vi.clearAllMocks()
 
-        parserTokenCallback = undefined
-        parserSubscribeMock = vi.fn((callback: (segment: unknown, unsubscribe: () => void) => void) => {
-            parserTokenCallback = callback
-            return undefined
-        })
-        parserStartParsingMock = vi.fn()
-        parserParseTokenMock = vi.fn()
-        parserStopParsingMock = vi.fn()
-        parserRemoveInstanceMock = vi.fn()
-        parserInstance = {
-            subscribeToTokenParse: parserSubscribeMock,
-            startParsing: parserStartParsingMock,
-            parseToken: parserParseTokenMock,
-            stopParsing: parserStopParsingMock,
-        }
-
         getDataMock.mockReturnValue({
             publish: natsPublishMock,
             subscribe: natsSubscribeMock,
@@ -119,14 +82,14 @@ describe('AiInteractionService', () => {
         organizationGetMock.mockReturnValue('org-1')
         userGetMock.mockReturnValue({ userId: 'user-1' })
         natsGetSubscriptionsMock.mockReturnValue([])
-        natsRequestMock.mockResolvedValue({ events: [], snapshot: { version: 0 } })
+        natsRequestMock.mockResolvedValue({ events: [] })
 
         service = new AiInteractionService({
             workspaceId,
             aiChatThreadId,
         })
 
-        await Promise.resolve()
+        await flushPromises()
     })
 
     afterEach(() => {
@@ -142,8 +105,17 @@ describe('AiInteractionService', () => {
 
     it('subscribes to the thread response subject when initialized', () => {
         expect(getDataMock).toHaveBeenCalledWith('nats')
-        expect(natsGetSubscriptionsMock).toHaveBeenCalledWith([responseSubject, stepSubject])
+        expect(natsGetSubscriptionsMock).toHaveBeenCalledWith([responseSubject])
         expect(natsSubscribeMock).toHaveBeenCalledWith(responseSubject, expect.any(Function))
+        expect(natsRequestMock).toHaveBeenCalledWith(
+            AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
+            {
+                token: 'auth-token',
+                workspaceId,
+                aiChatThreadId,
+                localStreamSeq: 0,
+            },
+        )
     })
 
     it('resolves run keys and selected metadata consistently', () => {
@@ -231,7 +203,96 @@ describe('AiInteractionService', () => {
         )
     })
 
-    it('routes markdown token streaming through the parser lifecycle', () => {
+    it('deduplicates persisted and live pipeline events by pipelineEventId while advancing stream sequence', () => {
+        const first = {
+            pipelineEventId: 'event-1',
+            pipelineStreamSeq: 3,
+            content: {
+                status: STREAM_STATUS.CONTEXT_RELEVANCE_ERROR,
+                error: 'context failed once',
+            },
+        }
+
+        service.onChatMessageResponse(first)
+        service.onChatMessageResponse({
+            ...first,
+            content: {
+                status: STREAM_STATUS.CONTEXT_RELEVANCE_ERROR,
+                error: 'duplicate should be ignored',
+            },
+        })
+
+        expect(receiveSegmentMock).toHaveBeenCalledTimes(1)
+        expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'context_relevance_error',
+            error: 'context failed once',
+        }))
+        expect(service.pipelineLocalStreamSeq).toBe(3)
+    })
+
+    it('replays pipeline events through the same response handler and updates local stream sequence', async () => {
+        natsRequestMock.mockResolvedValueOnce({
+            events: [
+                {
+                    eventId: 'event-4',
+                    streamSequence: 4,
+                    payload: {
+                        pipelineEventId: 'event-4',
+                        content: {
+                            status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
+                            resolution: { resolved: true },
+                            aiProvider: 'Anthropic',
+                        },
+                    },
+                },
+                {
+                    eventId: 'event-7',
+                    streamSequence: 7,
+                    payload: {
+                        pipelineEventId: 'event-7',
+                        content: {
+                            status: STREAM_STATUS.MEDIA_LINEAGE_PLANNED,
+                            lineagePlan: {
+                                generationRequestId: 'request-1',
+                                branchForks: [],
+                                runAssignments: [],
+                            },
+                            aiProvider: 'Anthropic',
+                        },
+                    },
+                },
+            ],
+        })
+
+        await service.resumePipelineEventStream()
+
+        expect(natsRequestMock).toHaveBeenLastCalledWith(
+            AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
+            {
+                token: 'auth-token',
+                workspaceId,
+                aiChatThreadId,
+                localStreamSeq: 0,
+            },
+        )
+        expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'image_branch_resolved',
+            imageBranchResolution: { resolved: true },
+            aiChatThreadId,
+        }))
+        expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'media_lineage_planned',
+            mediaBranchLineagePlan: {
+                generationRequestId: 'request-1',
+                branchForks: [],
+                runAssignments: [],
+            },
+            aiChatThreadId,
+        }))
+        expect(service.pipelineLocalStreamSeq).toBe(7)
+    })
+
+    it('ignores raw text stream statuses because text arrives through ProseMirror authority', () => {
         service.onChatMessageResponse({
             content: {
                 status: STREAM_STATUS.START_STREAM,
@@ -242,7 +303,6 @@ describe('AiInteractionService', () => {
                 },
             },
         })
-        expect(parserStartParsingMock).toHaveBeenCalled()
 
         service.onChatMessageResponse({
             content: {
@@ -251,52 +311,15 @@ describe('AiInteractionService', () => {
                 generationRun: { requestKind: 'media-generation-matrix', reasoningRunId: 'run-stream' },
             },
         })
-        expect(parserParseTokenMock).toHaveBeenCalledWith('hello')
 
-        expect(parserTokenCallback).toBeDefined()
         service.onChatMessageResponse({
             content: {
                 status: STREAM_STATUS.END_STREAM,
                 generationRun: { requestKind: 'media-generation-matrix', reasoningRunId: 'run-stream' },
             },
         })
-        expect(parserStopParsingMock).toHaveBeenCalled()
 
-        const callbackUnsubscribe = vi.fn()
-        expect(parserTokenCallback).toBeDefined()
-        parserTokenCallback?.({ status: STREAM_STATUS.END_STREAM }, callbackUnsubscribe)
-        expect(callbackUnsubscribe).toHaveBeenCalled()
-        expect(parserRemoveInstanceMock).toHaveBeenCalledWith(`${aiChatThreadId}:run-stream`)
-        expect(service.markdownParserContexts.has('run-stream')).toBe(false)
-    })
-
-    it('does not route markdown tokens for non-matrix generation runs', () => {
-        service.onChatMessageResponse({
-            content: {
-                status: STREAM_STATUS.START_STREAM,
-                aiProvider: 'provider-stream',
-                generationRun: { reasoningRunId: 'legacy-run' },
-            },
-        })
-
-        service.onChatMessageResponse({
-            content: {
-                status: STREAM_STATUS.STREAMING,
-                text: 'hello',
-                generationRun: { reasoningRunId: 'legacy-run' },
-            },
-        })
-
-        service.onChatMessageResponse({
-            content: {
-                status: STREAM_STATUS.END_STREAM,
-                generationRun: { reasoningRunId: 'legacy-run' },
-            },
-        })
-
-        expect(parserStartParsingMock).not.toHaveBeenCalled()
-        expect(parserParseTokenMock).not.toHaveBeenCalled()
-        expect(parserStopParsingMock).not.toHaveBeenCalled()
+        expect(receiveSegmentMock).not.toHaveBeenCalled()
     })
 
     it('sends rich payloads and matrix metadata for multi-model requests', async () => {
@@ -373,7 +396,7 @@ describe('AiInteractionService', () => {
         expect(payload).not.toHaveProperty('mediaGenerationRequest')
     })
 
-    it('stops markdown streams with a stop message on request', async () => {
+    it('sends a stop message on request', async () => {
         await service.stopChatMessage()
 
         expect(natsPublishMock).toHaveBeenCalledWith(
@@ -386,17 +409,22 @@ describe('AiInteractionService', () => {
         )
     })
 
-    it('disconnects parser contexts and response subscriptions', () => {
+    it('disconnects response subscriptions and clears pipeline/client state', () => {
         const unsubscribeMock = vi.fn()
         natsGetSubscriptionsMock.mockReturnValue([{ unsubscribe: unsubscribeMock }])
 
-        service.initMarkdownParser({ reasoningRunId: 'disconnect-run' }, 'provider-x')
+        service.updateRunProvider(aiChatThreadId, 'provider-x')
+        service.shouldProcessPipelinePayload({
+            pipelineEventId: 'event-1',
+            pipelineStreamSeq: 12,
+        })
         service.disconnect()
 
         expect(unsubscribeMock).toHaveBeenCalled()
-        expect(parserRemoveInstanceMock).toHaveBeenCalledWith(`${aiChatThreadId}:disconnect-run`)
+        expect(natsGetSubscriptionsMock).toHaveBeenCalledWith([responseSubject])
         expect(service.currentAiProvider).toBeNull()
-        expect(service.markdownParserContexts.size).toBe(0)
+        expect(service.providersByRunKey.size).toBe(0)
+        expect(service.pipelineEventIds.size).toBe(0)
     })
 
     it('ignores malformed response payloads without dispatching segments', () => {

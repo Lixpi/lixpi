@@ -72,7 +72,7 @@ Lixpi solves this by combining deterministic graph narrowing with VLM role assig
 
 ## System Architecture
 
-The browser builds non-authoritative candidate and workspace-context snapshots and sends them with the chat request. The API resolves visual roles, rewrites the provider messages with only the approved references, plans branch topology, streams the generation, and publishes branch + media events back. The browser applies the API lineage plan to canvas state and computes presentation geometry.
+The browser builds non-authoritative candidate and workspace-context snapshots and sends them with the chat request. The API resolves visual roles, rewrites the provider messages with only the approved references, plans branch topology, streams the generation, stores generated media, and persists the authoritative canvas projection for lineage markers and final media nodes. The browser renders live events and computes presentation geometry, but pipeline completion does not require a connected browser.
 
 ## Hard Frontend Boundary
 
@@ -123,8 +123,9 @@ flowchart TB
     Router --> MediaModel
     MediaModel --> Obj
     Publisher -->|branch + media events| AIS
+    Publisher -->|lineage/media canvas projection| DDB
     AIS --> Canvas
-    Canvas --> DDB
+    Canvas -->|viewport/local layout saves| DDB
     Obj --> Canvas
 ```
 
@@ -135,7 +136,8 @@ flowchart TB
 | `resolveWorkspaceContext` | Ranks descriptors, force-includes chips/edges, narrows the media candidate set. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md). |
 | `resolveImageBranch` | The structured VLM resolver — the routing authority for media references and branch identity. |
 | `ImageRouter` / `VideoRouter` | Route the enhanced prompt + approved references to a transient media provider. See [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). |
-| `WorkspaceCanvas` | Applies API-declared lineage marker IDs, edges, and generated metadata, then computes canvas geometry and re-tidies the branch tree (via `branchTreeLayout.ts`). |
+| `media-generation-canvas-projection.ts` | API-owned durable projection writer. Inserts planned lineage markers, final generated image/video nodes, generated metadata, and connector edges into `Workspace.canvasState` with optimistic retries. |
+| `WorkspaceCanvas` | Renders API-declared lineage marker IDs, edges, and generated metadata, computes canvas geometry, and re-tidies the branch tree (via `branchTreeLayout.ts`). It may show transient preflight markers, but durable generated-media projection is API-owned. |
 
 ## Where This Runs in the Pipeline
 
@@ -403,7 +405,8 @@ When a media model is selected, the canvas:
 1. `onImageBranchResolvedToCanvas` finds the pending placement.
 2. It stores the full VLM resolution in the placement.
 3. `MEDIA_LINEAGE_PLANNED` carries the API-owned topology: lineage source, placement anchor, branchOrigin/branchFork marker IDs, marker provenance, and per-run generated-media assignments.
-4. The canvas stores that plan and uses it for marker creation, generated-media metadata, and connector source IDs. Reference/style media remain placement and progress-outline context unless the API plan marks them as lineage parents.
+4. The canvas stores that plan and uses it for marker creation, generated-media metadata, and connector source IDs. Once a planned marker resolves to an API identity and canvas position, the marker is persisted to `canvasState` immediately so a refresh during the following LLM response can reload it.
+5. Reference/style media remain placement and progress-outline context unless the API plan marks them as lineage parents.
 
 **Verified continuation signals.** A connector edge into a generated output is allowed only when the resolver is continuing an existing generated branch. The accepted signals are:
 
@@ -433,6 +436,18 @@ PIXI reports intrinsic dimensions whenever placeholder, partial, or final pixels
 3. Resolver metadata and API lineage assignment are persisted onto `generatedBy`.
 4. The branch tree is re-tidied and rigid-separated from neighbors via `rebalanceBranchTreesAndResolve(...)` (see [Balanced Branch-Tree Layout](#balanced-branch-tree-layout)). Generated siblings are rooted under the API-assigned lineage parent: a neutral `branchOrigin` when referenced, a `branchFork` for the producing reasoning run, or the first generated image/video when no marker is needed.
 5. Pending placement is cleared **only after** completion state and generated metadata have been committed.
+
+### Refresh and Replay During Generation
+
+Generation state is split across three durable surfaces so a refresh can rejoin an active request:
+
+- The ProseMirror step stream replays the AI chat document from the persisted `proseMirrorVersion` plus missed `START` / `STEP` / `END` events.
+- The chat pipeline event log replays branch resolution, lineage planning, trace, image/video progress, complete, and error events after the browser's last pipeline stream sequence.
+- The workspace `canvasState` persists API-planned branch markers as soon as their positions are resolved, including `pendingState` keyed by generation request/run ids.
+
+On reload, `WorkspaceCanvas.ts` re-associates persisted pending markers with active runs from lineage node ids, `reasoningRunId`, `mediaRunId`, or `generationRequestId`; it does not need the in-memory pending-marker map that existed before the page refresh. When generated output starts or completes, the transition from pending marker to committed branch marker is also persisted so completed markers do not come back with spinner state.
+
+Media completion does not tear down the hidden ProseMirror-backed thread editor by itself. The canvas waits for AI thread receiving state to end, because the backend may still be writing final LLM text and generation details into the AI chat thread after the media completion event. Completion schedules a short bounded refresh of the persisted thread before re-rendering branch-marker previews, then clears live projection overrides after persisted content is available.
 
 ### Generated-Media Provenance Chrome
 
@@ -628,7 +643,7 @@ A dedicated `IMAGE_ARTIFACTS` table would help cross-workspace lineage queries a
 - Workspace-context and candidate snapshots should remain compact. Dense workspaces grow candidate counts quickly, so descriptor-first narrowing, browser candidate construction, and transcript compaction all matter.
 - Feature-extraction image blocks are **not** candidate branch blocks and must remain in `state.messages` after branch cleanup.
 
-## Current Implementation Map
+## Implementation Map
 
 | Area | File |
 |------|------|

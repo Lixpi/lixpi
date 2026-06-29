@@ -1,6 +1,12 @@
 import { Plugin, PluginKey } from 'prosemirror-state'
 
-export const statePlugin = (initialStateContent, dispatchUpdateCallback, documentTitleChangeCallback, dispatchLiveUpdateCallback) => {
+export const statePlugin = (
+    initialStateContent,
+    dispatchUpdateCallback,
+    documentTitleChangeCallback,
+    dispatchLiveUpdateCallback,
+    dispatchLocalTransactionCallback,
+) => {
     const hasInProgressAiContent = (doc) => {
         let inProgress = false
         doc.descendants((node) => {
@@ -34,17 +40,20 @@ export const statePlugin = (initialStateContent, dispatchUpdateCallback, documen
         if (tr.docChanged) {
             dispatchLiveUpdateCallback?.(tr.doc.toJSON());
         }
-        // If the transaction has the 'skipDispatch' flag set, don't call the update callback
-        if (!skipDispatch && tr.docChanged && !hasInProgressAiContent(tr.doc) && !isAiChatThreadDocument(tr.doc)) {
-            dispatchUpdateCallback(tr.doc.toJSON());
-
-            // Check if 'documentTitle' node's content has changed
-            const oldTitle = oldState.doc.firstChild.textContent;
-            const newTitle = tr.doc.firstChild.textContent;
+        if (!skipDispatch && tr.docChanged) {
+            dispatchLocalTransactionCallback?.(tr);
+        }
+        if (!skipDispatch && tr.docChanged && !isAiChatThreadDocument(tr.doc)) {
+            const oldTitle = oldState.doc.firstChild?.textContent;
+            const newTitle = tr.doc.firstChild?.textContent;
 
             if (newTitle !== oldTitle) {
                 documentTitleChangeCallback(newTitle);
             }
+        }
+        // If the transaction has the 'skipDispatch' flag set, don't call the update callback
+        if (!skipDispatch && !dispatchLocalTransactionCallback && tr.docChanged && !hasInProgressAiContent(tr.doc) && !isAiChatThreadDocument(tr.doc)) {
+            dispatchUpdateCallback(tr.doc.toJSON());
         }
     }
 

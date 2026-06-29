@@ -1,7 +1,14 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { STREAM_STATUS } from '@lixpi/constants'
+
+const projectionMocks = vi.hoisted(() => ({
+    upsertGeneratedVideoToCanvas: vi.fn(async () => undefined),
+    logCanvasProjectionError: vi.fn(),
+}))
+
+vi.mock('../../services/media-generation-canvas-projection.ts', () => projectionMocks)
 
 import { VideoPublisher } from './video-publisher.ts'
 
@@ -54,6 +61,11 @@ const mp4Sample = Buffer.from([
 ])
 
 describe('VideoPublisher', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        projectionMocks.upsertGeneratedVideoToCanvas.mockResolvedValue(undefined)
+    })
+
     it('publishes pending and generating events for long-running jobs', () => {
         const { publisher, published } = makePublisher()
 
@@ -235,6 +247,158 @@ describe('VideoPublisher', () => {
         expect(onProseMirrorContent).toHaveBeenCalledTimes(4)
     })
 
+    it('persists completed videos to API-owned canvas projection before publishing completion', async () => {
+        const generationRun = {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            mediaRunId: 'media-1',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'Google:veo-3.1-generate-preview',
+            mediaType: 'video',
+            reasoningIndex: 0,
+            mediaIndex: 0,
+            variantIndex: 0,
+            lineageAssignment: {
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                mediaRunId: 'media-1',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                mediaModelId: 'Google:veo-3.1-generate-preview',
+                mediaType: 'video',
+                branchId: 'branch-1',
+                branchLineNodeId: 'line-1',
+                lineageParentNodeId: 'line-1',
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                promptText: 'animate it',
+                createdAt: 1,
+            },
+        } as const
+        const published: Published[] = []
+        const storeVideo = vi.fn(async () => ({
+            fileId: 'video-file-id',
+            url: '/api/videos/ws-1/video-file-id',
+            isDuplicate: false,
+            size: 1234,
+            mimeType: 'video/mp4',
+        }))
+        const storeImage = vi.fn(async () => ({
+            fileId: 'image-file-id',
+            url: '/api/images/ws-1/image-file-id',
+            isDuplicate: false,
+            size: 456,
+            mimeType: 'image/png',
+        }))
+        const publisher = new VideoPublisher(
+            { publish: (subject: string, payload: any) => published.push({ subject, payload }) } as any,
+            storeVideo,
+            storeImage,
+            'ws-1',
+            'thread-1',
+            'Google',
+            generationRun,
+        )
+
+        await publisher.complete({
+            videoBuffer: mp4Sample,
+            posterBuffer: Buffer.from('poster'),
+            frameBuffer: Buffer.from('frame'),
+            durationSeconds: 8,
+            aspectRatio: '16:9',
+            hasAudio: true,
+            responseId: 'resp-1',
+            revisedPrompt: 'animate it clearly',
+            videoModelId: 'veo-3.1-generate-preview',
+        })
+
+        expect(projectionMocks.upsertGeneratedVideoToCanvas).toHaveBeenCalledWith({
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            videoUrl: '/api/videos/ws-1/video-file-id',
+            fileId: 'video-file-id',
+            posterUrl: '/api/images/ws-1/image-file-id',
+            posterFileId: 'image-file-id',
+            frameUrl: '/api/images/ws-1/image-file-id',
+            frameFileId: 'image-file-id',
+            durationSeconds: 8,
+            aspectRatio: '16:9',
+            hasAudio: true,
+            responseId: 'resp-1',
+            revisedPrompt: 'animate it clearly',
+            aiProvider: 'Google',
+            videoModelProvider: 'Google',
+            videoModelId: 'veo-3.1-generate-preview',
+            generationRun,
+        })
+        expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.VIDEO_COMPLETE)
+    })
+
+    it('still publishes video completion when canvas projection fails', async () => {
+        projectionMocks.upsertGeneratedVideoToCanvas.mockRejectedValueOnce(new Error('canvas write failed'))
+        const generationRun = {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'Google:veo-3.1-generate-preview',
+            mediaType: 'video',
+            reasoningIndex: 0,
+            lineageAssignment: {
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                mediaModelId: 'Google:veo-3.1-generate-preview',
+                mediaType: 'video',
+                branchId: 'branch-1',
+                branchLineNodeId: 'line-1',
+                lineageParentNodeId: 'line-1',
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                promptText: 'animate it',
+                createdAt: 1,
+            },
+        } as const
+        const published: Published[] = []
+        const publisher = new VideoPublisher(
+            { publish: (subject: string, payload: any) => published.push({ subject, payload }) } as any,
+            vi.fn(async () => ({
+                fileId: 'video-file-id',
+                url: '/api/videos/ws-1/video-file-id',
+                isDuplicate: false,
+                size: 1234,
+                mimeType: 'video/mp4',
+            })),
+            vi.fn(async () => ({
+                fileId: 'image-file-id',
+                url: '/api/images/ws-1/image-file-id',
+                isDuplicate: false,
+                size: 456,
+                mimeType: 'image/png',
+            })),
+            'ws-1',
+            'thread-1',
+            'Google',
+            generationRun,
+        )
+
+        await publisher.complete({
+            videoBuffer: mp4Sample,
+            posterBuffer: Buffer.from('poster'),
+            frameBuffer: Buffer.from('frame'),
+            durationSeconds: 8,
+            aspectRatio: '16:9',
+            hasAudio: true,
+            responseId: 'resp-1',
+            revisedPrompt: 'animate it clearly',
+            videoModelId: 'veo-3.1-generate-preview',
+        })
+
+        expect(projectionMocks.logCanvasProjectionError).toHaveBeenCalledWith(
+            'failed to persist generated video to canvas',
+            expect.any(Error),
+        )
+        expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.VIDEO_COMPLETE)
+    })
+
     it('ignores image-post-processing failures and still publishes VIDEO_COMPLETE', async () => {
         const published: Published[] = []
         const nats = {
@@ -283,5 +447,38 @@ describe('VideoPublisher', () => {
         expect(complete?.posterFileId).toBe('')
         expect(complete?.frameFileId).toBe('')
         expect(failingStoreImage).toHaveBeenCalledTimes(2)
+    })
+
+    it('routes video events through onPipelineContent when durable pipeline publishing is supplied', () => {
+        const published: Published[] = []
+        const nats = {
+            publish: (subject: string, payload: any) => {
+                published.push({ subject, payload })
+            },
+        } as any
+        const onProseMirrorContent = vi.fn()
+        const onPipelineContent = vi.fn()
+        const publisher = new VideoPublisher(
+            nats,
+            vi.fn(),
+            vi.fn(),
+            'ws-1',
+            'thread-1',
+            'Google',
+            undefined,
+            onProseMirrorContent,
+            onPipelineContent,
+        )
+
+        publisher.pending()
+
+        expect(published).toHaveLength(0)
+        expect(onProseMirrorContent).not.toHaveBeenCalled()
+        expect(onPipelineContent).toHaveBeenCalledWith(expect.objectContaining({
+            status: STREAM_STATUS.VIDEO_PENDING,
+            videoUrl: '',
+            fileId: '',
+            aiProvider: 'Google',
+        }))
     })
 })

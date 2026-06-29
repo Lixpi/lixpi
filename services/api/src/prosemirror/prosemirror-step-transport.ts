@@ -6,17 +6,17 @@ import {
     getWorkspaceStepStreamSubject,
     PROSEMIRROR_SCHEMA_VERSION,
     type DocCoordinate,
+    type LoggedStepStreamEvent,
     type StepEnvelope,
     type StepStreamControlEnvelope,
     type StepStreamEvent,
     type SubmitResult,
-    type SubmitStepPayload,
+    type SubmitStepsPayload,
 } from '@lixpi/prosemirror'
 
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000
 const DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 const DEFAULT_MAX_MSGS_PER_SUBJECT = 10000
-const DEFAULT_CONSUMER_INACTIVE_MS = 5 * 60 * 1000
 const NANOS_PER_MS = 1000000
 
 type ProseMirrorStepTransportOptions = {
@@ -66,6 +66,7 @@ type ControlEnvelopeBase = DocCoordinate & {
 type SubjectSequenceState = {
     subjectSeq: number
     streamSequence: number
+    documentVersion: number
 }
 
 type PublishedEnvelope<T extends StepStreamEvent> = {
@@ -103,52 +104,48 @@ export class ProseMirrorStepTransport {
         return streamName
     }
 
-    async submitStep(payload: SubmitStepPayload): Promise<SubmitResult> {
+    async submitSteps(payload: SubmitStepsPayload): Promise<SubmitResult> {
         try {
-            const expectedSubjectSeq = this.expectedSubjectSeq(payload)
             const state = await this.getCurrentSubjectState(payload)
-            if (state.subjectSeq !== expectedSubjectSeq) {
+            const currentVersion = this.getSubmitCurrentVersion(payload, state)
+            if (currentVersion !== payload.expectedVersion) {
                 return {
                     status: 'CONFLICT',
-                    currentVersion: payload.baseVersion + state.subjectSeq,
+                    currentVersion,
                 }
             }
-            const envelope = await this.publishClientStep(payload, state.streamSequence, expectedSubjectSeq)
-            return { status: 'ACCEPTED', version: envelope.version }
+
+            let streamSequence = state.streamSequence
+            let subjectSeq = state.subjectSeq
+            let version = payload.expectedVersion
+
+            for (const step of payload.steps) {
+                subjectSeq += 1
+                version += 1
+                streamSequence = await this.publishEnvelope({
+                    kind: 'STEP',
+                    workspaceId: payload.workspaceId,
+                    docType: payload.docType,
+                    docId: payload.docId,
+                    version,
+                    subjectSeq,
+                    step: step.step,
+                    msgId: step.msgId,
+                    clientId: step.clientId,
+                    schemaVersion: PROSEMIRROR_SCHEMA_VERSION,
+                    origin: payload.origin ?? 'client-edit',
+                }, streamSequence)
+            }
+
+            return { status: 'ACCEPTED', version }
         } catch (error) {
             if (!this.isExpectationFailure(error)) throw error
-            const currentSubjectSeq = await this.getCurrentSubjectSequence(payload)
+            const state = await this.getCurrentSubjectState(payload)
             return {
                 status: 'CONFLICT',
-                currentVersion: payload.baseVersion + currentSubjectSeq,
+                currentVersion: this.getSubmitCurrentVersion(payload, state),
             }
         }
-    }
-
-    async publishClientStep(
-        payload: SubmitStepPayload,
-        expectedLastStreamSequence?: number,
-        expectedSubjectSeq = this.expectedSubjectSeq(payload),
-    ): Promise<StepEnvelope> {
-        const subjectSeq = expectedSubjectSeq + 1
-        const envelope: StepEnvelope = {
-            kind: 'STEP',
-            workspaceId: payload.workspaceId,
-            docType: payload.docType,
-            docId: payload.docId,
-            version: payload.baseVersion + subjectSeq,
-            subjectSeq,
-            step: payload.step,
-            msgId: payload.msgId,
-            clientId: payload.clientId,
-            schemaVersion: PROSEMIRROR_SCHEMA_VERSION,
-            origin: payload.origin ?? 'client-edit',
-        }
-        await this.publishEnvelope(
-            envelope,
-            expectedLastStreamSequence ?? (await this.getCurrentSubjectState(payload)).streamSequence,
-        )
-        return envelope
     }
 
     async publishAiStreamStep(payload: PublishAiStreamStepPayload): Promise<PublishedEnvelope<StepEnvelope>> {
@@ -210,10 +207,30 @@ export class ProseMirrorStepTransport {
         const lastMessage = await this.natsService.getJetStreamMessage<StepStreamEvent>(streamName, {
             last_by_subj: subject,
         })
-        if (!lastMessage) return { subjectSeq: 0, streamSequence: 0 }
+        if (!lastMessage) return { subjectSeq: 0, streamSequence: 0, documentVersion: 0 }
+        const subjectSeq = typeof lastMessage.data.subjectSeq === 'number' ? lastMessage.data.subjectSeq : 0
         return {
-            subjectSeq: typeof lastMessage.data.subjectSeq === 'number' ? lastMessage.data.subjectSeq : 0,
+            subjectSeq,
             streamSequence: lastMessage.seq,
+            documentVersion: this.getDocumentVersion(lastMessage.data, subjectSeq),
+        }
+    }
+
+    async getCurrentSubjectStateOrNull(coordinate: DocCoordinate): Promise<SubjectSequenceState | null> {
+        const streamName = getWorkspaceStepStreamName(coordinate.workspaceId)
+        const streamInfo = await this.natsService.getJetStreamStreamInfoOrNull(streamName)
+        if (!streamInfo) return null
+
+        const subject = getDocumentStepSubject(coordinate)
+        const lastMessage = await this.natsService.getJetStreamMessage<StepStreamEvent>(streamName, {
+            last_by_subj: subject,
+        })
+        if (!lastMessage) return { subjectSeq: 0, streamSequence: 0, documentVersion: 0 }
+        const subjectSeq = typeof lastMessage.data.subjectSeq === 'number' ? lastMessage.data.subjectSeq : 0
+        return {
+            subjectSeq,
+            streamSequence: lastMessage.seq,
+            documentVersion: this.getDocumentVersion(lastMessage.data, subjectSeq),
         }
     }
 
@@ -224,26 +241,33 @@ export class ProseMirrorStepTransport {
 
     async replayDocumentSteps(options: ReplayDocumentStepsOptions): Promise<StepEnvelope[]> {
         const events = await this.replayDocumentStepEvents(options)
-        return events.filter((event): event is StepEnvelope => event.kind === 'STEP')
+        return events.filter((event): event is LoggedStepStreamEvent & StepEnvelope => event.kind === 'STEP')
     }
 
-    async replayDocumentStepEvents(options: ReplayDocumentStepsOptions): Promise<StepStreamEvent[]> {
-        const streamName = await this.ensureWorkspaceStream(options.workspaceId)
+    async replayDocumentStepEvents(options: ReplayDocumentStepsOptions): Promise<LoggedStepStreamEvent[]> {
+        const streamName = getWorkspaceStepStreamName(options.workspaceId)
         const subject = getDocumentStepSubject(options)
-        const consumerName = this.consumerName(options)
-        await this.natsService.ensureJetStreamConsumer(streamName, {
-            durable_name: consumerName,
-            ack_policy: 'explicit',
-            deliver_policy: 'by_start_sequence',
-            opt_start_seq: options.startStreamSeq,
-            filter_subject: subject,
-            inactive_threshold: DEFAULT_CONSUMER_INACTIVE_MS * NANOS_PER_MS,
+        const lastMessage = await this.natsService.getJetStreamMessage<StepStreamEvent>(streamName, {
+            last_by_subj: subject,
         })
-        const messages = await this.natsService.consumeJetStreamMessages<StepStreamEvent>(streamName, consumerName, {
-            maxMessages: options.maxMessages ?? 100,
-            expiresMs: 1000,
-        })
-        return messages.map(message => message.data)
+        if (!lastMessage || lastMessage.seq < options.startStreamSeq) return []
+
+        const events: LoggedStepStreamEvent[] = []
+        const maxMessages = options.maxMessages ?? 100
+        let nextSeq = options.startStreamSeq
+        while (nextSeq <= lastMessage.seq && events.length < maxMessages) {
+            const message = await this.natsService.getJetStreamMessage<StepStreamEvent>(streamName, {
+                seq: nextSeq,
+                next_by_subj: subject,
+            })
+            if (!message || message.seq > lastMessage.seq) break
+            events.push({
+                ...message.data,
+                streamSequence: message.seq,
+            })
+            nextSeq = message.seq + 1
+        }
+        return events
     }
 
     async purgeDocumentSubject(coordinate: DocCoordinate): Promise<void> {
@@ -252,29 +276,23 @@ export class ProseMirrorStepTransport {
         await this.natsService.purgeJetStreamSubject(streamName, subject)
     }
 
-    private expectedSubjectSeq(payload: SubmitStepPayload): number {
-        const subjectSeq = payload.expectedVersion - payload.baseVersion
-        if (!Number.isInteger(subjectSeq) || subjectSeq < 0) {
-            throw new Error(`Invalid ProseMirror expected version ${payload.expectedVersion} for base ${payload.baseVersion}`)
+    private getSubmitCurrentVersion(payload: Pick<SubmitStepsPayload, 'baseVersion'>, state: SubjectSequenceState): number {
+        if (state.subjectSeq === 0 && state.streamSequence === 0 && state.documentVersion === 0) {
+            return payload.baseVersion
         }
-        return subjectSeq
-    }
-
-    private consumerName(coordinate: DocCoordinate): string {
-        const rawName = [
-            'pm',
-            coordinate.workspaceId,
-            coordinate.docType,
-            coordinate.docId,
-            Date.now().toString(36),
-        ].join('_')
-        return rawName.replace(/[^A-Za-z0-9_-]/g, '_')
+        return state.documentVersion
     }
 
     private getPublishAckSequence(ack: any): number {
         if (typeof ack?.seq === 'number') return ack.seq
         if (typeof ack?.sequence === 'number') return ack.sequence
         throw new Error('JetStream publish ack did not include a stream sequence')
+    }
+
+    private getDocumentVersion(event: StepStreamEvent, fallbackSubjectSeq: number): number {
+        if (event.kind === 'END' && typeof event.finalVersion === 'number') return event.finalVersion
+        if (typeof event.version === 'number') return event.version
+        return fallbackSubjectSeq
     }
 
     private buildControlEnvelope(
@@ -303,7 +321,7 @@ export class ProseMirrorStepTransport {
         }
     }
 
-    private isExpectationFailure(error: unknown): boolean {
+    isExpectationFailure(error: unknown): boolean {
         const candidate = error as { code?: number; api_error?: { err_code?: number; description?: string }; message?: string }
         const message = `${candidate.message ?? ''} ${candidate.api_error?.description ?? ''}`.toLowerCase()
         return candidate.code === 400

@@ -18,9 +18,9 @@ This page is part of the canvas domain. For the DOM/PIXI rendering architecture,
 | Concept | Definition |
 |---------|------------|
 | **Workspace** | A named container owned by a user. Holds a canvas state (viewport position, zoom, and node positions) plus references to documents, AI chat threads, and uploaded files. |
-| **Canvas Node** | A positioned item on the canvas. It is one of four kinds — document, image, video, or AI chat thread — and stores position, dimensions, and type-specific data. |
-| **Document** | The actual text content (ProseMirror JSON). It lives separately from its canvas representation, so the same document could theoretically appear in multiple workspaces. Documents use `documentType: 'document'` and contain block-level content (paragraphs, headings, lists, and so on). |
-| **AI Chat Thread** | A persisted AI conversation session stored in the AI-Chat-Threads DynamoDB table. A thread is standalone; its ProseMirror history is rendered in an AI Chat panel tab and streamed through its own `AiInteractionService`. |
+| **Canvas Node** | A positioned item on the canvas. The shared persisted union contains documents, images, videos, and API-planned branch lineage markers (`branchOrigin`, `branchFork`, `branchLine`). The renderer also accepts `aiChatThread` canvas records for compatibility. |
+| **Document** | The actual text content (ProseMirror JSON). It lives separately from its canvas representation, so the same document could theoretically appear in multiple workspaces. Documents use `documentType: 'document'`, render through `ProseMirrorEditor`, and submit live edits through the ProseMirror authority step stream. |
+| **AI Chat Thread** | A persisted AI conversation session stored in the AI-Chat-Threads DynamoDB table. A thread is standalone; its ProseMirror history is rendered in an AI Chat panel tab, projected into branch marker/info panels, and streamed through server-authored ProseMirror step events plus durable pipeline side events. |
 | **AI Chat Panel** | A workspace-owned right-side surface that can be opened without creating a chat session; a standalone thread is created only when the first prompt is submitted. See [Chat Panel & Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md). |
 | **Image** | An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference workspace-owned image objects and delete them when removed from the canvas; a user can explicitly save a separate Media Library copy that is **not** deleted with the source node. |
 | **Video** | A generated or restored MP4 stored in NATS Object Store with a poster and an optional representative still. The canvas renders a PIXI poster behind a browser-composited `<video>` surface so playback, scrubbing, fullscreen, and shared controls do not depend on a PIXI video texture loop. See [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md). |
@@ -174,10 +174,16 @@ When an AI chat session generates images or videos, the workspace places them au
 
 ### CanvasNode
 
-Canvas nodes use a discriminated union keyed on the `type` field. There are four node types: `document`, `image`, `video`, and `aiChatThread`. Every node shares `nodeId`, `position`, and `dimensions`; the rest is type-specific.
+Canvas nodes use a discriminated union keyed on the `type` field. The shared `CanvasNode` type contains document, image, video, and branch lineage marker nodes. Every node shares `nodeId`, `position`, and `dimensions`; the rest is type-specific. `WorkspaceCanvas.ts` still contains runtime handling for `aiChatThread` canvas records, but AI chat sessions are primarily workspace panel/session records.
 
 ```typescript
-type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video'
+type CanvasNodeType =
+    | 'document'
+    | 'image'
+    | 'video'
+    | 'branchOrigin'
+    | 'branchFork'
+    | 'branchLine'
 
 // Document node - contains a ProseMirror editor
 type DocumentCanvasNode = {
@@ -217,20 +223,63 @@ type VideoCanvasNode = {
     dimensions: { width: number; height: number }
 }
 
-// AI Chat Thread node - contains an AI conversation
-type AiChatThreadCanvasNode = {
+// Branch origin marker - neutral generated-media lineage root
+type BranchOriginCanvasNode = {
     nodeId: string
-    type: 'aiChatThread'
-    referenceId: string    // Points to AiChatThread.threadId
+    type: 'branchOrigin'
+    branchId: string
+    generationRequestId: string
+    aiChatThreadId?: string
+    provenance?: BranchOriginProvenance
+    pendingState?: BranchMarkerPendingState
     position: { x: number; y: number }
     dimensions: { width: number; height: number }
+    temporary: true
+}
+
+// Branch fork marker - one reasoning-run lineage fork
+type BranchForkCanvasNode = {
+    nodeId: string
+    type: 'branchFork'
+    branchId: string
+    generationRequestId: string
+    aiChatThreadId?: string
+    reasoningRunId?: string
+    reasoningModelId?: AiModelId
+    reasoningIndex?: number
+    parentBranchNodeId?: string
+    provenance?: BranchForkProvenance
+    pendingState?: BranchMarkerPendingState
+    position: { x: number; y: number }
+    dimensions: { width: number; height: number }
+    temporary: true
+}
+
+// Branch line marker - continuation marker for a single media run
+type BranchLineCanvasNode = {
+    nodeId: string
+    type: 'branchLine'
+    branchId: string
+    generationRequestId: string
+    aiChatThreadId?: string
+    reasoningRunId?: string
+    mediaRunId?: string
+    mediaModelId?: AiModelId
+    parentBranchNodeId?: string
+    provenance?: BranchLineProvenance
+    pendingState?: BranchMarkerPendingState
+    position: { x: number; y: number }
+    dimensions: { width: number; height: number }
+    temporary: true
 }
 
 type CanvasNode =
     | DocumentCanvasNode
     | ImageCanvasNode
     | VideoCanvasNode
-    | AiChatThreadCanvasNode
+    | BranchOriginCanvasNode
+    | BranchForkCanvasNode
+    | BranchLineCanvasNode
 ```
 
 | Node type | Reference target | Key type-specific fields |
@@ -238,7 +287,9 @@ type CanvasNode =
 | `document` | `referenceId` → `Document.documentId` | — (content fetched lazily) |
 | `image` | `fileId` → NATS Object Store | `workspaceId`, `src`, `aspectRatio` |
 | `video` | `fileId` → NATS Object Store | `posterFileId`, optional `frameFileId`, `src`, `posterSrc`, `aspectRatio`, `durationSeconds`, `hasAudio` |
-| `aiChatThread` | `referenceId` → `AiChatThread.threadId` | — (history streamed/fetched) |
+| `branchOrigin` | API lineage plan | `branchId`, `generationRequestId`, optional `aiChatThreadId`, provenance, pending state |
+| `branchFork` | API lineage plan | `branchId`, `generationRequestId`, reasoning-run ids, parent marker/source id, provenance, pending state |
+| `branchLine` | API lineage plan | `branchId`, `generationRequestId`, reasoning/media run ids, parent marker/source id, provenance, pending state |
 
 The shared multimodal, workspace-context, descriptor, and canvas-node types are defined in [`packages/lixpi/constants/ts/types.ts`](../../packages/lixpi/constants/ts/types.ts).
 
@@ -313,6 +364,8 @@ Workspace, document, and thread persistence all travel over NATS request/respons
 | `WORKSPACE.GET_WORKSPACE_DOCUMENTS` | Get documents in workspace |
 | `DOCUMENT.CREATE_DOCUMENT` | Create document |
 | `DOCUMENT.UPDATE_DOCUMENT` | Update document content/title |
+| `DOCUMENT_STEP.DOC_SUBMIT_STEPS` | Submit one or more local ProseMirror steps for server-authoritative document editing |
+| `DOCUMENT_STEP.DOC_RESUME` | Load a ProseMirror snapshot and replay missed document step/control events |
 | `DOCUMENT.DELETE_DOCUMENT` | Delete document |
 | `AI_CHAT_THREAD.CREATE` | Create AI chat thread |
 | `AI_CHAT_THREAD.GET` | Get AI chat thread by workspaceId + threadId |
@@ -320,6 +373,7 @@ Workspace, document, and thread persistence all travel over NATS request/respons
 | `AI_CHAT_THREAD.DELETE` | Delete AI chat thread |
 | `AI_CHAT_THREAD.GET_BY_WORKSPACE` | Get all AI chat threads in workspace |
 | `AI_INTERACTION.CHAT_SEND_MESSAGE` | Send message to AI for processing |
+| `AI_INTERACTION.CHAT_PIPELINE_RESUME` | Replay missed chat pipeline events for a thread/pipeline |
 | `AI_INTERACTION.CHAT_STOP_MESSAGE` | Stop active AI streaming |
 | `AI_INTERACTION.FEATURE_EXTRACT.LIST_BY_WORKSPACE` | List extraction sessions for Sessions history |
 | `AI_INTERACTION.FEATURE_EXTRACT.DELETE` | Delete an extraction session without deleting its saved Feature |
@@ -357,11 +411,11 @@ Different changes persist on different cadences so continuous interactions never
 | Viewport pan/zoom | Debounced ~1s | `WORKSPACE.UPDATE_CANVAS_STATE` |
 | Node position/dimensions after drag/resize | Immediate via `onCanvasStateChange` | `WORKSPACE.UPDATE_CANVAS_STATE` |
 | Edge create / delete / reconnect | Immediate | `WORKSPACE.UPDATE_CANVAS_STATE` |
-| Document content | Debounced | `DocumentService.updateDocument()` |
-| AI chat thread content | Debounced | `AiChatThreadService.updateAiChatThread()` |
+| Document content | Live batched step submit + settled server snapshot | `DOCUMENT_STEP.DOC_SUBMIT_STEPS` / `DOCUMENT_STEP.DOC_RESUME`; API writes `Document.content` with `proseMirrorVersion` after the edit burst settles |
+| AI chat thread content | API final snapshot after stream completion | ProseMirror step stream for live rendering; `AiChatThread.update()` writes `content` and `proseMirrorVersion` when the authoritative stream ends |
 | AI chat panel UI (open/close, tabs, width, chips, drafts) | On change | persisted inside `canvasState.aiChatPanel` |
 
-Canvas-state changes are debounced (1 second) before persisting, which prevents hammering the backend during continuous pan/zoom. Document content changes are handled by `DocumentService.updateDocument()`, which has its own debouncing; AI chat thread content changes are handled by `AiChatThreadService.updateAiChatThread()` with similar debouncing.
+Canvas-state changes are debounced (1 second) before persisting, which prevents hammering the backend during continuous pan/zoom. Document editor transactions render locally, then submit short ProseMirror step batches to the API authority; the API writes a settled snapshot after the edit burst. AI chat transcript changes are authored by the API stream assembler, replayed through the document step log while active, and written once when the stream finalizes.
 
 AI chat panel state is stored inside `canvasState.aiChatPanel`. Opening or closing the panel, expanding or collapsing Sessions, opening or closing tabs, resizing it, changing context controls, and editing prompt drafts persist workspace UI state but do **not** create a conversation entity. Submitting from an empty panel creates a standalone chat session. Sessions is collapsed by default and toggled from the history icon in the panel control row; when expanded it lists standalone chats and extraction sessions. Closing a tab only changes panel presentation and the session remains reopenable; explicit standalone or extraction deletion removes that session and its saved prompt draft, while a saved Feature remains independent when its extraction session is deleted. The full panel and Sessions behavior is documented in [Chat Panel & Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md).
 

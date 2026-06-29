@@ -39,6 +39,16 @@ export type ExtractionTabRenderOptions = ExtractionTabPersistence & {
     surface?: ExtractionTabSurface
 }
 
+type PipelineEventEnvelope = {
+    payload: Record<string, any>
+    streamSequence: number
+}
+
+type PipelineReplayResult = {
+    error?: unknown
+    events?: PipelineEventEnvelope[]
+}
+
 const VALID_EXTRACTION_STATUSES: Array<CanvasFeatureExtractionState['status']> = [
     'pending', 'analyzing', 'routing', 'extracting', 'extracting_axes',
     'materializing_crops', 'synthesizing', 'generating_samples', 'saving', 'completed', 'failed',
@@ -475,6 +485,8 @@ export async function submitExtractionRequest(
     nats.getSubscriptions?.([subject, errorSubject])?.forEach((sub: any) => sub.unsubscribe())
     let featureCardBuffer = ''
     let isCapturingFeatureCard = false
+    const processedPipelineEventIds = new Set<string>()
+    let pipelineLocalStreamSeq = 0
     const handleExtractionError = (error: unknown) => {
         currentExtractionStatus = 'failed'
         extractionError = String(error)
@@ -482,7 +494,23 @@ export async function submitExtractionRequest(
         renderExtractionError(featureCardArea, `Feature extraction failed: ${extractionError}`)
         persistNow()
     }
-    nats.subscribe(subject, (data: any) => {
+    const shouldProcessPipelinePayload = (data: any): boolean => {
+        const pipelineEventId = typeof data?.pipelineEventId === 'string' ? data.pipelineEventId : ''
+        const pipelineStreamSeq = typeof data?.pipelineStreamSeq === 'number' ? data.pipelineStreamSeq : 0
+
+        if (pipelineEventId) {
+            if (processedPipelineEventIds.has(pipelineEventId)) {
+                pipelineLocalStreamSeq = Math.max(pipelineLocalStreamSeq, pipelineStreamSeq)
+                return false
+            }
+            processedPipelineEventIds.add(pipelineEventId)
+        }
+
+        pipelineLocalStreamSeq = Math.max(pipelineLocalStreamSeq, pipelineStreamSeq)
+        return true
+    }
+    const handleExtractionResponse = (data: any) => {
+        if (!shouldProcessPipelinePayload(data)) return
         if (data?.error) {
             handleExtractionError(data.error)
             return
@@ -548,10 +576,34 @@ export async function submitExtractionRequest(
             }
             persistNow()
         }
-    })
+    }
+    nats.subscribe(subject, handleExtractionResponse)
     nats.subscribe(errorSubject, (data: any) => {
         handleExtractionError(data?.error ?? data?.message ?? 'Unknown extraction error')
     })
+    const resumeExtractionPipeline = async (): Promise<void> => {
+        try {
+            const result = await nats.request(NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME, {
+                token: await AuthService.getTokenSilently(),
+                workspaceId,
+                pipelineId: extractionRunId,
+                localStreamSeq: pipelineLocalStreamSeq,
+            }) as PipelineReplayResult
+            if (result?.error) {
+                console.error('[EXTRACTION] CHAT_PIPELINE_RESUME failed:', result.error)
+                return
+            }
+            for (const event of result.events ?? []) {
+                handleExtractionResponse({
+                    ...event.payload,
+                    pipelineStreamSeq: event.streamSequence,
+                })
+            }
+        } catch (error) {
+            console.error('[EXTRACTION] CHAT_PIPELINE_RESUME failed:', error)
+        }
+    }
+    void resumeExtractionPipeline()
 
     try {
         const token = await AuthService.getTokenSilently()

@@ -5,7 +5,6 @@ import {
     NATS_SUBJECTS,
     STREAM_STATUS,
     type AiInteractionChatSendMessagePayload,
-    type AiInteractionChatStopMessagePayload,
     type ImageGenerationTrace,
     type ImageGenerationSize,
     type MediaBranchLineagePlan,
@@ -14,16 +13,8 @@ import {
     type VideoGenerationTrace,
     type WorkspaceContextResolution
 } from '@lixpi/constants'
-import {
-    DOCUMENT_TYPE,
-    getDocumentStepSubject,
-    type DocResumeResult,
-    type StepStreamEvent,
-} from '@lixpi/prosemirror'
-
 import AuthService from '$src/services/auth-service.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
-import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
@@ -52,38 +43,44 @@ type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadI
     videoSourceForExtension?: string
 }
 
-type MarkdownParserContext = {
-    parser: ReturnType<typeof MarkdownStreamParser.getInstance>
-    unsubscribe?: () => void
-    aiProvider: string | null
-    generationRun?: MediaGenerationRunMeta
+type PipelineEventEnvelope = {
+    kind: 'PIPELINE_EVENT'
+    workspaceId: string
+    pipelineId: string
+    eventId: string
+    payload: Record<string, any>
+    publishedAt: number
+    streamSequence: number
+}
+
+type PipelineReplayResult = {
+    error?: unknown
+    events?: PipelineEventEnvelope[]
 }
 
 export default class AiInteractionService {
     workspaceId: string
     aiChatThreadId: string
     segmentsReceiver: any
-    markdownParserContexts: Map<string, MarkdownParserContext>
     currentAiProvider: string | null
-    proseMirrorLocalVersion: number
+    providersByRunKey: Map<string, string>
+    pipelineEventIds: Set<string>
+    pipelineLocalStreamSeq: number
 
     constructor({ workspaceId, aiChatThreadId }: { workspaceId: string; aiChatThreadId: string }) {
         this.workspaceId = workspaceId
         this.aiChatThreadId = aiChatThreadId
         this.segmentsReceiver = SegmentsReceiver
-        this.markdownParserContexts = new Map()
         this.currentAiProvider = null
-        this.proseMirrorLocalVersion = 0
+        this.providersByRunKey = new Map()
+        this.pipelineEventIds = new Set()
+        this.pipelineLocalStreamSeq = 0
 
         this.initNatsSubscriptions()
     }
 
     getRunKey(generationRun?: MediaGenerationRunMeta): string {
         return generationRun?.reasoningRunId || this.aiChatThreadId
-    }
-
-    getParserInstanceId(runKey: string): string {
-        return runKey === this.aiChatThreadId ? this.aiChatThreadId : `${this.aiChatThreadId}:${runKey}`
     }
 
     getGenerationRun(content: any): MediaGenerationRunMeta | undefined {
@@ -96,75 +93,12 @@ export default class AiInteractionService {
         return `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
     }
 
-    getStepSubject(): string {
-        return getDocumentStepSubject({
-            workspaceId: this.workspaceId,
-            docType: DOCUMENT_TYPE.AI_CHAT_THREAD,
-            docId: this.aiChatThreadId,
-        })
-    }
-
-    shouldUseLegacyRawParser(generationRun?: MediaGenerationRunMeta): boolean {
-        return generationRun?.requestKind === 'media-generation-matrix'
-    }
-
-    cleanupMarkdownParserContext(runKey: string): void {
-        const context = this.markdownParserContexts.get(runKey)
-        context?.unsubscribe?.()
-        MarkdownStreamParser.removeInstance(this.getParserInstanceId(runKey))
-        this.markdownParserContexts.delete(runKey)
-        if (runKey === this.aiChatThreadId) {
-            this.currentAiProvider = null
-        }
-    }
-
-    initMarkdownParser(generationRun?: MediaGenerationRunMeta, aiProvider?: string) {
-        const runKey = this.getRunKey(generationRun)
-        this.cleanupMarkdownParserContext(runKey)
-
-        const parserInstanceId = this.getParserInstanceId(runKey)
-        // Initialize markdown stream parser (exact replication of backend pattern)
-        const parser = MarkdownStreamParser.getInstance(parserInstanceId)
-
-        const context: MarkdownParserContext = {
-            parser,
-            aiProvider: aiProvider || null,
-            ...(generationRun ? { generationRun } : {}),
-        }
-        this.markdownParserContexts.set(runKey, context)
-
-        // Subscribe to parsed segments from the markdown stream parser
-        context.unsubscribe = parser.subscribeToTokenParse((parsedSegment, unsubscribe) => {
-            // Emit parsed content to segmentsReceiver with aiProvider and aiChatThreadId
-            const currentContext = this.markdownParserContexts.get(runKey) ?? context
-            this.segmentsReceiver.receiveSegment({
-                ...parsedSegment,
-                aiProvider: currentContext.aiProvider,
-                aiChatThreadId: this.aiChatThreadId,
-                ...(currentContext.generationRun ? { generationRun: currentContext.generationRun } : {}),
-            })
-
-            // Cleanup on stream end
-            if (parsedSegment.status === 'END_STREAM') {
-                unsubscribe()
-                MarkdownStreamParser.removeInstance(parserInstanceId)
-                this.markdownParserContexts.delete(runKey)
-                if (runKey === this.aiChatThreadId) {
-                    this.currentAiProvider = null
-                }
-            }
-        })
-    }
-
     updateRunProvider(runKey: string, aiProvider: string | undefined): string | null {
         if (!aiProvider) {
-            return this.markdownParserContexts.get(runKey)?.aiProvider ?? this.currentAiProvider
+            return this.providersByRunKey.get(runKey) ?? this.currentAiProvider
         }
 
-        const existingContext = this.markdownParserContexts.get(runKey)
-        if (existingContext) {
-            existingContext.aiProvider = aiProvider
-        }
+        this.providersByRunKey.set(runKey, aiProvider)
         if (runKey === this.aiChatThreadId) {
             this.currentAiProvider = aiProvider
         }
@@ -177,15 +111,13 @@ export default class AiInteractionService {
                 throw new Error('AiInteractionService requires workspaceId and aiChatThreadId')
 
             const subject = this.getChatResponseSubject()
-            const stepSubject = this.getStepSubject()
 
             // Only unsubscribe previous subscriptions for THIS specific thread, not all threads
-            servicesStore.getData('nats')!.getSubscriptions([subject, stepSubject]).forEach(sub => sub.unsubscribe())
+            servicesStore.getData('nats')!.getSubscriptions([subject]).forEach((sub: { unsubscribe: () => void }) => sub.unsubscribe())
 
             console.log(`[AI_INTERACTION] Subscribing to NATS response channel: ${subject}`)
             this.subscribeToChatMessages()
-            this.subscribeToProseMirrorSteps()
-            void this.resumeProseMirrorStepStream()
+            void this.resumePipelineEventStream()
         } catch (error) {
             console.error('Failed to initialize NATS service:', error)
         }
@@ -196,82 +128,59 @@ export default class AiInteractionService {
         // Subscribe to responses for this specific workspace and thread
         servicesStore.getData('nats')!.subscribe(
             subject,
-            (data, msg) => {
+            (data: any, _msg: unknown) => {
                 this.onChatMessageResponse(data)
             }
         )
     }
 
-    async subscribeToProseMirrorSteps() {
-        const subject = this.getStepSubject()
-        servicesStore.getData('nats')!.subscribe(
-            subject,
-            (data) => {
-                this.onProseMirrorStepEvent(data as StepStreamEvent)
+    shouldProcessPipelinePayload(data: any): boolean {
+        const pipelineEventId = typeof data?.pipelineEventId === 'string' ? data.pipelineEventId : ''
+        const pipelineStreamSeq = typeof data?.pipelineStreamSeq === 'number' ? data.pipelineStreamSeq : 0
+
+        if (pipelineEventId) {
+            if (this.pipelineEventIds.has(pipelineEventId)) {
+                this.pipelineLocalStreamSeq = Math.max(this.pipelineLocalStreamSeq, pipelineStreamSeq)
+                return false
             }
-        )
+            this.pipelineEventIds.add(pipelineEventId)
+        }
+
+        this.pipelineLocalStreamSeq = Math.max(this.pipelineLocalStreamSeq, pipelineStreamSeq)
+        return true
     }
 
-    onProseMirrorStepEvent(event: StepStreamEvent) {
-        if (!event || event.docId !== this.aiChatThreadId) return
-        if (!this.shouldReceiveProseMirrorEvent(event)) return
-
-        this.segmentsReceiver.receiveSegment({
-            type: 'prosemirror_step_event',
-            proseMirrorStepEvent: event,
-            aiProvider: event.aiProvider ?? this.currentAiProvider,
-            aiChatThreadId: this.aiChatThreadId,
-            ...(event.generationRun ? { generationRun: event.generationRun } : {}),
-        })
-        this.updateProseMirrorLocalVersion(event)
-    }
-
-    async resumeProseMirrorStepStream(): Promise<void> {
+    async resumePipelineEventStream(): Promise<void> {
         try {
             const result = await servicesStore.getData('nats')!.request(
-                NATS_SUBJECTS.DOCUMENT_STEP_SUBJECTS.DOC_RESUME,
+                AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
                 {
                     token: await AuthService.getTokenSilently(),
                     workspaceId: this.workspaceId,
-                    docType: DOCUMENT_TYPE.AI_CHAT_THREAD,
-                    docId: this.aiChatThreadId,
-                    localVersion: this.proseMirrorLocalVersion,
+                    aiChatThreadId: this.aiChatThreadId,
+                    localStreamSeq: this.pipelineLocalStreamSeq,
                 },
-            ) as DocResumeResult
-            const snapshotVersion = result.snapshot?.version ?? 0
-            const shouldReplayEvents = this.proseMirrorLocalVersion > 0 || snapshotVersion > 0
-            this.proseMirrorLocalVersion = Math.max(
-                this.proseMirrorLocalVersion,
-                snapshotVersion,
-            )
-            if (!shouldReplayEvents) return
+            ) as PipelineReplayResult
+            if (result?.error) {
+                console.error('[AI_INTERACTION] CHAT_PIPELINE_RESUME failed:', result.error)
+                return
+            }
             for (const event of result.events ?? []) {
-                this.onProseMirrorStepEvent(event)
+                this.onChatMessageResponse({
+                    ...event.payload,
+                    pipelineStreamSeq: event.streamSequence,
+                })
             }
         } catch (error) {
-            console.error('[AI_INTERACTION] DOC_RESUME failed:', error)
+            console.error('[AI_INTERACTION] CHAT_PIPELINE_RESUME failed:', error)
         }
-    }
-
-    shouldReceiveProseMirrorEvent(event: StepStreamEvent): boolean {
-        if (event.kind === 'START') return this.proseMirrorLocalVersion <= event.baseVersion
-        if (event.kind === 'END') return this.proseMirrorLocalVersion < event.finalVersion
-        if (event.kind === 'ERROR') return true
-        return event.version > this.proseMirrorLocalVersion
-    }
-
-    updateProseMirrorLocalVersion(event: StepStreamEvent): void {
-        if (event.kind === 'START' || event.kind === 'ERROR') return
-        if (event.kind === 'END') {
-            this.proseMirrorLocalVersion = Math.max(this.proseMirrorLocalVersion, event.finalVersion)
-            return
-        }
-        this.proseMirrorLocalVersion = Math.max(this.proseMirrorLocalVersion, event.version)
     }
 
 
     onChatMessageResponse(data: any) {
         try {
+            if (!this.shouldProcessPipelinePayload(data)) return
+
             if (data?.error) {
                 alert(`Failed to receive chat message: \n${JSON.stringify(data.error)}`)
                 return
@@ -287,11 +196,10 @@ export default class AiInteractionService {
             const generationRun = this.getGenerationRun(content)
             const runKey = this.getRunKey(generationRun)
             const aiProvider = this.updateRunProvider(runKey, content.aiProvider)
-            const useLegacyRawParser = this.shouldUseLegacyRawParser(generationRun)
             const segmentBase = {
                 aiProvider,
                 aiChatThreadId: this.aiChatThreadId,
-                usesServerProseMirror: !useLegacyRawParser,
+                usesServerProseMirror: true,
                 ...(generationRun ? { generationRun } : {}),
             }
 
@@ -395,7 +303,7 @@ export default class AiInteractionService {
                     responseId: content.responseId,
                     revisedPrompt: content.revisedPrompt,
                     aiProvider: aiProvider || '',
-                    usesServerProseMirror: !useLegacyRawParser,
+                    usesServerProseMirror: true,
                     imageModelProvider: content.imageModelProvider || content.aiProvider || '',
                     imageModelId: content.imageModelId || '',
                     ...(generationRun ? { generationRun } : {}),
@@ -490,42 +398,6 @@ export default class AiInteractionService {
                     ...segmentBase,
                 })
                 return
-            }
-
-            if (content.status === STREAM_STATUS.COLLAPSIBLE_START) {
-                if (!useLegacyRawParser) return
-                this.segmentsReceiver.receiveSegment({
-                    type: 'collapsible_start',
-                    collapsibleTitle: content.collapsibleTitle || 'Image generation prompt',
-                    ...segmentBase,
-                })
-                return
-            }
-
-            if (content.status === STREAM_STATUS.COLLAPSIBLE_END) {
-                if (!useLegacyRawParser) return
-                this.segmentsReceiver.receiveSegment({
-                    type: 'collapsible_end',
-                    ...segmentBase,
-                })
-                return
-            }
-
-            // Route raw tokens through markdown parser (exact replication of backend pattern)
-            if (content.status === STREAM_STATUS.START_STREAM) {
-                if (!useLegacyRawParser) return
-                // Initialize fresh parser instance for this stream
-                this.initMarkdownParser(generationRun, aiProvider || undefined)
-                // startParsing() emits START_STREAM event via subscribeToTokenParse callback
-                this.markdownParserContexts.get(runKey)?.parser.startParsing()
-            } else if (content.status === STREAM_STATUS.STREAMING && content.text) {
-                if (!useLegacyRawParser) return
-                // Feed raw token to parser - it will emit parsed segments via subscribeToTokenParse callback
-                this.markdownParserContexts.get(runKey)?.parser.parseToken(content.text)
-            } else if (content.status === STREAM_STATUS.END_STREAM) {
-                if (!useLegacyRawParser) return
-                // stopParsing() will emit END_STREAM event internally via subscribeToTokenParse callback
-                this.markdownParserContexts.get(runKey)?.parser.stopParsing()
             }
         } catch (error) {
             console.error('[AI_INTERACTION] onChatMessageResponse failed:', { data }, error)
@@ -674,12 +546,10 @@ export default class AiInteractionService {
 
     disconnect() {
         const subject = this.getChatResponseSubject()
-        const stepSubject = this.getStepSubject()
-        for (const runKey of Array.from(this.markdownParserContexts.keys())) {
-            this.cleanupMarkdownParserContext(runKey)
-        }
-        servicesStore.getData('nats')?.getSubscriptions([subject, stepSubject]).forEach(sub => sub.unsubscribe())
+        servicesStore.getData('nats')?.getSubscriptions([subject]).forEach((sub: { unsubscribe: () => void }) => sub.unsubscribe())
         this.currentAiProvider = null
+        this.providersByRunKey.clear()
+        this.pipelineEventIds.clear()
     }
 
     destroy() {

@@ -28,13 +28,13 @@ import {
     applyStreamingSegmentToTransaction,
     documentTitleNodeType,
     getAiLineageEventsForProjection,
+    Step,
     type AiLineageEventDescriptor,
     type DocCoordinate,
 } from '@lixpi/prosemirror'
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { Transaction } from 'prosemirror-state'
-import type { Step } from 'prosemirror-transform'
 
 import AiChatThread from '../models/ai-chat-thread.ts'
 import { ProseMirrorStepTransport } from './prosemirror-step-transport.ts'
@@ -134,6 +134,7 @@ type QueuedTask = {
     resolve: () => void
 }
 
+const MAX_AUTHORITY_CAS_RETRIES = 5
 const AI_GENERATED_MEDIA_WIDTH = '75%'
 const AI_GENERATED_MEDIA_ALIGNMENT = 'left'
 const AI_GENERATED_MEDIA_TEXT_WRAP = 'none'
@@ -896,12 +897,10 @@ export class AiChatProseMirrorStreamAssembler {
     private async applyAndPublishTransaction(transaction: Transaction): Promise<void> {
         if (!transaction.docChanged || transaction.steps.length === 0) return
 
-        const versionBefore = this.engine.version
-        this.engine.applyTransaction(transaction)
-        let nextVersion = versionBefore
         for (const step of transaction.steps) {
-            nextVersion += 1
+            const nextVersion = this.engine.version + 1
             await this.publishStep(step, nextVersion)
+            this.engine.applyTransaction(this.engine.state.tr.step(step))
         }
     }
 
@@ -992,6 +991,34 @@ export class AiChatProseMirrorStreamAssembler {
         this.lastStreamSeq = state.streamSequence
     }
 
+    private async syncEngineToAuthority(): Promise<void> {
+        if ((this.config.baseVersion ?? 0) === 0 && this.subjectSeq === undefined && this.lastStreamSeq === undefined) return
+
+        const localStreamSeq = this.lastStreamSeq ?? 0
+        const state = await this.transport.getCurrentSubjectState(this.coordinate)
+        if (state.streamSequence <= localStreamSeq) {
+            this.subjectSeq = state.subjectSeq
+            this.lastStreamSeq = state.streamSequence
+            return
+        }
+
+        const events = await this.transport.replayDocumentStepEvents({
+            ...this.coordinate,
+            startStreamSeq: localStreamSeq + 1,
+            maxMessages: 1000,
+        })
+
+        for (const event of events) {
+            if (event.kind !== 'STEP' || event.version <= this.engine.version) continue
+            const step = Step.fromJSON(this.engine.schema, event.step)
+            this.engine.applyTransaction(this.engine.state.tr.step(step))
+        }
+
+        const latestState = await this.transport.getCurrentSubjectState(this.coordinate)
+        this.subjectSeq = latestState.subjectSeq
+        this.lastStreamSeq = latestState.streamSequence
+    }
+
     private async resetSubjectIfStartingFromBase(): Promise<void> {
         if ((this.config.baseVersion ?? 0) !== 0) return
         const state = await this.transport.getCurrentSubjectState(this.coordinate)
@@ -1019,7 +1046,7 @@ export class AiChatProseMirrorStreamAssembler {
                 const queuedTask = this.workQueue.shift()
                 if (!queuedTask) continue
                 try {
-                    await queuedTask.task()
+                    await this.runQueuedTaskWithAuthorityRetry(queuedTask)
                 } catch (error) {
                     err('[AiChatProseMirrorStreamAssembler] queued task failed:', error)
                 } finally {
@@ -1031,6 +1058,22 @@ export class AiChatProseMirrorStreamAssembler {
             if (this.workQueue.length > 0) {
                 this.isProcessingQueue = true
                 void this.processQueue()
+            }
+        }
+    }
+
+    private async runQueuedTaskWithAuthorityRetry(queuedTask: QueuedTask): Promise<void> {
+        for (let attempt = 0; attempt <= MAX_AUTHORITY_CAS_RETRIES; attempt += 1) {
+            try {
+                await this.syncEngineToAuthority()
+                await queuedTask.task()
+                return
+            } catch (error) {
+                if (!this.transport.isExpectationFailure(error) || attempt === MAX_AUTHORITY_CAS_RETRIES) {
+                    throw error
+                }
+                this.subjectSeq = undefined
+                this.lastStreamSeq = undefined
             }
         }
     }

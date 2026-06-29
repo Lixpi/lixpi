@@ -41,6 +41,7 @@ The API owns the decisions:
 - `resolveImageBranch` uses the structured VLM resolver to select target/reference/excluded media when candidates exist, and synthesizes a fresh-branch resolution in the API when the candidate list is empty.
 - `MediaBranchLineagePlanner` converts the resolver result into a `MediaBranchLineagePlan`.
 - `StreamPublisher.mediaLineagePlanned()` emits `MEDIA_LINEAGE_PLANNED` before media partials or completions.
+- `services/api/src/services/media-generation-canvas-projection.ts` persists the planned markers and final generated image/video nodes into `Workspace.canvasState` independently of any browser subscriber.
 
 ## Lineage Plan Contract
 
@@ -67,15 +68,21 @@ It must not include a child reasoning model's prompt rewrite, response text, med
 
 ## Browser Responsibilities
 
-`WorkspaceCanvas.ts` applies the plan to canvas state:
+`WorkspaceCanvas.ts` applies and presents the plan:
 
-- create planned `branchOrigin` and `branchFork` marker nodes if referenced by generated media,
-- add planned fork edges,
-- persist `generatedBy` lineage fields from `MediaRunLineageAssignment`,
+- render optimistic preflight markers while a request is resolving,
+- reconcile API-persisted planned `branchOrigin`, `branchFork`, and `branchLine` markers,
+- reconcile API-persisted generated-media nodes and `generatedBy` lineage fields from `MediaRunLineageAssignment`,
 - compute marker/media positions from visible canvas geometry,
 - run branch-tree tidy layout and collision cleanup.
 
 Those are presentation responsibilities. The browser must not derive `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, lineage-parent selection, fork count, or marker provenance from selected models, prompt text, selected nodes, local canvas order, previous canvas nodes, connector edges, persisted aliases, or candidate-snapshot contents.
+
+## Durable Canvas Projection
+
+Pipeline completion must not depend on a live browser tab. When media lineage is planned, the API mutates `Workspace.canvasState` with the planned lineage markers and marker edges. When final image or video bytes are stored, the API mutates the same canvas state with the generated media node, generated provenance, and connector edge from the API-assigned lineage parent.
+
+These mutations are idempotent and guarded by the workspace row's `updatedAt` value so concurrent browser canvas saves and API projection saves retry against the latest canvas snapshot instead of overwriting each other. If no UI is connected, the pipeline still finishes and the next workspace load sees the persisted markers and generated media.
 
 ## Extension Rule
 

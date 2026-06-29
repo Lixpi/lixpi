@@ -53,7 +53,7 @@ const getTargetScopeOwnerId = async ({
 export const featureSubjects = [
     {
         subject: FEATURE_SUBJECTS.CREATE, type: 'reply', payloadType: 'json',
-        permissions: { pub: { allow: [FEATURE_SUBJECTS.CREATE] }, sub: { allow: [FEATURE_SUBJECTS.CREATE, FEATURE_SUBJECTS.EVENTS.CREATED] } },
+        permissions: { pub: { allow: [FEATURE_SUBJECTS.CREATE] }, sub: { allow: [FEATURE_SUBJECTS.CREATE] } },
         handler: async (data: any) => {
             const { user: { userId }, workspaceId, category, name, summary, tags, instructions, parameters, sampleImages, sourceContext } = data
             if (!workspaceId || !(await verifyWorkspaceAccess(userId, workspaceId))) {
@@ -99,7 +99,7 @@ export const featureSubjects = [
     },
     {
         subject: FEATURE_SUBJECTS.UPDATE, type: 'reply', payloadType: 'json',
-        permissions: { pub: { allow: [FEATURE_SUBJECTS.UPDATE] }, sub: { allow: [FEATURE_SUBJECTS.UPDATE, FEATURE_SUBJECTS.EVENTS.UPDATED] } },
+        permissions: { pub: { allow: [FEATURE_SUBJECTS.UPDATE] }, sub: { allow: [FEATURE_SUBJECTS.UPDATE] } },
         handler: async (data: any) => {
             const { user: { userId }, featureId, updates } = data
             const result = await Feature.updateFeature({ featureId, ownerUserId: userId, updates })
@@ -110,7 +110,17 @@ export const featureSubjects = [
     },
     {
         subject: FEATURE_SUBJECTS.DELETE, type: 'reply', payloadType: 'json',
-        permissions: { pub: { allow: [FEATURE_SUBJECTS.DELETE] }, sub: { allow: [FEATURE_SUBJECTS.DELETE, FEATURE_SUBJECTS.EVENTS.DELETED] } },
+        permissions: {
+            pub: { allow: [FEATURE_SUBJECTS.DELETE] },
+            sub: {
+                allow: [
+                    FEATURE_SUBJECTS.DELETE,
+                    FEATURE_SUBJECTS.EVENTS.CREATED,
+                    FEATURE_SUBJECTS.EVENTS.UPDATED,
+                    FEATURE_SUBJECTS.EVENTS.DELETED,
+                ],
+            },
+        },
         handler: async (data: any) => {
             const { user: { userId }, workspaceId, featureId } = data
             // Features are org-wide: any member of the owning org can delete them.

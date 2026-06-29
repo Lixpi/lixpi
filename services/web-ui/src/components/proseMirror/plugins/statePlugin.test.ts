@@ -72,7 +72,32 @@ describe('statePlugin', () => {
         expect(onLiveUpdateCallback).toHaveBeenCalledTimes(1)
     })
 
-    it('suppresses update and title callbacks while streaming attrs are present in doc', () => {
+    it('routes local document changes to the authority callback instead of persisting directly', () => {
+        const onLocalTransactionCallback = vi.fn()
+        const plugin = statePlugin(
+            {},
+            onUpdateCallback,
+            onTitleChangeCallback,
+            onLiveUpdateCallback,
+            onLocalTransactionCallback,
+        )
+        let state = EditorState.create({
+            schema: testSchema,
+            doc: doc(p('')),
+            plugins: [plugin],
+        })
+
+        const tr = state.tr.insertText('Authority title', state.selection.from)
+        state = state.apply(tr)
+
+        expect(onLocalTransactionCallback).toHaveBeenCalledTimes(1)
+        expect(onLocalTransactionCallback).toHaveBeenCalledWith(tr)
+        expect(onUpdateCallback).not.toHaveBeenCalled()
+        expect(onTitleChangeCallback).toHaveBeenCalledWith('Authority title')
+        expect(onLiveUpdateCallback).toHaveBeenCalledTimes(1)
+    })
+
+    it('suppresses persistence while streaming attrs are present in a non-chat document', () => {
         const plugin = statePlugin({}, onUpdateCallback, onTitleChangeCallback, onLiveUpdateCallback)
         let state = EditorState.create({
             schema: testSchema,
@@ -84,7 +109,7 @@ describe('statePlugin', () => {
         state = state.apply(tr)
 
         expect(onUpdateCallback).not.toHaveBeenCalled()
-        expect(onTitleChangeCallback).not.toHaveBeenCalled()
+        expect(onTitleChangeCallback).toHaveBeenCalledWith('!streaming')
         expect(onLiveUpdateCallback).toHaveBeenCalledTimes(1)
     })
 })

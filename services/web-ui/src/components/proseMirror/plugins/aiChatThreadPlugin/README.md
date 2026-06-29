@@ -1,19 +1,20 @@
 # AI Chat Thread Plugin
 
-`aiChatThreadPlugin` powers the ProseMirror editor inside an AI chat thread canvas node. The thread editor is a conversation log and streaming target. Composer UI is provided by `aiPromptInputPlugin`.
+`aiChatThreadPlugin` powers the ProseMirror editor for AI chat thread documents in the panel, provenance projections, and compatibility canvas-thread surfaces. The thread editor is a conversation log and streaming target. Composer UI is provided by `aiPromptInputPlugin`.
 
 ## Input Flow
 
 1. `aiPromptInputPlugin` owns the composer editor and model controls.
 2. `AiPromptInputController` injects an `aiUserMessage` into the target thread editor.
 3. The controller dispatches `USE_AI_CHAT_META` with `{ threadId, nodePos }`.
-4. `aiChatThreadPlugin` extracts the thread messages, calls `sendAiRequestHandler`, and streams response nodes into the same thread.
+4. `aiChatThreadPlugin` extracts the thread messages and calls `sendAiRequestHandler` with the post-placeholder ProseMirror doc JSON.
+5. The API authors response nodes into the authoritative ProseMirror step stream; the browser applies those steps through `ProseMirrorAuthorityService`.
 
 ## What It Does
 
 - Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiLineageEvent`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
-- Streams parsed text, image, video, context-resolution, branch-resolution, and trace events from `SegmentsReceiver`.
-- In server-authoritative mode, applies only ProseMirror step events to the thread document; raw media/control events are routed to canvas placement without locally mutating the same ProseMirror doc.
+- Handles image, video, context-resolution, branch-resolution, trace, and error side-effect events from `SegmentsReceiver`.
+- Applies ProseMirror document changes only through authority step events. Raw media/control pipeline events are routed to canvas placement without locally mutating the same ProseMirror doc.
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
 - Delegates generated-image and generated-video canvas side effects through callback surfaces registered by `createAiChatThreadPlugin`.
 - Preserves API media-lineage assignments on durable response/media nodes, then projects those ids into reusable lineage-event markers for the live thread, branch-root panels, branch-fork panels, and generated-media provenance.
@@ -51,6 +52,7 @@ sequenceDiagram
     participant Controller as AiPromptInputController
     participant Thread as aiChatThreadPlugin
     participant Service as AiInteractionService
+    participant Authority as ProseMirrorAuthorityService
     participant Receiver as SegmentsReceiver
 
     User->>Prompt: Cmd/Ctrl+Enter or submit button
@@ -58,9 +60,11 @@ sequenceDiagram
     Controller->>Thread: insert aiUserMessage + USE_AI_CHAT_META
     Thread->>Thread: extract thread messages
     Thread->>Service: sendAiRequestHandler(payload + post-placeholder doc JSON)
-    Service->>Receiver: live step events for workspaceId + threadId
-    Receiver->>Thread: START / STEP / END
-    Thread->>Thread: apply Step.fromJSON(schema, step)
+    Authority->>Thread: DOC_RESUME + document step subscription
+    Authority->>Thread: START / STEP / END
+    Authority->>Thread: apply Step.fromJSON(schema, step)
+    Service->>Receiver: replayed/live pipeline side events
+    Receiver->>Thread: branch/media/trace/error events
 ```
 
 ## Schema Nodes
@@ -203,10 +207,6 @@ Media configuration group attrs are JSON strings parsed through `parseMediaGener
 
 The plugin subscribes through `SegmentsReceiver` and handles these event families:
 
-- `prosemirror_step_event`
-- `START_STREAM`
-- `STREAMING`
-- `END_STREAM`
 - stream errors
 - `image_partial`
 - `image_complete`
@@ -222,15 +222,15 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 - `video_complete`
 - `video_error`
 - `video_generation_trace`
-- `collapsible_start`
-- `collapsible_end`
 
-Single-writer text streams use `prosemirror_step_event`: `START` and `END`
-update receiving state, while `STEP` is applied directly with
-`Step.fromJSON(view.state.schema, stepEvent.step)`. The legacy
-`START_STREAM` / `STREAMING` / `END_STREAM` parser path is kept for media
-matrix streams until parallel reasoning runs share one server-side document
-authority.
+Single-writer text streams are applied by `ProseMirrorAuthorityService`, which
+subscribes to the document step subject and applies `STEP` events with
+`Step.fromJSON(view.state.schema, event.step)`. The plugin still owns the
+non-ProseMirror pipeline event families delivered through `SegmentsReceiver`.
+Raw `START_STREAM` / `STREAMING` / `END_STREAM` text events are not parsed in
+the browser. Generated-prompt collapsible blocks are authored by the API-side
+ProseMirror assembler; legacy collapsible segment handlers are compatibility
+code and are not the primary AI chat text path.
 
 Image and video completion/error events finalize the generated media node state
 and close the matching receiving run so prompt inputs leave stop mode when the

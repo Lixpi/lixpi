@@ -21,6 +21,7 @@ export type Document = {
     title: string
     revision?: number
     prevRevision?: number
+    proseMirrorVersion?: number
     content?: Record<string, any>
     tags?: Tag[]
     createdAt: string

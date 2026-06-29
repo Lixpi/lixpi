@@ -15,6 +15,7 @@ const createNatsService = () => ({
     ensureJetStreamStream: vi.fn(async () => undefined),
     publishJetStream: vi.fn(async () => ({ seq: 1 })),
     getJetStreamMessage: vi.fn(async () => ({ seq: 0, data: { subjectSeq: 0, version: 0 } })),
+    getJetStreamStreamInfoOrNull: vi.fn(async () => ({ config: { name: 'stream-workspace-1' } })),
     ensureJetStreamConsumer: vi.fn(async () => undefined),
     consumeJetStreamMessages: vi.fn(async () => []),
 })
@@ -51,7 +52,7 @@ describe('ProseMirrorStepTransport', () => {
         })
     })
 
-    it('returns ACCEPTED for a valid step submit and publishes the expected STEP envelope', async () => {
+    it('returns ACCEPTED for a one-step batch and publishes the expected STEP envelope', async () => {
         const natsService = createNatsService()
         natsService.getJetStreamMessage.mockResolvedValue({
             seq: 11,
@@ -65,14 +66,11 @@ describe('ProseMirrorStepTransport', () => {
             docId: 'thread-1',
             baseVersion: 0,
             expectedVersion: 3,
-            step: { type: 'replace' },
-            msgId: 'msg-1',
-            clientId: 'client-1',
+            steps: [{ step: { type: 'replace' }, msgId: 'msg-1', clientId: 'client-1' }],
             origin: 'client-edit',
-            schemaVersion: PROSEMIRROR_SCHEMA_VERSION,
         }
 
-        const result = await transport.submitStep(stepPayload as any)
+        const result = await transport.submitSteps(stepPayload as any)
 
         expect(result).toEqual({ status: 'ACCEPTED', version: 4 })
         expect(natsService.publishJetStream).toHaveBeenCalledWith(
@@ -96,6 +94,110 @@ describe('ProseMirrorStepTransport', () => {
         )
     })
 
+    it('accepts a one-step batch after a persisted snapshot without resetting the JetStream subject', async () => {
+        const natsService = createNatsService()
+        natsService.getJetStreamMessage.mockResolvedValue({
+            seq: 20,
+            data: { kind: 'STEP', subjectSeq: 7, version: 3 },
+        })
+        natsService.publishJetStream.mockResolvedValue({ seq: 21 })
+        const transport = new ProseMirrorStepTransport(natsService as any)
+        const stepPayload = {
+            workspaceId: 'workspace-1',
+            docType: 'document',
+            docId: 'document-1',
+            baseVersion: 3,
+            expectedVersion: 3,
+            steps: [{ step: { type: 'replace' }, msgId: 'msg-after-snapshot', clientId: 'client-1' }],
+            origin: 'client-edit',
+        }
+
+        const result = await transport.submitSteps(stepPayload as any)
+
+        expect(result).toEqual({ status: 'ACCEPTED', version: 4 })
+        expect(natsService.publishJetStream).toHaveBeenCalledWith(
+            getDocumentStepSubject(stepPayload),
+            expect.objectContaining({
+                kind: 'STEP',
+                version: 4,
+                subjectSeq: 8,
+                step: { type: 'replace' },
+                msgId: 'msg-after-snapshot',
+                clientId: 'client-1',
+            }),
+            {
+                msgID: 'msg-after-snapshot',
+                expect: {
+                    streamName: getWorkspaceStepStreamName('workspace-1'),
+                    lastSubjectSequence: 20,
+                },
+            },
+        )
+    })
+
+    it('submits a client step batch with one state read and chained JetStream expectations', async () => {
+        const natsService = createNatsService()
+        natsService.getJetStreamMessage.mockResolvedValue({
+            seq: 20,
+            data: { kind: 'STEP', subjectSeq: 7, version: 3 },
+        })
+        natsService.publishJetStream
+            .mockResolvedValueOnce({ seq: 21 })
+            .mockResolvedValueOnce({ seq: 22 })
+        const transport = new ProseMirrorStepTransport(natsService as any)
+        const payload = {
+            workspaceId: 'workspace-1',
+            docType: 'document',
+            docId: 'document-1',
+            baseVersion: 3,
+            expectedVersion: 3,
+            steps: [
+                { step: { type: 'replace', index: 1 }, msgId: 'msg-1', clientId: 'client-1' },
+                { step: { type: 'replace', index: 2 }, msgId: 'msg-2', clientId: 'client-1' },
+            ],
+            origin: 'client-edit',
+        }
+
+        const result = await transport.submitSteps(payload as any)
+
+        expect(result).toEqual({ status: 'ACCEPTED', version: 5 })
+        expect(natsService.getJetStreamMessage).toHaveBeenCalledTimes(1)
+        expect(natsService.publishJetStream).toHaveBeenNthCalledWith(
+            1,
+            getDocumentStepSubject(payload),
+            expect.objectContaining({
+                kind: 'STEP',
+                version: 4,
+                subjectSeq: 8,
+                step: { type: 'replace', index: 1 },
+                msgId: 'msg-1',
+                clientId: 'client-1',
+            }),
+            expect.objectContaining({
+                expect: expect.objectContaining({
+                    lastSubjectSequence: 20,
+                }),
+            }),
+        )
+        expect(natsService.publishJetStream).toHaveBeenNthCalledWith(
+            2,
+            getDocumentStepSubject(payload),
+            expect.objectContaining({
+                kind: 'STEP',
+                version: 5,
+                subjectSeq: 9,
+                step: { type: 'replace', index: 2 },
+                msgId: 'msg-2',
+                clientId: 'client-1',
+            }),
+            expect.objectContaining({
+                expect: expect.objectContaining({
+                    lastSubjectSequence: 21,
+                }),
+            }),
+        )
+    })
+
     it('returns CONFLICT when the next subject sequence does not match the expected version', async () => {
         const natsService = createNatsService()
         natsService.getJetStreamMessage.mockResolvedValue({
@@ -104,13 +206,13 @@ describe('ProseMirrorStepTransport', () => {
         })
         const transport = new ProseMirrorStepTransport(natsService as any)
 
-        const result = await transport.submitStep({
+        const result = await transport.submitSteps({
             workspaceId: 'workspace-1',
             docType: 'ai_chat_thread',
             docId: 'thread-1',
             baseVersion: 0,
             expectedVersion: 3,
-            step: { type: 'replace' },
+            steps: [{ step: { type: 'replace' } }],
         } as any)
 
         expect(result).toEqual({ status: 'CONFLICT', currentVersion: 1 })
@@ -126,13 +228,13 @@ describe('ProseMirrorStepTransport', () => {
         natsService.publishJetStream.mockRejectedValue({ message: 'wrong last sequence' })
         const transport = new ProseMirrorStepTransport(natsService as any)
 
-        const result = await transport.submitStep({
+        const result = await transport.submitSteps({
             workspaceId: 'workspace-1',
             docType: 'ai_chat_thread',
             docId: 'thread-1',
             baseVersion: 0,
             expectedVersion: 3,
-            step: { type: 'replace' },
+            steps: [{ step: { type: 'replace' } }],
         } as any)
 
         expect(result).toEqual({ status: 'CONFLICT', currentVersion: 3 })
@@ -184,5 +286,106 @@ describe('ProseMirrorStepTransport', () => {
                 },
             },
         )
+    })
+
+    it('reports END finalVersion as the document version instead of the JetStream subject sequence', async () => {
+        const natsService = createNatsService()
+        natsService.getJetStreamMessage.mockResolvedValue({
+            seq: 17,
+            data: {
+                kind: 'END',
+                workspaceId: 'workspace-1',
+                docType: 'ai_chat_thread',
+                docId: 'thread-1',
+                subjectSeq: 5,
+                version: 2,
+                finalVersion: 3,
+            },
+        })
+        const transport = new ProseMirrorStepTransport(natsService as any)
+
+        const state = await transport.getCurrentSubjectState({
+            workspaceId: 'workspace-1',
+            docType: 'ai_chat_thread',
+            docId: 'thread-1',
+        } as any)
+
+        expect(state).toEqual({
+            subjectSeq: 5,
+            streamSequence: 17,
+            documentVersion: 3,
+        })
+    })
+
+    it('returns null current state without creating a stream when the workspace stream is absent', async () => {
+        const natsService = createNatsService()
+        natsService.getJetStreamStreamInfoOrNull.mockResolvedValue(null)
+        const transport = new ProseMirrorStepTransport(natsService as any)
+
+        const state = await transport.getCurrentSubjectStateOrNull({
+            workspaceId: 'workspace-1',
+            docType: 'document',
+            docId: 'document-1',
+        } as any)
+
+        expect(state).toBeNull()
+        expect(natsService.ensureJetStreamStream).not.toHaveBeenCalled()
+        expect(natsService.getJetStreamMessage).not.toHaveBeenCalled()
+    })
+
+    it('replays document events with direct JetStream subject scans and attaches streamSequence', async () => {
+        const natsService = createNatsService()
+        natsService.getJetStreamMessage
+            .mockResolvedValueOnce({
+                seq: 10,
+                data: { kind: 'END', subjectSeq: 3, version: 2, finalVersion: 2 },
+            })
+            .mockResolvedValueOnce({
+                seq: 7,
+                data: { kind: 'START', subjectSeq: 2, version: 2, baseVersion: 2 },
+            })
+            .mockResolvedValueOnce({
+                seq: 9,
+                data: { kind: 'END', subjectSeq: 3, version: 2, finalVersion: 3 },
+            })
+        const transport = new ProseMirrorStepTransport(natsService as any)
+
+        const events = await transport.replayDocumentStepEvents({
+            workspaceId: 'workspace-1',
+            docType: 'ai_chat_thread',
+            docId: 'thread-1',
+            startStreamSeq: 6,
+            maxMessages: 2,
+        } as any)
+
+        expect(events).toEqual([
+            expect.objectContaining({ kind: 'START', streamSequence: 7 }),
+            expect.objectContaining({ kind: 'END', finalVersion: 3, streamSequence: 9 }),
+        ])
+        expect(natsService.getJetStreamMessage).toHaveBeenNthCalledWith(
+            1,
+            getWorkspaceStepStreamName('workspace-1'),
+            {
+                last_by_subj: getDocumentStepSubject({
+                    workspaceId: 'workspace-1',
+                    docType: 'ai_chat_thread',
+                    docId: 'thread-1',
+                }),
+            },
+        )
+        expect(natsService.getJetStreamMessage).toHaveBeenNthCalledWith(
+            2,
+            getWorkspaceStepStreamName('workspace-1'),
+            {
+                seq: 6,
+                next_by_subj: getDocumentStepSubject({
+                    workspaceId: 'workspace-1',
+                    docType: 'ai_chat_thread',
+                    docId: 'thread-1',
+                }),
+            },
+        )
+        expect(natsService.ensureJetStreamConsumer).not.toHaveBeenCalled()
+        expect(natsService.consumeJetStreamMessages).not.toHaveBeenCalled()
     })
 })

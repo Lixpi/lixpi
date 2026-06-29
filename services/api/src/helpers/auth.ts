@@ -40,11 +40,48 @@ const jwtVerifier = createJwtVerifier({
     algorithms: ['RS256']
 })
 
+const AUTH_REQUEST_CACHE_MS = 5000
+const AUTH_EXPIRY_SKEW_MS = 1000
+const authRequestCache = new Map<string, { expiresAt: number; result: JwtVerificationResult }>()
+
 // Export the verifier for use in HTTP endpoints (e.g., image upload/proxy)
 export { jwtVerifier }
 
+function getAuthRequestCacheKey(token: string, eventName?: string): string {
+    return `${eventName ?? '*'}:${token}`
+}
+
+function getCachedAuthResult(cacheKey: string): JwtVerificationResult | null {
+    const cached = authRequestCache.get(cacheKey)
+    if (!cached) return null
+    if (cached.expiresAt <= Date.now()) {
+        authRequestCache.delete(cacheKey)
+        return null
+    }
+    return cached.result
+}
+
+function cacheSuccessfulAuthResult(cacheKey: string, result: JwtVerificationResult): void {
+    const expiresAt = getAuthCacheExpiresAt(result.decoded)
+    if (expiresAt <= Date.now()) return
+    authRequestCache.set(cacheKey, { expiresAt, result })
+}
+
+function getAuthCacheExpiresAt(decoded: JwtVerificationResult['decoded']): number {
+    const now = Date.now()
+    const maxCacheExpiresAt = now + AUTH_REQUEST_CACHE_MS
+    const tokenExpiresAt = typeof decoded?.exp === 'number'
+        ? (decoded.exp * 1000) - AUTH_EXPIRY_SKEW_MS
+        : maxCacheExpiresAt
+    return Math.min(maxCacheExpiresAt, tokenExpiresAt)
+}
+
 export const authenticateTokenOnRequest = async ({ token, eventName }: { token: string, eventName?: string }): Promise<JwtVerificationResult> => {
     if (!token) return { error: 'No token provided' }
+
+    const cacheKey = getAuthRequestCacheKey(token, eventName)
+    const cached = getCachedAuthResult(cacheKey)
+    if (cached) return cached
 
     try {
         const { decoded, error } = await jwtVerifier.verify(token)
@@ -79,7 +116,9 @@ export const authenticateTokenOnRequest = async ({ token, eventName }: { token: 
             // TODO: Turn back balance verification !!!!!!!!!!!!!!!
             // TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-            return { decoded }
+            const result = { decoded }
+            cacheSuccessfulAuthResult(cacheKey, result)
+            return result
         }
 
         return { error: 'Token verification failed' }

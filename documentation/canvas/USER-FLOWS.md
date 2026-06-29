@@ -232,23 +232,24 @@ Video nodes follow the same shape over the `DELETE_VIDEO` subject. Neither delet
 
 ## Editing Content
 
-Typing in a document's ProseMirror editor propagates through the canvas to the Svelte wrapper, which calls `DocumentService.updateDocument()`; the actual NATS write is debounced.
+Typing in a document's ProseMirror editor applies locally first, then the authority service submits a short batch of ProseMirror steps to the API. The API accepts ordered steps through `DOCUMENT_STEP.DOC_SUBMIT_STEPS`, echoes authoritative step events, and writes the settled `Document.content` snapshot after the edit burst.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant ProseMirror
-    participant Canvas as WorkspaceCanvas.ts
-    participant Svelte as WorkspaceCanvas.svelte
-    participant DSvc as DocumentService
+    participant Auth as ProseMirrorAuthorityService
+    participant NATS
+    participant API
     %% ═══════════════════════════════════════════════════════════════
     %% PHASE 1: EDIT
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(220, 236, 233)
-        Note over User, DSvc: PHASE 1 - EDIT — User edits content
+        Note over User, API: PHASE 1 - EDIT - User edits content
         User->>ProseMirror: Type content
         activate ProseMirror
+        ProseMirror->>ProseMirror: apply local transaction
         deactivate ProseMirror
     end
 
@@ -256,24 +257,27 @@ sequenceDiagram
     %% PHASE 2: PROPAGATE
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
-        Note over User, DSvc: PHASE 2 - PROPAGATE
-        ProseMirror->>Canvas: onEditorChange(content)
-        activate Canvas
-        Canvas->>Svelte: onDocumentContentChange()
-        activate Svelte
-        Svelte->>DSvc: updateDocument()
-        deactivate Svelte
-        deactivate Canvas
+        Note over User, API: PHASE 2 - SUBMIT STEP BATCH
+        ProseMirror->>Auth: local transaction
+        activate Auth
+        Auth->>NATS: DOCUMENT_STEP.DOC_SUBMIT_STEPS
+        activate NATS
+        NATS->>API: validate + CAS publish
+        deactivate NATS
+        deactivate Auth
     end
 
     %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 3: PERSIST
+    %% PHASE 3: AUTHORITATIVE ECHO + SETTLE
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(246, 199, 179)
-        Note over User, DSvc: PHASE 3 - PERSIST
-        activate DSvc
-        DSvc->>DSvc: NATS request (debounced)
-        deactivate DSvc
+        Note over User, API: PHASE 3 - AUTHORITATIVE ECHO + SETTLE
+        activate API
+        API->>NATS: document.steps.{workspaceId}.{docType}.{docId}
+        NATS->>Auth: authoritative STEP
+        Auth->>ProseMirror: advance local version
+        API->>API: write settled snapshot
+        deactivate API
     end
 ```
 

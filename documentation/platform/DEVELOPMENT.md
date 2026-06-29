@@ -12,7 +12,7 @@ This guide gets Lixpi running locally. Everything runs in **Docker** via `docker
 | Service | Path | Purpose |
 |---------|------|---------|
 | **web-ui** | `services/web-ui/` | Svelte SPA — canvas, ProseMirror editors, AI chat UI |
-| **api** | `services/api/` | Node.js / TypeScript gateway — auth, CRUD, DynamoDB, plus the in-process LangGraph LLM workflow (token streaming, image generation, video generation) |
+| **api** | `services/api/` | Node.js / TypeScript gateway — auth, CRUD, DynamoDB, plus the in-process LangGraph LLM workflow (pipeline events, ProseMirror transcript steps, image generation, video generation) |
 | **nats** | `services/nats/` | NATS message bus (3-node cluster) |
 | **localauth0** | `services/localauth0/` | Mock Auth0 for zero-config offline dev (Rust — vendored `primait/localauth0` image) |
 

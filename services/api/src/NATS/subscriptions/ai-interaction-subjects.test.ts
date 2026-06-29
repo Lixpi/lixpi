@@ -15,6 +15,12 @@ const mocks = vi.hoisted(() => ({
     aiModel: {
         getAiModel: vi.fn(),
     },
+    workspace: {
+        getWorkspace: vi.fn(),
+    },
+    pipelineEventLog: {
+        replayPipelineEvents: vi.fn(),
+    },
     llmModule: {
         process: vi.fn(),
         processMediaGenerationMatrix: vi.fn(),
@@ -47,6 +53,12 @@ vi.mock('@lixpi/nats-service', () => ({
 
 vi.mock('../../models/organization.ts', () => ({ default: mocks.organization }))
 vi.mock('../../models/ai-model.ts', () => ({ default: mocks.aiModel }))
+vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
+vi.mock('../../llm/graph/pipeline-event-log.ts', () => ({
+    PipelineEventLog: {
+        fromSingleton: () => mocks.pipelineEventLog,
+    },
+}))
 
 import { aiInteractionSubjects, setLlmModule } from './ai-interaction-subjects.ts'
 
@@ -93,6 +105,12 @@ describe('AI interaction message routing', () => {
         mocks.nats.publish.mockClear()
         mocks.organization.getUserOrganizations.mockResolvedValue([{ organizationId: 'org-1' }])
         mocks.aiModel.getAiModel.mockResolvedValue({ modelVersion: '1' })
+        mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1' })
+        mocks.pipelineEventLog.replayPipelineEvents.mockResolvedValue({
+            streamName: 'PIPELINE_EVENTS_workspace-1',
+            subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.thread-1`,
+            events: [],
+        })
         mocks.llmModule.process.mockResolvedValue(undefined)
         mocks.llmModule.processMediaGenerationMatrix.mockResolvedValue(undefined)
         mocks.llmModule.stop.mockResolvedValue(undefined)
@@ -359,5 +377,68 @@ describe('AI interaction message routing', () => {
             aiChatThreadId: 'thread-1',
             generationRequestId: 'request-stop',
         })
+    })
+
+    it('replays persisted pipeline events from the next stream sequence', async () => {
+        mocks.pipelineEventLog.replayPipelineEvents.mockResolvedValueOnce({
+            streamName: 'PIPELINE_EVENTS_workspace-1',
+            subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.thread-1`,
+            events: [
+                { eventId: 'old', streamSequence: 4, payload: { content: { status: 'old' } } },
+                { eventId: 'next', streamSequence: 6, payload: { content: { status: 'new' } } },
+            ],
+        })
+
+        const result = await getHandler(SUBJECTS.CHAT_PIPELINE_RESUME)({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            localStreamSeq: 4,
+            maxMessages: 25,
+        })
+
+        expect(mocks.workspace.getWorkspace).toHaveBeenCalledWith({
+            userId: 'user-1',
+            workspaceId: 'workspace-1',
+        })
+        expect(mocks.pipelineEventLog.replayPipelineEvents).toHaveBeenCalledWith({
+            workspaceId: 'workspace-1',
+            pipelineId: 'thread-1',
+            startStreamSeq: 5,
+            maxMessages: 25,
+        })
+        expect(result).toEqual({
+            streamName: 'PIPELINE_EVENTS_workspace-1',
+            subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.thread-1`,
+            events: [
+                { eventId: 'next', streamSequence: 6, payload: { content: { status: 'new' } } },
+            ],
+        })
+    })
+
+    it('requires a pipeline id for pipeline replay', async () => {
+        const result = await getHandler(SUBJECTS.CHAT_PIPELINE_RESUME)({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            localStreamSeq: 0,
+        })
+
+        expect(result).toEqual({ error: 'PIPELINE_ID_REQUIRED' })
+        expect(mocks.workspace.getWorkspace).not.toHaveBeenCalled()
+        expect(mocks.pipelineEventLog.replayPipelineEvents).not.toHaveBeenCalled()
+    })
+
+    it('denies pipeline replay before touching JetStream when workspace access fails', async () => {
+        mocks.workspace.getWorkspace.mockResolvedValueOnce({ error: 'WORKSPACE_NOT_FOUND' })
+
+        const result = await getHandler(SUBJECTS.CHAT_PIPELINE_RESUME)({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            pipelineId: 'pipeline-1',
+            localStreamSeq: 0,
+        })
+
+        expect(result).toEqual({ error: 'WORKSPACE_NOT_FOUND' })
+        expect(mocks.pipelineEventLog.replayPipelineEvents).not.toHaveBeenCalled()
     })
 })

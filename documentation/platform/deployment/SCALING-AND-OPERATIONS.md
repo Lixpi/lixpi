@@ -16,7 +16,7 @@ For the topology these pieces scale within, see [Infrastructure Overview](./INFR
 | Service | Scaling mechanism | Notes |
 |---------|-------------------|-------|
 | `web-ui` | CloudFront edge cache | No origin scaling needed; global CDN |
-| `api` | ECS desired count + NATS queue group `aiInteraction` | Stateless — add tasks freely. Hosts both the gateway logic and the in-process LangGraph LLM workflow. CPU-bound on token streaming. |
+| `api` | ECS desired count + NATS queue group `aiInteraction` | Stateless — add tasks freely. Hosts both the gateway logic and the in-process LangGraph LLM workflow. CPU-bound on provider streaming, ProseMirror step assembly, and media routing. |
 | `nats` | App Auto Scaling target (CPU 70%, memory 80%) + ECS desired count | The program provisions `minCount=3, maxCount=3` by default — see "NATS cluster sizing" below |
 | `DynamoDB` | On-demand capacity mode (default) | No manual scaling; pay per request |
 | `Lambda` (cert-manager, sidecar) | AWS-managed | Short-lived, invoked rarely |
@@ -43,7 +43,7 @@ Use load tests rather than hardcoded estimates. The dimensions to measure are:
 | Media traffic | Object Store reads/writes, HTTP byte routes, video range requests |
 | DynamoDB | Hot partitions, throttling, stream/cleanup lag |
 
-In practice the **first bottleneck is `api` CPU** (token streaming parsing in the LangGraph workflow), not NATS. The second is **AI provider rate limits**, not AWS. NATS itself won't be the limiting factor until the cluster is pushed into the hundreds of thousands of simultaneous active users per region.
+In practice the **first bottleneck is `api` CPU** (provider streaming, ProseMirror assembly, and media orchestration in the LangGraph workflow), not NATS. The second is **AI provider rate limits**, not AWS. NATS itself won't be the limiting factor until the cluster is pushed into the hundreds of thousands of simultaneous active users per region.
 
 ### Scaling Up for Real Load
 
