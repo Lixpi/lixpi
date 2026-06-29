@@ -72,7 +72,7 @@ Lixpi solves this by combining deterministic graph narrowing with VLM role assig
 
 ## System Architecture
 
-The browser builds non-authoritative candidate and workspace-context snapshots and sends them with the chat request. The API resolves visual roles, rewrites the provider messages with only the approved references, plans branch topology, streams the generation, and publishes branch + media events back. The browser applies the API lineage plan to canvas state and computes presentation geometry.
+The browser builds non-authoritative candidate and workspace-context snapshots and sends them with the chat request. The API resolves visual roles, rewrites the provider messages with only the approved references, plans branch topology, streams the generation, stores generated media, and persists the authoritative canvas projection for lineage markers and final media nodes. The browser renders live events and computes presentation geometry, but pipeline completion does not require a connected browser.
 
 ## Hard Frontend Boundary
 
@@ -123,8 +123,9 @@ flowchart TB
     Router --> MediaModel
     MediaModel --> Obj
     Publisher -->|branch + media events| AIS
+    Publisher -->|lineage/media canvas projection| DDB
     AIS --> Canvas
-    Canvas --> DDB
+    Canvas -->|viewport/local layout saves| DDB
     Obj --> Canvas
 ```
 
@@ -135,7 +136,8 @@ flowchart TB
 | `resolveWorkspaceContext` | Ranks descriptors, force-includes chips/edges, narrows the media candidate set. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md). |
 | `resolveImageBranch` | The structured VLM resolver — the routing authority for media references and branch identity. |
 | `ImageRouter` / `VideoRouter` | Route the enhanced prompt + approved references to a transient media provider. See [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). |
-| `WorkspaceCanvas` | Applies API-declared lineage marker IDs, edges, and generated metadata, then computes canvas geometry and re-tidies the branch tree (via `branchTreeLayout.ts`). |
+| `media-generation-canvas-projection.ts` | API-owned durable projection writer. Inserts planned lineage markers, final generated image/video nodes, generated metadata, and connector edges into `Workspace.canvasState` with optimistic retries. |
+| `WorkspaceCanvas` | Renders API-declared lineage marker IDs, edges, and generated metadata, computes canvas geometry, and re-tidies the branch tree (via `branchTreeLayout.ts`). It may show transient preflight markers, but durable generated-media projection is API-owned. |
 
 ## Where This Runs in the Pipeline
 

@@ -3,6 +3,10 @@
 import type NatsService from '@lixpi/nats-service'
 import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
 
+import {
+    logCanvasProjectionError,
+    upsertGeneratedVideoToCanvas,
+} from '../../services/media-generation-canvas-projection.ts'
 import type { StoreWorkspaceImageFn } from './image-publisher.ts'
 import type { ChunkPayload, ProseMirrorContentHandler } from './stream-publisher.ts'
 import type { StoreVideoInput, StoreVideoResult } from '../../services/video-storage.ts'
@@ -120,6 +124,30 @@ export class VideoPublisher {
 
         const poster = await storeFrameImage(posterBuffer, 'generated-video-poster.png')
         const frame = await storeFrameImage(frameBuffer, 'generated-video-frame.png')
+
+        try {
+            await upsertGeneratedVideoToCanvas({
+                workspaceId: this.workspaceId,
+                aiChatThreadId: this.aiChatThreadId,
+                videoUrl: videoResult.url,
+                fileId: videoResult.fileId,
+                posterUrl: poster.url,
+                posterFileId: poster.fileId,
+                frameUrl: frame.url,
+                frameFileId: frame.fileId,
+                durationSeconds,
+                aspectRatio,
+                hasAudio,
+                responseId,
+                revisedPrompt,
+                aiProvider: this.provider,
+                videoModelProvider: this.provider,
+                videoModelId,
+                generationRun: this.generationRun,
+            })
+        } catch (error) {
+            logCanvasProjectionError('failed to persist generated video to canvas', error)
+        }
 
         this.publish({
             status: STREAM_STATUS.VIDEO_COMPLETE,

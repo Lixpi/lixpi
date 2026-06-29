@@ -21,6 +21,13 @@ const {
 
 const getWorkspaceBucketName = (workspaceId: string) => `workspace-${workspaceId}-files`
 
+type CanvasStateMutationResult = {
+    canvasState: CanvasState
+    changed: boolean
+}
+
+type CanvasStateMutator = (canvasState: CanvasState) => CanvasStateMutationResult
+
 export default {
     getWorkspace: async ({
         workspaceId,
@@ -219,6 +226,72 @@ export default {
         } catch (error) {
             err('Failed to update workspace canvas state:', error)
         }
+    },
+
+    mutateCanvasState: async ({
+        workspaceId,
+        mutate,
+        origin = 'mutateWorkspaceCanvasState'
+    }: { workspaceId: string; mutate: CanvasStateMutator; origin?: string }): Promise<boolean> => {
+        const maxAttempts = 5
+
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            const workspace = await dynamoDBService.getItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                key: { workspaceId },
+                origin: `${origin}:get`
+            })
+
+            if (!workspace || Object.keys(workspace).length === 0) {
+                return false
+            }
+
+            const currentCanvasState: CanvasState = {
+                viewport: workspace.canvasState?.viewport ?? { x: 0, y: 0, zoom: 1 },
+                nodes: workspace.canvasState?.nodes ?? [],
+                edges: workspace.canvasState?.edges ?? []
+            }
+            const result = mutate(currentCanvasState)
+            if (!result.changed) return false
+
+            const currentDate = new Date().getTime()
+            try {
+                const hasExpectedUpdatedAt = workspace.updatedAt !== undefined
+                const expressionAttributeValues = {
+                    ':canvasState': result.canvasState,
+                    ':updatedAt': currentDate,
+                    ...(hasExpectedUpdatedAt ? { ':expectedUpdatedAt': workspace.updatedAt } : {})
+                }
+                await dynamoDBService.updateItem({
+                    tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                    key: { workspaceId },
+                    updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt',
+                    conditionExpression: hasExpectedUpdatedAt ? '#updatedAt = :expectedUpdatedAt' : 'attribute_not_exists(#updatedAt)',
+                    expressionAttributeNames: {
+                        '#canvasState': 'canvasState',
+                        '#updatedAt': 'updatedAt'
+                    },
+                    expressionAttributeValues,
+                    origin
+                })
+
+                await dynamoDBService.updateItem({
+                    tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                    key: { workspaceId },
+                    updates: {
+                        updatedAt: currentDate
+                    },
+                    origin: `${origin}:meta`
+                })
+                return true
+            } catch (error: any) {
+                if (error?.name === 'ConditionalCheckFailedException') continue
+                err('Failed to mutate workspace canvas state:', error)
+                throw error
+            }
+        }
+
+        throw new Error(`Failed to mutate workspace canvas state after concurrent updates: ${workspaceId}`)
     },
 
     patchCanvasNodeDescriptor: async ({

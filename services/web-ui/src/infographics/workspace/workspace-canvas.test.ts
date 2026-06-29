@@ -944,10 +944,23 @@ describe('Workspace canvas — AI panel reload stability', () => {
 describe('Workspace canvas — detached generation resume stability', () => {
 	const ts = loadTs()
 
-	it('reattaches hidden receive-only editors for active detached canvas markers after reload', () => {
+	it('reattaches hidden receive-only editors for active detached canvas runs after reload', () => {
+		const getActiveThreadIdsBody = extractFunctionBody(ts, 'getActiveDetachedCanvasRunThreadIds')
 		const reattachBody = extractFunctionBody(ts, 'reattachDetachedCanvasRunListenersForActiveMarkers')
 		const createEditorBody = extractFunctionBody(ts, 'createDetachedCanvasThreadEditor')
 
+		expectExcerptToContain(getActiveThreadIdsBody, 'if (currentCanvasState) {', 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, 'for (const node of currentCanvasState.nodes)', 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, 'for (const thread of currentAiChatThreads)', 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, "thread.owner?.type !== 'standalone'", 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, 'hasDetachedCanvasRunCanvasProjection(thread.threadId)', 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, 'isRecentDetachedCanvasThreadUpdate(thread)', 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, 'aiChatThreadHasRecoverableDetachedCanvasTurn(thread)', 'detached run active thread lookup')
+		expectSourceNotToContain(ts, 'aiChatThreadHasSubmittedUserMessageWithoutResponse')
+		const restoreIndex = reattachBody.indexOf('restoreDetachedCanvasPreflightMarkersForActiveThreads()')
+		const loopIndex = reattachBody.indexOf('for (const threadId of getActiveDetachedCanvasRunThreadIds())')
+		expect(restoreIndex).toBeGreaterThan(-1)
+		expect(loopIndex).toBeGreaterThan(restoreIndex)
 		expectExcerptToContain(reattachBody, 'for (const threadId of getActiveDetachedCanvasRunThreadIds())', 'detached run reattach')
 		expectExcerptToContain(reattachBody, 'ensureDetachedCanvasRunTeardown(threadId)', 'detached run reattach')
 		expectExcerptToContain(reattachBody, 'promptInputController.setReceiving(threadId, true)', 'detached run reattach')
@@ -955,6 +968,40 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptToContain(createEditorBody, 'receiveOnly: true', 'detached canvas editor')
 		expectExcerptToContain(createEditorBody, 'baseVersion: getStoredProseMirrorVersion(thread)', 'detached canvas editor')
 		expectSourceToContain(ts, 'reattachDetachedCanvasRunListenersForActiveMarkers()')
+	})
+
+	it('creates detached canvas threads with the submitted user message already persisted', () => {
+		const submitBody = extractFunctionBody(ts, 'submitCanvasGenerationRun')
+		const submitPersistedBody = extractFunctionBody(ts, 'submitPersistedDetachedCanvasThreadMessage')
+
+		expectExcerptToContain(submitBody, 'const initialContent = {', 'detached run submit')
+		expectExcerptToContain(submitBody, "type: 'aiUserMessage'", 'detached run submit')
+		expectExcerptToContain(submitBody, 'referenceNodeIds: explicitContextNodeIds', 'detached run submit')
+		expectExcerptToContain(submitBody, 'content: initialContent', 'detached run submit')
+		expectExcerptToContain(submitBody, 'createDetachedCanvasThreadEditor({', 'detached run submit')
+		expectExcerptToContain(submitBody, 'submitPersistedDetachedCanvasThreadMessage(threadId)', 'detached run submit')
+		expectExcerptNotToContain(submitBody, 'promptInputController.submitMessage', 'detached run submit')
+		expectExcerptToContain(submitPersistedBody, 'editorView.state.doc.descendants', 'persisted detached submit')
+		expectExcerptToContain(submitPersistedBody, 'node.type?.name === \'aiChatThread\' && node.attrs?.threadId === threadId', 'persisted detached submit')
+		expectExcerptToContain(submitPersistedBody, 'setMeta(USE_AI_CHAT_META, { threadId, nodePos })', 'persisted detached submit')
+	})
+
+	it('restores preflight markers from persisted standalone canvas threads after early reload', () => {
+		const restoreBody = extractFunctionBody(ts, 'restoreDetachedCanvasPreflightMarkersForActiveThreads')
+		const insertBody = extractFunctionBody(ts, 'insertPendingBranchMarkerForPersistedCanvasThread')
+		const activeTurnBody = extractFunctionBody(ts, 'aiChatThreadHasRecoverableDetachedCanvasTurn')
+
+		expectExcerptToContain(activeTurnBody, 'aiChatThreadHasSubmittedUserMessage(thread)', 'recoverable detached turn')
+		expectExcerptToContain(activeTurnBody, 'aiChatThreadHasInProgressContent(thread)', 'recoverable detached turn')
+		expectExcerptToContain(restoreBody, 'for (const threadId of getActiveDetachedCanvasRunThreadIds())', 'detached preflight restore')
+		expectExcerptToContain(restoreBody, 'getPersistedAiChatThread(threadId)', 'detached preflight restore')
+		expectExcerptToContain(restoreBody, 'insertPendingBranchMarkerForPersistedCanvasThread(thread)', 'detached preflight restore')
+		expectExcerptToContain(insertBody, 'const promptText = getLatestAiUserMessageText(thread)', 'persisted marker restore')
+		expectExcerptToContain(insertBody, 'getDetachedThreadPendingModelStates(thread, promptText)', 'persisted marker restore')
+		expectExcerptToContain(insertBody, 'const nodeId = `pending-branch-${threadId}-${index}`', 'persisted marker restore')
+		expectExcerptToContain(insertBody, 'generationRequestId: threadId', 'persisted marker restore')
+		expectExcerptToContain(insertBody, 'commitTransientCanvasStatePreservingEditors({', 'persisted marker restore')
+		expectExcerptToContain(insertBody, 'syncPendingBranchMarkerScreenPlacements()', 'persisted marker restore')
 	})
 
 	it('recovers pending branch marker records from persisted canvas state when memory maps are empty', () => {
@@ -975,6 +1022,28 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptToContain(recoverBody, 'setPendingBranchMarkerRecordAliases(threadId, generationRun, record)', 'pending marker recovery')
 		expectExcerptToContain(getRecordBody, 'return recoverPendingBranchMarkerRecordFromCanvasState(threadId, generationRun)', 'pending marker lookup')
 		expectExcerptToContain(ensureRecordBody, 'return recoverPendingBranchMarkerRecordFromCanvasState(threadId, generationRun)', 'pending marker lookup')
+	})
+
+	it('recreates preflight pending branch markers from replayed lineage plans after early reload', () => {
+		const insertBody = extractFunctionBody(ts, 'insertPendingBranchMarkersFromLineagePlan')
+		const specBody = extractFunctionBody(ts, 'buildPendingBranchMarkerSpecsFromLineagePlan')
+		const applyLineageBody = extractFunctionBody(ts, 'applyMediaBranchLineagePlan')
+		const insertIndex = applyLineageBody.indexOf('insertPendingBranchMarkersFromLineagePlan(threadId, lineagePlan, generationRun)')
+		const resolveIndex = applyLineageBody.indexOf('resolvePendingBranchMarkerWithLineagePlan(threadId, resolvedRun)')
+
+		expectExcerptToContain(specBody, 'getUniqueLineageAssignmentsForMarkers(lineagePlan)', 'lineage preflight marker specs')
+		expectExcerptToContain(specBody, 'buildGenerationRunFromLineageAssignment(lineagePlan, assignment, sourceGenerationRun)', 'lineage preflight marker specs')
+		expectExcerptToContain(specBody, "phase: 'preflight'", 'lineage preflight marker specs')
+		expectExcerptToContain(specBody, 'promptText: assignment.promptText || lineagePlan.promptText', 'lineage preflight marker specs')
+		expectExcerptToContain(insertBody, 'const lineagePlacementKey = `${threadId}:${lineagePlan.generationRequestId}`', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'hasPendingBranchMarkerForPlacement(lineagePlacementKey)', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'hasCanvasBranchMarkerForPlacement(lineagePlacementKey)', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'generationRequestId: lineagePlan.generationRequestId', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'aiChatThreadId: threadId', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'setPendingBranchMarkerRecordAliases(threadId, spec.generationRun, record)', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'commitTransientCanvasStatePreservingEditors({', 'lineage preflight marker insert')
+		expect(insertIndex).toBeGreaterThan(-1)
+		expect(resolveIndex).toBeGreaterThan(insertIndex)
 	})
 
 	it('persists branch marker planning and pending-state clearing instead of using transient canvas commits', () => {

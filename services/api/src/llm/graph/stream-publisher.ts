@@ -17,6 +17,10 @@ import {
 } from '@lixpi/constants'
 
 import { AiChatProseMirrorStreamAssembler } from '../../prosemirror/ai-chat-stream-assembler.ts'
+import {
+    logCanvasProjectionError,
+    upsertMediaLineagePlanToCanvas,
+} from '../../services/media-generation-canvas-projection.ts'
 import { PipelineEventLog } from './pipeline-event-log.ts'
 
 const subject = (workspaceId: string, aiChatThreadId: string): string =>
@@ -238,6 +242,7 @@ export class StreamPublisher {
     private hasEnded = false
     private proseMirrorFinishPromise: Promise<void> | null = null
     private responsePublishChain: Promise<void> = Promise.resolve()
+    private canvasProjectionChain: Promise<void> = Promise.resolve()
 
     constructor(
         private readonly nats: NatsService,
@@ -317,6 +322,26 @@ export class StreamPublisher {
         }
     }
 
+    private enqueueCanvasProjection(write: () => Promise<void>, errorContext: string): void {
+        this.canvasProjectionChain = this.canvasProjectionChain
+            .catch(() => undefined)
+            .then(async () => {
+                try {
+                    await write()
+                } catch (error) {
+                    logCanvasProjectionError(errorContext, error)
+                }
+            })
+    }
+
+    private async drainCanvasProjectionWrites(): Promise<void> {
+        try {
+            await this.canvasProjectionChain
+        } catch {
+            // enqueueCanvasProjection already logs and swallows individual failures.
+        }
+    }
+
     start(): void {
         if (this.hasStarted) return
 
@@ -345,6 +370,7 @@ export class StreamPublisher {
 
     private async finishPipelineStream(): Promise<void> {
         await this.drainResponsePublishes()
+        await this.drainCanvasProjectionWrites()
         if (this.proseMirrorAssembler) {
             await this.proseMirrorAssembler.end()
         }
@@ -430,6 +456,15 @@ export class StreamPublisher {
     }
 
     mediaLineagePlanned(lineagePlan: MediaBranchLineagePlan, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+        this.enqueueCanvasProjection(
+            () => upsertMediaLineagePlanToCanvas({
+                workspaceId: this.workspaceId,
+                aiChatThreadId: this.aiChatThreadId,
+                lineagePlan,
+            }),
+            'failed to persist media lineage plan to canvas',
+        )
+
         this.publishChatContent({
             status: STREAM_STATUS.MEDIA_LINEAGE_PLANNED,
             aiProvider: this.provider,

@@ -3,6 +3,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STREAM_STATUS } from '@lixpi/constants'
 
+const canvasProjectionMocks = vi.hoisted(() => ({
+    upsertMediaLineagePlanToCanvas: vi.fn(async () => undefined),
+    logCanvasProjectionError: vi.fn(),
+}))
+
+vi.mock('../../services/media-generation-canvas-projection.ts', () => canvasProjectionMocks)
+
 import { StreamPublisher, TagAwareStream } from './stream-publisher.ts'
 
 type Published = { subject: string, payload: any }
@@ -466,6 +473,11 @@ describe('StreamPublisher trace payloads', () => {
                 ...generationRun,
                 mediaRunId: 'reasoning-1:image:override',
             },
+        })
+        expect(canvasProjectionMocks.upsertMediaLineagePlanToCanvas).toHaveBeenCalledWith({
+            workspaceId: 'ws1',
+            aiChatThreadId: 'thread1',
+            lineagePlan: { lineage: 'plan' },
         })
     })
 })

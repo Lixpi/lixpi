@@ -4,6 +4,10 @@ import type NatsService from '@lixpi/nats-service'
 import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
 
 import type { StoreImageInput, StoreImageResult } from '../../services/image-storage.ts'
+import {
+    logCanvasProjectionError,
+    upsertGeneratedImageToCanvas,
+} from '../../services/media-generation-canvas-projection.ts'
 import type { ChunkPayload, ProseMirrorContentHandler } from './stream-publisher.ts'
 
 export type StoreWorkspaceImageFn = (input: StoreImageInput) => Promise<StoreImageResult>
@@ -106,6 +110,23 @@ export class ImagePublisher {
             mimeType: isPng ? 'image/png' : 'image/jpeg',
             useContentHash: true,
         })
+
+        try {
+            await upsertGeneratedImageToCanvas({
+                workspaceId: this.workspaceId,
+                aiChatThreadId: this.aiChatThreadId,
+                imageUrl: result.url,
+                fileId: result.fileId,
+                responseId,
+                revisedPrompt,
+                aiProvider: this.provider,
+                imageModelProvider: this.provider,
+                imageModelId,
+                generationRun: this.generationRun,
+            })
+        } catch (error) {
+            logCanvasProjectionError('failed to persist generated image to canvas', error)
+        }
 
         this.publish({
             status: STREAM_STATUS.IMAGE_COMPLETE,
