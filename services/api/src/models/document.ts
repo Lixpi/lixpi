@@ -104,7 +104,8 @@ export default {
 		content,
 		documentId,
 		prevRevision,
-		workspaceId
+		workspaceId,
+		proseMirrorVersion
 	}: Partial<Document> & { documentId: string; workspaceId: string }): Promise<void> => {
 		const currentDate = new Date().getTime()
 		const currentRevision = sliceTime({ precision: 'hours' })
@@ -133,15 +134,18 @@ export default {
 			// 	})
 			// }
 
+			const documentUpdates: Record<string, unknown> = {
+				title,
+				// prevRevision: currentRevision,    // TODO: turn back on when versioning is ready
+				content,
+				updatedAt: currentDate
+			}
+			if (proseMirrorVersion !== undefined) documentUpdates.proseMirrorVersion = proseMirrorVersion
+
 			await dynamoDBService.updateItem({
 				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
 				key: { documentId, revision: 1 },
-				updates: {
-					title,
-					// prevRevision: currentRevision,    // TODO: turn back on when versioning is ready
-					content,
-					updatedAt: currentDate
-				},
+				updates: documentUpdates,
 				origin: 'updateDocument'
 			})
 

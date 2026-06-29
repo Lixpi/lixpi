@@ -28,9 +28,15 @@ export class VideoPublisher {
         private readonly provider: ProviderName,
         private readonly generationRun?: MediaGenerationRunMeta,
         private readonly onProseMirrorContent?: ProseMirrorContentHandler,
+        private readonly onPipelineContent?: ProseMirrorContentHandler,
     ) {}
 
     private publish(content: ChunkPayload['content']): void {
+        if (this.onPipelineContent) {
+            this.onPipelineContent(content)
+            return
+        }
+
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
             content,
             aiChatThreadId: this.aiChatThreadId,

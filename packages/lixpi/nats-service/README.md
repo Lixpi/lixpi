@@ -7,6 +7,7 @@ Provides a unified API for NATS messaging with support for:
 - Publish/subscribe patterns
 - Request/reply patterns
 - Queue groups for load balancing
+- JetStream stream administration, publish expectations, direct message reads, and subject purges
 - JetStream Object Store for file/blob storage
 - Optional self-issued JWT authentication via NKeys
 
@@ -48,6 +49,7 @@ Provides a unified API for NATS messaging with support for:
    - **Status Monitoring**: TypeScript has status iterator, Python uses callbacks (inherent library difference)
    - **TLS Config**: Python has explicit `tls_ca_cert` parameter (platform difference)
    - **Type System**: Python uses type hints, TypeScript uses native types
+   - **JetStream stream helpers**: TypeScript exposes the durable-stream helpers used by API replay logs. The Python package remains focused on legacy messaging/Object Store use until a Python service needs the same replay-log surface.
 
 6. **Validation Checklist** (use this when making changes):
    ```
@@ -172,6 +174,63 @@ await natsService.deleteObject('my-bucket', 'hello.txt')
 // Delete a bucket
 await natsService.deleteObjectStore('my-bucket')
 ```
+
+### JetStream Streams (TypeScript)
+
+The TypeScript package also exposes a small wrapper over the modular `@nats-io/jetstream` client for durable replay logs such as ProseMirror document steps and chat pipeline events. These helpers use current `@nats-io/*` packages and pass JetStream config/options through without translating them to older `nats.js` APIs.
+
+```typescript
+// Create or update a stream. Existing subjects are preserved and new subjects
+// are merged into the stream config.
+await natsService.ensureJetStreamStream({
+    name: 'PM_STEPS_workspace_123',
+    subjects: ['document.steps.workspace_123.>'],
+    retention: 'limits',
+    storage: 'file',
+    allow_direct: true,
+    allow_rollup_hdrs: true,
+    max_msgs_per_subject: 10000,
+})
+
+// Publish JSON with idempotency and optimistic expectation options.
+const ack = await natsService.publishJetStream(
+    'document.steps.workspace_123.aiChatThread.thread_456',
+    { kind: 'STEP', version: 42, step: {} },
+    {
+        msgID: 'pm-ai-run-step-42',
+        expect: {
+            streamName: 'PM_STEPS_workspace_123',
+            lastSubjectSequence: 128,
+        },
+    },
+)
+
+// Direct reads return null when the stream or message is genuinely missing.
+const last = await natsService.getJetStreamMessage('PM_STEPS_workspace_123', {
+    last_by_subj: 'document.steps.workspace_123.aiChatThread.thread_456',
+})
+
+const next = await natsService.getJetStreamMessage('PM_STEPS_workspace_123', {
+    seq: (last?.seq ?? 0) + 1,
+    next_by_subj: 'document.steps.workspace_123.aiChatThread.thread_456',
+})
+
+await natsService.purgeJetStreamSubject(
+    'PM_STEPS_workspace_123',
+    'document.steps.workspace_123.aiChatThread.thread_456',
+)
+```
+
+Relevant methods:
+
+| Method | Purpose |
+|--------|---------|
+| `ensureJetStreamStream(config)` | Add or update a stream while preserving existing subjects. |
+| `getJetStreamStreamInfo(name)` / `getJetStreamStreamInfoOrNull(name)` | Read stream metadata; return `null` only when the stream is genuinely absent. |
+| `publishJetStream(subject, data, options)` | Publish JSON or bytes with `msgID`, expectation, or header options. |
+| `getJetStreamMessage(streamName, request)` | Directly read messages by requests such as `last_by_subj`, `seq`, and `next_by_subj`. |
+| `ensureJetStreamConsumer(streamName, config)` / `consumeJetStreamMessages(...)` | Pull-consumer helpers for workloads that need an explicit consumer. |
+| `purgeJetStreamSubject(streamName, subject)` | Purge one filtered subject from a stream. |
 
 ### Python
 

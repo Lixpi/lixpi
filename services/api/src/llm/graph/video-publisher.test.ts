@@ -284,4 +284,37 @@ describe('VideoPublisher', () => {
         expect(complete?.frameFileId).toBe('')
         expect(failingStoreImage).toHaveBeenCalledTimes(2)
     })
+
+    it('routes video events through onPipelineContent when durable pipeline publishing is supplied', () => {
+        const published: Published[] = []
+        const nats = {
+            publish: (subject: string, payload: any) => {
+                published.push({ subject, payload })
+            },
+        } as any
+        const onProseMirrorContent = vi.fn()
+        const onPipelineContent = vi.fn()
+        const publisher = new VideoPublisher(
+            nats,
+            vi.fn(),
+            vi.fn(),
+            'ws-1',
+            'thread-1',
+            'Google',
+            undefined,
+            onProseMirrorContent,
+            onPipelineContent,
+        )
+
+        publisher.pending()
+
+        expect(published).toHaveLength(0)
+        expect(onProseMirrorContent).not.toHaveBeenCalled()
+        expect(onPipelineContent).toHaveBeenCalledWith(expect.objectContaining({
+            status: STREAM_STATUS.VIDEO_PENDING,
+            videoUrl: '',
+            fileId: '',
+            aiProvider: 'Google',
+        }))
+    })
 })

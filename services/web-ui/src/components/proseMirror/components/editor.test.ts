@@ -288,6 +288,19 @@ describe('ProseMirrorEditor — state/editability and lifecycle', () => {
         expect(editor.onStreamingUpdate).toHaveBeenCalledWith(streamingChange)
     })
 
+    it('delegates local transactions to ProseMirror authority when present', () => {
+        const editor = createEditorShim('document')
+        const transaction = { docChanged: true }
+        editor.proseMirrorAuthority = {
+            submitLocalTransaction: vi.fn(),
+            disconnect: vi.fn(),
+        }
+
+        editor.dispatchLocalTransaction(transaction)
+
+        expect(editor.proseMirrorAuthority.submitLocalTransaction).toHaveBeenCalledWith(transaction)
+    })
+
     it('sets new editable prop when focus state updates', () => {
         const editor = createEditorShim('document')
         editor.editorView = {
@@ -303,11 +316,15 @@ describe('ProseMirrorEditor — state/editability and lifecycle', () => {
     it('destroys editor view and clears schema state', () => {
         const editor = createEditorShim('document')
         const destroyMock = vi.fn()
+        const disconnectMock = vi.fn()
         editor.editorView = { destroy: destroyMock }
+        editor.proseMirrorAuthority = { disconnect: disconnectMock }
 
         editor.destroy()
 
+        expect(disconnectMock).toHaveBeenCalledTimes(1)
         expect(destroyMock).toHaveBeenCalledTimes(1)
+        expect(editor.proseMirrorAuthority).toBeNull()
         expect(editor.editorView).toBeNull()
         expect(editor.editorSchema).toBeNull()
     })

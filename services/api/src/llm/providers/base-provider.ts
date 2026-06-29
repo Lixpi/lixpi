@@ -173,9 +173,9 @@ export abstract class BaseProvider {
             || requestData.imageModelMetaInfo
             || requestData.videoModelMetaInfo,
         )
-        const onProseMirrorContent: ProseMirrorContentHandler = typeof requestData.proseMirrorContentHandler === 'function'
+        const onPipelineContent: ProseMirrorContentHandler = typeof requestData.proseMirrorContentHandler === 'function'
             ? requestData.proseMirrorContentHandler as ProseMirrorContentHandler
-            : (content: Parameters<ProseMirrorContentHandler>[0]) => this.streamPublisher?.publishProseMirrorContent(content)
+            : (content: Parameters<ProseMirrorContentHandler>[0]) => this.streamPublisher?.publishChatContent(content)
         this.streamPublisher = new StreamPublisher(
             this.deps.natsService,
             requestData.workspaceId,
@@ -196,7 +196,8 @@ export abstract class BaseProvider {
             requestData.aiChatThreadId,
             this.providerName,
             requestData.generationRun,
-            onProseMirrorContent,
+            undefined,
+            onPipelineContent,
         )
         this.videoPublisher = new VideoPublisher(
             this.deps.natsService,
@@ -206,7 +207,8 @@ export abstract class BaseProvider {
             requestData.aiChatThreadId,
             this.providerName,
             requestData.generationRun,
-            onProseMirrorContent,
+            undefined,
+            onPipelineContent,
         )
 
         const initialState: ProviderState = {
@@ -468,7 +470,7 @@ export abstract class BaseProvider {
         }
 
         const imageResult = await this.deps.runImageRouter(state, {
-            onProseMirrorContent: content => this.streamPublisher?.publishProseMirrorContent(content),
+            onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
         })
         if (imageResult.error) {
             this.streamPublisher?.imageGenerationError(imageResult.error, state.generationRun)
@@ -498,7 +500,7 @@ export abstract class BaseProvider {
         }
 
         const videoResult = await this.deps.runVideoRouter(state, {
-            onProseMirrorContent: content => this.streamPublisher?.publishProseMirrorContent(content),
+            onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
         })
         if (videoResult.error) {
             this.streamPublisher?.error(videoResult.error, videoResult.errorCode, videoResult.errorType)
@@ -590,7 +592,7 @@ export abstract class BaseProvider {
             }
 
             const imageResult = await this.deps.runImageRouter(fanoutState, {
-                onProseMirrorContent: content => this.streamPublisher?.publishProseMirrorContent(content),
+                onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
             })
             if (imageResult.error) {
                 this.streamPublisher?.imageGenerationError(imageResult.error, generationRun)
@@ -695,7 +697,7 @@ export abstract class BaseProvider {
             }
 
             const videoResult = await this.deps.runVideoRouter(fanoutState, {
-                onProseMirrorContent: content => this.streamPublisher?.publishProseMirrorContent(content),
+                onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
             })
             return {
                 error: videoResult.error,

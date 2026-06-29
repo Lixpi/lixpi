@@ -439,7 +439,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 
 		const partialHandler = ts.slice(partialStart, completeStart)
 		expectExcerptToContain(partialHandler, "const imageSrc = buildImageSrc(imageUrl, '', false)")
-		expectExcerptToContain(partialHandler, 'commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: resolvedNodes })')
+		expectExcerptToContain(partialHandler, 'commitTransientCanvasStatePreservingEditors({ ...currentCanvasState, nodes: resolvedNodes })')
 		expectExcerptNotToContain(partialHandler, 'imgEl.src', 'partial image handler')
 	})
 
@@ -496,7 +496,9 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectExcerptToContain(completeHandler, "const imageSrc = buildGeneratedImageFrameSrc({")
 		expectExcerptToContain(completeHandler, "fallbackSrc: imgNode.src,")
 		expectExcerptToContain(completeHandler, 'commitCanvasState({')
-		expect([...completeHandler.matchAll(/\.\.\.\(currentCanvasState \?\? \{\}\)/g)]).toHaveLength(2)
+		expect([...completeHandler.matchAll(/\.\.\.\(currentCanvasState \?\? \{\}\)/g)]).toHaveLength(1)
+		expectExcerptToContain(completeHandler, 'const deduped = withoutGeneratedMediaDuplicateNodes({', 'complete image handler')
+		expectExcerptToContain(completeHandler, 'const resolvedNodes = rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)', 'complete image handler')
 		expectExcerptNotToContain(completeHandler, 'imgEl.src', 'complete image handler')
 	})
 
@@ -547,7 +549,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceNotToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
 		// Wired into every generated-media add path (image partial + complete, video).
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithImage, newEdges)')
-		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, edges)')
+		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)')
 		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(allNodes, newEdges)')
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithVideo, newEdges)')
 		// Re-tidies on delete only when the removed node was a lineage member.
@@ -626,7 +628,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const errorStart = ts.indexOf('onVideoErrorToCanvas:', completeStart)
 		const completeHandler = ts.slice(completeStart, errorStart)
 
-		expectExcerptToContain(completeHandler, 'rebalanceGeneratedMediaTrees(nodes, currentCanvasState.edges)', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)', 'video complete handler')
 		expectExcerptToContain(completeHandler, 'nodes: resolvedNodes,', 'video complete handler')
 		expectExcerptToContain(completeHandler, 'edges: currentCanvasState.edges,', 'video complete handler')
 	})
@@ -931,6 +933,86 @@ describe('Workspace canvas — AI panel reload stability', () => {
 		expectSourceToContain(ts, 'const normalizedCanvasState = renderStatePlan.state')
 		expectSourceToContain(ts, 'const effectiveCanvasState = prunedCanvasState.state')
 		expectSourceToContain(ts, 'currentCanvasState = shouldPreserveLiveViewport && effectiveCanvasState')
+	})
+})
+
+// =============================================================================
+// Workspace canvas — detached generation resume stability
+// =============================================================================
+
+describe('Workspace canvas — detached generation resume stability', () => {
+	const ts = loadTs()
+
+	it('reattaches hidden receive-only editors for active detached canvas markers after reload', () => {
+		const reattachBody = extractFunctionBody(ts, 'reattachDetachedCanvasRunListenersForActiveMarkers')
+		const createEditorBody = extractFunctionBody(ts, 'createDetachedCanvasThreadEditor')
+
+		expectExcerptToContain(reattachBody, 'for (const threadId of getActiveDetachedCanvasRunThreadIds())', 'detached run reattach')
+		expectExcerptToContain(reattachBody, 'ensureDetachedCanvasRunTeardown(threadId)', 'detached run reattach')
+		expectExcerptToContain(reattachBody, 'promptInputController.setReceiving(threadId, true)', 'detached run reattach')
+		expectExcerptToContain(reattachBody, 'createDetachedCanvasThreadEditor({ thread })', 'detached run reattach')
+		expectExcerptToContain(createEditorBody, 'receiveOnly: true', 'detached canvas editor')
+		expectExcerptToContain(createEditorBody, 'baseVersion: getStoredProseMirrorVersion(thread)', 'detached canvas editor')
+		expectSourceToContain(ts, 'reattachDetachedCanvasRunListenersForActiveMarkers()')
+	})
+
+	it('recovers pending branch marker records from persisted canvas state when memory maps are empty', () => {
+		const recoverBody = extractFunctionBody(ts, 'recoverPendingBranchMarkerRecordFromCanvasState')
+		const getRecordBody = extractFunctionBody(ts, 'getPendingBranchMarkerRecord')
+		const ensureRecordBody = extractFunctionBody(ts, 'ensurePendingBranchMarkerRecordForApiRun')
+
+		expectExcerptToContain(recoverBody, 'isBranchMarkerNode(node)\n            && Boolean(node.pendingState)\n            && getBranchMarkerThreadId(node) === threadId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'lineageAssignment?.branchForkNodeId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'lineageAssignment?.branchLineNodeId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'lineageAssignment?.branchOriginNodeId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'generationRun?.reasoningRunId && runNode.reasoningRunId === generationRun.reasoningRunId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'generationRun?.mediaRunId && runNode.mediaRunId === generationRun.mediaRunId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'node.pendingState?.reasoningIndex === generationRun.reasoningIndex', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'normalizeBranchMarkerModelValue(node.pendingState?.reasoningModelId)', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'requestMatches.length === 1 ? requestMatches[0] : undefined', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'pendingBranchMarkers.set(placementKey, record)', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'setPendingBranchMarkerRecordAliases(threadId, generationRun, record)', 'pending marker recovery')
+		expectExcerptToContain(getRecordBody, 'return recoverPendingBranchMarkerRecordFromCanvasState(threadId, generationRun)', 'pending marker lookup')
+		expectExcerptToContain(ensureRecordBody, 'return recoverPendingBranchMarkerRecordFromCanvasState(threadId, generationRun)', 'pending marker lookup')
+	})
+
+	it('persists branch marker planning and pending-state clearing instead of using transient canvas commits', () => {
+		const resolveBody = extractFunctionBody(ts, 'resolvePendingBranchMarkerWithLineagePlan')
+		const clearBody = extractFunctionBody(ts, 'clearPendingBranchMarkerStateForRun')
+
+		expectExcerptToContain(resolveBody, 'commitCanvasStatePreservingEditors({', 'pending marker promotion')
+		expectExcerptNotToContain(resolveBody, 'commitTransientCanvasStatePreservingEditors', 'pending marker promotion')
+		expectExcerptToContain(clearBody, 'commitCanvasStatePreservingEditors({', 'pending marker clearing')
+		expectExcerptNotToContain(clearBody, 'commitTransientCanvasStatePreservingEditors', 'pending marker clearing')
+	})
+
+	it('clears pending marker state and refreshes persisted thread content when a media run finishes', () => {
+		const finishBody = extractFunctionBody(ts, 'finishGeneratedMediaRun')
+		const clearIndex = finishBody.indexOf('clearPendingBranchMarkerStateForRun(threadId, generationRun)')
+		const refreshIndex = finishBody.indexOf('schedulePersistedAiChatThreadRefreshForBranchMarkers(threadId)')
+		const activeRunIndex = finishBody.indexOf('if (activeRunKeys.size > 0)')
+
+		expect(clearIndex).toBeGreaterThan(-1)
+		expect(refreshIndex).toBeGreaterThan(clearIndex)
+		expect(activeRunIndex).toBeGreaterThan(refreshIndex)
+		expectExcerptToContain(finishBody, 'if (generationRun.reasoningRunId) activeRunKeys.delete(generationRun.reasoningRunId)', 'finish generated media run')
+		expectExcerptToContain(finishBody, 'if (generationRun.mediaRunId) activeRunKeys.delete(generationRun.mediaRunId)', 'finish generated media run')
+		expectExcerptNotToContain(finishBody, 'scheduleDetachedCanvasRunTeardown', 'finish generated media run')
+	})
+
+	it('performs bounded post-completion fetches to replace live thread overrides with persisted content', () => {
+		const refreshBody = extractFunctionBody(ts, 'refreshPersistedAiChatThreadForBranchMarkers')
+		const scheduleBody = extractFunctionBody(ts, 'schedulePersistedAiChatThreadRefreshForBranchMarkers')
+
+		expectExcerptToContain(refreshBody, "servicesStore.getData('aiChatThreadService')", 'persisted AI thread refresh')
+		expectExcerptToContain(refreshBody, 'aiChatThreadService.getAiChatThread({ workspaceId, threadId })', 'persisted AI thread refresh')
+		expectExcerptToContain(refreshBody, 'if (fetchedVersion < currentVersion) return', 'persisted AI thread refresh')
+		expectExcerptToContain(refreshBody, 'rememberAiChatThreadRecord(thread)', 'persisted AI thread refresh')
+		expectExcerptToContain(refreshBody, 'liveAiChatThreadContentOverrides.delete(threadId)', 'persisted AI thread refresh')
+		expectExcerptToContain(refreshBody, 'refreshBranchMarkersForAiChatThread(threadId)', 'persisted AI thread refresh')
+		expectExcerptToContain(scheduleBody, 'window.clearTimeout(timer)', 'persisted AI thread refresh scheduler')
+		expectExcerptToContain(scheduleBody, 'const timers = [400, 1400, 3000].map(delayMs =>', 'persisted AI thread refresh scheduler')
+		expectExcerptToContain(scheduleBody, 'void refreshPersistedAiChatThreadForBranchMarkers(threadId).catch', 'persisted AI thread refresh scheduler')
 	})
 })
 

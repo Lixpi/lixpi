@@ -58,6 +58,30 @@ type RawNKeyChallengeFields = {
     challengeNonce: string
 }
 
+type ResolvedNatsPermissions = {
+    pub: { allow: string[] }
+    sub: { allow: string[] }
+}
+
+const appendUniquePermissionSubjects = ({
+    target,
+    seen,
+    subjectPatterns,
+    userId,
+}: {
+    target: string[]
+    seen: Set<string>
+    subjectPatterns: string[]
+    userId: string
+}): void => {
+    for (const subjectPattern of subjectPatterns) {
+        const subject = subjectPattern.replace('{userId}', userId)
+        if (seen.has(subject)) continue
+        seen.add(subject)
+        target.push(subject)
+    }
+}
+
 // Resolves the NATS permissions for the authenticated client.
 //
 // Internal services and NATS-native tools, like NEX, pass a complete permission
@@ -80,7 +104,7 @@ const getPermissionsForUser = (
     }
 
     // Regular user permissions (Auth0-authenticated users)
-    const resolvedPermissions = {
+    const resolvedPermissions: ResolvedNatsPermissions = {
         pub: {
             allow: [
                 '_INBOX.>'
@@ -92,24 +116,30 @@ const getPermissionsForUser = (
             ]
         }
     }
+    const seenPublicationSubjects = new Set(resolvedPermissions.pub.allow)
+    const seenSubscriptionSubjects = new Set(resolvedPermissions.sub.allow)
 
-    subscriptions.forEach(subscription => {
+    for (const subscription of subscriptions) {
         if (subscription.permissions) {
             const {
                 pub: publicationPermissions,
                 sub: subscriptionPermissions
             } = subscription.permissions
-            const publicationAllows = publicationPermissions?.allow
-                ? publicationPermissions.allow.map((subjectPattern: string) => subjectPattern.replace('{userId}', userId))
-                : []
-            const subscriptionAllows = subscriptionPermissions?.allow
-                ? subscriptionPermissions.allow.map((subjectPattern: string) => subjectPattern.replace('{userId}', userId))
-                : []
 
-            resolvedPermissions.pub.allow.push(...publicationAllows)
-            resolvedPermissions.sub.allow.push(...subscriptionAllows)
+            appendUniquePermissionSubjects({
+                target: resolvedPermissions.pub.allow,
+                seen: seenPublicationSubjects,
+                subjectPatterns: publicationPermissions?.allow ?? [],
+                userId,
+            })
+            appendUniquePermissionSubjects({
+                target: resolvedPermissions.sub.allow,
+                seen: seenSubscriptionSubjects,
+                subjectPatterns: subscriptionPermissions?.allow ?? [],
+                userId,
+            })
         }
-    })
+    }
 
     info('Final resolved permissions:', resolvedPermissions)
     return resolvedPermissions

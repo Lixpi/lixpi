@@ -233,7 +233,7 @@ export default class NatsService {
             return
         }
 
-        subs.forEach(listener => {
+        for (const listener of subs) {
             try {
                 const subscriptionType = listener.type ?? 'subscribe'
 
@@ -267,7 +267,7 @@ export default class NatsService {
             } catch (error) {
                 err(`Failed to subscribe to NATS subject ${listener.subject}`, error)
             }
-        })
+        }
 
         this.subscriptionsInitialized = true
     }
@@ -633,6 +633,15 @@ export default class NatsService {
     async getJetStreamStreamInfo(streamName: string, options: Record<string, any> = {}): Promise<any> {
         const jsm = await this.getJetStreamManager()
         return await (jsm.streams as any).info(streamName, options)
+    }
+
+    async getJetStreamStreamInfoOrNull(streamName: string, options: Record<string, any> = {}): Promise<any | null> {
+        try {
+            return await this.getJetStreamStreamInfo(streamName, options)
+        } catch (e: any) {
+            if (this.isStreamNotFoundError(e)) return null
+            throw e
+        }
     }
 
     async getJetStreamMessage<T = any>(streamName: string, request: Record<string, any>): Promise<{ data: T; subject: string; seq: number } | null> {

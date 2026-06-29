@@ -5,7 +5,7 @@ description: The conceptual overview of Lixpi's NATS-first, message-driven servi
 
 # System Architecture
 
-Lixpi is a message-driven system built around [NATS](https://nats.io/). The browser uses NATS over WebSocket for normal app commands, workspace CRUD, canvas-state saves, document/thread operations, and AI stream events. The API service handles those subjects, persists data in DynamoDB, and hosts the LangGraph workflow in-process.
+Lixpi is a message-driven system built around [NATS](https://nats.io/). The browser uses NATS over WebSocket for normal app commands, workspace CRUD, canvas-state saves, document/thread operations, live AI pipeline events, and ProseMirror step streams. The API service handles those subjects, persists data in DynamoDB, and hosts the LangGraph workflow in-process. JetStream backs media Object Store buckets plus short-lived durable replay logs for AI pipeline events and ProseMirror document steps.
 
 There are still HTTP routes where HTTP is the right tool: image/video upload and download, Media Library previews, feature sample previews, health checks, and workspace export/import archives. Those routes move browser-friendly bytes or ZIP files; they are not the primary app command path.
 
@@ -22,8 +22,8 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 | Service | Language | Path | Role |
 |---------|----------|------|------|
 | **web-ui** | Svelte / TypeScript | `services/web-ui/` | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, and client-side context extraction |
-| **api** | Node.js / TypeScript | `services/api/` | API service — JWT auth, CRUD, DynamoDB persistence, NATS bridge, **and the in-process LangGraph LLM workflow** at `services/api/src/llm/` (token streaming, image generation, video generation, usage tracking) |
-| **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, JetStream Object Store for image and video storage |
+| **api** | Node.js / TypeScript | `services/api/` | API service — JWT auth, CRUD, DynamoDB persistence, NATS bridge, **and the in-process LangGraph LLM workflow** at `services/api/src/llm/` (pipeline events, ProseMirror transcript steps, image generation, video generation, usage tracking) |
+| **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, JetStream Object Store for image/video storage, and JetStream replay logs for pipeline/document events |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 | **nex** | Node.js / TypeScript | `services/nex/` | NATS NEX execution-engine node — runs background workloads on the bus (currently the hourly AI-models catalog sync). See [NEX Execution Engine](./deployment/NEX-EXECUTION-ENGINE.md) |
 | **DynamoDB** | AWS (local via Docker) | — | Document storage, user data, AI chat threads, AI model metadata |
@@ -44,12 +44,12 @@ graph TB
     end
 
     subgraph Broker["Message Broker"]
-        NATS[("NATS Cluster<br/>Pub/Sub · Request/Reply · JetStream Object Store")]
+        NATS[("NATS Cluster<br/>Pub/Sub · Request/Reply · JetStream Object Store · Replay Logs")]
     end
 
     subgraph Backend["API Tier"]
         API["api service<br/>Auth · CRUD · NATS Bridge"]
-        LLM["In-process LangGraph workflow<br/>token streaming · image · video"]
+        LLM["In-process LangGraph workflow<br/>pipeline events · ProseMirror steps · media"]
     end
 
     subgraph Identity["Identity Providers"]
@@ -61,13 +61,13 @@ graph TB
         Provider(("AI Providers<br/>OpenAI · Anthropic · Google"))
     end
 
-    UI <-->|WebSocket app commands + AI stream events| NATS
+    UI <-->|WebSocket app commands + live/replayable AI events| NATS
     UI -->|HTTPS media bytes + workspace export/import| API
     NATS <-->|Publish / Subscribe| API
     API --> LLM
     API --> DDB
-    API <-->|Object Store API| NATS
-    LLM -->|Stream events direct| NATS
+    API <-->|Object Store + JetStream stream API| NATS
+    LLM -->|Pipeline events + ProseMirror steps| NATS
     LLM <-->|Vendor SDK calls| Provider
     API -.->|JWT verify| Auth
 ```
@@ -75,9 +75,9 @@ graph TB
 | Tier | Component | Responsibility |
 |------|-----------|----------------|
 | Client | Web UI | Renders the canvas, hosts ProseMirror editors, extracts context from the node graph, and connects to NATS over WebSocket |
-| Broker | NATS Cluster | Carries app commands, auth callouts, CRUD requests, and AI stream events; stores media in JetStream Object Store |
+| Broker | NATS Cluster | Carries app commands, auth callouts, CRUD requests, AI pipeline events, replay logs, and ProseMirror document steps; stores media in JetStream Object Store |
 | API | api service | Validates tokens, performs CRUD against DynamoDB, hosts byte-oriented HTTP routes, and bridges browser requests to the in-process workflow |
-| API | LangGraph workflow | Resolves features, streams the text model, routes image/video tool calls, and publishes results directly to NATS |
+| API | LangGraph workflow | Resolves features, streams the text model, routes image/video tool calls, and publishes pipeline events plus ProseMirror transcript steps to NATS |
 | Identity | Auth0 / LocalAuth0 | Issues RS256 user JWTs and exposes a JWKS endpoint for verification |
 | Storage | DynamoDB | Persists documents, AI chat threads, users, and AI model metadata |
 | Storage | AI Providers | External text, image, and video models invoked through vendor SDKs |
@@ -87,7 +87,8 @@ graph TB
 Most application behavior in Lixpi flows through NATS. This decision shapes the system:
 
 - **End-to-end messaging** — Browser ↔ NATS ↔ backend services. The same bus carries browser requests and inter-service traffic.
-- **Real-time streaming** — AI tokens, image partials, and video events stream directly to clients on per-thread subjects, with no intermediate buffering layer.
+- **Real-time streaming** — AI pipeline events stream directly to clients on per-thread subjects, with no intermediate HTTP streaming layer.
+- **Durable replay windows** — JetStream stores short-lived pipeline event logs and ProseMirror document step logs so a refreshed client can replay missed generation state instead of falling back to stale snapshots.
 - **Centralized auth** — The NATS `auth_callout` delegates "can this connection happen, and what may it do?" to the API service. See [Authentication](./AUTHENTICATION.md).
 - **Queue groups** — Multiple instances of a service subscribe under a shared queue-group name, and NATS load-balances messages across them automatically. No external load balancer required.
 
@@ -100,7 +101,7 @@ HTTP remains in the system for payloads that are better served as HTTP responses
 | `/api/features/*` and `/api/media-library/*` previews | Authenticated thumbnail/asset previews are browser media requests, while feature and library metadata flows over NATS subjects. |
 | `/health-check` | ECS needs a simple health endpoint. |
 
-For the full token path from AI provider to rendered DOM, and the catalog of stream event types, see [Streaming & Events](./STREAMING-AND-EVENTS.md).
+For the AI event path from provider output to rendered DOM, and the catalog of stream event types, see [Streaming & Events](./STREAMING-AND-EVENTS.md).
 
 ### Subject Naming Convention
 
@@ -116,8 +117,10 @@ domain.entity.action[.qualifier]
 | `workspace.document.create` | `domain.entity.action` | Request: create a document |
 | `ai.interaction.chat.sendMessage` | `domain.entity.action.action` | Publish: browser → API |
 | `ai.interaction.chat.receiveMessage.{workspaceId}.{threadId}` | `…action.qualifier.qualifier` | Subscribe: LLM workflow → browser (per-thread, direct) |
+| `ai.interaction.chat.pipelineEvents.{workspaceId}.{pipelineId}` | `…action.qualifier.qualifier` | JetStream subject: durable replay of chat pipeline side events |
+| `document.steps.{workspaceId}.{docType}.{docId}` | `domain.entity.qualifier.qualifier.qualifier` | JetStream subject: durable ProseMirror control/step events |
 
-The trailing `{workspaceId}.{threadId}` qualifiers are what let the LLM workflow publish a stream straight to the one browser subscription that needs it, keeping streaming latency dominated by the AI provider rather than by Lixpi infrastructure.
+The trailing qualifiers are what scope live subscriptions and JetStream replay subjects to one workspace, thread, pipeline, or document. Live chat events still reach the one browser subscription that needs them; JetStream subjects give reconnecting clients a cursor-addressable replay window.
 
 {% callout type="important" %}
 Subjects are **not** ad-hoc strings scattered across the codebase. They are defined in `packages/lixpi/constants/nats-subjects.json` and consumed by both the browser and the API through `@lixpi/constants`. Adding or renaming a subject means editing that file, which keeps every producer and consumer in sync.
@@ -129,7 +132,7 @@ Four decisions define the shape of the system. Each is intentional and each is w
 
 ### NATS-First
 
-App commands, auth callouts, workspace/document/thread CRUD, canvas-state saves, file storage (JetStream Object Store), and AI streaming all center on NATS. The browser connects to NATS via WebSocket. Because the LLM workflow publishes streaming events directly onto the per-thread subjects the browser is already subscribed to, there is no extra hop between "token produced" and "token rendered."
+App commands, auth callouts, workspace/document/thread CRUD, canvas-state saves, file storage, AI pipeline events, and ProseMirror document-step transport all center on NATS. The browser connects to NATS via WebSocket. Because the LLM workflow publishes live pipeline events directly onto the per-thread subjects the browser is already subscribed to, there is no extra HTTP hop between provider output and browser updates. JetStream sits beside that live path for replay and storage, not as a polling layer.
 
 The exception is byte transport: media upload/download, video range reads, authenticated previews, and workspace import/export use HTTP because browsers and archives already speak HTTP well.
 
@@ -187,16 +190,17 @@ Shared packages in `packages/lixpi/` keep service contracts in sync so that the 
 | Package | Purpose |
 |---------|---------|
 | `@lixpi/constants` | Shared NATS subjects, shared types, AI model metadata with pricing |
-| `@lixpi/nats-service` | TypeScript NATS client, JetStream Object Store helpers, NKey auth |
+| `@lixpi/nats-service` | TypeScript NATS client, JetStream stream/direct-message helpers, JetStream Object Store helpers, NKey auth |
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by both the API and the NATS Auth Callout |
 | `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |
+| `@lixpi/prosemirror` | Shared ProseMirror schema, headless engine, stream assembly helpers, lineage projection helpers, and document-step transport types used by API and web-ui |
 | `@xyflow/system` (vendored) | Framework-agnostic pan/zoom/coordinate math — used at the low-level API, not React Flow or Svelte Flow |
 
 ## Where to Go Next
 
 - [Authentication](./AUTHENTICATION.md) — the dual auth model, the NATS auth callout, and the two auth modes.
 - [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md) — the LangGraph workflow, providers, and tool-call routing.
-- [Streaming & Events](./STREAMING-AND-EVENTS.md) — the full token path and the catalog of stream events.
+- [Streaming & Events](./STREAMING-AND-EVENTS.md) — live AI events, durable replay logs, ProseMirror step streams, and the event catalog.
 - [Rendering Engine](../canvas/RENDERING-ENGINE.md) — the framework-agnostic canvas.
 - [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md) — how the client assembles multimodal context.
 - [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md) and [Scaling & Operations](./deployment/SCALING-AND-OPERATIONS.md) — the AWS topology, Pulumi, and production scaling.

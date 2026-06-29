@@ -58,7 +58,7 @@ export const mediaLibrarySubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_IMAGE] },
-            sub: { allow: [MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_IMAGE, MEDIA_LIBRARY_SUBJECTS.EVENTS.CREATED] },
+            sub: { allow: [MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_IMAGE] },
         },
         handler: async (data: any) => {
             const { user: { userId }, workspaceId, fileId, descriptor } = data
@@ -195,7 +195,7 @@ export const mediaLibrarySubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_VIDEO] },
-            sub: { allow: [MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_VIDEO, MEDIA_LIBRARY_SUBJECTS.EVENTS.CREATED] },
+            sub: { allow: [MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_VIDEO] },
         },
         handler: async (data: any) => {
             const {
@@ -326,7 +326,13 @@ export const mediaLibrarySubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [MEDIA_LIBRARY_SUBJECTS.DELETE] },
-            sub: { allow: [MEDIA_LIBRARY_SUBJECTS.DELETE, MEDIA_LIBRARY_SUBJECTS.EVENTS.DELETED] },
+            sub: {
+                allow: [
+                    MEDIA_LIBRARY_SUBJECTS.DELETE,
+                    MEDIA_LIBRARY_SUBJECTS.EVENTS.CREATED,
+                    MEDIA_LIBRARY_SUBJECTS.EVENTS.DELETED,
+                ],
+            },
         },
         handler: async (data: any) => {
             const { user: { userId }, itemId } = data

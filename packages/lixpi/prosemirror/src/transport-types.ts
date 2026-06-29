@@ -50,6 +50,10 @@ export type StepStreamControlEnvelope = DocCoordinate & StreamControl & {
 
 export type StepStreamEvent = StepEnvelope | StepStreamControlEnvelope
 
+export type LoggedStepStreamEvent = StepStreamEvent & {
+    streamSequence: number
+}
+
 export type DocSnapshot = DocCoordinate & {
     version: number
     schemaVersion: string
@@ -59,14 +63,16 @@ export type DocSnapshot = DocCoordinate & {
 export type DocResumePayload = DocCoordinate & {
     baseVersion?: number
     localVersion?: number
+    localStreamSeq?: number
 }
 
 export type DocResumeResult = {
     snapshot: DocSnapshot | null
     currentVersion: number
+    currentStreamSeq: number
     streamName: string
     subject: string
-    events: StepStreamEvent[]
+    events: LoggedStepStreamEvent[]
 }
 
 export const PROSEMIRROR_STEP_SUBJECT_PREFIX = 'document.steps'

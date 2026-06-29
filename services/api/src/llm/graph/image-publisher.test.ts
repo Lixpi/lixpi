@@ -193,4 +193,44 @@ describe('ImagePublisher', () => {
             generationRun,
         })
     })
+
+    it('routes image events through onPipelineContent when durable pipeline publishing is supplied', async () => {
+        const published: Published[] = []
+        const nats = {
+            publish: (subject: string, payload: any) => {
+                published.push({ subject, payload })
+            },
+        } as any
+        const storeImage = vi.fn(async (input: any) => ({
+            fileId: 'file-1',
+            url: '/api/images/ws-1/file-1',
+            isDuplicate: false,
+            size: input.buffer.length,
+            mimeType: input.mimeType,
+        }))
+        const onProseMirrorContent = vi.fn()
+        const onPipelineContent = vi.fn()
+        const publisher = new ImagePublisher(
+            nats,
+            storeImage,
+            'ws-1',
+            'thread-1',
+            'Google',
+            undefined,
+            onProseMirrorContent,
+            onPipelineContent,
+        )
+        const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
+
+        await publisher.partial(pngBase64, 3)
+
+        expect(published).toHaveLength(0)
+        expect(onProseMirrorContent).not.toHaveBeenCalled()
+        expect(onPipelineContent).toHaveBeenCalledWith(expect.objectContaining({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            fileId: 'file-1',
+            partialIndex: 3,
+            aiProvider: 'Google',
+        }))
+    })
 })

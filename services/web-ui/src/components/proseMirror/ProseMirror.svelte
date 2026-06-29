@@ -33,7 +33,6 @@
 
     const documentService = new DocumentService()
 
-
     type ImageOptions = {
         aiImageModels: string[]
         imageGenerationSize: ImageGenerationSize
@@ -108,7 +107,7 @@
             return false
         }
 
-        aiInteractionInstance.stopChatMessage({ threadId })
+        aiInteractionInstance.stopChatMessage()
     }
 
     const onProjectTitleChange = inputValue => {
@@ -205,7 +204,11 @@
                 onAiChatSubmit,
                 onAiChatStop
             });
-            aiInteractionInstance = new AiInteractionService(RouterService.getRouteParams().documentId as string)
+            const routeParams = RouterService.getRouteParams()
+            aiInteractionInstance = new AiInteractionService({
+                workspaceId: routeParams.workspaceId as string,
+                aiChatThreadId: routeParams.documentId as string,
+            })
             documentStore.setMetaValues({ isRendered: true })
         }
     });

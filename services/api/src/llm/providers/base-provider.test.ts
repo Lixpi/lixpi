@@ -13,12 +13,24 @@ type Published = { subject: string, payload: any }
 
 const makeFakeNats = () => {
     const published: Published[] = []
+    let nextStreamSeq = 0
     const fake = {
         publish: (subject: string, payload: any) => {
             published.push({ subject, payload })
         },
+        ensureJetStreamStream: vi.fn(async () => undefined),
+        publishJetStream: vi.fn(async () => {
+            nextStreamSeq += 1
+            return { seq: nextStreamSeq }
+        }),
+        purgeJetStreamSubject: vi.fn(async () => undefined),
     } as any
     return { fake, published }
+}
+
+const flushPipelinePublishes = async (): Promise<void> => {
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
 }
 
 const makeImageModel = (model: string): AiModelMetaInfo => ({
@@ -149,6 +161,7 @@ describe('BaseProvider image fanout errors', () => {
         } as ProviderState
 
         const result = await provider.runImageGeneration(state)
+        await flushPipelinePublishes()
 
         expect(result).toEqual({ generatedImages: ['final-image-base64'] })
         expect(runImageRouter).toHaveBeenCalledTimes(2)
@@ -276,6 +289,7 @@ describe('BaseProvider fanout', () => {
         const provider = new TestProvider('ws1:thread1', deps)
 
         const result = await provider.runImageGeneration(createFanoutState())
+        await flushPipelinePublishes()
 
         expect(result).toEqual({ generatedImages: ['final-image-base64'] })
         expect(runImageRouter).toHaveBeenCalledTimes(2)
@@ -317,6 +331,7 @@ describe('BaseProvider fanout', () => {
         const provider = new TestProvider('ws1:thread1', deps)
 
         const result = await provider.runImageGeneration(createFanoutState())
+        await flushPipelinePublishes()
 
         expect(result).toEqual({ generatedImages: ['final-image-base64'] })
         expect(runImageRouter).toHaveBeenCalledTimes(2)
@@ -348,6 +363,7 @@ describe('BaseProvider fanout', () => {
             generatedImagePrompt: undefined,
             generatedVideoPrompt: 'Animate this cat in a loop.',
         }))
+        await flushPipelinePublishes()
 
         expect(result).toEqual({ generatedVideos: ['final-video-url'] })
         expect(runVideoRouter).toHaveBeenCalledTimes(2)
@@ -375,6 +391,7 @@ describe('BaseProvider fanout', () => {
             generatedVideoPrompt: undefined,
             generatedImagePrompt: 'Render with all models failing',
         }))
+        await flushPipelinePublishes()
 
         expect(result).toMatchObject({ error: 'Image model unavailable' })
         expect(runImageRouter).toHaveBeenCalledTimes(2)

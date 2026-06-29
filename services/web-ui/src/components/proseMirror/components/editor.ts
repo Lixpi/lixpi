@@ -38,11 +38,38 @@ import { imageSelectionPlugin } from '$src/components/proseMirror/plugins/imageS
 import {buildKeymap} from "$src/components/proseMirror/components/keyMap.js"
 import {buildInputRules} from "$src/components/proseMirror/components/inputRules.js"
 import { createSvelteComponentRendererPlugin } from '$src/components/proseMirror/plugins/svelteComponentRenderer/svelteComponentRendererPlugin.js'
+import { ProseMirrorAuthorityService } from '$src/services/prosemirror-authority-service.ts'
 // import TaskRow from '$src/rows/TaskRow.svelte'
 
 import { defaultAttrs as defautSubtaskAttrs } from '$src/components/proseMirror/customNodes/taskRowNode.js'
 
+type ProseMirrorEditorConfig = {
+    editorMountElement: HTMLElement
+    content: HTMLElement
+    initialVal?: any
+    isDisabled: boolean
+    documentType?: string
+    threadId?: string | null
+    onEditorChange?: (value: any) => void
+    onStreamingUpdate?: (value: any) => void
+    onProjectTitleChange?: (value: any) => void
+    onAiChatSubmit?: (value: any) => void
+    onAiChatStop?: (value: any) => void
+    onPromptSubmit?: (value: any) => void
+    onPromptStop?: () => void
+    isPromptReceiving?: () => boolean
+    promptControlFactories?: any
+    onReceivingStateChange?: (threadId: string, receiving: boolean) => void
+    readOnly?: boolean
+    proseMirrorAuthority?: any
+    aiChatThreadRenderContext?: any
+}
+
 export class ProseMirrorEditor {
+    editorView!: EditorView
+    editorSchema: any = null
+    proseMirrorAuthority: ProseMirrorAuthorityService | null = null
+
     constructor({
         editorMountElement,
         content,
@@ -61,8 +88,9 @@ export class ProseMirrorEditor {
         promptControlFactories,
         onReceivingStateChange,
         readOnly = false,
+        proseMirrorAuthority,
         aiChatThreadRenderContext
-    }) {
+    }: ProseMirrorEditorConfig) {
         this.onEditorChange = onEditorChange
         this.onStreamingUpdate = onStreamingUpdate
         this.onProjectTitleChange = onProjectTitleChange
@@ -73,6 +101,8 @@ export class ProseMirrorEditor {
         this.isPromptReceiving = isPromptReceiving
         this.promptControlFactories = promptControlFactories
         this.onReceivingStateChange = onReceivingStateChange
+        this.proseMirrorAuthorityOptions = proseMirrorAuthority
+        this.proseMirrorAuthority = null
         this.isDisabled = isDisabled
         this.readOnly = readOnly
         this.aiChatThreadRenderContext = {
@@ -92,6 +122,14 @@ export class ProseMirrorEditor {
             }),
             editable: () => this.isEditorEditable()
         })
+
+        if (this.proseMirrorAuthorityOptions) {
+            this.proseMirrorAuthority = new ProseMirrorAuthorityService({
+                ...this.proseMirrorAuthorityOptions,
+                getView: () => this.editorView,
+                onRemoteDocumentChange: value => this.dispatchStreamingUpdate(value),
+            })
+        }
     }
 
     createInitialDocument(initialVal, content) {
@@ -152,7 +190,13 @@ export class ProseMirrorEditor {
 
     createPlugins(initialValue, isDisabled) {
         const basePlugins = [
-            statePlugin(initialValue, this.dispatchStateChange.bind(this), this.onProjectTitleChange.bind(this), this.dispatchStreamingUpdate.bind(this)),
+            statePlugin(
+                initialValue,
+                this.dispatchStateChange.bind(this),
+                this.onProjectTitleChange.bind(this),
+                this.dispatchStreamingUpdate.bind(this),
+                this.proseMirrorAuthorityOptions ? this.dispatchLocalTransaction.bind(this) : null
+            ),
             focusPlugin(this.updateEditorFocusState.bind(this)), // Allows to enable editor if it was disabled and user clicks on the editor area
             bubbleMenuPlugin(),
             linkTooltipPlugin(),
@@ -232,7 +276,13 @@ export class ProseMirrorEditor {
         this.onStreamingUpdate?.(json)
     }
 
+    dispatchLocalTransaction(transaction) {
+        this.proseMirrorAuthority?.submitLocalTransaction(transaction)
+    }
+
     destroy() {
+        this.proseMirrorAuthority?.disconnect()
+        this.proseMirrorAuthority = null
         if (this.editorView) {
             this.editorView.destroy()
             this.editorView = null

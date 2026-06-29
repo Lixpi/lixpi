@@ -9,6 +9,8 @@
 	"AI_INTERACTION_SUBJECTS": {
 		"CHAT_SEND_MESSAGE": "ai.interaction.chat.sendMessage",
 		"CHAT_SEND_MESSAGE_RESPONSE": "ai.interaction.chat.receiveMessage",
+		"CHAT_PIPELINE_EVENTS": "ai.interaction.chat.pipelineEvents",
+		"CHAT_PIPELINE_RESUME": "ai.interaction.chat.pipelineResume",
 		"CHAT_STEPS": "ai.interaction.chat.steps",
 		"CHAT_STOP_MESSAGE": "ai.interaction.chat.stopMessage",
 		"CHAT_PROCESS": "ai.interaction.chat.process",

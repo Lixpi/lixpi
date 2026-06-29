@@ -13,8 +13,20 @@ import {
 import AiModel from '../../models/ai-model.ts'
 import Organization from '../../models/organization.ts'
 import type { LlmModule } from '../../llm/index.ts'
+import Workspace from '../../models/workspace.ts'
+import { PipelineEventLog } from '../../llm/graph/pipeline-event-log.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
+const PIPELINE_EVENT_STREAM_SUBJECT = `${AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_EVENTS}.>`
+
+type PipelineResumePayload = {
+    user: { userId: string }
+    workspaceId: string
+    aiChatThreadId?: string
+    pipelineId?: string
+    localStreamSeq?: number
+    maxMessages?: number
+}
 
 let _llmModule: LlmModule | undefined
 
@@ -257,6 +269,44 @@ export const aiInteractionSubjects = [
                     `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`,
                     { error: error instanceof Error ? error.message : String(error) },
                 )
+            }
+        },
+    },
+
+    {
+        subject: AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
+        type: 'reply',
+        queue: 'aiInteraction',
+        payloadType: 'json',
+        permissions: {
+            pub: { allow: [AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME] },
+            sub: { allow: [AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME, PIPELINE_EVENT_STREAM_SUBJECT] },
+        },
+        handler: async (data: PipelineResumePayload, _msg: any) => {
+            const { workspaceId } = data
+            const userId = data.user.userId
+            const pipelineId = data.pipelineId ?? data.aiChatThreadId
+            if (!pipelineId) {
+                return { error: 'PIPELINE_ID_REQUIRED' }
+            }
+
+            const workspace = await Workspace.getWorkspace({ userId, workspaceId })
+            if (!workspace || 'error' in workspace) {
+                return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
+            }
+
+            const localStreamSeq = typeof data.localStreamSeq === 'number' ? data.localStreamSeq : 0
+            const maxMessages = typeof data.maxMessages === 'number' ? data.maxMessages : 1000
+            const result = await PipelineEventLog.fromSingleton().replayPipelineEvents({
+                workspaceId,
+                pipelineId,
+                startStreamSeq: Math.max(1, localStreamSeq + 1),
+                maxMessages,
+            })
+
+            return {
+                ...result,
+                events: result.events.filter(event => event.streamSequence > localStreamSeq),
             }
         },
     },

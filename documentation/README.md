@@ -40,7 +40,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 |------|----------------|
 | [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Service responsibilities, NATS as the backbone, subject conventions, design decisions, scaling |
 | [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md) | The shared LangGraph workflow, `ProviderState`, the post-stream 3-way router, dual-model routing, tool injection/extraction, `ImageRouter`/`VideoRouter`, stream lifecycle, usage |
-| [Streaming & Events](platform/STREAMING-AND-EVENTS.md) | The per-thread `receiveMessage` subject and the full stream-event catalog; the browser parse → insert path |
+| [Streaming & Events](platform/STREAMING-AND-EVENTS.md) | Live AI pipeline subjects, JetStream replay logs, ProseMirror step streams, and the stream-event catalog |
 | [Authentication](platform/AUTHENTICATION.md) | Dual auth model, NATS auth callout, `@lixpi/auth-service`, LocalAuth0 |
 | [Infrastructure Overview](platform/deployment/INFRASTRUCTURE-OVERVIEW.md) | Pulumi, AWS topology, network, ECS `api`, web-ui delivery, DynamoDB |
 | [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | NATS on Fargate, CloudMap discovery, the Route53 sidecar, Caddy-in-Lambda TLS, the auth-callout boundary |

@@ -15,6 +15,7 @@ const createNatsService = () => ({
     ensureJetStreamStream: vi.fn(async () => undefined),
     publishJetStream: vi.fn(async () => ({ seq: 1 })),
     getJetStreamMessage: vi.fn(async () => ({ seq: 0, data: { subjectSeq: 0, version: 0 } })),
+    getJetStreamStreamInfoOrNull: vi.fn(async () => ({ config: { name: 'stream-workspace-1' } })),
     ensureJetStreamConsumer: vi.fn(async () => undefined),
     consumeJetStreamMessages: vi.fn(async () => []),
 })
@@ -184,5 +185,106 @@ describe('ProseMirrorStepTransport', () => {
                 },
             },
         )
+    })
+
+    it('reports END finalVersion as the document version instead of the JetStream subject sequence', async () => {
+        const natsService = createNatsService()
+        natsService.getJetStreamMessage.mockResolvedValue({
+            seq: 17,
+            data: {
+                kind: 'END',
+                workspaceId: 'workspace-1',
+                docType: 'ai_chat_thread',
+                docId: 'thread-1',
+                subjectSeq: 5,
+                version: 2,
+                finalVersion: 3,
+            },
+        })
+        const transport = new ProseMirrorStepTransport(natsService as any)
+
+        const state = await transport.getCurrentSubjectState({
+            workspaceId: 'workspace-1',
+            docType: 'ai_chat_thread',
+            docId: 'thread-1',
+        } as any)
+
+        expect(state).toEqual({
+            subjectSeq: 5,
+            streamSequence: 17,
+            documentVersion: 3,
+        })
+    })
+
+    it('returns null current state without creating a stream when the workspace stream is absent', async () => {
+        const natsService = createNatsService()
+        natsService.getJetStreamStreamInfoOrNull.mockResolvedValue(null)
+        const transport = new ProseMirrorStepTransport(natsService as any)
+
+        const state = await transport.getCurrentSubjectStateOrNull({
+            workspaceId: 'workspace-1',
+            docType: 'document',
+            docId: 'document-1',
+        } as any)
+
+        expect(state).toBeNull()
+        expect(natsService.ensureJetStreamStream).not.toHaveBeenCalled()
+        expect(natsService.getJetStreamMessage).not.toHaveBeenCalled()
+    })
+
+    it('replays document events with direct JetStream subject scans and attaches streamSequence', async () => {
+        const natsService = createNatsService()
+        natsService.getJetStreamMessage
+            .mockResolvedValueOnce({
+                seq: 10,
+                data: { kind: 'END', subjectSeq: 3, version: 2, finalVersion: 2 },
+            })
+            .mockResolvedValueOnce({
+                seq: 7,
+                data: { kind: 'START', subjectSeq: 2, version: 2, baseVersion: 2 },
+            })
+            .mockResolvedValueOnce({
+                seq: 9,
+                data: { kind: 'END', subjectSeq: 3, version: 2, finalVersion: 3 },
+            })
+        const transport = new ProseMirrorStepTransport(natsService as any)
+
+        const events = await transport.replayDocumentStepEvents({
+            workspaceId: 'workspace-1',
+            docType: 'ai_chat_thread',
+            docId: 'thread-1',
+            startStreamSeq: 6,
+            maxMessages: 2,
+        } as any)
+
+        expect(events).toEqual([
+            expect.objectContaining({ kind: 'START', streamSequence: 7 }),
+            expect.objectContaining({ kind: 'END', finalVersion: 3, streamSequence: 9 }),
+        ])
+        expect(natsService.getJetStreamMessage).toHaveBeenNthCalledWith(
+            1,
+            getWorkspaceStepStreamName('workspace-1'),
+            {
+                last_by_subj: getDocumentStepSubject({
+                    workspaceId: 'workspace-1',
+                    docType: 'ai_chat_thread',
+                    docId: 'thread-1',
+                }),
+            },
+        )
+        expect(natsService.getJetStreamMessage).toHaveBeenNthCalledWith(
+            2,
+            getWorkspaceStepStreamName('workspace-1'),
+            {
+                seq: 6,
+                next_by_subj: getDocumentStepSubject({
+                    workspaceId: 'workspace-1',
+                    docType: 'ai_chat_thread',
+                    docId: 'thread-1',
+                }),
+            },
+        )
+        expect(natsService.ensureJetStreamConsumer).not.toHaveBeenCalled()
+        expect(natsService.consumeJetStreamMessages).not.toHaveBeenCalled()
     })
 })

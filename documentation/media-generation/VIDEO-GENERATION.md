@@ -220,7 +220,7 @@ Generated videos persist as a discriminated member of the `CanvasNode` union (`t
 
 ## Video-Specific Stream Nuances
 
-Video events reuse the per-thread receive subject `ai.interaction.chat.receiveMessage.{workspaceId}.{aiChatThreadId}` — only the `status` values are new. The complete catalog (with payloads and browser handling) is owned by [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The table below is **only** the video-specific nuance — how the video lifecycle differs from the image lifecycle, which is the core consequence of VEO being async with no partial frames.
+Video events use the same live per-thread receive subject as the rest of the AI pipeline and are also persisted to the chat pipeline replay log. Trace/final generated-video transcript nodes are mirrored into the authoritative ProseMirror step stream, so branch-marker and generated-media provenance panels can recover after refresh. The complete catalog and replay behavior are owned by [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The table below is only the video-specific nuance - how the video lifecycle differs from the image lifecycle, which is the core consequence of VEO being async with no partial frames.
 
 | Status | Video-specific nuance |
 |--------|-----------------------|

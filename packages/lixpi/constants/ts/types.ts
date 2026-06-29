@@ -1331,6 +1331,7 @@ export type Document = {
     title: string
     content: string
     prevRevision: number
+    proseMirrorVersion?: number
     createdAt: number
     updatedAt: number
     revisionExpiresAt?: number

@@ -17,7 +17,7 @@ LLM orchestration previously lived in a separate Python `services/llm-api/` task
 
 ## The Shared Workflow
 
-The workflow processes every request through the same ordered nodes. Three **pre-stream resolver** nodes run first — they assemble workspace context, resolve `/use` features, and ground visual references before any token is generated. The text model then streams. A single 3-way router inspects the streamed result and sends the request down the video branch, the image branch, or straight to usage accounting. Every path converges on `calculateUsage` and `cleanup`.
+The workflow processes every request through the same ordered nodes. Resolver and planner nodes run before the provider stream: they assemble workspace context, resolve `/use` features, ground visual references, and plan media lineage before any semantic text token is generated. The text model then streams. A single 3-way router inspects the streamed result and sends the request down the video branch, the image branch, or straight to usage accounting. Every path converges on `calculateUsage` and `cleanup`.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -25,7 +25,8 @@ stateDiagram-v2
     [*] --> resolveWorkspaceContext
     resolveWorkspaceContext --> resolveFeatures
     resolveFeatures --> resolveImageBranch
-    resolveImageBranch --> validateRequest
+    resolveImageBranch --> planMediaBranchLineage
+    planMediaBranchLineage --> validateRequest
     validateRequest --> streamTokens
 
     streamTokens --> executeVideoGeneration: generatedVideoPrompt is set
@@ -61,7 +62,7 @@ The pre-stream resolvers and planner are large features in their own right; each
 | `resolveImageBranch` | Structured VLM resolver that assigns visual roles (target, base-context, style-reference, comparison-target, excluded) to the narrowed candidate media. Shared by image *and* video; a no-op when no media model is selected. See [Branch Lineage](../media-generation/BRANCH-LINEAGE.md). |
 | `planMediaBranchLineage` / `MediaBranchLineagePlanner` | API-side planner used after branch resolution for media-enabled requests. It assigns branch origin/fork marker IDs, lineage parent IDs, neutral branch-root provenance, and per-run lineage assignments before reasoning/media fanout. Matrix requests run the same planner once in shared preflight and pass the plan to every child run. |
 | `validateRequest` | Validates required request fields and extracts model metadata (text model, and any image/video model pricing + capabilities) before streaming begins. |
-| `streamTokens` | Runs the text model's `_stream_impl()`. Injects the media tool(s) and augments the system prompt when a media model is selected, streams the response (text chunks to the browser), then extracts any `generate_image` / `generate_video` tool call into state. |
+| `streamTokens` | Runs the text model's `_stream_impl()`. Injects the media tool(s), augments the system prompt when a media model is selected, publishes live pipeline lifecycle events, mirrors text through the API-side ProseMirror assembler, and extracts any `generate_image` / `generate_video` tool call into state. |
 | `routeAfterStream` | The post-stream conditional. Precedence: `generatedVideoPrompt` → video branch; else `generatedImagePrompt` → image branch; else `skip` to usage. The model normally emits at most one media tool call per turn. |
 | `validateImagePrompt` | Image-branch-only gate. Re-checks the extracted image prompt (e.g. provider length limits); if rejected or cleared, the graph skips generation and proceeds to usage. |
 | `executeImageGeneration` | Conditional node. Builds an `ImageRouter` that instantiates a fresh provider for the image model and calls `provider.process()`. Publishes the image generation trace before invoking the media provider. |
@@ -244,7 +245,7 @@ That `enable…` flag is what makes the transient provider **skip its own stream
 
 ## Stream Lifecycle
 
-Top-level (user-facing) requests publish `START_STREAM` **before** the pre-stream resolver work runs. This creates the empty assistant-response shell immediately, so the browser enters a receiving state and does not look frozen while workspace relevance, feature resolution, image-URL normalization, and the branch VLM call execute. Real text tokens still wait until branch resolution completes, because the text model must receive the VLM-approved reference set.
+Top-level user-facing requests publish `START_STREAM` before the pre-stream resolver work runs. This opens the API-side stream lifecycle immediately, so the browser enters a receiving state and does not look frozen while workspace relevance, feature resolution, image-URL normalization, and the branch VLM call execute. Real text tokens still wait until branch resolution completes, because the text model must receive the VLM-approved reference set.
 
 The `StreamPublisher` ([`stream-publisher.ts`](../../services/api/src/llm/graph/stream-publisher.ts)) makes `start()` and `end()` **idempotent**:
 
@@ -253,15 +254,21 @@ The `StreamPublisher` ([`stream-publisher.ts`](../../services/api/src/llm/graph/
 - A pre-stream error publishes `ERROR` and then `END_STREAM`, so the browser never gets stuck receiving.
 - Transient media providers invoked through the routers skip their own lifecycle entirely — the parent chat stream owns it.
 
+Before `StreamPublisher` publishes a live `receiveMessage` payload, it writes that payload to the workspace pipeline JetStream log. Browser clients call `CHAT_PIPELINE_RESUME` with their last pipeline stream sequence after mount or reconnect and replay missed branch, lineage, trace, image/video, and error events through the same `AiInteractionService` handler used for live events.
+
+For AI chat text, `StreamPublisher` also mirrors content into `AiChatProseMirrorStreamAssembler`. The assembler runs `@lixpi/markdown-stream-parser` on the API, applies the shared ProseMirror assembly rules from `@lixpi/prosemirror`, and writes `START` / `STEP` / `END` / `ERROR` events to the `document.steps.{workspaceId}.aiChatThread.{threadId}` subject. The browser applies those step events through `ProseMirrorAuthorityService`; it does not parse raw AI chat text into ProseMirror transactions.
+
+Media trace and final media events are sent through both paths: they remain pipeline events for canvas side effects, and they are mirrored into the ProseMirror stream so the persisted AI chat transcript contains generation details and final generated-media atom nodes. When the text phase ends before media completion, the assembler flushes text but defers the final ProseMirror `END` until cleanup, after final snapshot persistence.
+
 A **circuit breaker** bounds every request: `LLM_TIMEOUT_MS` (default 20 minutes) plus a shared `AbortController`. This matters most for video: a VEO submit+poll loop occupies a worker for minutes with no token traffic, so the poll loop publishes a `VIDEO_GENERATING` keepalive on a fixed interval to keep the browser informed while staying inside the breaker.
 
 {% callout type="important" %}
-This page intentionally does not enumerate the stream events. The complete catalog — `START_STREAM`, `STREAMING`, `END_STREAM`, `ERROR`, the image/video/branch/relevance events, and the collapsible wrappers — with their payloads and browser handling lives in [Streaming and Events](./STREAMING-AND-EVENTS.md).
+This page intentionally does not enumerate the stream events. The complete catalog, the pipeline replay log, and the ProseMirror step stream live in [Streaming and Events](./STREAMING-AND-EVENTS.md).
 {% /callout %}
 
 ## Request-to-Stream Sequence
 
-The end-to-end path for a text request: the browser publishes a message, the API validates and enriches it, then invokes the in-process workflow, which streams tokens directly back over NATS. (When the text model emits a media tool call, the image/video branch executes between the stream and usage accounting — see the branch detail on [Image Generation](../media-generation/IMAGE-GENERATION.md) and [Video Generation](../media-generation/VIDEO-GENERATION.md).)
+The end-to-end path for a text request: the browser publishes a message, the API validates and enriches it, then invokes the in-process workflow. Live pipeline events go over the per-thread receive subject; ProseMirror document mutations go over the document step subject and can be replayed after refresh. When the text model emits a media tool call, the image/video branch executes between text streaming and usage accounting; see [Image Generation](../media-generation/IMAGE-GENERATION.md) and [Video Generation](../media-generation/VIDEO-GENERATION.md).
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
@@ -271,6 +278,7 @@ sequenceDiagram
     participant API as API service
     participant LLM as LangGraph Workflow<br/>(in-process)
     participant AI as AI Provider
+    participant PM as ProseMirror Step Log
 
     %% ═══════════════════════════════════════════════════════════════
     %% PHASE 1: REQUEST
@@ -292,9 +300,12 @@ sequenceDiagram
         Note over WebUI, AI: PHASE 2 - INVOKE — API runs the workflow in-process
         API->>LLM: process(instanceKey, provider, payload)
         activate LLM
-        LLM->>NATS: START_STREAM (before pre-stream work)
-        NATS-->>WebUI: empty response shell
+        LLM->>NATS: persist + publish START_STREAM
+        LLM->>PM: publish document START
+        NATS-->>WebUI: receiving state
+        PM-->>WebUI: document START
         LLM->>LLM: resolveWorkspaceContext → resolveFeatures → resolveImageBranch
+        LLM->>LLM: planMediaBranchLineage
         LLM->>LLM: validateRequest
         deactivate API
     end
@@ -303,13 +314,15 @@ sequenceDiagram
     %% PHASE 3: STREAM
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(246, 199, 179)
-        Note over WebUI, AI: PHASE 3 - STREAM — Tokens flow directly to the client
+        Note over WebUI, AI: PHASE 3 - STREAM — Provider tokens become durable document steps
         LLM->>AI: stream request via vendor SDK
         activate AI
         loop Token Streaming
             AI-->>LLM: token chunk
-            LLM->>NATS: STREAMING { content }
-            NATS-->>WebUI: deliver token
+            LLM->>NATS: persist + publish STREAMING lifecycle payload
+            LLM->>PM: parse + publish STEP
+            NATS-->>WebUI: pipeline side event
+            PM-->>WebUI: Step.fromJSON
         end
         deactivate AI
     end
@@ -320,9 +333,13 @@ sequenceDiagram
     rect rgb(200, 220, 228)
         Note over WebUI, AI: PHASE 4 - COMPLETION — route after stream, then meter + finalize
         LLM->>LLM: routeAfterStream (video / image / skip)
+        LLM->>NATS: persist + publish trace/media events when media runs
+        LLM->>PM: mirror trace/media transcript nodes
         LLM->>LLM: calculateUsage → cleanup
-        LLM->>NATS: END_STREAM
-        NATS-->>WebUI: finalize response
+        LLM->>NATS: persist + publish END_STREAM
+        LLM->>PM: persist final snapshot + publish END
+        NATS-->>WebUI: pipeline complete
+        PM-->>WebUI: receiving false after finalVersion
         deactivate LLM
     end
 ```

@@ -977,6 +977,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // actively streaming so the response line tracks the doc token-by-token; it is
     // cleared once the store catches up via onEditorChange.
     const liveAiChatThreadContentOverrides: Map<string, object> = new Map()
+    const pendingAiChatThreadRefreshTimers: Map<string, number[]> = new Map()
     let edgesRaf: number | null = null
     let transformSideEffectsRaf: number | null = null
     let pendingHandleZoom: number | null = null
@@ -4422,6 +4423,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return Boolean(thread && thread.content != null && typeof thread.content === 'object' && Object.keys(thread.content).length > 0)
     }
 
+    function proseMirrorContentHasInProgressAiContent(value: unknown): boolean {
+        if (!value || typeof value !== 'object') return false
+        const node = value as { attrs?: Record<string, unknown>; content?: unknown[] }
+        const attrs = node.attrs ?? {}
+        if (attrs.isReceivingAnimation || attrs.isStreaming || attrs.isPartial) return true
+        return Boolean(node.content?.some(proseMirrorContentHasInProgressAiContent))
+    }
+
+    function aiChatThreadHasInProgressContent(thread: AiChatThread | undefined): boolean {
+        return proseMirrorContentHasInProgressAiContent(thread?.content)
+    }
+
+    function getStoredProseMirrorVersion(record: unknown): number {
+        const version = (record as { proseMirrorVersion?: unknown } | undefined)?.proseMirrorVersion
+        return typeof version === 'number' && Number.isInteger(version) && version >= 0 ? version : 0
+    }
+
     function countProseMirrorNodesByType(value: unknown, nodeTypes: Set<string>): number {
         if (!value || typeof value !== 'object') return 0
 
@@ -4940,6 +4958,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         subscribedFeatureExtractionRunSubjects.set(extractionRunId, { subject, errorSubject })
 
         let currentReasoningStage = 'router'
+        const processedPipelineEventIds = new Set<string>()
+        let pipelineLocalStreamSeq = 0
         const saveUpdatedState = (
             updater: (state: CanvasFeatureExtractionState) => CanvasFeatureExtractionState,
             refreshImmediately = false,
@@ -4952,7 +4972,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             scheduleFeatureExtractionPanelRefresh(extractionRunId, refreshImmediately)
         }
 
-        nats.subscribe(subject, (data: any) => {
+        const shouldProcessPipelinePayload = (data: any): boolean => {
+            const pipelineEventId = typeof data?.pipelineEventId === 'string' ? data.pipelineEventId : ''
+            const pipelineStreamSeq = typeof data?.pipelineStreamSeq === 'number' ? data.pipelineStreamSeq : 0
+
+            if (pipelineEventId) {
+                if (processedPipelineEventIds.has(pipelineEventId)) {
+                    pipelineLocalStreamSeq = Math.max(pipelineLocalStreamSeq, pipelineStreamSeq)
+                    return false
+                }
+                processedPipelineEventIds.add(pipelineEventId)
+            }
+
+            pipelineLocalStreamSeq = Math.max(pipelineLocalStreamSeq, pipelineStreamSeq)
+            return true
+        }
+
+        const handleFeatureExtractionResponse = (data: any): void => {
+            if (!shouldProcessPipelinePayload(data)) return
             if (data?.error) {
                 saveUpdatedState((state) => ({
                     ...state,
@@ -5009,7 +5046,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     updatedAt: Date.now(),
                 }), true)
             }
-        })
+        }
+
+        nats.subscribe(subject, handleFeatureExtractionResponse)
 
         nats.subscribe(errorSubject, (data: any) => {
             saveUpdatedState((state) => ({
@@ -5019,6 +5058,33 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 updatedAt: Date.now(),
             }), true)
         })
+
+        const resumeFeatureExtractionPipeline = async (): Promise<void> => {
+            try {
+                const result = await nats.request(NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME, {
+                    token: await AuthService.getTokenSilently(),
+                    workspaceId,
+                    pipelineId: extractionRunId,
+                    localStreamSeq: pipelineLocalStreamSeq,
+                }) as {
+                    error?: unknown
+                    events?: Array<{ payload: Record<string, any>; streamSequence: number }>
+                }
+                if (result?.error) {
+                    console.error('[FEATURE_EXTRACTION] CHAT_PIPELINE_RESUME failed:', result.error)
+                    return
+                }
+                for (const event of result.events ?? []) {
+                    handleFeatureExtractionResponse({
+                        ...event.payload,
+                        pipelineStreamSeq: event.streamSequence,
+                    })
+                }
+            } catch (error) {
+                console.error('[FEATURE_EXTRACTION] CHAT_PIPELINE_RESUME failed:', error)
+            }
+        }
+        void resumeFeatureExtractionPipeline()
     }
 
     function getPersistedFeatureExtractionState(extractionRunId: string): CanvasFeatureExtractionState | undefined {
@@ -5729,7 +5795,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         hasContent = aiChatThreadHasRenderableContent(thread)
         const promptControlFactories = getPromptControlFactories()
-        let activeAiService: AiInteractionService | null = null
         if (showingThread && panelThreadId) {
             const editorContent = hasContent && thread
                 ? thread.content
@@ -5740,8 +5805,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         { type: 'aiChatThread', attrs: { threadId: panelThreadId }, content: [] },
                     ],
                 }
-            activeAiService = new AiInteractionService({ workspaceId, aiChatThreadId: panelThreadId })
-            const aiService = activeAiService
+            let aiService: AiInteractionService | null = null
+            const getAiService = (): AiInteractionService => {
+                if (!aiService) throw new Error('AI interaction service is not initialized')
+                return aiService
+            }
             const editor = new ProseMirrorEditor({
                 editorMountElement: editorContainer,
                 content: html`<div></div>` as HTMLDivElement,
@@ -5749,7 +5817,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 isDisabled: true,
                 documentType: 'aiChatThread',
                 threadId: panelThreadId,
+                proseMirrorAuthority: {
+                    workspaceId,
+                    docType: 'aiChatThread',
+                    docId: panelThreadId,
+                    baseVersion: getStoredProseMirrorVersion(thread),
+                    receiveOnly: true,
+                },
                 aiChatThreadRenderContext: {
+                    proseMirrorBaseVersion: getStoredProseMirrorVersion(thread),
                     contextPreview: getAiUserMessageContextPreviewRenderer(),
                     traceDetailsOptions: createCanvasTraceDetailsOptions(
                         'canvas-generated-media-trace-details workspace-ai-chat-panel-trace-details',
@@ -5765,10 +5841,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 },
                 // Streamed AI tokens are dispatched with skipDispatch, so they never
                 // reach onEditorChange or the store. Mirror the live doc into the
-                // override and refresh so the marker's response preview tracks the
-                // sliced tail token-by-token instead of only updating once finished.
+                // local cache/override and refresh so the marker's response preview
+                // tracks the sliced tail token-by-token instead of only updating once finished.
                 onStreamingUpdate: (value: any) => {
                     liveAiChatThreadContentOverrides.set(panelThreadId, value)
+                    rememberAiChatThreadContent(panelThreadId, value)
                     refreshBranchMarkersForAiChatThread(panelThreadId)
                     refreshGeneratedMediaProjectionsForAiChatThread(panelThreadId)
                 },
@@ -5843,7 +5920,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             }
                         }
 
-                        aiService.sendChatMessage({
+                        await getAiService().sendChatMessage({
                             messages: messagesWithContext,
                             aiReasoningModels: aiReasoningModels ?? [],
                             useMultipleReasoningModels,
@@ -5871,7 +5948,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     }
                 },
                 onAiChatStop: () => {
-                    aiService.stopChatMessage()
+                    void getAiService().stopChatMessage()
                 },
                 onPromptSubmit: () => {},
                 onPromptStop: () => {},
@@ -5889,6 +5966,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             })
 
+            aiService = new AiInteractionService({ workspaceId, aiChatThreadId: panelThreadId })
             threadEditors.set(panelThreadId, {
                 editor,
                 aiService,
@@ -6074,11 +6152,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createDetachedCanvasThreadEditor({
         thread,
         submittedData,
-        explicitContextNodeIds,
+        explicitContextNodeIds = [],
     }: {
         thread: AiChatThread
-        submittedData: AiPromptComposerSubmitData
-        explicitContextNodeIds: string[]
+        submittedData?: AiPromptComposerSubmitData
+        explicitContextNodeIds?: string[]
     }): AiChatThreadEditorEntry {
         const threadId = thread.threadId
         const host = ensureDetachedAiChatThreadHostElement()
@@ -6087,8 +6165,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ` as HTMLDivElement
         host.appendChild(containerEl)
 
-        const aiService = new AiInteractionService({ workspaceId, aiChatThreadId: threadId })
-        activeCanvasRunServices.set(threadId, aiService)
+        let aiService: AiInteractionService | null = null
+        const getAiService = (): AiInteractionService => {
+            if (!aiService) throw new Error('AI interaction service is not initialized')
+            return aiService
+        }
 
         const editor = new ProseMirrorEditor({
             editorMountElement: containerEl,
@@ -6097,7 +6178,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             isDisabled: false,
             documentType: 'aiChatThread',
             threadId,
+            proseMirrorAuthority: {
+                workspaceId,
+                docType: 'aiChatThread',
+                docId: threadId,
+                baseVersion: getStoredProseMirrorVersion(thread),
+                receiveOnly: true,
+            },
             aiChatThreadRenderContext: {
+                proseMirrorBaseVersion: getStoredProseMirrorVersion(thread),
                 contextPreview: getAiUserMessageContextPreviewRenderer(),
             },
             onEditorChange: (value: any) => {
@@ -6109,10 +6198,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             },
             // Streamed AI tokens are dispatched with skipDispatch, so they never
             // reach onEditorChange or the store. Mirror the live doc into the
-            // override and refresh so the marker's response preview tracks the
-            // sliced tail token-by-token instead of only updating once finished.
+            // local cache/override and refresh so the marker's response preview
+            // tracks the sliced tail token-by-token instead of only updating once finished.
             onStreamingUpdate: (value: any) => {
                 liveAiChatThreadContentOverrides.set(threadId, value)
+                rememberAiChatThreadContent(threadId, value)
                 refreshBranchMarkersForAiChatThread(threadId)
                 refreshGeneratedMediaProjectionsForAiChatThread(threadId)
             },
@@ -6130,6 +6220,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 proseMirrorBaseVersion,
             }: any) => {
                 try {
+                    if (!submittedData) return
+
                     const currentDoc = editor.editorView?.state?.doc
                     if (currentDoc?.toJSON) {
                         onAiChatThreadContentChange?.({ workspaceId, threadId, content: currentDoc.toJSON() })
@@ -6196,7 +6288,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         }
                     }
 
-                    await aiService.sendChatMessage({
+                    await getAiService().sendChatMessage({
                         messages: messagesWithContext,
                         aiReasoningModels: aiReasoningModels ?? [],
                         useMultipleReasoningModels,
@@ -6225,7 +6317,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             },
             onAiChatStop: () => {
-                aiService.stopChatMessage()
+                void getAiService().stopChatMessage()
             },
             onPromptSubmit: () => {},
             onPromptStop: () => {},
@@ -6233,12 +6325,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             promptControlFactories: getPromptControlFactories(),
             onReceivingStateChange: (receivingThreadId: string, receiving: boolean) => {
                 promptInputController.setReceiving(receivingThreadId, receiving)
+                const currentDoc = editor.editorView?.state?.doc
+                if (currentDoc?.toJSON) {
+                    rememberAiChatThreadContent(receivingThreadId, currentDoc.toJSON())
+                    refreshBranchMarkersForAiChatThread(receivingThreadId)
+                    refreshGeneratedMediaProjectionsForAiChatThread(receivingThreadId)
+                }
                 if (!receiving && !pendingGeneratedImagePlacements.has(receivingThreadId)) {
                     scheduleDetachedCanvasRunTeardown(receivingThreadId)
                 }
             },
         })
 
+        aiService = new AiInteractionService({ workspaceId, aiChatThreadId: threadId })
+        activeCanvasRunServices.set(threadId, aiService)
         const entry: AiChatThreadEditorEntry = {
             editor,
             aiService,
@@ -6249,6 +6349,43 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             editorView: editor.editorView,
         })
         return entry
+    }
+
+    function ensureDetachedCanvasRunTeardown(threadId: string): void {
+        if (activeCanvasRunTeardownsByThread.has(threadId)) return
+        const teardown = () => teardownDetachedCanvasRun(threadId)
+        activeCanvasRunTeardowns.add(teardown)
+        activeCanvasRunTeardownsByThread.set(threadId, teardown)
+    }
+
+    function getActiveDetachedCanvasRunThreadIds(): string[] {
+        if (!currentCanvasState) return []
+
+        const threadIds = new Set<string>()
+        const threadsById = new Map(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
+        for (const node of currentCanvasState.nodes) {
+            if (!isBranchMarkerNode(node)) continue
+            const threadId = getBranchMarkerThreadId(node)
+            if (!isDetachedCanvasThreadId(threadId)) continue
+            const thread = threadsById.get(threadId)
+            if (!thread) continue
+            if (!isBranchMarkerGenerationActive(node) && !aiChatThreadHasInProgressContent(thread)) continue
+            threadIds.add(threadId)
+        }
+        return [...threadIds]
+    }
+
+    function reattachDetachedCanvasRunListenersForActiveMarkers(): void {
+        for (const threadId of getActiveDetachedCanvasRunThreadIds()) {
+            if (detachedAiChatThreadEditors.has(threadId)) continue
+            const thread = getPersistedAiChatThread(threadId)
+            if (!thread) continue
+
+            activeCanvasRunIds.add(threadId)
+            ensureDetachedCanvasRunTeardown(threadId)
+            promptInputController.setReceiving(threadId, true)
+            createDetachedCanvasThreadEditor({ thread })
+        }
     }
 
     // Runs a detached, canvas-wide generation as a standalone ProseMirror-backed
@@ -6290,9 +6427,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ? currentAiChatThreads.map((existing) => existing.threadId === threadId ? thread : existing)
                 : [...currentAiChatThreads, thread]
             activeCanvasRunIds.add(threadId)
-            const teardown = () => teardownDetachedCanvasRun(threadId)
-            activeCanvasRunTeardowns.add(teardown)
-            activeCanvasRunTeardownsByThread.set(threadId, teardown)
+            ensureDetachedCanvasRunTeardown(threadId)
             createDetachedCanvasThreadEditor({
                 thread,
                 submittedData: data,
@@ -6366,6 +6501,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (key === placementKey || key.startsWith(placementPrefix)) return true
         }
         return false
+    }
+
+    function hasCanvasBranchMarkerForPlacement(placementKey: string): boolean {
+        if (!currentCanvasState) return false
+
+        const [threadId, generationRequestId] = placementKey.split(':')
+        const placementIds = new Set<string>(
+            [placementKey, threadId, generationRequestId].filter((value): value is string => Boolean(value)),
+        )
+        return currentCanvasState.nodes.some((node: CanvasNode) => {
+            if (!isBranchMarkerNode(node)) return false
+            return placementIds.has(getBranchMarkerThreadId(node)) || placementIds.has(node.generationRequestId)
+        })
     }
 
     function addUniquePendingBranchMarkerKey(keys: string[], key: string | undefined): void {
@@ -6465,6 +6613,88 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return normalizeBranchMarkerModelValue(record.reasoningModelId) === normalizeBranchMarkerModelValue(generationRun.reasoningModelId)
         }
         return !record.reasoningModelId && record.reasoningIndex == null
+    }
+
+    function createPendingBranchMarkerRecordFromCanvasNode(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        node: BranchMarkerNode,
+    ): PendingBranchMarkerRecord {
+        const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
+        const lineageAssignment = getApiMediaRunLineageAssignment(generationRun)
+        const runNode = node as Partial<BranchForkCanvasNode & BranchLineCanvasNode>
+        const reasoningModelId = node.pendingState?.reasoningModelId
+            ?? runNode.reasoningModelId
+            ?? generationRun?.reasoningModelId
+            ?? lineageAssignment?.reasoningModelId
+        const reasoningIndex = node.pendingState?.reasoningIndex
+            ?? runNode.reasoningIndex
+            ?? generationRun?.reasoningIndex
+        return {
+            nodeId: node.nodeId,
+            placementKey,
+            threadId: getBranchMarkerThreadId(node) || threadId,
+            ...(reasoningModelId ? { reasoningModelId } : {}),
+            ...(reasoningIndex == null ? {} : { reasoningIndex }),
+        }
+    }
+
+    function recoverPendingBranchMarkerRecordFromCanvasState(
+        threadId: string,
+        generationRun?: MediaGenerationRunMeta,
+    ): PendingBranchMarkerRecord | undefined {
+        if (!currentCanvasState) return undefined
+
+        const lineageAssignment = getApiMediaRunLineageAssignment(generationRun)
+        const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
+        const candidates = currentCanvasState.nodes.filter((node: CanvasNode): node is BranchMarkerNode =>
+            isBranchMarkerNode(node)
+            && Boolean(node.pendingState)
+            && getBranchMarkerThreadId(node) === threadId
+        )
+        if (candidates.length === 0) return undefined
+
+        const lineageNodeIds = new Set([
+            lineageAssignment?.branchForkNodeId,
+            lineageAssignment?.branchLineNodeId,
+            lineageAssignment?.branchOriginNodeId,
+        ].filter((nodeId): nodeId is string => Boolean(nodeId)))
+        const matchingLineageNode = lineageNodeIds.size > 0
+            ? candidates.find(node => lineageNodeIds.has(node.nodeId))
+            : undefined
+        const matchingRunNode = candidates.find((node) => {
+            const runNode = node as Partial<BranchForkCanvasNode & BranchLineCanvasNode>
+            return Boolean(
+                (generationRun?.reasoningRunId && runNode.reasoningRunId === generationRun.reasoningRunId)
+                || (lineageAssignment?.reasoningRunId && runNode.reasoningRunId === lineageAssignment.reasoningRunId)
+                || (generationRun?.mediaRunId && runNode.mediaRunId === generationRun.mediaRunId)
+                || (lineageAssignment?.mediaRunId && runNode.mediaRunId === lineageAssignment.mediaRunId)
+            )
+        })
+        const matchingReasoningIndex = generationRun?.reasoningIndex == null
+            ? undefined
+            : candidates.find(node => node.pendingState?.reasoningIndex === generationRun.reasoningIndex)
+        const matchingReasoningModel = generationRun?.reasoningModelId
+            ? candidates.find(node =>
+                normalizeBranchMarkerModelValue(node.pendingState?.reasoningModelId)
+                    === normalizeBranchMarkerModelValue(generationRun.reasoningModelId)
+            )
+            : undefined
+        const requestMatches = generationRun?.generationRequestId
+            ? candidates.filter(node => node.generationRequestId === generationRun.generationRequestId)
+            : []
+        const matchingNode = matchingLineageNode
+            ?? matchingRunNode
+            ?? matchingReasoningIndex
+            ?? matchingReasoningModel
+            ?? (requestMatches.length === 1 ? requestMatches[0] : undefined)
+            ?? (candidates.length === 1 ? candidates[0] : undefined)
+        if (!matchingNode) return undefined
+
+        const record = createPendingBranchMarkerRecordFromCanvasNode(threadId, generationRun, matchingNode)
+        pendingBranchMarkers.set(placementKey, record)
+        setPendingBranchMarkerRecordAliases(threadId, generationRun, record)
+        return record
     }
 
     function setPendingBranchMarkerRecordAliases(
@@ -6650,7 +6880,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         promptText: string,
         data: AiPromptComposerSubmitData,
     ): void {
-        if (!currentCanvasState || hasPendingBranchMarkerForPlacement(placementKey)) return
+        if (!currentCanvasState || hasPendingBranchMarkerForPlacement(placementKey) || hasCanvasBranchMarkerForPlacement(placementKey)) return
 
         const pendingStates = getPendingBranchMarkerModelStates(data, promptText)
         const pendingNodes: BranchLineCanvasNode[] = []
@@ -6694,7 +6924,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             pendingNodes.push(pendingNode)
             stackOffsetY += screenFixedDimensions.height + stackGap
         })
-        commitCanvasStatePreservingEditors({
+        commitTransientCanvasStatePreservingEditors({
             ...currentCanvasState,
             nodes: [...currentCanvasState.nodes, ...pendingNodes],
         })
@@ -6732,7 +6962,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return threadRecord
         }
 
-        return undefined
+        return recoverPendingBranchMarkerRecordFromCanvasState(threadId, generationRun)
     }
 
     function preserveBranchMarkerPreviewStateAcrossPromotion(
@@ -6789,7 +7019,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         const threadRecord = placementKey !== threadId ? pendingBranchMarkers.get(threadId) : undefined
-        if (!threadRecord || !pendingBranchMarkerRecordMatchesGenerationRun(threadRecord, generationRun)) return undefined
+        if (!threadRecord || !pendingBranchMarkerRecordMatchesGenerationRun(threadRecord, generationRun)) {
+            return recoverPendingBranchMarkerRecordFromCanvasState(threadId, generationRun)
+        }
 
         const migrated = { ...threadRecord, placementKey }
         pendingBranchMarkers.set(placementKey, migrated)
@@ -7265,15 +7497,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!placement) return
 
         if (!generationRun?.generationRequestId) {
+            clearPendingBranchMarkerStateForRun(threadId, generationRun)
+            schedulePersistedAiChatThreadRefreshForBranchMarkers(threadId)
             pendingGeneratedImagePlacements.delete(placementKey)
             clearGeneratingReferenceNodeIds(placementKey)
             forgetPendingBranchMarkerRecordForRun(threadId, generationRun)
-            if (activeCanvasRunIds.has(threadId)) scheduleDetachedCanvasRunTeardown(threadId)
             return
         }
 
         const activeRunKeys = new Set(placement.activeRunKeys ?? [])
         activeRunKeys.delete(getGeneratedMediaRunKey(threadId, generationRun))
+        if (generationRun.reasoningRunId) activeRunKeys.delete(generationRun.reasoningRunId)
+        if (generationRun.mediaRunId) activeRunKeys.delete(generationRun.mediaRunId)
+        clearPendingBranchMarkerStateForRun(threadId, generationRun)
+        schedulePersistedAiChatThreadRefreshForBranchMarkers(threadId)
         if (activeRunKeys.size > 0) {
             pendingGeneratedImagePlacements.set(placementKey, {
                 ...placement,
@@ -7292,7 +7529,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (key.startsWith(initialReasoningModelPrefix)) pendingBranchMarkers.delete(key)
             }
         }
-        if (activeCanvasRunIds.has(threadId)) scheduleDetachedCanvasRunTeardown(threadId)
     }
 
     function clearPendingGeneratedMediaPlacementsForThread(threadId: string): void {
@@ -7678,6 +7914,46 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         currentAiChatThreads = currentAiChatThreads.some((candidate: AiChatThread) => candidate.threadId === threadId)
             ? currentAiChatThreads.map((candidate: AiChatThread) => candidate.threadId === threadId ? updatedThread : candidate)
             : [...currentAiChatThreads, updatedThread]
+    }
+
+    function rememberAiChatThreadRecord(thread: AiChatThread): void {
+        currentAiChatThreads = currentAiChatThreads.some((candidate: AiChatThread) => candidate.threadId === thread.threadId)
+            ? currentAiChatThreads.map((candidate: AiChatThread) => candidate.threadId === thread.threadId ? thread : candidate)
+            : [...currentAiChatThreads, thread]
+        aiChatThreadsStore.addThread(thread)
+    }
+
+    async function refreshPersistedAiChatThreadForBranchMarkers(threadId: string): Promise<void> {
+        const aiChatThreadService = servicesStore.getData('aiChatThreadService')
+        if (!aiChatThreadService?.getAiChatThread) return
+
+        const thread = await aiChatThreadService.getAiChatThread({ workspaceId, threadId }) as AiChatThread | null
+        if (!thread || thread.workspaceId !== workspaceId) return
+
+        const currentThread = getPersistedAiChatThread(threadId)
+        const currentVersion = getStoredProseMirrorVersion(currentThread)
+        const fetchedVersion = getStoredProseMirrorVersion(thread)
+        if (fetchedVersion < currentVersion) return
+
+        rememberAiChatThreadRecord(thread)
+        liveAiChatThreadContentOverrides.delete(threadId)
+        refreshBranchMarkersForAiChatThread(threadId)
+        refreshGeneratedMediaProjectionsForAiChatThread(threadId)
+    }
+
+    function schedulePersistedAiChatThreadRefreshForBranchMarkers(threadId: string): void {
+        for (const timer of pendingAiChatThreadRefreshTimers.get(threadId) ?? []) {
+            window.clearTimeout(timer)
+        }
+
+        const timers = [400, 1400, 3000].map(delayMs =>
+            window.setTimeout(() => {
+                void refreshPersistedAiChatThreadForBranchMarkers(threadId).catch((error) => {
+                    console.error('[CANVAS] failed to refresh AI chat thread after media completion', { threadId, error })
+                })
+            }, delayMs)
+        )
+        pendingAiChatThreadRefreshTimers.set(threadId, timers)
     }
 
     function getAiChatThreadContentForProjection(threadId: string): unknown {
@@ -8545,6 +8821,160 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return buildImageSrc('', '', false)
     }
 
+    function generatedMediaNodeMatchesGenerationRun(
+        node: CanvasNode,
+        mediaType: 'image' | 'video',
+        threadId: string,
+        generationRun?: MediaGenerationRunMeta,
+    ): node is ImageCanvasNode | VideoCanvasNode {
+        if ((node.type !== 'image' && node.type !== 'video') || node.type !== mediaType) return false
+        const generatedBy = node.generatedBy
+        if (!generationRun || !generatedBy || generatedBy.aiChatThreadId !== threadId) return false
+        const lineageAssignment = getApiMediaRunLineageAssignment(generationRun)
+        const mediaRunId = generationRun.mediaRunId ?? lineageAssignment?.mediaRunId
+        if (mediaRunId && generatedBy.mediaRunId === mediaRunId) return true
+
+        if (generatedBy.generationRequestId !== generationRun.generationRequestId) return false
+        if (generationRun.mediaType && generationRun.mediaType !== mediaType) return false
+        if (lineageAssignment?.mediaType && lineageAssignment.mediaType !== mediaType) return false
+        if (generationRun.reasoningRunId && generatedBy.reasoningRunId && generatedBy.reasoningRunId !== generationRun.reasoningRunId) return false
+
+        const mediaModelId = generationRun.mediaModelId ?? lineageAssignment?.mediaModelId
+        if (mediaModelId) return generatedBy.mediaModelId === mediaModelId
+
+        const branchLineNodeId = generationRun.lineageAssignment?.branchLineNodeId ?? lineageAssignment?.branchLineNodeId
+        if (branchLineNodeId) return generatedBy.branchLineNodeId === branchLineNodeId
+
+        return Boolean(generatedBy.reasoningRunId && generatedBy.reasoningRunId === generationRun.reasoningRunId)
+    }
+
+    function findGeneratedMediaNodeForRun(
+        mediaType: 'image' | 'video',
+        threadId: string,
+        generationRun?: MediaGenerationRunMeta,
+    ): ImageCanvasNode | VideoCanvasNode | undefined {
+        return currentCanvasState?.nodes.find((node: CanvasNode) =>
+            generatedMediaNodeMatchesGenerationRun(node, mediaType, threadId, generationRun)
+        )
+    }
+
+    function getGeneratedMediaSourceNodeId(nodeId: string): string | undefined {
+        return currentCanvasState?.edges.find((edge: WorkspaceEdge) => edge.targetNodeId === nodeId)?.sourceNodeId
+    }
+
+    function hasGeneratedImageFrame(node: ImageCanvasNode): boolean {
+        return Boolean(node.fileId || (node.src && node.src !== buildImageSrc('', '', false)))
+    }
+
+    function hasGeneratedVideoFrame(node: VideoCanvasNode): boolean {
+        return Boolean(node.fileId || node.posterFileId || node.frameFileId || node.src || node.posterSrc)
+    }
+
+    function rememberPartialImageTrackerForNode(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        imageNode: ImageCanvasNode,
+    ): PendingGeneratedMediaTracker {
+        const sourceNodeId = getGeneratedMediaSourceNodeId(imageNode.nodeId)
+        const tracker: PendingGeneratedMediaTracker = {
+            nodeId: imageNode.nodeId,
+            fileId: imageNode.fileId,
+            placementKey: getGeneratedMediaPlacementKey(threadId, generationRun),
+            hasReceivedFrame: hasGeneratedImageFrame(imageNode),
+            ...(sourceNodeId ? { sourceNodeId } : {}),
+        }
+        partialImageTracker.set(getGeneratedMediaRunKey(threadId, generationRun), tracker)
+        return tracker
+    }
+
+    function rememberVideoGenerationTrackerForNode(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        videoNode: VideoCanvasNode,
+    ): PendingGeneratedMediaTracker {
+        const sourceNodeId = getGeneratedMediaSourceNodeId(videoNode.nodeId)
+        const tracker: PendingGeneratedMediaTracker = {
+            nodeId: videoNode.nodeId,
+            fileId: videoNode.fileId,
+            placementKey: getGeneratedMediaPlacementKey(threadId, generationRun),
+            hasReceivedFrame: hasGeneratedVideoFrame(videoNode),
+            ...(sourceNodeId ? { sourceNodeId } : {}),
+        }
+        videoGenerationTracker.set(getGeneratedMediaRunKey(threadId, generationRun), tracker)
+        return tracker
+    }
+
+    function getGeneratedMediaDuplicateNodeIds(
+        nodes: CanvasNode[],
+        mediaType: 'image' | 'video',
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        keepNodeId: string,
+    ): Set<string> {
+        return new Set(
+            nodes
+                .filter((node: CanvasNode) =>
+                    node.nodeId !== keepNodeId
+                    && generatedMediaNodeMatchesGenerationRun(node, mediaType, threadId, generationRun)
+                )
+                .map((node: CanvasNode) => node.nodeId)
+        )
+    }
+
+    function removeGeneratedMediaDuplicateDom(nodeIds: Set<string>): void {
+        for (const nodeId of nodeIds) {
+            selectedNodeIds.delete(nodeId)
+            partialImageTracker.forEach((tracker, runKey) => {
+                if (tracker.nodeId === nodeId) partialImageTracker.delete(runKey)
+            })
+            videoGenerationTracker.forEach((tracker, runKey) => {
+                if (tracker.nodeId === nodeId) videoGenerationTracker.delete(runKey)
+            })
+            viewportEl?.querySelector(`[data-node-id="${nodeId}"]`)?.remove()
+        }
+    }
+
+    function withoutGeneratedMediaDuplicateNodes(
+        state: CanvasState,
+        mediaType: 'image' | 'video',
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        keepNodeId: string,
+    ): { state: CanvasState; duplicateNodeIds: Set<string> } {
+        const duplicateNodeIds = getGeneratedMediaDuplicateNodeIds(state.nodes, mediaType, threadId, generationRun, keepNodeId)
+        if (duplicateNodeIds.size === 0) return { state, duplicateNodeIds }
+
+        return {
+            state: {
+                ...state,
+                nodes: state.nodes.filter((node: CanvasNode) => !duplicateNodeIds.has(node.nodeId)),
+                edges: state.edges.filter((edge: WorkspaceEdge) =>
+                    !duplicateNodeIds.has(edge.sourceNodeId) && !duplicateNodeIds.has(edge.targetNodeId)
+                ),
+            },
+            duplicateNodeIds,
+        }
+    }
+
+    function commitGeneratedMediaDuplicateCleanup(
+        mediaType: 'image' | 'video',
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        keepNodeId: string,
+    ): void {
+        if (!currentCanvasState) return
+        const { state, duplicateNodeIds } = withoutGeneratedMediaDuplicateNodes(currentCanvasState, mediaType, threadId, generationRun, keepNodeId)
+        if (duplicateNodeIds.size === 0) return
+
+        const resolvedTreeState = resolveGeneratedMediaTreeState(state.nodes, state.edges)
+        commitCanvasStatePreservingEditors({
+            ...state,
+            nodes: resolvedTreeState.nodes,
+            edges: resolvedTreeState.edges,
+        })
+        removeGeneratedMediaDuplicateDom(duplicateNodeIds)
+    }
+
     // Append an image node to the DOM directly without a full renderNodes() cycle.
     // This preserves active editors and their streaming state.
     function syncConnectionManagerForCurrentCanvasState(options: { flushPixi?: boolean } = {}): void {
@@ -8621,6 +9051,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // and skips renderNodes(). The caller manages DOM updates manually.
     function commitCanvasStatePreservingEditors(nextState: CanvasState): void {
         commitCanvasState(nextState)
+        lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
+    }
+
+    function commitTransientCanvasStatePreservingEditors(nextState: CanvasState): void {
+        const prunedState = pruneUnconfirmedFeatureExtractionRuns(nextState).state ?? nextState
+        canvasMediaNodeLifecycle.trackCanvasState(prunedState)
+        currentCanvasState = prunedState
+        pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(prunedState)
+
+        syncCanvasNodeDomGeometry(prunedState.nodes)
+        syncPixiMediaLayer(prunedState)
+        syncConnectionManagerForCurrentCanvasState()
+        pixiMediaLayer?.renderNow()
+        lastVisualSyncKey = getCanvasVisualSyncKey(prunedState)
         lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
     }
 
@@ -8782,7 +9226,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
             registerGeneratedMediaRun(threadId, generationRun)
 
-            const existing = partialImageTracker.get(runKey)
+            let existing = partialImageTracker.get(runKey)
+            if (!existing) {
+                const existingImageNode = findGeneratedMediaNodeForRun('image', threadId, generationRun)
+                if (existingImageNode?.type === 'image') {
+                    if (existingImageNode.fileId && !imageUrl && !fileId) return
+                    existing = rememberPartialImageTrackerForNode(threadId, generationRun, existingImageNode)
+                }
+            }
 
             if (existing) {
                 const receivedFirstFrame = !existing.hasReceivedFrame && Boolean(imageUrl)
@@ -8819,7 +9270,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         ? rebalanceGeneratedMediaTrees(updatedNodes, currentCanvasState.edges)
                         : updatedNodes
 
-                    commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: resolvedNodes })
+                    commitTransientCanvasStatePreservingEditors({ ...currentCanvasState, nodes: resolvedNodes })
                 }
                 return
             }
@@ -8906,7 +9357,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodes: rebalancedNodes,
                 edges: newEdges,
             }
-            commitCanvasStatePreservingEditors(newCanvasState)
+            commitTransientCanvasStatePreservingEditors(newCanvasState)
             if (branchOriginNode) {
                 const placedBranchOriginNode =
                     (rebalancedNodes.find((n: CanvasNode) => n.nodeId === branchOriginNode.nodeId) as BranchOriginCanvasNode | undefined)
@@ -8927,12 +9378,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             registerGeneratedMediaRun(threadId, generationRun)
             const completionMediaModelId = generationRun?.mediaModelId ?? buildAiModelId(imageModelProvider, imageModelId ?? '')
 
-            const partial = partialImageTracker.get(runKey)
+            let partial = partialImageTracker.get(runKey)
+            if (!partial) {
+                const existingImageNode = findGeneratedMediaNodeForRun('image', threadId, generationRun)
+                if (existingImageNode?.type === 'image') {
+                    partial = rememberPartialImageTrackerForNode(threadId, generationRun, existingImageNode)
+                }
+            }
 
             if (partial) {
                 const receivedFirstFrame = !partial.hasReceivedFrame
                 if (!getApiMediaRunLineageAssignment(generationRun)) {
                     console.error('[CANVAS] Missing API media lineage assignment for image completion', { threadId, generationRun })
+                    finishGeneratedMediaRun(threadId, generationRun)
+                    return
+                }
+                if (!currentCanvasState) {
+                    finishGeneratedMediaRun(threadId, generationRun)
+                    return
+                }
+                const existingImageNode = getCurrentCanvasMediaNode(partial.nodeId)
+                if (existingImageNode?.type === 'image' && fileId && existingImageNode.fileId === fileId) {
+                    commitGeneratedMediaDuplicateCleanup('image', threadId, generationRun, existingImageNode.nodeId)
+                    partialImageTracker.delete(runKey)
+                    syncPixiGeneratingImageNodes()
                     finishGeneratedMediaRun(threadId, generationRun)
                     return
                 }
@@ -8983,14 +9452,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 // PIXI removes the progress border when the tracker is cleared and this state commits.
                 // Re-tidy the lineage tree the finalized node belongs to and
                 // rigid-separate it from neighbors via the unchanged resolver.
-                const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, edges)
+                const deduped = withoutGeneratedMediaDuplicateNodes({
+                    ...currentCanvasState,
+                    nodes,
+                    edges,
+                }, 'image', threadId, generationRun, partial.nodeId)
+                const resolvedNodes = rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)
 
                 commitCanvasState({
-                    ...(currentCanvasState ?? {}),
-                    viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                    ...deduped.state,
                     nodes: resolvedNodes,
-                    edges,
+                    edges: deduped.state.edges,
                 })
+                removeGeneratedMediaDuplicateDom(deduped.duplicateNodeIds)
                 finishGeneratedMediaRun(threadId, generationRun)
                 const completedImageNode = getCurrentCanvasMediaNode(partial.nodeId)
                 queueCanvasMediaAnalysis(
@@ -9117,6 +9591,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             registerGeneratedMediaRun(threadId, generationRun)
 
             if (videoGenerationTracker.has(runKey)) return
+            const existingVideoNode = findGeneratedMediaNodeForRun('video', threadId, generationRun)
+            if (existingVideoNode?.type === 'video') {
+                if (hasGeneratedVideoFrame(existingVideoNode)) return
+                rememberVideoGenerationTrackerForNode(threadId, generationRun, existingVideoNode)
+                syncPixiGeneratingImageNodes()
+                return
+            }
 
             // Placeholder is square until the attached <video> reports the MP4's
             // intrinsic dimensions; handleVideoIntrinsicSize re-fits the node,
@@ -9198,7 +9679,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodes: rebalancedNodes,
                 edges: newEdges,
             }
-            commitCanvasStatePreservingEditors(newCanvasState)
+            commitTransientCanvasStatePreservingEditors(newCanvasState)
             if (branchOriginNode) {
                 const placedBranchOriginNode =
                     (rebalancedNodes.find((n: CanvasNode) => n.nodeId === branchOriginNode.nodeId) as BranchOriginCanvasNode | undefined)
@@ -9250,12 +9731,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const runKey = getGeneratedMediaRunKey(threadId, generationRun)
             registerGeneratedMediaRun(threadId, generationRun)
 
-            const existing = videoGenerationTracker.get(runKey)
+            let existing = videoGenerationTracker.get(runKey)
+            if (!existing) {
+                const existingVideoNode = findGeneratedMediaNodeForRun('video', threadId, generationRun)
+                if (existingVideoNode?.type === 'video') {
+                    existing = rememberVideoGenerationTrackerForNode(threadId, generationRun, existingVideoNode)
+                }
+            }
             if (!existing || !currentCanvasState) {
                 finishGeneratedMediaRun(threadId, generationRun)
                 return
             }
             const receivedFirstFrame = !existing.hasReceivedFrame
+            const existingVideoNode = getCurrentCanvasMediaNode(existing.nodeId)
+            if (existingVideoNode?.type === 'video' && fileId && existingVideoNode.fileId === fileId) {
+                commitGeneratedMediaDuplicateCleanup('video', threadId, generationRun, existingVideoNode.nodeId)
+                videoGenerationTracker.delete(runKey)
+                syncPixiGeneratingImageNodes()
+                finishGeneratedMediaRun(threadId, generationRun)
+                return
+            }
 
             const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
             if (!getApiMediaRunLineageAssignment(generationRun)) {
@@ -9311,13 +9806,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // the lineage tree and rigid-separate it from neighbors; the initial
             // placement already accounts for prior media, so this is a no-op in the
             // common case and only nudges genuinely colliding nodes/trees.
-            const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, currentCanvasState.edges)
+            const deduped = withoutGeneratedMediaDuplicateNodes({
+                ...currentCanvasState,
+                nodes,
+                edges: currentCanvasState.edges,
+            }, 'video', threadId, generationRun, existing.nodeId)
+            const resolvedNodes = rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)
 
             commitCanvasState({
-                ...currentCanvasState,
+                ...deduped.state,
                 nodes: resolvedNodes,
-                edges: currentCanvasState.edges,
+                edges: deduped.state.edges,
             })
+            removeGeneratedMediaDuplicateDom(deduped.duplicateNodeIds)
             finishGeneratedMediaRun(threadId, generationRun)
             const completedVideoNode = getCurrentCanvasMediaNode(existing.nodeId)
             queueCanvasMediaAnalysis(
@@ -10310,6 +10811,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     isDisabled: false,
                     documentType: 'document',
                     threadId: null,
+                    proseMirrorAuthority: {
+                        workspaceId,
+                        docType: 'document',
+                        docId: node.referenceId,
+                        baseVersion: getStoredProseMirrorVersion(doc),
+                    },
                     onEditorChange: (value: any) => {
                         onDocumentContentChange?.({
                             documentId: node.referenceId,
@@ -10317,6 +10824,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             prevRevision: doc.prevRevision || 1,
                             content: value
                         })
+                        scheduleTextNodeDescriptor(node.nodeId, value, doc.title)
+                    },
+                    onStreamingUpdate: (value: any) => {
                         scheduleTextNodeDescriptor(node.nodeId, value, doc.title)
                     },
                     onProjectTitleChange: (title: string) => {
@@ -11189,6 +11699,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // never drawn until a reload runs renderNodes() with a non-null state.
     ensureConnectionManager()
     renderNodes()
+    reattachDetachedCanvasRunListenersForActiveMarkers()
     syncPixiMediaLayer(currentCanvasState)
     if ((initialUnconfirmedFeatureExtractionRunsPruned || initialStaleMediaAnalysisReset) && currentCanvasState) {
         initialUnconfirmedFeatureExtractionRunsPruned = false
@@ -11340,6 +11851,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (!aiChatPanelState.isOpen && activeAiChatPanelEl && !activeClosingRightSidePanel) destroyActiveAiChatPanel(false)
             }
             refreshBranchMarkerPreviewsForLoadedThreads(newAiChatThreads)
+            reattachDetachedCanvasRunListenersForActiveMarkers()
 
             // 2. Sync PIXI state BEFORE applying the viewport. This ensures
             //    `lastState` inside the PIXI layer is already the new workspace's
@@ -11424,6 +11936,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             for (const timer of textDescriptorTimers.values()) clearTimeout(timer)
             textDescriptorTimers.clear()
+            for (const timers of pendingAiChatThreadRefreshTimers.values()) {
+                for (const timer of timers) window.clearTimeout(timer)
+            }
+            pendingAiChatThreadRefreshTimers.clear()
             connectionManager?.destroy()
             connectionManager = null
             viewportBridge = null

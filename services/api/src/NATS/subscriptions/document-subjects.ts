@@ -10,12 +10,14 @@ import Workspace from '../../models/workspace.ts'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 import {
+    DOCUMENT_TYPE,
+    HeadlessProseMirrorEngine,
     PROSEMIRROR_SCHEMA_VERSION,
     getDocumentStepSubject,
     getWorkspaceStepStreamName,
     type DocCoordinate,
     type DocSnapshot,
-    type StepStreamEvent,
+    type LoggedStepStreamEvent,
     type SubmitStepPayload,
 } from '@lixpi/prosemirror'
 import { ProseMirrorStepTransport } from '../../prosemirror/prosemirror-step-transport.ts'
@@ -23,6 +25,8 @@ import { ProseMirrorStepTransport } from '../../prosemirror/prosemirror-step-tra
 const { DOCUMENT_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 const { DOCUMENT_STEP_SUBJECTS } = NATS_SUBJECTS
 const DOCUMENT_STEP_STREAM_SUBJECT = `${DOCUMENT_STEP_SUBJECTS.DOC_STEPS}.>`
+const DOCUMENT_STEP_SNAPSHOT_SETTLE_MS = 750
+const documentStepSnapshotTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 function parseStoredDocContent(content: unknown): object | null {
     if (!content) return null
@@ -79,16 +83,111 @@ async function loadProseMirrorSnapshot(coordinate: DocCoordinate): Promise<DocSn
     }
 }
 
-function getReplayCurrentVersion(snapshot: DocSnapshot | null, events: StepStreamEvent[]): number {
-    let currentVersion = snapshot?.version ?? 0
+function getDocumentSnapshotKey(coordinate: DocCoordinate): string {
+    return `${coordinate.workspaceId}:${coordinate.docType}:${coordinate.docId}`
+}
+
+function getDocumentTitleFromSnapshot(snapshot: object): string {
+    const doc = snapshot as { content?: Array<{ type?: string; content?: Array<{ text?: string }> }> }
+    const titleNode = doc.content?.find(node => node.type === 'documentTitle')
+    return titleNode?.content?.map(node => node.text ?? '').join('') || 'Untitled'
+}
+
+async function persistSettledDocumentStepSnapshot(coordinate: DocCoordinate): Promise<void> {
+    if (coordinate.docType !== DOCUMENT_TYPE.DOCUMENT) return
+
+    const snapshot = await loadProseMirrorSnapshot(coordinate)
+    const transport = ProseMirrorStepTransport.fromSingleton()
+    const events = await transport.replayDocumentStepEvents({
+        ...coordinate,
+        startStreamSeq: 1,
+        maxMessages: 10000,
+    })
+    const engine = new HeadlessProseMirrorEngine({
+        documentType: DOCUMENT_TYPE.DOCUMENT,
+        doc: snapshot?.doc,
+        version: snapshot?.version ?? 0,
+    })
+
     for (const event of events) {
-        if (event.kind === 'END') {
-            currentVersion = Math.max(currentVersion, event.finalVersion)
-            continue
-        }
-        currentVersion = Math.max(currentVersion, event.version)
+        if (event.kind !== 'STEP' || event.version <= engine.version) continue
+        engine.applyStepJson(event.step)
     }
-    return currentVersion
+
+    const finalVersion = engine.version
+    if (snapshot && finalVersion <= snapshot.version) return
+
+    const finalSnapshot = engine.snapshot()
+    await Document.update({
+        workspaceId: coordinate.workspaceId,
+        documentId: coordinate.docId,
+        title: getDocumentTitleFromSnapshot(finalSnapshot),
+        content: finalSnapshot as any,
+        proseMirrorVersion: finalVersion,
+    })
+}
+
+function scheduleSettledDocumentStepSnapshot(coordinate: DocCoordinate): void {
+    if (coordinate.docType !== DOCUMENT_TYPE.DOCUMENT) return
+
+    const key = getDocumentSnapshotKey(coordinate)
+    const existingTimer = documentStepSnapshotTimers.get(key)
+    if (existingTimer) clearTimeout(existingTimer)
+
+    const timer = setTimeout(() => {
+        documentStepSnapshotTimers.delete(key)
+        void persistSettledDocumentStepSnapshot(coordinate).catch((error) => {
+            console.error('[DOCUMENT_STEPS] settled snapshot failed:', { coordinate, error })
+        })
+    }, DOCUMENT_STEP_SNAPSHOT_SETTLE_MS)
+    if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') timer.unref()
+    documentStepSnapshotTimers.set(key, timer)
+}
+
+function shouldReplayStepStreamEvent(event: LoggedStepStreamEvent, localVersion: number): boolean {
+    if (event.kind === 'START') return localVersion <= event.baseVersion
+    if (event.kind === 'END') return localVersion < event.finalVersion
+    if (event.kind === 'ERROR') return true
+    return event.version > localVersion
+}
+
+async function replayRelevantStepStreamEvents({
+    transport,
+    coordinate,
+    localStreamSeq,
+    localVersion,
+    currentStreamSeq,
+    maxMessages,
+}: {
+    transport: ProseMirrorStepTransport
+    coordinate: DocCoordinate
+    localStreamSeq: number
+    localVersion: number
+    currentStreamSeq: number
+    maxMessages: number
+}): Promise<LoggedStepStreamEvent[]> {
+    const replayEvents: LoggedStepStreamEvent[] = []
+    let nextStreamSeq = Math.max(1, localStreamSeq + 1)
+
+    while (nextStreamSeq <= currentStreamSeq && replayEvents.length < maxMessages) {
+        const events = await transport.replayDocumentStepEvents({
+            ...coordinate,
+            startStreamSeq: nextStreamSeq,
+            maxMessages,
+        })
+        if (events.length === 0) break
+
+        for (const event of events) {
+            if (shouldReplayStepStreamEvent(event, localVersion)) replayEvents.push(event)
+            if (replayEvents.length >= maxMessages) break
+        }
+
+        const lastEvent = events.at(-1)
+        if (!lastEvent || lastEvent.streamSequence >= currentStreamSeq) break
+        nextStreamSeq = lastEvent.streamSequence + 1
+    }
+
+    return replayEvents
 }
 
 export const documentSubjects = [
@@ -260,7 +359,7 @@ export const documentSubjects = [
                 return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
             }
 
-            return await ProseMirrorStepTransport.fromSingleton().submitStep({
+            const result = await ProseMirrorStepTransport.fromSingleton().submitStep({
                 workspaceId: data.workspaceId,
                 docType: data.docType,
                 docId: data.docId,
@@ -271,6 +370,14 @@ export const documentSubjects = [
                 clientId: data.clientId,
                 origin: 'client-edit',
             })
+            if (result.status === 'ACCEPTED') {
+                scheduleSettledDocumentStepSnapshot({
+                    workspaceId: data.workspaceId,
+                    docType: data.docType,
+                    docId: data.docId,
+                })
+            }
+            return result
         }
     },
     {
@@ -282,7 +389,7 @@ export const documentSubjects = [
             pub: { allow: [DOCUMENT_STEP_SUBJECTS.DOC_RESUME] },
             sub: { allow: [DOCUMENT_STEP_SUBJECTS.DOC_RESUME, DOCUMENT_STEP_STREAM_SUBJECT] }
         },
-        handler: async (data: DocCoordinate & { baseVersion?: number; localVersion?: number; user: { userId: string } }, msg: any) => {
+        handler: async (data: DocCoordinate & { baseVersion?: number; localVersion?: number; localStreamSeq?: number; user: { userId: string } }, msg: any) => {
             const { workspaceId } = data
             const userId = data.user.userId
 
@@ -291,41 +398,43 @@ export const documentSubjects = [
                 return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
             }
 
-            const transport = ProseMirrorStepTransport.fromSingleton()
-            await transport.ensureWorkspaceStream(workspaceId)
             const snapshot = await loadProseMirrorSnapshot(data)
             const localVersion = data.localVersion ?? data.baseVersion ?? snapshot?.version ?? 0
-            const currentSubjectSeq = await transport.getCurrentSubjectSequence(data)
+            const localStreamSeq = typeof data.localStreamSeq === 'number' ? data.localStreamSeq : 0
+            const transport = ProseMirrorStepTransport.fromSingleton()
+            const subjectState = await transport.getCurrentSubjectStateOrNull(data)
+            const currentStreamSeq = subjectState?.streamSequence ?? 0
             const currentVersion = Math.max(
                 snapshot?.version ?? 0,
-                (data.baseVersion ?? snapshot?.version ?? 0) + currentSubjectSeq,
+                subjectState?.documentVersion ?? 0,
             )
-            if (localVersion >= currentVersion) {
+            if (localVersion >= currentVersion && localStreamSeq >= currentStreamSeq) {
                 return {
                     snapshot,
                     currentVersion,
+                    currentStreamSeq,
                     streamName: getWorkspaceStepStreamName(workspaceId),
                     subject: getDocumentStepSubject(data),
                     events: [],
                 }
             }
-            const events = await transport.replayDocumentStepEvents({
-                workspaceId: data.workspaceId,
-                docType: data.docType,
-                docId: data.docId,
-                startStreamSeq: 1,
+            const replayEvents = await replayRelevantStepStreamEvents({
+                transport,
+                coordinate: {
+                    workspaceId: data.workspaceId,
+                    docType: data.docType,
+                    docId: data.docId,
+                },
+                localStreamSeq,
+                localVersion,
+                currentStreamSeq,
                 maxMessages: 1000,
-            })
-            const replayEvents = events.filter((event) => {
-                if (event.kind === 'START') return localVersion <= event.baseVersion
-                if (event.kind === 'END') return localVersion < event.finalVersion
-                if (event.kind === 'ERROR') return true
-                return event.version > localVersion
             })
 
             return {
                 snapshot,
-                currentVersion: getReplayCurrentVersion(snapshot, events),
+                currentVersion,
+                currentStreamSeq,
                 streamName: getWorkspaceStepStreamName(workspaceId),
                 subject: getDocumentStepSubject(data),
                 events: replayEvents,
