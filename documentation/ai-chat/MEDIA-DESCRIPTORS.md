@@ -105,10 +105,12 @@ captioning runs on the representative still/poster, never the MP4.
 ### Documents and threads — text analysis
 
 Document nodes and AI chat thread nodes get descriptors from their text
-content/transcript. Create and debounced edit paths request the same descriptor
-service shape, but the API summarizes text instead of pixels. These descriptors
-let the workspace relevance engine rank documents and conversations alongside
-media using one uniform contract.
+content/transcript. The browser can seed a descriptor from existing text content
+when a node is inserted, but plain canvas document typing does not proactively
+request descriptor analysis. Missing or weak document/thread descriptors are
+repaired during workspace context self-heal when an AI turn needs the node.
+These descriptors let the workspace relevance engine rank documents and
+conversations alongside media using one uniform contract.
 
 ## Self-Heal
 

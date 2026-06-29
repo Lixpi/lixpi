@@ -69,4 +69,46 @@ describe('Document.update', () => {
 
         expect(Object.hasOwn(dynamo.updateItem.mock.calls[0]?.[0].updates, 'proseMirrorVersion')).toBe(false)
     })
+
+    it('omits undefined document fields from partial updates', async () => {
+        dynamo.updateItem.mockResolvedValue(undefined)
+
+        await Document.update({
+            workspaceId: 'workspace-1',
+            documentId: 'document-1',
+            title: 'Updated title',
+        })
+
+        expect(dynamo.updateItem).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            updates: expect.objectContaining({
+                title: 'Updated title',
+                updatedAt: expect.any(Number),
+            }),
+        }))
+        expect(Object.hasOwn(dynamo.updateItem.mock.calls[0]?.[0].updates, 'content')).toBe(false)
+        expect(dynamo.updateItem).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            updates: expect.objectContaining({
+                title: 'Updated title',
+                updatedAt: expect.any(Number),
+            }),
+        }))
+
+        vi.clearAllMocks()
+        dynamo.updateItem.mockResolvedValue(undefined)
+
+        await Document.update({
+            workspaceId: 'workspace-1',
+            documentId: 'document-1',
+            content: { type: 'doc', content: [] } as any,
+        })
+
+        expect(dynamo.updateItem).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            updates: expect.objectContaining({
+                content: { type: 'doc', content: [] },
+                updatedAt: expect.any(Number),
+            }),
+        }))
+        expect(Object.hasOwn(dynamo.updateItem.mock.calls[0]?.[0].updates, 'title')).toBe(false)
+        expect(Object.hasOwn(dynamo.updateItem.mock.calls[1]?.[0].updates, 'title')).toBe(false)
+    })
 })

@@ -18,15 +18,17 @@ import {
     type DocCoordinate,
     type DocSnapshot,
     type LoggedStepStreamEvent,
-    type SubmitStepPayload,
+    type SubmitStepsPayload,
 } from '@lixpi/prosemirror'
 import { ProseMirrorStepTransport } from '../../prosemirror/prosemirror-step-transport.ts'
 
 const { DOCUMENT_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 const { DOCUMENT_STEP_SUBJECTS } = NATS_SUBJECTS
 const DOCUMENT_STEP_STREAM_SUBJECT = `${DOCUMENT_STEP_SUBJECTS.DOC_STEPS}.>`
-const DOCUMENT_STEP_SNAPSHOT_SETTLE_MS = 750
+const DOCUMENT_STEP_SNAPSHOT_SETTLE_MS = 5000
+const DOCUMENT_STEP_WORKSPACE_ACCESS_CACHE_MS = 5000
 const documentStepSnapshotTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const documentStepWorkspaceAccessCache = new Map<string, { expiresAt: number }>()
 
 function parseStoredDocContent(content: unknown): object | null {
     if (!content) return null
@@ -85,6 +87,21 @@ async function loadProseMirrorSnapshot(coordinate: DocCoordinate): Promise<DocSn
 
 function getDocumentSnapshotKey(coordinate: DocCoordinate): string {
     return `${coordinate.workspaceId}:${coordinate.docType}:${coordinate.docId}`
+}
+
+async function verifyDocumentStepWorkspaceAccess({ userId, workspaceId }: { userId: string; workspaceId: string }): Promise<{ error?: string }> {
+    const cacheKey = `${userId}:${workspaceId}`
+    const cached = documentStepWorkspaceAccessCache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) return {}
+
+    const workspace = await Workspace.getWorkspace({ userId, workspaceId })
+    if (!workspace || 'error' in workspace) {
+        documentStepWorkspaceAccessCache.delete(cacheKey)
+        return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
+    }
+
+    documentStepWorkspaceAccessCache.set(cacheKey, { expiresAt: Date.now() + DOCUMENT_STEP_WORKSPACE_ACCESS_CACHE_MS })
+    return {}
 }
 
 function getDocumentTitleFromSnapshot(snapshot: object): string {
@@ -342,32 +359,28 @@ export const documentSubjects = [
         }
     },
     {
-        subject: DOCUMENT_STEP_SUBJECTS.DOC_SUBMIT_STEP,
+        subject: DOCUMENT_STEP_SUBJECTS.DOC_SUBMIT_STEPS,
         type: 'reply',
         queue: 'documentSteps',
         payloadType: 'json',
         permissions: {
-            pub: { allow: [DOCUMENT_STEP_SUBJECTS.DOC_SUBMIT_STEP] },
-            sub: { allow: [DOCUMENT_STEP_SUBJECTS.DOC_SUBMIT_STEP] }
+            pub: { allow: [DOCUMENT_STEP_SUBJECTS.DOC_SUBMIT_STEPS] },
+            sub: { allow: [DOCUMENT_STEP_SUBJECTS.DOC_SUBMIT_STEPS] }
         },
-        handler: async (data: SubmitStepPayload & { user: { userId: string } }, msg: any) => {
+        handler: async (data: SubmitStepsPayload & { user: { userId: string } }, msg: any) => {
             const { workspaceId } = data
             const userId = data.user.userId
 
-            const workspace = await Workspace.getWorkspace({ userId, workspaceId })
-            if (!workspace || 'error' in workspace) {
-                return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
-            }
+            const access = await verifyDocumentStepWorkspaceAccess({ userId, workspaceId })
+            if (access.error) return access
 
-            const result = await ProseMirrorStepTransport.fromSingleton().submitStep({
+            const result = await ProseMirrorStepTransport.fromSingleton().submitSteps({
                 workspaceId: data.workspaceId,
                 docType: data.docType,
                 docId: data.docId,
                 baseVersion: data.baseVersion,
                 expectedVersion: data.expectedVersion,
-                step: data.step,
-                msgId: data.msgId,
-                clientId: data.clientId,
+                steps: data.steps,
                 origin: 'client-edit',
             })
             if (result.status === 'ACCEPTED') {

@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
     },
     transport: {
         ensureWorkspaceStream: vi.fn(),
-        submitStep: vi.fn(),
+        submitSteps: vi.fn(),
         getCurrentSubjectSequence: vi.fn(),
         getCurrentSubjectStateOrNull: vi.fn(),
         replayDocumentStepEvents: vi.fn(),
@@ -40,6 +40,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@lixpi/debug-tools', () => mocks.debug)
 vi.mock('@lixpi/prosemirror', () => ({
+    DOCUMENT_TYPE: {
+        DOCUMENT: 'document',
+        AI_CHAT_THREAD: 'aiChatThread',
+    },
     PROSEMIRROR_SCHEMA_VERSION: 'prosemirror-v1',
     getDocumentStepSubject: mocks.getDocumentStepSubject,
     getWorkspaceStepStreamName: mocks.getWorkspaceStepStreamName,
@@ -86,7 +90,7 @@ describe('Document subject handlers — ownership and persistence', () => {
             proseMirrorVersion: 1,
         })
         mocks.transport.ensureWorkspaceStream.mockResolvedValue(undefined)
-        mocks.transport.submitStep.mockResolvedValue({ success: true })
+        mocks.transport.submitSteps.mockResolvedValue({ success: true })
         mocks.transport.getCurrentSubjectSequence.mockResolvedValue(0)
         mocks.transport.getCurrentSubjectStateOrNull.mockResolvedValue({
             subjectSeq: 0,
@@ -204,55 +208,87 @@ describe('Document step submissions', () => {
         mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1' })
     })
 
-    it('returns workspace errors before submit for DOC_SUBMIT_STEP', async () => {
+    it('returns workspace errors before submitting document step batches', async () => {
         mocks.workspace.getWorkspace.mockResolvedValueOnce({ error: 'PERMISSION_DENIED' })
 
-        const result = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEP)({
+        const result = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEPS)({
             ...baseDocumentData,
             docType: 'document',
             docId: 'document-1',
             baseVersion: 1,
             expectedVersion: 1,
-            step: { type: 'replace' },
-            msgId: 'msg-1',
-            clientId: 'client-1',
+            steps: [{ step: { type: 'replace' }, msgId: 'msg-1', clientId: 'client-1' }],
             user: { userId: 'user-1' },
         })
 
         expect(result).toEqual({ error: 'PERMISSION_DENIED' })
-        expect(mocks.transport.submitStep).not.toHaveBeenCalled()
+        expect(mocks.transport.submitSteps).not.toHaveBeenCalled()
     })
 
-    it('submits document steps to the prosemirror transport with client-edit origin', async () => {
+    it('submits one document step through the batch subject with client-edit origin', async () => {
         const payload = {
             ...baseDocumentData,
             docType: 'document',
             docId: 'document-1',
             baseVersion: 1,
             expectedVersion: 1,
-            step: { type: 'replace' },
-            msgId: 'msg-1',
-            clientId: 'client-1',
+            steps: [{ step: { type: 'replace' }, msgId: 'msg-1', clientId: 'client-1' }],
             user: { userId: 'user-1' },
         }
 
         const transportResult = { success: true, version: 2 }
-        mocks.transport.submitStep.mockResolvedValueOnce(transportResult)
+        mocks.transport.submitSteps.mockResolvedValueOnce(transportResult)
 
-        const result = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEP)(payload)
+        const result = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEPS)(payload)
 
-        expect(mocks.transport.submitStep).toHaveBeenCalledWith({
+        expect(mocks.transport.submitSteps).toHaveBeenCalledWith({
             workspaceId: 'workspace-1',
             docType: 'document',
             docId: 'document-1',
             baseVersion: 1,
             expectedVersion: 1,
-            step: { type: 'replace' },
-            msgId: 'msg-1',
-            clientId: 'client-1',
+            steps: [{ step: { type: 'replace' }, msgId: 'msg-1', clientId: 'client-1' }],
             origin: 'client-edit',
         })
         expect(result).toEqual(transportResult)
+    })
+
+    it('submits document step batches to the prosemirror transport with one workspace access check', async () => {
+        const payload = {
+            ...baseDocumentData,
+            workspaceId: 'workspace-batch',
+            docType: 'document',
+            docId: 'document-1',
+            baseVersion: 4,
+            expectedVersion: 4,
+            steps: [
+                { step: { type: 'replace', index: 1 }, msgId: 'msg-1', clientId: 'client-1' },
+                { step: { type: 'replace', index: 2 }, msgId: 'msg-2', clientId: 'client-1' },
+            ],
+            user: { userId: 'user-batch' },
+        }
+        const transportResult = { status: 'ACCEPTED', version: 6 }
+        mocks.transport.submitSteps.mockResolvedValueOnce(transportResult)
+
+        const result = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEPS)(payload)
+        const secondResult = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEPS)(payload)
+
+        expect(mocks.workspace.getWorkspace).toHaveBeenCalledOnce()
+        expect(mocks.workspace.getWorkspace).toHaveBeenCalledWith({
+            userId: 'user-batch',
+            workspaceId: 'workspace-batch',
+        })
+        expect(mocks.transport.submitSteps).toHaveBeenCalledWith({
+            workspaceId: 'workspace-batch',
+            docType: 'document',
+            docId: 'document-1',
+            baseVersion: 4,
+            expectedVersion: 4,
+            steps: payload.steps,
+            origin: 'client-edit',
+        })
+        expect(result).toEqual(transportResult)
+        expect(secondResult).toEqual({ success: true })
     })
 })
 

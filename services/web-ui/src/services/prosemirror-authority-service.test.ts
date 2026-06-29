@@ -1,6 +1,6 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 import { DOCUMENT_TYPE, getDocumentStepSubject } from '@lixpi/prosemirror'
 
@@ -113,6 +113,10 @@ describe('ProseMirrorAuthorityService', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mocks.getTokenSilently.mockResolvedValue('auth-token')
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
     })
 
     it('subscribes to the document step subject and resumes with the local stream cursor', async () => {
@@ -252,6 +256,76 @@ describe('ProseMirrorAuthorityService', () => {
             }),
         )
 
+        service.disconnect()
+    })
+
+    it('batches multiple local steps into one submit request', async () => {
+        vi.useFakeTimers()
+        const nats = createNats()
+        nats.request.mockImplementation(async (subject: string) => {
+            if (subject === NATS_SUBJECTS.DOCUMENT_STEP_SUBJECTS.DOC_RESUME) {
+                return {
+                    snapshot: null,
+                    currentVersion: 0,
+                    currentStreamSeq: 0,
+                    events: [],
+                }
+            }
+            if (subject === NATS_SUBJECTS.DOCUMENT_STEP_SUBJECTS.DOC_SUBMIT_STEPS) {
+                return { status: 'ACCEPTED', version: 2 }
+            }
+            return { error: 'unexpected subject' }
+        })
+        mocks.getData.mockReturnValue(nats)
+        const { view } = createView()
+        const service = new ProseMirrorAuthorityService({
+            ...coordinate,
+            docType: DOCUMENT_TYPE.DOCUMENT,
+            docId: 'document-1',
+            baseVersion: 0,
+            getView: () => view,
+        })
+
+        await Promise.resolve()
+        await Promise.resolve()
+
+        service.submitLocalTransaction({
+            docChanged: true,
+            getMeta: vi.fn(() => false),
+            steps: [
+                { toJSON: () => ({ type: 'replace', index: 1 }) },
+                { toJSON: () => ({ type: 'replace', index: 2 }) },
+            ],
+            docs: [{}, {}],
+        } as any)
+
+        expect(nats.request).toHaveBeenCalledTimes(1)
+
+        await vi.advanceTimersByTimeAsync(100)
+        await Promise.resolve()
+
+        expect(nats.request).toHaveBeenCalledTimes(2)
+        expect(nats.request).toHaveBeenNthCalledWith(
+            2,
+            NATS_SUBJECTS.DOCUMENT_STEP_SUBJECTS.DOC_SUBMIT_STEPS,
+            expect.objectContaining({
+                token: 'auth-token',
+                workspaceId: coordinate.workspaceId,
+                docType: DOCUMENT_TYPE.DOCUMENT,
+                docId: 'document-1',
+                expectedVersion: 0,
+                steps: [
+                    expect.objectContaining({
+                        step: { type: 'replace', index: 1 },
+                        clientId: 'client-uuid',
+                    }),
+                    expect.objectContaining({
+                        step: { type: 'replace', index: 2 },
+                        clientId: 'client-uuid',
+                    }),
+                ],
+            }),
+        )
         service.disconnect()
     })
 })

@@ -815,9 +815,10 @@ describe('Workspace canvas — content descriptors (documents & threads)', () =>
 		expectSourceToContain(ts, 'settings.contentDescriptor.editDebounceMs')
 	})
 
-	it('triggers a descriptor refresh on document edits and on node creation', () => {
-		// Edit trigger: document editor.
-		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(node.nodeId, value, doc.title)')
+	it('seeds descriptors on node creation without analyzing every document edit', () => {
+		// Edit handlers must not call the descriptor service. API self-heal repairs
+		// missing or weak text descriptors when an AI turn actually needs them.
+		expectSourceNotToContain(ts, 'scheduleTextNodeDescriptor(node.nodeId, value, doc.title)')
 		// Create trigger: a newly inserted document node with existing content.
 		expectSourceToContain(ts, 'if (doc?.content !== undefined) scheduleTextNodeDescriptor(preparedNode.nodeId, doc.content, doc.title)')
 	})
@@ -1064,6 +1065,17 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 		expectSourceToContain(svelte, 'viewport.y !== scheduledViewport.y')
 		expectSourceToContain(svelte, 'viewport.zoom !== scheduledViewport.zoom')
 		expectSourceToContain(svelte, 'viewport: scheduledViewport')
+	})
+
+	it('debounces fallback document saves in the Svelte canvas host', () => {
+		expectSourceToContain(svelte, 'const DOCUMENT_SAVE_DEBOUNCE_MS = 5000')
+		expectSourceToContain(svelte, 'const documentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()')
+		expectSourceToContain(svelte, 'const pendingDocumentUpdates = new Map<string, PendingDocumentUpdate>()')
+		expectSourceToContain(svelte, 'function scheduleDocumentUpdate(update: PendingDocumentUpdate): void')
+		expectSourceToContain(svelte, 'if (existingTimer) clearTimeout(existingTimer)')
+		expectSourceToContain(svelte, '}, DOCUMENT_SAVE_DEBOUNCE_MS)')
+		expectSourceToContain(svelte, 'documentService.updateDocument(pending)')
+		expectSourceToContain(svelte, 'for (const timer of documentSaveTimers.values()) clearTimeout(timer)')
 	})
 })
 

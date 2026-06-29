@@ -27,7 +27,7 @@
 	},
 	"DOCUMENT_STEP_SUBJECTS": {
 		"DOC_STEPS": "document.steps",
-		"DOC_SUBMIT_STEP": "document.submitStep",
+		"DOC_SUBMIT_STEPS": "document.submitSteps",
 		"DOC_RESUME": "document.resume"
 	},
 	"WORKSPACE_SUBJECTS": {

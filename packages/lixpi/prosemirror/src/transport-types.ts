@@ -21,12 +21,14 @@ export type StepEnvelope = DocCoordinate & {
     origin: 'ai-stream' | 'client-edit'
 }
 
-export type SubmitStepPayload = DocCoordinate & {
+export type SubmitStepsPayload = DocCoordinate & {
     baseVersion: number
     expectedVersion: number
-    step: object
-    msgId?: string
-    clientId?: string
+    steps: Array<{
+        step: object
+        msgId?: string
+        clientId?: string
+    }>
     origin?: 'client-edit'
 }
 

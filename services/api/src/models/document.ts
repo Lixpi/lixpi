@@ -135,11 +135,11 @@ export default {
 			// }
 
 			const documentUpdates: Record<string, unknown> = {
-				title,
 				// prevRevision: currentRevision,    // TODO: turn back on when versioning is ready
-				content,
 				updatedAt: currentDate
 			}
+			if (title !== undefined) documentUpdates.title = title
+			if (content !== undefined) documentUpdates.content = content
 			if (proseMirrorVersion !== undefined) documentUpdates.proseMirrorVersion = proseMirrorVersion
 
 			await dynamoDBService.updateItem({
@@ -149,13 +149,15 @@ export default {
 				origin: 'updateDocument'
 			})
 
+			const documentMetaUpdates: Record<string, unknown> = {
+				updatedAt: currentDate
+			}
+			if (title !== undefined) documentMetaUpdates.title = title
+
 			await dynamoDBService.updateItem({
 				tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
 				key: { documentId },
-				updates: {
-					title,
-					updatedAt: currentDate
-				},
+				updates: documentMetaUpdates,
 				origin: 'updateDocument'
 			})
 		}

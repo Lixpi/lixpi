@@ -8775,10 +8775,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    // Debounce a document/thread descriptor refresh. Called on node create and on
-    // each editor change; flattens the node's ProseMirror content to plain text and,
-    // once there is enough to summarize, regenerates the descriptor after edits
-    // settle. Too-thin content is skipped (no model call, no 'failed').
+    // Debounce a document/thread descriptor refresh. Used for seeding descriptors
+    // from existing text content; normal document typing relies on API self-heal
+    // instead of proactively calling the descriptor model.
     function scheduleTextNodeDescriptor(nodeId: string, content: unknown, title?: string): void {
         const existing = textDescriptorTimers.get(nodeId)
         if (existing) clearTimeout(existing)
@@ -10824,11 +10823,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             prevRevision: doc.prevRevision || 1,
                             content: value
                         })
-                        scheduleTextNodeDescriptor(node.nodeId, value, doc.title)
                     },
-                    onStreamingUpdate: (value: any) => {
-                        scheduleTextNodeDescriptor(node.nodeId, value, doc.title)
-                    },
+                    onStreamingUpdate: () => {},
                     onProjectTitleChange: (title: string) => {
                         onDocumentTitleChange?.({ documentId: node.referenceId, title })
                     },

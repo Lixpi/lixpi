@@ -11,7 +11,7 @@ import {
     type StepStreamControlEnvelope,
     type StepStreamEvent,
     type SubmitResult,
-    type SubmitStepPayload,
+    type SubmitStepsPayload,
 } from '@lixpi/prosemirror'
 
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000
@@ -104,52 +104,48 @@ export class ProseMirrorStepTransport {
         return streamName
     }
 
-    async submitStep(payload: SubmitStepPayload): Promise<SubmitResult> {
+    async submitSteps(payload: SubmitStepsPayload): Promise<SubmitResult> {
         try {
-            const expectedSubjectSeq = this.expectedSubjectSeq(payload)
             const state = await this.getCurrentSubjectState(payload)
-            if (state.subjectSeq !== expectedSubjectSeq) {
+            const currentVersion = this.getSubmitCurrentVersion(payload, state)
+            if (currentVersion !== payload.expectedVersion) {
                 return {
                     status: 'CONFLICT',
-                    currentVersion: payload.baseVersion + state.subjectSeq,
+                    currentVersion,
                 }
             }
-            const envelope = await this.publishClientStep(payload, state.streamSequence, expectedSubjectSeq)
-            return { status: 'ACCEPTED', version: envelope.version }
+
+            let streamSequence = state.streamSequence
+            let subjectSeq = state.subjectSeq
+            let version = payload.expectedVersion
+
+            for (const step of payload.steps) {
+                subjectSeq += 1
+                version += 1
+                streamSequence = await this.publishEnvelope({
+                    kind: 'STEP',
+                    workspaceId: payload.workspaceId,
+                    docType: payload.docType,
+                    docId: payload.docId,
+                    version,
+                    subjectSeq,
+                    step: step.step,
+                    msgId: step.msgId,
+                    clientId: step.clientId,
+                    schemaVersion: PROSEMIRROR_SCHEMA_VERSION,
+                    origin: payload.origin ?? 'client-edit',
+                }, streamSequence)
+            }
+
+            return { status: 'ACCEPTED', version }
         } catch (error) {
             if (!this.isExpectationFailure(error)) throw error
-            const currentSubjectSeq = await this.getCurrentSubjectSequence(payload)
+            const state = await this.getCurrentSubjectState(payload)
             return {
                 status: 'CONFLICT',
-                currentVersion: payload.baseVersion + currentSubjectSeq,
+                currentVersion: this.getSubmitCurrentVersion(payload, state),
             }
         }
-    }
-
-    async publishClientStep(
-        payload: SubmitStepPayload,
-        expectedLastStreamSequence?: number,
-        expectedSubjectSeq = this.expectedSubjectSeq(payload),
-    ): Promise<StepEnvelope> {
-        const subjectSeq = expectedSubjectSeq + 1
-        const envelope: StepEnvelope = {
-            kind: 'STEP',
-            workspaceId: payload.workspaceId,
-            docType: payload.docType,
-            docId: payload.docId,
-            version: payload.baseVersion + subjectSeq,
-            subjectSeq,
-            step: payload.step,
-            msgId: payload.msgId,
-            clientId: payload.clientId,
-            schemaVersion: PROSEMIRROR_SCHEMA_VERSION,
-            origin: payload.origin ?? 'client-edit',
-        }
-        await this.publishEnvelope(
-            envelope,
-            expectedLastStreamSequence ?? (await this.getCurrentSubjectState(payload)).streamSequence,
-        )
-        return envelope
     }
 
     async publishAiStreamStep(payload: PublishAiStreamStepPayload): Promise<PublishedEnvelope<StepEnvelope>> {
@@ -280,12 +276,11 @@ export class ProseMirrorStepTransport {
         await this.natsService.purgeJetStreamSubject(streamName, subject)
     }
 
-    private expectedSubjectSeq(payload: SubmitStepPayload): number {
-        const subjectSeq = payload.expectedVersion - payload.baseVersion
-        if (!Number.isInteger(subjectSeq) || subjectSeq < 0) {
-            throw new Error(`Invalid ProseMirror expected version ${payload.expectedVersion} for base ${payload.baseVersion}`)
+    private getSubmitCurrentVersion(payload: Pick<SubmitStepsPayload, 'baseVersion'>, state: SubjectSequenceState): number {
+        if (state.subjectSeq === 0 && state.streamSequence === 0 && state.documentVersion === 0) {
+            return payload.baseVersion
         }
-        return subjectSeq
+        return state.documentVersion
     }
 
     private getPublishAckSequence(ack: any): number {

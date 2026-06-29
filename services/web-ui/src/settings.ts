@@ -1810,8 +1810,8 @@ export const settings: Settings = {
 
     // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).
     contentDescriptor: {
-        // Quiet period (ms) after the last edit before a text node's descriptor is regenerated. Increasing it batches more typing into one describe call; decreasing it refreshes the descriptor sooner.
-        editDebounceMs: 2500,
+        // Quiet period (ms) before a text node descriptor seed/refresh runs. Canvas document typing does not proactively call this path.
+        editDebounceMs: 5000,
         // Minimum trimmed plain-text length before a document/thread is worth describing. Below this we skip the model call (nothing meaningful to summarize).
         minTextLength: 16,
     },

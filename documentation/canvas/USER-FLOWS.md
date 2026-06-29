@@ -232,7 +232,7 @@ Video nodes follow the same shape over the `DELETE_VIDEO` subject. Neither delet
 
 ## Editing Content
 
-Typing in a document's ProseMirror editor applies locally first, then the authority service submits ProseMirror steps to the API. The API accepts ordered steps through `DOCUMENT_STEP.DOC_SUBMIT_STEP`, echoes authoritative step events, and writes the settled `Document.content` snapshot after the edit burst.
+Typing in a document's ProseMirror editor applies locally first, then the authority service submits a short batch of ProseMirror steps to the API. The API accepts ordered steps through `DOCUMENT_STEP.DOC_SUBMIT_STEPS`, echoes authoritative step events, and writes the settled `Document.content` snapshot after the edit burst.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
@@ -257,10 +257,10 @@ sequenceDiagram
     %% PHASE 2: PROPAGATE
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
-        Note over User, API: PHASE 2 - SUBMIT STEP
+        Note over User, API: PHASE 2 - SUBMIT STEP BATCH
         ProseMirror->>Auth: local transaction
         activate Auth
-        Auth->>NATS: DOCUMENT_STEP.DOC_SUBMIT_STEP
+        Auth->>NATS: DOCUMENT_STEP.DOC_SUBMIT_STEPS
         activate NATS
         NATS->>API: validate + CAS publish
         deactivate NATS

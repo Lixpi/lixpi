@@ -364,7 +364,7 @@ Workspace, document, and thread persistence all travel over NATS request/respons
 | `WORKSPACE.GET_WORKSPACE_DOCUMENTS` | Get documents in workspace |
 | `DOCUMENT.CREATE_DOCUMENT` | Create document |
 | `DOCUMENT.UPDATE_DOCUMENT` | Update document content/title |
-| `DOCUMENT_STEP.DOC_SUBMIT_STEP` | Submit a local ProseMirror step for server-authoritative document editing |
+| `DOCUMENT_STEP.DOC_SUBMIT_STEPS` | Submit one or more local ProseMirror steps for server-authoritative document editing |
 | `DOCUMENT_STEP.DOC_RESUME` | Load a ProseMirror snapshot and replay missed document step/control events |
 | `DOCUMENT.DELETE_DOCUMENT` | Delete document |
 | `AI_CHAT_THREAD.CREATE` | Create AI chat thread |
@@ -411,11 +411,11 @@ Different changes persist on different cadences so continuous interactions never
 | Viewport pan/zoom | Debounced ~1s | `WORKSPACE.UPDATE_CANVAS_STATE` |
 | Node position/dimensions after drag/resize | Immediate via `onCanvasStateChange` | `WORKSPACE.UPDATE_CANVAS_STATE` |
 | Edge create / delete / reconnect | Immediate | `WORKSPACE.UPDATE_CANVAS_STATE` |
-| Document content | Live step submit + settled server snapshot | `DOCUMENT_STEP.DOC_SUBMIT_STEP` / `DOCUMENT_STEP.DOC_RESUME`; API writes `Document.content` with `proseMirrorVersion` after the edit burst settles |
+| Document content | Live batched step submit + settled server snapshot | `DOCUMENT_STEP.DOC_SUBMIT_STEPS` / `DOCUMENT_STEP.DOC_RESUME`; API writes `Document.content` with `proseMirrorVersion` after the edit burst settles |
 | AI chat thread content | API final snapshot after stream completion | ProseMirror step stream for live rendering; `AiChatThread.update()` writes `content` and `proseMirrorVersion` when the authoritative stream ends |
 | AI chat panel UI (open/close, tabs, width, chips, drafts) | On change | persisted inside `canvasState.aiChatPanel` |
 
-Canvas-state changes are debounced (1 second) before persisting, which prevents hammering the backend during continuous pan/zoom. Document editor transactions render locally, then submit ProseMirror steps to the API authority; the API writes a settled snapshot after the edit burst. AI chat transcript changes are authored by the API stream assembler, replayed through the document step log while active, and written once when the stream finalizes.
+Canvas-state changes are debounced (1 second) before persisting, which prevents hammering the backend during continuous pan/zoom. Document editor transactions render locally, then submit short ProseMirror step batches to the API authority; the API writes a settled snapshot after the edit burst. AI chat transcript changes are authored by the API stream assembler, replayed through the document step log while active, and written once when the stream finalizes.
 
 AI chat panel state is stored inside `canvasState.aiChatPanel`. Opening or closing the panel, expanding or collapsing Sessions, opening or closing tabs, resizing it, changing context controls, and editing prompt drafts persist workspace UI state but do **not** create a conversation entity. Submitting from an empty panel creates a standalone chat session. Sessions is collapsed by default and toggled from the history icon in the panel control row; when expanded it lists standalone chats and extraction sessions. Closing a tab only changes panel presentation and the session remains reopenable; explicit standalone or extraction deletion removes that session and its saved prompt draft, while a saved Feature remains independent when its extraction session is deleted. The full panel and Sessions behavior is documented in [Chat Panel & Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md).
 

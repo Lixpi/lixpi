@@ -40,6 +40,9 @@ type PendingLocalStep = {
 
 type EndStreamEvent = Extract<StepStreamEvent, { kind: 'END' }>
 
+const LOCAL_STEP_BATCH_DELAY_MS = 100
+const MAX_LOCAL_STEP_BATCH_SIZE = 50
+
 function getStreamSequence(event: StepStreamEvent): number | null {
     const streamSequence = (event as Partial<LoggedStepStreamEvent>).streamSequence
     return typeof streamSequence === 'number' ? streamSequence : null
@@ -67,6 +70,7 @@ export class ProseMirrorAuthorityService {
     private resumeInFlight = false
     private localStreamSeq = 0
     private drainingPendingRemoteEvents = false
+    private submitQueueTimer: ReturnType<typeof setTimeout> | null = null
     private subscription: { unsubscribe: () => void } | null = null
 
     constructor(private readonly options: ProseMirrorAuthorityServiceOptions) {
@@ -90,11 +94,13 @@ export class ProseMirrorAuthorityService {
                 beforeDoc: transaction.docs[index] as ProseMirrorNode,
             })
         })
-        this.flushSubmitQueue()
+        this.scheduleSubmitQueue()
     }
 
     disconnect(): void {
         this.disconnected = true
+        if (this.submitQueueTimer) clearTimeout(this.submitQueueTimer)
+        this.submitQueueTimer = null
         this.subscription?.unsubscribe()
         this.subscription = null
     }
@@ -304,7 +310,7 @@ export class ProseMirrorAuthorityService {
         transaction.setMeta('skipDispatch', true)
         transaction.setMeta('proseMirrorAuthorityRemote', true)
         this.dispatchAuthorityTransaction(transaction)
-        this.flushSubmitQueue()
+        this.scheduleSubmitQueue()
     }
 
     private dispatchAuthorityTransaction(transaction: Transaction): void {
@@ -318,18 +324,35 @@ export class ProseMirrorAuthorityService {
 
     private flushSubmitQueue(): void {
         if (this.submitting) return
+        if (this.submitQueueTimer) {
+            clearTimeout(this.submitQueueTimer)
+            this.submitQueueTimer = null
+        }
         this.submitting = true
         void this.runSubmitQueue()
+    }
+
+    private scheduleSubmitQueue(): void {
+        if (this.submitting || this.submitQueueTimer) return
+        if (this.pendingLocalSteps.length >= MAX_LOCAL_STEP_BATCH_SIZE) {
+            this.flushSubmitQueue()
+            return
+        }
+        this.submitQueueTimer = setTimeout(() => {
+            this.submitQueueTimer = null
+            this.flushSubmitQueue()
+        }, LOCAL_STEP_BATCH_DELAY_MS)
     }
 
     private async runSubmitQueue(): Promise<void> {
         try {
             while (!this.disconnected && this.pendingLocalSteps.length > 0) {
-                const progressed = await this.submitFirstPendingStep()
+                const progressed = await this.submitPendingStepBatch()
                 if (!progressed) return
             }
         } finally {
             this.submitting = false
+            if (!this.disconnected && this.pendingLocalSteps.length > 0) this.scheduleSubmitQueue()
         }
     }
 
@@ -360,14 +383,14 @@ export class ProseMirrorAuthorityService {
         void this.resume()
     }
 
-    private async submitFirstPendingStep(): Promise<boolean> {
-        const pending = this.pendingLocalSteps[0]
-        if (!pending) return false
+    private async submitPendingStepBatch(): Promise<boolean> {
+        const batch = this.pendingLocalSteps.slice(0, MAX_LOCAL_STEP_BATCH_SIZE)
+        if (batch.length === 0) return false
 
         let result: SubmitResult & { error?: unknown }
         try {
             result = await servicesStore.getData('nats')!.request(
-                NATS_SUBJECTS.DOCUMENT_STEP_SUBJECTS.DOC_SUBMIT_STEP,
+                NATS_SUBJECTS.DOCUMENT_STEP_SUBJECTS.DOC_SUBMIT_STEPS,
                 {
                     token: await AuthService.getTokenSilently(),
                     workspaceId: this.options.workspaceId,
@@ -375,18 +398,20 @@ export class ProseMirrorAuthorityService {
                     docId: this.options.docId,
                     baseVersion: this.options.baseVersion ?? 0,
                     expectedVersion: this.localVersion,
-                    step: pending.step.toJSON(),
-                    msgId: pending.msgId,
-                    clientId: this.clientId,
+                    steps: batch.map(pending => ({
+                        step: pending.step.toJSON(),
+                        msgId: pending.msgId,
+                        clientId: this.clientId,
+                    })),
                 },
             ) as SubmitResult & { error?: unknown }
         } catch (error) {
-            console.error('[PROSEMIRROR_AUTHORITY] DOC_SUBMIT_STEP failed:', error)
+            console.error('[PROSEMIRROR_AUTHORITY] DOC_SUBMIT_STEPS failed:', error)
             return false
         }
 
         if (result?.error) {
-            console.error('[PROSEMIRROR_AUTHORITY] DOC_SUBMIT_STEP failed:', result.error)
+            console.error('[PROSEMIRROR_AUTHORITY] DOC_SUBMIT_STEPS failed:', result.error)
             return false
         }
 
@@ -396,8 +421,10 @@ export class ProseMirrorAuthorityService {
         }
 
         this.localVersion = Math.max(this.localVersion, result.version)
-        this.acknowledgedLocalMessageIds.add(pending.msgId)
-        this.pendingLocalSteps.shift()
+        for (const pending of batch) {
+            this.acknowledgedLocalMessageIds.add(pending.msgId)
+        }
+        this.pendingLocalSteps.splice(0, batch.length)
         return true
     }
 }

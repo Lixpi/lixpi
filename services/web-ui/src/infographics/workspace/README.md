@@ -428,7 +428,7 @@ The context extraction logic lives in `AiChatThreadService`, not in the canvas m
 
 ### ProseMirror Integration
 
-Each document node instantiates a `ProseMirrorEditor`. The editor container has `.nopan` so clicking inside doesn't pan the canvas. Content changes fire `onDocumentContentChange` which the Svelte layer forwards to `DocumentService`.
+Each document node instantiates a `ProseMirrorEditor`. The editor container has `.nopan` so clicking inside doesn't pan the canvas. Canvas document editors use the ProseMirror authority transport for local edits; the API persists settled snapshots after the document-step debounce. The `onDocumentContentChange` fallback is debounced in the Svelte host before calling `DocumentService`. Plain document typing does not request text descriptors or VLM analysis; descriptor repair happens during API context self-heal when an AI turn needs a better descriptor.
 
 ## State Flow
 

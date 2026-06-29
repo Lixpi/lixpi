@@ -25,6 +25,14 @@
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
 
+    type PendingDocumentUpdate = {
+        workspaceId: string
+        documentId: string
+        title?: string
+        prevRevision?: number
+        content?: any
+    }
+
     let paneEl: HTMLDivElement
     let viewportEl: HTMLDivElement
     let renderer: ReturnType<typeof createWorkspaceCanvas> | null = null
@@ -48,6 +56,9 @@
     let imageWrapperEl: HTMLDivElement
     let fileInputEl: HTMLInputElement
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
+    const documentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+    const pendingDocumentUpdates = new Map<string, PendingDocumentUpdate>()
+    const DOCUMENT_SAVE_DEBOUNCE_MS = 5000
     const documentService = new DocumentService()
     const aiChatThreadService = new AiChatThreadService()
     const DEFAULT_DOCUMENT_NODE_DIMENSIONS = { width: 400, height: 350 }
@@ -106,6 +117,32 @@
                 persistCanvasState(newCanvasState)
             }
         }, 1000)
+    }
+
+    function scheduleDocumentUpdate(update: PendingDocumentUpdate): void {
+        const { workspaceId: targetWorkspaceId, documentId } = update
+        const pendingUpdate = {
+            ...pendingDocumentUpdates.get(documentId),
+            workspaceId: targetWorkspaceId,
+            documentId,
+            ...(update.title !== undefined ? { title: update.title } : {}),
+            ...(update.prevRevision !== undefined ? { prevRevision: update.prevRevision } : {}),
+            ...(update.content !== undefined ? { content: update.content } : {}),
+        }
+        pendingDocumentUpdates.set(documentId, pendingUpdate)
+
+        const existingTimer = documentSaveTimers.get(documentId)
+        if (existingTimer) clearTimeout(existingTimer)
+
+        const timer = setTimeout(() => {
+            documentSaveTimers.delete(documentId)
+            const pending = pendingDocumentUpdates.get(documentId)
+            pendingDocumentUpdates.delete(documentId)
+            if (!pending) return
+            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
+            documentService.updateDocument(pending)
+        }, DOCUMENT_SAVE_DEBOUNCE_MS)
+        documentSaveTimers.set(documentId, timer)
     }
 
     async function handleCreateDocument() {
@@ -303,10 +340,9 @@
             onCanvasStateChange: persistCanvasState,
             onDocumentContentChange: ({ documentId, title, prevRevision, content }) => {
                 if (!workspaceId || loadedWorkspaceId !== workspaceId) return
-                documentService.updateDocument({
+                scheduleDocumentUpdate({
                     workspaceId,
                     documentId,
-                    title: title ?? '',
                     prevRevision: prevRevision || 1,
                     content
                 })
@@ -314,7 +350,7 @@
             onDocumentTitleChange: ({ documentId, title }) => {
                 if (!workspaceId || loadedWorkspaceId !== workspaceId) return
                 documentsStore.updateDocument(documentId, { title })
-                documentService.updateDocument({
+                scheduleDocumentUpdate({
                     workspaceId,
                     documentId,
                     title
@@ -357,6 +393,9 @@
 
     onDestroy(() => {
         if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
+        for (const timer of documentSaveTimers.values()) clearTimeout(timer)
+        documentSaveTimers.clear()
+        pendingDocumentUpdates.clear()
         renderer?.destroy()
     })
 </script>
