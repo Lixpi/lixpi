@@ -82,6 +82,8 @@ import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasMediaNodeLifecycleTracker } from '$src/infographics/workspace/canvasMediaNodeLifecycle.ts'
 import { shouldAcceptGeneratedMediaEvent as shouldAcceptGeneratedMediaEventForState } from '$src/infographics/workspace/generatedMediaEventWorkspaceGuard.ts'
 import { createVideoNodeHandler, type VideoNodeHandlerControl } from '$src/infographics/workspace/rendering/videoNodeHandler.ts'
+import { createAudioNodeHandler, type AudioNodeHandlerControl } from '$src/infographics/workspace/rendering/audioNodeHandler.ts'
+import { createDocumentNodeHandler } from '$src/infographics/workspace/rendering/documentNodeHandler.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { getAdaptiveBoundedZoomScalingOptions, getCanvasChromeScreenLayout, getResizeHandleScaledSizes, scaleCanvasChromeToScreenForZoom, scaleCanvasChromeWorldSizeForZoom } from '$src/infographics/utils/zoomScaling.ts'
@@ -1097,6 +1099,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // there is no DOM spinner, mirroring PR #202's image pattern.
     const videoGenerationTracker = new Map<string, PendingGeneratedMediaTracker>()
     let videoNodeHandler: VideoNodeHandlerControl | null = null
+    let audioNodeHandler: AudioNodeHandlerControl | null = null
 
     const pixiSelectionColors: SelectionColors = {
         marqueeStroke: selectionStyles.marqueeBorderColor,
@@ -1126,6 +1129,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 onVideoElementReady: () => scheduleGeneratedMediaChromeSync(),
             })
             mediaRegistry.register(videoNodeHandler)
+
+            // Uploaded audio + document nodes share the same media container as
+            // video. Audio owns a hidden DOM <audio> surface (playback chrome is
+            // wired like video); documents render a first-page poster sprite only.
+            audioNodeHandler = createAudioNodeHandler({
+                audioLayer: videoLayer,
+                onRender: () => pixiMediaLayer?.scheduleRender?.(),
+                onAudioElementReady: () => scheduleGeneratedMediaChromeSync(),
+            })
+            mediaRegistry.register(audioNodeHandler)
+
+            mediaRegistry.register(createDocumentNodeHandler({
+                documentLayer: videoLayer,
+                onRender: () => pixiMediaLayer?.scheduleRender?.(),
+            }))
         }
     }
     mediaChromeViewportEl = createMediaChromeViewport()
@@ -1988,7 +2006,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return [
                 imageNode.src,
                 imageNode.workspaceId && imageNode.fileId
-                    ? `/api/images/${encodeURIComponent(imageNode.workspaceId)}/${encodeURIComponent(imageNode.fileId)}`
+                    ? `/api/files/${encodeURIComponent(imageNode.workspaceId)}/${encodeURIComponent(imageNode.fileId)}`
                     : '',
             ]
         }
@@ -1996,11 +2014,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const videoNode = node as VideoCanvasNode
             return [
                 videoNode.frameFileId && videoNode.workspaceId
-                    ? `/api/images/${encodeURIComponent(videoNode.workspaceId)}/${encodeURIComponent(videoNode.frameFileId)}`
+                    ? `/api/files/${encodeURIComponent(videoNode.workspaceId)}/${encodeURIComponent(videoNode.frameFileId)}`
                     : '',
                 videoNode.posterSrc,
                 videoNode.workspaceId && videoNode.posterFileId
-                    ? `/api/images/${encodeURIComponent(videoNode.workspaceId)}/${encodeURIComponent(videoNode.posterFileId)}`
+                    ? `/api/files/${encodeURIComponent(videoNode.workspaceId)}/${encodeURIComponent(videoNode.posterFileId)}`
                     : '',
             ]
         }
@@ -9129,13 +9147,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!imageUrl) return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
         if (imageUrl.startsWith('data:')) return imageUrl
         if (imageUrl.startsWith('/api/')) return `${apiBaseUrl}${imageUrl}${token ? `?token=${token}` : ''}`
-        if (imageUrl.startsWith('http') && imageUrl.includes('/api/images/')) return `${imageUrl}${token ? `?token=${token}` : ''}`
+        if (imageUrl.startsWith('http') && imageUrl.includes('/api/files/')) return `${imageUrl}${token ? `?token=${token}` : ''}`
         if (imageUrl.startsWith('http')) return imageUrl
         return `data:image/png;base64,${imageUrl}`
     }
 
     function buildStoredImageSrc(workspaceId: string, fileId: string): string {
-        return `/api/images/${encodeURIComponent(workspaceId)}/${encodeURIComponent(fileId)}`
+        return `/api/files/${encodeURIComponent(workspaceId)}/${encodeURIComponent(fileId)}`
     }
 
     function buildGeneratedImageFrameSrc({

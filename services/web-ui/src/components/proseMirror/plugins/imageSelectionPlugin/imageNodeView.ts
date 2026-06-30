@@ -39,8 +39,8 @@ async function buildImageSrc(src: string): Promise<string> {
         return `${API_BASE_URL}${src}${token ? `?token=${encodeURIComponent(token)}` : ''}`
     }
 
-    // Full URLs pointing to /api/images/ — strip stale token and re-apply fresh one
-    if (src.startsWith('http') && src.includes('/api/images/')) {
+    // Full URLs pointing to /api/files/ — strip stale token and re-apply fresh one
+    if (src.startsWith('http') && src.includes('/api/files/')) {
         const stripped = src.replace(/[?&]token=[^&]+/, '')
         const token = await AuthService.getTokenSilently()
         return `${stripped}${token ? `?token=${encodeURIComponent(token)}` : ''}`

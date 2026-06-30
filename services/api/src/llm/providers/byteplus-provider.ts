@@ -7,7 +7,7 @@ import type { ProviderName } from '@lixpi/constants'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
 import type { ProviderState, VideoUsage } from '../graph/state.ts'
-import { extractPosterFrame, extractRepresentativeFrame } from '../../services/video-storage.ts'
+import { extractPosterFrame, extractRepresentativeFrame } from '../../services/transcoders/audiovideo.ts'
 import { BYTEPLUS_ARK_BASE_URL, BYTEPLUS_VIDEO_POLL_INTERVAL_MS } from '../config.ts'
 import {
     BytePlusModelArkError,

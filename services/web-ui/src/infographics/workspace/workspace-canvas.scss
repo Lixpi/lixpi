@@ -143,6 +143,16 @@
     white-space: nowrap;
 }
 
+.workspace-image-submenu-error {
+    padding: 8px 12px;
+    margin-bottom: 4px;
+    border-radius: 6px;
+    background: rgba(220, 38, 38, 0.08);
+    color: #dc2626;
+    font-size: 12px;
+    white-space: normal;
+}
+
 .workspace-image-submenu-option {
     display: block;
     width: 100%;

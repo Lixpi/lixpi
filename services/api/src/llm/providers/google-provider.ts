@@ -25,7 +25,7 @@ import {
     VIDEO_TOOL_NAME,
     getVideoToolForProvider,
 } from '../tools/video-generation.ts'
-import { extractPosterFrame, extractRepresentativeFrame } from '../../services/video-storage.ts'
+import { extractPosterFrame, extractRepresentativeFrame } from '../../services/transcoders/audiovideo.ts'
 import { VEO_POLL_INTERVAL_MS } from '../config.ts'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'

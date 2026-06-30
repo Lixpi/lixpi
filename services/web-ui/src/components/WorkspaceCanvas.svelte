@@ -4,10 +4,14 @@
         type Viewport
     } from '@xyflow/system'
     import {
-        MAX_IMAGE_FILE_SIZE,
+        MAX_UPLOAD_FILE_SIZE,
         type CanvasState,
         type DocumentCanvasNode,
-        type ImageCanvasNode
+        type DocumentMediaCanvasNode,
+        type ImageCanvasNode,
+        type VideoCanvasNode,
+        type AudioCanvasNode,
+        type MediaKind
     } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
@@ -53,6 +57,7 @@
     let imageSubmenuOpen = $state(false)
     let imageSubmenuMode: 'menu' | 'url' = $state('menu')
     let imageUrlValue = $state('')
+    let uploadError = $state('')
     let imageWrapperEl: HTMLDivElement
     let fileInputEl: HTMLInputElement
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -204,6 +209,7 @@
         imageSubmenuOpen = false
         imageSubmenuMode = 'menu'
         imageUrlValue = ''
+        uploadError = ''
     }
 
     function handleUploadFromDevice() {
@@ -214,9 +220,27 @@
         const input = e.target as HTMLInputElement
         if (input.files && input.files.length > 0) {
             closeImageSubmenu()
-            uploadAndAddImage(input.files[0])
+            uploadAndAddFile(input.files[0])
             input.value = ''
         }
+    }
+
+    // Shape the unified upload/import endpoint returns. `kind` selects the canvas
+    // node; the rest are per-kind hints. Type/policy decisions are server-side.
+    type IngestResult = {
+        fileId: string
+        kind: MediaKind
+        url: string
+        aspectRatio?: number
+        durationSeconds?: number
+        hasAudio?: boolean
+        posterFileId?: string
+        posterUrl?: string
+        pageCount?: number
+    }
+
+    function tokenizeUrl(url: string, token: string): string {
+        return `${API_BASE_URL}${url}?token=${encodeURIComponent(token)}`
     }
 
     async function handleImageUrlInsert() {
@@ -224,11 +248,12 @@
         const targetWorkspaceId = workspaceId
         if (!url || !targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
+        uploadError = ''
         try {
             const token = await AuthService.getTokenSilently()
             if (!token) return
 
-            const response = await fetch(`${API_BASE_URL}/api/images/${targetWorkspaceId}/import-url`, {
+            const response = await fetch(`${API_BASE_URL}/api/files/${targetWorkspaceId}/import-url`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -236,25 +261,34 @@
                 },
                 body: JSON.stringify({ url }),
             })
-            if (!response.ok) throw new Error('Image URL import failed')
 
             const data = await response.json()
-            const imageUrl = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`
+            if (!response.ok) {
+                uploadError = data?.error || 'File URL import failed'
+                return
+            }
             if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
             closeImageSubmenu()
-            addImageToCanvas({ fileId: data.fileId, src: imageUrl, targetWorkspaceId })
+            addFileToCanvas(data, token, targetWorkspaceId)
         } catch (error) {
-            console.error('Image URL import failed:', error)
+            console.error('File URL import failed:', error)
+            uploadError = 'File URL import failed'
         }
     }
 
-    async function uploadAndAddImage(file: File) {
-        if (!file.type.startsWith('image/')) return
-        if (file.size > MAX_IMAGE_FILE_SIZE) return
+    // Generalized device upload — accepts ANY file. The client no longer
+    // pre-rejects by MIME (the server sniffs the bytes); it only enforces the
+    // size ceiling and surfaces the server's specific rejection inline.
+    async function uploadAndAddFile(file: File) {
+        if (file.size > MAX_UPLOAD_FILE_SIZE) {
+            uploadError = 'File is too large.'
+            return
+        }
         const targetWorkspaceId = workspaceId
         if (!targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
+        uploadError = ''
         try {
             const token = await AuthService.getTokenSilently()
             if (!token) return
@@ -262,22 +296,91 @@
             const formData = new FormData()
             formData.append('file', file)
 
-            const response = await fetch(`${API_BASE_URL}/api/images/${targetWorkspaceId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/files/${targetWorkspaceId}`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             })
 
-            if (!response.ok) throw new Error('Upload failed')
-
             const data = await response.json()
-            const imageUrl = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`
+            if (!response.ok) {
+                uploadError = data?.error || 'Upload failed'
+                return
+            }
             if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
-            addImageToCanvas({ fileId: data.fileId, src: imageUrl, targetWorkspaceId })
+            addFileToCanvas(data, token, targetWorkspaceId)
         } catch (error) {
-            console.error('Image upload failed:', error)
+            console.error('File upload failed:', error)
+            uploadError = 'Upload failed'
         }
+    }
+
+    // Dispatch an ingested file onto the canvas as the typed node its `kind`
+    // selects. Uploads stay client-placed at the viewport center (they have no
+    // server-side lineage to position against).
+    function addFileToCanvas(result: IngestResult, token: string, targetWorkspaceId: string) {
+        if (!targetWorkspaceId || workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
+
+        const { fileId, kind } = result
+        const src = tokenizeUrl(result.url, token)
+        const posterSrc = result.posterUrl ? tokenizeUrl(result.posterUrl, token) : undefined
+
+        if (kind === 'image') {
+            addImageToCanvas({ fileId, src, targetWorkspaceId })
+            return
+        }
+
+        if (kind === 'video') {
+            const aspectRatio = result.aspectRatio && result.aspectRatio > 0 ? result.aspectRatio : 1
+            const videoNode: Omit<VideoCanvasNode, 'position'> = {
+                nodeId: `node-${fileId}`,
+                type: 'video',
+                fileId,
+                posterFileId: result.posterFileId ?? '',
+                workspaceId: targetWorkspaceId,
+                src,
+                posterSrc: posterSrc ?? '',
+                aspectRatio,
+                durationSeconds: result.durationSeconds ?? 0,
+                hasAudio: result.hasAudio ?? true,
+                dimensions: getImageInsertionDimensions(aspectRatio),
+            }
+            renderer?.insertNodeAtViewportCenter(videoNode)
+            return
+        }
+
+        if (kind === 'audio') {
+            // Audio has no aspect; use a compact fixed strip.
+            const audioNode: Omit<AudioCanvasNode, 'position'> = {
+                nodeId: `node-${fileId}`,
+                type: 'audio',
+                fileId,
+                workspaceId: targetWorkspaceId,
+                src,
+                durationSeconds: result.durationSeconds ?? 0,
+                hasAudio: true,
+                dimensions: { width: 360, height: 96 },
+            }
+            renderer?.insertNodeAtViewportCenter(audioNode)
+            return
+        }
+
+        // document (PDF / converted office doc / text)
+        const aspectRatio = result.aspectRatio && result.aspectRatio > 0 ? result.aspectRatio : 0.7727 // ~A4 portrait
+        const documentNode: Omit<DocumentMediaCanvasNode, 'position'> = {
+            nodeId: `node-${fileId}`,
+            type: 'mediaDocument',
+            fileId,
+            workspaceId: targetWorkspaceId,
+            src,
+            posterFileId: result.posterFileId,
+            posterSrc,
+            pageCount: result.pageCount,
+            aspectRatio,
+            dimensions: getImageInsertionDimensions(aspectRatio),
+        }
+        renderer?.insertNodeAtViewportCenter(documentNode)
     }
 
     function addImageToCanvas({ fileId, src, targetWorkspaceId }: { fileId: string, src: string, targetWorkspaceId: string }) {
@@ -425,6 +528,9 @@
             </button>
             {#if imageSubmenuOpen}
                 <div class="workspace-image-submenu">
+                    {#if uploadError}
+                        <div class="workspace-image-submenu-error" role="alert">{uploadError}</div>
+                    {/if}
                     {#if imageSubmenuMode === 'menu'}
                         <button class="workspace-image-submenu-option" onclick={handleUploadFromDevice}>
                             Upload from Device
@@ -466,7 +572,7 @@
 
     <input
         type="file"
-        accept="image/*"
+        accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.ppt,.pptx,.odt,.rtf,.txt,.md"
         style="display: none"
         bind:this={fileInputEl}
         onchange={handleFileInputChange}

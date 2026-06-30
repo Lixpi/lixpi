@@ -93,13 +93,13 @@ export function buildPixiImageSrc(imageUrl: string, apiBaseUrl: string, token: s
 
 export function isStoredImageSrc(src: string): boolean {
     const stripped = src.replace(/[?&]token=[^&]+/, '')
-    return stripped.startsWith('/api/') || (stripped.startsWith('http') && stripped.includes('/api/images/'))
+    return stripped.startsWith('/api/') || (stripped.startsWith('http') && stripped.includes('/api/files/'))
 }
 
 export function resolveStoredImagePath(node: ImageCanvasNode, workspaceId: string): string {
     const strippedSrc = node.src.replace(/[?&]token=[^&]+/, '')
     return isStoredImageSrc(strippedSrc)
-        ? `/api/images/${workspaceId}/${node.fileId}`
+        ? `/api/files/${workspaceId}/${node.fileId}`
         : strippedSrc
 }
 
@@ -112,7 +112,7 @@ export function getPixiLodTier(zoom: number): LodTier {
 
 export function addPixiLodSizeParam(url: string, tier: LodTier): string {
     if (tier === 'full' || tier === 'color') return url
-    if (!url.includes('/api/images/')) return url
+    if (!url.includes('/api/files/')) return url
 
     try {
         const parsed = new URL(url, window.location.origin)

@@ -28,12 +28,17 @@ RUN pnpm install --force && pnpm store prune && rm -rf ~/.pnpm-store
 # Stage 2: Runtime
 FROM node:${NODE_VERSION}-alpine
 
-# Install necessary packages
-# ffmpeg is used by services/api/src/services/video-storage.ts to extract a
-# poster frame from generated VEO videos for the PIXI low-LoD texture path.
-# Poster extraction is best-effort — if ffmpeg is unavailable for any reason,
-# video generation still completes, the canvas just won't have a static poster.
-RUN apk add --update --no-cache curl ffmpeg
+# Install necessary packages for the unified file-upload transcode pipeline
+# (services/api/src/services/transcoders/):
+#   - ffmpeg     : audio/video transcode + poster/representative frame extraction
+#                  and ffprobe for duration/dimension probing.
+#   - libreoffice: headless office-document → PDF conversion (DOC/DOCX/PPT/PPTX/
+#                  ODT/RTF). Heavy (~400MB) but only runs at ingest time.
+#   - poppler-utils: pdftoppm renders a PDF's first page to a poster PNG, and
+#                  pdfinfo reports its page count.
+# Transcode/poster/probe steps are best-effort — if a tool is unavailable, the
+# original is still stored and the upload still succeeds.
+RUN apk add --update --no-cache curl ffmpeg libreoffice poppler-utils
 
 # Install pnpm globally (in the runtime stage)
 RUN npm install -g pnpm

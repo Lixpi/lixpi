@@ -148,7 +148,7 @@ async function buildContextPreviewAuthenticatedMediaSrc(mediaUrl: string, enviro
         return setContextPreviewMediaTokenParam(sourceUrl, token)
     }
     if (mediaUrl.startsWith('http')) {
-        if (mediaUrl.includes('/api/videos/') || mediaUrl.includes('/api/images/')) {
+        if (mediaUrl.includes('/api/files/')) {
             const token = await environment.getAuthToken()
             return setContextPreviewMediaTokenParam(mediaUrl, token)
         }
