@@ -26,11 +26,15 @@ The ZIP archive has the following structure:
 ```text
 workspace-export.zip
 ├── manifest.json          # Workspace metadata + all text content
-└── images/                # Binary image files from NATS Object Store
-    ├── {fileId}.png
-    ├── {fileId}.jpg
-    └── ...
+├── images/                # Export-version-1 Object Store entries
+│   ├── {fileId}.png
+│   ├── {fileId}.mp4
+│   ├── {fileId}.pdf
+│   └── ...
+└── missing-images.json    # Present only when referenced bytes were missing at export time
 ```
+
+`images/` is the export-version-1 object directory name. It is not limited to image media; entries are workspace Object Store objects named by `fileId` and extension, including uploaded/generated images, MP4s, audio, PDFs, posters, representative frames, and canonical converted derivatives when they are part of the exported object set.
 
 **manifest.json** contains:
 
@@ -105,7 +109,11 @@ sequenceDiagram
             activate ObjStore
             ObjStore-->>API: binary data
             deactivate ObjStore
-            API->>API: Append to images/ folder
+            API->>API: Append to images/ object folder
+        end
+        loop For each extra canvas image reference not in workspace.files
+            API->>ObjStore: getObject(bucketName, fileId)
+            API->>API: Append to images/ object folder or mark missing
         end
         API->>API: archive.finalize()
         API-->>Browser: Stream ZIP response
@@ -125,8 +133,9 @@ sequenceDiagram
 
 - **Streaming**: The ZIP is streamed directly to the HTTP response using the `archiver` npm package — no temporary files are written to disk.
 - **Auth**: Supports JWT via query parameter (`?token=`) since the download is triggered via `window.open()`, which cannot set Authorization headers. Also supports `Authorization: Bearer` header.
-- **File naming**: Images are stored as `images/{fileId}{extension}` where the extension is derived from the file's MIME type or original filename.
-- **Error handling**: Individual image fetch failures are logged but don't abort the export — the manifest and remaining images are still included.
+- **File naming**: Object Store entries are stored as `images/{fileId}{extension}` where the extension is derived from the file's MIME type or original filename.
+- **Coverage**: Export starts from `workspace.files[]` and also includes canvas image-node references that are missing from the file registry, so older desynced image nodes have a chance to survive portability.
+- **Missing bytes report**: Object fetch failures are logged and recorded in `missing-images.json` with the missing `fileId`s. The ZIP still streams, but the report is a data-loss signal; importing an archive that lacks manifest or canvas-referenced object entries is rejected.
 - **Compression**: Uses zlib level 5 (balanced speed/size).
 
 ### Export Dependencies
@@ -155,11 +164,15 @@ The import is triggered from the workspace dropdown menu in the sidebar. It open
 The import follows a **validate-first, write media, replace database content** approach:
 
 1. **Parse** — Extract the ZIP and read `manifest.json` entirely in memory
-2. **Validate** — Check export version, required fields, document/thread arrays, and Object Store entries referenced by the manifest. If invalid, return 400 — no data is touched
+2. **Validate** — Check export version, required fields, document/thread arrays, and Object Store entries referenced by the manifest and canvas state. If invalid, return 400 — no data is touched
 3. **Write media** — Write archive media objects into the existing workspace Object Store bucket, creating the bucket only when it is absent
 4. **Replace database content** — Delete workspace documents and AI chat threads, recreate them from the manifest, and update workspace canvas state + files array
 
 The import does not destroy the workspace Object Store bucket. Objects that are not referenced by the imported workspace may remain as storage orphans until workspace deletion, which is safer than deleting the whole bucket before restore. Documents and threads are queried by `workspaceId` and each record is deleted individually.
+
+{% callout type="important" %}
+Import must not recreate canvas media nodes whose Object Store bytes are absent from the archive. The importer validates both `manifest.workspace.files[]` and the object keys referenced by `canvasState` before deleting existing workspace content. A missing object returns 400 and leaves the workspace untouched.
+{% /callout %}
 
 {% callout type="warning" %}
 Import is destructive for workspace documents, AI chat threads, canvas state, and file metadata. Validation runs **first** — an invalid or incomplete archive returns a 400 with zero data loss — but a valid archive replaces the workspace's persisted content wholesale. Existing Object Store bytes are not bucket-wiped during import.
@@ -167,7 +180,7 @@ Import is destructive for workspace documents, AI chat threads, canvas state, an
 
 ### Import Behavior
 
-- **Workspace identity preserved**: The workspace's ID, name, `accessType`, and `accessList` remain unchanged. Only content (canvas state, documents, threads, images) is replaced.
+- **Workspace identity preserved**: The workspace's ID, name, `accessType`, and `accessList` remain unchanged. Only content (canvas state, documents, threads, and file metadata) is replaced.
 - **Document IDs preserved**: Original document IDs from the export are reused so canvas node references (which store document IDs) remain valid without remapping.
 - **`workspaceId` overridden**: Documents and threads from the manifest receive the target workspace's ID — an export from one workspace can be imported into a different workspace.
 - **Cross-workspace import**: Since `workspaceId` is overridden, a user can export from workspace A and import into workspace B.
@@ -215,9 +228,9 @@ sequenceDiagram
     %% PHASE 3: WRITE MEDIA
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(242, 234, 224)
-        Note over User, ObjStore: PHASE 3 - WRITE MEDIA — Store archive media before DB replacement
+        Note over User, ObjStore: PHASE 3 - WRITE MEDIA — Store archive objects before DB replacement
         activate ObjStore
-        loop For each image in ZIP
+        loop For each Object Store entry in ZIP
             API->>ObjStore: putObject(bucketName, fileId, data)
         end
         deactivate ObjStore
@@ -267,6 +280,7 @@ sequenceDiagram
 - **Auth**: Uses `Authorization: Bearer` header (standard `fetch` POST, not `window.open`).
 - **Validation-first**: The archive is fully parsed and validated before existing database content is deleted. Invalid or incomplete archives produce a 400 error with zero data loss.
 - **Object Store handling**: Archive media is written into the workspace bucket before database replacement. The import path does not bucket-wipe workspace media; unreferenced old objects may remain as storage orphans until workspace deletion.
+- **Dangling-reference guard**: The importer rejects archives missing any `workspace.files[]` object or any object key returned by `Workspace.getCanvasStateReferencedFileIds()`. New media node fields must be added to that collector before they are persisted.
 - **File size**: Accepts uploads up to 1GB via multer memory storage.
 - **Post-import reload**: The frontend automatically reloads workspace data, documents, and AI chat threads if the imported workspace is currently open.
 
@@ -276,4 +290,4 @@ sequenceDiagram
 |---------|---------|
 | `adm-zip` | ZIP archive extraction in memory |
 | `@types/adm-zip` | TypeScript types (dev) |
-| `multer` | Multipart file upload handling (already used by image routes) |
+| `multer` | Multipart file upload handling |

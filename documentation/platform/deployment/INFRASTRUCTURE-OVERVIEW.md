@@ -261,7 +261,7 @@ The CPU/memory baseline is sized to accommodate the in-process LangGraph LLM wor
 
 For NATS request/reply subjects, there is nothing HTTP-shaped to route. The service pulls work off NATS subjects using **queue groups**. When you add another `api` task, it joins the same queue group, NATS starts distributing messages across the tasks, and no external load balancer needs to know about that subject.
 
-That does not remove the need for an HTTP front door for byte routes. The Express routes under `/api/images`, `/api/videos`, `/api/workspaces`, `/api/features`, and `/api/media-library` exist in the API service; exposing them from the hosted SPA is a separate deployment concern.
+That does not remove the need for an HTTP front door for byte routes. The Express routes under `/api/files`, `/api/workspaces`, `/api/features`, and `/api/media-library` exist in the API service; exposing them from the hosted SPA is a separate deployment concern.
 
 ### Deployment Strategy
 

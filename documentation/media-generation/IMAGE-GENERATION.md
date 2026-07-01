@@ -142,7 +142,7 @@ Other generation knobs are **hardcoded** for best output rather than exposed to 
 
 ## Storage and Deduplication
 
-Generated images are stored in the NATS Object Store exactly like uploaded images. To avoid duplicates, the storage path computes a **SHA-256 hash** of the image content and uses `hash-{sha256}` as the `fileId`. Before writing, it checks whether that `fileId` already exists; if so, it skips the upload and returns the existing URL. This content-hash dedup is the same mechanism video reuses (`storeWorkspaceVideo`) — see [Video Generation](./VIDEO-GENERATION.md). Saved-copy independence (Media Library) is covered in [Media Library](../library/MEDIA-LIBRARY.md).
+Generated images are stored through the unified workspace file storage adapter, with `kind: 'image'`, `modelSafe: true`, and NATS Object Store bytes in `workspace-{workspaceId}-files`. To avoid duplicates, the storage path computes a **SHA-256 hash** of the image content and uses `hash-{sha256}` as the `fileId`. Before returning a duplicate, it confirms the Object Store bytes still exist; if metadata exists but bytes are missing, it writes the image again so the reference self-heals. Video generation uses the same `storeWorkspaceFile` adapter through `storeWorkspaceVideo` — see [Video Generation](./VIDEO-GENERATION.md). Saved-copy independence (Media Library) is covered in [Media Library](../library/MEDIA-LIBRARY.md).
 
 ## Multi-Turn Image Editing
 

@@ -17,13 +17,15 @@ This page is part of the canvas domain. For the DOM/PIXI rendering architecture,
 
 | Concept | Definition |
 |---------|------------|
-| **Workspace** | A named container owned by a user. Holds a canvas state (viewport position, zoom, and node positions) plus references to documents, AI chat threads, and uploaded files. |
-| **Canvas Node** | A positioned item on the canvas. The shared persisted union contains documents, images, videos, and API-planned branch lineage markers (`branchOrigin`, `branchFork`, `branchLine`). The renderer also accepts `aiChatThread` canvas records for compatibility. |
+| **Workspace** | A named container owned by a user. Holds a canvas state (viewport position, zoom, and node positions) plus references to documents, AI chat threads, and uploaded media files. |
+| **Canvas Node** | A positioned item on the canvas. The shared persisted union contains documents, uploaded media documents, images, videos, audio, upload placeholders, and API-planned branch lineage markers (`branchOrigin`, `branchFork`, `branchLine`). The renderer also accepts `aiChatThread` canvas records for compatibility. |
 | **Document** | The actual text content (ProseMirror JSON). It lives separately from its canvas representation, so the same document could theoretically appear in multiple workspaces. Documents use `documentType: 'document'`, render through `ProseMirrorEditor`, and submit live edits through the ProseMirror authority step stream. |
 | **AI Chat Thread** | A persisted AI conversation session stored in the AI-Chat-Threads DynamoDB table. A thread is standalone; its ProseMirror history is rendered in an AI Chat panel tab, projected into branch marker/info panels, and streamed through server-authored ProseMirror step events plus durable pipeline side events. |
 | **AI Chat Panel** | A workspace-owned right-side surface that can be opened without creating a chat session; a standalone thread is created only when the first prompt is submitted. See [Chat Panel & Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md). |
-| **Image** | An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference workspace-owned image objects; removing the node requests storage cleanup, and the API deletes bytes only after the canonical canvas state no longer references the file. A user can explicitly save a separate Media Library copy that is **not** deleted with the source node. |
-| **Video** | A generated or restored MP4 stored in NATS Object Store with a poster and an optional representative still. The canvas renders a PIXI poster behind a browser-composited `<video>` surface so playback, scrubbing, fullscreen, and shared controls do not depend on a PIXI video texture loop. See [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md). |
+| **Image** | An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference the workspace-owned object that is safe to render and send to models. Removing the node requests storage cleanup, and the API deletes bytes only after the canonical canvas state no longer references the file. A user can explicitly save a separate Media Library copy that is **not** deleted with the source node. |
+| **Video** | A generated, uploaded, imported, or restored MP4 stored in NATS Object Store with a poster and an optional representative still. The canvas renders a PIXI poster behind a browser-composited `<video>` surface so playback, scrubbing, fullscreen, and shared controls do not depend on a PIXI video texture loop. See [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md). |
+| **Uploaded Audio** | An `audio` canvas node backed by a workspace Object Store object and played through a DOM `<audio>` element. |
+| **Uploaded Document Media** | A `mediaDocument` canvas node backed by a stored text, Markdown, PDF, or office-document object. Office documents are converted to PDF before the node is created; PDFs may carry a first-page poster. |
 | **Branch Root** | The first generated image or video in a branch. It records the prompt, references, resolver metadata, and visual summaries on its own `generatedBy` metadata; no separate provenance node is persisted. See [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md). |
 | **Viewport** | The current view: x/y offset and zoom level, persisted so users return to where they left off. While a workspace is open, the live viewport inside [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) is the rendering source of truth; Svelte/store persistence is an acknowledgement path. A delayed store render must not replay an older viewport-only state over the current transform. |
 
@@ -109,7 +111,7 @@ type Workspace = {
     workspaceId: string
     name: string
     accessType: 'private' | 'shared'
-    files: string[]              // Document IDs
+    files: DocumentFile[]        // Workspace Object Store metadata
     canvasState: CanvasState
     createdAt: number
     canvasStateUpdatedAt: number // Canvas save token
@@ -350,6 +352,26 @@ The currently open workspace with full canvas state.
 
 The `files` array is metadata for objects in the workspace's NATS Object Store bucket. Backend file registration uses atomic DynamoDB append, and file removal uses a conditional indexed remove instead of rewriting the whole list, so a delete cannot overwrite concurrent media registrations. The API checks canonical `canvasState` before deleting workspace media bytes. Converted uploads preserve the original file record and store a `canonicalFileId`; canvas media nodes reference the canonical object so rendering and descriptor analysis never read unsupported original bytes. Full `canvasState` saves use `canvasStateUpdatedAt` as a canvas-only save token, so file uploads and other workspace metadata changes can update `updatedAt` without making an otherwise current canvas save fail.
 
+### Media Storage Durability Contract
+
+{% callout type="important" %}
+Canvas media durability depends on two records staying aligned: `canvasState.nodes[]` names the object key a node renders, and `workspace.files[]` records the Object Store metadata for the original object plus any `canonicalFileId`. Any change that creates, deletes, converts, exports, imports, or rewrites media must preserve both sides.
+{% /callout %}
+
+These rules prevent canvas media from disappearing:
+
+1. **Canvas nodes reference renderable objects.** If an upload is converted, the final `image`, `video`, `audio`, or `mediaDocument` node uses the `canonicalFileId`. The preserved original remains in `workspace.files[]` with its `canonicalFileId` pointer.
+2. **Placeholders do not own bytes.** `uploadPlaceholder` nodes carry conversion UI state only. They are ignored by media descriptors and storage cleanup, and they must be replaced by a real media node only after the API or conversion notification returns the canvas-safe object id.
+3. **File registry writes are atomic.** File registration uses DynamoDB `list_append`; file removal reads the live list, removes the matched index conditionally, and retries on conflicts. Do not replace the whole `files` array from a stale workspace snapshot.
+4. **Canvas saves use the canvas token.** Browser canvas saves send `expectedCanvasStateUpdatedAt`, and the API updates `canvasStateUpdatedAt` separately from general `updatedAt`. A media upload, metadata patch, or file deletion must not make an otherwise fresh canvas save look stale, and a stale canvas save must not erase newer media nodes.
+5. **Storage delete requests are only requests.** The browser-side lifecycle tracker may detect that an image or video node disappeared, but the API still re-reads the canonical workspace and refuses deletion when any `image`, `video`, `audio`, or `mediaDocument` node references the requested id, its poster, its representative frame, or its canonical/original pair.
+6. **Delete metadata before bytes.** The API removes the file record before deleting Object Store bytes. If object deletion fails, the result is an orphaned object; deleting bytes first can leave live metadata and canvas nodes pointing at missing storage.
+7. **Object Store reads and deletes must not recreate buckets.** A missing workspace bucket or missing object is a data-loss signal. Read, delete, dedup, export, and import checks should surface the fault rather than silently creating empty storage.
+8. **Export/import must cover every canvas media reference.** When a new media node field can point at Object Store bytes, update `Workspace.getCanvasStateReferencedFileIds`, export collection, import validation, URL rewriting, and delete guards together. Imports must reject archives that are missing manifest or canvas-referenced object keys instead of recreating dangling nodes.
+9. **Generated-media dedup self-heals.** Content-hash dedup may return an existing `hash-{sha256}` id only after Object Store confirms the object still exists. If metadata exists but bytes are gone, the storage adapter writes the bytes again.
+
+The exact failure to avoid is a stale or partial writer making DynamoDB say a canvas node still exists while its Object Store bytes were removed, or making Object Store contain bytes that no canvas/file metadata can reach. Treat either as a bug in the writer, not as a rendering issue.
+
 ### documentsStore
 
 Documents belonging to the current workspace.
@@ -402,6 +424,8 @@ Workspace, document, and thread persistence all travel over NATS request/respons
 | `AI_INTERACTION.FEATURE_EXTRACT.DELETE` | Delete an extraction session without deleting its saved Feature |
 | `WORKSPACE_IMAGE.DELETE_IMAGE` | Delete image metadata and Object Store bytes after canonical canvas reference checks |
 | `WORKSPACE_VIDEO.DELETE_VIDEO` | Delete video metadata and Object Store bytes after canonical canvas reference checks |
+| `FILE_SUBJECTS.CONVERT` | Request heavy upload conversion/probing from the NEX file-conversion workload |
+| `FILE_SUBJECTS.CONVERT_RESPONSE.>` | Per-upload conversion completion notification consumed by the browser |
 | `WORKSPACE.MEDIA_LIBRARY.CREATE_FROM_IMAGE` | Copy a stored canvas image into the Media Library |
 | `WORKSPACE.MEDIA_LIBRARY.CREATE_FROM_VIDEO` | Copy a stored canvas video and poster into the Media Library |
 | `WORKSPACE.MEDIA_LIBRARY.LIST_AVAILABLE` | List saved media visible in selected scopes |
@@ -416,12 +440,13 @@ Workspace file bytes are served over authenticated HTTP rather than NATS, so the
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/files/:workspaceId` | POST | Upload any allowed file, sniff bytes, convert non-model-safe formats, and return the canvas-safe object id |
+| `/api/files/:workspaceId` | POST | Upload any allowed file, sniff bytes, store the original, and return either a ready canvas-safe object or a conversion id |
 | `/api/files/:workspaceId/import-url` | POST | Fetch a public URL into workspace Object Store through the same sniff/convert pipeline |
 | `/api/files/:workspaceId/:fileId` | GET | Serve original, canonical, poster, audio, video, image, or document bytes with auth token |
 | `/api/media-library/items/:itemId/content` | GET | Serve an ACL-checked saved Media Library image preview or Range-capable video preview |
 | `/api/media-library/items/:itemId/poster` | GET | Serve an ACL-checked saved Media Library video poster |
 | `/api/workspaces/:workspaceId/export` | GET | Download workspace as ZIP archive (see [Workspace Export & Import](../library/WORKSPACE-EXPORT-IMPORT.md)) |
+| `/api/workspaces/:workspaceId/import` | POST | Validate and import a workspace ZIP archive |
 
 ## Persistence Strategy
 
@@ -448,7 +473,7 @@ Media nodes on the canvas are tracked by [`canvasMediaNodeLifecycle.ts`](../../s
 2. It detects which tracked media keys are missing from the current canvas state.
 3. It calls the configured deletion utility for that node type.
 
-This keeps intentionally removed workspace-node media from accumulating in storage. The API re-reads canonical `canvasState` before deleting bytes and refuses deletion while any image, video, audio, or uploaded-document node still references the file. Image nodes use `deleteImage()` from [`imageUtils.ts`](../../services/web-ui/src/utils/imageUtils.ts). Video nodes use `deleteVideo()` from [`videoUtils.ts`](../../services/web-ui/src/utils/videoUtils.ts), which deletes the MP4 and best-effort poster image. Neither path deletes Media Library items — those are intentionally independent saved copies with their own scope and deletion lifecycle (see [Media Library](../library/MEDIA-LIBRARY.md)).
+This keeps intentionally removed workspace-node media from accumulating in storage. The tracked browser cleanup paths are image and video nodes; upload placeholders are ignored because they do not own a renderable object. The API re-reads canonical `canvasState` before deleting bytes and refuses deletion while any image, video, audio, or uploaded-document node still references the file. Image nodes use `deleteImage()` from [`imageUtils.ts`](../../services/web-ui/src/utils/imageUtils.ts). Video nodes use `deleteVideo()` from [`videoUtils.ts`](../../services/web-ui/src/utils/videoUtils.ts), which deletes the MP4 and best-effort poster image. Neither path deletes Media Library items — those are intentionally independent saved copies with their own scope and deletion lifecycle (see [Media Library](../library/MEDIA-LIBRARY.md)).
 
 ## Workspace Load and Visibility Tracking
 

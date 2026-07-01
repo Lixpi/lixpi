@@ -60,6 +60,8 @@ graph TB
 | **Document** | ProseMirror (`documentType: 'document'`) | Free | DynamoDB Documents table |
 | **Image** | None (PIXI pixels + DOM chrome) | Aspect-ratio locked | NATS JetStream Object Store |
 | **Video** | None (PIXI poster + DOM `<video>` chrome) | Aspect-ratio locked | NATS JetStream Object Store |
+| **Audio** | DOM `<audio>` playback surface | Fixed strip | NATS JetStream Object Store |
+| **Uploaded Document Media** | None (PDF/text/document preview) | Aspect-ratio locked | NATS JetStream Object Store |
 | **Branch Origin / Fork / Line** | None | API-positioned topology markers | Workspace `canvasState` + media lineage metadata |
 | **AI Chat Thread** | Compatibility canvas node data; active sessions render as panel tabs | Free when drawn by legacy code | DynamoDB AI-Chat-Threads table |
 
@@ -135,7 +137,7 @@ graph LR
     end
 ```
 
-**Progressive streaming**: An animated placeholder appears immediately when generation starts (`IMAGE_PARTIAL` with empty data). Up to 3 progressively sharper partial previews update the canvas node in real-time. The final high-resolution image replaces them (`IMAGE_COMPLETE`). All images are stored in NATS JetStream Object Store with SHA-256 content-hash deduplication.
+**Progressive streaming**: An animated placeholder appears immediately when generation starts (`IMAGE_PARTIAL` with empty data). Up to 3 progressively sharper partial previews update the canvas node in real-time. The final high-resolution image replaces them (`IMAGE_COMPLETE`). Generated images are stored in NATS JetStream Object Store through the unified workspace file storage path with SHA-256 content-hash deduplication.
 
 **Placement**: Generated images appear as separate canvas nodes connected back to the source thread/response by an edge. The retired overlapping-thread placement prototype is archived in [ANCHORED-GENERATED-IMAGES.md](knowledge/archive/ANCHORED-GENERATED-IMAGES.md).
 
@@ -147,7 +149,7 @@ graph LR
 
 Video generation is powered by Google VEO through the same dual-model architecture as images. The user selects a text model and an explicit video model; the text model emits a `generate_video` tool call with a cinematic prompt, then the API's in-process LangGraph workflow routes that prompt to a transient VEO provider.
 
-VEO generation is asynchronous: the API submits a `generateVideos` operation, polls until completion, publishes keepalive events while no partial frames exist, downloads and validates the MP4, extracts a frame-0 poster and representative mid-frame with `ffmpeg`, and stores the result in NATS Object Store. The completed clip becomes a `VideoCanvasNode`.
+VEO generation is asynchronous: the API submits a `generateVideos` operation, polls until completion, publishes keepalive events while no partial frames exist, downloads and validates the MP4, asks the NEX file-conversion workload to extract a frame-0 poster and representative mid-frame with `ffmpeg`, and stores the result in NATS Object Store. The completed clip becomes a `VideoCanvasNode`.
 
 On the canvas, PIXI renders the poster/placeholder for stable geometry, while a visible browser-composited `<video>` element owns actual playback, seeking, scrubbing, and fullscreen. Hovering the video reveals the shared SVG control bar. Prior video nodes can be piped into later AI threads as representative stills, or extended directly through VEO's video input using **Extend video in new thread**. See [Video Generation](media-generation/VIDEO-GENERATION.md) for the full architecture.
 
@@ -200,8 +202,9 @@ graph TB
 | Service | Language | Role |
 |---------|----------|------|
 | **web-ui** | Svelte / TypeScript | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, context extraction |
-| **api** | Node.js / TypeScript | Gateway + in-process LangGraph workflow — JWT auth, CRUD operations, DynamoDB persistence, NATS bridge, pipeline events, ProseMirror transcript steps, image generation, video generation |
-| **nats** | Go (3-node cluster) | Message bus — pub/sub, request/reply, JetStream replay streams, JetStream Object Store for image and video storage |
+| **api** | Node.js / TypeScript | Gateway + in-process LangGraph workflow — JWT auth, CRUD operations, DynamoDB persistence, NATS bridge, file ingest routes, pipeline events, ProseMirror transcript steps, image generation, video generation |
+| **nats** | Go (3-node cluster) | Message bus — pub/sub, request/reply, JetStream replay streams, JetStream Object Store for workspace media storage |
+| **nex** | Node.js / TypeScript | NATS NEX workloads — AI-models sync and heavy file conversion/frame extraction |
 | **localauth0** | Rust (vendored `primait/localauth0`) | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 
 ### Key Architecture Decisions
@@ -212,7 +215,7 @@ graph TB
 
 **Provider-agnostic AI**: Every AI request sends the full conversation history — no provider-specific session IDs. Users can start a conversation with Claude, switch to GPT-5, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`, which plugs into the shared LangGraph workflow.
 
-**Context extraction is client-side**: When a user sends a message, the browser-side `AiChatThreadService` traverses the edge graph, extracts content from connected nodes, and assembles the multimodal payload. Images and videos contribute Object Store references; videos use representative stills for model context unless the user explicitly starts a video-extension flow.
+**Context extraction is client-side**: When a user sends a message, the browser-side `AiChatThreadService` traverses the edge graph, extracts content from connected nodes, and assembles the multimodal payload. Workspace media contributes Object Store references; videos use representative stills for model context unless the user explicitly starts a video-extension flow.
 
 ---
 

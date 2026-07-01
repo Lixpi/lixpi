@@ -123,7 +123,7 @@ These are the issues a future round of work should tackle. Listed in priority or
 **This is the biggest unrealized win in the entire LoD system.**
 {% /callout %}
 
-`pixiMediaLayerLogic.addPixiLodSizeParam()` appends `?size=256` or `?size=1024` to the image URL. The API handler at [`services/api/src/routes/image-routes.ts`](../../services/api/src/routes/image-routes.ts) (`GET /:workspaceId/:fileId`) **ignores those query params completely** and serves the full-resolution object back from NATS Object Store. The `?size=` value only changes the URL string, not the bytes.
+`pixiMediaLayerLogic.addPixiLodSizeParam()` appends `?size=256` or `?size=1024` to the image URL. The API handler at [`services/api/src/routes/file-routes.ts`](../../services/api/src/routes/file-routes.ts) (`GET /:workspaceId/:fileId`) **ignores those query params completely** and serves the full-resolution object back from NATS Object Store. The `?size=` value only changes the URL string, not the bytes.
 
 Consequences:
 

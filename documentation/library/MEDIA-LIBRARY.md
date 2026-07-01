@@ -245,25 +245,25 @@ Repeated saving is intentionally conservative. If the same user saves the same s
 
 When saved media is added to the canvas, [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) sends the materialized response through its existing centered insertion and collision-resolution path. The inserted node is a regular `ImageCanvasNode` or `VideoCanvasNode`; it does not borrow generation edges or provenance from the media that was originally saved.
 
-## URL Image Imports
+## URL File Imports
 
-An image inserted from a URL must be a real workspace image before it can behave like other canvas media. [`WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) now sends URL insertion through `POST /api/images/:workspaceId/import-url`, then builds a node only from the stored response returned by that route.
+Media inserted from a URL must be a real workspace object before it can behave like other canvas media. [`WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) sends URL insertion through `POST /api/files/:workspaceId/import-url`, then builds a node only from the ready ingest response or the async conversion notification for that stored object.
 
-[`remote-image-import.ts`](../../services/api/src/services/remote-image-import.ts) applies the server-side rules:
+[`remote-file-import.ts`](../../services/api/src/services/remote-file-import.ts) fetches the URL and runs the bytes through the same ingest pipeline as device uploads. [`remote-image-import.ts`](../../services/api/src/services/remote-image-import.ts) keeps the shared public-URL guard:
 
 - Only `http` and `https` URLs whose destination passes the server's address checks are accepted.
 - URLs containing credentials are rejected.
 - DNS results and literal addresses are rejected for implemented private/local ranges, including IPv4 private, loopback, link-local, carrier-grade NAT and multicast ranges, plus IPv6 loopback, unique-local and link-local ranges and IPv4-mapped forms of denied IPv4 addresses.
 - Redirects are followed manually, with the same address check applied at every hop, for at most four redirects.
 - Fetches time out after 15 seconds.
-- The response must use an allowed image MIME type and fit within the shared image-size limit.
-- `sharp` must be able to read intrinsic width and height before the image is stored.
+- The response body must fit within `MAX_UPLOAD_FILE_SIZE`.
+- The downloaded bytes are sniffed by `detectFileType()` and must match `MEDIA_POLICY`.
 
 {% callout type="warning" %}
 These import rules are an SSRF defense: a server-side fetch of a user-supplied URL must never be coerced into reaching an internal/private address. The address check is applied to the literal URL, every DNS result, and every redirect hop — not just once at the start.
 {% /callout %}
 
-On success, the image goes through [`image-storage.ts`](../../services/api/src/services/image-storage.ts), receives a workspace `fileId`, and becomes eligible for normal canvas lifecycle and Media Library saving. On failure, no canvas image node is created.
+On success, the file goes through [`file-ingest.ts`](../../services/api/src/services/file-ingest.ts) and [`file-storage.ts`](../../services/api/src/services/file-storage.ts), receives workspace Object Store metadata, and becomes eligible for normal canvas lifecycle. If conversion/probing is needed, the canvas keeps an `uploadPlaceholder` until the NEX file-conversion workload returns the canonical id and canvas hints. On failure, no media node is created.
 
 ## Scopes and Access
 
@@ -387,7 +387,7 @@ The `Features` category continues to use `WORKSPACE_SUBJECTS.FEATURE_SUBJECTS`, 
 
 | Route | Purpose |
 |-------|---------|
-| `POST /api/images/:workspaceId/import-url` | Fetch a public remote image safely and store it as a workspace image before node insertion |
+| `POST /api/files/:workspaceId/import-url` | Fetch a public remote file safely and store it through the unified workspace ingest pipeline before node insertion |
 | `GET /api/media-library/items/:itemId/content` | Return authorized saved-image bytes or Range-capable saved-video MP4 bytes for panel previews and materialized playback |
 | `GET /api/media-library/items/:itemId/poster` | Return authorized saved-video poster bytes |
 | `GET /api/features/:featureId/samples/:sampleIndex` | Return authorized Feature sample bytes, preferring durable promoted storage with legacy origin-workspace fallback |

@@ -44,7 +44,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [Authentication](platform/AUTHENTICATION.md) | Dual auth model, NATS auth callout, `@lixpi/auth-service`, LocalAuth0 |
 | [Infrastructure Overview](platform/deployment/INFRASTRUCTURE-OVERVIEW.md) | Pulumi, AWS topology, network, ECS `api`, web-ui delivery, DynamoDB |
 | [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | NATS on Fargate, CloudMap discovery, the Route53 sidecar, Caddy-in-Lambda TLS, the auth-callout boundary |
-| [NEX Execution Engine](platform/deployment/NEX-EXECUTION-ENGINE.md) | The background-workload node — the hourly AI-models sync on NATS, the NEX account and credentials, local and AWS deployment |
+| [NEX Execution Engine](platform/deployment/NEX-EXECUTION-ENGINE.md) | The background-workload node — AI-models sync, file conversion/frame extraction, the NEX account and credentials, local and AWS deployment |
 | [Scaling & Operations](platform/deployment/SCALING-AND-OPERATIONS.md) | Scaling profile, capacity ceilings, failure modes, environments, observability |
 
 ## Canvas
@@ -53,8 +53,8 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 
 | Page | What it covers |
 |------|----------------|
-| [Workspace Model](canvas/WORKSPACE-MODEL.md) | Core concepts, the `CanvasState`/`CanvasNode`/`WorkspaceEdge` data model, stores, NATS subjects, HTTP endpoints, persistence, media lifecycle, lazy loading |
-| [User Flows](canvas/USER-FLOWS.md) | Opening a workspace, creating documents, adding/saving/deleting/moving/editing media |
+| [Workspace Model](canvas/WORKSPACE-MODEL.md) | Core concepts, the `CanvasState`/`CanvasNode`/`WorkspaceEdge` data model, stores, NATS subjects, HTTP endpoints, persistence, media lifecycle, storage durability, lazy loading |
+| [User Flows](canvas/USER-FLOWS.md) | Opening a workspace, creating documents, uploading/converting/saving/deleting/moving/editing media |
 | [Edges & Connections](canvas/EDGES-AND-CONNECTIONS.md) | `WorkspaceConnectionManager`, proximity connect, routing, handles, selection/deletion/persistence |
 | [Rendering Engine](canvas/RENDERING-ENGINE.md) | DOM/PIXI ownership split, layer stack, viewport bridge, sync pipeline, config ownership, file map |
 | [Image Rendering Performance](canvas/IMAGE-RENDERING-PERFORMANCE.md) | LoD tiers, texture cache, decode pool, mipmaps, edge renderer, optimizations, known issues, tuning constants |

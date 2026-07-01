@@ -296,7 +296,7 @@ sequenceDiagram
         activate PIXI
         PIXI->>Pool: decodeImageInWorker(url)
         activate Pool
-        Pool->>API: GET /api/images/:workspaceId/:fileId?size=...
+        Pool->>API: GET /api/files/:workspaceId/:fileId?size=...
         activate API
         API-->>Pool: image bytes
         deactivate API

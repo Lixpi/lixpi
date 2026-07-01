@@ -7,7 +7,7 @@ description: The conceptual overview of Lixpi's NATS-first, message-driven servi
 
 Lixpi is a message-driven system built around [NATS](https://nats.io/). The browser uses NATS over WebSocket for normal app commands, workspace CRUD, canvas-state saves, document/thread operations, live AI pipeline events, and ProseMirror step streams. The API service handles those subjects, persists data in DynamoDB, and hosts the LangGraph workflow in-process. JetStream backs media Object Store buckets plus short-lived durable replay logs for AI pipeline events and ProseMirror document steps.
 
-There are still HTTP routes where HTTP is the right tool: image/video upload and download, Media Library previews, feature sample previews, health checks, and workspace export/import archives. Those routes move browser-friendly bytes or ZIP files; they are not the primary app command path.
+There are still HTTP routes where HTTP is the right tool: file upload/download, Range-capable audio/video playback, Media Library previews, feature sample previews, health checks, and workspace export/import archives. Those routes move browser-friendly bytes or ZIP files; they are not the primary app command path.
 
 This page maps how the running system fits together: which services exist, how they talk, the design decisions that shaped them, and how the system scales.
 
@@ -23,9 +23,9 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 |---------|----------|------|------|
 | **web-ui** | Svelte / TypeScript | `services/web-ui/` | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, and client-side context extraction |
 | **api** | Node.js / TypeScript | `services/api/` | API service — JWT auth, CRUD, DynamoDB persistence, NATS bridge, **and the in-process LangGraph LLM workflow** at `services/api/src/llm/` (pipeline events, ProseMirror transcript steps, image generation, video generation, usage tracking) |
-| **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, JetStream Object Store for image/video storage, and JetStream replay logs for pipeline/document events |
+| **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, JetStream Object Store for workspace media storage, and JetStream replay logs for pipeline/document events |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
-| **nex** | Node.js / TypeScript | `services/nex/` | NATS NEX execution-engine node — runs background workloads on the bus (currently the hourly AI-models catalog sync). See [NEX Execution Engine](./deployment/NEX-EXECUTION-ENGINE.md) |
+| **nex** | Node.js / TypeScript | `services/nex/` | NATS NEX execution-engine node — runs background workloads on the bus: the hourly AI-models catalog sync and heavy file conversion/frame extraction. See [NEX Execution Engine](./deployment/NEX-EXECUTION-ENGINE.md) |
 | **DynamoDB** | AWS (local via Docker) | — | Document storage, user data, AI chat threads, AI model metadata |
 
 {% callout type="note" %}
@@ -52,6 +52,10 @@ graph TB
         LLM["In-process LangGraph workflow<br/>pipeline events · ProseMirror steps · media"]
     end
 
+    subgraph Workers["NEX Workloads"]
+        NEX["services/nex<br/>file conversion · model sync"]
+    end
+
     subgraph Identity["Identity Providers"]
         Auth["Auth0 / LocalAuth0<br/>RS256 JWKS"]
     end
@@ -67,6 +71,8 @@ graph TB
     API --> LLM
     API --> DDB
     API <-->|Object Store + JetStream stream API| NATS
+    NEX <-->|NATS request/reply + Object Store| NATS
+    NEX --> DDB
     LLM -->|Pipeline events + ProseMirror steps| NATS
     LLM <-->|Vendor SDK calls| Provider
     API -.->|JWT verify| Auth
@@ -75,9 +81,10 @@ graph TB
 | Tier | Component | Responsibility |
 |------|-----------|----------------|
 | Client | Web UI | Renders the canvas, hosts ProseMirror editors, extracts context from the node graph, and connects to NATS over WebSocket |
-| Broker | NATS Cluster | Carries app commands, auth callouts, CRUD requests, AI pipeline events, replay logs, and ProseMirror document steps; stores media in JetStream Object Store |
+| Broker | NATS Cluster | Carries app commands, auth callouts, CRUD requests, AI pipeline events, replay logs, ProseMirror document steps, and file-conversion requests; stores media in JetStream Object Store |
 | API | api service | Validates tokens, performs CRUD against DynamoDB, hosts byte-oriented HTTP routes, and bridges browser requests to the in-process workflow |
 | API | LangGraph workflow | Resolves features, streams the text model, routes image/video tool calls, and publishes pipeline events plus ProseMirror transcript steps to NATS |
+| Workers | NEX workloads | Run long-lived background services on NATS, including file conversion/probing and AI-model catalog synchronization |
 | Identity | Auth0 / LocalAuth0 | Issues RS256 user JWTs and exposes a JWKS endpoint for verification |
 | Storage | DynamoDB | Persists documents, AI chat threads, users, and AI model metadata |
 | Storage | AI Providers | External text, image, and video models invoked through vendor SDKs |
@@ -96,7 +103,7 @@ HTTP remains in the system for payloads that are better served as HTTP responses
 
 | HTTP route family | Why it is HTTP |
 |-------------------|----------------|
-| `/api/images/*` and `/api/videos/*` | Browser upload, download, range requests, and `<video>` playback need ordinary HTTP semantics. The bytes are stored in NATS Object Store. |
+| `/api/files/*` | Browser upload, download, audio/video Range requests, and media playback need ordinary HTTP semantics. The bytes are stored in NATS Object Store, while heavy conversion/probing is handed off over NATS. |
 | `/api/workspaces/:workspaceId/export` and `/api/workspaces/:workspaceId/import` | Workspace portability uses ZIP archives and multipart uploads. Normal workspace reads, writes, canvas-state updates, and deletion are still NATS subjects. |
 | `/api/features/*` and `/api/media-library/*` previews | Authenticated thumbnail/asset previews are browser media requests, while feature and library metadata flows over NATS subjects. |
 | `/health-check` | ECS needs a simple health endpoint. |

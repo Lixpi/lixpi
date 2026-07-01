@@ -110,47 +110,60 @@ sequenceDiagram
     end
 ```
 
-## Adding an Image
+## Adding a File
 
-Adding an image opens the upload modal, posts the file to the workspace image endpoint (which stores it in Object Store), then the canvas loads the image to read its aspect ratio, creates an `ImageCanvasNode`, and persists the canvas state.
+The canvas upload control accepts images, videos, audio, PDFs, office documents, text, and Markdown. The browser posts the selected file to the unified file endpoint; the API sniffs the bytes, stores the original in the workspace Object Store bucket, and either returns a ready result or queues the NEX file-conversion workload for canonical conversion/probing. The browser keeps an `uploadPlaceholder` node on the canvas until a real media node can be created.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Svelte as WorkspaceCanvas.svelte
-    participant Modal as ImageUploadModal
-    participant API as /api/images/:workspaceId
+    participant Picker as Upload Picker
+    participant API as /api/files/:workspaceId
+    participant NEX as file-conversion workload
     participant ObjStore as NATS Object Store
     participant WSvc as WorkspaceService
     %% ═══════════════════════════════════════════════════════════════
     %% PHASE 1: UPLOAD
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(220, 236, 233)
-        Note over User, WSvc: PHASE 1 - UPLOAD — User picks an image
-        User->>Svelte: Click "+ Add Image"
+        Note over User, WSvc: PHASE 1 - UPLOAD — User picks a file
+        User->>Svelte: Click upload control
         activate Svelte
-        Svelte->>Modal: show()
+        Svelte->>Picker: open()
         deactivate Svelte
-        User->>Modal: Select/drop image file
-        activate Modal
-        Modal->>API: POST file (multipart)
+        User->>Picker: Select file
+        activate Picker
+        Picker->>Svelte: File selected
+        activate Svelte
+        Svelte->>Svelte: Insert uploadPlaceholder
+        Svelte->>API: POST multipart file
         activate API
-        API->>ObjStore: putObject(fileId, buffer)
-        API-->>Modal: { fileId, url }
+        API->>API: sniff bytes + apply MEDIA_POLICY
+        API->>ObjStore: putObject(original fileId, bytes)
         deactivate API
-        deactivate Modal
+        deactivate Picker
     end
 
     %% ═══════════════════════════════════════════════════════════════
     %% PHASE 2: CREATE NODE
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
-        Note over User, WSvc: PHASE 2 - CREATE NODE
-        Modal-->>Svelte: onComplete({ fileId, src })
-        activate Svelte
-        Svelte->>Svelte: Load image to get aspectRatio
-        Svelte->>Svelte: Create ImageCanvasNode
+        Note over User, WSvc: PHASE 2 - CONVERT OR PROBE
+        alt ready without conversion
+            API-->>Svelte: { status: ready, fileId, kind, url }
+        else needs conversion/probing
+            API-->>Svelte: { status: processing, fileId, conversionId, kind }
+            Svelte->>Svelte: Subscribe to CONVERT_RESPONSE.workspace.conversionId
+            API->>NEX: workspace.file.convert
+            activate NEX
+            NEX->>ObjStore: read original fileId
+            NEX->>ObjStore: write canonical/poster objects when needed
+            NEX-->>API: conversion hints
+            deactivate NEX
+            API-->>Svelte: publish conversion notification
+        end
         deactivate Svelte
     end
 
@@ -158,17 +171,20 @@ sequenceDiagram
     %% PHASE 3: PERSIST
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(242, 234, 224)
-        Note over User, WSvc: PHASE 3 - PERSIST
+        Note over User, WSvc: PHASE 3 - CREATE NODE + PERSIST
         activate Svelte
+        Svelte->>Svelte: Replace placeholder with image/video/audio/mediaDocument node
         Svelte->>WSvc: updateCanvasState()
         activate WSvc
         deactivate WSvc
-        Svelte->>Svelte: Re-render with new image node
+        Svelte->>Svelte: Re-render with stored media node
         deactivate Svelte
     end
 ```
 
-After an image is uploaded or imported from a public URL, the client loads the persisted workspace object to determine the natural aspect ratio. URL insertion uses `POST /api/images/:workspaceId/import-url`, which validates and stores the fetched image in the workspace Object Store **before** creating a canvas node; a canvas image node is therefore never backed only by an external URL. The validation and import rules for URLs live in [Media Library](../library/MEDIA-LIBRARY.md). On load the client verifies that the stored node dimensions match that ratio; if they do not match it corrects the node dimensions and persists the corrected values, so stale nodes self-heal. Image resize uses a diagonal-based algorithm for smooth, aspect-locked resizing, and the UI computes resize handle size and offsets dynamically so handles stay visually consistent regardless of canvas zoom.
+The server is authoritative for file type and canvas hints. The browser enforces only the shared size ceiling, then relies on the ingest response or conversion notification for `kind`, `canonicalFileId`, `aspectRatio`, `durationSeconds`, `hasAudio`, `posterFileId`, and `pageCount`. Converted HEIC/HEIF/AVIF/TIFF, audio, video, and office-document inputs preserve their original object but create canvas nodes from the canonical/model-safe object. URL insertion uses `POST /api/files/:workspaceId/import-url`, with the same public-URL checks and byte-sniffed ingest pipeline; a canvas media node is therefore never backed only by an external URL.
+
+On load the client verifies that stored image node dimensions match the natural aspect ratio; if they do not match it corrects the node dimensions and persists the corrected values, so stale image nodes self-heal. Image resize uses a diagonal-based algorithm for smooth, aspect-locked resizing, and the UI computes resize handle size and offsets dynamically so handles stay visually consistent regardless of canvas zoom.
 
 ## Saving Media to the Media Library
 
@@ -176,9 +192,9 @@ Completed image and video nodes expose `Add to Media Library` in their canvas bu
 
 Because a saved copy is independent, removing the original canvas media does **not** remove its Media Library copy, and deleting a workspace removes only the library items still scoped to that workspace. The full saved-media panel, scopes, ownership, materialization-back-to-canvas, and Feature-promotion rules are documented in [Media Library](../library/MEDIA-LIBRARY.md).
 
-## Deleting an Image
+## Deleting Canvas Media
 
-When an image node is removed from the canvas — by user action or programmatically — the lifecycle tracker diffs the canvas state, detects the removed `fileId`, and issues a delete request over NATS. The API re-reads the workspace and deletes bytes only when canonical `canvasState` no longer references the file.
+When an image or video node is removed from the canvas — by user action or programmatically — the lifecycle tracker diffs the canvas state, detects the removed `fileId`, and issues a delete request over NATS. The API re-reads the workspace and deletes bytes only when canonical `canvasState` no longer references the file or its related canonical/original/poster/frame object.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
@@ -193,8 +209,8 @@ sequenceDiagram
     %% PHASE 1: REMOVE
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(220, 236, 233)
-        Note over User, ObjStore: PHASE 1 - REMOVE — User deletes image from canvas
-        User->>Canvas: Remove image node
+        Note over User, ObjStore: PHASE 1 - REMOVE — User deletes media from canvas
+        User->>Canvas: Remove media node
         activate Canvas
         Canvas->>Canvas: commitCanvasState(newState)
         deactivate Canvas
@@ -208,7 +224,7 @@ sequenceDiagram
         Canvas->>Tracker: trackCanvasState(newState)
         activate Tracker
         Tracker->>Tracker: Compare previous vs current
-        Tracker->>Tracker: Detect removed image
+        Tracker->>Tracker: Detect removed tracked media
         deactivate Tracker
     end
 
@@ -218,17 +234,18 @@ sequenceDiagram
     rect rgb(246, 199, 179)
         Note over User, ObjStore: PHASE 3 - DELETE
         activate Tracker
-        Tracker->>NATS: DELETE_IMAGE request
+        Tracker->>NATS: DELETE_IMAGE or DELETE_VIDEO request
         NATS->>API: Handle deletion
         activate API
-        API->>API: Remove from workspace.files
+        API->>API: Re-read canonical canvasState
+        API->>API: Remove matching workspace.files entry only if unreferenced
         API->>ObjStore: deleteObject(fileId)
         deactivate API
         deactivate Tracker
     end
 ```
 
-Video nodes follow the same shape over the `DELETE_VIDEO` subject. The delete handler refuses to remove bytes while canonical canvas state still references the MP4, poster, or representative frame. Neither deletion path touches Media Library items, which are independent saved copies; the full lifecycle is described in [Media Node Lifecycle Management](./WORKSPACE-MODEL.md#media-node-lifecycle-management).
+The delete handler refuses to remove bytes while canonical canvas state still references the requested object, its canonical/original pair, a video poster, a representative frame, or an uploaded-document poster. Neither deletion path touches Media Library items, which are independent saved copies. The full lifecycle and the durability rules for future media work are described in [Media Node Lifecycle Management](./WORKSPACE-MODEL.md#media-node-lifecycle-management) and [Media Storage Durability Contract](./WORKSPACE-MODEL.md#media-storage-durability-contract).
 
 ## Editing Content
 

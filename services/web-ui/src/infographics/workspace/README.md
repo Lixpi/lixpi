@@ -26,7 +26,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Resize** nodes from any corner by hovering that corner handle (images preserve aspect ratio)
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
 - **Chat with AI** from the bottom-center composer; each submit creates a standalone session. The right-side panel opens as a view-only transcript of past sessions
-- **Add images** via the toolbar button which opens an upload modal
+- **Upload files** via the toolbar button; the server sniffs the bytes, stores the original, and returns or later publishes the canonical canvas-safe media object
 - **Open the Media Library** from the independent bottom-right icon above the original zoom badge to browse Features, explicitly saved Images, or explicitly saved Videos; the canvas-owned full-height drawer shifts left when AI chat is open and covers its launcher while open
 - **Save media for reuse** from an image or video bubble menu; saved Media Library items are independent Object Store copies that survive removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same source media reuses the existing item instead of duplicating it
 - **Connect nodes** by dragging from a handle, then use AI Chat composer context previews and workspace relevance to decide what the next prompt sees
@@ -183,8 +183,8 @@ flowchart TB
     CTX -->|"reads content"| TS
     AIS -->|"streaming via NATS"| LLM
     CC --> IL
-    IL -->|"deleteImage"| NS
-    NS -->|"DELETE_IMAGE"| OBJ
+    IL -->|"deleteImage/deleteVideo"| NS
+    NS -->|"DELETE_IMAGE / DELETE_VIDEO"| OBJ
 ```
 
 ## How It Works
@@ -305,7 +305,7 @@ When an AI-generated image is being created, the canvas provides visual feedback
 
 ### Media Node Lifecycle
 
-When a tracked media node is removed from the canvas, the `canvasMediaNodeLifecycle` tracker detects the change and triggers the configured deletion path. Image nodes route through `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE`; video nodes route through `WORKSPACE_SUBJECTS.VIDEO_SUBJECTS.DELETE_VIDEO` and best-effort poster cleanup. The API re-reads canonical canvas state and refuses storage deletion while any current node still references the file.
+When a tracked media node is removed from the canvas, the `canvasMediaNodeLifecycle` tracker detects the change and triggers the configured deletion path. Image nodes route through `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE`; video nodes route through `WORKSPACE_SUBJECTS.VIDEO_SUBJECTS.DELETE_VIDEO` and best-effort poster cleanup. The API re-reads canonical canvas state and refuses storage deletion while any current node still references the file, its canonical/original pair, or a related poster/frame object. Do not add a new cleanup path unless the API-side delete handler has the same canonical-state guard; lifecycle diffs alone must never be trusted to remove Object Store bytes.
 
 Workspace navigation and first non-empty workspace load reinitialize the media lifecycle tracker from the opened workspace's canvas state before local commits can run. The tracker must never compare media from one workspace against another workspace's node set, because a cross-workspace diff would turn a navigation render into destructive storage deletion.
 
@@ -470,8 +470,8 @@ When an image node, video node, or edge is selected on the canvas, a bubble menu
 - **Delete** — removes the node and its associated edges from canvas state
 
 ### Video Node Actions
-- **Replace** — uploads a new video through `/api/videos/:workspaceId`, swaps the MP4/poster IDs on the existing node, and keeps the node in place
-- **Download** — downloads the stored MP4 through the Range-capable video route with `download=true`
+- **Replace** — uploads a new video for the selected node, swaps the MP4/poster IDs on the existing node, and keeps the node in place
+- **Download** — downloads the stored MP4 through the Range-capable file route with `download=true`
 - **Add to Media Library** — saves a completed stored video and poster as independent library copies
 - **Connect to node** — starts the same menu-driven graph connection flow as images
 - **Delete** — removes the node and its associated edges from canvas state
