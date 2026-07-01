@@ -181,9 +181,9 @@ class Auth0MockService {
         })
     }
 
-    public async getTokenSilently(): Promise<string | false> {
+    public async getTokenSilently(forceRefresh = false): Promise<string | false> {
         const token = localStorage.getItem('localauth0_token')
-        if (token && !this.isTokenExpired(token)) {
+        if (!forceRefresh && token && !this.isTokenExpired(token)) {
             return token
         }
 
