@@ -131,6 +131,8 @@ class NatsServiceConfig:
         subscriptions: Optional[List[Dict[str, Any]]] = None,
         middleware: Optional[List[Callable]] = None,
         reply_middleware: Optional[List[Callable]] = None,
+        get_token: Optional[Callable[[], Any]] = None,
+        on_auth_error: Optional[Callable[[Exception], Any]] = None,
     ):
         """
         Initialize NATS service configuration.
@@ -146,6 +148,14 @@ class NatsServiceConfig:
             tls_ca_cert: Path to TLS CA certificate (optional)
             max_reconnect_attempts: Maximum reconnection attempts (-1 for infinite)
             reconnect_time_wait: Wait time between reconnections in seconds
+            get_token: Optional (async) callable used to (re)fetch a fresh auth
+                token before every connect/reconnect attempt. When supplied it
+                takes precedence over the static `token` and lets the connection
+                recover from token expiry or signing-key rotation without a
+                manual restart.
+            on_auth_error: Optional callable invoked when the server rejects our
+                credentials so the caller can invalidate any cached token before
+                `get_token` is called again.
         """
         self.servers = servers or ["nats://localhost:4222"]
         self.name = name or "default"
@@ -160,6 +170,8 @@ class NatsServiceConfig:
         self.subscriptions = subscriptions or []
         self.middleware = middleware or []
         self.reply_middleware = reply_middleware or []
+        self.get_token = get_token
+        self.on_auth_error = on_auth_error
 
 
 class NatsService:
@@ -187,6 +199,13 @@ class NatsService:
         self._reconnect_timer: Optional[asyncio.Task] = None
         self._subscriptions_initialized = False
         self._reconnect_attempts = 0
+        # Latest token handed to the connection. Kept in sync so a reconnect after
+        # a token expiry or signing-key rotation presents fresh credentials rather
+        # than the token captured once at connect time.
+        self._current_token: Optional[str] = None
+        # Set during graceful disconnect()/drain() so the close callback does not
+        # try to reconnect after an intentional close.
+        self._intentional_close = False
 
     @classmethod
     def get_instance(cls) -> Optional['NatsService']:
@@ -322,24 +341,73 @@ class NatsService:
         """Apply authentication to connection options."""
         if self.config.nkey_seed and self.config.user_id:
             # Priority 1: Self-issued JWT using NKey seed (Ed25519 signing)
-            # Used by services that need cryptographically signed authentication
-            info("Generating self-issued JWT...")
-            options["token"] = generate_self_issued_jwt(
-                nkey_seed=self.config.nkey_seed,
-                user_id=self.config.user_id,
-                expiry_hours=1
-            )
+            # Used by services that need cryptographically signed authentication.
+            # _refresh_token() regenerates a fresh (non-expired) JWT before each
+            # connect attempt; fall back to generating one here if it wasn't set.
+            if not self._current_token:
+                self._current_token = generate_self_issued_jwt(
+                    nkey_seed=self.config.nkey_seed,
+                    user_id=self.config.user_id,
+                    expiry_hours=1
+                )
             info(f"Using self-issued JWT for user: {self.config.user_id}")
-        elif self.config.token:
-            # Priority 2: Pre-generated JWT token
-            # Used when token is already available from external source
-            options["token"] = self.config.token
+            options["token"] = self._current_token
+        elif self.config.get_token or self.config.token or self._current_token:
+            # Priority 2: Pre-generated / provider-supplied JWT token.
+            # Uses the freshest token captured by _refresh_token() so a reconnect
+            # never replays a token that has since expired or been rotated out.
+            if not self._current_token and self.config.token:
+                self._current_token = self.config.token
+            options["token"] = self._current_token
         elif self.config.user and self.config.password:
             # Priority 3: Basic username/password authentication
             # Legacy auth method, less secure than JWT
             options["user"] = self.config.user
             options["password"] = self.config.password
         # If none provided, connection will be attempted without authentication
+
+    async def _refresh_token(self) -> None:
+        """Refresh the token used for authentication before a connect attempt.
+
+        Prefers the async provider, then regenerates the self-issued JWT (which
+        expires hourly), then falls back to the static token.
+        """
+        if self.config.get_token:
+            try:
+                fresh = self.config.get_token()
+                if asyncio.iscoroutine(fresh):
+                    fresh = await fresh
+                if fresh:
+                    self._current_token = fresh
+            except Exception as error:
+                err(f"NATS -> failed to refresh auth token: {error}")
+        elif self.config.nkey_seed and self.config.user_id:
+            self._current_token = generate_self_issued_jwt(
+                nkey_seed=self.config.nkey_seed,
+                user_id=self.config.user_id,
+                expiry_hours=1
+            )
+        elif self.config.token:
+            self._current_token = self.config.token
+
+    async def _handle_auth_error(self, error: Exception) -> None:
+        """Notify the caller that the server rejected our credentials so it can
+        clear any cached token before the next _refresh_token() call."""
+        if not self.config.on_auth_error:
+            return
+        try:
+            result = self.config.on_auth_error(error)
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as cb_error:
+            err(f"NATS -> on_auth_error handler failed: {cb_error}")
+
+    @staticmethod
+    def _is_auth_error(error: Any) -> bool:
+        """Detect authorization/authentication failures across error shapes."""
+        name = type(error).__name__ if isinstance(error, BaseException) else ''
+        message = str(error) if error is not None else ''
+        return 'Authorization' in name or 'authoriz' in message.lower() or 'authentic' in message.lower()
 
     async def connect(self, initial_connect_timeout: int = 2) -> None:
         """
@@ -352,8 +420,13 @@ class NatsService:
             return
 
         self._is_connecting = True
+        self._intentional_close = False
 
         try:
+            # Fetch a fresh token before every attempt so a reconnect after a token
+            # expiry or signing-key rotation does not keep replaying stale creds.
+            await self._refresh_token()
+
             options = self._build_connection_options()
 
             # Handle TLS if CA cert provided
@@ -388,7 +461,14 @@ class NatsService:
             err("NATS -> connection error or timeout")
             self._schedule_reconnect()
         except Exception as error:
-            err(f"NATS -> connection error or timeout: {error}")
+            if self._is_auth_error(error):
+                # Server rejected our credentials. Let the caller invalidate its
+                # cached token so the next _refresh_token() obtains a valid one
+                # instead of looping forever on the same rejected token.
+                err(f"NATS -> authorization failed, refreshing credentials: {error}")
+                await self._handle_auth_error(error)
+            else:
+                err(f"NATS -> connection error or timeout: {error}")
             self._schedule_reconnect()
         finally:
             self._is_connecting = False
@@ -396,12 +476,18 @@ class NatsService:
     async def disconnect(self) -> None:
         """Disconnect from NATS server."""
         if self.nc and not self.nc.is_closed:
+            self._intentional_close = True
+            if self._reconnect_timer:
+                self._reconnect_timer.cancel()
             await self.nc.close()
             info("NATS disconnected gracefully.")
 
     async def drain(self) -> None:
         """Drain all subscriptions and disconnect."""
         if self.nc and not self.nc.is_closed:
+            self._intentional_close = True
+            if self._reconnect_timer:
+                self._reconnect_timer.cancel()
             await self.nc.drain()
             info("NATS drained all subscriptions and disconnected.")
 
@@ -622,6 +708,11 @@ class NatsService:
     async def _error_callback(self, e: Exception) -> None:
         """Handle NATS errors."""
         err(f"NATS -> connection error: {e}")
+        # If the server rejected our credentials (expired token or rotated signing
+        # key), refresh them so the next reconnect presents valid credentials.
+        if self._is_auth_error(e):
+            await self._handle_auth_error(e)
+            await self._refresh_token()
 
     async def _disconnected_callback(self) -> None:
         """Handle NATS disconnection."""
@@ -639,6 +730,9 @@ class NatsService:
         warn("NATS -> connection closed")
         # Reset the initialized flag on close so we can reconnect properly
         self._subscriptions_initialized = False
+        # Reconnect unless we intentionally closed the connection.
+        if not self._intentional_close:
+            self._schedule_reconnect()
 
     # ===========================================
     # JetStream Object Store Methods

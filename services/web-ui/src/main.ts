@@ -42,6 +42,13 @@ async function initializeServicesSequentially() {
             webSocket: true,
             name: 'web-client',
             token: authToken,
+            // Re-fetch a valid token before every (re)connect so the client recovers
+            // from token expiry or a signing-key rotation (e.g. after the auth/API
+            // service restarts) without needing the user to clear cookies/localStorage.
+            getToken: () => AuthService.getTokenSilently(),
+            // When the server rejects our credentials, force a fresh token so the
+            // subsequent getToken() no longer returns the stale, cached one.
+            onAuthError: () => AuthService.getTokenSilently(true),
         });
 
         servicesStore.setDataValues({

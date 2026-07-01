@@ -81,9 +81,11 @@ class Auth0Service {
         authStore.setDataValues({ user: null })
     }
 
-    public async getTokenSilently(): Promise<string | false> {
+    public async getTokenSilently(forceRefresh = false): Promise<string | false> {
         try {
-            return await this.auth0.getTokenSilently() ?? false
+            return await this.auth0.getTokenSilently(
+                forceRefresh ? { cacheMode: 'off' } : undefined
+            ) ?? false
         } catch (error) {
             await this.login()
             return false
