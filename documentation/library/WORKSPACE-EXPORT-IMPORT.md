@@ -1,6 +1,6 @@
 ---
 title: Workspace Export & Import
-description: Export a complete workspace as a downloadable ZIP archive (manifest.json + images, streamed with no temp files), and import a previously exported archive with a validate-first, wipe, replace strategy that preserves workspace identity and document IDs while allowing cross-workspace import.
+description: Export a complete workspace as a downloadable ZIP archive (manifest.json + media objects, streamed with no temp files), and import a previously exported archive with a validate-first replace strategy that preserves workspace identity and document IDs while allowing cross-workspace import.
 ---
 
 # Workspace Export & Import
@@ -44,6 +44,7 @@ workspace-export.zip
         canvasState: CanvasState,       // Viewport, nodes, edges
         files: DocumentFile[],          // File metadata (id, name, mimeType)
         createdAt: number,
+        canvasStateUpdatedAt: number,   // Canvas save token
         updatedAt: number,
     },
     documents: Document[],             // All documents (latest revisions)
@@ -139,11 +140,11 @@ sequenceDiagram
 
 ## Workspace Import
 
-Import a previously exported ZIP archive into an existing workspace, replacing all current content. The import wipes documents, AI chat threads, and images, then restores everything from the archive — keeping workspace identity (ID, name, access list) intact.
+Import a previously exported ZIP archive into an existing workspace, replacing the workspace content with the archive while keeping workspace identity (ID, name, access list) intact.
 
 ### Import Overview
 
-The import is triggered from the workspace dropdown menu in the sidebar. It opens a file picker for the user to select a `.zip` archive. The file is uploaded to the API, which validates the archive, wipes the workspace content, and restores from the manifest.
+The import is triggered from the workspace dropdown menu in the sidebar. It opens a file picker for the user to select a `.zip` archive. The file is uploaded to the API, which validates the archive, writes archive media objects into the workspace bucket, then replaces documents, threads, canvas state, and file metadata from the manifest.
 
 - **Endpoint**: `POST /api/workspaces/:workspaceId/import`
 - **Route file**: [`services/api/src/routes/workspace-export-routes.ts`](../../services/api/src/routes/workspace-export-routes.ts)
@@ -151,17 +152,17 @@ The import is triggered from the workspace dropdown menu in the sidebar. It open
 
 ### Import Strategy
 
-The import follows a **validate-first, wipe, replace** approach:
+The import follows a **validate-first, write media, replace database content** approach:
 
 1. **Parse** — Extract the ZIP and read `manifest.json` entirely in memory
-2. **Validate** — Check export version, required fields, document/thread arrays. If invalid, return 400 — no data is touched
-3. **Wipe** — Delete all existing content in parallel: NATS Object Store bucket (all images), DynamoDB documents, DynamoDB AI chat threads
-4. **Restore** — Recreate images, documents, AI chat threads, and update workspace canvas state + files array from the manifest
+2. **Validate** — Check export version, required fields, document/thread arrays, and Object Store entries referenced by the manifest. If invalid, return 400 — no data is touched
+3. **Write media** — Write archive media objects into the existing workspace Object Store bucket, creating the bucket only when it is absent
+4. **Replace database content** — Delete workspace documents and AI chat threads, recreate them from the manifest, and update workspace canvas state + files array
 
-This ensures no garbage is left behind. The NATS bucket is deleted entirely (not individual objects), which guarantees a clean slate for images. Documents and threads are queried by `workspaceId` and each record is deleted individually.
+The import does not destroy the workspace Object Store bucket. Objects that are not referenced by the imported workspace may remain as storage orphans until workspace deletion, which is safer than deleting the whole bucket before restore. Documents and threads are queried by `workspaceId` and each record is deleted individually.
 
 {% callout type="warning" %}
-Import is destructive. All existing documents, AI chat threads, and images in the target workspace are deleted before the archive is restored. Validation runs **first** — an invalid archive returns a 400 with zero data loss — but a valid archive replaces the workspace's content wholesale.
+Import is destructive for workspace documents, AI chat threads, canvas state, and file metadata. Validation runs **first** — an invalid or incomplete archive returns a 400 with zero data loss — but a valid archive replaces the workspace's persisted content wholesale. Existing Object Store bytes are not bucket-wiped during import.
 {% /callout %}
 
 ### Import Behavior
@@ -211,33 +212,27 @@ sequenceDiagram
     end
 
     %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 3: WIPE
+    %% PHASE 3: WRITE MEDIA
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(242, 234, 224)
-        Note over User, ObjStore: PHASE 3 - WIPE — Delete all existing content
-        API->>ObjStore: deleteObjectStore(bucketName)
-        activate ObjStore
-        API->>DB: deleteWorkspaceDocuments(workspaceId)
-        activate DB
-        API->>DB: deleteWorkspaceAiChatThreads(workspaceId)
-        DB-->>API: deleted
-        deactivate DB
-        ObjStore-->>API: bucket deleted
-        deactivate ObjStore
-        Note right of API: Parallel deletion
-    end
-
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 4: RESTORE
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(246, 199, 179)
-        Note over User, ObjStore: PHASE 4 - RESTORE — Recreate content from archive
-        API->>ObjStore: createObjectStore(bucketName)
+        Note over User, ObjStore: PHASE 3 - WRITE MEDIA — Store archive media before DB replacement
         activate ObjStore
         loop For each image in ZIP
             API->>ObjStore: putObject(bucketName, fileId, data)
         end
         deactivate ObjStore
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 4: REPLACE DB CONTENT
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(246, 199, 179)
+        Note over User, ObjStore: PHASE 4 - REPLACE DB CONTENT — Recreate content from archive
+        API->>DB: deleteWorkspaceDocuments(workspaceId)
+        activate DB
+        API->>DB: deleteWorkspaceAiChatThreads(workspaceId)
+        DB-->>API: deleted
+        deactivate DB
         loop For each document in manifest
             API->>DB: importDocument(doc)
             activate DB
@@ -270,8 +265,8 @@ sequenceDiagram
 
 - **In-memory extraction**: The ZIP is buffered by `multer` and extracted with `adm-zip` — no temporary files on disk.
 - **Auth**: Uses `Authorization: Bearer` header (standard `fetch` POST, not `window.open`).
-- **Validation-first**: The archive is fully parsed and validated before any existing data is deleted. Invalid archives produce a 400 error with zero data loss.
-- **Bucket wipe**: The NATS Object Store bucket is deleted entirely via `deleteObjectStore()`, then created explicitly with `createObjectStore()` as part of the import restore transaction. Normal media writes do not auto-create missing buckets.
+- **Validation-first**: The archive is fully parsed and validated before existing database content is deleted. Invalid or incomplete archives produce a 400 error with zero data loss.
+- **Object Store handling**: Archive media is written into the workspace bucket before database replacement. The import path does not bucket-wipe workspace media; unreferenced old objects may remain as storage orphans until workspace deletion.
 - **File size**: Accepts uploads up to 1GB via multer memory storage.
 - **Post-import reload**: The frontend automatically reloads workspace data, documents, and AI chat threads if the imported workspace is currently open.
 

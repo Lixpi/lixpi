@@ -22,7 +22,7 @@ This page is part of the canvas domain. For the DOM/PIXI rendering architecture,
 | **Document** | The actual text content (ProseMirror JSON). It lives separately from its canvas representation, so the same document could theoretically appear in multiple workspaces. Documents use `documentType: 'document'`, render through `ProseMirrorEditor`, and submit live edits through the ProseMirror authority step stream. |
 | **AI Chat Thread** | A persisted AI conversation session stored in the AI-Chat-Threads DynamoDB table. A thread is standalone; its ProseMirror history is rendered in an AI Chat panel tab, projected into branch marker/info panels, and streamed through server-authored ProseMirror step events plus durable pipeline side events. |
 | **AI Chat Panel** | A workspace-owned right-side surface that can be opened without creating a chat session; a standalone thread is created only when the first prompt is submitted. See [Chat Panel & Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md). |
-| **Image** | An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference workspace-owned image objects and delete them when removed from the canvas; a user can explicitly save a separate Media Library copy that is **not** deleted with the source node. |
+| **Image** | An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference workspace-owned image objects; removing the node requests storage cleanup, and the API deletes bytes only after the canonical canvas state no longer references the file. A user can explicitly save a separate Media Library copy that is **not** deleted with the source node. |
 | **Video** | A generated or restored MP4 stored in NATS Object Store with a poster and an optional representative still. The canvas renders a PIXI poster behind a browser-composited `<video>` surface so playback, scrubbing, fullscreen, and shared controls do not depend on a PIXI video texture loop. See [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md). |
 | **Branch Root** | The first generated image or video in a branch. It records the prompt, references, resolver metadata, and visual summaries on its own `generatedBy` metadata; no separate provenance node is persisted. See [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md). |
 | **Viewport** | The current view: x/y offset and zoom level, persisted so users return to where they left off. While a workspace is open, the live viewport inside [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) is the rendering source of truth; Svelte/store persistence is an acknowledgement path. A delayed store render must not replay an older viewport-only state over the current transform. |
@@ -112,6 +112,7 @@ type Workspace = {
     files: string[]              // Document IDs
     canvasState: CanvasState
     createdAt: number
+    canvasStateUpdatedAt: number // Canvas save token
     updatedAt: number
 }
 ```
@@ -325,7 +326,7 @@ The currently open workspace with full canvas state.
 }
 ```
 
-The `files` array is metadata for objects in the workspace's NATS Object Store bucket. Backend file registration uses atomic DynamoDB append, and file removal uses a conditional indexed remove instead of rewriting the whole list, so a delete cannot overwrite concurrent media registrations.
+The `files` array is metadata for objects in the workspace's NATS Object Store bucket. Backend file registration uses atomic DynamoDB append, and file removal uses a conditional indexed remove instead of rewriting the whole list, so a delete cannot overwrite concurrent media registrations. The API checks canonical `canvasState` before deleting workspace media bytes. Full `canvasState` saves use `canvasStateUpdatedAt` as a canvas-only save token, so file uploads and other workspace metadata changes can update `updatedAt` without making an otherwise current canvas save fail.
 
 ### documentsStore
 
@@ -359,7 +360,7 @@ Workspace, document, and thread persistence all travel over NATS request/respons
 | `WORKSPACE.GET_WORKSPACE` | Get single workspace with canvas state |
 | `WORKSPACE.CREATE_WORKSPACE` | Create new workspace |
 | `WORKSPACE.UPDATE_WORKSPACE` | Update name |
-| `WORKSPACE.UPDATE_CANVAS_STATE` | Persist viewport and node positions |
+| `WORKSPACE.UPDATE_CANVAS_STATE` | Persist viewport and node positions using the canvas save token |
 | `WORKSPACE.DELETE_WORKSPACE` | Delete workspace |
 | `WORKSPACE.GET_WORKSPACE_DOCUMENTS` | Get documents in workspace |
 | `DOCUMENT.CREATE_DOCUMENT` | Create document |
@@ -377,8 +378,8 @@ Workspace, document, and thread persistence all travel over NATS request/respons
 | `AI_INTERACTION.CHAT_STOP_MESSAGE` | Stop active AI streaming |
 | `AI_INTERACTION.FEATURE_EXTRACT.LIST_BY_WORKSPACE` | List extraction sessions for Sessions history |
 | `AI_INTERACTION.FEATURE_EXTRACT.DELETE` | Delete an extraction session without deleting its saved Feature |
-| `WORKSPACE_IMAGE.DELETE_IMAGE` | Delete image from Object Store |
-| `WORKSPACE_VIDEO.DELETE_VIDEO` | Delete video from Object Store |
+| `WORKSPACE_IMAGE.DELETE_IMAGE` | Delete image metadata and Object Store bytes after canonical canvas reference checks |
+| `WORKSPACE_VIDEO.DELETE_VIDEO` | Delete video metadata and Object Store bytes after canonical canvas reference checks |
 | `WORKSPACE.MEDIA_LIBRARY.CREATE_FROM_IMAGE` | Copy a stored canvas image into the Media Library |
 | `WORKSPACE.MEDIA_LIBRARY.CREATE_FROM_VIDEO` | Copy a stored canvas video and poster into the Media Library |
 | `WORKSPACE.MEDIA_LIBRARY.LIST_AVAILABLE` | List saved media visible in selected scopes |
@@ -415,7 +416,7 @@ Different changes persist on different cadences so continuous interactions never
 | AI chat thread content | API final snapshot after stream completion | ProseMirror step stream for live rendering; `AiChatThread.update()` writes `content` and `proseMirrorVersion` when the authoritative stream ends |
 | AI chat panel UI (open/close, tabs, width, chips, drafts) | On change | persisted inside `canvasState.aiChatPanel` |
 
-Canvas-state changes are debounced (1 second) before persisting, which prevents hammering the backend during continuous pan/zoom. Document editor transactions render locally, then submit short ProseMirror step batches to the API authority; the API writes a settled snapshot after the edit burst. AI chat transcript changes are authored by the API stream assembler, replayed through the document step log while active, and written once when the stream finalizes.
+Canvas-state changes are debounced (1 second) before persisting, which prevents hammering the backend during continuous pan/zoom. The browser serializes full canvas saves per workspace and sends the last acknowledged `canvasStateUpdatedAt` value with each save; the API rejects stale canvas saves instead of replacing newer canonical canvas state. Document editor transactions render locally, then submit short ProseMirror step batches to the API authority; the API writes a settled snapshot after the edit burst. AI chat transcript changes are authored by the API stream assembler, replayed through the document step log while active, and written once when the stream finalizes.
 
 AI chat panel state is stored inside `canvasState.aiChatPanel`. Opening or closing the panel, expanding or collapsing Sessions, opening or closing tabs, resizing it, changing context controls, and editing prompt drafts persist workspace UI state but do **not** create a conversation entity. Submitting from an empty panel creates a standalone chat session. Sessions is collapsed by default and toggled from the history icon in the panel control row; when expanded it lists standalone chats and extraction sessions. Closing a tab only changes panel presentation and the session remains reopenable; explicit standalone or extraction deletion removes that session and its saved prompt draft, while a saved Feature remains independent when its extraction session is deleted. The full panel and Sessions behavior is documented in [Chat Panel & Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md).
 
@@ -427,7 +428,7 @@ Media nodes on the canvas are tracked by [`canvasMediaNodeLifecycle.ts`](../../s
 2. It detects which tracked media keys are missing from the current canvas state.
 3. It calls the configured deletion utility for that node type.
 
-This ensures orphaned workspace-node media does not accumulate in storage. Image nodes use `deleteImage()` from [`imageUtils.ts`](../../services/web-ui/src/utils/imageUtils.ts). Video nodes use `deleteVideo()` from [`videoUtils.ts`](../../services/web-ui/src/utils/videoUtils.ts), which deletes the MP4 and best-effort poster image. Neither path deletes Media Library items — those are intentionally independent saved copies with their own scope and deletion lifecycle (see [Media Library](../library/MEDIA-LIBRARY.md)).
+This keeps intentionally removed workspace-node media from accumulating in storage. The API re-reads canonical `canvasState` before deleting bytes and refuses deletion while any image, video, audio, or uploaded-document node still references the file. Image nodes use `deleteImage()` from [`imageUtils.ts`](../../services/web-ui/src/utils/imageUtils.ts). Video nodes use `deleteVideo()` from [`videoUtils.ts`](../../services/web-ui/src/utils/videoUtils.ts), which deletes the MP4 and best-effort poster image. Neither path deletes Media Library items — those are intentionally independent saved copies with their own scope and deletion lifecycle (see [Media Library](../library/MEDIA-LIBRARY.md)).
 
 ## Workspace Load and Visibility Tracking
 

@@ -54,11 +54,17 @@ export const videoSubjects = [
 
             try {
                 const bucketName = getWorkspaceBucketName(workspaceId)
-                await natsService.deleteObject(bucketName, fileId)
-                info(`Deleted video file ${fileId} from bucket ${bucketName}`)
+                const isReferenced = await Workspace.isFileReferencedByCanvasState({ workspaceId, fileId })
+
+                if (isReferenced) {
+                    return { error: 'FILE_STILL_REFERENCED_BY_CANVAS', fileId }
+                }
 
                 await Workspace.removeFile({ workspaceId, fileId })
                 info(`Removed video file ${fileId} metadata from workspace ${workspaceId}`)
+
+                await natsService.deleteObject(bucketName, fileId)
+                info(`Deleted video file ${fileId} from bucket ${bucketName}`)
 
                 return { success: true, fileId }
             } catch (error: any) {

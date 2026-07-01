@@ -50,7 +50,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Display uploaded images from workspace storage
 - Have a full-area drag overlay
 - Resize preserves aspect ratio (stored when image is uploaded)
-- Automatically delete their workspace object when removed from canvas; explicitly saved Media Library copies are separate objects and remain available
+- Request workspace-object cleanup when removed from canvas; the API deletes bytes only after canonical canvas state no longer references the file, and explicitly saved Media Library copies are separate objects and remain available
 - Expose `Add to Media Library` in the bubble menu once their stored object is available; streaming generated-image placeholders hide the action until completion
 
 ### Video Nodes
@@ -296,7 +296,7 @@ When an AI-generated image is being created, the canvas provides visual feedback
 
 ### Media Node Lifecycle
 
-When a tracked media node is removed from the canvas, the `canvasMediaNodeLifecycle` tracker detects the change and triggers the configured deletion path. Image nodes route through `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE`; video nodes route through `WORKSPACE_SUBJECTS.VIDEO_SUBJECTS.DELETE_VIDEO` and best-effort poster cleanup.
+When a tracked media node is removed from the canvas, the `canvasMediaNodeLifecycle` tracker detects the change and triggers the configured deletion path. Image nodes route through `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE`; video nodes route through `WORKSPACE_SUBJECTS.VIDEO_SUBJECTS.DELETE_VIDEO` and best-effort poster cleanup. The API re-reads canonical canvas state and refuses storage deletion while any current node still references the file.
 
 Workspace navigation and first non-empty workspace load reinitialize the media lifecycle tracker from the opened workspace's canvas state before local commits can run. The tracker must never compare media from one workspace against another workspace's node set, because a cross-workspace diff would turn a navigation render into destructive storage deletion.
 

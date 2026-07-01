@@ -178,7 +178,7 @@ Because a saved copy is independent, removing the original canvas media does **n
 
 ## Deleting an Image
 
-When an image node is removed from the canvas — by user action or programmatically — the lifecycle tracker diffs the canvas state, detects the removed `fileId`, and issues a delete to Object Store via NATS so orphaned objects do not accumulate.
+When an image node is removed from the canvas — by user action or programmatically — the lifecycle tracker diffs the canvas state, detects the removed `fileId`, and issues a delete request over NATS. The API re-reads the workspace and deletes bytes only when canonical `canvasState` no longer references the file.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
@@ -221,14 +221,14 @@ sequenceDiagram
         Tracker->>NATS: DELETE_IMAGE request
         NATS->>API: Handle deletion
         activate API
-        API->>ObjStore: deleteObject(fileId)
         API->>API: Remove from workspace.files
+        API->>ObjStore: deleteObject(fileId)
         deactivate API
         deactivate Tracker
     end
 ```
 
-Video nodes follow the same shape over the `DELETE_VIDEO` subject. Neither deletion path touches Media Library items, which are independent saved copies; the full lifecycle is described in [Media Node Lifecycle Management](./WORKSPACE-MODEL.md#media-node-lifecycle-management).
+Video nodes follow the same shape over the `DELETE_VIDEO` subject. The delete handler refuses to remove bytes while canonical canvas state still references the MP4, poster, or representative frame. Neither deletion path touches Media Library items, which are independent saved copies; the full lifecycle is described in [Media Node Lifecycle Management](./WORKSPACE-MODEL.md#media-node-lifecycle-management).
 
 ## Editing Content
 

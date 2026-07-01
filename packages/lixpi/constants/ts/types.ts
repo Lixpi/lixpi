@@ -1502,6 +1502,7 @@ export type Workspace = {
     files?: DocumentFile[]
     canvasState: CanvasState
     createdAt: number
+    canvasStateUpdatedAt?: number
     updatedAt: number
 }
 

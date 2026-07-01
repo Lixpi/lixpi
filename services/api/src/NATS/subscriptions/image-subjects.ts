@@ -53,14 +53,21 @@ export const imageSubjects = [
 
             try {
                 const bucketName = getWorkspaceBucketName(workspaceId)
+                const isReferenced = await Workspace.isFileReferencedByCanvasState({ workspaceId, fileId })
+
+                if (isReferenced) {
+                    return { error: 'FILE_STILL_REFERENCED_BY_CANVAS', fileId }
+                }
+
+                // Remove file metadata before bytes. If the object delete fails, the
+                // remaining object is an orphan; the reverse order leaves live
+                // metadata pointing at missing storage.
+                await Workspace.removeFile({ workspaceId, fileId })
+                info(`Removed file ${fileId} metadata from workspace ${workspaceId}`)
 
                 // Delete file from Object Store
                 await natsService.deleteObject(bucketName, fileId)
                 info(`Deleted file ${fileId} from bucket ${bucketName}`)
-
-                // Remove file metadata from workspace
-                await Workspace.removeFile({ workspaceId, fileId })
-                info(`Removed file ${fileId} metadata from workspace ${workspaceId}`)
 
                 return { success: true, fileId }
             } catch (error: any) {
