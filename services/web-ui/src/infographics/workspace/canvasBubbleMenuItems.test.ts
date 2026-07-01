@@ -307,4 +307,89 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
 
         expect(items[3].element.style.display).toBe('none')
     })
+
+    it('Add to Media Library update shows saveable media', () => {
+        const callbacks = createCallbacks()
+        callbacks.canAddToMediaLibrary = vi.fn(() => true)
+        const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
+        setActiveNodeId('img-library')
+
+        items[3].update?.()
+
+        expect(items[3].element.style.display).toBe('')
+    })
+
+    it('Add to Media Library uses active node ID', () => {
+        const callbacks = createCallbacks()
+        callbacks.canAddToMediaLibrary = vi.fn((nodeId: string | null) => nodeId !== null)
+        const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
+
+        setActiveNodeId('img-1')
+        items[3].update?.()
+        expect(callbacks.canAddToMediaLibrary).toHaveBeenCalledWith('img-1')
+
+        setActiveNodeId(null)
+        items[3].update?.()
+        expect(callbacks.canAddToMediaLibrary).toHaveBeenCalledWith(null)
+    })
+})
+
+// =============================================================================
+// buildCanvasBubbleMenuItems — EDGE CALLBACKS
+// =============================================================================
+
+describe('buildCanvasBubbleMenuItems — edge callbacks', () => {
+    it('getActiveEdgeId starts as null', () => {
+        const callbacks = createCallbacks()
+        const { getActiveEdgeId } = buildCanvasBubbleMenuItems(callbacks)
+
+        expect(getActiveEdgeId()).toBeNull()
+    })
+
+    it('setActiveEdgeId updates and clears the value', () => {
+        const callbacks = createCallbacks()
+        const { getActiveEdgeId, setActiveEdgeId } = buildCanvasBubbleMenuItems(callbacks)
+
+        setActiveEdgeId('edge-1')
+        expect(getActiveEdgeId()).toBe('edge-1')
+
+        setActiveEdgeId(null)
+        expect(getActiveEdgeId()).toBeNull()
+    })
+
+    it('Change connector curve uses active edge id and hides menu', () => {
+        const callbacks = createCallbacks()
+        const { items, setActiveEdgeId } = buildCanvasBubbleMenuItems(callbacks)
+
+        setActiveEdgeId('edge-curve')
+        items[8].element.click()
+
+        expect(callbacks.onChangeConnectorCurve).toHaveBeenCalledWith('edge-curve')
+        expect(callbacks.onHide).toHaveBeenCalledOnce()
+        expect(callbacks.onDeleteEdge).not.toHaveBeenCalled()
+    })
+
+    it('Delete edge uses active edge id and hides menu', () => {
+        const callbacks = createCallbacks()
+        const { items, setActiveEdgeId } = buildCanvasBubbleMenuItems(callbacks)
+
+        setActiveEdgeId('edge-del')
+        items[9].element.click()
+
+        expect(callbacks.onDeleteEdge).toHaveBeenCalledWith('edge-del')
+        expect(callbacks.onHide).toHaveBeenCalledOnce()
+        expect(callbacks.onDeleteNode).not.toHaveBeenCalled()
+    })
+
+    it('Edge actions are no-ops without an active edge id', () => {
+        const callbacks = createCallbacks()
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+
+        items[8].element.click()
+        items[9].element.click()
+
+        expect(callbacks.onChangeConnectorCurve).not.toHaveBeenCalled()
+        expect(callbacks.onDeleteEdge).not.toHaveBeenCalled()
+        expect(callbacks.onHide).not.toHaveBeenCalled()
+    })
 })

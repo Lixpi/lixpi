@@ -1,50 +1,119 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
 
-import { extractPosterFrame, extractRepresentativeFrame } from './video-storage.ts'
+const mocks = vi.hoisted(() => ({
+    request: vi.fn(),
+    putObject: vi.fn(),
+    getObject: vi.fn(),
+    deleteObject: vi.fn(),
+    getInstance: vi.fn(),
+}))
 
-let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
-let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
-let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
+vi.mock('@lixpi/debug-tools', () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    err: vi.fn(),
+}))
 
-// =============================================================================
-// FRAME EXTRACTION — best-effort contract
-// =============================================================================
+vi.mock('@lixpi/nats-service', () => ({
+    default: { getInstance: mocks.getInstance },
+}))
 
-// Both extractors are best-effort: callers (VideoPublisher, GoogleProvider) do
-// not wrap them in try/catch, so they must resolve to null rather than throw
-// when ffmpeg is missing or the bytes are not a decodable video. This guards
-// the shared ffmpeg wrapper and its temp-dir cleanup against regressions.
-describe('video frame extraction — graceful failure', () => {
+vi.mock('uuid', () => ({ v4: () => 'frame-workflow' }))
+
+import { extractVideoFramesViaWorkload } from './video-frame-extraction.ts'
+
+const workspaceId = 'workspace-1'
+const bucketName = `workspace-${workspaceId}-files`
+const videoBuffer = Buffer.from('mp4-bytes')
+const fileId = 'tmp-frames-frame-workflow'
+
+describe('video frame extraction via workload', () => {
     beforeEach(() => {
-        debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
-        debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
-        debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+        vi.clearAllMocks()
+        mocks.getInstance.mockReturnValue({
+            request: mocks.request,
+            putObject: mocks.putObject,
+            getObject: mocks.getObject,
+            deleteObject: mocks.deleteObject,
+        })
     })
 
-    afterEach(() => {
-        debugInfoSpy?.mockRestore()
-        debugInfoSpy = null
-        debugWarnSpy?.mockRestore()
-        debugWarnSpy = null
-        debugErrSpy?.mockRestore()
-        debugErrSpy = null
+    it('returns nulls when NATS is unavailable and leaves no traces', async () => {
+        mocks.getInstance.mockReturnValue(undefined)
+
+        const result = await extractVideoFramesViaWorkload({
+            workspaceId,
+            videoBuffer,
+        })
+
+        expect(result).toEqual({ posterBuffer: null, frameBuffer: null })
+        expect(mocks.request).not.toHaveBeenCalled()
+        expect(mocks.putObject).not.toHaveBeenCalled()
+        mockWarnSpy('extractVideoFramesViaWorkload: NATS service unavailable; proceeding without frames')
     })
 
-    const notAVideo = Buffer.from('this is definitely not an mp4 container')
+    it('returns nulls and clears temporary video object when the workload reports failure', async () => {
+        mocks.request.mockResolvedValue({ success: false, error: 'not supported' })
+        mocks.putObject.mockResolvedValue(undefined)
+        mocks.deleteObject.mockResolvedValue(undefined)
 
-    it('extractPosterFrame returns null for non-video bytes', async () => {
-        expect(await extractPosterFrame(notAVideo)).toBeNull()
+        const result = await extractVideoFramesViaWorkload({
+            workspaceId,
+            videoBuffer,
+        })
+
+        expect(result).toEqual({ posterBuffer: null, frameBuffer: null })
+        expect(mocks.putObject).toHaveBeenCalledWith(bucketName, fileId, videoBuffer, { name: fileId })
+        expect(mocks.deleteObject).toHaveBeenCalledWith(bucketName, fileId)
     })
 
-    it('extractRepresentativeFrame returns null for non-video bytes', async () => {
-        expect(await extractRepresentativeFrame(notAVideo, 3)).toBeNull()
+    it('returns poster and frame buffers and deletes all temporary objects', async () => {
+        const posterId = `${fileId}-poster`
+        const frameId = `${fileId}-frame`
+        const posterBuffer = Buffer.from('poster')
+        const frameBuffer = Buffer.from('frame')
+        mocks.request.mockResolvedValue({
+            success: true,
+            posterFileId: posterId,
+            frameFileId: frameId,
+        })
+        mocks.putObject.mockResolvedValue(undefined)
+        mocks.getObject
+            .mockResolvedValueOnce(posterBuffer)
+            .mockResolvedValueOnce(frameBuffer)
+        mocks.deleteObject.mockResolvedValue(undefined)
+
+        const result = await extractVideoFramesViaWorkload({
+            workspaceId,
+            videoBuffer,
+            atSeconds: 3,
+        })
+
+        expect(result).toEqual({ posterBuffer, frameBuffer })
+        expect(mocks.deleteObject).toHaveBeenNthCalledWith(1, bucketName, fileId)
+        expect(mocks.deleteObject).toHaveBeenNthCalledWith(2, bucketName, posterId)
+        expect(mocks.deleteObject).toHaveBeenNthCalledWith(3, bucketName, frameId)
     })
 
-    it('extractRepresentativeFrame tolerates a missing seek point', async () => {
-        expect(await extractRepresentativeFrame(notAVideo)).toBeNull()
+    it('returns nulls when the request throws after temporary upload', async () => {
+        mocks.request.mockRejectedValue(new Error('convert failed'))
+        mocks.putObject.mockResolvedValue(undefined)
+        mocks.deleteObject.mockResolvedValue(undefined)
+
+        const result = await extractVideoFramesViaWorkload({
+            workspaceId,
+            videoBuffer,
+        })
+
+        expect(result).toEqual({ posterBuffer: null, frameBuffer: null })
+        expect(mocks.deleteObject).toHaveBeenCalledWith(bucketName, fileId)
     })
 })
+
+const mockWarnSpy = (message: string) => {
+    expect(debugTools.warn).toHaveBeenCalledWith(expect.stringContaining(message))
+}

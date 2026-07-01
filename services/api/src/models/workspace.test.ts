@@ -598,13 +598,15 @@ describe('Workspace file list storage', () => {
             fileId: 'original-file-canonical',
         })
 
-        expect(dynamo.updateItem).toHaveBeenCalledWith(expect.objectContaining({
+        const call = dynamo.updateItem.mock.calls[0]?.[0]
+        expect(call).toBeDefined()
+        expect(call).toEqual(expect.objectContaining({
+            tableName: expect.stringContaining('Workspaces'),
             key: { workspaceId: 'workspace-1' },
             updateExpression: 'SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, :previousUpdatedAt), #updatedAt = :now REMOVE #files[1]',
             conditionExpression: '#files[1].#canonicalFileId = :fileId',
             expressionAttributeNames: {
                 '#files': 'files',
-                '#id': 'id',
                 '#updatedAt': 'updatedAt',
                 '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
                 '#canonicalFileId': 'canonicalFileId',
@@ -614,7 +616,92 @@ describe('Workspace file list storage', () => {
                 ':now': expect.any(Number),
                 ':previousUpdatedAt': expect.any(Number),
             },
+            origin: 'model::Workspace->removeFile()',
         }))
+    })
+
+    it('sets canonical pointer fields on the original file record when transcode finishes', async () => {
+        dynamo.getItem.mockResolvedValue({
+            files: [
+                { id: 'original-file', canonicalFileId: 'old-canonical', canonicalMimeType: 'video/mp4' },
+            ],
+        })
+        dynamo.updateItem.mockResolvedValue(undefined)
+
+        await Workspace.setFileCanonical({
+            workspaceId: 'workspace-1',
+            fileId: 'original-file',
+            canonicalFileId: 'new-canonical',
+            canonicalMimeType: 'video/quicktime',
+        })
+
+        expect(dynamo.updateItem).toHaveBeenCalledWith(expect.objectContaining({
+            key: { workspaceId: 'workspace-1' },
+            updateExpression: 'SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, :previousUpdatedAt), #updatedAt = :now, #files[0].#canonicalFileId = :canonicalFileId, #files[0].#canonicalMimeType = :canonicalMimeType',
+            conditionExpression: '#files[0].#id = :fileId',
+            expressionAttributeNames: {
+                '#files': 'files',
+                '#id': 'id',
+                '#canonicalFileId': 'canonicalFileId',
+                '#canonicalMimeType': 'canonicalMimeType',
+                '#updatedAt': 'updatedAt',
+                '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
+            },
+            expressionAttributeValues: {
+                ':fileId': 'original-file',
+                ':canonicalFileId': 'new-canonical',
+                ':canonicalMimeType': 'video/quicktime',
+                ':now': expect.any(Number),
+                ':previousUpdatedAt': expect.any(Number),
+            },
+        }))
+    })
+
+    it('retries setFileCanonical when a concurrent index move is detected', async () => {
+        const conditionalFailure = Object.assign(new Error('index changed'), {
+            name: 'ConditionalCheckFailedException',
+        })
+        dynamo.getItem
+            .mockResolvedValueOnce({
+                files: [
+                    { id: 'file-1' },
+                ],
+                updatedAt: 10,
+            })
+            .mockResolvedValueOnce({
+                files: [
+                    { id: 'file-1' },
+                ],
+                updatedAt: 11,
+            })
+        dynamo.updateItem
+            .mockRejectedValueOnce(conditionalFailure)
+            .mockResolvedValueOnce(undefined)
+
+        await Workspace.setFileCanonical({
+            workspaceId: 'workspace-1',
+            fileId: 'file-1',
+            canonicalFileId: 'canonical-1',
+            canonicalMimeType: 'image/png',
+        })
+
+        expect(dynamo.getItem).toHaveBeenCalledTimes(2)
+        expect(dynamo.updateItem).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not patch canonical fields when source file id is missing', async () => {
+        dynamo.getItem.mockResolvedValue({
+            files: [{ id: 'keep-1' }],
+        })
+
+        await Workspace.setFileCanonical({
+            workspaceId: 'workspace-1',
+            fileId: 'missing-file',
+            canonicalFileId: 'canonical-missing',
+            canonicalMimeType: 'image/png',
+        })
+
+        expect(dynamo.updateItem).not.toHaveBeenCalled()
     })
 
     it('re-reads and retries when another writer shifts the file index', async () => {

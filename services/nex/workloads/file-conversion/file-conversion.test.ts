@@ -1,11 +1,17 @@
 'use strict'
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import sharp from 'sharp'
 
 import type { ConvertFileRequest } from '@lixpi/constants'
 
 import { convertWorkspaceFile, type ConversionStorage } from './file-conversion.ts'
+
+vi.mock('@lixpi/debug-tools', () => ({
+    info: () => undefined,
+    warn: () => undefined,
+    err: () => undefined,
+}))
 
 // In-memory Object Store stand-in so the orchestration is testable without real
 // JetStream. Keys are `${bucket}/${name}`.
@@ -41,6 +47,30 @@ describe('convertWorkspaceFile', () => {
         if (!result.success) expect(result.error).toMatch(/could not be read/i)
     })
 
+    it('skips transcoding for model-safe media, yet still writes canvas hints', async () => {
+        const storage = new MemoryStorage()
+        const png = await sharp({
+            create: { width: 4, height: 2, channels: 3, background: { r: 30, g: 40, b: 50 } },
+        }).png().toBuffer()
+        await storage.putObject('workspace-ws-1-files', 'file-1', png)
+
+        const result = await convertWorkspaceFile(baseRequest({
+            kind: 'image',
+            modelSafe: true,
+            canonicalMime: 'image/webp',
+            mimeType: 'image/png',
+        }), storage)
+
+        expect(result.success).toBe(true)
+        if (result.success) {
+            expect(result.canonicalFileId).toBeUndefined()
+            expect(result.canonicalMimeType).toBeUndefined()
+            expect(result.aspectRatio).toBeCloseTo(2, 1)
+        }
+        const canonical = await storage.getObject('workspace-ws-1-files', 'file-1-canonical')
+        expect(canonical).toBeNull()
+    })
+
     it('transcodes an image, writes the canonical, and reports aspectRatio', async () => {
         const storage = new MemoryStorage()
         // A 20x10 TIFF original (not model-safe) → canonical PNG.
@@ -62,6 +92,21 @@ describe('convertWorkspaceFile', () => {
         expect(canonical).not.toBeNull()
         const meta = await sharp(Buffer.from(canonical!)).metadata()
         expect(meta.format).toBe('png')
+    })
+
+    it('returns a failure for unsupported media kinds', async () => {
+        const storage = new MemoryStorage()
+        const png = await sharp({
+            create: { width: 1, height: 1, channels: 3, background: { r: 1, g: 2, b: 3 } },
+        }).png().toBuffer()
+        await storage.putObject('workspace-ws-1-files', 'file-1', png)
+
+        const result = await convertWorkspaceFile(baseRequest({ kind: 'blob' as ConvertFileRequest['kind'] }), storage)
+
+        expect(result.success).toBe(false)
+        if (!result.success) {
+            expect(result.error).toMatch(/Unsupported media kind: blob/)
+        }
     })
 
     it('returns a failure for an undecodable image rather than throwing', async () => {

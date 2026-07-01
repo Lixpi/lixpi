@@ -449,6 +449,57 @@ describe('VideoPublisher', () => {
         expect(failingStoreImage).toHaveBeenCalledTimes(2)
     })
 
+    it('allows missing poster and frame buffers and does not call image storage for absent assets', async () => {
+        const storeImage = vi.fn(async () => ({
+            fileId: 'image-file-id',
+            url: '/api/images/ws-1/image-file-id',
+            isDuplicate: false,
+            size: 456,
+            mimeType: 'image/png',
+        }))
+        const published: Published[] = []
+        const publisher = new VideoPublisher(
+            {
+                publish: (subject: string, payload: any) => {
+                    published.push({ subject, payload })
+                },
+            } as any,
+            vi.fn(async () => ({
+                fileId: 'video-file-id',
+                url: '/api/videos/ws-1/video-file-id',
+                isDuplicate: false,
+                size: 1234,
+                mimeType: 'video/mp4',
+            })),
+            storeImage,
+            'ws-1',
+            'thread-1',
+            'Google',
+        )
+
+        await publisher.complete({
+            videoBuffer: mp4Sample,
+            posterBuffer: null,
+            frameBuffer: undefined,
+            durationSeconds: 6,
+            aspectRatio: '16:9',
+            hasAudio: true,
+            responseId: 'resp-1',
+            revisedPrompt: 'No poster required',
+            videoModelId: 'veo-3.1-generate-preview',
+        })
+
+        const complete = published.find((entry) => entry.payload.content.status === STREAM_STATUS.VIDEO_COMPLETE)?.payload.content
+        expect(complete).toMatchObject({
+            status: STREAM_STATUS.VIDEO_COMPLETE,
+            posterUrl: '',
+            posterFileId: '',
+            frameUrl: '',
+            frameFileId: '',
+        })
+        expect(storeImage).not.toHaveBeenCalled()
+    })
+
     it('routes video events through onPipelineContent when durable pipeline publishing is supplied', () => {
         const published: Published[] = []
         const nats = {

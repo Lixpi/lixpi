@@ -179,7 +179,7 @@ describe('aiGeneratedImageNodeView', () => {
         vi.mocked(AuthService.getTokenSilently).mockResolvedValue('fresh-token')
 
         const { nodeView } = createNodeView({
-            imageData: 'https://cdn.example.com/api/images/workspace-images/final-file?token=stale',
+            imageData: 'https://cdn.example.com/api/files/workspace-images/final-file?token=stale',
             isPartial: false,
         })
         const image = nodeView.dom.querySelector('.ai-generated-image-content') as HTMLImageElement

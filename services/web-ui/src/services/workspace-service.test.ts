@@ -1,13 +1,15 @@
 'use strict'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { NATS_SUBJECTS } from '@lixpi/constants'
+import { LoadingStatus, NATS_SUBJECTS } from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => {
     const workspaceData: { updatedAt: number; canvasStateUpdatedAt?: number } = { updatedAt: 10, canvasStateUpdatedAt: 5 }
+    let routeWorkspaceId = 'workspace-1'
 
     return {
         workspaceData,
+        routeWorkspaceId,
         request: vi.fn(),
         getTokenSilently: vi.fn(),
         setDataValues: vi.fn((values: { updatedAt?: number; canvasStateUpdatedAt?: number }) => {
@@ -31,7 +33,7 @@ vi.mock('$src/services/auth-service.ts', () => ({
 
 vi.mock('$src/services/router-service.ts', () => ({
     default: {
-        getRouteParams: vi.fn(() => ({ workspaceId: 'workspace-1' })),
+        getRouteParams: vi.fn(() => ({ workspaceId: mocks.routeWorkspaceId })),
     },
 }))
 
@@ -79,6 +81,7 @@ describe('WorkspaceService canvas save queue', () => {
         vi.clearAllMocks()
         mocks.workspaceData.updatedAt = 10
         mocks.workspaceData.canvasStateUpdatedAt = 5
+        mocks.routeWorkspaceId = 'workspace-1'
         mocks.getTokenSilently.mockResolvedValue('token-1')
     })
 
@@ -176,5 +179,142 @@ describe('WorkspaceService canvas save queue', () => {
         expect(mocks.request.mock.calls[0]?.[1]).not.toEqual(expect.objectContaining({
             expectedUpdatedAt: 10,
         }))
+    })
+
+    it('refreshes the current workspace when the server reports stale canvas state', async () => {
+        mocks.request.mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE' })
+
+        const service = new WorkspaceService()
+        const getWorkspaceSpy = vi.spyOn(service as unknown as { getWorkspace: (args: { workspaceId: string }) => Promise<void> }, 'getWorkspace')
+            .mockResolvedValue(undefined)
+        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: makeCanvasState('stale-node') })
+
+        await vi.waitFor(() => {
+            expect(mocks.request).toHaveBeenCalledTimes(1)
+        })
+        await vi.waitFor(() => {
+            expect(getWorkspaceSpy).toHaveBeenCalledTimes(1)
+        })
+        expect(getWorkspaceSpy).toHaveBeenCalledWith({ workspaceId: 'workspace-1' })
+        expect(mocks.setMetaValues).toHaveBeenCalledWith({ requiresSave: false })
+    })
+
+    it('does not refetch the workspace when stale canvas state belongs to a different route', async () => {
+        mocks.routeWorkspaceId = 'workspace-2'
+        mocks.request.mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE' })
+
+        const service = new WorkspaceService()
+        const getWorkspaceSpy = vi.spyOn(service as unknown as { getWorkspace: (args: { workspaceId: string }) => Promise<void> }, 'getWorkspace')
+            .mockResolvedValue(undefined)
+        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: makeCanvasState('stale-node') })
+
+        await vi.waitFor(() => {
+            expect(mocks.request).toHaveBeenCalledTimes(1)
+        })
+        expect(getWorkspaceSpy).not.toHaveBeenCalled()
+        expect(mocks.setMetaValues).toHaveBeenCalledWith({ requiresSave: false })
+    })
+
+    it('does not include an optimistic canvas save token when none is available', async () => {
+        mocks.workspaceData.updatedAt = Number.NaN
+        mocks.workspaceData.canvasStateUpdatedAt = undefined
+        mocks.request.mockResolvedValueOnce({
+            success: true,
+            workspaceId: 'workspace-1',
+            updatedAt: 12,
+            canvasStateUpdatedAt: 13,
+        })
+
+        const service = new WorkspaceService()
+        const staleState = makeCanvasState('no-token')
+
+        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: staleState })
+
+        await vi.waitFor(() => {
+            expect(mocks.request).toHaveBeenCalledTimes(1)
+        })
+        expect(mocks.request.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+            canvasState: staleState,
+            token: 'token-1',
+        }))
+        expect(mocks.request.mock.calls[0]?.[1]).not.toHaveProperty('expectedCanvasStateUpdatedAt')
+    })
+
+    it('retries queued canvas updates after a non-stale error, then marks save complete on success', async () => {
+        mocks.request
+            .mockResolvedValueOnce({ error: 'UNAVAILABLE' })
+            .mockResolvedValueOnce({ success: true, workspaceId: 'workspace-1', updatedAt: 20, canvasStateUpdatedAt: 19 })
+
+        const service = new WorkspaceService()
+        const stateA = makeCanvasState('state-a')
+        const stateB = makeCanvasState('state-b')
+
+        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: stateA })
+        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: stateB })
+
+        await vi.waitFor(() => {
+            expect(mocks.request).toHaveBeenCalledTimes(2)
+        })
+
+        expect(mocks.setMetaValues).toHaveBeenCalledWith({ requiresSave: true })
+        expect(mocks.setMetaValues).toHaveBeenCalledWith({ requiresSave: false })
+        expect(mocks.setDataValues).toHaveBeenCalledWith({ updatedAt: 20 })
+        expect(mocks.setDataValues).toHaveBeenCalledWith({ canvasStateUpdatedAt: 19 })
+        expect(mocks.request.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+            canvasState: stateB,
+            expectedCanvasStateUpdatedAt: 5,
+        }))
+    })
+})
+
+describe('WorkspaceService state loading', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mocks.workspaceData.updatedAt = 10
+        mocks.workspaceData.canvasStateUpdatedAt = 5
+        mocks.routeWorkspaceId = 'workspace-1'
+        mocks.getTokenSilently.mockResolvedValue('token-1')
+    })
+
+    it('loads workspace data and normalizes missing canvas state edges', async () => {
+        const service = new WorkspaceService()
+        mocks.request.mockResolvedValueOnce({
+            workspaceId: 'workspace-1',
+            name: 'Project',
+            updatedAt: 10,
+            canvasState: {
+                nodes: [{ nodeId: 'n1', type: 'image' }],
+                dimensions: { width: 100, height: 100 },
+            },
+        })
+
+        await service.getWorkspace({ workspaceId: 'workspace-1' })
+
+        expect(mocks.setMetaValues).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.loading })
+        expect(mocks.setMetaValues).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.success })
+        expect(mocks.setDataValues).toHaveBeenCalledWith(expect.objectContaining({
+            workspaceId: 'workspace-1',
+            updatedAt: 10,
+            canvasStateUpdatedAt: 10,
+            canvasState: expect.objectContaining({
+                edges: [],
+            }),
+        }))
+    })
+
+    it('does nothing with workspace payload when the active route changed', async () => {
+        mocks.routeWorkspaceId = 'other-workspace'
+        const service = new WorkspaceService()
+        mocks.request.mockResolvedValueOnce({
+            workspaceId: 'workspace-1',
+            updatedAt: 10,
+            canvasState: { nodes: [], edges: [] },
+        })
+
+        await service.getWorkspace({ workspaceId: 'workspace-1' })
+
+        expect(mocks.setMetaValues).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.loading })
+        expect(mocks.setMetaValues).not.toHaveBeenCalledWith({ loadingStatus: LoadingStatus.success })
+        expect(mocks.setDataValues).not.toHaveBeenCalled()
     })
 })

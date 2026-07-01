@@ -99,15 +99,15 @@ describe('createImageGenerationTraceDetails — reference tile load contract', (
 // =============================================================================
 
 describe('createImageGenerationTraceDetails — reference source resolution', () => {
-    it('resolves a nats-obj:// reference to an authenticated /api/images URL', async () => {
+    it('resolves a nats-obj:// reference to an authenticated /api/files URL', async () => {
         const { image } = renderTiles([makeReference({ imageUrl: 'nats-obj://workspace-workspace-1-files/person-file' })])
-        await vi.waitFor(() => expect(image.src).toContain('/api/images/workspace-1/person-file'))
+        await vi.waitFor(() => expect(image.src).toContain('/api/files/workspace-1/person-file'))
         expect(image.src).toContain('token=token-1')
     })
 
     it('falls back to fileId/workspaceId when imageUrl is empty', async () => {
         const { image } = renderTiles([makeReference({ imageUrl: '' })])
-        await vi.waitFor(() => expect(image.src).toContain('/api/images/workspace-1/person-file'))
+        await vi.waitFor(() => expect(image.src).toContain('/api/files/workspace-1/person-file'))
     })
 
     it('retries the next source (e.g. the canvas in-memory image) when the primary errors', async () => {

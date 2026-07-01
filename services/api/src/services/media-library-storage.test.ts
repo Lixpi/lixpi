@@ -38,11 +38,8 @@ vi.mock('../models/workspace.ts', () => ({
     },
 }))
 
-vi.mock('./image-storage.ts', () => ({
+vi.mock('./store-media-adapters.ts', () => ({
     storeWorkspaceImage: mocks.storeWorkspaceImage,
-}))
-
-vi.mock('./video-storage.ts', () => ({
     storeWorkspaceVideo: mocks.storeWorkspaceVideo,
 }))
 
@@ -255,5 +252,41 @@ describe('Media Library storage ownership', () => {
             originalName: 'saved-poster.png',
             mimeType: 'image/png',
         })
+    })
+
+    it('does not fail when a saved video poster object is missing in the library bucket', async () => {
+        const item = makeVideoItem()
+        mocks.getObject
+            .mockResolvedValueOnce(pngBytes)
+            .mockResolvedValueOnce(undefined)
+
+        const result = await materializeLibraryVideoToWorkspace({ item, workspaceId: 'workspace-2' })
+
+        expect(result.poster).toBeUndefined()
+        expect(mocks.storeWorkspaceImage).not.toHaveBeenCalled()
+        expect(mocks.getObject).toHaveBeenNthCalledWith(
+            2,
+            'media-library-workspace-workspace-1-files',
+            item.poster.objectKey,
+        )
+    })
+
+    it('does not copy a missing video poster stream when saving to the library', async () => {
+        const item = makeVideoItem()
+        mocks.getObjectStream.mockResolvedValueOnce({ readable: true })
+        mocks.getObjectStream.mockResolvedValueOnce(undefined)
+
+        await copyWorkspaceVideoToLibrary({
+            workspaceId: 'workspace-1',
+            fileId: 'source-video-1',
+            posterFileId: 'source-poster-1',
+            durationSeconds: 4,
+            aspectRatio: 1,
+            hasAudio: false,
+            scope: 'organization',
+            scopeOwnerId: 'organization-1',
+        })
+
+        expect(mocks.putObjectFromReadable).toHaveBeenCalledTimes(1)
     })
 })

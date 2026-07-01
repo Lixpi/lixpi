@@ -116,6 +116,34 @@ describe('ingestWorkspaceFile — processing (workload)', () => {
         expect(mocks.setFileCanonical).not.toHaveBeenCalled()
         expect(mocks.natsPublish).toHaveBeenCalledWith('workspace.file.convert.response.ws.conv-123', expect.objectContaining({ success: false, error: 'bad seek' }))
     })
+
+    it('publishes a failure notification when the workload request fails', async () => {
+        mocks.detectFileType.mockResolvedValue({
+            rejected: false, mimeType: 'image/heic', kind: 'image', modelSafe: false, canonicalMime: 'image/jpeg',
+        })
+        mocks.storeWorkspaceFile.mockResolvedValue({
+            fileId: 'orig', isDuplicate: false, kind: 'image', modelSafe: false,
+        })
+        mocks.natsRequest.mockRejectedValue(new Error('nats unavailable'))
+
+        const result = await ingestWorkspaceFile({
+            workspaceId: 'ws',
+            buffer: Buffer.from('heic'),
+            originalName: 'p.heic',
+        })
+
+        expect(result).toMatchObject({ status: 'processing', fileId: 'orig', conversionId: 'conv-123', kind: 'image' })
+        await flushMicrotasks()
+        expect(mocks.setFileCanonical).not.toHaveBeenCalled()
+        expect(mocks.natsPublish).toHaveBeenCalledWith(
+            'workspace.file.convert.response.ws.conv-123',
+            expect.objectContaining({
+                success: false,
+                conversionId: 'conv-123',
+                error: 'File conversion timed out or the converter was unavailable.',
+            }),
+        )
+    })
 })
 
 describe('ingestWorkspaceFile — dedup & rejection', () => {

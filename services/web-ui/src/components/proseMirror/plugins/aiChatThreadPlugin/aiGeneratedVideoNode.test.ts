@@ -237,11 +237,11 @@ describe('aiGeneratedVideoNodeView', () => {
         expect(controlInstance.destroy).toHaveBeenCalled()
     })
 
-    it('refreshes api video URLs and tokens without mutating non-video source shape', async () => {
+    it('refreshes /api/files URLs and tokens for full URLs', async () => {
         const view = createNodeView({
             isPending: false,
-            videoUrl: 'https://cdn.example.com/api/videos/workspace-id/video.mp4?token=stale',
-            posterUrl: 'https://cdn.example.com/api/images/workspace-id/poster.png?token=stale',
+            videoUrl: 'https://cdn.example.com/api/files/workspace-id/video.mp4?token=stale',
+            posterUrl: 'https://cdn.example.com/api/files/workspace-id/poster.png?token=stale',
             errorMessage: '',
         })
 
@@ -256,5 +256,24 @@ describe('aiGeneratedVideoNodeView', () => {
         const resolvedPosterSrc = video.poster || video.getAttribute('poster')
         expect(resolvedPosterSrc).toContain('token=token-1')
         expect(resolvedPosterSrc).not.toContain('token=stale')
+    })
+
+    it('does not refresh non-file full URLs for legacy video/http sources', async () => {
+        const view = createNodeView({
+            isPending: false,
+            videoUrl: 'https://cdn.example.com/api/videos/workspace-id/video.mp4?token=stale',
+            posterUrl: 'https://cdn.example.com/public-assets/poster.png?token=stale',
+            errorMessage: '',
+        })
+
+        const video = view.dom.querySelector('.ai-generated-video-content') as HTMLVideoElement
+
+        await vi.waitFor(() => {
+            const resolvedVideoSrc = video.getAttribute('src') || video.src
+            expect(resolvedVideoSrc).toContain('token=stale')
+        })
+
+        const resolvedPosterSrc = video.poster || video.getAttribute('poster')
+        expect(resolvedPosterSrc).toContain('token=stale')
     })
 })

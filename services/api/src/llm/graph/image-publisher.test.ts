@@ -140,6 +140,31 @@ describe('ImagePublisher', () => {
         expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.IMAGE_COMPLETE)
     })
 
+    it('propagates storage errors from IMAGE_COMPLETE', async () => {
+        const { publisher, published } = makePublisher()
+        const storeImage = vi.fn(async () => {
+            throw new Error('temporary object store write failure')
+        })
+        const failingPublisher = new ImagePublisher(
+            { publish: () => {} } as any,
+            storeImage,
+            'ws-1',
+            'thread-1',
+            'Google',
+        )
+        const jpegBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]).toString('base64')
+
+        await expect(
+            failingPublisher.complete({
+                imageBase64: jpegBase64,
+                responseId: 'resp-1',
+                revisedPrompt: 'cat',
+                imageModelId: 'gemini-2.5-flash-image',
+            }),
+        ).rejects.toThrow('temporary object store write failure')
+        expect(published).toHaveLength(0)
+    })
+
     it('passes generation-run metadata through partial and complete image events', async () => {
         const generationRun = {
             generationRequestId: 'request-1',

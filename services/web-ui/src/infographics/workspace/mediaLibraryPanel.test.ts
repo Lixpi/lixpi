@@ -95,15 +95,19 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(canvasSource, 'mediaLibraryService.materializeImage')
         expectSourceToContain(canvasSource, 'insertNodeAtViewportCenterInternal(imageNode)')
         expectSourceToContain(canvasSource, "type: 'image'")
-        expectSourceToContain(workspaceSvelteSource, '/api/images/${targetWorkspaceId}/import-url')
-        expectSourceToContain(workspaceSvelteSource, 'addImageToCanvas({ fileId: data.fileId, src: imageUrl, targetWorkspaceId })')
+        expectSourceToContain(workspaceSvelteSource, '/api/files/${targetWorkspaceId}/import-url')
+        expectSourceToContain(workspaceSvelteSource, 'insertNodeAtViewportCenter(imageNode)')
     })
 
     it('imports remote images with the current workspace target and encoded auth token', () => {
-        expectSourceToContain(workspaceSvelteSource, 'const targetWorkspaceId = workspaceId')
-        expectSourceToContain(workspaceSvelteSource, 'fetch(`${API_BASE_URL}/api/images/${targetWorkspaceId}/import-url`, {')
+        expectSourceToContain(workspaceSvelteSource, "const targetWorkspaceId = workspaceId")
+        expectSourceToContain(workspaceSvelteSource, "fetch(`${API_BASE_URL}/api/files/${targetWorkspaceId}/import-url`, {")
         expectSourceToContain(workspaceSvelteSource, "'Authorization': `Bearer ${token}`")
-        expectSourceToContain(workspaceSvelteSource, 'const imageUrl = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`')
-        expectSourceToContain(workspaceSvelteSource, 'if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return')
+        expectSourceToContain(workspaceSvelteSource, 'const src = tokenizeUrl(result.url, token)')
+        expectSourceToContain(workspaceSvelteSource, 'await finalizeIngest(data, token, targetWorkspaceId, placeholderNodeId)')
+        expectSourceToContain(
+            workspaceSvelteSource,
+            'if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return',
+        )
     })
 })
