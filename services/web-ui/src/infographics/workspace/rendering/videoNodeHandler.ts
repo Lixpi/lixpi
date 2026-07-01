@@ -81,7 +81,7 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
         }
         if (url.startsWith('http')) {
             const stripped = url.replace(/[?&]token=[^&]+/, '')
-            if (stripped.includes('/api/videos/') || stripped.includes('/api/images/')) {
+            if (stripped.includes('/api/files/')) {
                 const token = await AuthService.getTokenSilently()
                 return `${stripped}${token ? `?token=${token}` : ''}`
             }

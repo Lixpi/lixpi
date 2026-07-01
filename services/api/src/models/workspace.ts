@@ -9,6 +9,7 @@ import {
     type WorkspaceMeta,
     type WorkspaceAccessList,
     type CanvasState,
+    type CanvasNode,
     type ContentDescriptor,
     type DocumentFile
 } from '@lixpi/constants'
@@ -27,6 +28,73 @@ type CanvasStateMutationResult = {
 }
 
 type CanvasStateMutator = (canvasState: CanvasState) => CanvasStateMutationResult
+
+type UpdateCanvasStateResult =
+    | { success: true; workspaceId: string; updatedAt: number; canvasStateUpdatedAt: number }
+    | {
+        success: false
+        workspaceId: string
+        error: 'STALE_CANVAS_STATE'
+        currentUpdatedAt?: number
+        currentCanvasStateUpdatedAt?: number
+    }
+
+type WorkspaceWithCanvasToken = Partial<Workspace> & {
+    canvasStateUpdatedAt?: number
+}
+
+const addFileId = (fileIds: Set<string>, fileId: unknown): void => {
+    if (typeof fileId === 'string' && fileId.length > 0) {
+        fileIds.add(fileId)
+    }
+}
+
+const getFileRecordByStorageId = (files: DocumentFile[] | undefined, fileId: string): DocumentFile | undefined =>
+    files?.find((file: DocumentFile) => file.id === fileId || file.canonicalFileId === fileId)
+
+const getCanvasStateUpdatedAt = (workspace: WorkspaceWithCanvasToken | null | undefined): number | undefined => {
+    if (typeof workspace?.canvasStateUpdatedAt === 'number') return workspace.canvasStateUpdatedAt
+    if (typeof workspace?.updatedAt === 'number') return workspace.updatedAt
+    return undefined
+}
+
+const getCanvasStateWriteCondition = (hasExpectedCanvasStateUpdatedAt: boolean): string => {
+    if (!hasExpectedCanvasStateUpdatedAt) {
+        return '(attribute_not_exists(#canvasStateUpdatedAt) AND attribute_not_exists(#updatedAt))'
+    }
+
+    return '(#canvasStateUpdatedAt = :expectedCanvasStateUpdatedAt OR (attribute_not_exists(#canvasStateUpdatedAt) AND #updatedAt = :expectedCanvasStateUpdatedAt))'
+}
+
+const getCanvasStateReferencedFileIds = (canvasState: CanvasState | null | undefined): Set<string> => {
+    const fileIds = new Set<string>()
+
+    for (const node of canvasState?.nodes ?? []) {
+        const mediaNode = node as CanvasNode & {
+            fileId?: string
+            posterFileId?: string
+            frameFileId?: string
+        }
+
+        switch (mediaNode.type) {
+            case 'image':
+            case 'audio':
+                addFileId(fileIds, mediaNode.fileId)
+                break
+            case 'video':
+                addFileId(fileIds, mediaNode.fileId)
+                addFileId(fileIds, mediaNode.posterFileId)
+                addFileId(fileIds, mediaNode.frameFileId)
+                break
+            case 'mediaDocument':
+                addFileId(fileIds, mediaNode.fileId)
+                addFileId(fileIds, mediaNode.posterFileId)
+                break
+        }
+    }
+
+    return fileIds
+}
 
 export default {
     getWorkspace: async ({
@@ -53,6 +121,7 @@ export default {
 
         return {
             ...workspace,
+            canvasStateUpdatedAt: getCanvasStateUpdatedAt(workspace),
             canvasState: {
                 ...workspace.canvasState,
                 edges: workspace.canvasState?.edges ?? []
@@ -122,6 +191,7 @@ export default {
             }],
             canvasState: defaultCanvasState,
             createdAt: currentDate,
+            canvasStateUpdatedAt: currentDate,
             updatedAt: currentDate
         }
 
@@ -169,15 +239,30 @@ export default {
         const currentDate = new Date().getTime()
 
         try {
-            const updates: Record<string, any> = { updatedAt: currentDate }
+            const workspaceExpressionNames: Record<string, string> = {
+                '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
+                '#updatedAt': 'updatedAt'
+            }
+            const workspaceExpressionValues: Record<string, unknown> = {
+                ':updatedAt': currentDate
+            }
+            const workspaceSetExpressions = [
+                '#canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, #updatedAt)',
+                '#updatedAt = :updatedAt'
+            ]
+
             if (name !== undefined) {
-                updates.name = name
+                workspaceExpressionNames['#name'] = 'name'
+                workspaceExpressionValues[':name'] = name
+                workspaceSetExpressions.push('#name = :name')
             }
 
             await dynamoDBService.updateItem({
                 tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
                 key: { workspaceId },
-                updates,
+                updateExpression: `SET ${workspaceSetExpressions.join(', ')}`,
+                expressionAttributeNames: workspaceExpressionNames,
+                expressionAttributeValues: workspaceExpressionValues,
                 origin: 'updateWorkspace'
             })
 
@@ -200,17 +285,36 @@ export default {
     updateCanvasState: async ({
         workspaceId,
         canvasState,
-        userId
-    }: { workspaceId: string; canvasState: CanvasState; userId: string }): Promise<void> => {
+        userId,
+        expectedCanvasStateUpdatedAt,
+        expectedUpdatedAt
+    }: {
+        workspaceId: string
+        canvasState: CanvasState
+        userId: string
+        expectedCanvasStateUpdatedAt?: number
+        expectedUpdatedAt?: number
+    }): Promise<UpdateCanvasStateResult> => {
         const currentDate = new Date().getTime()
+        const canvasStateSaveToken = expectedCanvasStateUpdatedAt ?? expectedUpdatedAt
+        const hasExpectedCanvasStateUpdatedAt = canvasStateSaveToken !== undefined
 
         try {
             await dynamoDBService.updateItem({
                 tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
                 key: { workspaceId },
-                updates: {
-                    canvasState,
-                    updatedAt: currentDate
+                updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt',
+                conditionExpression: getCanvasStateWriteCondition(hasExpectedCanvasStateUpdatedAt),
+                expressionAttributeNames: {
+                    '#canvasState': 'canvasState',
+                    '#updatedAt': 'updatedAt',
+                    '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
+                },
+                expressionAttributeValues: {
+                    ':canvasState': canvasState,
+                    ':updatedAt': currentDate,
+                    ':canvasStateUpdatedAt': currentDate,
+                    ...(hasExpectedCanvasStateUpdatedAt ? { ':expectedCanvasStateUpdatedAt': canvasStateSaveToken } : {})
                 },
                 origin: 'updateWorkspaceCanvasState'
             })
@@ -223,8 +327,27 @@ export default {
                 },
                 origin: 'updateWorkspaceCanvasState'
             })
+
+            return { success: true, workspaceId, updatedAt: currentDate, canvasStateUpdatedAt: currentDate }
         } catch (error) {
+            if ((error as any)?.name === 'ConditionalCheckFailedException') {
+                const workspace = await dynamoDBService.getItem({
+                    tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                    key: { workspaceId },
+                    origin: `updateWorkspaceCanvasState:stale(${workspaceId})`
+                })
+
+                return {
+                    success: false,
+                    workspaceId,
+                    error: 'STALE_CANVAS_STATE',
+                    currentUpdatedAt: workspace?.updatedAt,
+                    currentCanvasStateUpdatedAt: getCanvasStateUpdatedAt(workspace)
+                }
+            }
+
             err('Failed to update workspace canvas state:', error)
+            throw error
         }
     },
 
@@ -256,20 +379,23 @@ export default {
 
             const currentDate = new Date().getTime()
             try {
-                const hasExpectedUpdatedAt = workspace.updatedAt !== undefined
+                const expectedCanvasStateUpdatedAt = getCanvasStateUpdatedAt(workspace)
+                const hasExpectedCanvasStateUpdatedAt = expectedCanvasStateUpdatedAt !== undefined
                 const expressionAttributeValues = {
                     ':canvasState': result.canvasState,
                     ':updatedAt': currentDate,
-                    ...(hasExpectedUpdatedAt ? { ':expectedUpdatedAt': workspace.updatedAt } : {})
+                    ':canvasStateUpdatedAt': currentDate,
+                    ...(hasExpectedCanvasStateUpdatedAt ? { ':expectedCanvasStateUpdatedAt': expectedCanvasStateUpdatedAt } : {})
                 }
                 await dynamoDBService.updateItem({
                     tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
                     key: { workspaceId },
-                    updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt',
-                    conditionExpression: hasExpectedUpdatedAt ? '#updatedAt = :expectedUpdatedAt' : 'attribute_not_exists(#updatedAt)',
+                    updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt',
+                    conditionExpression: getCanvasStateWriteCondition(hasExpectedCanvasStateUpdatedAt),
                     expressionAttributeNames: {
                         '#canvasState': 'canvasState',
-                        '#updatedAt': 'updatedAt'
+                        '#updatedAt': 'updatedAt',
+                        '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
                     },
                     expressionAttributeValues,
                     origin
@@ -315,16 +441,21 @@ export default {
             await dynamoDBService.updateItem({
                 tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
                 key: { workspaceId },
-                updateExpression: `SET #canvasState.#nodes[${nodeIndex}].#descriptor = :descriptor, #updatedAt = :updatedAt`,
+                updateExpression: `SET #canvasState.#nodes[${nodeIndex}].#descriptor = :descriptor, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt`,
+                conditionExpression: `#canvasState.#nodes[${nodeIndex}].#nodeId = :nodeId`,
                 expressionAttributeNames: {
                     '#canvasState': 'canvasState',
                     '#nodes': 'nodes',
                     '#descriptor': 'descriptor',
-                    '#updatedAt': 'updatedAt'
+                    '#updatedAt': 'updatedAt',
+                    '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
+                    '#nodeId': 'nodeId'
                 },
                 expressionAttributeValues: {
                     ':descriptor': descriptor,
-                    ':updatedAt': currentDate
+                    ':updatedAt': currentDate,
+                    ':canvasStateUpdatedAt': currentDate,
+                    ':nodeId': nodeId
                 },
                 origin: 'patchWorkspaceCanvasNodeDescriptor'
             })
@@ -388,10 +519,11 @@ export default {
             await dynamoDBService.updateItem({
                 tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
                 key: { workspaceId },
-                updateExpression: 'SET #files = list_append(if_not_exists(#files, :empty), :newFiles), #updatedAt = :now',
+                updateExpression: 'SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, #updatedAt), #files = list_append(if_not_exists(#files, :empty), :newFiles), #updatedAt = :now',
                 expressionAttributeNames: {
                     '#files': 'files',
-                    '#updatedAt': 'updatedAt'
+                    '#updatedAt': 'updatedAt',
+                    '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
                 },
                 expressionAttributeValues: {
                     ':empty': [],
@@ -421,23 +553,38 @@ export default {
             })
 
             const currentFiles = workspace?.files || []
-            const fileIndex = currentFiles.findIndex((file: DocumentFile) => file.id === fileId)
+            const fileIndex = currentFiles.findIndex((file: DocumentFile) => file.id === fileId || file.canonicalFileId === fileId)
             if (fileIndex < 0) return
+            const matchedFile = currentFiles[fileIndex] as DocumentFile
+            const removingCanonicalPointer = matchedFile.id !== fileId && matchedFile.canonicalFileId === fileId
+            const previousUpdatedAt = typeof workspace?.updatedAt === 'number' ? workspace.updatedAt : currentDate
+            // Only declare the attribute name the conditionExpression actually
+            // uses — DynamoDB rejects the request if #id is declared but unused
+            // (the canonical-pointer branch matches on #canonicalFileId instead).
+            const expressionAttributeNames: Record<string, string> = {
+                '#files': 'files',
+                '#updatedAt': 'updatedAt',
+                '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
+            }
+            if (removingCanonicalPointer) {
+                expressionAttributeNames['#canonicalFileId'] = 'canonicalFileId'
+            } else {
+                expressionAttributeNames['#id'] = 'id'
+            }
 
             try {
                 await dynamoDBService.updateItem({
                     tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
                     key: { workspaceId },
-                    updateExpression: `SET #updatedAt = :now REMOVE #files[${fileIndex}]`,
-                    conditionExpression: `#files[${fileIndex}].#id = :fileId`,
-                    expressionAttributeNames: {
-                        '#files': 'files',
-                        '#id': 'id',
-                        '#updatedAt': 'updatedAt'
-                    },
+                    updateExpression: `SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, :previousUpdatedAt), #updatedAt = :now REMOVE #files[${fileIndex}]`,
+                    conditionExpression: removingCanonicalPointer
+                        ? `#files[${fileIndex}].#canonicalFileId = :fileId`
+                        : `#files[${fileIndex}].#id = :fileId`,
+                    expressionAttributeNames,
                     expressionAttributeValues: {
                         ':fileId': fileId,
-                        ':now': currentDate
+                        ':now': currentDate,
+                        ':previousUpdatedAt': previousUpdatedAt
                     },
                     origin: 'model::Workspace->removeFile()'
                 })
@@ -450,6 +597,66 @@ export default {
         }
 
         throw new Error(`Failed to remove file from workspace after concurrent updates: ${workspaceId}/${fileId}`)
+    },
+
+    // Point an already-registered original file at the canonical derivative the
+    // file-conversion workload produced. Used by the async ingest completion path
+    // (the original was registered at upload time without a canonical; the
+    // workload transcodes later and the API patches the pointer here). Mirrors
+    // removeFile's read-modify-write retry against concurrent file mutations.
+    setFileCanonical: async ({
+        workspaceId,
+        fileId,
+        canonicalFileId,
+        canonicalMimeType
+    }: { workspaceId: string; fileId: string; canonicalFileId: string; canonicalMimeType: string }): Promise<void> => {
+        const currentDate = new Date().getTime()
+        const maxAttempts = 5
+
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            const workspace = await dynamoDBService.getItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                key: { workspaceId },
+                origin: 'model::Workspace->setFileCanonical()'
+            })
+
+            const currentFiles = workspace?.files || []
+            const fileIndex = currentFiles.findIndex((file: DocumentFile) => file.id === fileId)
+            if (fileIndex < 0) return
+            const previousUpdatedAt = typeof workspace?.updatedAt === 'number' ? workspace.updatedAt : currentDate
+
+            try {
+                await dynamoDBService.updateItem({
+                    tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                    key: { workspaceId },
+                    updateExpression: `SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, :previousUpdatedAt), #updatedAt = :now, #files[${fileIndex}].#canonicalFileId = :canonicalFileId, #files[${fileIndex}].#canonicalMimeType = :canonicalMimeType`,
+                    conditionExpression: `#files[${fileIndex}].#id = :fileId`,
+                    expressionAttributeNames: {
+                        '#files': 'files',
+                        '#id': 'id',
+                        '#canonicalFileId': 'canonicalFileId',
+                        '#canonicalMimeType': 'canonicalMimeType',
+                        '#updatedAt': 'updatedAt',
+                        '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
+                    },
+                    expressionAttributeValues: {
+                        ':fileId': fileId,
+                        ':canonicalFileId': canonicalFileId,
+                        ':canonicalMimeType': canonicalMimeType,
+                        ':now': currentDate,
+                        ':previousUpdatedAt': previousUpdatedAt
+                    },
+                    origin: 'model::Workspace->setFileCanonical()'
+                })
+                return
+            } catch (error: any) {
+                if (error?.name === 'ConditionalCheckFailedException') continue
+                err('Failed to set file canonical pointer:', error)
+                throw error
+            }
+        }
+
+        throw new Error(`Failed to set file canonical after concurrent updates: ${workspaceId}/${fileId}`)
     },
 
     getWorkspaceInternal: async ({
@@ -468,6 +675,28 @@ export default {
         return workspace as Workspace
     },
 
+    getCanvasStateReferencedFileIds,
+
+    isFileReferencedByCanvasState: async ({
+        workspaceId,
+        fileId
+    }: { workspaceId: string; fileId: string }): Promise<boolean> => {
+        const workspace = await dynamoDBService.getItem({
+            tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+            key: { workspaceId },
+            origin: `model::Workspace->isFileReferencedByCanvasState(${workspaceId}:${fileId})`
+        })
+
+        const referencedFileIds = getCanvasStateReferencedFileIds(workspace?.canvasState)
+        if (referencedFileIds.has(fileId)) return true
+
+        const file = getFileRecordByStorageId(workspace?.files, fileId)
+        return Boolean(file && (
+            referencedFileIds.has(file.id)
+            || (file.canonicalFileId ? referencedFileIds.has(file.canonicalFileId) : false)
+        ))
+    },
+
     replaceWorkspaceContent: async ({
         workspaceId,
         canvasState,
@@ -482,6 +711,7 @@ export default {
                 updates: {
                     canvasState,
                     files,
+                    canvasStateUpdatedAt: currentDate,
                     updatedAt: currentDate
                 },
                 origin: 'replaceWorkspaceContent'

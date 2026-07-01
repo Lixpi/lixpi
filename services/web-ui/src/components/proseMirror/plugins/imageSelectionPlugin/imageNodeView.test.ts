@@ -128,8 +128,8 @@ describe('ImageNodeView — buildImageSrc', () => {
 		expect(ts).toContain('`${API_BASE_URL}${src}')
 	})
 
-	it('strips stale tokens from full URLs pointing to /api/images/', () => {
-		expect(ts).toContain("src.includes('/api/images/')")
+	it('strips stale tokens from full URLs pointing to /api/files/', () => {
+		expect(ts).toContain("src.includes('/api/files/')")
 		expect(ts).toMatch(/src\.replace\([^)]*token[^)]*\)/)
 	})
 })

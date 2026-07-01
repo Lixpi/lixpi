@@ -147,7 +147,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         spinnerElement.classList.remove('is-active')
         imageElement.classList.add('is-visible')
 
-        // imageData is now a URL path like /api/images/workspaceId/fileId
+        // imageData is now a URL path like /api/files/workspaceId/fileId
         // It can also be a data URL or base64 for backwards compatibility
         let imageSrc: string
         if (imageData.startsWith('data:')) {
@@ -159,7 +159,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         } else if (imageData.startsWith('http')) {
             // Full URL — strip any stale token and re-apply a fresh one
             const stripped = imageData.replace(/[?&]token=[^&]+/, '')
-            if (stripped.includes('/api/images/')) {
+            if (stripped.includes('/api/files/')) {
                 const token = await AuthService.getTokenSilently()
                 imageSrc = `${stripped}${token ? `?token=${token}` : ''}`
             } else {

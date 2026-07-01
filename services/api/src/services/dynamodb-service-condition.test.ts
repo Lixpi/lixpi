@@ -30,7 +30,7 @@ describe('Workspace model file update contract', () => {
 
         expectSourceToContain(
             source,
-            "updateExpression: 'SET #files = list_append(if_not_exists(#files, :empty), :newFiles), #updatedAt = :now'",
+            "updateExpression: 'SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, #updatedAt), #files = list_append(if_not_exists(#files, :empty), :newFiles), #updatedAt = :now'",
             'Workspace.addFile'
         )
         expectSourceNotToContain(
@@ -50,7 +50,7 @@ describe('Workspace model file update contract', () => {
         )
         expectSourceToContain(
             source,
-            'updateExpression: `SET #updatedAt = :now REMOVE #files[${fileIndex}]`',
+            'updateExpression: `SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, :previousUpdatedAt), #updatedAt = :now REMOVE #files[${fileIndex}]`',
             'Workspace.removeFile'
         )
         expectSourceToContain(

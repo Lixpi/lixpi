@@ -26,7 +26,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Resize** nodes from any corner by hovering that corner handle (images preserve aspect ratio)
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
 - **Chat with AI** from the bottom-center composer; each submit creates a standalone session. The right-side panel opens as a view-only transcript of past sessions
-- **Add images** via the toolbar button which opens an upload modal
+- **Upload files** via the toolbar button; the server sniffs the bytes, stores the original, and returns or later publishes the canonical canvas-safe media object
 - **Open the Media Library** from the independent bottom-right icon above the original zoom badge to browse Features, explicitly saved Images, or explicitly saved Videos; the canvas-owned full-height drawer shifts left when AI chat is open and covers its launcher while open
 - **Save media for reuse** from an image or video bubble menu; saved Media Library items are independent Object Store copies that survive removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same source media reuses the existing item instead of duplicating it
 - **Connect nodes** by dragging from a handle, then use AI Chat composer context previews and workspace relevance to decide what the next prompt sees
@@ -50,8 +50,13 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Display uploaded images from workspace storage
 - Have a full-area drag overlay
 - Resize preserves aspect ratio (stored when image is uploaded)
-- Automatically delete their workspace object when removed from canvas; explicitly saved Media Library copies are separate objects and remain available
+- Request workspace-object cleanup when removed from canvas; the API deletes bytes only after canonical canvas state no longer references the file, and explicitly saved Media Library copies are separate objects and remain available
 - Expose `Add to Media Library` in the bubble menu once their stored object is available; streaming generated-image placeholders hide the action until completion
+
+### Uploaded File Placeholders
+- File uploads insert an inert `uploadPlaceholder` node before the API returns. The placeholder is persisted in `canvasState`, carries no `fileId`, and is ignored by media descriptor analysis and Object Store cleanup.
+- The upload response supplies the model-safe object id and URL. Converted HEIC/HEIF/AVIF/TIFF and other non-model-safe inputs therefore replace the placeholder with a canonical image/video/audio/document node; the canvas never creates a media node from the preserved original bytes.
+- Conversion failures mark the placeholder as failed instead of creating an image/video node that would trigger descriptor analysis against unsupported bytes.
 
 ### Video Nodes
 - Display generated or media-library videos with a PIXI poster/placeholder behind a visible DOM `<video>` surface that is moved into the transformed chrome layer once the video handler creates the attached element
@@ -62,6 +67,10 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Scrubbing pauses at the pressed timestamp, moves the control position immediately, writes the first video seek immediately, then applies the latest drag target as soon as the active seek settles so paused video frames keep updating during drag; it resumes on release only when the video was already playing
 - Support play/pause, seek, continuous speed, volume, and fullscreen without persisting playback state into `canvasState`
 - Expose `Add to Media Library` once their stored MP4 is available; videos still polling through VEO hide the action until completion
+
+### Uploaded Audio and Document Nodes
+- Uploaded audio nodes use an `audio` canvas node. PIXI renders the rounded audio geometry while a hidden DOM `<audio>` element owns playback metadata and controls.
+- Uploaded PDFs, converted office documents, text, and Markdown use `mediaDocument` nodes. PIXI renders a first-page poster when available and falls back to a stable document rectangle.
 
 ### Branch Lineage Trees
 - `WorkspaceCanvas.ts` is presentational for generated-media lineage. It applies live `IMAGE_BRANCH_RESOLVED` / `MEDIA_LINEAGE_PLANNED` events, reconciles API-persisted canvas projection, computes marker/media geometry, and re-tidies the visible tree. It may render transient preflight markers while the API is still resolving, but durable branch markers, final media nodes, generated lineage fields, and connector parentage are persisted by `services/api`. It must not decide branch IDs, branch-root creation, fork creation, lineage parentage, reasoning-model fanout, resolver outcomes, or marker provenance.
@@ -174,8 +183,8 @@ flowchart TB
     CTX -->|"reads content"| TS
     AIS -->|"streaming via NATS"| LLM
     CC --> IL
-    IL -->|"deleteImage"| NS
-    NS -->|"DELETE_IMAGE"| OBJ
+    IL -->|"deleteImage/deleteVideo"| NS
+    NS -->|"DELETE_IMAGE / DELETE_VIDEO"| OBJ
 ```
 
 ## How It Works
@@ -296,7 +305,7 @@ When an AI-generated image is being created, the canvas provides visual feedback
 
 ### Media Node Lifecycle
 
-When a tracked media node is removed from the canvas, the `canvasMediaNodeLifecycle` tracker detects the change and triggers the configured deletion path. Image nodes route through `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE`; video nodes route through `WORKSPACE_SUBJECTS.VIDEO_SUBJECTS.DELETE_VIDEO` and best-effort poster cleanup.
+When a tracked media node is removed from the canvas, the `canvasMediaNodeLifecycle` tracker detects the change and triggers the configured deletion path. Image nodes route through `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE`; video nodes route through `WORKSPACE_SUBJECTS.VIDEO_SUBJECTS.DELETE_VIDEO` and best-effort poster cleanup. The API re-reads canonical canvas state and refuses storage deletion while any current node still references the file, its canonical/original pair, or a related poster/frame object. Do not add a new cleanup path unless the API-side delete handler has the same canonical-state guard; lifecycle diffs alone must never be trusted to remove Object Store bytes.
 
 Workspace navigation and first non-empty workspace load reinitialize the media lifecycle tracker from the opened workspace's canvas state before local commits can run. The tracker must never compare media from one workspace against another workspace's node set, because a cross-workspace diff would turn a navigation render into destructive storage deletion.
 
@@ -461,8 +470,8 @@ When an image node, video node, or edge is selected on the canvas, a bubble menu
 - **Delete** — removes the node and its associated edges from canvas state
 
 ### Video Node Actions
-- **Replace** — uploads a new video through `/api/videos/:workspaceId`, swaps the MP4/poster IDs on the existing node, and keeps the node in place
-- **Download** — downloads the stored MP4 through the Range-capable video route with `download=true`
+- **Replace** — uploads a new video for the selected node, swaps the MP4/poster IDs on the existing node, and keeps the node in place
+- **Download** — downloads the stored MP4 through the Range-capable file route with `download=true`
 - **Add to Media Library** — saves a completed stored video and poster as independent library copies
 - **Connect to node** — starts the same menu-driven graph connection flow as images
 - **Delete** — removes the node and its associated edges from canvas state

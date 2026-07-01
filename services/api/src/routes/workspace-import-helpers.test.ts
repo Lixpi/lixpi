@@ -75,11 +75,13 @@ describe('reconcileFilesWithImages', () => {
         const added = reconcileFilesWithImages(files, imageEntries)
         expect(added).toBe(1)
         expect(files).toHaveLength(2)
-        expect(files[1]).toEqual({
+        expect(files[1]).toEqual(expect.objectContaining({
             id: 'new-image',
             name: 'new-image.jpg',
             mimeType: 'image/jpeg',
-        })
+            kind: 'image',
+            modelSafe: true,
+        }))
     })
 
     it('does not duplicate existing entries', () => {
@@ -144,9 +146,9 @@ describe('rewriteCanvasImageNodes', () => {
 
         const count = rewriteCanvasImageNodes(nodes, 'new-ws-123')
         expect(count).toBe(2)
-        expect(nodes[0].src).toBe('/api/images/new-ws-123/file-abc')
+        expect(nodes[0].src).toBe('/api/files/new-ws-123/file-abc')
         expect(nodes[0].workspaceId).toBe('new-ws-123')
-        expect(nodes[1].src).toBe('/api/images/new-ws-123/file-def')
+        expect(nodes[1].src).toBe('/api/files/new-ws-123/file-def')
         expect(nodes[1].workspaceId).toBe('new-ws-123')
     })
 
@@ -179,8 +181,8 @@ describe('rewriteCanvasImageNodes', () => {
 
         const count = rewriteCanvasImageNodes(nodes, 'target-ws')
         expect(count).toBe(2)
-        expect((nodes[1] as any).src).toBe('/api/images/target-ws/img-1')
-        expect((nodes[3] as any).src).toBe('/api/images/target-ws/img-2')
+        expect((nodes[1] as any).src).toBe('/api/files/target-ws/img-1')
+        expect((nodes[3] as any).src).toBe('/api/files/target-ws/img-2')
     })
 
     it('handles empty nodes array', () => {

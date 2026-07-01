@@ -304,34 +304,41 @@ router.post(
             }
         }
 
-        // ── Wipe existing content ──────────────────────────────────
+        const importedFileIds = new Set(imageEntries.map((image) => image.fileId))
+        const manifestFiles: DocumentFile[] = manifest.workspace.files || []
+        const missingManifestFileIds = manifestFiles
+            .map((file) => file.id)
+            .filter((fileId) => !importedFileIds.has(fileId))
+        const missingCanvasFileIds = [...Workspace.getCanvasStateReferencedFileIds(manifest.workspace.canvasState)]
+            .filter((fileId) => !importedFileIds.has(fileId))
+        const missingArchiveFileIds = Array.from(new Set([
+            ...missingManifestFileIds,
+            ...missingCanvasFileIds,
+        ]))
+
+        if (missingArchiveFileIds.length > 0) {
+            return res.status(400).json({
+                error: 'Archive is missing Object Store entries referenced by the workspace manifest',
+                missingFileIds: missingArchiveFileIds,
+            })
+        }
+
+        // ── Restore workspace bucket objects before destructive DB changes ──
         try {
             const natsService = NATS_Service.getInstance()
             const bucketName = getWorkspaceBucketName(workspaceId)
 
-            await Promise.all([
-                // Delete all images (wipe entire NATS object store bucket)
-                (async () => {
-                    if (natsService) {
-                        try {
-                            await natsService.deleteObjectStore(bucketName)
-                        } catch (e: any) {
-                            // Bucket may not exist — that's fine
-                        }
-                    }
-                })(),
-                // Delete all documents from DynamoDB
-                Document.deleteWorkspaceDocuments({ workspaceId }),
-                // Delete all AI chat threads from DynamoDB
-                AiChatThread.deleteWorkspaceAiChatThreads({ workspaceId })
-            ])
-
-            // ── Restore workspace bucket + images ──────────────────
-            if (natsService) {
-                await natsService.createObjectStore(bucketName)
+            if (imageEntries.length > 0 && !natsService) {
+                return res.status(503).json({ error: 'Storage service unavailable' })
             }
 
             if (imageEntries.length > 0 && natsService) {
+                try {
+                    await natsService.getObjectStore(bucketName)
+                } catch {
+                    await natsService.createObjectStore(bucketName)
+                }
+
                 for (const image of imageEntries) {
                     await natsService.putObject(bucketName, image.fileId, image.data, {
                         name: image.fileId,
@@ -339,6 +346,11 @@ router.post(
                     })
                 }
             }
+
+            await Promise.all([
+                Document.deleteWorkspaceDocuments({ workspaceId }),
+                AiChatThread.deleteWorkspaceAiChatThreads({ workspaceId })
+            ])
 
             // ── Restore documents ──────────────────────────────────
             for (const doc of manifest.documents) {
@@ -363,7 +375,7 @@ router.post(
             }
 
             // ── Reconcile files array with actually-imported images ──
-            const files: DocumentFile[] = manifest.workspace.files || []
+            const files: DocumentFile[] = manifestFiles
             reconcileFilesWithImages(files, imageEntries)
 
             // ── Rewrite canvas image node src to target workspaceId ────
@@ -381,8 +393,7 @@ router.post(
             // Be loud about canvas image nodes whose bytes were not present in the
             // archive — these will render broken. Surface them instead of silently
             // importing dangling references.
-            const importedImageIds = new Set(imageEntries.map((img) => img.fileId))
-            const danglingFileIds = collectCanvasImageFileIds(canvasState?.nodes || [], importedImageIds)
+            const danglingFileIds = collectCanvasImageFileIds(canvasState?.nodes || [], importedFileIds)
             if (danglingFileIds.length > 0) {
                 err(`Workspace ${workspaceId} import: ${danglingFileIds.length} canvas image node(s) reference images not present in the archive and will render broken: ${danglingFileIds.join(', ')}`)
             }

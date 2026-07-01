@@ -15,7 +15,24 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 import { workspacesStore } from '$src/stores/workspacesStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 
+type CanvasSaveQueue = {
+    inFlight: boolean
+    pendingCanvasState: CanvasState | null
+}
+
+type CanvasStateUpdateResponse = {
+    success?: boolean
+    workspaceId?: string
+    updatedAt?: number
+    canvasStateUpdatedAt?: number
+    error?: string
+    currentUpdatedAt?: number
+    currentCanvasStateUpdatedAt?: number
+}
+
 class WorkspaceService {
+    private readonly canvasSaveQueues = new Map<string, CanvasSaveQueue>()
+
     constructor() {}
 
     public async getWorkspace({ workspaceId }: { workspaceId: string }): Promise<void> {
@@ -37,6 +54,7 @@ class WorkspaceService {
 
             const normalizedWorkspace = {
                 ...workspace,
+                canvasStateUpdatedAt: workspace.canvasStateUpdatedAt ?? workspace.updatedAt,
                 canvasState: {
                     ...workspace.canvasState,
                     edges: workspace.canvasState?.edges ?? []
@@ -89,6 +107,7 @@ class WorkspaceService {
 
             const normalizedWorkspace = {
                 ...workspace,
+                canvasStateUpdatedAt: workspace.canvasStateUpdatedAt ?? workspace.updatedAt,
                 canvasState: {
                     ...workspace.canvasState,
                     edges: workspace.canvasState?.edges ?? []
@@ -135,19 +154,81 @@ class WorkspaceService {
         }
     }
 
-    public async updateCanvasState({ workspaceId, canvasState }: { workspaceId: string; canvasState: CanvasState }): Promise<void> {
-        try {
-            const result: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE, {
-                token: await AuthService.getTokenSilently(),
-                workspaceId,
-                canvasState
-            })
+    public updateCanvasState({ workspaceId, canvasState }: { workspaceId: string; canvasState: CanvasState }): void {
+        const queue = this.getCanvasSaveQueue(workspaceId)
+        queue.pendingCanvasState = canvasState
 
-            if (!result.error) {
-                workspaceStore.setMetaValues({ requiresSave: false })
+        if (!queue.inFlight) {
+            void this.flushCanvasStateSaveQueue(workspaceId, queue)
+        }
+    }
+
+    private getCanvasSaveQueue(workspaceId: string): CanvasSaveQueue {
+        const existing = this.canvasSaveQueues.get(workspaceId)
+        if (existing) return existing
+
+        const queue = { inFlight: false, pendingCanvasState: null }
+        this.canvasSaveQueues.set(workspaceId, queue)
+        return queue
+    }
+
+    private async flushCanvasStateSaveQueue(workspaceId: string, queue: CanvasSaveQueue): Promise<void> {
+        queue.inFlight = true
+
+        try {
+            while (queue.pendingCanvasState) {
+                const canvasState = queue.pendingCanvasState
+                queue.pendingCanvasState = null
+                const storedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                const expectedCanvasStateUpdatedAt = Number.isFinite(storedCanvasStateUpdatedAt)
+                    ? storedCanvasStateUpdatedAt
+                    : workspaceStore.getData('updatedAt')
+
+                const result: CanvasStateUpdateResponse = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE, {
+                    token: await AuthService.getTokenSilently(),
+                    workspaceId,
+                    canvasState,
+                    ...(Number.isFinite(expectedCanvasStateUpdatedAt) ? { expectedCanvasStateUpdatedAt } : {}),
+                })
+
+                if (result.error === 'STALE_CANVAS_STATE') {
+                    queue.pendingCanvasState = null
+                    workspaceStore.setMetaValues({ requiresSave: false })
+                    if (RouterService.getRouteParams().workspaceId === workspaceId) {
+                        await this.getWorkspace({ workspaceId })
+                    }
+                    queue.pendingCanvasState = null
+                    return
+                }
+
+                if (result.error) {
+                    console.error('Failed to update canvas state:', result.error)
+                    workspaceStore.setMetaValues({ requiresSave: true })
+                    return
+                }
+
+                if (typeof result.updatedAt === 'number') {
+                    workspaceStore.setDataValues({ updatedAt: result.updatedAt })
+                    workspacesStore.updateWorkspace(workspaceId, { updatedAt: result.updatedAt })
+                }
+                if (typeof result.canvasStateUpdatedAt === 'number') {
+                    workspaceStore.setDataValues({ canvasStateUpdatedAt: result.canvasStateUpdatedAt })
+                }
+
+                if (!queue.pendingCanvasState) {
+                    workspaceStore.setMetaValues({ requiresSave: false })
+                }
             }
         } catch (error) {
             console.error('Failed to update canvas state:', error)
+            workspaceStore.setMetaValues({ requiresSave: true })
+        } finally {
+            queue.inFlight = false
+            if (queue.pendingCanvasState) {
+                void this.flushCanvasStateSaveQueue(workspaceId, queue)
+            } else {
+                this.canvasSaveQueues.delete(workspaceId)
+            }
         }
     }
 

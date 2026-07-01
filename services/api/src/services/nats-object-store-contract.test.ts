@@ -25,17 +25,21 @@ function expectSourceNotToContain(source: string, snippet: string, label = 'sour
 // =============================================================================
 
 describe('API storage bucket contract', () => {
-    it('workspace import explicitly recreates the wiped workspace bucket before image writes', () => {
+    it('workspace import does not wipe the workspace bucket before writing archive objects', () => {
         const source = readSource('../routes/workspace-export-routes.ts')
 
         expectSourceNotToContain(source, 'ensureObjectStore', 'workspace export/import route')
-        const createBucketIndex = source.indexOf('await natsService.createObjectStore(bucketName)')
         const putImageIndex = source.indexOf('await natsService.putObject(bucketName, image.fileId')
+        const deleteBucketIndex = source.indexOf('await natsService.deleteObjectStore(bucketName)')
+        const missingArchiveCheckIndex = source.indexOf('missingArchiveFileIds.length > 0')
+        const deleteDocumentsIndex = source.indexOf('Document.deleteWorkspaceDocuments({ workspaceId })')
 
-        expect(createBucketIndex, 'workspace import should create the bucket explicitly').toBeGreaterThan(-1)
         expect(putImageIndex, 'workspace import should write image objects').toBeGreaterThan(-1)
-        expect(createBucketIndex, 'workspace import should create the bucket before writing images')
-            .toBeLessThan(putImageIndex)
+        expect(deleteBucketIndex, 'workspace import should not destroy the bucket').toBe(-1)
+        expect(missingArchiveCheckIndex, 'workspace import should validate archive object completeness').toBeGreaterThan(-1)
+        expect(deleteDocumentsIndex, 'workspace import should delete documents after validation').toBeGreaterThan(-1)
+        expect(missingArchiveCheckIndex, 'workspace import should validate before document deletion')
+            .toBeLessThan(deleteDocumentsIndex)
     })
 
     it('workspace creation provisions only the workspace file bucket (media buckets are org-scoped)', () => {

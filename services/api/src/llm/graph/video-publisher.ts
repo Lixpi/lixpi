@@ -9,7 +9,24 @@ import {
 } from '../../services/media-generation-canvas-projection.ts'
 import type { StoreWorkspaceImageFn } from './image-publisher.ts'
 import type { ChunkPayload, ProseMirrorContentHandler } from './stream-publisher.ts'
-import type { StoreVideoInput, StoreVideoResult } from '../../services/video-storage.ts'
+
+// Store-function contract for generated video. Implemented by a
+// storeWorkspaceFile adapter at the composition root (store-media-adapters.ts).
+export type StoreVideoInput = {
+    workspaceId: string
+    buffer: Buffer
+    originalName?: string
+    mimeType?: string
+    useContentHash?: boolean
+}
+
+export type StoreVideoResult = {
+    fileId: string
+    url: string
+    isDuplicate: boolean
+    size: number
+    mimeType: string
+}
 
 export type StoreWorkspaceVideoFn = (input: StoreVideoInput) => Promise<StoreVideoResult>
 

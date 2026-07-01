@@ -260,6 +260,10 @@ services:
             NATS_SERVERS: "nats://lixpi-nats-1:4222,nats://lixpi-nats-2:4222,nats://lixpi-nats-3:4222"
             NATS_NEX_NODE_NKEY_SEED: ${NATS_NEX_NODE_NKEY_SEED}
             NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            # AUTH-account regular_user password — the file-conversion workload
+            # connects with this (not the NEX node creds) so it can read/write the
+            # workspace Object Store buckets that live in the AUTH account.
+            NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
             NATS_JS_DOMAIN: lixpi
             NEX_NAMESPACE: system
             NEX_NODE_NAME: lixpi-nex-1

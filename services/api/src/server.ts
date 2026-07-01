@@ -31,17 +31,16 @@ import { documentSubjects } from './NATS/subscriptions/document-subjects.ts'
 import { aiChatThreadSubjects } from './NATS/subscriptions/ai-chat-thread-subjects.ts'
 import { imageSubjects } from './NATS/subscriptions/image-subjects.ts'
 import { videoSubjects } from './NATS/subscriptions/video-subjects.ts'
+import { fileConversionSubjects } from './NATS/subscriptions/file-conversion-subjects.ts'
 import { featureSubjects } from './NATS/subscriptions/feature-subjects.ts'
 import { mediaLibrarySubjects } from './NATS/subscriptions/media-library-subjects.ts'
-import imageRoutes from './routes/image-routes.ts'
-import videoRoutes from './routes/video-routes.ts'
+import fileRoutes from './routes/file-routes.ts'
 import workspaceExportRoutes from './routes/workspace-export-routes.ts'
 import featureRoutes from './routes/feature-routes.ts'
 import mediaLibraryRoutes from './routes/media-library-routes.ts'
 
 import { createLlmModule } from './llm/index.ts'
-import { storeWorkspaceImage } from './services/image-storage.ts'
-import { storeWorkspaceVideo } from './services/video-storage.ts'
+import { storeWorkspaceImage, storeWorkspaceVideo } from './services/store-media-adapters.ts'
 
 const env = process.env
 
@@ -127,6 +126,7 @@ const subscriptions = [
     // Workspace media, reusable features, and media library records.
     ...imageSubjects,
     ...videoSubjects,
+    ...fileConversionSubjects,
     ...featureSubjects,
     ...mediaLibrarySubjects,
 ]
@@ -296,11 +296,10 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }))
 app.use(cors(corsOptions))
 app.use(cookieParser())
 
-// Image upload/download routes
-app.use('/api/images', imageRoutes)
-
-// Video upload/download route (Range-capable for HTML5 <video> + PIXI VideoSource)
-app.use('/api/videos', videoRoutes)
+// Unified file upload/download route — accepts any media kind, sniffs the bytes,
+// transcodes to a model-safe canonical, and serves originals/canonicals/posters
+// (Range-capable for audio/video). Replaces the retired /api/images + /api/videos.
+app.use('/api/files', fileRoutes)
 
 // Workspace export routes
 app.use('/api/workspaces', workspaceExportRoutes)

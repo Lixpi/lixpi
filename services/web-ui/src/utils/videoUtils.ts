@@ -1,5 +1,6 @@
 import { NATS_SUBJECTS } from '@lixpi/constants'
 import { servicesStore } from '$src/stores/servicesStore.ts'
+import AuthService from '$src/services/auth-service.ts'
 
 const { VIDEO_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 
@@ -15,18 +16,28 @@ export async function deleteVideo(fileId: string, workspaceId: string, posterFil
     const nats = servicesStore.getData('nats')
     if (!nats) return
 
+    const token = await AuthService.getTokenSilently()
+    if (!token) return
+
     try {
-        await nats.request(VIDEO_SUBJECTS.DELETE_VIDEO, {
+        const result = await nats.request(VIDEO_SUBJECTS.DELETE_VIDEO, {
+            token,
             workspaceId,
             fileId,
         })
+        if (result?.error) {
+            console.warn('[videoUtils] deleteVideo refused', { fileId, workspaceId, error: result.error })
+            return
+        }
     } catch (e) {
         console.warn('[videoUtils] deleteVideo failed', { fileId, workspaceId, error: e })
+        return
     }
 
     if (posterFileId) {
         try {
             await nats.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE, {
+                token,
                 workspaceId,
                 fileId: posterFileId,
             })

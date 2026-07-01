@@ -74,7 +74,9 @@ router.get('/items/:itemId/content', authenticateRequest, async (req: any, res: 
         const data = await natsService.getObject(item.asset.bucketName, item.asset.objectKey)
         if (!data) return res.status(404).json({ error: 'Asset not found' })
 
-        if (item.kind === 'video') {
+        // Audio and video honor HTTP Range so <audio>/<video> can seek without
+        // pulling the whole asset into memory.
+        if (item.kind === 'video' || item.kind === 'audio') {
             const buffer = Buffer.from(data)
             const totalSize = buffer.length
             const range = parseRangeHeader(req.headers.range as string | undefined, totalSize)
@@ -103,8 +105,8 @@ router.get('/items/:itemId/content', authenticateRequest, async (req: any, res: 
 })
 
 // GET /api/media-library/items/:itemId/poster - Serve the still-frame poster
-// for a video item. Returns 404 for image items (they don't carry a poster)
-// and for video items whose ffmpeg poster extraction failed at save time.
+// for a video item or the first-page poster for a document item. Returns 404
+// for kinds that don't carry a poster, or when poster extraction failed at save.
 router.get('/items/:itemId/poster', authenticateRequest, async (req: any, res: any) => {
     const { itemId } = req.params
     const { userId } = req.user
@@ -117,7 +119,7 @@ router.get('/items/:itemId/poster', authenticateRequest, async (req: any, res: a
         if ('error' in item) {
             return res.status(item.error === 'NOT_FOUND' ? 404 : 403).json({ error: item.error })
         }
-        if (item.kind !== 'video' || !item.poster) {
+        if ((item.kind !== 'video' && item.kind !== 'document') || !item.poster) {
             return res.status(404).json({ error: 'Poster not available' })
         }
 

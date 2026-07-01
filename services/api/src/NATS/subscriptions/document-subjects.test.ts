@@ -225,6 +225,33 @@ describe('Document step submissions', () => {
         expect(mocks.transport.submitSteps).not.toHaveBeenCalled()
     })
 
+    it('rechecks workspace access after a denied submit instead of caching denied access', async () => {
+        const payload = {
+            ...baseDocumentData,
+            workspaceId: 'workspace-recheck',
+            docType: 'document',
+            docId: 'document-recheck',
+            baseVersion: 1,
+            expectedVersion: 1,
+            steps: [{ step: { type: 'replace' }, msgId: 'msg-1', clientId: 'client-1' }],
+            user: { userId: 'user-recheck' },
+        }
+        const transportResult = { status: 'ACCEPTED', version: 2 }
+
+        mocks.workspace.getWorkspace
+            .mockResolvedValueOnce({ error: 'PERMISSION_DENIED' })
+            .mockResolvedValueOnce({ workspaceId: 'workspace-recheck' })
+        mocks.transport.submitSteps.mockResolvedValueOnce(transportResult)
+
+        const firstResult = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEPS)(payload)
+        const secondResult = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEPS)(payload)
+
+        expect(firstResult).toEqual({ error: 'PERMISSION_DENIED' })
+        expect(secondResult).toEqual(transportResult)
+        expect(mocks.workspace.getWorkspace).toHaveBeenCalledTimes(2)
+        expect(mocks.transport.submitSteps).toHaveBeenCalledTimes(1)
+    })
+
     it('submits one document step through the batch subject with client-edit origin', async () => {
         const payload = {
             ...baseDocumentData,

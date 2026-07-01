@@ -55,6 +55,10 @@ export function reconcileFilesWithImages(
                 id: image.fileId,
                 name: `${image.fileId}${image.ext}`,
                 mimeType: mimeMap[image.ext] || 'image/png',
+                size: 0,
+                uploadedAt: Date.now(),
+                kind: 'image',
+                modelSafe: true,
             })
             fileIdSet.add(image.fileId)
             added++
@@ -73,7 +77,7 @@ export function rewriteCanvasImageNodes(
     for (const node of nodes) {
         if (node.type === 'image' && 'fileId' in node && node.fileId) {
             const imgNode = node as ImageCanvasNode
-            imgNode.src = `/api/images/${targetWorkspaceId}/${imgNode.fileId}`
+            imgNode.src = `/api/files/${targetWorkspaceId}/${imgNode.fileId}`
             imgNode.workspaceId = targetWorkspaceId
             rewritten++
         }

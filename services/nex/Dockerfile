@@ -22,7 +22,19 @@ ARG TARGETARCH
 
 # curl: release download + healthchecks. ca-certificates: TLS to GitHub/AWS.
 # libc6-compat: lets the prebuilt Go binary run on musl Alpine.
-RUN apk add --update --no-cache curl ca-certificates libc6-compat
+#
+# Heavy media tooling for the file-conversion workload (moved off services/api,
+# which must do NO heavy processing):
+#   - ffmpeg       : audio/video transcode + poster/representative frame extraction
+#   - libreoffice  : headless office-document → PDF conversion (DOC/DOCX/PPT/RTF/ODT)
+#   - poppler-utils: pdftoppm renders a PDF's first page to a poster PNG; pdfinfo
+#                    reports page count
+#   - libheif-tools: heif-convert decodes HEIC/HEIF via the system libheif. sharp's
+#                    BUNDLED libheif fails on common Apple HEIC variants (MiHB/MiHA
+#                    branded iPhone files) with "bad seek … Decoder plugin error",
+#                    so HEIC/HEIF decoding is delegated to heif-convert.
+# (sharp, used for non-HEIC images, is an npm dependency installed below.)
+RUN apk add --update --no-cache curl ca-certificates libc6-compat ffmpeg libreoffice poppler-utils libheif-tools
 
 # pnpm installs the workload's node_modules (mirrors services/api).
 RUN npm install -g pnpm

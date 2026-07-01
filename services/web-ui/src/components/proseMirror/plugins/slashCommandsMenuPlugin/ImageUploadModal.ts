@@ -1,4 +1,4 @@
-import { MAX_IMAGE_FILE_SIZE } from '@lixpi/constants'
+import { MAX_UPLOAD_FILE_SIZE } from '@lixpi/constants'
 
 import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
 import type { EditorView } from 'prosemirror-view'
@@ -384,7 +384,7 @@ export class ImageUploadModal {
             return
         }
 
-        if (file.size > MAX_IMAGE_FILE_SIZE) {
+        if (file.size > MAX_UPLOAD_FILE_SIZE) {
             alert('File size exceeds 1GB limit')
             return
         }
@@ -460,7 +460,7 @@ export class ImageUploadModal {
                 reject(new Error('Upload was cancelled'))
             })
 
-            xhr.open('POST', `${API_BASE_URL}/api/images/${workspaceId}`)
+            xhr.open('POST', `${API_BASE_URL}/api/files/${workspaceId}`)
             xhr.setRequestHeader('Authorization', `Bearer ${token}`)
             xhr.send(formData)
         })

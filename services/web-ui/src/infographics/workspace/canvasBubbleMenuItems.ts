@@ -19,6 +19,8 @@ import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
 
 export const CANVAS_IMAGE_CONTEXT = 'canvasImage'
 export const CANVAS_VIDEO_CONTEXT = 'canvasVideo'
+export const CANVAS_DOCUMENT_CONTEXT = 'canvasDocument'
+export const CANVAS_AUDIO_CONTEXT = 'canvasAudio'
 export const CANVAS_EDGE_CONTEXT = 'canvasEdge'
 
 const magicIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>'
@@ -167,6 +169,18 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         },
     })
 
+    const deleteFileButton = createCanvasButton({
+        icon: trashBinIcon,
+        title: 'Delete file',
+        iconSize: 16,
+        onClick: () => {
+            if (activeNodeId) {
+                callbacks.onDeleteNode(activeNodeId)
+                callbacks.onHide()
+            }
+        },
+    })
+
     const deleteEdgeButton = createCanvasButton({
         icon: trashBinIcon,
         title: 'Delete connection',
@@ -194,7 +208,7 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
     const items: BubbleMenuItem[] = [
         { element: askAiButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: replaceButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT] },
-        { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT] },
+        { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT] },
         {
             element: addToLibraryButton,
             context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT],
@@ -202,11 +216,12 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
                 display: callbacks.canAddToMediaLibrary(activeNodeId) ? '' : 'none',
             }),
         },
-        // Connect is shared across image + video contexts because both can be
+        // Connect is shared across all media contexts because any node can be
         // wired into a downstream thread the same way.
-        { element: connectButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT] },
+        { element: connectButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT] },
         { element: deleteButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: deleteVideoButton, context: [CANVAS_VIDEO_CONTEXT] },
+        { element: deleteFileButton, context: [CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT] },
         { element: changeCurveButton, context: [CANVAS_EDGE_CONTEXT] },
         { element: deleteEdgeButton, context: [CANVAS_EDGE_CONTEXT] },
     ]

@@ -108,7 +108,7 @@ const buildAuthenticatedImageUrl = async (path: string): Promise<string> => {
 
 const getReferenceWorkspaceImagePath = (reference: ImageGenerationTraceReference): string | null => {
     if (reference.fileId && reference.workspaceId) {
-        return `/api/images/${encodeURIComponent(reference.workspaceId)}/${encodeURIComponent(reference.fileId)}`
+        return `/api/files/${encodeURIComponent(reference.workspaceId)}/${encodeURIComponent(reference.fileId)}`
     }
     return null
 }
@@ -119,7 +119,7 @@ const getNatsWorkspaceImagePath = (imageUrl: string): string | null => {
 
     const [, workspaceId, objectKey] = match
     if (!workspaceId || !objectKey || objectKey.includes('/')) return null
-    return `/api/images/${encodeURIComponent(workspaceId)}/${encodeURIComponent(objectKey)}`
+    return `/api/files/${encodeURIComponent(workspaceId)}/${encodeURIComponent(objectKey)}`
 }
 
 const isApiHttpUrl = (imageUrl: string): boolean => {

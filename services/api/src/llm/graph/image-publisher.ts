@@ -3,12 +3,31 @@
 import type NatsService from '@lixpi/nats-service'
 import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
 
-import type { StoreImageInput, StoreImageResult } from '../../services/image-storage.ts'
 import {
     logCanvasProjectionError,
     upsertGeneratedImageToCanvas,
 } from '../../services/media-generation-canvas-projection.ts'
 import type { ChunkPayload, ProseMirrorContentHandler } from './stream-publisher.ts'
+
+// Store-function contract for the generation pipeline. The concrete
+// implementation injected at the composition root is a storeWorkspaceFile
+// adapter (see services/store-media-adapters.ts); the result is a superset of
+// these fields.
+export type StoreImageInput = {
+    workspaceId: string
+    buffer: Buffer
+    originalName?: string
+    mimeType?: string
+    useContentHash?: boolean
+}
+
+export type StoreImageResult = {
+    fileId: string
+    url: string
+    isDuplicate: boolean
+    size: number
+    mimeType: string
+}
 
 export type StoreWorkspaceImageFn = (input: StoreImageInput) => Promise<StoreImageResult>
 

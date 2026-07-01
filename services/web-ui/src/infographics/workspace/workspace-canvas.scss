@@ -143,6 +143,16 @@
     white-space: nowrap;
 }
 
+.workspace-image-submenu-error {
+    padding: 8px 12px;
+    margin-bottom: 4px;
+    border-radius: 6px;
+    background: rgba(220, 38, 38, 0.08);
+    color: #dc2626;
+    font-size: 12px;
+    white-space: normal;
+}
+
 .workspace-image-submenu-option {
     display: block;
     width: 100%;
@@ -1439,6 +1449,170 @@
     background: transparent;
 }
 
+.workspace-media-document-node,
+.workspace-audio-node {
+    background: transparent;
+    border-radius: var(--workspace-media-node-border-radius);
+    box-shadow: var(--workspace-media-node-default-box-shadow);
+    overflow: visible;
+    padding: 0;
+
+    &.is-selected {
+        box-shadow: var(--workspace-media-node-selected-box-shadow);
+    }
+}
+
+.media-document-drag-overlay,
+.audio-drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    background: transparent;
+}
+
+.workspace-upload-placeholder-node {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    // Hug the content instead of the fixed inline node height (set from canvas
+    // state) — otherwise the short text floats centered in a tall box.
+    height: auto !important;
+    min-height: 0;
+    padding: 0;
+    border: 1px dashed rgba(95, 112, 136, 0.45);
+    border-radius: var(--workspace-media-node-border-radius);
+    background: rgba(248, 250, 252, 0.94);
+    box-shadow: var(--workspace-media-node-default-box-shadow);
+    color: #39455d;
+    overflow: hidden;
+
+    &.is-failed {
+        border-color: rgba(220, 38, 38, 0.45);
+        background: rgba(254, 242, 242, 0.96);
+        color: #7f1d1d;
+    }
+}
+
+.workspace-upload-placeholder-content {
+    position: relative;
+    z-index: 5;
+    display: grid;
+    width: 100%;
+    gap: 3px;
+    padding: 12px 16px;
+    box-sizing: border-box;
+    text-align: left;
+}
+
+// The app's shared dual-ring spinner (mirrors components/spinner.svelte's
+// .loader, which is component-scoped and can't be reused in this vanilla-DOM
+// node), scaled down for the converting upload placeholder.
+.workspace-upload-placeholder-spinner {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 20;    // above the transparent drag overlay (z-index: 15)
+    width: 22px;
+    height: 22px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    border-top: 2.5px solid $nightBlue;
+    border-right: 2.5px solid transparent;
+    animation: upload-placeholder-spinner-rotation 1500ms linear infinite;
+
+    &::after {
+        content: '';
+        box-sizing: border-box;
+        position: absolute;
+        left: -2.5px;
+        top: -2.5px;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border-left: 2.5px solid $redPink;
+        border-bottom: 2.5px solid transparent;
+        animation: upload-placeholder-spinner-rotation 500ms linear infinite reverse;
+    }
+}
+
+@keyframes upload-placeholder-spinner-rotation {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.workspace-upload-placeholder-dismiss {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 20;    // above the transparent drag overlay (z-index: 15)
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(127, 29, 29, 0.08);
+    color: #991b1b;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background 0.12s ease, color 0.12s ease;
+
+    &:hover {
+        background: rgba(127, 29, 29, 0.16);
+        color: #7f1d1d;
+    }
+}
+
+.workspace-upload-placeholder-status,
+.workspace-upload-placeholder-name,
+.workspace-upload-placeholder-message {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-upload-placeholder-status {
+    font-size: 12px;
+    font-weight: 680;
+    color: #5f8fcf;
+    text-transform: uppercase;
+}
+
+.workspace-upload-placeholder-node.is-failed .workspace-upload-placeholder-status {
+    color: #dc2626;
+}
+
+.workspace-upload-placeholder-name {
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.workspace-upload-placeholder-message {
+    font-size: 12px;
+    color: #697388;
+}
+
+.workspace-upload-placeholder-node.is-failed .workspace-upload-placeholder-message {
+    color: #991b1b;
+}
+
+.upload-placeholder-drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    background: transparent;
+}
+
 // Video nodes mirror image nodes for selection/resize chrome. Completed playback
 // is composited by a DOM <video> in .workspace-video-chrome; the node shell still
 // provides fallback drag/resize hit areas.
@@ -2104,10 +2278,14 @@
 .workspace-document-node:hover .workspace-handle,
 .workspace-image-node:hover .workspace-handle,
 .workspace-video-node:hover .workspace-handle,
+.workspace-media-document-node:hover .workspace-handle,
+.workspace-audio-node:hover .workspace-handle,
 .workspace-ai-chat-thread-node:hover .workspace-handle,
 .workspace-document-node.is-selected .workspace-handle,
 .workspace-image-node.is-selected .workspace-handle,
 .workspace-video-node.is-selected .workspace-handle,
+.workspace-media-document-node.is-selected .workspace-handle,
+.workspace-audio-node.is-selected .workspace-handle,
 .workspace-ai-chat-thread-node.is-selected .workspace-handle {
     opacity: 1;
     pointer-events: auto;

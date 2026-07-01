@@ -38,6 +38,7 @@
         "decimal.js": "*",
         "dotenv": "*",
         "express": "*",
+        "file-type": "*",
         "jsonwebtoken": "*",
         "multer": "*",
         "uuid": "*",

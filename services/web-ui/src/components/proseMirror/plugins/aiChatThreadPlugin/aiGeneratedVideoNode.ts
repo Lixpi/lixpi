@@ -96,7 +96,7 @@ export function getAiGeneratedVideoCallbacks(): AiGeneratedVideoCallbacks {
     return globalCallbacks
 }
 
-// Resolves a path like /api/videos/{ws}/{fileId} or /api/images/... to a full
+// Resolves a path like /api/files/{ws}/{fileId} or /api/files/... to a full
 // authenticated URL. Mirrors the helper inlined in aiGeneratedImageNode.ts so
 // the same auth-token attachment logic applies to both video and poster URLs.
 const buildAuthenticatedUrl = async (url: string): Promise<string> => {
@@ -109,7 +109,7 @@ const buildAuthenticatedUrl = async (url: string): Promise<string> => {
     }
     if (url.startsWith('http')) {
         const stripped = url.replace(/[?&]token=[^&]+/, '')
-        if (stripped.includes('/api/videos/') || stripped.includes('/api/images/')) {
+        if (stripped.includes('/api/files/')) {
             const token = await AuthService.getTokenSilently()
             return `${stripped}${token ? `?token=${token}` : ''}`
         }

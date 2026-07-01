@@ -1,0 +1,31 @@
+# Nexfile — file-conversion (native / service)
+#
+# Canonical declaration of the file-conversion workload. This file documents the
+# contract; the actual deploy is performed by services/nex/entrypoint.sh, which
+# injects the runtime `environment` from the container env at `nex workload start`
+# time. That injection is required because the native nexlet does NOT inherit the
+# container env — agents/native/state.go sets the child process env to ONLY
+# start_request.environment (+ NEX_WORKLOAD_* creds). Secrets (the NATS
+# regular-user password) therefore cannot live in this committed file; the
+# entrypoint supplies them at deploy time.
+#
+# Unlike ai-models-sync (which connects with the NEX-account creds the native
+# nexlet mints), this workload connects to NATS as the AUTH-account `regular_user`
+# so it can read/write the workspace Object Store buckets that live in AUTH. The
+# NEX node only supervises this process.
+#
+# No `tags:` — the single Lixpi node bids on the untagged request.
+name: file-conversion
+description: Heavy media transcoding (sharp/ffmpeg/libreoffice/poppler) off the API
+type: native
+lifecycle: service
+start_request:
+  # Run the TypeScript responder directly via Node type-stripping (as the API does).
+  uri: "file:///usr/local/bin/node"
+  argv:
+    - "--experimental-transform-types"
+    - "--disable-warning=ExperimentalWarning"
+    - "/usr/src/service/workloads/file-conversion/index.ts"
+  # The entrypoint injects these from container env at deploy time:
+  #   NATS_SERVERS, NATS_REGULAR_USER_PASSWORD, HOME, PATH
+  environment: {}

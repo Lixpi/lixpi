@@ -14,12 +14,15 @@ import { v4 as uuidv4 } from 'uuid'
 import {
     NATS_SUBJECTS,
     STREAM_STATUS,
-    type CanvasState,
-    type CanvasNode,
-    type DocumentCanvasNode,
-    type ImageCanvasNode,
-    type VideoCanvasNode,
-    type BranchOriginCanvasNode,
+	type CanvasState,
+	type CanvasNode,
+	type DocumentCanvasNode,
+	type DocumentMediaCanvasNode,
+	type ImageCanvasNode,
+	type VideoCanvasNode,
+	type AudioCanvasNode,
+	type UploadPlaceholderCanvasNode,
+	type BranchOriginCanvasNode,
     type BranchForkCanvasNode,
     type BranchForkLineagePlan,
     type BranchLineCanvasNode,
@@ -82,6 +85,8 @@ import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasMediaNodeLifecycleTracker } from '$src/infographics/workspace/canvasMediaNodeLifecycle.ts'
 import { shouldAcceptGeneratedMediaEvent as shouldAcceptGeneratedMediaEventForState } from '$src/infographics/workspace/generatedMediaEventWorkspaceGuard.ts'
 import { createVideoNodeHandler, type VideoNodeHandlerControl } from '$src/infographics/workspace/rendering/videoNodeHandler.ts'
+import { createAudioNodeHandler, type AudioNodeHandlerControl } from '$src/infographics/workspace/rendering/audioNodeHandler.ts'
+import { createDocumentNodeHandler } from '$src/infographics/workspace/rendering/documentNodeHandler.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { getAdaptiveBoundedZoomScalingOptions, getCanvasChromeScreenLayout, getResizeHandleScaledSizes, scaleCanvasChromeToScreenForZoom, scaleCanvasChromeWorldSizeForZoom } from '$src/infographics/utils/zoomScaling.ts'
@@ -124,7 +129,7 @@ import { CircularGlassMaterial } from '$src/utils/animations/gradients/pixiGlass
 import { tPatternSvgTexture } from '$src/svgIcons/svgTextures.ts'
 import { settings, type WorkspaceCollisionFlowSettings, type WorkspaceCollisionNodeTypeSettings } from '$src/settings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
-import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
+import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import MediaLibraryService from '$src/services/media-library-service.ts'
@@ -788,8 +793,11 @@ type WorkspaceCanvasCallbacks = {
 
 type WorkspaceCanvasNodeInsertion =
     | Omit<DocumentCanvasNode, 'position'>
+    | Omit<DocumentMediaCanvasNode, 'position'>
     | Omit<ImageCanvasNode, 'position'>
     | Omit<VideoCanvasNode, 'position'>
+    | Omit<AudioCanvasNode, 'position'>
+    | Omit<UploadPlaceholderCanvasNode, 'position'>
 
 type PendingGeneratedMediaTracker = {
     nodeId: string
@@ -1097,6 +1105,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // there is no DOM spinner, mirroring PR #202's image pattern.
     const videoGenerationTracker = new Map<string, PendingGeneratedMediaTracker>()
     let videoNodeHandler: VideoNodeHandlerControl | null = null
+    let audioNodeHandler: AudioNodeHandlerControl | null = null
 
     const pixiSelectionColors: SelectionColors = {
         marqueeStroke: selectionStyles.marqueeBorderColor,
@@ -1126,6 +1135,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 onVideoElementReady: () => scheduleGeneratedMediaChromeSync(),
             })
             mediaRegistry.register(videoNodeHandler)
+
+            // Uploaded audio + document nodes share the same media container as
+            // video. Audio owns a hidden DOM <audio> surface (playback chrome is
+            // wired like video); documents render a first-page poster sprite only.
+            audioNodeHandler = createAudioNodeHandler({
+                audioLayer: videoLayer,
+                onRender: () => pixiMediaLayer?.scheduleRender?.(),
+                onAudioElementReady: () => scheduleGeneratedMediaChromeSync(),
+            })
+            mediaRegistry.register(audioNodeHandler)
+
+            mediaRegistry.register(createDocumentNodeHandler({
+                documentLayer: videoLayer,
+                onRender: () => pixiMediaLayer?.scheduleRender?.(),
+            }))
         }
     }
     mediaChromeViewportEl = createMediaChromeViewport()
@@ -1209,7 +1233,29 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             },
             onDownloadMedia: (nodeId) => {
                 const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
-                if (!node || (node.type !== 'image' && node.type !== 'video')) return
+                if (!node) return
+
+                // Uploaded documents/audio live under the unified /api/files route;
+                // download via a tokenized attachment link (the route honors
+                // ?download=true). Image/video keep their existing path below.
+                if (node.type === 'mediaDocument' || node.type === 'audio') {
+                    void (async () => {
+                        const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+                        const token = await AuthService.getTokenSilently()
+                        if (!token) return
+                        const href = `${API_BASE_URL}/api/files/${workspaceId}/${node.fileId}?download=true&token=${encodeURIComponent(token)}`
+                        const a = document.createElement('a')
+                        a.href = href
+                        a.rel = 'noopener'
+                        a.style.display = 'none'
+                        document.body.appendChild(a)
+                        a.click()
+                        a.remove()
+                    })()
+                    return
+                }
+
+                if (node.type !== 'image' && node.type !== 'video') return
 
                 void (async () => {
                     const API_BASE_URL = import.meta.env.VITE_API_URL || ''
@@ -1988,7 +2034,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return [
                 imageNode.src,
                 imageNode.workspaceId && imageNode.fileId
-                    ? `/api/images/${encodeURIComponent(imageNode.workspaceId)}/${encodeURIComponent(imageNode.fileId)}`
+                    ? `/api/files/${encodeURIComponent(imageNode.workspaceId)}/${encodeURIComponent(imageNode.fileId)}`
                     : '',
             ]
         }
@@ -1996,11 +2042,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const videoNode = node as VideoCanvasNode
             return [
                 videoNode.frameFileId && videoNode.workspaceId
-                    ? `/api/images/${encodeURIComponent(videoNode.workspaceId)}/${encodeURIComponent(videoNode.frameFileId)}`
+                    ? `/api/files/${encodeURIComponent(videoNode.workspaceId)}/${encodeURIComponent(videoNode.frameFileId)}`
                     : '',
                 videoNode.posterSrc,
                 videoNode.workspaceId && videoNode.posterFileId
-                    ? `/api/images/${encodeURIComponent(videoNode.workspaceId)}/${encodeURIComponent(videoNode.posterFileId)}`
+                    ? `/api/files/${encodeURIComponent(videoNode.workspaceId)}/${encodeURIComponent(videoNode.posterFileId)}`
                     : '',
             ]
         }
@@ -4091,7 +4137,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!canvasBubbleMenu || !canvasBubbleMenuItems || !currentCanvasState) return
 
         const node = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
-        if (!node || (node.type !== 'image' && node.type !== 'video')) {
+        // Every uploaded media kind gets a bubble menu (at minimum Delete) — image,
+        // video, uploaded document (PDF/office/text), and audio.
+        const bubbleContextByType: Record<string, string> = {
+            image: CANVAS_IMAGE_CONTEXT,
+            video: CANVAS_VIDEO_CONTEXT,
+            mediaDocument: CANVAS_DOCUMENT_CONTEXT,
+            audio: CANVAS_AUDIO_CONTEXT,
+        }
+        const context = node ? bubbleContextByType[node.type] : undefined
+        if (!node || !context) {
             canvasBubbleMenu.hide()
             return
         }
@@ -4109,7 +4164,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             clampToParent: false,
             animateOnShow: false,
         }
-        const context = node.type === 'video' ? CANVAS_VIDEO_CONTEXT : CANVAS_IMAGE_CONTEXT
         canvasBubbleMenu.show(context, position)
         canvasBubbleMenu.refreshState()
     }
@@ -9129,13 +9183,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!imageUrl) return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
         if (imageUrl.startsWith('data:')) return imageUrl
         if (imageUrl.startsWith('/api/')) return `${apiBaseUrl}${imageUrl}${token ? `?token=${token}` : ''}`
-        if (imageUrl.startsWith('http') && imageUrl.includes('/api/images/')) return `${imageUrl}${token ? `?token=${token}` : ''}`
+        if (imageUrl.startsWith('http') && imageUrl.includes('/api/files/')) return `${imageUrl}${token ? `?token=${token}` : ''}`
         if (imageUrl.startsWith('http')) return imageUrl
         return `data:image/png;base64,${imageUrl}`
     }
 
     function buildStoredImageSrc(workspaceId: string, fileId: string): string {
-        return `/api/images/${encodeURIComponent(workspaceId)}/${encodeURIComponent(fileId)}`
+        return `/api/files/${encodeURIComponent(workspaceId)}/${encodeURIComponent(fileId)}`
     }
 
     function buildGeneratedImageFrameSrc({
@@ -9335,15 +9389,120 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // PIXI media layer's videoNodeHandler picks the new node up on the next
     // syncPixiMediaLayer() call and creates the corresponding sprite under the
     // videoLayer Container.
-    function appendVideoNodeToDOM(videoNode: VideoCanvasNode): void {
-        const nodeEl = createVideoNode(videoNode)
-        viewportEl.appendChild(nodeEl)
-        connectionManager?.registerNodeElement(videoNode.nodeId, nodeEl as HTMLDivElement)
-        syncPixiMediaLayer(currentCanvasState)
-        syncConnectionsAfterManualNodeAppend()
-    }
+	    function appendVideoNodeToDOM(videoNode: VideoCanvasNode): void {
+	        const nodeEl = createVideoNode(videoNode)
+	        viewportEl.appendChild(nodeEl)
+	        connectionManager?.registerNodeElement(videoNode.nodeId, nodeEl as HTMLDivElement)
+	        syncPixiMediaLayer(currentCanvasState)
+	        syncConnectionsAfterManualNodeAppend()
+	    }
 
-    function appendBranchOriginNodeToDOM(branchOriginNode: BranchOriginCanvasNode): void {
+	    function appendDocumentMediaNodeToDOM(documentNode: DocumentMediaCanvasNode): void {
+	        const nodeEl = createDocumentMediaNode(documentNode)
+	        viewportEl.appendChild(nodeEl)
+	        connectionManager?.registerNodeElement(documentNode.nodeId, nodeEl as HTMLDivElement)
+	        syncPixiMediaLayer(currentCanvasState)
+	        syncConnectionsAfterManualNodeAppend()
+	    }
+
+	    function appendAudioNodeToDOM(audioNode: AudioCanvasNode): void {
+	        const nodeEl = createAudioNode(audioNode)
+	        viewportEl.appendChild(nodeEl)
+	        connectionManager?.registerNodeElement(audioNode.nodeId, nodeEl as HTMLDivElement)
+	        syncPixiMediaLayer(currentCanvasState)
+	        syncConnectionsAfterManualNodeAppend()
+	    }
+
+	    function appendCanvasNodeToDOM(node: CanvasNode): void {
+	        if (node.type === 'image') appendImageNodeToDOM(node)
+	        else if (node.type === 'video') appendVideoNodeToDOM(node)
+	        else if (node.type === 'mediaDocument') appendDocumentMediaNodeToDOM(node)
+	        else if (node.type === 'audio') appendAudioNodeToDOM(node)
+	    }
+
+	    function syncExistingUploadPlaceholderNodeToDOM(node: UploadPlaceholderCanvasNode): void {
+	        const existingNodeEl = viewportEl.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
+	        if (!existingNodeEl) return
+
+	        const nodeEl = createUploadPlaceholderNode(node)
+	        existingNodeEl.replaceWith(nodeEl)
+	        connectionManager?.registerNodeElement(node.nodeId, nodeEl as HTMLDivElement)
+	        syncConnectionsAfterManualNodeAppend()
+	    }
+
+	    function prepareUploadReplacementNode(
+	        placeholderNode: UploadPlaceholderCanvasNode,
+	        node: WorkspaceCanvasNodeInsertion
+	    ): CanvasNode {
+	        const position = {
+	            x: placeholderNode.position.x + (placeholderNode.dimensions.width - node.dimensions.width) / 2,
+	            y: placeholderNode.position.y + (placeholderNode.dimensions.height - node.dimensions.height) / 2,
+	        }
+	        const positionedNode = { ...node, position } as CanvasNode
+	        const mediaNodeNeedsAnalysis = (positionedNode.type === 'image' || positionedNode.type === 'video')
+	            && shouldAnalyzeMediaDescriptor((positionedNode as ImageCanvasNode | VideoCanvasNode).descriptor)
+	        return mediaNodeNeedsAnalysis
+	            ? { ...(positionedNode as ImageCanvasNode | VideoCanvasNode), descriptor: buildAnalyzingDescriptor() } as CanvasNode
+	            : positionedNode
+	    }
+
+	    function replaceUploadPlaceholderInternal(
+	        placeholderNodeId: string,
+	        node: WorkspaceCanvasNodeInsertion
+	    ): CanvasState | null {
+	        if (!currentCanvasState) return null
+	        const placeholderNode = currentCanvasState.nodes.find((candidate: CanvasNode): candidate is UploadPlaceholderCanvasNode =>
+	            candidate.type === 'uploadPlaceholder' && candidate.nodeId === placeholderNodeId
+	        )
+	        if (!placeholderNode) return null
+
+	        const preparedNode = prepareUploadReplacementNode(placeholderNode, node)
+	        const nodes = resolveTopLevelNodeCollisions(currentCanvasState.nodes.map((candidate: CanvasNode): CanvasNode =>
+	            candidate.nodeId === placeholderNodeId ? preparedNode : candidate
+	        ))
+	        const edges = currentCanvasState.edges.map((edge: WorkspaceEdge): WorkspaceEdge => ({
+	            ...edge,
+	            sourceNodeId: edge.sourceNodeId === placeholderNodeId ? preparedNode.nodeId : edge.sourceNodeId,
+	            targetNodeId: edge.targetNodeId === placeholderNodeId ? preparedNode.nodeId : edge.targetNodeId,
+	        }))
+	        const nextState: CanvasState = { ...currentCanvasState, nodes, edges }
+
+	        commitCanvasStatePreservingEditors(nextState)
+	        viewportEl.querySelector(`[data-node-id="${placeholderNodeId}"]`)?.remove()
+	        appendCanvasNodeToDOM(preparedNode)
+	        selectedNodeIds.delete(placeholderNodeId)
+	        selectNode(preparedNode.nodeId)
+
+	        if (preparedNode.type === 'image' || preparedNode.type === 'video') {
+	            queueCanvasMediaAnalysis(preparedNode.nodeId, getMediaDescriptorStillFileId(preparedNode))
+	        }
+
+	        return nextState
+	    }
+
+	    function markUploadPlaceholderFailedInternal(placeholderNodeId: string, message: string): CanvasState | null {
+	        if (!currentCanvasState) return null
+	        let failedNode: UploadPlaceholderCanvasNode | null = null
+	        const nodes = currentCanvasState.nodes.map((node: CanvasNode): CanvasNode => {
+	            if (node.type !== 'uploadPlaceholder' || node.nodeId !== placeholderNodeId) return node
+	            failedNode = {
+	                ...node,
+	                status: 'failed',
+	                message,
+	                updatedAt: Date.now(),
+	            }
+	            return failedNode
+	        })
+	        if (!failedNode) return null
+
+	        const nextState: CanvasState = { ...currentCanvasState, nodes }
+	        commitCanvasStatePreservingEditors(nextState)
+	        syncExistingUploadPlaceholderNodeToDOM(failedNode)
+
+	        return nextState
+	    }
+
+	    function appendBranchOriginNodeToDOM(branchOriginNode: BranchOriginCanvasNode): void {
         if (findBranchMarkerNodeEl(branchOriginNode.nodeId)) {
             syncExistingBranchMarkerNodeToDOM(branchOriginNode)
             return
@@ -11209,6 +11368,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
+    function createDocumentMediaNode(node: DocumentMediaCanvasNode): HTMLElement {
+        const { nodeEl, dragOverlay } = createBaseNodeElement(
+            node,
+            'workspace-media-document-node',
+            { fileId: node.fileId }
+        )
+        dragOverlay.className = 'media-document-drag-overlay nopan'
+
+        return nodeEl
+    }
+
     // DOM shell for VideoCanvasNode. Mirrors createImageNode: the shell owns
     // interaction chrome, while completed videos get a visible DOM
     // <video> surface in the transformed chrome layer.
@@ -11234,6 +11404,96 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
         dragOverlay.addEventListener('dblclick', togglePlayback)
+
+        return nodeEl
+    }
+
+    function createAudioNode(node: AudioCanvasNode): HTMLElement {
+        const { nodeEl, dragOverlay } = createBaseNodeElement(
+            node,
+            'workspace-audio-node',
+            { fileId: node.fileId }
+        )
+        dragOverlay.className = 'audio-drag-overlay nopan'
+
+        const togglePlayback = (event: Event) => {
+            event.stopPropagation()
+            if (audioNodeHandler?.hasEntry(node.nodeId)) {
+                audioNodeHandler.toggle(node.nodeId).catch(() => {})
+            }
+        }
+        dragOverlay.addEventListener('dblclick', togglePlayback)
+
+        return nodeEl
+    }
+
+    // Dismiss a (typically failed) upload placeholder: drop it from canvas state
+    // + DOM so a failed upload can be cleared instead of lingering forever.
+    function removeUploadPlaceholderInternal(placeholderNodeId: string): CanvasState | null {
+        if (!currentCanvasState) return null
+        const exists = currentCanvasState.nodes.some((candidate: CanvasNode): boolean =>
+            candidate.type === 'uploadPlaceholder' && candidate.nodeId === placeholderNodeId
+        )
+        if (!exists) return null
+
+        const nodes = currentCanvasState.nodes.filter((candidate: CanvasNode): boolean => candidate.nodeId !== placeholderNodeId)
+        const edges = currentCanvasState.edges.filter((edge: WorkspaceEdge): boolean =>
+            edge.sourceNodeId !== placeholderNodeId && edge.targetNodeId !== placeholderNodeId
+        )
+        const nextState: CanvasState = { ...currentCanvasState, nodes, edges }
+
+        commitCanvasStatePreservingEditors(nextState)
+        viewportEl.querySelector(`[data-node-id="${placeholderNodeId}"]`)?.remove()
+        selectedNodeIds.delete(placeholderNodeId)
+
+        return nextState
+    }
+
+    function createUploadPlaceholderNode(node: UploadPlaceholderCanvasNode): HTMLElement {
+        const { nodeEl, dragOverlay } = createBaseNodeElement(
+            node,
+            `workspace-upload-placeholder-node is-${node.status}`,
+            { uploadStatus: node.status },
+            { renderResizeHandles: false }
+        )
+        dragOverlay.className = 'upload-placeholder-drag-overlay nopan'
+
+        const label = node.status === 'failed' ? 'Conversion failed' : 'Converting upload'
+        const message = node.message ?? (node.status === 'failed'
+            ? 'The file could not be converted to a supported format.'
+            : 'Creating a supported copy before adding it to the canvas.')
+        const content = html`
+            <div className="workspace-upload-placeholder-content">
+                <span className="workspace-upload-placeholder-status">${label}</span>
+                <span className="workspace-upload-placeholder-name">${node.fileName}</span>
+                <span className="workspace-upload-placeholder-message">${message}</span>
+            </div>
+        ` as HTMLDivElement
+        nodeEl.appendChild(content)
+
+        // Converting uploads show the app's shared dual-ring spinner (top-right).
+        if (node.status === 'converting') {
+            const spinner = document.createElement('span')
+            spinner.className = 'workspace-upload-placeholder-spinner'
+            spinner.setAttribute('aria-label', 'Converting')
+            nodeEl.appendChild(spinner)
+        }
+
+        // Failed uploads get a dismiss (×) button so they can be cleared. It sits
+        // above the transparent drag overlay (z-index) so its click isn't swallowed.
+        if (node.status === 'failed') {
+            const dismissBtn = document.createElement('button')
+            dismissBtn.type = 'button'
+            dismissBtn.className = 'workspace-upload-placeholder-dismiss nopan'
+            dismissBtn.setAttribute('aria-label', 'Dismiss')
+            dismissBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+            dismissBtn.addEventListener('pointerdown', (e: Event) => { e.stopPropagation() })
+            dismissBtn.addEventListener('click', (e: Event) => {
+                e.stopPropagation()
+                removeUploadPlaceholderInternal(node.nodeId)
+            })
+            nodeEl.appendChild(dismissBtn)
+        }
 
         return nodeEl
     }
@@ -11721,15 +11981,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         for (const node of currentCanvasState.nodes) {
             let nodeEl: HTMLElement
 
-            if (node.type === 'document') {
-                const docNode = node as DocumentCanvasNode
-                const doc = documentMap.get(docNode.referenceId)
-                nodeEl = createDocumentNode(docNode, doc)
-            } else if (node.type === 'image') {
-                nodeEl = createImageNode(node as ImageCanvasNode)
-            } else if (node.type === 'video') {
-                nodeEl = createVideoNode(node as VideoCanvasNode)
-            } else if (node.type === 'branchOrigin') {
+	            if (node.type === 'document') {
+	                const docNode = node as DocumentCanvasNode
+	                const doc = documentMap.get(docNode.referenceId)
+	                nodeEl = createDocumentNode(docNode, doc)
+	            } else if (node.type === 'mediaDocument') {
+	                nodeEl = createDocumentMediaNode(node as DocumentMediaCanvasNode)
+	            } else if (node.type === 'image') {
+	                nodeEl = createImageNode(node as ImageCanvasNode)
+	            } else if (node.type === 'video') {
+	                nodeEl = createVideoNode(node as VideoCanvasNode)
+	            } else if (node.type === 'audio') {
+	                nodeEl = createAudioNode(node as AudioCanvasNode)
+	            } else if (node.type === 'uploadPlaceholder') {
+	                nodeEl = createUploadPlaceholderNode(node as UploadPlaceholderCanvasNode)
+	            } else if (node.type === 'branchOrigin') {
                 nodeEl = createBranchOriginNode(node as BranchOriginCanvasNode)
             } else if (node.type === 'branchFork') {
                 nodeEl = createBranchForkNode(node as BranchForkCanvasNode)
@@ -12104,11 +12370,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return newCanvasState
     }
 
-    return {
-        insertNodeAtViewportCenter(node: WorkspaceCanvasNodeInsertion, statePatch: WorkspaceCanvasInsertionStatePatch = {}) {
-            return insertNodeAtViewportCenterInternal(node, statePatch)
-        },
-        render(newCanvasState: CanvasState | null, newDocuments: Document[], newAiChatThreads: AiChatThread[] = [], newWorkspaceId?: string) {
+	    return {
+	        insertNodeAtViewportCenter(node: WorkspaceCanvasNodeInsertion, statePatch: WorkspaceCanvasInsertionStatePatch = {}) {
+	            return insertNodeAtViewportCenterInternal(node, statePatch)
+	        },
+	        replaceUploadPlaceholder(placeholderNodeId: string, node: WorkspaceCanvasNodeInsertion) {
+	            return replaceUploadPlaceholderInternal(placeholderNodeId, node)
+	        },
+	        markUploadPlaceholderFailed(placeholderNodeId: string, message: string) {
+	            return markUploadPlaceholderFailedInternal(placeholderNodeId, message)
+	        },
+	        render(newCanvasState: CanvasState | null, newDocuments: Document[], newAiChatThreads: AiChatThread[] = [], newWorkspaceId?: string) {
             const workspaceChanged = Boolean(newWorkspaceId && newWorkspaceId !== workspaceId)
             if (newWorkspaceId) workspaceId = newWorkspaceId
             if (workspaceChanged) pendingLocalCanvasVisualCommit = null
