@@ -163,6 +163,7 @@ describe('ImageUploadModal', () => {
     let originalXmlHttpRequest: typeof XMLHttpRequest | undefined
     let originalAlert: any
     let alertSpy: ReturnType<typeof vi.fn> | null = null
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null
 
     beforeEach(() => {
         document.body.innerHTML = ''
@@ -180,6 +181,8 @@ describe('ImageUploadModal', () => {
         originalAlert = (globalThis as any).alert
         alertSpy = vi.fn()
         ;(globalThis as any).alert = alertSpy
+
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     })
 
     afterEach(() => {
@@ -193,6 +196,8 @@ describe('ImageUploadModal', () => {
             ;(globalThis as any).alert = originalAlert
         }
         alertSpy = null
+        consoleErrorSpy?.mockRestore()
+        consoleErrorSpy = null
     })
 
     it('renders overlay and defaults to the upload tab', () => {

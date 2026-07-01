@@ -16,6 +16,9 @@ const panelSource = readFileSync(resolve(__dirname, 'mediaLibraryPanel.ts'), 'ut
 const panelStyles = readFileSync(resolve(__dirname, 'media-library-panel.scss'), 'utf-8')
 const canvasSource = readFileSync(resolve(__dirname, 'WorkspaceCanvas.ts'), 'utf-8')
 const workspaceSvelteSource = readFileSync(resolve(__dirname, '../../components/WorkspaceCanvas.svelte'), 'utf-8')
+const WORKSPACE_IMPORT_GUARD_SNIPPET =
+    'if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return'
+const WORKSPACE_IMPORT_FINALIZE_SNIPPET = 'await finalizeIngest(data, token, targetWorkspaceId, placeholderNodeId)'
 
 describe('Media Library panel contract', () => {
     it('is an embedded renderer the right side panel hosts, not a standalone drawer', () => {
@@ -104,10 +107,19 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(workspaceSvelteSource, "fetch(`${API_BASE_URL}/api/files/${targetWorkspaceId}/import-url`, {")
         expectSourceToContain(workspaceSvelteSource, "'Authorization': `Bearer ${token}`")
         expectSourceToContain(workspaceSvelteSource, 'const src = tokenizeUrl(result.url, token)')
-        expectSourceToContain(workspaceSvelteSource, 'await finalizeIngest(data, token, targetWorkspaceId, placeholderNodeId)')
+        expectSourceToContain(workspaceSvelteSource, WORKSPACE_IMPORT_FINALIZE_SNIPPET)
         expectSourceToContain(
             workspaceSvelteSource,
-            'if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return',
+            WORKSPACE_IMPORT_GUARD_SNIPPET,
         )
+    })
+
+    it('bails out early if the workspace context changed while importing a remote media sample', () => {
+        const guardIndex = workspaceSvelteSource.indexOf(WORKSPACE_IMPORT_GUARD_SNIPPET)
+        const finalizeIndex = workspaceSvelteSource.indexOf(WORKSPACE_IMPORT_FINALIZE_SNIPPET)
+
+        expect(guardIndex, 'stale-workspace guard should be present').toBeGreaterThan(-1)
+        expect(finalizeIndex, 'import finalize call should be present').toBeGreaterThan(-1)
+        expect(finalizeIndex).toBeGreaterThan(guardIndex)
     })
 })

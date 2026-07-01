@@ -15,6 +15,52 @@ beforeEach(() => {
     ;(globalThis as any).dynamoDBService = dynamo
 })
 
+describe('Workspace.getWorkspace', () => {
+    it('normalizes missing workspaces into NOT_FOUND', async () => {
+        dynamo.getItem.mockResolvedValueOnce(undefined)
+
+        await expect(Workspace.getWorkspace({ workspaceId: 'workspace-1', userId: 'user-1' })).resolves.toEqual(
+            { error: 'NOT_FOUND' },
+        )
+        expect(dynamo.getItem).toHaveBeenCalledWith(expect.objectContaining({
+            key: { workspaceId: 'workspace-1' },
+        }))
+    })
+
+    it('returns PERMISSION_DENIED when the requesting user lacks access', async () => {
+        dynamo.getItem.mockResolvedValueOnce({
+            workspaceId: 'workspace-1',
+            accessList: [{ userId: 'other-user' }],
+            canvasState: { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [] },
+        })
+
+        await expect(Workspace.getWorkspace({ workspaceId: 'workspace-1', userId: 'user-1' })).resolves.toEqual(
+            { error: 'PERMISSION_DENIED' },
+        )
+    })
+
+    it('falls back to updatedAt as canvasStateUpdatedAt and keeps an empty edges array', async () => {
+        dynamo.getItem.mockResolvedValueOnce({
+            workspaceId: 'workspace-1',
+            accessList: [{ userId: 'user-1' }],
+            updatedAt: 10,
+            canvasState: { viewport: { x: 1, y: 2, zoom: 1 }, nodes: [{ nodeId: 'n-1', type: 'image' }] },
+        })
+
+        const result = await Workspace.getWorkspace({ workspaceId: 'workspace-1', userId: 'user-1' })
+
+        expect(result).toMatchObject({
+            workspaceId: 'workspace-1',
+            canvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 1, y: 2, zoom: 1 },
+                nodes: [{ nodeId: 'n-1', type: 'image' }],
+                edges: [],
+            },
+        })
+    })
+})
+
 describe('Workspace.patchCanvasNodeDescriptor', () => {
     it('patches only the matched canvas node descriptor path', async () => {
         const descriptor: ContentDescriptor = {

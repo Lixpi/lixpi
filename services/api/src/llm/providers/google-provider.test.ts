@@ -2,6 +2,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const debugTools = vi.hoisted(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    err: vi.fn(),
+}))
+
+vi.mock('@lixpi/debug-tools', () => debugTools)
+
 import { type BaseProviderDeps } from './base-provider.ts'
 import { buildVeoReferenceImages, getGoogleImageResponseSummary } from './google-provider.ts'
 import { GoogleProvider } from './google-provider.ts'
@@ -64,10 +72,12 @@ const resetGoogleMocks = () => {
 
 const configureProviderInternals = (provider: GoogleProvider) => {
     const start = vi.fn()
+    const end = vi.fn()
     const chunk = vi.fn()
     const error = vi.fn()
     const streamPublisher = {
         start,
+        end,
         chunk,
         error,
     } as any
@@ -85,7 +95,7 @@ const configureProviderInternals = (provider: GoogleProvider) => {
     ;(provider as any).imagePublisher = imagePublisher
     ;(provider as any).videoPublisher = videoPublisher
     ;(provider as any).abortController = new AbortController()
-    return { start, chunk, error, imagePublisher, videoPublisher }
+    return { start, end, chunk, error, imagePublisher, videoPublisher }
 }
 
 const baseGoogleState = () => ({
@@ -450,6 +460,128 @@ describe('GoogleProvider internals', () => {
         }))
     })
 
+    it('falls back to forced function calling when fanout is enabled and no initial tool call is emitted', async () => {
+        googleMocks.generateContentStream.mockResolvedValueOnce(makeAsyncStream([
+            {
+                candidates: [
+                    {
+                        content: {
+                            parts: [
+                                {
+                                    text: 'No clear tool call yet.',
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        ]))
+        googleMocks.generateContentStream.mockResolvedValueOnce(makeAsyncStream([
+            {
+                candidates: [
+                    {
+                        content: {
+                            parts: [
+                                {
+                                    functionCall: {
+                                        name: 'generate_image',
+                                        args: { prompt: 'Strict mode fallback prompt' },
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        ]))
+
+        const provider = new GoogleProvider('ws-1:thread-1', createProviderDeps())
+        const { chunk } = configureProviderInternals(provider)
+
+        const update = await (provider as any).streamImpl({
+            ...baseGoogleState(),
+            imageModelVersion: 'imagen-4.0',
+            imageModelMetaInfo: {
+                provider: 'Google',
+                model: 'imagen-4.0',
+                modelVersion: 'imagen-4.0',
+            } as any,
+            imageProviderName: 'Google',
+            enableImageGeneration: false,
+            mediaFanoutPlan: true,
+            messages: [{ role: 'user', content: 'draw it' }],
+        } as any)
+
+        expect(chunk).toHaveBeenCalledWith('No clear tool call yet.')
+        expect(googleMocks.generateContentStream).toHaveBeenCalledTimes(2)
+        expect(update.generatedImagePrompt).toBe('Strict mode fallback prompt')
+        expect(googleMocks.generateContentStream.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+            config: expect.objectContaining({
+                toolConfig: expect.objectContaining({
+                    functionCallingConfig: expect.objectContaining({
+                        mode: 'ANY',
+                        allowedFunctionNames: ['generate_image'],
+                    }),
+                }),
+            }),
+        }))
+    })
+
+    it('streams plain-text responses and finalizes the stream publisher lifecycle', async () => {
+        googleMocks.generateContentStream.mockResolvedValueOnce(makeAsyncStream([
+            {
+                usageMetadata: {
+                    promptTokenCount: 3,
+                    candidatesTokenCount: 4,
+                    totalTokenCount: 7,
+                },
+                candidates: [
+                    { content: { parts: [{ text: 'hello ' }] } },
+                ],
+            },
+            {
+                usageMetadata: {
+                    promptTokenCount: 3,
+                    candidatesTokenCount: 6,
+                    cachedContentTokenCount: 1,
+                    thoughtsTokenCount: 2,
+                    totalTokenCount: 12,
+                },
+                candidates: [
+                    { content: { parts: [{ text: 'world' }] } },
+                ],
+            },
+        ]))
+
+        const provider = new GoogleProvider('ws-1:thread-1', createProviderDeps())
+        const { chunk, end, error } = configureProviderInternals(provider)
+
+        const update = await (provider as any).streamImpl({
+            ...baseGoogleState(),
+            enableImageGeneration: false,
+            enableVideoGeneration: false,
+            messages: [{ role: 'user', content: 'plain text request' }],
+        })
+
+        expect(chunk).toHaveBeenCalledTimes(2)
+        expect(chunk).toHaveBeenNthCalledWith(1, 'hello ')
+        expect(chunk).toHaveBeenNthCalledWith(2, 'world')
+        expect(end).toHaveBeenCalledOnce()
+        expect(error).not.toHaveBeenCalled()
+        expect(update).toMatchObject({
+            usage: {
+                promptTokens: 3,
+                completionTokens: 6,
+                promptCachedTokens: 1,
+                completionReasoningTokens: 2,
+                totalTokens: 12,
+            },
+            aiVendorRequestId: 'google-ws-1-thread-1',
+        })
+        expect(update.generatedImages).toBeUndefined()
+        expect(update.generatedVideos).toBeUndefined()
+    })
+
     it('streams VEO path from model-version matching regex and updates media usage', async () => {
         googleMocks.generateVideos.mockResolvedValueOnce({
             done: true,
@@ -532,5 +664,139 @@ describe('GoogleProvider internals', () => {
         expect(update.error).toBe('VEO: operation completed without a video')
         expect(videoPublisher.error).toHaveBeenCalledWith('VEO: operation completed without a video')
         expect(update.generatedVideos).toBeUndefined()
+    })
+
+    it('streams plain text for non-media models and emits mapped usage', async () => {
+        googleMocks.generateContentStream.mockResolvedValueOnce(makeAsyncStream([
+            {
+                usageMetadata: {
+                    promptTokenCount: 12,
+                    cachedContentTokenCount: 1,
+                    candidatesTokenCount: 7,
+                    thoughtsTokenCount: 2,
+                    totalTokenCount: 21,
+                },
+                candidates: [{
+                    content: {
+                        parts: [
+                            { text: 'Hello ' },
+                            { text: 'world' },
+                        ],
+                    },
+                }],
+            },
+        ]))
+
+        const provider = new GoogleProvider('ws-1:thread-1', createProviderDeps())
+        const { start, chunk } = configureProviderInternals(provider)
+
+        const update = await (provider as any).streamImpl({
+            ...baseGoogleState(),
+            modelVersion: 'gemini-2.5-flash',
+            enableImageGeneration: false,
+            enableVideoGeneration: false,
+            messages: [{ role: 'user', content: 'Tell me something.' }],
+        })
+
+        expect(start).toHaveBeenCalled()
+        expect(chunk).toHaveBeenCalledWith('Hello ')
+        expect(chunk).toHaveBeenCalledWith('world')
+        expect(update).toMatchObject({
+            usage: {
+                promptTokens: 12,
+                promptCachedTokens: 1,
+                completionTokens: 7,
+                completionReasoningTokens: 2,
+                totalTokens: 21,
+                promptAudioTokens: 0,
+                completionAudioTokens: 0,
+            },
+            aiVendorRequestId: 'google-ws-1-thread-1',
+        })
+    })
+
+    it('retries tool generation with forced tool calling when no function call is detected', async () => {
+        const noToolCallStream = [
+            {
+                candidates: [
+                    {
+                        content: {
+                            parts: [{ text: 'No function call today.' }],
+                        },
+                    },
+                ],
+            },
+        ]
+
+        const toolCallStream = [
+            {
+                candidates: [
+                    {
+                        content: {
+                            parts: [
+                                {
+                                    functionCall: {
+                                        name: 'generate_image',
+                                        args: { prompt: 'Auto-promote the request' },
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        ]
+
+        googleMocks.generateContentStream
+            .mockResolvedValueOnce(makeAsyncStream(noToolCallStream))
+            .mockResolvedValueOnce(makeAsyncStream(toolCallStream))
+
+        const provider = new GoogleProvider('ws-1:thread-1', createProviderDeps())
+        const { start } = configureProviderInternals(provider)
+
+        const update = await (provider as any).streamImpl({
+            ...baseGoogleState(),
+            modelVersion: 'gemini-2.5-flash',
+            imageModelVersion: 'imagen-4.0-generate-001',
+            imageModelMetaInfo: {
+                provider: 'Google',
+                model: 'imagen-4.0',
+                modelVersion: 'imagen-4.0-generate-001',
+            } as any,
+            imageProviderName: 'Google',
+            imageSize: '16:9',
+            enableImageGeneration: false,
+            mediaFanoutPlan: true,
+            enableVideoGeneration: false,
+            messages: [{
+                role: 'user',
+                content: 'generate an image of a mountain',
+            }],
+        } as any)
+
+        expect(start).toHaveBeenCalled()
+        expect(googleMocks.generateContentStream).toHaveBeenCalledTimes(2)
+        const firstCall = googleMocks.generateContentStream.mock.calls[0] as any[]
+        const secondCall = googleMocks.generateContentStream.mock.calls[1] as any[]
+        expect(firstCall[0]).toMatchObject({ model: 'gemini-2.5-flash' })
+        expect(firstCall[0].config).toEqual(expect.objectContaining({
+            tools: expect.any(Array),
+        }))
+        expect(firstCall[0].config.toolConfig).toBeUndefined()
+        expect(secondCall[0]).toMatchObject({
+            config: expect.objectContaining({
+                toolConfig: {
+                    functionCallingConfig: {
+                        mode: 'ANY',
+                        allowedFunctionNames: ['generate_image'],
+                    },
+                },
+            }),
+        })
+        expect(debugTools.warn).toHaveBeenCalledWith(
+            '[Google:ws-1:thread-1] media fanout AUTO mode skipped the tool; retrying with forced function call',
+        )
+        expect(update.generatedImagePrompt).toBe('Auto-promote the request')
+        expect(update.generatedVideoPrompt).toBeUndefined()
     })
 })

@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const debugTools = vi.hoisted(() => ({
+    info: vi.fn(),
+    err: vi.fn(),
+}))
+
+vi.mock('@lixpi/debug-tools', () => debugTools)
 
 import { BytePlusProvider } from './byteplus-provider.ts'
 import type { BaseProviderDeps } from './base-provider.ts'
@@ -173,6 +180,20 @@ describe('BytePlusProvider', () => {
         expect(byteplusMocks.createVideoGenerationTask).not.toHaveBeenCalled()
     })
 
+    it('errors when Seedance returns no task id and reports it through the video publisher', async () => {
+        process.env.BYTEPLUS_ARK_API_KEY = 'test-key'
+        const provider = new BytePlusProvider('ws-1:thread-1:video', makeDeps())
+        const publisherState = setProviderPublishers(provider)
+
+        byteplusMocks.createVideoGenerationTask.mockResolvedValueOnce({})
+
+        await expect((provider as any).streamImpl(makeState())).rejects.toThrow('ModelArk did not return a task id')
+        expect(publisherState.error).toHaveBeenCalledWith('ModelArk did not return a task id')
+        expect(publisherState.complete).not.toHaveBeenCalled()
+        expect(publisherState.pending).not.toHaveBeenCalled()
+        expect(byteplusMocks.pollVideoGenerationTask).not.toHaveBeenCalled()
+    })
+
     it('records Seedance failures on the video publisher and rethrows to the caller', async () => {
         process.env.BYTEPLUS_ARK_API_KEY = 'test-key'
         const provider = new BytePlusProvider('ws-1:thread-1:video', makeDeps())
@@ -204,5 +225,55 @@ describe('BytePlusProvider', () => {
             messages: [{ role: 'user', content: { message: 'not a string' } }],
         }))).rejects.toThrow('Seedance: missing prompt in user message')
         expect(byteplusMocks.createVideoGenerationTask).not.toHaveBeenCalled()
+    })
+
+    it('errors when the Seedance task returns success without a usable video_url', async () => {
+        process.env.BYTEPLUS_ARK_API_KEY = 'test-key'
+        const provider = new BytePlusProvider('ws-1:thread-1:video', makeDeps())
+        const publisherState = setProviderPublishers(provider)
+
+        byteplusMocks.createVideoGenerationTask.mockResolvedValueOnce({ id: 'seedance-task-3' })
+        byteplusMocks.pollVideoGenerationTask.mockResolvedValueOnce({
+            id: 'seedance-task-3',
+            status: 'succeeded',
+            content: {},
+            usage: { completion_tokens: 77, total_tokens: 155 },
+            duration: 6,
+            resolution: '1080p',
+            ratio: '16:9',
+        })
+
+        await expect((provider as any).streamImpl(makeState())).rejects.toThrow(
+            'Seedance task succeeded but returned no video_url',
+        )
+        expect(publisherState.error).toHaveBeenCalledWith('Seedance task succeeded but returned no video_url')
+        expect(publisherState.complete).not.toHaveBeenCalled()
+    })
+
+    it('errors when Seedance video download is empty', async () => {
+        process.env.BYTEPLUS_ARK_API_KEY = 'test-key'
+        const provider = new BytePlusProvider('ws-1:thread-1:video', makeDeps())
+        const publisherState = setProviderPublishers(provider)
+
+        byteplusMocks.createVideoGenerationTask.mockResolvedValueOnce({ id: 'seedance-task-4' })
+        byteplusMocks.pollVideoGenerationTask.mockResolvedValueOnce({
+            id: 'seedance-task-4',
+            status: 'succeeded',
+            content: { video_url: 'https://byteplus.local/video.mp4' },
+            usage: { completion_tokens: 77, total_tokens: 155 },
+            duration: 6,
+            resolution: '1080p',
+            ratio: '16:9',
+        })
+        byteplusMocks.downloadVideo.mockResolvedValueOnce(Buffer.alloc(0))
+
+        await expect((provider as any).streamImpl(makeState())).rejects.toThrow(
+            'Seedance: empty video bytes after download',
+        )
+        expect(frameMocks.extractVideoFramesViaWorkload).not.toHaveBeenCalled()
+        expect(publisherState.error).toHaveBeenCalledWith('Seedance: empty video bytes after download')
+        expect(debugTools.err).toHaveBeenCalledWith(
+            '[BytePlus:ws-1:thread-1:video] Seedance failed: Seedance: empty video bytes after download',
+        )
     })
 })

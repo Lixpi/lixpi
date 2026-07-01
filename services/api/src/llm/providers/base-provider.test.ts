@@ -113,6 +113,14 @@ class TestProvider extends BaseProvider {
     }
 }
 
+class FailingStreamProvider extends BaseProvider {
+    readonly providerName: ProviderName = 'Anthropic'
+
+    protected async streamImpl(): Promise<Partial<ProviderState>> {
+        throw new Error('streamer exploded')
+    }
+}
+
 describe('BaseProvider image fanout errors', () => {
     it('publishes IMAGE_ERROR for the failed media child while returning successful siblings', async () => {
         const nats = makeFakeNats()
@@ -453,6 +461,50 @@ describe('BaseProvider fanout', () => {
         expect(result).toEqual({ generatedVideos: ['only-video', 'only-video'] })
         expect((deps.runVideoRouter as any)).toHaveBeenCalledTimes(2)
         expect((deps.runImageRouter as any)).not.toHaveBeenCalled()
+    })
+})
+
+describe('BaseProvider streamTokens failure path', () => {
+    it('returns terminal error metadata and marks stream as finished when streamImpl throws', async () => {
+        const provider = new FailingStreamProvider('ws1:thread1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+
+        const streamError = vi.fn()
+        const streamEnd = vi.fn()
+        ;(provider as any).streamPublisher = {
+            error: streamError,
+            end: streamEnd,
+        } as any
+
+        const update = await (provider as any).streamTokens({
+            workspaceId: 'ws1',
+            aiChatThreadId: 'thread1',
+            instanceKey: 'ws1:thread1',
+            provider: 'Anthropic',
+            modelVersion: 'claude-sonnet-4-6',
+            messages: [{ role: 'user', content: 'make fire' }],
+            streamActive: false,
+            aiRequestReceivedAt: 1,
+            aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
+            eventMeta: {},
+            temperature: 0.7,
+            imageSize: 'auto',
+        } as any)
+
+        expect(update).toMatchObject({
+            streamActive: false,
+            error: 'streamer exploded',
+            aiRequestFinishedAt: expect.any(Number),
+        })
+        expect(streamError).toHaveBeenCalledWith('streamer exploded')
+        expect(streamEnd).toHaveBeenCalledTimes(1)
+        expect(debugErrSpy).toHaveBeenCalledWith('Streaming error (Anthropic): streamer exploded')
     })
 })
 

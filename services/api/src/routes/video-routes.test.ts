@@ -2,6 +2,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const debugTools = vi.hoisted(() => ({
+    err: vi.fn(),
+}))
+
 const mocks = vi.hoisted(() => {
     class MockFileRejectedError extends Error {
         reason: string
@@ -23,7 +27,7 @@ const mocks = vi.hoisted(() => {
     }
 })
 
-vi.mock('@lixpi/debug-tools', () => ({ err: vi.fn() }))
+vi.mock('@lixpi/debug-tools', () => debugTools)
 vi.mock('@lixpi/nats-service', () => ({
     default: { getInstance: mocks.getNatsInstance },
 }))
@@ -266,6 +270,93 @@ describe('File upload route', () => {
 
         expect(res.status).toHaveBeenCalledWith(503)
         expect(res.json).toHaveBeenCalledWith({ error: 'Storage service unavailable' })
+    })
+
+    it('returns 401 and logs when token verification throws', async () => {
+        const route = findRoute('/:workspaceId', 'post')
+        const req: any = {
+            ...createUploadRequest(),
+            file: {
+                buffer: Buffer.from('video-bytes'),
+                originalname: 'clip.mp4',
+                mimetype: 'video/mp4',
+            },
+        }
+        const res = createResponse()
+        const authFailure = new Error('Identity provider unavailable')
+        mocks.verify.mockRejectedValueOnce(authFailure)
+
+        await route.stack[0].handle(req, res, vi.fn())
+
+        expect(res.status).toHaveBeenCalledWith(401)
+        expect(res.json).toHaveBeenCalledWith({ error: 'Authentication failed' })
+        expect(debugTools.err).toHaveBeenCalledWith('Token verification failed:', authFailure)
+    })
+
+    it('returns 500 for workspace access failures and logs them', async () => {
+        const route = findRoute('/:workspaceId', 'post')
+        const uploadHandler = route.stack.at(-1).handle
+        const accessError = new Error('workspace db is down')
+        mocks.getWorkspace.mockRejectedValueOnce(accessError)
+        const req: any = {
+            ...createUploadRequest(),
+            user: { userId: 'user-1' },
+            file: {
+                buffer: Buffer.from('video-bytes'),
+                originalname: 'clip.mp4',
+                mimetype: 'video/mp4',
+            },
+        }
+        const res = createResponse()
+
+        await route.stack[1].handle(req, res, vi.fn())
+        await uploadHandler(req, res)
+
+        expect(res.status).toHaveBeenCalledWith(500)
+        expect(res.json).toHaveBeenCalledWith({ error: 'Failed to validate workspace access' })
+        expect(debugTools.err).toHaveBeenCalledWith('Workspace access validation failed:', accessError)
+    })
+
+    it('returns 401 when verifier reports an invalid token payload', async () => {
+        const route = findRoute('/:workspaceId', 'post')
+        const req: any = {
+            ...createUploadRequest(),
+            file: {
+                buffer: Buffer.from('video-bytes'),
+                originalname: 'clip.mp4',
+                mimetype: 'video/mp4',
+            },
+        }
+        const res = createResponse()
+
+        mocks.verify.mockResolvedValueOnce({ error: 'invalid' })
+
+        await route.stack[0].handle(req, res, vi.fn())
+
+        expect(res.status).toHaveBeenCalledWith(401)
+        expect(res.json).toHaveBeenCalledWith({ error: 'Invalid or expired token' })
+        expect(res.status).not.toHaveBeenCalledWith(500)
+    })
+
+    it('returns 500 for generic upload failures', async () => {
+        const route = findRoute('/:workspaceId', 'post')
+        const uploadHandler = route.stack.at(-1).handle
+        mocks.ingestWorkspaceFile.mockRejectedValueOnce(new Error('disk quota exceeded'))
+        const req: any = {
+            ...createUploadRequest(),
+            file: {
+                buffer: Buffer.from('video-bytes'),
+                originalname: 'clip.mp4',
+                mimetype: 'video/mp4',
+            },
+        }
+        const res = createResponse()
+
+        await runAuthAndAccess(route, req, res)
+        await uploadHandler(req, res)
+
+        expect(res.status).toHaveBeenCalledWith(500)
+        expect(res.json).toHaveBeenCalledWith({ error: 'Failed to upload file' })
     })
 })
 
@@ -554,6 +645,115 @@ describe('File download route', () => {
         expect(res.status).toHaveBeenCalledWith(416)
         expect(res.end).toHaveBeenCalled()
         expect(res.setHeader).toHaveBeenCalledWith('Content-Range', 'bytes */3')
+    })
+
+    it('returns 416 for malformed range header syntax', async () => {
+        mocks.getWorkspace.mockResolvedValue({
+            workspaceId: 'workspace-1',
+            files: [
+                {
+                    id: 'file-range-bad-syntax',
+                    name: 'video.mp4',
+                    mimeType: 'video/mp4',
+                    kind: 'video',
+                    uploadedAt: 0,
+                    size: 5,
+                    modelSafe: true,
+                },
+            ],
+            name: 'workspace-1',
+        })
+
+        const route = findRoute('/:workspaceId/:fileId', 'get')
+        const getHandler = route.stack.at(-1).handle
+        const req: any = {
+            ...createGetRequest('workspace-1', 'file-range-bad-syntax'),
+            headers: {
+                range: 'bytes=abc-def',
+                authorization: 'Bearer token-1',
+            },
+            query: {},
+        }
+        const res = createResponse()
+
+        mocks.getObject.mockResolvedValue(Uint8Array.from([1, 2, 3, 4, 5]))
+
+        await runAuthAndAccess(route, req, res)
+        await getHandler(req, res)
+
+        expect(res.status).toHaveBeenCalledWith(416)
+        expect(res.setHeader).toHaveBeenCalledWith('Content-Range', 'bytes */5')
+        expect(res.end).toHaveBeenCalled()
+        expect(mocks.getObject).toHaveBeenCalledWith('workspace-workspace-1-files', 'file-range-bad-syntax')
+    })
+
+    it('returns 404 for object-store missing streams and logs the storage lookup failure', async () => {
+        mocks.getWorkspace.mockResolvedValue({
+            workspaceId: 'workspace-1',
+            files: [{
+                id: 'missing-bucket-file',
+                name: 'missing.mp4',
+                mimeType: 'video/mp4',
+                kind: 'video',
+                uploadedAt: 0,
+                size: 3,
+                modelSafe: true,
+            }],
+            name: 'workspace-1',
+        })
+
+        const route = findRoute('/:workspaceId/:fileId', 'get')
+        const getHandler = route.stack.at(-1).handle
+
+        const req: any = {
+            ...createGetRequest('workspace-1', 'missing-bucket-file'),
+            headers: { authorization: 'Bearer token-1' },
+            query: {},
+        }
+        const res = createResponse()
+        mocks.getObject.mockRejectedValueOnce(new Error('no stream available: bucket missing'))
+
+        await runAuthAndAccess(route, req, res)
+        await getHandler(req, res)
+
+        expect(res.status).toHaveBeenCalledWith(404)
+        expect(res.json).toHaveBeenCalledWith({ error: 'File storage not found — data may have been lost' })
+        expect(debugTools.err).toHaveBeenCalledWith(
+            'Object Store bucket missing for workspace-1: no stream available: bucket missing',
+        )
+    })
+
+    it('returns 500 for unexpected object-store retrieval failures', async () => {
+        mocks.getWorkspace.mockResolvedValue({
+            workspaceId: 'workspace-1',
+            files: [{
+                id: 'flaky-file',
+                name: 'flaky.mp4',
+                mimeType: 'video/mp4',
+                kind: 'video',
+                uploadedAt: 0,
+                size: 3,
+                modelSafe: true,
+            }],
+            name: 'workspace-1',
+        })
+
+        const route = findRoute('/:workspaceId/:fileId', 'get')
+        const getHandler = route.stack.at(-1).handle
+
+        const req: any = {
+            ...createGetRequest('workspace-1', 'flaky-file'),
+            headers: { authorization: 'Bearer token-1' },
+            query: {},
+        }
+        const res = createResponse()
+        mocks.getObject.mockRejectedValueOnce(new Error('disk read failed'))
+
+        await runAuthAndAccess(route, req, res)
+        await getHandler(req, res)
+
+        expect(res.status).toHaveBeenCalledWith(500)
+        expect(res.json).toHaveBeenCalledWith({ error: 'Failed to retrieve file' })
     })
 
     it('returns 503 when storage service is unavailable', async () => {

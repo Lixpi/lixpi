@@ -122,6 +122,21 @@ describe('ImagePublisher', () => {
         expect(published).toHaveLength(0)
     })
 
+    it('rejects truncated PNG headers that are not full valid images', async () => {
+        const { publisher, published, storeImage } = makePublisher()
+        const shortPng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d]).toString('base64')
+
+        await expect(publisher.complete({
+            imageBase64: shortPng,
+            responseId: 'resp-2',
+            revisedPrompt: 'tiny',
+            imageModelId: 'gemini-2.5-flash-image',
+        })).rejects.toThrow('Image completion failed: provider returned bytes that are not a PNG or JPEG image')
+
+        expect(storeImage).not.toHaveBeenCalled()
+        expect(published).toHaveLength(0)
+    })
+
     it('stores JPEG final bytes with the JPEG MIME type', async () => {
         const { publisher, published, storeImage } = makePublisher()
         const jpegBase64 = Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64')

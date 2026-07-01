@@ -1,6 +1,6 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoadingStatus, NATS_SUBJECTS } from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => {
@@ -77,12 +77,20 @@ const makeCanvasState = (nodeId: string) => ({
 // =============================================================================
 
 describe('WorkspaceService canvas save queue', () => {
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null
+
     beforeEach(() => {
         vi.clearAllMocks()
         mocks.workspaceData.updatedAt = 10
         mocks.workspaceData.canvasStateUpdatedAt = 5
         mocks.routeWorkspaceId = 'workspace-1'
         mocks.getTokenSilently.mockResolvedValue('token-1')
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    })
+
+    afterEach(() => {
+        consoleErrorSpy?.mockRestore()
+        consoleErrorSpy = null
     })
 
     it('serializes canvas saves and sends the latest pending state with the acknowledged canvas save token', async () => {
