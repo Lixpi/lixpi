@@ -5,7 +5,7 @@ import { info, err } from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
 import Workspace from '../../models/workspace.ts'
 
-import { NATS_SUBJECTS } from '@lixpi/constants'
+import { NATS_SUBJECTS, type DocumentFile } from '@lixpi/constants'
 
 // Mirrors NATS/subscriptions/image-subjects.ts. Video objects live in the same
 // workspace bucket as images (workspace-{workspaceId}-files), so deletion uses
@@ -16,6 +16,13 @@ import { NATS_SUBJECTS } from '@lixpi/constants'
 const { VIDEO_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 
 const getWorkspaceBucketName = (workspaceId: string) => `workspace-${workspaceId}-files`
+
+const getStorageFileIdsForDelete = (files: DocumentFile[] | undefined, fileId: string): string[] => {
+    const file = files?.find((candidate: DocumentFile) => candidate.id === fileId || candidate.canonicalFileId === fileId)
+    if (!file) return [fileId]
+
+    return [file.id, file.canonicalFileId].filter((value): value is string => Boolean(value))
+}
 
 export const videoSubjects = [
     {
@@ -54,6 +61,7 @@ export const videoSubjects = [
 
             try {
                 const bucketName = getWorkspaceBucketName(workspaceId)
+                const storageFileIds = getStorageFileIdsForDelete(workspace.files, fileId)
                 const isReferenced = await Workspace.isFileReferencedByCanvasState({ workspaceId, fileId })
 
                 if (isReferenced) {
@@ -63,8 +71,10 @@ export const videoSubjects = [
                 await Workspace.removeFile({ workspaceId, fileId })
                 info(`Removed video file ${fileId} metadata from workspace ${workspaceId}`)
 
-                await natsService.deleteObject(bucketName, fileId)
-                info(`Deleted video file ${fileId} from bucket ${bucketName}`)
+                for (const storageFileId of storageFileIds) {
+                    await natsService.deleteObject(bucketName, storageFileId)
+                    info(`Deleted video file ${storageFileId} from bucket ${bucketName}`)
+                }
 
                 return { success: true, fileId }
             } catch (error: any) {

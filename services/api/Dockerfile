@@ -28,17 +28,12 @@ RUN pnpm install --force && pnpm store prune && rm -rf ~/.pnpm-store
 # Stage 2: Runtime
 FROM node:${NODE_VERSION}-alpine
 
-# Install necessary packages for the unified file-upload transcode pipeline
-# (services/api/src/services/transcoders/):
-#   - ffmpeg     : audio/video transcode + poster/representative frame extraction
-#                  and ffprobe for duration/dimension probing.
-#   - libreoffice: headless office-document → PDF conversion (DOC/DOCX/PPT/PPTX/
-#                  ODT/RTF). Heavy (~400MB) but only runs at ingest time.
-#   - poppler-utils: pdftoppm renders a PDF's first page to a poster PNG, and
-#                  pdfinfo reports its page count.
-# Transcode/poster/probe steps are best-effort — if a tool is unavailable, the
-# original is still stored and the upload still succeeds.
-RUN apk add --update --no-cache curl ffmpeg libreoffice poppler-utils
+# The API does NO heavy media processing. All transcode/poster/probe work
+# (ffmpeg/libreoffice/poppler/sharp) runs on the NATS NEX node in the
+# file-conversion workload (services/nex/workloads/file-conversion); the API only
+# stores the original and hands the heavy work off over NATS. Keep this image
+# lean — do not reintroduce media tooling here.
+RUN apk add --update --no-cache curl
 
 # Install pnpm globally (in the runtime stage)
 RUN npm install -g pnpm

@@ -49,6 +49,9 @@ const addFileId = (fileIds: Set<string>, fileId: unknown): void => {
     }
 }
 
+const getFileRecordByStorageId = (files: DocumentFile[] | undefined, fileId: string): DocumentFile | undefined =>
+    files?.find((file: DocumentFile) => file.id === fileId || file.canonicalFileId === fileId)
+
 const getCanvasStateUpdatedAt = (workspace: WorkspaceWithCanvasToken | null | undefined): number | undefined => {
     if (typeof workspace?.canvasStateUpdatedAt === 'number') return workspace.canvasStateUpdatedAt
     if (typeof workspace?.updatedAt === 'number') return workspace.updatedAt
@@ -550,22 +553,34 @@ export default {
             })
 
             const currentFiles = workspace?.files || []
-            const fileIndex = currentFiles.findIndex((file: DocumentFile) => file.id === fileId)
+            const fileIndex = currentFiles.findIndex((file: DocumentFile) => file.id === fileId || file.canonicalFileId === fileId)
             if (fileIndex < 0) return
+            const matchedFile = currentFiles[fileIndex] as DocumentFile
+            const removingCanonicalPointer = matchedFile.id !== fileId && matchedFile.canonicalFileId === fileId
             const previousUpdatedAt = typeof workspace?.updatedAt === 'number' ? workspace.updatedAt : currentDate
+            // Only declare the attribute name the conditionExpression actually
+            // uses — DynamoDB rejects the request if #id is declared but unused
+            // (the canonical-pointer branch matches on #canonicalFileId instead).
+            const expressionAttributeNames: Record<string, string> = {
+                '#files': 'files',
+                '#updatedAt': 'updatedAt',
+                '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
+            }
+            if (removingCanonicalPointer) {
+                expressionAttributeNames['#canonicalFileId'] = 'canonicalFileId'
+            } else {
+                expressionAttributeNames['#id'] = 'id'
+            }
 
             try {
                 await dynamoDBService.updateItem({
                     tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
                     key: { workspaceId },
                     updateExpression: `SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, :previousUpdatedAt), #updatedAt = :now REMOVE #files[${fileIndex}]`,
-                    conditionExpression: `#files[${fileIndex}].#id = :fileId`,
-                    expressionAttributeNames: {
-                        '#files': 'files',
-                        '#id': 'id',
-                        '#updatedAt': 'updatedAt',
-                        '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
-                    },
+                    conditionExpression: removingCanonicalPointer
+                        ? `#files[${fileIndex}].#canonicalFileId = :fileId`
+                        : `#files[${fileIndex}].#id = :fileId`,
+                    expressionAttributeNames,
                     expressionAttributeValues: {
                         ':fileId': fileId,
                         ':now': currentDate,
@@ -582,6 +597,66 @@ export default {
         }
 
         throw new Error(`Failed to remove file from workspace after concurrent updates: ${workspaceId}/${fileId}`)
+    },
+
+    // Point an already-registered original file at the canonical derivative the
+    // file-conversion workload produced. Used by the async ingest completion path
+    // (the original was registered at upload time without a canonical; the
+    // workload transcodes later and the API patches the pointer here). Mirrors
+    // removeFile's read-modify-write retry against concurrent file mutations.
+    setFileCanonical: async ({
+        workspaceId,
+        fileId,
+        canonicalFileId,
+        canonicalMimeType
+    }: { workspaceId: string; fileId: string; canonicalFileId: string; canonicalMimeType: string }): Promise<void> => {
+        const currentDate = new Date().getTime()
+        const maxAttempts = 5
+
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            const workspace = await dynamoDBService.getItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                key: { workspaceId },
+                origin: 'model::Workspace->setFileCanonical()'
+            })
+
+            const currentFiles = workspace?.files || []
+            const fileIndex = currentFiles.findIndex((file: DocumentFile) => file.id === fileId)
+            if (fileIndex < 0) return
+            const previousUpdatedAt = typeof workspace?.updatedAt === 'number' ? workspace.updatedAt : currentDate
+
+            try {
+                await dynamoDBService.updateItem({
+                    tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                    key: { workspaceId },
+                    updateExpression: `SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, :previousUpdatedAt), #updatedAt = :now, #files[${fileIndex}].#canonicalFileId = :canonicalFileId, #files[${fileIndex}].#canonicalMimeType = :canonicalMimeType`,
+                    conditionExpression: `#files[${fileIndex}].#id = :fileId`,
+                    expressionAttributeNames: {
+                        '#files': 'files',
+                        '#id': 'id',
+                        '#canonicalFileId': 'canonicalFileId',
+                        '#canonicalMimeType': 'canonicalMimeType',
+                        '#updatedAt': 'updatedAt',
+                        '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
+                    },
+                    expressionAttributeValues: {
+                        ':fileId': fileId,
+                        ':canonicalFileId': canonicalFileId,
+                        ':canonicalMimeType': canonicalMimeType,
+                        ':now': currentDate,
+                        ':previousUpdatedAt': previousUpdatedAt
+                    },
+                    origin: 'model::Workspace->setFileCanonical()'
+                })
+                return
+            } catch (error: any) {
+                if (error?.name === 'ConditionalCheckFailedException') continue
+                err('Failed to set file canonical pointer:', error)
+                throw error
+            }
+        }
+
+        throw new Error(`Failed to set file canonical after concurrent updates: ${workspaceId}/${fileId}`)
     },
 
     getWorkspaceInternal: async ({
@@ -612,7 +687,14 @@ export default {
             origin: `model::Workspace->isFileReferencedByCanvasState(${workspaceId}:${fileId})`
         })
 
-        return getCanvasStateReferencedFileIds(workspace?.canvasState).has(fileId)
+        const referencedFileIds = getCanvasStateReferencedFileIds(workspace?.canvasState)
+        if (referencedFileIds.has(fileId)) return true
+
+        const file = getFileRecordByStorageId(workspace?.files, fileId)
+        return Boolean(file && (
+            referencedFileIds.has(file.id)
+            || (file.canonicalFileId ? referencedFileIds.has(file.canonicalFileId) : false)
+        ))
     },
 
     replaceWorkspaceContent: async ({

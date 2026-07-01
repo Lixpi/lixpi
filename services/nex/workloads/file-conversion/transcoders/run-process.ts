@@ -7,8 +7,8 @@ import { join } from 'node:path'
 
 // Spawn a CLI tool (ffmpeg, soffice, pdftoppm, …) and resolve when it exits 0.
 // stdio is fully ignored — transcoders communicate via temp files, never stdin/
-// stdout — and a hard timeout kills runaway conversions so an ingest request can
-// never hang indefinitely.
+// stdout — and a hard timeout kills runaway conversions so a conversion request
+// can never hang indefinitely.
 export const runProcess = async (
     command: string,
     args: string[],

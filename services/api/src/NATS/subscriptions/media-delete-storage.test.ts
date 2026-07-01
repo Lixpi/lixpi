@@ -83,6 +83,29 @@ describe('Workspace media delete subjects', () => {
         )
     })
 
+    it('deletes original and canonical image objects when the canvas used the canonical id', async () => {
+        mocks.workspace.getWorkspace.mockResolvedValueOnce({
+            workspaceId: 'workspace-1',
+            files: [
+                { id: 'original-image', canonicalFileId: 'original-image-canonical' },
+            ],
+        })
+
+        const result = await getImageHandler()({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            fileId: 'original-image-canonical',
+        }, {})
+
+        expect(result).toEqual({ success: true, fileId: 'original-image-canonical' })
+        expect(mocks.workspace.removeFile).toHaveBeenCalledWith({
+            workspaceId: 'workspace-1',
+            fileId: 'original-image-canonical',
+        })
+        expect(mocks.natsService.deleteObject).toHaveBeenCalledWith('workspace-workspace-1-files', 'original-image')
+        expect(mocks.natsService.deleteObject).toHaveBeenCalledWith('workspace-workspace-1-files', 'original-image-canonical')
+    })
+
     it('refuses to delete video bytes while canonical canvas state still references the file', async () => {
         mocks.workspace.isFileReferencedByCanvasState.mockResolvedValueOnce(true)
 
@@ -117,5 +140,28 @@ describe('Workspace media delete subjects', () => {
         expect(mocks.workspace.removeFile.mock.invocationCallOrder[0]).toBeLessThan(
             mocks.natsService.deleteObject.mock.invocationCallOrder[0]!
         )
+    })
+
+    it('deletes original and canonical video objects when the canvas used the canonical id', async () => {
+        mocks.workspace.getWorkspace.mockResolvedValueOnce({
+            workspaceId: 'workspace-1',
+            files: [
+                { id: 'original-video', canonicalFileId: 'original-video-canonical' },
+            ],
+        })
+
+        const result = await getVideoHandler()({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            fileId: 'original-video-canonical',
+        }, {})
+
+        expect(result).toEqual({ success: true, fileId: 'original-video-canonical' })
+        expect(mocks.workspace.removeFile).toHaveBeenCalledWith({
+            workspaceId: 'workspace-1',
+            fileId: 'original-video-canonical',
+        })
+        expect(mocks.natsService.deleteObject).toHaveBeenCalledWith('workspace-workspace-1-files', 'original-video')
+        expect(mocks.natsService.deleteObject).toHaveBeenCalledWith('workspace-workspace-1-files', 'original-video-canonical')
     })
 })

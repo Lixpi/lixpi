@@ -175,13 +175,16 @@ When an AI chat session generates images or videos, the workspace places them au
 
 ### CanvasNode
 
-Canvas nodes use a discriminated union keyed on the `type` field. The shared `CanvasNode` type contains document, image, video, and branch lineage marker nodes. Every node shares `nodeId`, `position`, and `dimensions`; the rest is type-specific. `WorkspaceCanvas.ts` still contains runtime handling for `aiChatThread` canvas records, but AI chat sessions are primarily workspace panel/session records.
+Canvas nodes use a discriminated union keyed on the `type` field. The shared `CanvasNode` type contains text documents, uploaded document media, images, videos, audio, upload placeholders, and branch lineage marker nodes. Every node shares `nodeId`, `position`, and `dimensions`; the rest is type-specific. `WorkspaceCanvas.ts` still contains runtime handling for `aiChatThread` canvas records, but AI chat sessions are primarily workspace panel/session records.
 
 ```typescript
 type CanvasNodeType =
     | 'document'
+    | 'mediaDocument'
     | 'image'
     | 'video'
+    | 'audio'
+    | 'uploadPlaceholder'
     | 'branchOrigin'
     | 'branchFork'
     | 'branchLine'
@@ -222,6 +225,19 @@ type VideoCanvasNode = {
     hasAudio: boolean
     position: { x: number; y: number }
     dimensions: { width: number; height: number }
+}
+
+// Upload placeholder - persisted while the API converts an upload to a supported format
+type UploadPlaceholderCanvasNode = {
+    nodeId: string
+    type: 'uploadPlaceholder'
+    fileName: string
+    status: 'converting' | 'failed'
+    message?: string
+    position: { x: number; y: number }
+    dimensions: { width: number; height: number }
+    createdAt: number
+    updatedAt: number
 }
 
 // Branch origin marker - neutral generated-media lineage root
@@ -276,8 +292,11 @@ type BranchLineCanvasNode = {
 
 type CanvasNode =
     | DocumentCanvasNode
+    | DocumentMediaCanvasNode
     | ImageCanvasNode
     | VideoCanvasNode
+    | AudioCanvasNode
+    | UploadPlaceholderCanvasNode
     | BranchOriginCanvasNode
     | BranchForkCanvasNode
     | BranchLineCanvasNode
@@ -286,8 +305,11 @@ type CanvasNode =
 | Node type | Reference target | Key type-specific fields |
 |-----------|------------------|--------------------------|
 | `document` | `referenceId` → `Document.documentId` | — (content fetched lazily) |
+| `mediaDocument` | `fileId` → NATS Object Store | `workspaceId`, `src`, optional `posterFileId`/`posterSrc`, `pageCount`, `aspectRatio` |
 | `image` | `fileId` → NATS Object Store | `workspaceId`, `src`, `aspectRatio` |
 | `video` | `fileId` → NATS Object Store | `posterFileId`, optional `frameFileId`, `src`, `posterSrc`, `aspectRatio`, `durationSeconds`, `hasAudio` |
+| `audio` | `fileId` → NATS Object Store | `workspaceId`, `src`, `durationSeconds`, `hasAudio` |
+| `uploadPlaceholder` | none | `fileName`, conversion `status`, optional failure/conversion message |
 | `branchOrigin` | API lineage plan | `branchId`, `generationRequestId`, optional `aiChatThreadId`, provenance, pending state |
 | `branchFork` | API lineage plan | `branchId`, `generationRequestId`, reasoning-run ids, parent marker/source id, provenance, pending state |
 | `branchLine` | API lineage plan | `branchId`, `generationRequestId`, reasoning/media run ids, parent marker/source id, provenance, pending state |
@@ -326,7 +348,7 @@ The currently open workspace with full canvas state.
 }
 ```
 
-The `files` array is metadata for objects in the workspace's NATS Object Store bucket. Backend file registration uses atomic DynamoDB append, and file removal uses a conditional indexed remove instead of rewriting the whole list, so a delete cannot overwrite concurrent media registrations. The API checks canonical `canvasState` before deleting workspace media bytes. Full `canvasState` saves use `canvasStateUpdatedAt` as a canvas-only save token, so file uploads and other workspace metadata changes can update `updatedAt` without making an otherwise current canvas save fail.
+The `files` array is metadata for objects in the workspace's NATS Object Store bucket. Backend file registration uses atomic DynamoDB append, and file removal uses a conditional indexed remove instead of rewriting the whole list, so a delete cannot overwrite concurrent media registrations. The API checks canonical `canvasState` before deleting workspace media bytes. Converted uploads preserve the original file record and store a `canonicalFileId`; canvas media nodes reference the canonical object so rendering and descriptor analysis never read unsupported original bytes. Full `canvasState` saves use `canvasStateUpdatedAt` as a canvas-only save token, so file uploads and other workspace metadata changes can update `updatedAt` without making an otherwise current canvas save fail.
 
 ### documentsStore
 
@@ -390,15 +412,13 @@ Workspace, document, and thread persistence all travel over NATS request/respons
 
 ### Media HTTP Endpoints
 
-Image and video bytes are served over authenticated HTTP rather than NATS, so the browser can stream pixels and use HTTP Range requests for video.
+Workspace file bytes are served over authenticated HTTP rather than NATS, so the browser can stream pixels and use HTTP Range requests for audio and video.
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/images/:workspaceId` | POST | Upload image (multipart/form-data) |
-| `/api/images/:workspaceId/import-url` | POST | Fetch a public image URL into workspace Object Store before canvas insertion |
-| `/api/images/:workspaceId/:fileId` | GET | Serve image with auth token |
-| `/api/videos/:workspaceId` | POST | Upload replacement or user-supplied video, store its MP4, and best-effort extract a poster |
-| `/api/videos/:workspaceId/:fileId` | GET | Serve video with auth token and HTTP Range support |
+| `/api/files/:workspaceId` | POST | Upload any allowed file, sniff bytes, convert non-model-safe formats, and return the canvas-safe object id |
+| `/api/files/:workspaceId/import-url` | POST | Fetch a public URL into workspace Object Store through the same sniff/convert pipeline |
+| `/api/files/:workspaceId/:fileId` | GET | Serve original, canonical, poster, audio, video, image, or document bytes with auth token |
 | `/api/media-library/items/:itemId/content` | GET | Serve an ACL-checked saved Media Library image preview or Range-capable video preview |
 | `/api/media-library/items/:itemId/poster` | GET | Serve an ACL-checked saved Media Library video poster |
 | `/api/workspaces/:workspaceId/export` | GET | Download workspace as ZIP archive (see [Workspace Export & Import](../library/WORKSPACE-EXPORT-IMPORT.md)) |

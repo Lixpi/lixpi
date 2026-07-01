@@ -98,6 +98,7 @@ export const MEDIA_POLICY: Readonly<Record<string, MediaPolicyEntry>> = {
     'audio/mpeg':      { kind: 'audio', modelSafe: true,  canonicalMime: 'audio/mpeg' },
     'audio/wav':       { kind: 'audio', modelSafe: true,  canonicalMime: 'audio/wav' },
     'audio/mp4':       { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
+    'audio/x-m4a':     { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
     'audio/aac':       { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
     'audio/ogg':       { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
     'audio/flac':      { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
@@ -129,10 +130,81 @@ export const UPLOAD_DENYLIST_MIME: readonly string[] = [
 // API route, remote-URL import, and the web-ui uploader.
 export const MAX_UPLOAD_FILE_SIZE = 1024 * 1024 * 1024
 
+// Async file-conversion contract. The API stores the uploaded original, then
+// hands the heavy transcode off to the NEX file-conversion workload over NATS
+// request/reply (WORKSPACE_SUBJECTS.FILE_SUBJECTS.CONVERT). The workload reads
+// the original from the workspace Object Store bucket, transcodes it, writes the
+// canonical (+ poster) back, and replies with these hints — never carrying the
+// bytes themselves over NATS. No heavy processing ever runs on the API.
+export type ConvertFileRequest = {
+    workspaceId: string
+    fileId: string              // Object Store key of the stored original
+    originalName: string
+    mimeType: string            // sniffed mime of the original
+    kind: MediaKind
+    modelSafe: boolean          // when true the workload SKIPS transcode and only
+                                // probes the original for hints (poster/duration/
+                                // pageCount) — e.g. a model-safe mp4 still needs a
+                                // poster frame, but no re-encode.
+    canonicalMime: string       // transcode target from MEDIA_POLICY
+}
+
+export type ConvertFileResult =
+    | {
+          success: true
+          // Present only when a transcode produced a derivative (non-model-safe
+          // input). Absent when the original is already model-safe.
+          canonicalFileId?: string
+          canonicalMimeType?: string
+          aspectRatio?: number
+          durationSeconds?: number
+          hasAudio?: boolean
+          posterFileId?: string
+          pageCount?: number
+      }
+    | {
+          success: false
+          error: string          // user-facing failure reason for the placeholder
+      }
+
+// Frame-extraction contract. The AI video-generation providers (VEO / Seedance)
+// must not run ffmpeg on the API either — they stage the freshly generated video
+// to a temp Object Store key in the workspace bucket and ask the file-conversion
+// workload (WORKSPACE_SUBJECTS.FILE_SUBJECTS.EXTRACT_FRAMES) to extract the poster
+// and the representative (image-to-video anchor) frame. The workload writes those
+// frames back to temp keys and returns them; the provider reads them, then
+// deletes all three temp objects.
+export type ExtractFramesRequest = {
+    workspaceId: string
+    videoFileId: string         // temp Object Store key of the staged video
+    atSeconds?: number          // representative-frame seek target (clip midpoint)
+}
+
+export type ExtractFramesResult =
+    | {
+          success: true
+          posterFileId?: string   // temp Object Store key of the poster PNG
+          frameFileId?: string    // temp Object Store key of the representative PNG
+      }
+    | {
+          success: false
+          error: string
+      }
+
+// Pushed to the browser on WORKSPACE_SUBJECTS.FILE_SUBJECTS.CONVERT_RESPONSE
+// .<workspaceId>.<conversionId> once conversion settles, so the canvas can
+// replace or fail the upload placeholder. `conversionId` correlates with the
+// value the upload route returned.
+export type ConvertFileNotification = {
+    conversionId: string
+    workspaceId: string
+    fileId: string
+} & ConvertFileResult
+
 // NOTE: 'document' is the thread/text node (server-authoritative ProseMirror).
 // Uploaded documents use the distinct 'mediaDocument' type to avoid colliding
 // with it. 'audio' is the uploaded-audio node.
-export type CanvasNodeType = 'document' | 'mediaDocument' | 'image' | 'video' | 'audio' | 'branchOrigin' | 'branchFork' | 'branchLine'
+export type CanvasNodeType = 'document' | 'mediaDocument' | 'image' | 'video' | 'audio' | 'uploadPlaceholder' | 'branchOrigin' | 'branchFork' | 'branchLine'
 
 type CanvasNodePosition = {
     x: number
@@ -852,6 +924,24 @@ export type DocumentMediaCanvasNode = CanvasNodeParentingFields & {
     descriptor?: ContentDescriptor
 }
 
+export type UploadPlaceholderCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'uploadPlaceholder'
+    fileName: string
+    status: 'converting' | 'failed'
+    message?: string
+    // Set while status === 'converting' so the canvas can re-attach to the async
+    // file-conversion completion subject (CONVERT_RESPONSE.<workspaceId>.<conversionId>)
+    // after a reload. `fileId`/`kind` let the re-attach build the real node.
+    conversionId?: string
+    fileId?: string
+    kind?: MediaKind
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    createdAt: number
+    updatedAt: number
+}
+
 export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'branchOrigin'
@@ -905,7 +995,7 @@ export type BranchLineCanvasNode = CanvasNodeParentingFields & {
     temporary: true
 }
 
-export type CanvasNode = DocumentCanvasNode | DocumentMediaCanvasNode | ImageCanvasNode | VideoCanvasNode | AudioCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
+export type CanvasNode = DocumentCanvasNode | DocumentMediaCanvasNode | ImageCanvasNode | VideoCanvasNode | AudioCanvasNode | UploadPlaceholderCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 
 export type CanvasViewport = {
     x: number

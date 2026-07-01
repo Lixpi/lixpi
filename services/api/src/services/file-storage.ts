@@ -73,14 +73,19 @@ export const storeWorkspaceFile = async (input: StoreFileInput): Promise<StoreFi
         fileId = `hash-${hash}`
 
         const existing = workspace.files?.find((f: DocumentFile) => f.id === fileId)
-        if (existing) {
-            // Only short-circuit as a duplicate if the bytes are ACTUALLY still in
-            // storage. If the object is gone, fall through and re-store it so the
-            // dangling reference self-heals instead of staying permanently broken.
-            const storedInfo = await natsService.getObjectInfo(bucketName, fileId).catch(() => null)
-            if (storedInfo && !storedInfo.deleted) {
-                info(`Duplicate file detected: ${fileId} (skipping upload)`)
-                return {
+            if (existing) {
+                // Only short-circuit as a duplicate if the bytes are ACTUALLY still in
+                // storage. If the object or its canonical derivative is gone, fall
+                // through and re-store it so the dangling reference self-heals instead
+                // of staying permanently broken.
+                const storedInfo = await natsService.getObjectInfo(bucketName, fileId).catch(() => null)
+                const canonicalInfo = existing.canonicalFileId
+                    ? await natsService.getObjectInfo(bucketName, existing.canonicalFileId).catch(() => null)
+                    : null
+                const hasCanonicalBytes = !existing.canonicalFileId || Boolean(canonicalInfo && !canonicalInfo.deleted)
+                if (storedInfo && !storedInfo.deleted && hasCanonicalBytes) {
+                    info(`Duplicate file detected: ${fileId} (skipping upload)`)
+                    return {
                     fileId,
                     url: `/api/files/${workspaceId}/${fileId}`,
                     isDuplicate: true,
@@ -92,8 +97,8 @@ export const storeWorkspaceFile = async (input: StoreFileInput): Promise<StoreFi
                     canonicalMimeType: existing.canonicalMimeType,
                 }
             }
-            warn(`Hash ${fileId} is registered in workspace ${workspaceId} but its bytes are missing from storage — re-storing`)
-        }
+                warn(`Hash ${fileId} is registered in workspace ${workspaceId} but its bytes are missing from storage — re-storing`)
+            }
     } else {
         fileId = uuid()
     }

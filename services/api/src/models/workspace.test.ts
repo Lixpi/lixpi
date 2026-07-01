@@ -495,6 +495,24 @@ describe('Workspace canvas media references', () => {
             origin: 'model::Workspace->isFileReferencedByCanvasState(workspace-1:file-1)',
         }))
     })
+
+    it('treats a canonical derivative reference as a reference to the original file record', async () => {
+        dynamo.getItem.mockResolvedValueOnce({
+            files: [
+                { id: 'original-file', canonicalFileId: 'original-file-canonical' },
+            ],
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                edges: [],
+                nodes: [{ nodeId: 'node-1', type: 'image', fileId: 'original-file-canonical' }],
+            },
+        })
+
+        await expect(Workspace.isFileReferencedByCanvasState({
+            workspaceId: 'workspace-1',
+            fileId: 'original-file',
+        })).resolves.toBe(true)
+    })
 })
 
 // =============================================================================
@@ -564,6 +582,39 @@ describe('Workspace file list storage', () => {
             },
         }))
         expect(dynamo.updateItem.mock.calls[0][0].updates).toBeUndefined()
+    })
+
+    it('removes the original file record when deletion is requested by canonical file id', async () => {
+        dynamo.getItem.mockResolvedValue({
+            files: [
+                { id: 'keep-1' },
+                { id: 'original-file', canonicalFileId: 'original-file-canonical' },
+            ],
+        })
+        dynamo.updateItem.mockResolvedValue(undefined)
+
+        await Workspace.removeFile({
+            workspaceId: 'workspace-1',
+            fileId: 'original-file-canonical',
+        })
+
+        expect(dynamo.updateItem).toHaveBeenCalledWith(expect.objectContaining({
+            key: { workspaceId: 'workspace-1' },
+            updateExpression: 'SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, :previousUpdatedAt), #updatedAt = :now REMOVE #files[1]',
+            conditionExpression: '#files[1].#canonicalFileId = :fileId',
+            expressionAttributeNames: {
+                '#files': 'files',
+                '#id': 'id',
+                '#updatedAt': 'updatedAt',
+                '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
+                '#canonicalFileId': 'canonicalFileId',
+            },
+            expressionAttributeValues: {
+                ':fileId': 'original-file-canonical',
+                ':now': expect.any(Number),
+                ':previousUpdatedAt': expect.any(Number),
+            },
+        }))
     })
 
     it('re-reads and retries when another writer shifts the file index', async () => {

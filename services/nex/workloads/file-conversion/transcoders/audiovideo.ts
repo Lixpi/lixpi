@@ -46,7 +46,7 @@ export const transcodeAudioVideo = async (buffer: Buffer, canonicalMime: string)
 
 // Extract a single PNG frame from a video. When `atSeconds` is set the decoder
 // fast-seeks there first; otherwise it grabs frame 0. Best-effort — returns null
-// if ffmpeg is unavailable or extraction fails, so an upload never fails solely
+// if ffmpeg is unavailable or extraction fails, so a conversion never fails solely
 // because a poster could not be produced.
 const extractFrameFromVideo = async (videoBuffer: Buffer, atSeconds?: number): Promise<Buffer | null> => {
     try {

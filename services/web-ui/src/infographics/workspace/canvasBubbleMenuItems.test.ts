@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_EDGE_CONTEXT } from './canvasBubbleMenuItems.ts'
+import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT, CANVAS_EDGE_CONTEXT } from './canvasBubbleMenuItems.ts'
 
 // =============================================================================
 // HELPERS
@@ -37,9 +37,9 @@ describe('CANVAS_IMAGE_CONTEXT', () => {
 describe('buildCanvasBubbleMenuItems — structure', () => {
     const callbacks = createCallbacks()
 
-    it('returns 9 items total (image, video, and edge contexts)', () => {
+    it('returns 10 items total (image, video, document/audio, and edge contexts)', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items).toHaveLength(9)
+        expect(items).toHaveLength(10)
     })
 
     it('first 6 items expose the canvasImage context', () => {
@@ -49,9 +49,9 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         }
     })
 
-    it('the Connect button is shared between image and video contexts', () => {
+    it('the Connect button is shared across all media contexts', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[4].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT])
+        expect(items[4].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT])
     })
 
     it('the Add to Media Library button is shared between image and video contexts', () => {
@@ -59,22 +59,24 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         expect(items[3].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT])
     })
 
-    it('the Replace and Download buttons are shared between image and video contexts', () => {
+    it('Replace is image+video, Download is shared across all media contexts', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
         expect(items[1].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT])
-        expect(items[2].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT])
+        expect(items[2].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT])
     })
 
-    it('the single video-only item follows the image items', () => {
+    it('the per-kind delete items follow the shared items (image, video, document/audio)', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
+        expect(items[5].context).toEqual([CANVAS_IMAGE_CONTEXT])
         expect(items[6].context).toEqual([CANVAS_VIDEO_CONTEXT])
-        expect(items[7].context).toEqual([CANVAS_EDGE_CONTEXT])
+        expect(items[7].context).toEqual([CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT])
+        expect(items[7].element.getAttribute('title')).toBe('Delete file')
     })
 
     it('the last 2 items are edge-context only', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[7].context).toEqual([CANVAS_EDGE_CONTEXT])
         expect(items[8].context).toEqual([CANVAS_EDGE_CONTEXT])
+        expect(items[9].context).toEqual([CANVAS_EDGE_CONTEXT])
     })
 
     it('first item is Ask AI button', () => {
@@ -114,12 +116,12 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
 
     it('ninth item is Change connector curve button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[7].element.getAttribute('title')).toBe('Change connector curve')
+        expect(items[8].element.getAttribute('title')).toBe('Change connector curve')
     })
 
     it('tenth item is Delete connection button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[8].element.getAttribute('title')).toBe('Delete connection')
+        expect(items[9].element.getAttribute('title')).toBe('Delete connection')
     })
 
     it('items are HTMLButtonElement instances with bubble-menu-button class', () => {

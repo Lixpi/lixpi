@@ -750,9 +750,10 @@ describe('Workspace canvas — video node interaction', () => {
 // Media descriptors
 // =============================================================================
 
-describe('Workspace canvas — media descriptors', () => {
-	const ts = loadTs()
-	const scss = loadScss()
+	describe('Workspace canvas — media descriptors', () => {
+		const ts = loadTs()
+		const svelte = loadWorkspaceCanvasSvelte()
+		const scss = loadScss()
 
 	it('derives a descriptor from generated media metadata for free (no extra model call)', () => {
 		expectSourceToContain(ts, 'function analyzeCanvasMediaStill(nodeId: string, stillFileId: string, analysisAttempt = 0): Promise<void>')
@@ -779,15 +780,33 @@ describe('Workspace canvas — media descriptors', () => {
 		expectSourceToContain(ts, 'mediaNodeNeedsAnalysis && (preparedNode.type === \'image\' || preparedNode.type === \'video\')')
 	})
 
-	it('shows an unobtrusive animated analyzing indicator with an explanation', () => {
-		expectSourceToContain(ts, "node.descriptor?.status === 'analyzing'")
-		const buttonBlock = extractBlock(scss, '.media-info-button')
-		expectExcerptToContain(buttonBlock, '&.is-analyzing', '.media-info-button')
-		expectSourceToContain(scss, '@keyframes workspace-media-analyzing-pulse')
-		const descriptorBlock = extractBlock(scss, '.canvas-media-descriptor')
-		expectExcerptToContain(descriptorBlock, '&.is-analyzing', '.canvas-media-descriptor')
+		it('shows an unobtrusive animated analyzing indicator with an explanation', () => {
+			expectSourceToContain(ts, "node.descriptor?.status === 'analyzing'")
+			const buttonBlock = extractBlock(scss, '.media-info-button')
+			expectExcerptToContain(buttonBlock, '&.is-analyzing', '.media-info-button')
+			expectSourceToContain(scss, '@keyframes workspace-media-analyzing-pulse')
+			const descriptorBlock = extractBlock(scss, '.canvas-media-descriptor')
+			expectExcerptToContain(descriptorBlock, '&.is-analyzing', '.canvas-media-descriptor')
+		})
+
+		it('keeps uploaded exotic media inert until the canonical object is returned', () => {
+			expectSourceToContain(svelte, "type: 'uploadPlaceholder',")
+			expectSourceToContain(svelte, 'placeholderNodeId = insertUploadPlaceholder(file.name)')
+			expectSourceToContain(svelte, 'placeholderNodeId = insertUploadPlaceholder(getRemotePlaceholderName(url))')
+			expectSourceToContain(svelte, 'renderer?.replaceUploadPlaceholder(placeholderNodeId, imageNode)')
+			expectSourceToContain(ts, "candidate.type === 'uploadPlaceholder' && candidate.nodeId === placeholderNodeId")
+			expectSourceToContain(ts, 'queueCanvasMediaAnalysis(preparedNode.nodeId, getMediaDescriptorStillFileId(preparedNode))')
+			expectSourceNotToContain(svelte, 'new Image()')
+		})
+
+		it('renders upload placeholders and non-image upload node shells after reload', () => {
+			expectSourceToContain(ts, "node.type === 'mediaDocument'")
+			expectSourceToContain(ts, "node.type === 'audio'")
+			expectSourceToContain(ts, "node.type === 'uploadPlaceholder'")
+			expectSourceToContain(ts, 'function createUploadPlaceholderNode(node: UploadPlaceholderCanvasNode): HTMLElement')
+			expectSourceToContain(scss, '.workspace-upload-placeholder-node')
+		})
 	})
-})
 
 // =============================================================================
 // Content descriptors (documents & threads)
@@ -2188,7 +2207,7 @@ describe('Workspace canvas — collision resolution ownership', () => {
 	it('uses the image-node theme width for toolbar image insertion sizing', () => {
 		expectSourceToContain(svelte, 'const width = settings.mediaNode.image.defaultInsertionWidth')
 		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(aspectRatio)')
-		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(1)')
+		expectSourceToContain(svelte, 'dimensions,')
 		expectSourceNotToContain(svelte, 'const maxWidth = 400')
 		expectSourceNotToContain(svelte, 'FALLBACK_IMAGE_DIMENSIONS')
 	})
@@ -2369,7 +2388,7 @@ describe('Image loading — PIXI ownership and URL resolution strategy', () => {
 	})
 
 	it('PIXI uses canonical workspaceId path for stored API images', () => {
-		expectSourceToContain(pixiLogicTs, '`/api/images/${workspaceId}/${node.fileId}`')
+		expectSourceToContain(pixiLogicTs, '`/api/files/${workspaceId}/${node.fileId}`')
 		expectSourceToContain(pixiLogicTs, 'isStoredImageSrc(strippedSrc)')
 	})
 
@@ -2614,8 +2633,11 @@ describe('video generation — canvas + plugin source shape', () => {
 		// with images, while keeping dedicated Delete behavior.
 		const bubbleMenuTs = readSourceFile('canvasBubbleMenuItems.ts')
 		expectSourceToContain(ts, "import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT")
-		expectSourceToContain(ts, "node.type !== 'image' && node.type !== 'video'")
-		expectSourceToContain(ts, "node.type === 'video' ? CANVAS_VIDEO_CONTEXT : CANVAS_IMAGE_CONTEXT")
+		// Every uploaded media kind maps to a bubble-menu context (image, video,
+		// mediaDocument, audio) — so documents/audio also get a menu (Delete).
+		expectSourceToContain(ts, "video: CANVAS_VIDEO_CONTEXT,")
+		expectSourceToContain(ts, "mediaDocument: CANVAS_DOCUMENT_CONTEXT,")
+		expectSourceToContain(ts, "const context = node ? bubbleContextByType[node.type] : undefined")
 		expectSourceToContain(ts, 'onDownloadMedia: (nodeId) => {')
 		expectSourceToContain(ts, 'onReplaceMedia: (nodeId) => {')
 		expectSourceToContain(bubbleMenuTs, "export const CANVAS_VIDEO_CONTEXT = 'canvasVideo'")

@@ -31,6 +31,7 @@ import { documentSubjects } from './NATS/subscriptions/document-subjects.ts'
 import { aiChatThreadSubjects } from './NATS/subscriptions/ai-chat-thread-subjects.ts'
 import { imageSubjects } from './NATS/subscriptions/image-subjects.ts'
 import { videoSubjects } from './NATS/subscriptions/video-subjects.ts'
+import { fileConversionSubjects } from './NATS/subscriptions/file-conversion-subjects.ts'
 import { featureSubjects } from './NATS/subscriptions/feature-subjects.ts'
 import { mediaLibrarySubjects } from './NATS/subscriptions/media-library-subjects.ts'
 import fileRoutes from './routes/file-routes.ts'
@@ -125,6 +126,7 @@ const subscriptions = [
     // Workspace media, reusable features, and media library records.
     ...imageSubjects,
     ...videoSubjects,
+    ...fileConversionSubjects,
     ...featureSubjects,
     ...mediaLibrarySubjects,
 ]

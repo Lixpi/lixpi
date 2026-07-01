@@ -36,9 +36,12 @@ export const convertDocumentToPdf = async (buffer: Buffer, originalName: string)
         return readFile(join(outDir, produced))
     })
 
-// Render the first page of a PDF to a PNG poster via poppler's pdftoppm. Best-
-// effort — returns null when poppler is unavailable or rendering fails, so a
-// document upload never fails solely because a thumbnail could not be produced.
+// Render the first page of a PDF to a PNG poster via poppler's pdftocairo. We use
+// pdftocairo (Cairo backend) over pdftoppm (Splash backend) for cleaner
+// anti-aliased output; both render the page content faithfully (any accent bar at
+// the page's top edge belongs to the PDF itself, not the renderer). Best-effort —
+// returns null when poppler is unavailable or rendering fails, so a document
+// conversion never fails solely because a thumbnail could not be produced.
 export const renderPdfFirstPagePoster = async (pdfBuffer: Buffer): Promise<Buffer | null> => {
     try {
         return await withTempDir('pdf-poster-', async (dir) => {
@@ -46,7 +49,7 @@ export const renderPdfFirstPagePoster = async (pdfBuffer: Buffer): Promise<Buffe
             const outPrefix = join(dir, 'poster')
             await writeFile(inPath, pdfBuffer)
 
-            await runProcess('pdftoppm', [
+            await runProcess('pdftocairo', [
                 '-png', '-f', '1', '-l', '1', '-singlefile', '-scale-to', '1024',
                 inPath, outPrefix,
             ], { timeoutMs: 60_000 })

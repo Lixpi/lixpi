@@ -5,11 +5,18 @@ import { info, err } from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
 import Workspace from '../../models/workspace.ts'
 
-import { NATS_SUBJECTS } from '@lixpi/constants'
+import { NATS_SUBJECTS, type DocumentFile } from '@lixpi/constants'
 
 const { IMAGE_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 
 const getWorkspaceBucketName = (workspaceId: string) => `workspace-${workspaceId}-files`
+
+const getStorageFileIdsForDelete = (files: DocumentFile[] | undefined, fileId: string): string[] => {
+    const file = files?.find((candidate: DocumentFile) => candidate.id === fileId || candidate.canonicalFileId === fileId)
+    if (!file) return [fileId]
+
+    return [file.id, file.canonicalFileId].filter((value): value is string => Boolean(value))
+}
 
 export const imageSubjects = [
     {
@@ -53,6 +60,7 @@ export const imageSubjects = [
 
             try {
                 const bucketName = getWorkspaceBucketName(workspaceId)
+                const storageFileIds = getStorageFileIdsForDelete(workspace.files, fileId)
                 const isReferenced = await Workspace.isFileReferencedByCanvasState({ workspaceId, fileId })
 
                 if (isReferenced) {
@@ -65,9 +73,10 @@ export const imageSubjects = [
                 await Workspace.removeFile({ workspaceId, fileId })
                 info(`Removed file ${fileId} metadata from workspace ${workspaceId}`)
 
-                // Delete file from Object Store
-                await natsService.deleteObject(bucketName, fileId)
-                info(`Deleted file ${fileId} from bucket ${bucketName}`)
+                for (const storageFileId of storageFileIds) {
+                    await natsService.deleteObject(bucketName, storageFileId)
+                    info(`Deleted file ${storageFileId} from bucket ${bucketName}`)
+                }
 
                 return { success: true, fileId }
             } catch (error: any) {

@@ -10,6 +10,7 @@ A Lixpi-owned [NATS NEX](https://github.com/synadia-io/nex) **node**: a process 
 | Workload | Type / lifecycle | What it does |
 |---|---|---|
 | `ai-models-sync` | `native` / `service` | Runs `AiModelsSync.synchronizeModels()` at boot and **every hour**, writing the `AI_MODELS_LIST` DynamoDB table. ([`workloads/ai-models-synchronization`](./workloads/ai-models-synchronization)) |
+| `file-conversion` | `native` / `service` | NATS responder on `workspace.file.convert` that does all heavy media transcoding (sharp/ffmpeg/libreoffice/poppler) **off** the API: reads an uploaded original from the workspace Object Store bucket, writes the canonical (+ poster) back, and replies with canvas hints. Connects as the AUTH-account `regular_user` (not the NEX node creds) to reach the AUTH-account Object Store. ([`workloads/file-conversion`](./workloads/file-conversion)) |
 | `system-reporter` | `native` / `service` | Trivial smoke-test workload (echoes uptime every 30 s). Deployed **manually** to prove the substrate. ([`workloads/system-reporter`](./workloads/system-reporter)) |
 
 ## How it works

@@ -38,6 +38,11 @@
 		"GET_USER_WORKSPACES": "workspace.getUserWorkspaces",
 		"UPDATE_CANVAS_STATE": "workspace.updateCanvasState",
 		"GET_WORKSPACE_DOCUMENTS": "workspace.getDocuments",
+		"FILE_SUBJECTS": {
+			"CONVERT": "workspace.file.convert",
+			"CONVERT_RESPONSE": "workspace.file.convert.response",
+			"EXTRACT_FRAMES": "workspace.file.extractFrames"
+		},
 		"IMAGE_SUBJECTS": {
 			"DELETE_IMAGE": "workspace.image.delete"
 		},

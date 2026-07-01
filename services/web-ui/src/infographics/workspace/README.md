@@ -53,6 +53,11 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Request workspace-object cleanup when removed from canvas; the API deletes bytes only after canonical canvas state no longer references the file, and explicitly saved Media Library copies are separate objects and remain available
 - Expose `Add to Media Library` in the bubble menu once their stored object is available; streaming generated-image placeholders hide the action until completion
 
+### Uploaded File Placeholders
+- File uploads insert an inert `uploadPlaceholder` node before the API returns. The placeholder is persisted in `canvasState`, carries no `fileId`, and is ignored by media descriptor analysis and Object Store cleanup.
+- The upload response supplies the model-safe object id and URL. Converted HEIC/HEIF/AVIF/TIFF and other non-model-safe inputs therefore replace the placeholder with a canonical image/video/audio/document node; the canvas never creates a media node from the preserved original bytes.
+- Conversion failures mark the placeholder as failed instead of creating an image/video node that would trigger descriptor analysis against unsupported bytes.
+
 ### Video Nodes
 - Display generated or media-library videos with a PIXI poster/placeholder behind a visible DOM `<video>` surface that is moved into the transformed chrome layer once the video handler creates the attached element
 - Keep the node shell as interaction chrome only; completed playback, seeking, and fullscreen are driven by the browser-composited `<video>` element so connector edges are not tied to a PIXI video frame loop
@@ -62,6 +67,10 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Scrubbing pauses at the pressed timestamp, moves the control position immediately, writes the first video seek immediately, then applies the latest drag target as soon as the active seek settles so paused video frames keep updating during drag; it resumes on release only when the video was already playing
 - Support play/pause, seek, continuous speed, volume, and fullscreen without persisting playback state into `canvasState`
 - Expose `Add to Media Library` once their stored MP4 is available; videos still polling through VEO hide the action until completion
+
+### Uploaded Audio and Document Nodes
+- Uploaded audio nodes use an `audio` canvas node. PIXI renders the rounded audio geometry while a hidden DOM `<audio>` element owns playback metadata and controls.
+- Uploaded PDFs, converted office documents, text, and Markdown use `mediaDocument` nodes. PIXI renders a first-page poster when available and falls back to a stable document rectangle.
 
 ### Branch Lineage Trees
 - `WorkspaceCanvas.ts` is presentational for generated-media lineage. It applies live `IMAGE_BRANCH_RESOLVED` / `MEDIA_LINEAGE_PLANNED` events, reconciles API-persisted canvas projection, computes marker/media geometry, and re-tidies the visible tree. It may render transient preflight markers while the API is still resolving, but durable branch markers, final media nodes, generated lineage fields, and connector parentage are persisted by `services/api`. It must not decide branch IDs, branch-root creation, fork creation, lineage parentage, reasoning-model fanout, resolver outcomes, or marker provenance.
