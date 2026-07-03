@@ -7760,6 +7760,81 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function findLineageAssignmentForGenerationRun(
+        lineagePlan: MediaBranchLineagePlan,
+        generationRun?: MediaGenerationRunMeta,
+    ): MediaRunLineageAssignment | undefined {
+        if (generationRun?.lineageAssignment) return generationRun.lineageAssignment
+        if (!generationRun) return undefined
+
+        return lineagePlan.runAssignments.find(assignment =>
+            (generationRun.mediaRunId && assignment.mediaRunId === generationRun.mediaRunId)
+            || (generationRun.reasoningRunId && assignment.reasoningRunId === generationRun.reasoningRunId)
+            || (
+                generationRun.reasoningIndex != null
+                && getLineageAssignmentReasoningIndex(lineagePlan, assignment, generationRun) === generationRun.reasoningIndex
+                && (!generationRun.reasoningModelId || assignment.reasoningModelId === generationRun.reasoningModelId)
+            )
+        )
+    }
+
+    function buildPendingBranchMarkerStateForPlannedRun(
+        threadId: string,
+        generationRun?: MediaGenerationRunMeta,
+    ): NonNullable<BranchMarkerNode['pendingState']> | undefined {
+        const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
+            ?? pendingGeneratedImagePlacements.get(threadId)
+        const lineagePlan = placement?.lineagePlan
+        if (lineagePlan) {
+            const assignment = findLineageAssignmentForGenerationRun(lineagePlan, generationRun)
+            const relatedAssignments = assignment
+                ? getRelatedLineageAssignments(lineagePlan, assignment)
+                : lineagePlan.runAssignments
+            const reasoningModelId = assignment?.reasoningModelId ?? generationRun?.reasoningModelId
+            const reasoningIndex = assignment
+                ? getLineageAssignmentReasoningIndex(lineagePlan, assignment, generationRun)
+                : generationRun?.reasoningIndex
+            return {
+                phase: 'planned',
+                promptText: assignment?.promptText || lineagePlan.promptText,
+                reasoningModelIds: uniqueAiModelIds([reasoningModelId]),
+                ...(reasoningModelId ? { reasoningModelId } : {}),
+                ...(reasoningIndex == null ? {} : { reasoningIndex }),
+                imageModelIds: getLineageAssignmentMediaModelIds(relatedAssignments, 'image'),
+                videoModelIds: getLineageAssignmentMediaModelIds(relatedAssignments, 'video'),
+            }
+        }
+
+        const promptText = placement?.promptText
+        if (!promptText) return undefined
+
+        const mediaModelIds = uniqueAiModelIds([generationRun?.mediaModelId])
+        return {
+            phase: 'planned',
+            promptText,
+            reasoningModelIds: uniqueAiModelIds([generationRun?.reasoningModelId]),
+            ...(generationRun?.reasoningModelId ? { reasoningModelId: generationRun.reasoningModelId } : {}),
+            ...(generationRun?.reasoningIndex == null ? {} : { reasoningIndex: generationRun.reasoningIndex }),
+            imageModelIds: generationRun?.mediaType === 'video' ? [] : mediaModelIds,
+            videoModelIds: generationRun?.mediaType === 'video' ? mediaModelIds : [],
+        }
+    }
+
+    function applyPendingStateToSyncedPlannedBranchMarker(
+        plannedNode: BranchMarkerNode,
+        threadId: string,
+        generationRun?: MediaGenerationRunMeta,
+    ): BranchMarkerNode {
+        const pendingState = buildPendingBranchMarkerStateForPlannedRun(threadId, generationRun)
+        if (!pendingState) return resizeBranchMarkerNodeFromProseMirror(plannedNode)
+
+        return resizeBranchMarkerNodeFromProseMirror({
+            ...plannedNode,
+            aiChatThreadId: getBranchMarkerThreadId(plannedNode) || threadId,
+            pendingState,
+        } as BranchMarkerNode)
+    }
+
     function applyPendingStateToPlannedBranchMarker(
         plannedNode: BranchMarkerNode,
         pendingNode: BranchMarkerNode,
@@ -7788,7 +7863,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     ): void {
         if (!currentCanvasState || !plannedResolution.primaryNode) return
 
-        const plannedNode = resizeBranchMarkerNodeFromProseMirror(plannedResolution.primaryNode) as BranchMarkerNode
+        const plannedNode = applyPendingStateToSyncedPlannedBranchMarker(
+            plannedResolution.primaryNode,
+            threadId,
+            generationRun,
+        )
         const supportNodes = [
             plannedResolution.branchOriginNode,
             plannedResolution.branchForkNode,
@@ -9628,11 +9707,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const runKey = getGeneratedMediaRunKey(threadId, generationRun)
         const existingTracker = partialImageTracker.get(runKey)
-        if (existingTracker) return existingTracker
+        if (existingTracker) {
+            clearPendingBranchMarkerStateForRun(threadId, generationRun)
+            return existingTracker
+        }
 
         const existingImageNode = findGeneratedMediaNodeForRun('image', threadId, generationRun)
         if (existingImageNode?.type === 'image') {
-            if (hasGeneratedImageFrame(existingImageNode) && !imageUrl && !fileId) return undefined
+            if (hasGeneratedImageFrame(existingImageNode) && !imageUrl && !fileId) {
+                clearPendingBranchMarkerStateForRun(threadId, generationRun)
+                return undefined
+            }
             const tracker = rememberPartialImageTrackerForNode(threadId, generationRun, existingImageNode)
             debugGeneratedMediaLifecycle('reattach-image-placeholder', {
                 runKey,
@@ -9642,6 +9727,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 sourceNodeId: tracker.sourceNodeId ?? '',
                 hasReceivedFrame: tracker.hasReceivedFrame,
             })
+            clearPendingBranchMarkerStateForRun(threadId, generationRun)
             if (!viewportEl.querySelector(`[data-node-id="${existingImageNode.nodeId}"]`)) {
                 appendImageNodeToDOM(existingImageNode)
             } else {
@@ -11097,11 +11183,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
             registerGeneratedMediaRun(threadId, generationRun)
 
-            if (videoGenerationTracker.has(runKey)) return
+            if (videoGenerationTracker.has(runKey)) {
+                clearPendingBranchMarkerStateForRun(threadId, generationRun)
+                return
+            }
             const existingVideoNode = findGeneratedMediaNodeForRun('video', threadId, generationRun)
             if (existingVideoNode?.type === 'video') {
-                if (hasGeneratedVideoFrame(existingVideoNode)) return
+                if (hasGeneratedVideoFrame(existingVideoNode)) {
+                    clearPendingBranchMarkerStateForRun(threadId, generationRun)
+                    return
+                }
                 rememberVideoGenerationTrackerForNode(threadId, generationRun, existingVideoNode)
+                clearPendingBranchMarkerStateForRun(threadId, generationRun)
                 syncPixiGeneratingImageNodes()
                 return
             }

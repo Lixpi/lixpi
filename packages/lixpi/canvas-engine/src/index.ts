@@ -1,5 +1,5 @@
 'use strict'
 
-export * from './geometry/index.ts'
-export * from './collision/index.ts'
-export * from './canvas-node/index.ts'
+export * from './shared/index.ts'
+export * as backend from './backend/index.ts'
+export * as frontend from './frontend/index.ts'

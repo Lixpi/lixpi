@@ -5,7 +5,11 @@
     "type": "module",
     "main": "./src/index.ts",
     "exports": {
-        ".": "./src/index.ts"
+        ".": "./src/index.ts",
+        "./shared": "./src/shared/index.ts",
+        "./backend": "./src/backend/index.ts",
+        "./frontend": "./src/frontend/index.ts",
+        "./frontend/rendering": "./src/frontend/rendering/index.ts"
     },
     "dependencies": {
         "@lixpi/constants": "workspace:*"
