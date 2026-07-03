@@ -259,6 +259,69 @@ describe('ProseMirrorAuthorityService', () => {
         service.disconnect()
     })
 
+    it('recovers from a failed remote step by retrying resume until the settled snapshot arrives', async () => {
+        vi.useFakeTimers()
+        const nats = createNats()
+        let subscriptionHandler: ((event: any) => void) | null = null
+        nats.subscribe.mockImplementation((_subject: string, handler: any) => {
+            subscriptionHandler = handler
+            return { unsubscribe: vi.fn() }
+        })
+        nats.request
+            // Initial resume on connect: nothing to replay.
+            .mockResolvedValueOnce({ snapshot: null, currentVersion: 0, currentStreamSeq: 0, events: [] })
+            // Recovery resume while the stream is still active: no settled snapshot yet.
+            .mockResolvedValueOnce({ snapshot: null, currentVersion: 1, currentStreamSeq: 2, events: [] })
+            // Retry after the stream settles: snapshot is available.
+            .mockResolvedValueOnce({
+                snapshot: {
+                    ...coordinate,
+                    version: 1,
+                    schemaVersion: 'prosemirror-v1',
+                    doc: { type: 'doc', content: [{ type: 'paragraph' }] },
+                },
+                currentVersion: 1,
+                currentStreamSeq: 2,
+                events: [],
+            })
+        mocks.getData.mockReturnValue(nats)
+        const { view } = createView()
+
+        const service = new ProseMirrorAuthorityService({
+            ...coordinate,
+            baseVersion: 0,
+            getView: () => view,
+        })
+
+        await vi.advanceTimersByTimeAsync(0)
+        expect(nats.request).toHaveBeenCalledTimes(1)
+
+        subscriptionHandler!(makeEvent({ kind: 'START', baseVersion: 0, version: 0, subjectSeq: 1, streamSequence: 1 }))
+        // The mock view cannot apply steps (state.tr.step is undefined), so this
+        // remote step fails to apply and must push the service into snapshot recovery.
+        subscriptionHandler!(makeEvent({ kind: 'STEP', version: 1, step: { stepType: 'replace' }, subjectSeq: 2, streamSequence: 2 }))
+        await vi.advanceTimersByTimeAsync(0)
+
+        // Recovery resumes from version 0 so the server returns snapshot + full replay.
+        expect(nats.request).toHaveBeenCalledTimes(2)
+        expect(nats.request).toHaveBeenNthCalledWith(
+            2,
+            NATS_SUBJECTS.DOCUMENT_STEP_SUBJECTS.DOC_RESUME,
+            expect.objectContaining({ localVersion: 0, localStreamSeq: 0 }),
+        )
+
+        // No snapshot yet → the service must keep retrying instead of going idle.
+        await vi.advanceTimersByTimeAsync(1000)
+        expect(nats.request).toHaveBeenCalledTimes(3)
+        expect(view.state.schema.nodeFromJSON).toHaveBeenCalledWith({ type: 'doc', content: [{ type: 'paragraph' }] })
+
+        // Recovery is resolved: no further retries are scheduled.
+        await vi.advanceTimersByTimeAsync(5000)
+        expect(nats.request).toHaveBeenCalledTimes(3)
+
+        service.disconnect()
+    })
+
     it('batches multiple local steps into one submit request', async () => {
         vi.useFakeTimers()
         const nats = createNats()

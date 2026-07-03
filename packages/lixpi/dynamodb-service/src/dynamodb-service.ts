@@ -404,6 +404,7 @@ export default class DynamoDBService {
         expressionAttributeNames = {},    // Use this if you need to provide custom attribute names
         expressionAttributeValues = {},    // Use this if you need to provide custom attribute values
         conditionExpression = '',
+        logConditionalCheckFailures = true,
         origin = 'unknown'
     }) {
         if (!tableName || Object.keys(key).length === 0) {
@@ -451,7 +452,9 @@ export default class DynamoDBService {
 
             return response.Attributes
         } catch (error) {
-            console.error('Error updating item:', error)
+            if (logConditionalCheckFailures || (error as { name?: string })?.name !== 'ConditionalCheckFailedException') {
+                console.error('Error updating item:', error)
+            }
             throw error
         }
     }

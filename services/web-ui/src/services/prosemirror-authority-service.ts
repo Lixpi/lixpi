@@ -42,6 +42,7 @@ type EndStreamEvent = Extract<StepStreamEvent, { kind: 'END' }>
 
 const LOCAL_STEP_BATCH_DELAY_MS = 100
 const MAX_LOCAL_STEP_BATCH_SIZE = 50
+const SNAPSHOT_RECOVERY_RETRY_DELAY_MS = 1000
 
 function getStreamSequence(event: StepStreamEvent): number | null {
     const streamSequence = (event as Partial<LoggedStepStreamEvent>).streamSequence
@@ -68,8 +69,12 @@ export class ProseMirrorAuthorityService {
     private applyingAuthorityStep = false
     private submitting = false
     private resumeInFlight = false
+    private resumeRequestedWhileInFlight = false
     private localStreamSeq = 0
     private drainingPendingRemoteEvents = false
+    private snapshotRecoveryMinVersion: number | null = null
+    private snapshotRecoveryRequested = false
+    private snapshotRecoveryRetryTimer: ReturnType<typeof setTimeout> | null = null
     private submitQueueTimer: ReturnType<typeof setTimeout> | null = null
     private subscription: { unsubscribe: () => void } | null = null
 
@@ -101,6 +106,8 @@ export class ProseMirrorAuthorityService {
         this.disconnected = true
         if (this.submitQueueTimer) clearTimeout(this.submitQueueTimer)
         this.submitQueueTimer = null
+        if (this.snapshotRecoveryRetryTimer) clearTimeout(this.snapshotRecoveryRetryTimer)
+        this.snapshotRecoveryRetryTimer = null
         this.subscription?.unsubscribe()
         this.subscription = null
     }
@@ -119,6 +126,12 @@ export class ProseMirrorAuthorityService {
         if (this.resumeInFlight || this.disconnected) return
         this.resumeInFlight = true
         let needsAnotherResume = false
+        // While in snapshot recovery the local doc has diverged from the
+        // authority, so resume from version 0: the server then returns its
+        // settled snapshot plus the full step replay, letting the client
+        // rebuild the authoritative doc instead of waiting for a future
+        // snapshot that is only written when the stream settles.
+        const recovering = this.snapshotRecoveryMinVersion !== null
         try {
             const result = await servicesStore.getData('nats')!.request(
                 NATS_SUBJECTS.DOCUMENT_STEP_SUBJECTS.DOC_RESUME,
@@ -128,8 +141,8 @@ export class ProseMirrorAuthorityService {
                     docType: this.options.docType,
                     docId: this.options.docId,
                     baseVersion: this.options.baseVersion ?? 0,
-                    localVersion: this.localVersion,
-                    localStreamSeq: this.localStreamSeq,
+                    localVersion: recovering ? 0 : this.localVersion,
+                    localStreamSeq: recovering ? 0 : this.localStreamSeq,
                 },
             ) as DocResumeResult & { error?: unknown }
 
@@ -138,7 +151,9 @@ export class ProseMirrorAuthorityService {
                 return
             }
 
-            if (shouldApplySnapshot(result, this.localVersion)) {
+            if (recovering && result?.snapshot) {
+                this.applySnapshot(result.snapshot.doc, result.snapshot.version, { force: true })
+            } else if (shouldApplySnapshot(result, this.localVersion)) {
                 this.applySnapshot(result.snapshot!.doc, result.snapshot!.version)
             }
 
@@ -147,8 +162,10 @@ export class ProseMirrorAuthorityService {
                 await this.handleStepStreamEvent(event)
             }
             this.drainPendingRemoteEvents()
-            needsAnotherResume = (result.currentVersion ?? this.localVersion) > this.localVersion
-                || (events.length > 0 && this.localStreamSeq < (result.currentStreamSeq ?? this.localStreamSeq))
+            const waitingForSnapshotRecovery = this.snapshotRecoveryMinVersion !== null
+            needsAnotherResume = !waitingForSnapshotRecovery
+                && ((result.currentVersion ?? this.localVersion) > this.localVersion
+                    || (events.length > 0 && this.localStreamSeq < (result.currentStreamSeq ?? this.localStreamSeq)))
             if (!needsAnotherResume) {
                 this.localStreamSeq = Math.max(this.localStreamSeq, result.currentStreamSeq ?? this.localStreamSeq)
             }
@@ -158,12 +175,20 @@ export class ProseMirrorAuthorityService {
             this.resumeInFlight = false
         }
 
-        if (needsAnotherResume) {
+        const shouldResumeAgain = needsAnotherResume || this.resumeRequestedWhileInFlight
+        this.resumeRequestedWhileInFlight = false
+        if (shouldResumeAgain) {
             this.requestResume()
+        } else if (this.snapshotRecoveryMinVersion !== null) {
+            // Recovery did not complete (e.g. the settled snapshot is not
+            // written yet because the stream is still active). Keep retrying
+            // instead of going idle, otherwise the client stays desynced until
+            // a page refresh.
+            this.scheduleSnapshotRecoveryRetry()
         }
     }
 
-    private applySnapshot(docJson: object, version: number): void {
+    private applySnapshot(docJson: object, version: number, options?: { force?: boolean }): void {
         const view = this.options.getView()
         if (!view) return
 
@@ -174,7 +199,20 @@ export class ProseMirrorAuthorityService {
             transaction.setMeta('skipDispatch', true)
             transaction.setMeta('proseMirrorAuthorityRemote', true)
             this.dispatchAuthorityTransaction(transaction)
-            this.localVersion = Math.max(this.localVersion, version)
+            if (options?.force) {
+                // The local doc diverged; the snapshot replaces it wholesale.
+                // Unsubmitted local steps were built against the diverged doc
+                // and can no longer be rebased safely.
+                this.pendingLocalSteps.length = 0
+                this.localVersion = version
+                this.resetSnapshotRecovery()
+                for (const pendingVersion of Array.from(this.pendingRemoteStepEvents.keys())) {
+                    if (pendingVersion <= version) this.pendingRemoteStepEvents.delete(pendingVersion)
+                }
+            } else {
+                this.localVersion = Math.max(this.localVersion, version)
+                this.clearSnapshotRecovery(version)
+            }
             this.drainPendingRemoteEvents()
         } catch (error) {
             console.error('[PROSEMIRROR_AUTHORITY] snapshot application failed:', error)
@@ -196,7 +234,11 @@ export class ProseMirrorAuthorityService {
         if (event.kind === 'END') {
             if (this.localVersion < event.finalVersion) {
                 this.pendingEndEvents.set(event.finalVersion, event)
-                this.requestResume()
+                if (this.snapshotRecoveryMinVersion !== null) {
+                    this.requestSnapshotRecovery(event.finalVersion, true)
+                } else {
+                    this.requestResume()
+                }
                 return
             }
             this.setReceiving(false, event)
@@ -205,6 +247,7 @@ export class ProseMirrorAuthorityService {
         }
 
         if (event.kind === 'ERROR') {
+            this.resetSnapshotRecovery()
             this.setReceiving(false, event)
             return
         }
@@ -214,6 +257,10 @@ export class ProseMirrorAuthorityService {
 
     private handleRemoteStepEvent(event: StepEnvelope): void {
         if (event.version <= this.localVersion) return
+        if (this.snapshotRecoveryMinVersion !== null) {
+            this.requestSnapshotRecovery(event.version)
+            return
+        }
 
         if (event.version > this.localVersion + 1) {
             this.pendingRemoteStepEvents.set(event.version, event)
@@ -228,8 +275,8 @@ export class ProseMirrorAuthorityService {
         }
 
         if (!this.applyRemoteStep(event)) {
-            this.pendingRemoteStepEvents.set(event.version, event)
-            this.requestResume()
+            this.pendingRemoteStepEvents.delete(event.version)
+            this.requestSnapshotRecovery(event.version)
             return
         }
 
@@ -273,10 +320,41 @@ export class ProseMirrorAuthorityService {
             transaction.setMeta('proseMirrorStepVersion', event.version)
             this.dispatchAuthorityTransaction(transaction)
             return true
-        } catch (error) {
-            console.warn('[PROSEMIRROR_AUTHORITY] Step.fromJSON application failed:', error)
+        } catch {
             return false
         }
+    }
+
+    private requestSnapshotRecovery(requiredVersion: number, force = false): void {
+        this.snapshotRecoveryMinVersion = Math.max(this.snapshotRecoveryMinVersion ?? 0, requiredVersion)
+        if (!force && this.snapshotRecoveryRequested) return
+        this.snapshotRecoveryRequested = true
+        this.requestResume()
+    }
+
+    private clearSnapshotRecovery(snapshotVersion: number): void {
+        if (this.snapshotRecoveryMinVersion === null || snapshotVersion < this.snapshotRecoveryMinVersion) return
+        this.resetSnapshotRecovery()
+        for (const pendingVersion of Array.from(this.pendingRemoteStepEvents.keys())) {
+            if (pendingVersion <= snapshotVersion) this.pendingRemoteStepEvents.delete(pendingVersion)
+        }
+    }
+
+    private resetSnapshotRecovery(): void {
+        this.snapshotRecoveryMinVersion = null
+        this.snapshotRecoveryRequested = false
+        if (this.snapshotRecoveryRetryTimer) {
+            clearTimeout(this.snapshotRecoveryRetryTimer)
+            this.snapshotRecoveryRetryTimer = null
+        }
+    }
+
+    private scheduleSnapshotRecoveryRetry(): void {
+        if (this.disconnected || this.snapshotRecoveryRetryTimer) return
+        this.snapshotRecoveryRetryTimer = setTimeout(() => {
+            this.snapshotRecoveryRetryTimer = null
+            if (this.snapshotRecoveryMinVersion !== null) this.requestResume()
+        }, SNAPSHOT_RECOVERY_RETRY_DELAY_MS)
     }
 
     private applyRemoteStepWithPendingLocalSteps(remoteStep: Step): void {
@@ -358,6 +436,7 @@ export class ProseMirrorAuthorityService {
 
     private drainPendingRemoteEvents(): void {
         if (this.drainingPendingRemoteEvents) return
+        if (this.snapshotRecoveryMinVersion !== null) return
         this.drainingPendingRemoteEvents = true
         try {
             while (true) {
@@ -365,6 +444,7 @@ export class ProseMirrorAuthorityService {
                 if (!nextEvent) break
                 this.pendingRemoteStepEvents.delete(nextEvent.version)
                 this.handleRemoteStepEvent(nextEvent)
+                if (this.snapshotRecoveryMinVersion !== null) break
             }
 
             for (const [finalVersion, event] of this.pendingEndEvents) {
@@ -379,7 +459,11 @@ export class ProseMirrorAuthorityService {
     }
 
     private requestResume(): void {
-        if (this.resumeInFlight || this.disconnected) return
+        if (this.disconnected) return
+        if (this.resumeInFlight) {
+            this.resumeRequestedWhileInFlight = true
+            return
+        }
         void this.resume()
     }
 

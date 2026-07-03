@@ -1677,8 +1677,8 @@
     will-change: left, top, width, height, transform;
 }
 
-// Docked above the composer (before a canvas destination is computed): keep the
-// prompt on a single line at the input's type size. It grows wider (see
+// Screen-fixed before a canvas destination is computed: keep the prompt on a
+// single line at the input's type size. It grows wider (see
 // getBranchMarkerScreenFixedDimensions) and truncates rather than wrapping; once
 // it lands on the canvas the pill regains its taller, larger on-canvas proportions.
 .workspace-branch-marker-screen-fixed {
@@ -1747,6 +1747,7 @@
     justify-content: center;
     min-width: 0;
     gap: 0;
+    overflow: visible;
 }
 
 .workspace-branch-marker-separator {
@@ -1764,14 +1765,18 @@
     display: flex;
     align-items: center;
     box-sizing: border-box;
+    flex: 0 1 auto;
     gap: 7px;
+    max-width: 100%;
+    min-width: 0;
     padding: 0 3px;
     color: currentColor;
     font-size: var(--workspace-branch-marker-response-font-size, 16px);
     font-weight: 500;
     line-height: var(--workspace-branch-marker-response-line-height, 1.15);
+    min-height: 1.32em;
     opacity: 0.72;
-    overflow: hidden;
+    overflow: visible;
     white-space: nowrap;
 }
 
@@ -1808,8 +1813,13 @@
 }
 
 .workspace-branch-marker-response-text {
+    display: block;
+    flex: 1 1 auto;
+    line-height: inherit;
+    max-width: 100%;
     min-width: 0;
     overflow: hidden;
+    padding-block: 1px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -1818,13 +1828,17 @@
     display: flex;
     align-items: center;
     box-sizing: border-box;
+    flex: 0 1 auto;
+    max-width: 100%;
+    min-width: 0;
     color: currentColor;
     font-size: var(--workspace-branch-marker-message-font-size, 16px);
     font-weight: 700;
     gap: 8px;
     line-height: var(--workspace-branch-marker-message-line-height, 1.14);
+    min-height: 1.28em;
     opacity: 0.94;
-    overflow: hidden;
+    overflow: visible;
     padding: 0 3px;
     text-align: left;
 }
@@ -1970,8 +1984,12 @@
 
 .workspace-branch-marker-message-text {
     display: -webkit-box;
+    flex: 1 1 auto;
+    line-height: inherit;
+    max-width: 100%;
     min-width: 0;
     overflow: hidden;
+    padding-block: 1px;
     text-overflow: ellipsis;
     white-space: normal;
     -webkit-box-orient: vertical;

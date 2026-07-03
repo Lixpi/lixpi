@@ -630,7 +630,10 @@ describe('Workspace canvas — generated video canvas state', () => {
 
 		expectExcerptToContain(completeHandler, 'rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)', 'video complete handler')
 		expectExcerptToContain(completeHandler, 'nodes: resolvedNodes,', 'video complete handler')
-		expectExcerptToContain(completeHandler, 'edges: currentCanvasState.edges,', 'video complete handler')
+		// Completed videos are renamed to the API-assigned node id (node-<fileId>),
+		// so lineage edges are retargeted from the placeholder id before commit.
+		expectExcerptToContain(completeHandler, 'const edges = currentCanvasState.edges.map((edge: WorkspaceEdge) => {', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'targetNodeId: completedNodeId,', 'video complete handler')
 	})
 
 	it('threads the representative mid-frame fileId onto the completed video node', () => {
@@ -1651,7 +1654,7 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(ts, 'referenceToMarkerMinGap: getBranchLineageNodeGap(),')
 		expectSourceToContain(ts, 'settings.mediaBranchLineage.rootToFirstMediaGap')
 		expectSourceToContain(settingsTs, 'nodeGap: number')
-		expectSourceToContain(settingsTs, 'nodeGap: 64')
+		expectSourceToContain(settingsTs, 'nodeGap: mediaGenerationLayoutSettings.nodeGap')
 		expectSourceToContain(settingsTs, 'mediaBranchLineage.nodeGap')
 		expectSourceToContain(ts, 'const referenceRootPosition = getReferenceBranchRootMarkerPositionForGeneratedMedia(')
 		expectSourceNotToContain(ts, 'referencePosition.x - getRootBranchMarkerOutputGap() - markerDimensions.width')

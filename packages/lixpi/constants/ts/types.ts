@@ -578,6 +578,17 @@ export type MediaLineagePlannedStreamPayload = {
     lineagePlan: MediaBranchLineagePlan
 }
 
+// Published when a lineage plan was announced but the reasoning model finished
+// without emitting a generate_image/generate_video tool call, so the planned
+// media runs will never start. Lets the UI settle the pending markers instead
+// of spinning forever.
+export type MediaGenerationSkippedStreamPayload = {
+    status: 'MEDIA_GENERATION_SKIPPED'
+    aiProvider: string
+    generationRun?: MediaGenerationRunMeta
+    generationRequestId: string
+}
+
 export type ImageBranchResolutionErrorStreamPayload = {
     status: 'IMAGE_BRANCH_RESOLUTION_ERROR'
     aiProvider: string
@@ -1666,6 +1677,10 @@ export type AiInteractionChatSendMessagePayload = {
     // Whole-workspace, descriptors-only index sent each turn; consumed by the
     // API `resolveWorkspaceContext` relevance stage (later phase).
     workspaceContextSnapshot?: WorkspaceContextSnapshot
+    canvasVisibleArea?: {
+        width: number
+        height: number
+    }
 }
 
 export type AiInteractionMediaGenerationRequest = {

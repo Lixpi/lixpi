@@ -496,6 +496,7 @@ export class MediaGenerationMatrixOrchestrator {
             requestData.aiChatThreadId,
             reasoningModel.provider,
             generationRun,
+            { canvasVisibleArea: requestData.canvasVisibleArea },
         )
         let state: ProviderState = {
             messages: requestData.messages ?? [],
@@ -518,6 +519,7 @@ export class MediaGenerationMatrixOrchestrator {
             imagePromptRetryCount: 0,
             workspaceContextSnapshot: requestData.workspaceContextSnapshot,
             imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
+            canvasVisibleArea: requestData.canvasVisibleArea,
             referencedFeatureIds: requestData.referencedFeatureIds,
             enableVideoGeneration: requestData.enableVideoGeneration ?? false,
             videoModelMetaInfo: primaryVideoModel?.meta,

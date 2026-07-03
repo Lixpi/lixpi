@@ -2,6 +2,7 @@
 
 export * from './types.ts'
 export * from './aws-resources.ts'
+export * from './media-generation-layout-settings.ts'
 
 import natsSubjects from '../nats-subjects.json' with { type: 'json' }
 import aiInteractionConstants from '../ai-interaction-constants.json' with { type: 'json' }
