@@ -44,7 +44,21 @@ init-config.bat
 
 For CI/automation, see [`infrastructure/init-script/README.md`](infrastructure/init-script/README.md).
 
-### 3. Initialize infrastructure
+### 3. Point Docker Compose at your environment file
+
+`./init-config.sh` writes a `.env.<stage-name>` file (e.g. `.env.shelby-local`), not a plain `.env` — but Docker Compose only *auto-loads* a file literally named `.env`. Without one, every `docker compose`/`docker-compose` command in this repo (and there are many: `start.sh`, `rebuild-containers.sh`, the test runner, Pulumi, individual service commands in the docs) either needs `--env-file .env.<stage-name>` typed out explicitly every time, or every variable in `docker-compose.yml` comes back unset with a wall of `variable is not set` warnings.
+
+`./set-env.sh` fixes this once: it lists your `.env.*` files, and symlinks `.env` to whichever one you pick. After that, every command in this repo works with no extra flags — Compose finds `.env` on its own. Safe to re-run any time you want to switch which environment file is active; it only ever replaces a symlink it created itself, never a real file.
+
+```bash
+# macOS / Linux
+./set-env.sh
+
+# Windows
+set-env.bat
+```
+
+### 4. Initialize infrastructure
 
 First-time setup for TLS certificates and DynamoDB tables:
 
@@ -56,7 +70,7 @@ First-time setup for TLS certificates and DynamoDB tables:
 init-infrastructure.bat
 ```
 
-### 4. Start
+### 5. Start
 
 ```bash
 # macOS / Linux

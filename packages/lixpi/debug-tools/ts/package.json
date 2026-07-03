@@ -4,6 +4,12 @@
     "private": true,
     "type": "module",
     "main": "./debug-tools.ts",
+    "scripts": {
+        "test:run": "vitest run"
+    },
+    "devDependencies": {
+        "vitest": "*"
+    },
     "dependencies": {
         "chalk": "*"
     }

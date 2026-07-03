@@ -361,7 +361,7 @@ describe('ImageUploadModal', () => {
         expect(onComplete).toHaveBeenCalledWith({
             success: true,
             fileId: 'file-abc',
-            src: 'http://localhost:3005/api/files/workspace-id/image.png?token=token-1',
+            src: `${import.meta.env.VITE_API_URL || ''}/api/files/workspace-id/image.png?token=token-1`,
         })
         expect(document.querySelector('.image-upload-modal-overlay')).toBeNull()
         expect(vi.mocked(AuthService.getTokenSilently)).toHaveBeenCalledTimes(2)

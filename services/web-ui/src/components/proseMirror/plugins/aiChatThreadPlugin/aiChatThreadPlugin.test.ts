@@ -4,10 +4,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { afterEach, beforeEach, beforeAll } from 'vitest'
 import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
 import { EditorState } from 'prosemirror-state'
+import { documentStore } from '$src/stores/documentStore.ts'
 import { STOP_AI_CHAT_META, USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
 import {
     doc,
+    createStateWithTextSelection,
     findNodePosition,
     schema,
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
@@ -514,6 +516,160 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const joined = content.join('\n')
         expect(joined).toContain('Thread one prompt')
         expect(joined).not.toContain('Thread two prompt')
+    })
+
+    it('falls back to active-thread scope when thread context metadata is unavailable', async () => {
+        const sendAiRequestHandler = vi.fn()
+        const plugin = createPlugin(sendAiRequestHandler)
+
+        let currentThreadPos: number | null = null
+
+        const state = EditorState.create({
+            doc: doc(
+                makeThread(
+                    {
+                        threadId: 'thread-workspace',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                        threadContext: 'Workspace',
+                        workspaceSelected: true,
+                    },
+                    [makeUserMessage('Workspace prompt')],
+                ),
+                makeThread(
+                    {
+                        threadId: 'thread-current',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                        threadContext: 'Workspace',
+                        workspaceSelected: false,
+                    },
+                    [makeUserMessage('Current thread prompt')],
+                ),
+            ),
+            schema,
+            plugins: [plugin],
+        })
+
+        state.doc.descendants((node, pos) => {
+            if (node.type.name === 'aiChatThread' && node.attrs.threadId === 'thread-current') {
+                currentThreadPos = pos
+                return false
+            }
+            return true
+        })
+
+        expect(currentThreadPos).not.toBeNull()
+
+        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
+            threadId: 'thread-current',
+            nodePos: currentThreadPos,
+        })
+        state.applyTransaction(trigger)
+
+        await Promise.resolve()
+
+        const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
+        expect(payload).toBeTruthy()
+        expect(payload.threadId).toBe('thread-current')
+        expect(payload.messages).toHaveLength(1)
+
+        const messageContent = payload.messages[0].content
+        expect(typeof messageContent).toBe('string')
+        expect(messageContent).toContain('Current thread prompt')
+        expect(messageContent).not.toContain('Workspace prompt')
+    })
+
+    it('updates ai reasoning model dropdown selection into thread attrs', () => {
+        const setMetaValuesSpy = vi.spyOn(documentStore, 'setMetaValues').mockImplementation(() => {})
+
+        const plugin = createPlugin(vi.fn())
+        const state = EditorState.create({
+            doc: doc(makeThread({
+                threadId: 'thread-dropdown',
+                aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+            }, [makeUserMessage('dropdown selection')])),
+            schema,
+            plugins: [plugin],
+        })
+
+        const threadPos = findNodePosition(state.doc, 'aiChatThread')
+        expect(threadPos).not.toBeNull()
+
+        const transaction = state.tr.setMeta('dropdownOptionSelected', {
+            dropdownId: 'ai-model-dropdown-thread',
+            nodePos: threadPos! + 1,
+            option: {
+                provider: 'OpenAI',
+                model: 'o4-mini',
+            },
+        })
+
+        const { state: nextState } = state.applyTransaction(transaction)
+        const nextThread = nextState.doc.nodeAt(threadPos!)
+
+        expect(nextThread?.attrs.aiReasoningModels).toBe('["OpenAI:o4-mini"]')
+        expect(setMetaValuesSpy).toHaveBeenCalledWith({ requiresSave: true })
+
+        setMetaValuesSpy.mockRestore()
+    })
+
+    it('updates threadContext on thread-context dropdown selection and requires saving', () => {
+        const setMetaValuesSpy = vi.spyOn(documentStore, 'setMetaValues').mockImplementation(() => {})
+
+        const plugin = createPlugin(vi.fn())
+
+        const state = EditorState.create({
+            doc: doc(makeThread({
+                threadId: 'thread-context',
+                threadContext: 'Thread',
+            }, [makeUserMessage('thread context update')])),
+            schema,
+            plugins: [plugin],
+        })
+
+        const threadPos = findNodePosition(state.doc, 'aiChatThread')
+        expect(threadPos).not.toBeNull()
+
+        const transaction = state.tr.setMeta('dropdownOptionSelected', {
+            dropdownId: 'thread-context-dropdown-thread',
+            nodePos: threadPos! + 1,
+            option: {
+                value: 'Workspace',
+            },
+        })
+
+        const { state: nextState } = state.applyTransaction(transaction)
+        const nextThread = nextState.doc.nodeAt(threadPos!)
+
+        expect(setMetaValuesSpy).toHaveBeenCalledWith({ requiresSave: true })
+        expect(nextThread?.attrs.threadContext).toBeUndefined()
+
+        setMetaValuesSpy.mockRestore()
+    })
+
+    it('blocks paste inside an aiChatThread and allows it outside', () => {
+        const plugin = createPlugin(vi.fn())
+
+        const state = EditorState.create({
+            doc: doc(makeThread({
+                threadId: 'thread-paste',
+            }, [makeUserMessage('paste test')])),
+            schema,
+            plugins: [plugin],
+        })
+
+        const threadPos = findNodePosition(state.doc, 'aiChatThread')
+        const stateInsideThread = createStateWithTextSelection(state.doc, threadPos! + 1, threadPos! + 1)
+
+        const handlePaste = plugin.spec.props.handlePaste
+        expect(handlePaste).toBeDefined()
+
+        const insidePaste = handlePaste!({ state: stateInsideThread } as any, {} as ClipboardEvent, null as any)
+        const outsidePaste = handlePaste!({
+            state: createStateWithTextSelection(state.doc, state.doc.content.size, state.doc.content.size),
+        } as any, {} as ClipboardEvent, null as any)
+
+        expect(insidePaste).toBe(true)
+        expect(outsidePaste).toBe(false)
     })
 
     it('passes section multi-model settings into image/video request options', async () => {

@@ -2,8 +2,6 @@
 
 import process from 'process'
 import chalk from 'chalk'
-
-import LambdaService from '@lixpi/lambda-service'
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 import SubscriptionService from '../../services/subscription-service.ts'
@@ -13,11 +11,6 @@ import { NATS_SUBJECTS } from '@lixpi/constants'
 
 const { USER_SUBSCRIPTION_SUBJECTS } = NATS_SUBJECTS
 
-// const sqsService = new SQSService()
-const lambdaService = new LambdaService({
-    region: process.env.AWS_REGION,
-    ssoProfile: process.env.AWS_PROFILE
-})
 const subscriptionService = new SubscriptionService()
 
 export const subscriptionSubjects = [
@@ -42,16 +35,6 @@ export const subscriptionSubjects = [
                 stripeCustomerId
             } = user
 
-            console.log('//TODO: put it back !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! return await lambdaService.invokeFunction({')
-            // return await lambdaService.invokeFunction({
-            //     functionName: ssmParams.StripeBillingHandlerLambda,
-            //     payload: {
-            //         target: 'get-payment-method-setup-intent-secret',
-            //         userId,
-            //         stripeCustomerId
-            //     },
-            //     origin: USER_SUBSCRIPTION_SUBJECTS.GET_PAYMENT_METHOD_SETUP_INTENT
-            // })
         }
     },
 
@@ -145,7 +128,6 @@ export const subscriptionSubjects = [
             const amountInCents = parseInt(amount) * 100
 
 
-            // Instead of invoking the lambda directly, use topUpUserBalance from the SubscriptionService
             const topUpResponse = await subscriptionService.topUpUserBalance({
                 userId,
                 stripeCustomerId,

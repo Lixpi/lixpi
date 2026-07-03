@@ -8,7 +8,7 @@ import * as AiModelModelModule from '../../models/ai-model.ts'
 import * as featureResolver from '../graph/feature-resolver.ts'
 import * as imageBranchResolver from '../graph/image-branch-resolver.ts'
 import * as workspaceContextResolver from '../graph/workspace-context-resolver.ts'
-import { buildMediaGenerationRequestGroupKey, MediaGenerationMatrixOrchestrator, type MatrixRequestData } from './media-generation-matrix.ts'
+import { buildMediaGenerationRequestGroupKey, buildMediaGenerationThreadGroupPrefix, MediaGenerationMatrixOrchestrator, type MatrixRequestData } from './media-generation-matrix.ts'
 
 const natsService = { publish: vi.fn() } as any
 
@@ -68,6 +68,10 @@ describe('MediaGenerationMatrixOrchestrator key helpers', () => {
     it('builds deterministic request grouping keys', () => {
         expect(buildMediaGenerationRequestGroupKey('ws-1', 'thread-1', 'request-1'))
             .toBe('ws-1:thread-1:request-1')
+    })
+
+    it('builds deterministic thread-scoped stop prefixes', () => {
+        expect(buildMediaGenerationThreadGroupPrefix('ws-1', 'thread-1')).toBe('ws-1:thread-1:')
     })
 })
 

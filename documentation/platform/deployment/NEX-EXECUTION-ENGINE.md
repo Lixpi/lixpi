@@ -128,7 +128,7 @@ Because the API runs in the `AUTH` account and NATS subjects are account-scoped,
 
 ## Local development
 
-`docker compose --profile main up` starts the three NATS nodes and then `lixpi-nex-1`. The node connects over plain `nats://lixpi-nats-*:4222` — the client port is not TLS locally. Watch it with:
+`docker compose --profile main up` starts the three NATS nodes and then `lixpi-nex-1` (assumes `.env` is symlinked via `./set-env.sh` at the repo root — see `services/nex/README.md`). The node connects over plain `nats://lixpi-nats-*:4222` — the client port is not TLS locally. Watch it with:
 
 ```bash
 docker logs -f lixpi-nex-1     # node registration + "✅ ai-models sync done"

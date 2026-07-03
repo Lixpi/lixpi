@@ -5,9 +5,11 @@
     "type": "module",
     "main": "src/nats-auth-callout-service.ts",
     "scripts": {
+        "test:run": "vitest run"
     },
     "devDependencies": {
-        "@types/jsonwebtoken": "*"
+        "@types/jsonwebtoken": "*",
+        "vitest": "*"
     },
     "dependencies": {
         "@lixpi/auth-service": "workspace:*",

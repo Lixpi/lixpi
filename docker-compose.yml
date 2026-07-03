@@ -1,3 +1,6 @@
+include:
+    - docker-compose.typescript-test-runner.yml
+
 services:
 
     lixpi-dynamodb:
@@ -303,8 +306,6 @@ services:
             - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
             - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:ro,cached
             - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:ro,cached
-            - ./packages/lixpi/ssm-service/package.json:/usr/src/service/packages/lixpi/ssm-service/package.json:ro,cached
-            - ./packages/lixpi/ssm-service/src:/usr/src/service/packages/lixpi/ssm-service/src:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
 
@@ -508,14 +509,6 @@ services:
             - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
             - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:ro,cached
             - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:ro,cached
-            - ./packages/lixpi/lambda-service/package.json:/usr/src/service/packages/lixpi/lambda-service/package.json:ro,cached
-            - ./packages/lixpi/lambda-service/src:/usr/src/service/packages/lixpi/lambda-service/src:ro,cached
-            - ./packages/lixpi/sqs-service/package.json:/usr/src/service/packages/lixpi/sqs-service/package.json:ro,cached
-            - ./packages/lixpi/sqs-service/src:/usr/src/service/packages/lixpi/sqs-service/src:ro,cached
-            - ./packages/lixpi/ssm-service/package.json:/usr/src/service/packages/lixpi/ssm-service/package.json:ro,cached
-            - ./packages/lixpi/ssm-service/src:/usr/src/service/packages/lixpi/ssm-service/src:ro,cached
-            - ./packages/lixpi/sns-service/package.json:/usr/src/service/packages/lixpi/sns-service/package.json:ro,cached
-            - ./packages/lixpi/sns-service/src:/usr/src/service/packages/lixpi/sns-service/src:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
             - ./packages/lixpi/nats-auth-callout-service/package.json:/usr/src/service/packages/lixpi/nats-auth-callout-service/package.json:ro,cached

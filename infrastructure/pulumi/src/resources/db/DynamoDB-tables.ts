@@ -572,10 +572,6 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
 
         financialTransactionsTable,
 
-        // Optional bindings preserved for consumers; undefined in this module
-        stripeBillingHandlerLambda: undefined,
-        subscriptionBalanceUpdatesSNSTopic: undefined,
-
         outputs,
     }
 }

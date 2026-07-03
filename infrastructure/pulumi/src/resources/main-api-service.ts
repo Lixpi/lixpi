@@ -43,15 +43,6 @@ export type MainApiServiceArgs = {
         tables?: {
             [key: string]: aws.dynamodb.Table
         }
-        functions?: {
-            [key: string]: aws.lambda.Function
-        }
-        topics?: {
-            [key: string]: aws.sns.Topic
-        }
-        queues?: {
-            [key: string]: aws.sqs.Queue
-        }
     }
 
     // App configuration
@@ -192,68 +183,6 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
             policyArn: tablePolicy.arn,
         })
     })
-
-    // // Allow containers to access bound SQS queues
-    // resourceBindings.queues && Object.values(resourceBindings.queues).forEach((queue, i) => {
-    //     const sqsPolicy = new aws.iam.Policy(`${formattedServiceName}-sqs-policy-${i}`, {
-    //         policy: queue.arn.apply(arn => JSON.stringify({
-    //             Version: '2012-10-17',
-    //             Statement: [{
-    //                 Effect: 'Allow',
-    //                 Action: [
-    //                     'sqs:ReceiveMessage',
-    //                     'sqs:DeleteMessage',
-    //                     'sqs:GetQueueAttributes',
-    //                     'sqs:ChangeMessageVisibility',
-    //                 ],
-    //                 Resource: arn,
-    //             }],
-    //         })),
-    //     })
-
-    //     new aws.iam.RolePolicyAttachment(`${formattedServiceName}-sqs-attachment-${i}`, {
-    //         role: taskRole.name,
-    //         policyArn: sqsPolicy.arn,
-    //     })
-    // })
-
-    // // Allow containers to access SNS topics
-    // resourceBindings.topics && Object.values(resourceBindings.topics).forEach((topic, i) => {
-    //     const snsPolicy = new aws.iam.Policy(`${formattedServiceName}-sns-policy-${i}`, {
-    //         policy: topic.arn.apply(arn => JSON.stringify({
-    //             Version: '2012-10-17',
-    //             Statement: [{
-    //                 Effect: 'Allow',
-    //                 Action: ['sns:Publish'],
-    //                 Resource: arn,
-    //             }],
-    //         })),
-    //     })
-
-    //     new aws.iam.RolePolicyAttachment(`${formattedServiceName}-sns-attachment-${i}`, {
-    //         role: taskRole.name,
-    //         policyArn: snsPolicy.arn,
-    //     })
-    // })
-
-    // // Allow containers to invoke Lambda functions
-    // resourceBindings.functions && Object.values(resourceBindings.functions).forEach((func, i) => {
-    //     const lambdaPolicy = new aws.iam.Policy(`${formattedServiceName}-lambda-policy-${i}`, {
-    //         policy: func.arn.apply(arn => JSON.stringify({
-    //             Version: '2012-10-17',
-    //             Statement: [{
-    //                 Effect: 'Allow',
-    //                 Action: ['lambda:InvokeFunction'],
-    //                 Resource: arn,
-    //             }],
-    //         })),
-    //     })
-
-    //     new aws.iam.RolePolicyAttachment(`${formattedServiceName}-lambda-attachment-${i}`, {
-    //         role: taskRole.name,
-    //         policyArn: lambdaPolicy.arn,
-    //     })
-    // })
 
     // Allow containers to access SSM parameters
     const ssmPolicy = new aws.iam.Policy(`${formattedServiceName}-ssm-policy`, {

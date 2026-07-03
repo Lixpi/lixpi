@@ -30,6 +30,7 @@ vi.mock('$src/stores/authStore.ts', () => ({
 import authService from '$src/services/auth0-service.ts'
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null
+let consoleLogSpy: ReturnType<typeof vi.spyOn> | null = null
 
 // =============================================================================
 // Auth0Service.getTokenSilently — cache mode forwarding + error fallback
@@ -45,6 +46,7 @@ describe('Auth0Service — getTokenSilently', () => {
         handleRedirectCallbackMock.mockReset()
         getUserMock.mockReset()
         consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+        consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined)
 
         // Wire up the underlying (mocked) Auth0 client on the singleton.
         await authService.init()
@@ -53,6 +55,8 @@ describe('Auth0Service — getTokenSilently', () => {
     afterEach(() => {
         consoleErrorSpy?.mockRestore()
         consoleErrorSpy = null
+        consoleLogSpy?.mockRestore()
+        consoleLogSpy = null
     })
 
     it('uses the cache by default (no cacheMode override)', async () => {

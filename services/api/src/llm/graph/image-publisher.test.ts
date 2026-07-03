@@ -378,6 +378,64 @@ describe('ImagePublisher', () => {
         expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.IMAGE_COMPLETE)
     })
 
+    it('attempts canvas projection during completion even when generationRun requestKind is media-generation-matrix', async () => {
+        const generationRun = {
+            requestKind: 'media-generation-matrix',
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            mediaRunId: 'media-1',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'Google:gemini-2.5-flash-image',
+            mediaType: 'image',
+            reasoningIndex: 0,
+            mediaIndex: 0,
+            variantIndex: 0,
+        } as const
+        const published: Published[] = []
+        const nats = {
+            publish: (subject: string, payload: any) => {
+                published.push({ subject, payload })
+            },
+        } as any
+        const storeImage = vi.fn(async (input: any) => ({
+            fileId: 'file-1',
+            url: '/api/images/ws-1/file-1',
+            isDuplicate: false,
+            size: input.buffer.length,
+            mimeType: input.mimeType,
+        }))
+        const publisher = new ImagePublisher(
+            nats,
+            storeImage,
+            'ws-1',
+            'thread-1',
+            'Google',
+            generationRun,
+        )
+        const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
+
+        await publisher.complete({
+            imageBase64: pngBase64,
+            responseId: 'resp-1',
+            revisedPrompt: 'draw it clearly',
+            imageModelId: 'gemini-2.5-flash-image',
+        })
+
+        expect(projectionMocks.upsertGeneratedImageToCanvas).toHaveBeenCalledWith(expect.objectContaining({
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/ws-1/file-1',
+            fileId: 'file-1',
+            responseId: 'resp-1',
+            revisedPrompt: 'draw it clearly',
+            aiProvider: 'Google',
+            imageModelProvider: 'Google',
+            imageModelId: 'gemini-2.5-flash-image',
+            generationRun,
+        }))
+        expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.IMAGE_COMPLETE)
+    })
+
     it('routes image events through onPipelineContent when durable pipeline publishing is supplied', async () => {
         const published: Published[] = []
         const nats = {

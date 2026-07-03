@@ -180,9 +180,10 @@ vi.mock('@lixpi/dynamodb-service', () => ({
     default: mocks.DynamoDBService,
 }))
 
-vi.mock('@lixpi/ssm-service', () => ({
-    default: class {},
-}))
+// @lixpi/ssm-service package removed — commented out pending re-enable
+// vi.mock('@lixpi/ssm-service', () => ({
+//     default: class {},
+// }))
 
 vi.mock('@lixpi/nats-service', () => ({
     default: {

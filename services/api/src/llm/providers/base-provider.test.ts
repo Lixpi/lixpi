@@ -8,6 +8,7 @@ import * as debugTools from '@lixpi/debug-tools'
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
 import type { AiModelMetaInfo, ProviderState } from '../graph/state.ts'
+import { validateImagePrompt } from '../tools/image-generation.ts'
 
 type Published = { subject: string, payload: any }
 
@@ -275,6 +276,68 @@ describe('BaseProvider routing', () => {
         expect((provider as any).routeAfterStream({ generatedImagePrompt: 'paint' } as any)).toBe('generate_image')
         expect((provider as any).routeAfterStream({} as any)).toBe('skip')
     })
+
+    it('emits MEDIA_GENERATION_SKIPPED when lineage is planned but no media prompt was generated', () => {
+        const nats = makeFakeNats()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        })
+        ;(provider as any).streamPublisher = new StreamPublisher(
+            nats.fake,
+            'ws-1',
+            'thread-1',
+            'Anthropic',
+        )
+        const skippedSpy = vi.spyOn((provider as any).streamPublisher, 'mediaGenerationSkipped')
+
+        expect((provider as any).routeAfterStream({
+            mediaBranchLineagePlan: { generationRequestId: 'request-matrix-1' },
+        } as any)).toBe('skip')
+
+        expect(skippedSpy).toHaveBeenCalledTimes(1)
+        expect(skippedSpy).toHaveBeenCalledWith('request-matrix-1')
+    })
+
+    it('does not emit MEDIA_GENERATION_SKIPPED when no lineage plan is available', () => {
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        })
+
+        expect((provider as any).routeAfterStream({} as any)).toBe('skip')
+        expect((provider as any).streamPublisher).toBeUndefined()
+    })
+
+    it('does not call MEDIA_GENERATION_SKIPPED when lineage is not available', () => {
+        const nats = makeFakeNats()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        })
+        ;(provider as any).streamPublisher = new StreamPublisher(
+            nats.fake,
+            'ws-1',
+            'thread-1',
+            'Anthropic',
+        )
+        const skippedSpy = vi.spyOn((provider as any).streamPublisher, 'mediaGenerationSkipped')
+
+        expect((provider as any).routeAfterStream({} as any)).toBe('skip')
+        expect(skippedSpy).not.toHaveBeenCalled()
+    })
 })
 
 describe('BaseProvider fanout', () => {
@@ -461,6 +524,187 @@ describe('BaseProvider fanout', () => {
         expect(result).toEqual({ generatedVideos: ['only-video', 'only-video'] })
         expect((deps.runVideoRouter as any)).toHaveBeenCalledTimes(2)
         expect((deps.runImageRouter as any)).not.toHaveBeenCalled()
+    })
+})
+
+describe('BaseProvider image fanout prompt validation', () => {
+    class FanoutRewriteProvider extends TestProvider {
+        readonly providerName = 'Anthropic' as const
+
+        constructor(instanceKey: string, deps: BaseProviderDeps, private readonly rewrittenImage: string | undefined) {
+            super(instanceKey, deps)
+        }
+
+        protected override async rewriteImagePromptToFitLimit(
+            _state: ProviderState,
+            prompt: string,
+            maxChars: number,
+        ): Promise<string | undefined> {
+            if (this.rewrittenImage !== undefined) {
+                return this.rewrittenImage
+            }
+            return `${prompt.slice(0, maxChars)}`
+        }
+    }
+
+    it('uses a successful rewritten prompt when a fanout prompt exceeds limits', async () => {
+        const nats = makeFakeNats()
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(async () => ({ generatedImages: ['ok'] })),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps
+        const provider = new FanoutRewriteProvider('ws1:thread1', deps, 'short')
+
+        const state = createFanoutState({
+            generatedImagePrompt: 'this prompt is intentionally and clearly too long for this model',
+            imageModelMetaInfo: {
+                provider: 'Anthropic',
+                model: 'claude-sonnet-4-6',
+                modelVersion: 'claude-sonnet-4-6',
+                imagePromptMaxChars: 5,
+            } as any,
+            imageModelVersion: 'claude-sonnet-4-6',
+            imageProviderName: 'Anthropic',
+        } as any)
+
+        const result = await (provider as any).validateImageFanoutPrompt(state)
+
+        expect(result).toEqual({ generatedImagePrompt: 'short' })
+    })
+
+    it('returns validation error when rewritten fanout prompt still violates provider constraints', async () => {
+        const nats = makeFakeNats()
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(async () => ({ generatedImages: ['ok'] })),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps
+        const provider = new FanoutRewriteProvider('ws1:thread1', deps, 'this rewritten prompt is still too long')
+
+        const state = createFanoutState({
+            generatedImagePrompt: 'this prompt is intentionally and clearly too long for this model',
+            imageModelMetaInfo: {
+                provider: 'Anthropic',
+                model: 'claude-sonnet-4-6',
+                modelVersion: 'claude-sonnet-4-6',
+                imagePromptMaxChars: 5,
+            } as any,
+            imageModelVersion: 'claude-sonnet-4-6',
+            imageProviderName: 'Anthropic',
+        } as any)
+
+        const result = await (provider as any).validateImageFanoutPrompt(state)
+        const expectedError = validateImagePrompt(
+            'this rewritten prompt is still too long',
+            state.imageModelMetaInfo,
+            state.imageProviderName,
+        )
+
+        expect(result).toEqual({ error: expectedError })
+    })
+
+    it('falls back to the original validation error if rewrite throws', async () => {
+        class ThrowingRewriteProvider extends TestProvider {
+            readonly providerName = 'Anthropic' as const
+
+            protected override async rewriteImagePromptToFitLimit(
+                _state: ProviderState,
+                _prompt: string,
+                _maxChars: number,
+            ): Promise<string | undefined> {
+                throw new Error('rewrite service unavailable')
+            }
+        }
+
+        const nats = makeFakeNats()
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(async () => ({ generatedImages: ['ok'] })),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps
+        const provider = new ThrowingRewriteProvider('ws1:thread1', deps)
+
+        const state = createFanoutState({
+            generatedImagePrompt: 'this prompt is intentionally and clearly too long for this model',
+            imageModelMetaInfo: {
+                provider: 'Anthropic',
+                model: 'claude-sonnet-4-6',
+                modelVersion: 'claude-sonnet-4-6',
+                imagePromptMaxChars: 5,
+            } as any,
+            imageModelVersion: 'claude-sonnet-4-6',
+            imageProviderName: 'Anthropic',
+        } as any)
+
+        const result = await (provider as any).validateImageFanoutPrompt(state)
+        const expectedError = validateImagePrompt(
+            'this prompt is intentionally and clearly too long for this model',
+            state.imageModelMetaInfo,
+            state.imageProviderName,
+        )
+
+        expect(result).toEqual({
+            error: expectedError,
+        })
+        expect(debugWarnSpy).toHaveBeenCalledWith(
+            '[BaseProvider] Image fanout prompt rewrite failed for ws1:thread1: rewrite service unavailable',
+        )
+    })
+
+    it('falls back to the original validation error when rewrite returns undefined', async () => {
+        class MissingRewriteProvider extends TestProvider {
+            readonly providerName = 'Anthropic' as const
+
+            protected override async rewriteImagePromptToFitLimit(
+                _state: ProviderState,
+                _prompt: string,
+                _maxChars: number,
+            ): Promise<string | undefined> {
+                return undefined
+            }
+        }
+
+        const nats = makeFakeNats()
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(async () => ({ generatedImages: ['ok'] })),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps
+        const provider = new MissingRewriteProvider('ws1:thread1', deps)
+
+        const state = createFanoutState({
+            generatedImagePrompt: 'this prompt is intentionally and clearly too long for this model',
+            imageModelMetaInfo: {
+                provider: 'Anthropic',
+                model: 'claude-sonnet-4-6',
+                modelVersion: 'claude-sonnet-4-6',
+                imagePromptMaxChars: 5,
+            } as any,
+            imageModelVersion: 'claude-sonnet-4-6',
+            imageProviderName: 'Anthropic',
+        } as any)
+
+        const result = await (provider as any).validateImageFanoutPrompt(state)
+        const expectedError = validateImagePrompt(
+            'this prompt is intentionally and clearly too long for this model',
+            state.imageModelMetaInfo,
+            state.imageProviderName,
+        )
+
+        expect(result).toEqual({ error: expectedError })
     })
 })
 

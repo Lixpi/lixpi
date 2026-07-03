@@ -298,20 +298,6 @@ export const createInfrastructure = async () => {
                 documentsAccessListTable: dynamoDBtables.documentsAccessListTable,
                 aiModelsListTable: dynamoDBtables.aiModelsListTable,
             },
-            functions: (() => {
-                const f: any = {};
-                if (dynamoDBtables?.stripeBillingHandlerLambda) {
-                    f.stripeBillingHandlerLambda = dynamoDBtables.stripeBillingHandlerLambda;
-                }
-                return f;
-            })(),
-            topics: (() => {
-                const t: any = {};
-                if (dynamoDBtables?.subscriptionBalanceUpdatesSNSTopic) {
-                    t.subscriptionBalanceUpdatesTopic = dynamoDBtables.subscriptionBalanceUpdatesSNSTopic;
-                }
-                return t;
-            })(),
         },
         environment: {
             NODE_OPTIONS: NODE_OPTIONS!,

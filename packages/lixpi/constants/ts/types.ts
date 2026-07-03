@@ -1862,28 +1862,6 @@ export type TokensUsageEvent = {
     }
 }
 
-export type SNS_OutputMessage = {
-    TopicArn: string
-    Message: any
-    MessageAttributes?: {
-        [key: string]: {
-            DataType: 'String' | 'String.Array' | 'Number' | 'Binary'
-            Value?: string | Uint8Array
-        }
-    }
-}
-
-export type SQS_OutputMessage = {
-    TopicArn: string
-    Message: any
-    messageAttributes?: {
-        [key: string]: {
-            dataType: 'String' | `String.${string}` | 'Number' | `Number.${string}` | 'Binary' | `Binary.${string}`;
-            stringValue?: string;
-            binaryValue?: Uint8Array;
-        }
-    }
-}
 
 export type FinancialTransaction = {
     userId: string

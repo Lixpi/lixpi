@@ -8,16 +8,11 @@ import chalk from 'chalk'
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 import DynamoDBService from '@lixpi/dynamodb-service'
-import SSMService from '@lixpi/ssm-service'
 import NATS_Service from '@lixpi/nats-service'
 import { startNatsAuthCalloutService } from '@lixpi/nats-auth-callout-service'
 import type { ServiceAuthConfig } from '@lixpi/auth-service'
 
 import { createServer } from 'http'
-
-// SQS pollers imports ******************************************
-// import SqsPollingService from './SQS-pollers/polling-service.ts'
-// import { userSubscriptionSqsPollers } from './SQS-pollers/polling-handlers/user-subscription.ts'
 
 import { jwtAuthMiddleware } from './NATS/middleware/nats-auth-middleware.ts'
 import { userSubjects } from './NATS/subscriptions/user-subjects.ts'
@@ -63,41 +58,7 @@ global.dynamoDBService = new DynamoDBService({
     ...(env.DYNAMODB_ENDPOINT && { endpoint: env.DYNAMODB_ENDPOINT }),    // For local development only
 })
 
-//Set the global SSM service instance to be used across the application for parameter store operations
-// const ssmService = new SSMService({
-//     region: env.AWS_REGION,
-//     ssoProfile: env.AWS_PROFILE,
-//     prefix: `/sst/${env.ORG_NAME}/${env.STAGE}/`
-// })
 
-// Fetch and set the global SSM parameters to be used across the application
-// global.ssmParams = {
-//     // // Queues ******************************************
-//     // UserSubscriptionEventsQueue: await ssmService.getParameter({
-//     //     parameterName: 'Queue/User_Subscription_Events/queueUrl',
-//     //     withDecryption: true,
-//     //     origin: 'server:start::getSsmParams'
-//     // }),
-//     // // SNS Topics **************************************
-//     // AiTokensUsageSnsTopic: await ssmService.getParameter({
-//     //     parameterName: 'Parameter/AI_TOKENS_USAGE_TOPIC_ARN/value',
-//     //     withDecryption: true,
-//     //     origin: 'server:start::getSsmParams'
-//     // }),
-//     // // Lambdas *****************************************
-//     // StripeBillingHandlerLambda: await ssmService.getParameter({
-//     //     parameterName: 'Function/Stripe_Billing_Handler/functionName',
-//     //     withDecryption: true,
-//     //     origin: 'server:start::getSsmParams'
-//     // }),
-
-// }
-
-// // Start the SQS polling service
-// const sqsPollingService = new SqsPollingService([
-//     ...userSubscriptionSqsPollers(ssmParams)
-// ])
-// sqsPollingService.startPolling()
 
 // AI models synchronization runs hourly on the NATS NEX execution-engine node
 // (services/nex). The API reads the AI_MODELS_LIST table live (model::AiModel
