@@ -211,7 +211,7 @@ After the text model finishes, each provider extracts the tool call from its own
 | Provider | Where the call lives | What it matches |
 |----------|----------------------|-----------------|
 | OpenAI | `response.output[*]` | `type: 'function_call'`, `name: 'generate_image'` / `'generate_video'` |
-| Anthropic | `finalMessage.content[*]` | `type: 'tool_use'`, `name: 'generate_image'` / `'generate_video'` |
+| Anthropic | Streamed `input_json_delta` plus `finalMessage.content[*]` | `type: 'tool_use'`, `name: 'generate_image'` / `'generate_video'`; prompt deltas are mirrored into the generated-prompt collapsible while the final tool call remains the authoritative extracted value |
 | Google | `response.candidates[*].content.parts[*]` | `functionCall` with `name: 'generate_image'` / `'generate_video'` |
 
 ### Reference Image Extraction (Image)

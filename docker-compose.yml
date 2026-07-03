@@ -409,13 +409,13 @@ services:
         stop_signal: SIGTERM
         ports:
             - 3001:5173
-        depends_on:
-            lixpi-api:
-                condition: service_healthy
-                restart: true
-            lixpi-nex-1:
-                condition: service_healthy
-                restart: true
+        # depends_on:
+        #     lixpi-api:
+        #         condition: service_healthy
+        #         restart: true
+        #     lixpi-nex-1:
+        #         condition: service_healthy
+        #         restart: true
 
     lixpi-api:
         container_name: lixpi-api
@@ -495,6 +495,8 @@ services:
 
             - ./packages/lixpi/auth-service/package.json:/usr/src/service/packages/lixpi/auth-service/package.json:ro,cached
             - ./packages/lixpi/auth-service/src:/usr/src/service/packages/lixpi/auth-service/src:ro,cached
+            - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/packages/lixpi/canvas-engine/package.json:ro,cached
+            - ./packages/lixpi/canvas-engine/src:/usr/src/service/packages/lixpi/canvas-engine/src:ro,cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached

@@ -1682,9 +1682,41 @@
 // getBranchMarkerScreenFixedDimensions) and truncates rather than wrapping; once
 // it lands on the canvas the pill regains its taller, larger on-canvas proportions.
 .workspace-branch-marker-screen-fixed {
+    .workspace-branch-marker-content {
+        gap: 6px;
+        padding: 7px 14px;
+    }
+
+    .workspace-branch-marker-spinner {
+        flex-basis: 12px;
+        width: 12px;
+        height: 12px;
+        border-width: 1.8px;
+    }
+
+    .workspace-branch-marker-main {
+        gap: 0;
+    }
+
+    .workspace-branch-marker-message {
+        gap: 6px;
+        min-height: 1.12em;
+        padding: 0;
+    }
+
     .workspace-branch-marker-message-text {
         white-space: nowrap;
         -webkit-line-clamp: 1;
+    }
+
+    .workspace-branch-marker-separator {
+        margin: 3px auto;
+    }
+
+    .workspace-branch-marker-response {
+        gap: 5px;
+        min-height: 1.12em;
+        padding: 0;
     }
 }
 

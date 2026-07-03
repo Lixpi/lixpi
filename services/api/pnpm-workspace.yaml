@@ -1,5 +1,6 @@
 packages:
   - "packages/lixpi/auth-service"
+  - "packages/lixpi/canvas-engine"
   - "packages/lixpi/constants/ts"
   - "packages/lixpi/debug-tools/ts"
   - "packages/lixpi/dynamodb-service"

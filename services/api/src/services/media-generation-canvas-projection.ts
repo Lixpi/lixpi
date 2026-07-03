@@ -1,6 +1,11 @@
 'use strict'
 
 import {
+    resolveRigidCanvasNodeGroupCollisions,
+    type CanvasEngineRect,
+    type RigidCanvasNodeGroup,
+} from '@lixpi/canvas-engine'
+import {
     type AiModelId,
     type BranchForkCanvasNode,
     type BranchForkLineagePlan,
@@ -77,6 +82,8 @@ type UpsertVideoInput = {
 }
 
 type MarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
+type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
+type LineageCollisionNode = MarkerNode | GeneratedMediaNode
 type GeneratedByLineageMetadata = Partial<ImageGeneratedByMetadata & VideoGeneratedByMetadata>
 type BranchMarkerSiblingSlot = {
     index: number
@@ -218,6 +225,193 @@ function positionBranchMarkerBeforeGeneratedMedia(
 
 function findNode(nodes: CanvasNode[], nodeId: string | undefined): CanvasNode | undefined {
     return nodeId ? nodes.find(node => node.nodeId === nodeId) : undefined
+}
+
+function buildNodesById(nodes: CanvasNode[]): Map<string, CanvasNode> {
+    return new Map(nodes.map(node => [node.nodeId, node]))
+}
+
+function isTopLevelNode(node: CanvasNode): boolean {
+    return !node.parentId
+}
+
+function isMarkerNode(node: CanvasNode): node is MarkerNode {
+    return node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
+}
+
+function isGeneratedMediaLineageNode(node: CanvasNode): node is GeneratedMediaNode {
+    return (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy?.branchId)
+}
+
+function isLineageCollisionNode(node: CanvasNode): node is LineageCollisionNode {
+    return isTopLevelNode(node) && (isMarkerNode(node) || isGeneratedMediaLineageNode(node))
+}
+
+function getLineageCollisionLinks(node: LineageCollisionNode): Array<string | undefined> {
+    if (node.type === 'branchFork' || node.type === 'branchLine') return [node.parentBranchNodeId]
+    if (node.type === 'branchOrigin') return []
+
+    return [
+        node.generatedBy?.parentMediaNodeId,
+        node.generatedBy?.parentImageNodeId,
+        node.generatedBy?.branchOriginNodeId,
+        node.generatedBy?.branchForkNodeId,
+        node.generatedBy?.branchLineNodeId,
+    ]
+}
+
+function getSetRoot(parentById: Map<string, string>, nodeId: string): string {
+    const parentId = parentById.get(nodeId)
+    if (!parentId || parentId === nodeId) return nodeId
+
+    const rootId = getSetRoot(parentById, parentId)
+    parentById.set(nodeId, rootId)
+    return rootId
+}
+
+function unionSets(parentById: Map<string, string>, a: string, b: string): void {
+    const rootA = getSetRoot(parentById, a)
+    const rootB = getSetRoot(parentById, b)
+    if (rootA === rootB) return
+    parentById.set(rootB, rootA)
+}
+
+function getNodeRect(node: CanvasNode): CanvasEngineRect {
+    return {
+        x: getFiniteNumber(node.position.x, 0),
+        y: getFiniteNumber(node.position.y, 0),
+        width: Math.max(0, getFiniteNumber(node.dimensions.width, 0)),
+        height: Math.max(0, getFiniteNumber(node.dimensions.height, 0)),
+    }
+}
+
+function getGroupRect(nodeIds: string[], nodesById: Map<string, CanvasNode>): CanvasEngineRect | undefined {
+    let minX = Number.POSITIVE_INFINITY
+    let minY = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+
+    for (const nodeId of nodeIds) {
+        const node = nodesById.get(nodeId)
+        if (!node) continue
+
+        const rect = getNodeRect(node)
+        minX = Math.min(minX, rect.x)
+        minY = Math.min(minY, rect.y)
+        maxX = Math.max(maxX, rect.x + rect.width)
+        maxY = Math.max(maxY, rect.y + rect.height)
+    }
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+        return undefined
+    }
+
+    return {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+    }
+}
+
+function getSortedGroupNodeIds(nodeIds: string[], nodesById: Map<string, CanvasNode>): string[] {
+    return [...nodeIds].sort((a, b) => {
+        const nodeA = nodesById.get(a)
+        const nodeB = nodesById.get(b)
+        const yDelta = getFiniteNumber(nodeA?.position.y, 0) - getFiniteNumber(nodeB?.position.y, 0)
+        if (yDelta !== 0) return yDelta
+        const xDelta = getFiniteNumber(nodeA?.position.x, 0) - getFiniteNumber(nodeB?.position.x, 0)
+        if (xDelta !== 0) return xDelta
+        return a.localeCompare(b)
+    })
+}
+
+function buildCanvasProjectionCollisionGroups(state: CanvasState): RigidCanvasNodeGroup[] {
+    const nodesById = buildNodesById(state.nodes)
+    const lineageNodes = state.nodes.filter(isLineageCollisionNode)
+    const lineageNodeIds = new Set(lineageNodes.map(node => node.nodeId))
+    const parentById = new Map<string, string>()
+    for (const nodeId of lineageNodeIds) parentById.set(nodeId, nodeId)
+
+    for (const node of lineageNodes) {
+        for (const linkedNodeId of getLineageCollisionLinks(node)) {
+            if (linkedNodeId && lineageNodeIds.has(linkedNodeId)) {
+                unionSets(parentById, node.nodeId, linkedNodeId)
+            }
+        }
+    }
+
+    for (const edge of state.edges ?? []) {
+        if (!lineageNodeIds.has(edge.sourceNodeId) || !lineageNodeIds.has(edge.targetNodeId)) continue
+        unionSets(parentById, edge.sourceNodeId, edge.targetNodeId)
+    }
+
+    const lineageGroupsByRoot = new Map<string, string[]>()
+    for (const nodeId of lineageNodeIds) {
+        const rootId = getSetRoot(parentById, nodeId)
+        const group = lineageGroupsByRoot.get(rootId) ?? []
+        group.push(nodeId)
+        lineageGroupsByRoot.set(rootId, group)
+    }
+
+    const groups: RigidCanvasNodeGroup[] = []
+    const groupedNodeIds = new Set<string>()
+    for (const nodeIds of lineageGroupsByRoot.values()) {
+        const sortedNodeIds = getSortedGroupNodeIds(nodeIds, nodesById)
+        const rect = getGroupRect(sortedNodeIds, nodesById)
+        if (!rect) continue
+
+        for (const nodeId of sortedNodeIds) groupedNodeIds.add(nodeId)
+        groups.push({
+            id: `lineage:${sortedNodeIds[0]}`,
+            nodeIds: sortedNodeIds,
+            rect,
+            margin: canvasProjectionSettings.nodeGap,
+            overlapThreshold: 0,
+        })
+    }
+
+    for (const node of state.nodes) {
+        if (!isTopLevelNode(node) || groupedNodeIds.has(node.nodeId)) continue
+        groups.push({
+            id: `node:${node.nodeId}`,
+            nodeIds: [node.nodeId],
+            rect: getNodeRect(node),
+            margin: 20,
+            overlapThreshold: 0.5,
+        })
+    }
+
+    return groups
+}
+
+function resolveCanvasProjectionCollisions(
+    state: CanvasState,
+    context: string,
+): { state: CanvasState; changed: boolean } {
+    const groups = buildCanvasProjectionCollisionGroups(state)
+    const collisionResult = resolveRigidCanvasNodeGroupCollisions(state.nodes, groups, {
+        iterations: 50,
+        margin: 20,
+        overlapThreshold: 0.5,
+    })
+    if (!collisionResult.changed) return { state, changed: false }
+
+    console.info('[media-generation-canvas-projection] resolved canvas collisions', {
+        context,
+        groupCount: groups.length,
+        movedGroupCount: collisionResult.movedGroupCount,
+        movedNodeCount: collisionResult.movedNodeCount,
+        collisionIterations: collisionResult.collisionIterations,
+    })
+
+    return {
+        state: {
+            ...state,
+            nodes: collisionResult.nodes,
+        },
+        changed: true,
+    }
 }
 
 function getGeneratedMediaPosition(
@@ -579,9 +773,10 @@ export async function upsertMediaLineagePlanToCanvas(params: {
         mutate: (canvasState) => {
             const markers = markerNodesFromLineagePlan(params.lineagePlan, params.aiChatThreadId, canvasState, params.canvasVisibleArea)
             const markerResult = ensureMarkers(canvasState, markers)
+            const collisionResult = resolveCanvasProjectionCollisions(markerResult.state, 'upsertMediaLineagePlanToCanvas')
             return {
-                canvasState: markerResult.state,
-                changed: markerResult.changed,
+                canvasState: collisionResult.state,
+                changed: markerResult.changed || collisionResult.changed,
             }
         },
     })
@@ -627,9 +822,10 @@ export async function upsertGeneratedImageToCanvas(params: UpsertImageInput): Pr
             nextState = { ...nextState, nodes: nodeResult.nodes }
             const edgeResult = addGeneratedMediaEdge(nextState, lineageParentNodeId, nodeId)
             nextState = edgeResult.state
+            const collisionResult = resolveCanvasProjectionCollisions(nextState, 'upsertGeneratedImageToCanvas')
             return {
-                canvasState: nextState,
-                changed: markerResult.changed || nodeResult.changed || edgeResult.changed,
+                canvasState: collisionResult.state,
+                changed: markerResult.changed || nodeResult.changed || edgeResult.changed || collisionResult.changed,
             }
         },
     })
@@ -683,9 +879,10 @@ export async function upsertGeneratedVideoToCanvas(params: UpsertVideoInput): Pr
             nextState = { ...nextState, nodes: nodeResult.nodes }
             const edgeResult = addGeneratedMediaEdge(nextState, lineageParentNodeId, nodeId)
             nextState = edgeResult.state
+            const collisionResult = resolveCanvasProjectionCollisions(nextState, 'upsertGeneratedVideoToCanvas')
             return {
-                canvasState: nextState,
-                changed: markerResult.changed || nodeResult.changed || edgeResult.changed,
+                canvasState: collisionResult.state,
+                changed: markerResult.changed || nodeResult.changed || edgeResult.changed || collisionResult.changed,
             }
         },
     })
