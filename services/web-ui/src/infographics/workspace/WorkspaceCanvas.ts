@@ -8255,7 +8255,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         setGeneratingReferenceNodeIds(getGeneratedMediaPlacementKey(threadId, generationRun), lineagePlan.referenceNodeIds)
         insertPendingBranchMarkersFromLineagePlan(threadId, lineagePlan, generationRun)
         syncPendingBranchMarkerScreenPlacements()
+        resolvePendingBranchMarkersForLineagePlan(threadId, lineagePlan, generationRun)
         cleanupOrphanPreflightMarkersForThread(threadId)
+    }
+
+    function resolvePendingBranchMarkersForLineagePlan(
+        threadId: string,
+        lineagePlan: MediaBranchLineagePlan,
+        sourceGenerationRun?: MediaGenerationRunMeta,
+    ): void {
+        const assignments = getUniqueLineageAssignmentsForMarkers(lineagePlan)
+        if (assignments.length === 0) {
+            resolvePendingBranchMarkerWithLineagePlan(threadId, sourceGenerationRun)
+            return
+        }
+
+        for (const assignment of assignments) {
+            resolvePendingBranchMarkerWithLineagePlan(
+                threadId,
+                buildGenerationRunFromLineageAssignment(lineagePlan, assignment, sourceGenerationRun),
+            )
+        }
     }
 
     // After the API lineage plan is applied, every surviving preflight pill must
@@ -9132,7 +9152,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return {
             userText,
             responseText: collectProseMirrorText(responseContainer, {
-                excludedNodeTypes: ['aiGeneratedImage', 'aiGeneratedVideo', 'aiLineageEvent'],
+                excludedNodeTypes: ['aiGeneratedImage', 'aiGeneratedVideo', 'aiLineageEvent', 'aiCollapsibleBlock'],
             }).trim(),
             phase,
             isReceiving: streamIsReceiving || isBranchMarkerGenerationActive(node),
