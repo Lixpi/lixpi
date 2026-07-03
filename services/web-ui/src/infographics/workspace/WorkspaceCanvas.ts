@@ -6701,6 +6701,56 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const pendingGeneratedImagePlacements = new Map<string, PendingGeneratedImagePlacement>()
     const pendingBranchMarkers = new Map<string, PendingBranchMarkerRecord>()
 
+    // Explicit branch-marker UI phase, driven by media pipeline events instead of
+    // ProseMirror receiving flags. ProseMirror's isReceivingAnimation stays true for
+    // the whole media workflow, so it cannot distinguish "visible assistant text is
+    // streaming" from "text is done but the media placeholder has not appeared yet".
+    // Keyed by marker nodeId so the phase survives incoming workspace-state
+    // replacements that drop the marker's transient pendingState.
+    type BranchMarkerUiPhase = 'preflight' | 'planned-awaiting-media' | 'media-placeholder'
+    const branchMarkerUiPhaseByNodeId = new Map<string, BranchMarkerUiPhase>()
+
+    function getBranchMarkerUiPhase(node: BranchMarkerNode): BranchMarkerUiPhase | undefined {
+        const trackedPhase = branchMarkerUiPhaseByNodeId.get(node.nodeId)
+        if (trackedPhase) return trackedPhase
+        // Markers restored without a tracked phase (e.g. after a reload) fall back
+        // to the persisted pendingState phase.
+        if (node.pendingState?.phase === 'preflight') return 'preflight'
+        if (node.pendingState?.phase === 'planned') return 'planned-awaiting-media'
+        return undefined
+    }
+
+    function isBranchMarkerPendingForUi(node: BranchMarkerNode): boolean {
+        const uiPhase = getBranchMarkerUiPhase(node)
+        return uiPhase === 'preflight' || uiPhase === 'planned-awaiting-media'
+    }
+
+    function getBranchMarkerUiPhaseNodeIdsForRun(threadId: string, generationRun?: MediaGenerationRunMeta): string[] {
+        const nodeIds = new Set<string>()
+        const record = getPendingBranchMarkerRecord(threadId, generationRun)
+        if (record) nodeIds.add(record.nodeId)
+        const assignment = getApiMediaRunLineageAssignment(generationRun)
+        for (const nodeId of [assignment?.branchOriginNodeId, assignment?.branchForkNodeId, assignment?.branchLineNodeId]) {
+            if (nodeId) nodeIds.add(nodeId)
+        }
+        return [...nodeIds]
+    }
+
+    // Overwrite-only: markers without a tracked pending phase already render as
+    // committed, so 'media-placeholder' only needs to displace an earlier pending
+    // phase once the generated-media placeholder/tracker owns the visible progress.
+    function markBranchMarkerRunMediaPlaceholderPhase(threadId: string, generationRun?: MediaGenerationRunMeta): void {
+        for (const nodeId of getBranchMarkerUiPhaseNodeIdsForRun(threadId, generationRun)) {
+            if (branchMarkerUiPhaseByNodeId.has(nodeId)) branchMarkerUiPhaseByNodeId.set(nodeId, 'media-placeholder')
+        }
+    }
+
+    function clearBranchMarkerUiPhasesForRun(threadId: string, generationRun?: MediaGenerationRunMeta): void {
+        for (const nodeId of getBranchMarkerUiPhaseNodeIdsForRun(threadId, generationRun)) {
+            branchMarkerUiPhaseByNodeId.delete(nodeId)
+        }
+    }
+
     function getGeneratedMediaPlacementKey(threadId: string, generationRun?: MediaGenerationRunMeta): string {
         return generationRun?.generationRequestId
             ? `${threadId}:${generationRun.generationRequestId}`
@@ -6956,6 +7006,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function cleanupBranchMarkerArtifacts(nodeIds: Iterable<string>): void {
         for (const nodeId of nodeIds) {
             deletePendingBranchMarkerAliasesForNodeId(nodeId)
+            branchMarkerUiPhaseByNodeId.delete(nodeId)
             destroyBranchMarkerReasoningTooltip(nodeId)
             liveNodeOverrides.delete(nodeId)
             branchMarkerProjectionOverrideNodeIds.delete(nodeId)
@@ -7287,6 +7338,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             threadId: getBranchMarkerThreadId(marker),
             generationRequestId: marker.generationRequestId,
             pendingPhase: marker.pendingState?.phase ?? '',
+            uiPhase: branchMarkerUiPhaseByNodeId.get(marker.nodeId) ?? '',
             ...details,
         })
     }
@@ -7416,6 +7468,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 pendingBranchMarkers.set(getPendingBranchMarkerReasoningIndexKey(threadId, pendingState.reasoningIndex), record)
             }
             if (pendingStates.length === 1) pendingBranchMarkers.set(threadId, record)
+            branchMarkerUiPhaseByNodeId.set(nodeId, 'preflight')
             pendingNodes.push(pendingNode)
         })
         if (pendingNodes.length === 0) return
@@ -7486,6 +7539,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 pendingBranchMarkers.set(getPendingBranchMarkerReasoningIndexKey(placementKey, pendingState.reasoningIndex), record)
             }
             if (pendingStates.length === 1) pendingBranchMarkers.set(placementKey, record)
+            branchMarkerUiPhaseByNodeId.set(nodeId, 'preflight')
             pendingNodes.push(pendingNode)
         })
         commitTransientCanvasStatePreservingEditors({
@@ -7913,6 +7967,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (removePreviousNode) cleanupBranchMarkerArtifacts([previousRecord.nodeId])
         rememberPlannedBranchMarkerRecord(threadId, generationRun, previousRecord, plannedNode.nodeId)
+        branchMarkerUiPhaseByNodeId.delete(previousRecord.nodeId)
+        branchMarkerUiPhaseByNodeId.set(plannedNode.nodeId, 'planned-awaiting-media')
         debugBranchMarkerHandoff('sync-planned-marker-resolution', plannedNode, {
             previousNodeId: previousRecord.nodeId,
             placementKey: getGeneratedMediaPlacementKey(threadId, generationRun),
@@ -8018,6 +8074,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             : edges
 
         rememberPlannedBranchMarkerRecord(threadId, generationRun, record, plannedNodeWithPending.nodeId)
+        branchMarkerUiPhaseByNodeId.delete(record.nodeId)
+        branchMarkerUiPhaseByNodeId.set(plannedNodeWithPending.nodeId, 'planned-awaiting-media')
         commitCanvasStatePreservingEditors({
             ...currentCanvasState,
             nodes,
@@ -8040,6 +8098,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function clearPendingBranchMarkerStateForRun(threadId: string, generationRun?: MediaGenerationRunMeta): void {
+        // Every caller reaches this point when the generated-media placeholder or
+        // tracker takes over the visible progress (or the run is settling, where
+        // the finish/skip handlers clear the phase immediately afterwards).
+        markBranchMarkerRunMediaPlaceholderPhase(threadId, generationRun)
         if (!currentCanvasState) return
         const record = getPendingBranchMarkerRecord(threadId, generationRun)
         if (!record) return
@@ -8076,6 +8138,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function removePendingBranchMarkerForRun(threadId: string, generationRun?: MediaGenerationRunMeta): void {
+        clearBranchMarkerUiPhasesForRun(threadId, generationRun)
         const record = getPendingBranchMarkerRecord(threadId, generationRun)
         if (!currentCanvasState) {
             if (record) cleanupBranchMarkerArtifacts([record.nodeId])
@@ -8290,6 +8353,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             pendingBranchMarkers.set(placementKey, record)
             if (spec.generationRun) setPendingBranchMarkerRecordAliases(threadId, spec.generationRun, record)
             if (pendingSpecs.length === 1) pendingBranchMarkers.set(threadId, record)
+            branchMarkerUiPhaseByNodeId.set(nodeId, 'preflight')
             pendingNodes.push(pendingNode)
         })
 
@@ -8418,6 +8482,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (!generationRun?.generationRequestId) {
             clearPendingBranchMarkerStateForRun(threadId, generationRun)
+            clearBranchMarkerUiPhasesForRun(threadId, generationRun)
             schedulePersistedAiChatThreadRefreshForBranchMarkers(threadId)
             pendingGeneratedImagePlacements.delete(placementKey)
             clearGeneratingReferenceNodeIds(placementKey)
@@ -8430,6 +8495,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (generationRun.reasoningRunId) activeRunKeys.delete(generationRun.reasoningRunId)
         if (generationRun.mediaRunId) activeRunKeys.delete(generationRun.mediaRunId)
         clearPendingBranchMarkerStateForRun(threadId, generationRun)
+        clearBranchMarkerUiPhasesForRun(threadId, generationRun)
         schedulePersistedAiChatThreadRefreshForBranchMarkers(threadId)
         if (activeRunKeys.size > 0) {
             pendingGeneratedImagePlacements.set(placementKey, {
@@ -8470,6 +8536,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         for (const placementKey of pendingBranchMarkers.keys()) {
             if (placementKey !== threadId && !placementKey.startsWith(`${threadId}:`)) continue
             pendingBranchMarkers.delete(placementKey)
+        }
+        for (const node of currentCanvasState?.nodes ?? []) {
+            if (isBranchMarkerNode(node) && getBranchMarkerThreadId(node) === threadId) {
+                branchMarkerUiPhaseByNodeId.delete(node.nodeId)
+            }
         }
     }
 
@@ -9161,7 +9232,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function isBranchMarkerGenerationActive(node: BranchMarkerNode): boolean {
-        if (node.pendingState) return true
+        if (node.pendingState || isBranchMarkerPendingForUi(node)) return true
 
         for (const placementKey of getBranchMarkerPlacementKeys(node)) {
             const placement = pendingGeneratedImagePlacements.get(placementKey)
@@ -9243,7 +9314,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         node: BranchMarkerNode,
         preview: BranchMarkerConversationPreview | null | undefined,
     ): boolean {
-        return Boolean(preview?.responseText) && (!node.pendingState || Boolean(preview?.streamIsReceiving))
+        // Once response text exists the row must never disappear: hiding it after
+        // the text stream ends and re-showing it on commit reads as lost output.
+        // While the marker is still pending the row keeps its spinner (driven by
+        // isBranchMarkerGenerationActive), so the gap between the end of visible
+        // text and the generated-media placeholder still shows live progress
+        // instead of a completed-looking marker.
+        return Boolean(preview?.responseText)
     }
 
     function resizeBranchMarkerNodeFromProseMirror(node: BranchMarkerNode): BranchMarkerNode {
@@ -10766,9 +10843,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             for (const plannedRun of plannedRuns) {
                 clearPendingBranchMarkerStateForRun(threadId, plannedRun ?? generationRun)
+                clearBranchMarkerUiPhasesForRun(threadId, plannedRun ?? generationRun)
                 forgetPendingBranchMarkerRecordForRun(threadId, plannedRun ?? generationRun)
             }
             clearPendingBranchMarkerStateForRun(threadId, generationRun)
+            clearBranchMarkerUiPhasesForRun(threadId, generationRun)
             forgetPendingBranchMarkerRecordForRun(threadId, generationRun)
             schedulePersistedAiChatThreadRefreshForBranchMarkers(threadId)
             pendingGeneratedImagePlacements.delete(placementKey)
@@ -12792,13 +12871,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const responsePreview = showResponseLine
             ? getBranchMarkerResponsePreview(responseText, { isReceiving: responseIsReceiving })
             : ''
-        const spinnerOnUserLine = Boolean(node.pendingState) && !showResponseLine
-        const spinnerOnResponseLine = Boolean(node.pendingState) && showResponseLine && responseIsReceiving
+        const pendingForUi = isBranchMarkerPendingForUi(node)
+        const spinnerOnUserLine = pendingForUi && !showResponseLine
+        const spinnerOnResponseLine = pendingForUi && showResponseLine && responseIsReceiving
         const responseIsEnhancing = responseIsReceiving && responsePhase === 'enhancement'
-        const responseDone = showResponseLine && (!node.pendingState || responsePhase === 'done' || !responseIsReceiving)
+        const responseDone = showResponseLine && (!pendingForUi || responsePhase === 'done' || !responseIsReceiving)
         const responseSummary = responsePreview ? `Response: ${responsePreview}` : ''
         const accessibleLabel = [promptPreview, label, reasoningModelSummary, responseSummary, modelSummary].filter(Boolean).join(' · ')
-        const messageClassName = `workspace-branch-marker-message${node.pendingState ? ' is-pending' : ''}`
+        const messageClassName = `workspace-branch-marker-message${pendingForUi ? ' is-pending' : ''}`
         const responseClassName = `workspace-branch-marker-response${responseIsEnhancing ? ' is-enhancing' : ''}`
         // The marker DOM is rebuilt as it streams and as it travels through pending
         // states (preflight → planned → committed). A fresh spinner element would
@@ -12848,11 +12928,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function isCurrentBranchMarkerPending(nodeId: string): boolean {
         const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
-        return Boolean(node && isBranchMarkerNode(node) && node.pendingState)
+        return Boolean(node && isBranchMarkerNode(node) && (node.pendingState || isBranchMarkerPendingForUi(node)))
     }
 
     function getBranchMarkerTypeLabel(node: BranchMarkerNode): string {
-        if (node.pendingState?.phase === 'preflight') return 'Preparing branch'
+        if (getBranchMarkerUiPhase(node) === 'preflight') return 'Preparing branch'
         if (node.type === 'branchOrigin') return 'Start branch'
         if (node.type === 'branchFork') return 'Fork branch'
         return 'Continue branch'
@@ -13759,6 +13839,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             videoNodeHandler = null
             partialImageTracker.clear()
             videoGenerationTracker.clear()
+            branchMarkerUiPhaseByNodeId.clear()
             canvasBubbleMenu?.destroy()
             canvasBubbleMenu = null
 
