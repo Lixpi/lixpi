@@ -735,6 +735,29 @@ describe('Workspace file list storage', () => {
         expect(dynamo.updateItem).toHaveBeenCalledTimes(2)
     })
 
+    it('throws a deterministic error when setFileCanonical retries are exhausted by concurrent updates', async () => {
+        const conditionalFailure = Object.assign(new Error('index changed'), {
+            name: 'ConditionalCheckFailedException',
+        })
+        dynamo.getItem.mockResolvedValue({
+            files: [{ id: 'file-1' }],
+            updatedAt: 10,
+        })
+        dynamo.updateItem.mockRejectedValue(conditionalFailure)
+
+        await expect(
+            Workspace.setFileCanonical({
+                workspaceId: 'workspace-1',
+                fileId: 'file-1',
+                canonicalFileId: 'canonical-1',
+                canonicalMimeType: 'video/mp4',
+            }),
+        ).rejects.toThrow('Failed to set file canonical after concurrent updates: workspace-1/file-1')
+
+        expect(dynamo.getItem).toHaveBeenCalledTimes(5)
+        expect(dynamo.updateItem).toHaveBeenCalledTimes(5)
+    })
+
     it('does not patch canonical fields when source file id is missing', async () => {
         dynamo.getItem.mockResolvedValue({
             files: [{ id: 'keep-1' }],
@@ -778,6 +801,27 @@ describe('Workspace file list storage', () => {
         expect(dynamo.getItem).toHaveBeenCalledTimes(2)
         expect(dynamo.updateItem.mock.calls[0][0].updateExpression).toBe('SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, :previousUpdatedAt), #updatedAt = :now REMOVE #files[1]')
         expect(dynamo.updateItem.mock.calls[1][0].updateExpression).toBe('SET #canvasStateUpdatedAt = if_not_exists(#canvasStateUpdatedAt, :previousUpdatedAt), #updatedAt = :now REMOVE #files[0]')
+    })
+
+    it('throws a deterministic error when removeFile retries are exhausted by concurrent updates', async () => {
+        const conditionalFailure = Object.assign(new Error('index changed'), {
+            name: 'ConditionalCheckFailedException',
+        })
+        dynamo.getItem.mockResolvedValue({
+            files: [{ id: 'file-1' }],
+            updatedAt: 10,
+        })
+        dynamo.updateItem.mockRejectedValue(conditionalFailure)
+
+        await expect(
+            Workspace.removeFile({
+                workspaceId: 'workspace-1',
+                fileId: 'file-1',
+            }),
+        ).rejects.toThrow('Failed to remove file from workspace after concurrent updates: workspace-1/file-1')
+
+        expect(dynamo.getItem).toHaveBeenCalledTimes(5)
+        expect(dynamo.updateItem).toHaveBeenCalledTimes(5)
     })
 
     it('does not write when the file is already absent', async () => {

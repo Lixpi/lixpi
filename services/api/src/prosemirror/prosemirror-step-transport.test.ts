@@ -333,6 +333,24 @@ describe('ProseMirrorStepTransport', () => {
         expect(natsService.getJetStreamMessage).not.toHaveBeenCalled()
     })
 
+    it('returns null current state when stream-info reads time out and does not call getJetStreamMessage', async () => {
+        const natsService = createNatsService()
+        const timeoutError = Object.assign(new Error('operation timed out waiting for stream info'), {
+            name: 'TimeoutError',
+        })
+        natsService.getJetStreamStreamInfoOrNull.mockRejectedValue(timeoutError)
+        const transport = new ProseMirrorStepTransport(natsService as any)
+
+        const state = await transport.getCurrentSubjectStateOrNull({
+            workspaceId: 'workspace-1',
+            docType: 'document',
+            docId: 'document-1',
+        } as any)
+
+        expect(state).toBeNull()
+        expect(natsService.getJetStreamMessage).not.toHaveBeenCalled()
+    })
+
     it('replays document events with direct JetStream subject scans and attaches streamSequence', async () => {
         const natsService = createNatsService()
         natsService.getJetStreamMessage

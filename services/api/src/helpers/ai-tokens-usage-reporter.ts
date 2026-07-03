@@ -1,22 +1,13 @@
 'use strict'
 
 import { Decimal } from 'decimal.js'
-import SnsService from '@lixpi/sns-service'
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
-
-import {
-    SNS_messageTypes
-} from '@lixpi/constants'
 
 import type {
     TokensUsage,
     TokensUsageEvent
 } from '@lixpi/constants'
 
-const snsService = new SnsService({
-    region: process.env.AWS_REGION,
-    ssoProfile: process.env.AWS_PROFILE
-})
 
 export const reportAiTokensUsage = ({
     eventMeta,
@@ -49,7 +40,7 @@ export const reportAiTokensUsage = ({
     const textPromptPriceResale = textPromptPrice.mul(resaleMargin)
     const textCompletionPriceResale = textCompletionPrice.mul(resaleMargin)
 
-    const snsMessage: TokensUsageEvent = {
+    const message: TokensUsageEvent = {
         eventMeta,
 
         aiModel: `${aiModelMetaInfo.provider}:${aiModelMetaInfo.model}`,
@@ -86,23 +77,8 @@ export const reportAiTokensUsage = ({
             }
         },
 
-    }
 
-    // TODO: put it back!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    console.log('snsService.publishMessage put it back!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
-    // Send messages stats to SNS
-    // snsService.publishMessage({
-    //     topicArn: ssmParams.AiTokensUsageSnsTopic,
-    //     attributes: {
-    //         messageType: {
-    //             DataType: 'String',
-    //             StringValue: SNS_messageTypes.AiTokensUsage
-    //         }
-    //     },
-    //     message: snsMessage,
-    //     origin: `MainAPI::reportAiTokensUsage`
-    // })
 
 
 }

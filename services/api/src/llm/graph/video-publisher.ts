@@ -50,6 +50,7 @@ export class VideoPublisher {
         private readonly generationRun?: MediaGenerationRunMeta,
         private readonly onProseMirrorContent?: ProseMirrorContentHandler,
         private readonly onPipelineContent?: ProseMirrorContentHandler,
+        private readonly canvasVisibleArea?: { width: number; height: number },
     ) {}
 
     private publish(content: ChunkPayload['content']): void {
@@ -161,6 +162,7 @@ export class VideoPublisher {
                 videoModelProvider: this.provider,
                 videoModelId,
                 generationRun: this.generationRun,
+                ...(this.canvasVisibleArea ? { canvasVisibleArea: this.canvasVisibleArea } : {}),
             })
         } catch (error) {
             logCanvasProjectionError('failed to persist generated video to canvas', error)

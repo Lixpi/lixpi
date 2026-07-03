@@ -282,6 +282,18 @@ export default class AiInteractionService {
                 return
             }
 
+            if (content.status === STREAM_STATUS.MEDIA_GENERATION_SKIPPED) {
+                console.log('[AI_INTERACTION] MEDIA_GENERATION_SKIPPED received:', {
+                    generationRequestId: content.generationRequestId,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'media_generation_skipped',
+                    generationRequestId: content.generationRequestId || '',
+                    ...segmentBase,
+                })
+                return
+            }
+
             if (content.status === STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR) {
                 console.log('[AI_INTERACTION] IMAGE_BRANCH_RESOLUTION_ERROR received:', content)
                 this.segmentsReceiver.receiveSegment({
@@ -422,6 +434,7 @@ export default class AiInteractionService {
         referencedFeatureIds,
         imageBranchCandidateSnapshot,
         workspaceContextSnapshot,
+        canvasVisibleArea,
         proseMirrorInitialDoc,
         proseMirrorBaseVersion,
     }: SendChatMessageOptions) {
@@ -461,6 +474,10 @@ export default class AiInteractionService {
         // every turn (text-only included); the API consumes it in a later phase.
         if (workspaceContextSnapshot) {
             payload.workspaceContextSnapshot = workspaceContextSnapshot
+        }
+
+        if (canvasVisibleArea) {
+            payload.canvasVisibleArea = canvasVisibleArea
         }
 
         if (proseMirrorInitialDoc) {

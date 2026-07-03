@@ -187,6 +187,7 @@ export abstract class BaseProvider {
                 proseMirrorBaseVersion: requestData.proseMirrorBaseVersion,
                 proseMirrorInitialDoc: requestData.proseMirrorInitialDoc,
                 deferProseMirrorEnd,
+                canvasVisibleArea: requestData.canvasVisibleArea,
             },
         )
         this.imagePublisher = new ImagePublisher(
@@ -198,6 +199,7 @@ export abstract class BaseProvider {
             requestData.generationRun,
             undefined,
             onPipelineContent,
+            requestData.canvasVisibleArea,
         )
         this.videoPublisher = new VideoPublisher(
             this.deps.natsService,
@@ -209,6 +211,7 @@ export abstract class BaseProvider {
             requestData.generationRun,
             undefined,
             onPipelineContent,
+            requestData.canvasVisibleArea,
         )
 
         const initialState: ProviderState = {
@@ -235,6 +238,7 @@ export abstract class BaseProvider {
             imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
             imageBranchResolution: requestData.imageBranchResolution,
             mediaBranchLineagePlan: requestData.mediaBranchLineagePlan,
+            canvasVisibleArea: requestData.canvasVisibleArea,
             referencedFeatureIds: requestData.referencedFeatureIds,
             featureReferenceImages: requestData.featureReferenceImages,
             featureReferenceImageTraceUrls: requestData.featureReferenceImageTraceUrls,
@@ -395,6 +399,12 @@ export abstract class BaseProvider {
     protected routeAfterStream(state: ProviderState): 'generate_image' | 'generate_video' | 'skip' {
         if (state.generatedVideoPrompt) return 'generate_video'
         if (state.generatedImagePrompt) return 'generate_image'
+        // A lineage plan was already announced to clients, but no media tool
+        // call was emitted — the planned runs will never start. Tell the UI so
+        // pending branch markers settle instead of spinning forever.
+        if (state.mediaBranchLineagePlan) {
+            this.publisher.mediaGenerationSkipped(state.mediaBranchLineagePlan.generationRequestId)
+        }
         return 'skip'
     }
 

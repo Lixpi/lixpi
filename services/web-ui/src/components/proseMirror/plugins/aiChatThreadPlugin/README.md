@@ -231,6 +231,10 @@ Raw `START_STREAM` / `STREAMING` / `END_STREAM` text events are not parsed in
 the browser. Generated-prompt collapsible blocks are authored by the API-side
 ProseMirror assembler; legacy collapsible segment handlers are compatibility
 code and are not the primary AI chat text path.
+When a mounted editor receives a step that was authored against a different
+seed document, the authority service enters snapshot recovery instead of
+retrying the same structural failure. The final API-persisted snapshot is the
+recovery source for that stale editor.
 
 Image and video completion/error events finalize the generated media node state
 and close the matching receiving run so prompt inputs leave stop mode when the

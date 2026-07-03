@@ -118,9 +118,6 @@ export const createSsmParameters = () => {
             AUTH0_DOMAIN: auth0DomainParam.name,
             AUTH0_API_IDENTIFIER: auth0ApiIdentifierParam.name,
         },
-        snsTopics: {
-            AI_TOKENS_USAGE_TOPIC_ARN: aiTokensUsageTopicArnParam.name,
-        },
         aiConfig: {
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: saveLlmResponsesParam.name,
             // OPENAI_API_KEY_SECRET_ARN: openApiKeySecret.arn,

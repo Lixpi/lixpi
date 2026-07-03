@@ -246,6 +246,39 @@ describe('StreamPublisher extraction progress', () => {
         expect(nats.published).toHaveLength(0)
     })
 
+    it('keeps publishing later chunks after a JetStream publish failure on an earlier chunk', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+        const nats = makeFakeNats()
+        nats.fake.publishJetStream
+            .mockRejectedValueOnce(new Error('jetstream unavailable'))
+            .mockResolvedValueOnce({ seq: 1 })
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'OpenAI')
+
+        publisher.start()
+        publisher.chunk('hello')
+        publisher.end()
+        await flushPipelinePublishes()
+
+        consoleErrorSpy.mockRestore()
+
+        expect(nats.published).toHaveLength(3)
+        expect(nats.published[0]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.START_STREAM,
+            aiProvider: 'OpenAI',
+        })
+        expect(nats.published[1]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.STREAMING,
+            text: 'hello',
+            aiProvider: 'OpenAI',
+        })
+        expect(nats.published[2]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.END_STREAM,
+            aiProvider: 'OpenAI',
+        })
+        expect(nats.fake.publishJetStream).toHaveBeenCalledTimes(3)
+    })
+
     it('publishes extraction status and detail on the chat stream', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'run1', 'Anthropic')

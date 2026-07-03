@@ -1,3 +1,5 @@
+import { mediaGenerationLayoutSettings } from '@lixpi/constants'
+
 import type { WorkspaceEdgePathType } from '@lixpi/constants'
 import type { CircularGlassMaterialStyle } from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
 
@@ -1416,24 +1418,28 @@ export const settings: Settings = {
     },
 
     // Generated media branch-lineage placement settings for image and video nodes.
+    // The dimensions and gaps come from the shared mediaGenerationLayoutSettings in
+    // @lixpi/constants: the API canvas projection persists node geometry with the
+    // same values, so editing them here-and-there separately is what caused nodes
+    // to jump or overlap. Tune them in @lixpi/constants only.
     mediaBranchLineage: {
         // Canvas-unit base width and height for new generated media nodes. Increasing it makes each generated branch artifact larger when inserted.
-        generatedMediaSize: 800,
+        generatedMediaSize: mediaGenerationLayoutSettings.generatedMediaSize,
         // Canvas-unit minimum empty space reserved around every branchOrigin, branchFork, and branchLine marker during placement, drag release, and branch-tree rebalance.
-        nodeGap: 64,
+        nodeGap: mediaGenerationLayoutSettings.nodeGap,
         // Canvas-unit horizontal gap between a chat root or reference group and the first generated media node in that branch.
-        rootToFirstMediaGap: 384,
+        rootToFirstMediaGap: mediaGenerationLayoutSettings.rootToFirstMediaGap,
         // Canvas-unit vertical gap between separate branch rows spawned from the same chat root. Increasing it moves new branches farther below the previous branch.
-        branchRowGap: 160,
+        branchRowGap: mediaGenerationLayoutSettings.branchRowGap,
         // Canvas-unit base horizontal gap between consecutive generated media nodes in the same branch lineage.
-        mediaToMediaGap: 712,
+        mediaToMediaGap: mediaGenerationLayoutSettings.mediaToMediaGap,
         // Canvas-unit horizontal gap from a temporary branchOrigin marker to its first generated media node.
-        branchOriginToFirstMediaGap: 312,
+        branchOriginToFirstMediaGap: mediaGenerationLayoutSettings.branchOriginToFirstMediaGap,
         // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
-        branchFanoutExtraGap: 200,
-        // Vertical gap between the global prompt input and pending branch marker; the same numeric gap separates stacked pending branch markers.
+        branchFanoutExtraGap: mediaGenerationLayoutSettings.branchFanoutExtraGap,
+        // Vertical gap between stacked screen-fixed pending branch markers.
         pendingMarkerInputGap: 8,
-        // Milliseconds for moving and scaling a pending branch marker from the global prompt input to its API-planned canvas position.
+        // Milliseconds for moving and scaling a pending branch marker from its screen-fixed preflight position to its API-planned canvas position.
         pendingMarkerMoveDurationMs: 420,
         // Temporary root marker used when a fresh multi-model branch has no real source node.
         branchOrigin: {
@@ -1794,9 +1800,9 @@ export const settings: Settings = {
             minWidthMultiplier: 2.6,
             // Multiplier on the minimum width capping how wide an on-canvas (already-placed) marker may grow before its preview wraps to a second line and truncates. Lower it to keep long placed messages more compact.
             maxWidthGrowth: 1.5,
-            // Multiplier on the minimum width capping the docked, above-the-composer pose (single line). Kept wider than maxWidthGrowth so long prompts stay on one line while still being assessed; once the marker lands on the canvas it tightens to maxWidthGrowth.
+            // Multiplier on the minimum width capping the screen-fixed preflight pose. Kept wider than maxWidthGrowth so long prompts stay on one line while still being assessed; once the marker lands on the canvas it tightens to maxWidthGrowth.
             screenFixedMaxWidthGrowth: 6,
-            // Hard cap on the docked pose's on-screen width as a fraction of the prompt input field width. The pill hugs its content but never grows past this share of the input; longer messages truncate with an ellipsis.
+            // Hard cap on the screen-fixed preflight pose's on-screen width as a fraction of the prompt input field width. The pill hugs its content but never grows past this share of the input; longer messages truncate with an ellipsis.
             screenFixedMaxWidthFraction: 0.8,
             // Text sizing for the marker's preview lines. Matches the floating detail panel's body text (1rem / 16px) so a marker reads at the same size as the thread it represents.
             text: {

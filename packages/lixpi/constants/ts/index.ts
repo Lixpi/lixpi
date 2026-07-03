@@ -2,6 +2,10 @@
 
 export * from './types.ts'
 export * from './aws-resources.ts'
+export {
+    mediaGenerationLayoutSettings,
+    type MediaGenerationLayoutSettings,
+} from './media-generation-layout-settings.ts'
 
 import natsSubjects from '../nats-subjects.json' with { type: 'json' }
 import aiInteractionConstants from '../ai-interaction-constants.json' with { type: 'json' }
@@ -36,14 +40,6 @@ export const CONTENT_DESCRIPTOR_TEXT_INPUT_MAX_LENGTH = 12000
 
 
 
-export const USER_SUBSCRIPTION_EVENTS_SQS_MESSAGE_TYPES: Record<string, string> = {
-    TOP_UP_BALANCE_SUCCEED: 'top-up-balance',
-    USE_CREDITS: 'use-credits',
-}
-
-
-
-
 export const STRIPE_COMISSION: Record<string, string> = {    // Values processed as strings by decimal.js to avoid floating point errors
     comissionPercentRate: '0.029',    // 2.9%
     fixedFee: '0.30'    // 30 cents
@@ -75,7 +71,3 @@ export enum UserSubscription {
     minimumBalance = '5',
 }
 
-export enum SNS_messageTypes {
-    AiTokensUsage = 'AiTokensUsage',
-    StripeInvoiceEvent = 'StripeInvoiceEvent',
-}

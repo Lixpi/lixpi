@@ -500,6 +500,81 @@ describe('VideoPublisher', () => {
         expect(storeImage).not.toHaveBeenCalled()
     })
 
+    it('attempts canvas projection during completion even when generationRun requestKind is media-generation-matrix', async () => {
+        const generationRun = {
+            requestKind: 'media-generation-matrix',
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            mediaRunId: 'media-1',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'Google:veo-3.1-generate-preview',
+            mediaType: 'video',
+            reasoningIndex: 0,
+            mediaIndex: 0,
+            variantIndex: 0,
+        }
+        const published: Published[] = []
+        const nats = {
+            publish: (subject: string, payload: any) => {
+                published.push({ subject, payload })
+            },
+        } as any
+        const publisher = new VideoPublisher(
+            nats,
+            async () => ({
+                fileId: 'video-file-id',
+                url: '/api/videos/ws-1/video-file-id',
+                isDuplicate: false,
+                size: 1234,
+                mimeType: 'video/mp4',
+            }),
+            async () => ({
+                fileId: 'image-file-id',
+                url: '/api/images/ws-1/image-file-id',
+                isDuplicate: false,
+                size: 456,
+                mimeType: 'image/png',
+            }),
+            'ws-1',
+            'thread-1',
+            'Google',
+            generationRun,
+        )
+
+        await publisher.complete({
+            videoBuffer: mp4Sample,
+            posterBuffer: Buffer.from('poster'),
+            frameBuffer: Buffer.from('frame'),
+            durationSeconds: 4,
+            aspectRatio: '16:9',
+            hasAudio: true,
+            responseId: 'resp-1',
+            revisedPrompt: 'static no lineage',
+            videoModelId: 'veo-3.1-generate-preview',
+        })
+
+        expect(projectionMocks.upsertGeneratedVideoToCanvas).toHaveBeenCalledWith(expect.objectContaining({
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            videoUrl: '/api/videos/ws-1/video-file-id',
+            fileId: 'video-file-id',
+            posterUrl: '/api/images/ws-1/image-file-id',
+            posterFileId: 'image-file-id',
+            frameUrl: '/api/images/ws-1/image-file-id',
+            frameFileId: 'image-file-id',
+            durationSeconds: 4,
+            aspectRatio: '16:9',
+            hasAudio: true,
+            responseId: 'resp-1',
+            revisedPrompt: 'static no lineage',
+            aiProvider: 'Google',
+            videoModelProvider: 'Google',
+            videoModelId: 'veo-3.1-generate-preview',
+            generationRun,
+        }))
+        expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.VIDEO_COMPLETE)
+    })
+
     it('routes video events through onPipelineContent when durable pipeline publishing is supplied', () => {
         const published: Published[] = []
         const nats = {

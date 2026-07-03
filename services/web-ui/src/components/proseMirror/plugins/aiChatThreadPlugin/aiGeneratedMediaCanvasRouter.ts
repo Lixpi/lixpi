@@ -89,6 +89,14 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
             }
             return
 
+        case 'media_generation_skipped':
+            imageCallbacks.onMediaGenerationSkippedToCanvas?.({
+                threadId,
+                generationRequestId: event.generationRequestId || '',
+                generationRun,
+            })
+            return
+
         case 'context_relevance_resolved':
             if (event.workspaceContextResolution) {
                 imageCallbacks.onWorkspaceContextResolvedToCanvas?.({

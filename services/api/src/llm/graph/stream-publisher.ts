@@ -76,6 +76,7 @@ export type StreamPublisherOptions = {
     proseMirrorBaseVersion?: number
     proseMirrorInitialDoc?: object
     deferProseMirrorEnd?: boolean
+    canvasVisibleArea?: { width: number; height: number }
 }
 
 export type ProseMirrorContentHandler = (content: ChunkPayload['content']) => void
@@ -461,6 +462,7 @@ export class StreamPublisher {
                 workspaceId: this.workspaceId,
                 aiChatThreadId: this.aiChatThreadId,
                 lineagePlan,
+                ...(this.options.canvasVisibleArea ? { canvasVisibleArea: this.options.canvasVisibleArea } : {}),
             }),
             'failed to persist media lineage plan to canvas',
         )
@@ -469,6 +471,17 @@ export class StreamPublisher {
             status: STREAM_STATUS.MEDIA_LINEAGE_PLANNED,
             aiProvider: this.provider,
             lineagePlan,
+            ...(generationRun ? { generationRun } : {}),
+        })
+    }
+
+    // The reasoning model finished without emitting a media tool call after a
+    // lineage plan was already published; the planned runs will never start.
+    mediaGenerationSkipped(generationRequestId: string, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+        this.publishChatContent({
+            status: STREAM_STATUS.MEDIA_GENERATION_SKIPPED,
+            aiProvider: this.provider,
+            generationRequestId,
             ...(generationRun ? { generationRun } : {}),
         })
     }

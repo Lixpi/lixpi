@@ -481,7 +481,8 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceNotToContain(ts, 'image-generating-spinner')
 		expectSourceNotToContain(ts, 'img-dot-bounce')
 		expectSourceNotToContain(scss, '.workspace-image-progress-viewport')
-		expectExcerptNotToContain(partialHandler, 'partialImageTracker.delete', 'partial image handler')
+		expectExcerptToContain(partialHandler, 'if (existing && !getCurrentCanvasMediaNode(existing.nodeId)) {', 'partial image handler')
+		expectExcerptToContain(partialHandler, 'partialImageTracker.delete(runKey)', 'partial image handler')
 		expectExcerptToContain(completeHandler, 'partialImageTracker.delete(runKey)')
 		expectExcerptToContain(completeHandler, 'commitCanvasState({')
 	})
@@ -512,10 +513,11 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		const completeHandler = ts.slice(completeStart, videoStart)
 		const errorHandler = ts.slice(errorStart, partialStart)
 
-		expectExcerptToContain(partialHandler, '...(currentCanvasState ?? {})', 'partial image handler')
-		expectExcerptToContain(completeHandler, '...(currentCanvasState ?? {})', 'complete image handler')
-		expectExcerptToContain(errorHandler, 'const resolvedTreeState = resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)', 'error image handler')
-		expectExcerptToContain(errorHandler, 'commitCanvasStatePreservingEditors(nextState)', 'error image handler')
+		expectExcerptToContain(partialHandler, '...currentCanvasState,', 'partial image handler')
+		expectExcerptToContain(completeHandler, 'currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 }', 'complete image handler')
+		expectExcerptToContain(errorHandler, 'const existing = partialImageTracker.get(runKey)', 'error image handler')
+		expectExcerptToContain(errorHandler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'error image handler')
+		expectExcerptToContain(errorHandler, 'finishFailedGeneratedMediaRun(threadId, generationRun)', 'error image handler')
 		expectSourceToContain(ts, 'commitCanvasStatePreservingEditors({')
 		expectSourceToContain(ts, 'commitCanvasState({')
 		expectSourceToContain(ts, 'viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 }')
@@ -583,8 +585,8 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const errorHandler = ts.slice(errorStart, errorEnd)
 
 		expectExcerptToContain(pendingHandler, '...(currentCanvasState ?? {})', 'video pending handler')
-		expectExcerptToContain(completeHandler, '...currentCanvasState', 'video complete handler')
-		expectExcerptToContain(errorHandler, '...currentCanvasState', 'video error handler')
+		expectExcerptToContain(completeHandler, 'commitCanvasState({', 'video complete handler')
+		expectExcerptToContain(errorHandler, 'const errorNodeId = existing.nodeId', 'video error handler')
 	})
 
 	it('renders shared SVG controls for completed video nodes in the chrome layer', () => {
@@ -630,7 +632,10 @@ describe('Workspace canvas — generated video canvas state', () => {
 
 		expectExcerptToContain(completeHandler, 'rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)', 'video complete handler')
 		expectExcerptToContain(completeHandler, 'nodes: resolvedNodes,', 'video complete handler')
-		expectExcerptToContain(completeHandler, 'edges: currentCanvasState.edges,', 'video complete handler')
+		// Completed videos are renamed to the API-assigned node id (node-<fileId>),
+		// so lineage edges are retargeted from the placeholder id before commit.
+		expectExcerptToContain(completeHandler, 'const edges = currentCanvasState.edges.map((edge: WorkspaceEdge) => {', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'targetNodeId: completedNodeId,', 'video complete handler')
 	})
 
 	it('threads the representative mid-frame fileId onto the completed video node', () => {
@@ -871,7 +876,7 @@ describe('Workspace canvas — parent-child world positioning', () => {
 		expect(syncMatch).not.toBeNull()
 		const syncBody = syncMatch![0]
 		expectExcerptToContain(syncBody, 'syncCanvasNodeDomGeometry([branchMarkerNode])')
-		expectExcerptToContain(syncBody, 'syncBranchMarkerNodeContent(branchMarkerNode)')
+		expectExcerptToContain(syncBody, 'syncBranchMarkerNodeContent(branchMarkerNode, nodeEl)')
 		expectExcerptToContain(syncBody, 'syncConnectionsAfterManualNodeAppend()')
 
 		const originMatch = ts.match(/function\s+appendBranchOriginNodeToDOM[\s\S]*?^    \}/m)
@@ -951,7 +956,7 @@ describe('Workspace canvas — AI panel reload stability', () => {
 		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(prunedState)')
 		expectSourceToContain(ts, 'const renderStatePlan = mergeIncomingCanvasStateWithPendingVisualCommit({')
 		expectSourceToContain(ts, 'const normalizedCanvasState = renderStatePlan.state')
-		expectSourceToContain(ts, 'const effectiveCanvasState = prunedCanvasState.state')
+		expectSourceToContain(ts, 'preserveActiveGeneratedMediaTrackersInState(persistedCanvasState)')
 		expectSourceToContain(ts, 'currentCanvasState = shouldPreserveLiveViewport && effectiveCanvasState')
 	})
 })
@@ -1048,7 +1053,7 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		const specBody = extractFunctionBody(ts, 'buildPendingBranchMarkerSpecsFromLineagePlan')
 		const applyLineageBody = extractFunctionBody(ts, 'applyMediaBranchLineagePlan')
 		const insertIndex = applyLineageBody.indexOf('insertPendingBranchMarkersFromLineagePlan(threadId, lineagePlan, generationRun)')
-		const resolveIndex = applyLineageBody.indexOf('resolvePendingBranchMarkerWithLineagePlan(threadId, resolvedRun)')
+		const resolveIndex = applyLineageBody.indexOf('resolvePendingBranchMarkersForLineagePlan(threadId, lineagePlan, generationRun)')
 
 		expectExcerptToContain(specBody, 'getUniqueLineageAssignmentsForMarkers(lineagePlan)', 'lineage preflight marker specs')
 		expectExcerptToContain(specBody, 'buildGenerationRunFromLineageAssignment(lineagePlan, assignment, sourceGenerationRun)', 'lineage preflight marker specs')
@@ -1651,7 +1656,7 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(ts, 'referenceToMarkerMinGap: getBranchLineageNodeGap(),')
 		expectSourceToContain(ts, 'settings.mediaBranchLineage.rootToFirstMediaGap')
 		expectSourceToContain(settingsTs, 'nodeGap: number')
-		expectSourceToContain(settingsTs, 'nodeGap: 64')
+		expectSourceToContain(settingsTs, 'nodeGap: mediaGenerationLayoutSettings.nodeGap')
 		expectSourceToContain(settingsTs, 'mediaBranchLineage.nodeGap')
 		expectSourceToContain(ts, 'const referenceRootPosition = getReferenceBranchRootMarkerPositionForGeneratedMedia(')
 		expectSourceNotToContain(ts, 'referencePosition.x - getRootBranchMarkerOutputGap() - markerDimensions.width')
@@ -2435,14 +2440,12 @@ describe('Image generation error cleanup', () => {
 	it('removes the failed partial image node from state and DOM immediately', () => {
 		const handler = getImageErrorHandler()
 
+		expectExcerptToContain(handler, 'const runKey = getGeneratedMediaRunKey(threadId, generationRun)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'const existing = partialImageTracker.get(runKey)', 'onImageErrorToCanvas')
 		expectExcerptToContain(handler, 'partialImageTracker.delete(runKey)', 'onImageErrorToCanvas')
 		expectExcerptToContain(handler, 'selectedNodeIds.delete(existing.nodeId)', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'const remainingNodes = currentCanvasState.nodes.filter', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'const remainingEdges = currentCanvasState.edges.filter', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'commitCanvasStatePreservingEditors(nextState)', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'nodeEl?.remove()', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'finishGeneratedMediaRun(threadId, generationRun)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'finishFailedGeneratedMediaRun(threadId, generationRun)', 'onImageErrorToCanvas')
 		expectExcerptNotToContain(handler, 'setTimeout', 'onImageErrorToCanvas')
 	})
 

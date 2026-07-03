@@ -90,7 +90,7 @@ Every live pipeline message carries a `status` from `STREAM_STATUS` inside `cont
 | Status | Payload | Browser segment / handling | Purpose |
 |--------|---------|----------------------------|---------|
 | `START_STREAM` | — | Pipeline lifecycle; ProseMirror authority receives a separate `START` document event | Begin the top-level stream before pre-stream resolver work. Idempotent. |
-| `STREAMING` | `{ text }` or structured progress fields | Text is mirrored into ProseMirror steps by the API; extraction/stage/feature fields remain pipeline events | A text delta or structured progress payload from the provider path. |
+| `STREAMING` | `{ text }` or structured progress fields | Text is mirrored into ProseMirror steps by the API; extraction/stage/feature fields remain pipeline events | A text delta or structured progress payload from the provider path. Anthropic media tool `prompt` input deltas are decoded server-side and emitted through the generated-prompt text path before the final tool call is available. |
 | `END_STREAM` | `{ text: '', aiProvider }` | Pipeline lifecycle; ProseMirror authority receives a separate `END` document event after final snapshot persistence | End the top-level stream. Usage is computed separately and is not currently included in the stream event. |
 | `ERROR` | `{ error }` | Surface the error; end receiving state | Stream-level failure (including pre-stream errors). |
 | `CONTEXT_RELEVANCE_RESOLVED` | `{ workspaceContextResolution }` | Panel/canvas: keep selections scoped to the submitted turn, patch improved descriptors, narrow media candidates | Result of `resolveWorkspaceContext`. Bypasses the markdown parser. |

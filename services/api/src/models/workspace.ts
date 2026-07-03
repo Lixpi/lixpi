@@ -316,6 +316,7 @@ export default {
                     ':canvasStateUpdatedAt': currentDate,
                     ...(hasExpectedCanvasStateUpdatedAt ? { ':expectedCanvasStateUpdatedAt': canvasStateSaveToken } : {})
                 },
+                logConditionalCheckFailures: false,
                 origin: 'updateWorkspaceCanvasState'
             })
 
@@ -398,6 +399,7 @@ export default {
                         '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
                     },
                     expressionAttributeValues,
+                    logConditionalCheckFailures: false,
                     origin
                 })
 

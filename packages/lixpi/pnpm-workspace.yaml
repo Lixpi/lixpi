@@ -1,0 +1,9 @@
+packages:
+  - "auth-service"
+  - "canvas-engine"
+  - "constants/ts"
+  - "debug-tools/ts"
+  - "dynamodb-service"
+  - "nats-auth-callout-service"
+  - "nats-service/ts"
+  - "prosemirror"

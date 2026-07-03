@@ -26,6 +26,8 @@ State is intentionally **not** persisted (`--state kv` omitted): the entrypoint 
 
 ## Run it locally
 
+The commands below assume `.env` is symlinked to your `.env.<stage>` file via `./set-env.sh` at the repo root (Docker Compose only auto-loads a file literally named `.env`) — run it once, or add `--env-file .env.<stage>` to each command instead.
+
 ```bash
 docker compose --profile main up        # brings up NATS x3, then lixpi-nex-1
 docker compose --profile main up -d --build lixpi-nex-1   # rebuild just this node

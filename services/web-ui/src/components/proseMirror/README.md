@@ -315,13 +315,14 @@ The main plugin orchestrating AI chat functionality. All AI chat logic is consol
 **Message submission flow:**
 1. User types in the floating `aiPromptInput` and presses Cmd/Ctrl+Enter or clicks submit
 2. `AiPromptInputController` extracts content, creates an `aiUserMessage` node in the target thread
-3. Dispatches `USE_AI_CHAT_META` on the thread editor to trigger the AI request
+3. Dispatches `USE_AI_CHAT_META` on the thread editor to trigger the AI request; this submit-seed transaction uses `skipDispatch` because the API receives the post-submit doc and persists the final authoritative snapshot
 4. Plugin calls `onAiChatSubmit` callback with the message array
 
 **Streaming response handling:**
 - Subscribes to `SegmentsReceiver.subscribeToeceiveSegment()` for streaming events
 - `ProseMirrorAuthorityService` subscribes to the live ProseMirror step subject and applies `Step.fromJSON(schema, step)` events from the API
 - The submit payload includes the post-placeholder thread doc JSON so API-authored step positions match the browser doc
+- If a remote step is structurally invalid for a mounted editor, the authority service stops retrying that step and waits for a newer persisted snapshot to recover the document
 - `SegmentsReceiver` remains for non-ProseMirror pipeline events such as media trace, lineage, partial, complete, and error events
 
 See `plugins/aiChatThreadPlugin/README.md` for complete documentation.

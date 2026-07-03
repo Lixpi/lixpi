@@ -344,6 +344,7 @@ export class AiPromptInputController {
 
         // Set the USE_AI_CHAT_META to trigger the AI request handler in the thread plugin
         tr = tr.setMeta(USE_AI_CHAT_META, { threadId, nodePos: threadPos })
+        tr = tr.setMeta('skipDispatch', true)
         editorView.dispatch(tr)
 
         // Trigger gradient animation

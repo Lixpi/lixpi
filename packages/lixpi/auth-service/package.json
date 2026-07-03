@@ -3,13 +3,17 @@
     "version": "0.0.1",
     "private": true,
     "type": "module",
+    "scripts": {
+        "test:run": "vitest run"
+    },
     "main": "./src/index.ts",
     "exports": {
         ".": "./src/index.ts"
     },
     "devDependencies": {
         "@types/jsonwebtoken": "*",
-        "@types/node": "*"
+        "@types/node": "*",
+        "vitest": "*"
     },
     "dependencies": {
         "@nats-io/nkeys": "*",

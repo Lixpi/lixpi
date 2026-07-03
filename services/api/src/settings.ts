@@ -1,6 +1,8 @@
 'use strict'
 
-import type { AiModelId } from '@lixpi/constants'
+import { mediaGenerationLayoutSettings } from '@lixpi/constants'
+
+import type { AiModelId, MediaGenerationLayoutSettings } from '@lixpi/constants'
 
 export type ApiSettings = {
     // API-owned media descriptor settings for image and video summaries shown on the canvas.
@@ -14,6 +16,10 @@ export type ApiSettings = {
         // breaking media descriptions while still keeping the model choice here.
         defaultVlmMaxTokens: number
     }
+    // Canvas projection geometry used when persisting generated-media lineage.
+    // Sourced from the shared mediaGenerationLayoutSettings in @lixpi/constants
+    // so the API and the WebUI place nodes with identical dimensions and gaps.
+    mediaGenerationCanvasProjection: MediaGenerationLayoutSettings
 }
 
 export const settings: ApiSettings = {
@@ -26,4 +32,5 @@ export const settings: ApiSettings = {
         // provider allows more room. Keep this aligned with the sync defaults.
         defaultVlmMaxTokens: 8192,
     },
+    mediaGenerationCanvasProjection: mediaGenerationLayoutSettings,
 }

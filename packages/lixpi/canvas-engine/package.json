@@ -1,0 +1,23 @@
+{
+    "name": "@lixpi/canvas-engine",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "test:run": "vitest run"
+    },
+    "main": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts",
+        "./shared": "./src/shared/index.ts",
+        "./backend": "./src/backend/index.ts",
+        "./frontend": "./src/frontend/index.ts",
+        "./frontend/rendering": "./src/frontend/rendering/index.ts"
+    },
+    "devDependencies": {
+        "vitest": "*"
+    },
+    "dependencies": {
+        "@lixpi/constants": "file:../constants/ts"
+    }
+}

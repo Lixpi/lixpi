@@ -60,6 +60,11 @@ export type AiGeneratedImageCallbacks = {
         lineagePlan: MediaBranchLineagePlan
         generationRun?: MediaGenerationRunMeta
     }) => void
+    onMediaGenerationSkippedToCanvas?: (data: {
+        threadId: string
+        generationRequestId: string
+        generationRun?: MediaGenerationRunMeta
+    }) => void
     onWorkspaceContextResolvedToCanvas?: (data: {
         threadId: string
         resolution: WorkspaceContextResolution

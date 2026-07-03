@@ -218,7 +218,13 @@ export class ProseMirrorStepTransport {
 
     async getCurrentSubjectStateOrNull(coordinate: DocCoordinate): Promise<SubjectSequenceState | null> {
         const streamName = getWorkspaceStepStreamName(coordinate.workspaceId)
-        const streamInfo = await this.natsService.getJetStreamStreamInfoOrNull(streamName)
+        let streamInfo: unknown
+        try {
+            streamInfo = await this.natsService.getJetStreamStreamInfoOrNull(streamName)
+        } catch (error) {
+            if (this.isJetStreamInfoTimeoutError(error)) return null
+            throw error
+        }
         if (!streamInfo) return null
 
         const subject = getDocumentStepSubject(coordinate)
@@ -232,6 +238,13 @@ export class ProseMirrorStepTransport {
             streamSequence: lastMessage.seq,
             documentVersion: this.getDocumentVersion(lastMessage.data, subjectSeq),
         }
+    }
+
+    private isJetStreamInfoTimeoutError(error: unknown): boolean {
+        const candidate = error as { name?: unknown; message?: unknown }
+        const name = typeof candidate?.name === 'string' ? candidate.name.toLowerCase() : ''
+        const message = typeof candidate?.message === 'string' ? candidate.message.toLowerCase() : String(error ?? '').toLowerCase()
+        return name === 'timeouterror' || message.includes('timeout')
     }
 
     async getCurrentSubjectSequence(coordinate: DocCoordinate): Promise<number> {

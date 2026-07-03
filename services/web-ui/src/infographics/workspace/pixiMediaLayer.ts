@@ -67,6 +67,9 @@ type PixiImageEntry = {
     requestId: number
     // URL of the texture currently bound to the sprite, or `null` when none.
     textureKey: string | null
+    // Generated placeholders should promote directly to the stored final file.
+    // The thumbnail endpoint can briefly expose resize artifacts during this swap.
+    forceFullOnNextLoad: boolean
     worldRect: IndexedImage
     isVisible: boolean
     // Last-known geometry used to draw the placeholder colorRect. Compared
@@ -852,6 +855,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     nodeId,
                     entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
                 }))
+                entry.requestId++
+                entry.requestedTier = null
+                entry.loadedTier = null
                 releaseTexture(entry.textureKey)
                 // Remove from spatial index before destroying the entry.
                 spatialIndex.remove(entry.worldRect, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
@@ -1191,6 +1197,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         return `${getWorkspaceId()}|${node.fileId}|${node.src}`
     }
 
+    function shouldPromoteGeneratedFinalFrameDirectly(previousNode: ImageCanvasNode, nextNode: ImageCanvasNode): boolean {
+        return Boolean(nextNode.generatedBy?.aiChatThreadId && !previousNode.fileId && nextNode.fileId)
+    }
+
     function getMediaNodeBorderRadius(width: number, height: number): number {
         const borderRadius = settings.mediaNode.styles.borderRadius
         if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
@@ -1250,7 +1260,43 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         return Math.min(0.98, inProgressOutlineAnimation.snakeLengthFraction * (nodePerimeter / circlePerimeter))
     }
 
+    function isUsableGraphics(graphics: Graphics): boolean {
+        const candidate = graphics as unknown as {
+            destroyed?: boolean
+            position?: { set?: unknown }
+        }
+        return candidate.destroyed !== true && typeof candidate.position?.set === 'function'
+    }
+
+    function replaceEntrySpriteMask(entry: PixiImageEntry): void {
+        const previousSpriteMask = entry.spriteMask
+        const nextSpriteMask = createImageSpriteMask(entry.nodeRef.nodeId)
+        let previousSpriteMaskIndex = imageLayer.children.length
+        try {
+            previousSpriteMaskIndex = imageLayer.getChildIndex(previousSpriteMask)
+            imageLayer.removeChild(previousSpriteMask)
+        } catch {
+            // If Pixi already detached or destroyed the mask, keep replacing it.
+        }
+        entry.spriteMask = nextSpriteMask
+        entry.sprite.mask = nextSpriteMask
+        entry.spriteMaskW = -1
+        entry.spriteMaskH = -1
+        entry.spriteMaskRadius = -1
+        imageLayer.addChildAt(nextSpriteMask, Math.max(0, Math.min(previousSpriteMaskIndex, imageLayer.children.length)))
+        try {
+            previousSpriteMask.destroy()
+        } catch (error) {
+            debugLog('texture-mask-destroy-after-mask-replace-failed', {
+                nodeId: entry.nodeRef.nodeId,
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+            })
+        }
+    }
+
     function syncSpriteMask(entry: PixiImageEntry, x: number, y: number, width: number, height: number): void {
+        if (!isUsableGraphics(entry.spriteMask)) replaceEntrySpriteMask(entry)
         const radius = getMediaNodeBorderRadius(width, height)
         entry.spriteMask.position.set(x, y)
         if (width === entry.spriteMaskW && height === entry.spriteMaskH && radius === entry.spriteMaskRadius) return
@@ -1261,6 +1307,108 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         entry.spriteMaskW = width
         entry.spriteMaskH = height
         entry.spriteMaskRadius = radius
+    }
+
+    function createImageSprite(nodeId: string, texture: Texture = Texture.EMPTY): Sprite {
+        const sprite = new Sprite(texture)
+        sprite.label = `pixi-image-${nodeId}`
+        sprite.eventMode = 'none'
+        sprite.visible = false
+        return sprite
+    }
+
+    function createImageSpriteMask(nodeId: string): Graphics {
+        const spriteMask = new Graphics()
+        spriteMask.label = `pixi-image-mask-${nodeId}`
+        spriteMask.eventMode = 'none'
+        return spriteMask
+    }
+
+    function detachImageLayerChild(child: Sprite | Graphics): void {
+        try {
+            imageLayer.removeChild(child)
+        } catch {
+            // Already detached.
+        }
+    }
+
+    function hideDetachedImageSprite(sprite: Sprite): void {
+        try {
+            sprite.mask = null
+            sprite.renderable = false
+            sprite.visible = false
+        } catch {
+            // A failed texture swap can corrupt sprite internals; cleanup remains best effort.
+        }
+    }
+
+    function hideDetachedImageMask(mask: Graphics): void {
+        try {
+            mask.clear()
+            mask.renderable = false
+            mask.visible = false
+        } catch {
+            // A corrupted mask should not block replacement.
+        }
+    }
+
+    function replaceEntrySprite(entry: PixiImageEntry, texture: Texture): void {
+        const previousSprite = entry.sprite
+        const previousSpriteMask = entry.spriteMask
+        const nextSprite = createImageSprite(entry.nodeRef.nodeId, texture)
+        const nextSpriteMask = createImageSpriteMask(entry.nodeRef.nodeId)
+        let previousSpriteIndex = imageLayer.children.length
+        try {
+            previousSpriteIndex = imageLayer.getChildIndex(previousSprite)
+        } catch {
+            // If the failed texture assignment left the old sprite detached, append
+            // the replacement at the top of the image layer.
+        }
+        nextSprite.mask = nextSpriteMask
+        nextSprite.renderable = entry.isVisible
+        nextSprite.position.set(entry.worldRect.minX, entry.worldRect.minY)
+        detachImageLayerChild(previousSprite)
+        detachImageLayerChild(previousSpriteMask)
+        hideDetachedImageSprite(previousSprite)
+        hideDetachedImageMask(previousSpriteMask)
+        entry.sprite = nextSprite
+        entry.spriteMask = nextSpriteMask
+        entry.spriteMaskW = -1
+        entry.spriteMaskH = -1
+        entry.spriteMaskRadius = -1
+        imageLayer.addChildAt(nextSpriteMask, Math.max(0, Math.min(previousSpriteIndex, imageLayer.children.length)))
+        imageLayer.addChildAt(nextSprite, Math.max(0, Math.min(previousSpriteIndex + 1, imageLayer.children.length)))
+        try {
+            previousSprite.destroy()
+        } catch (error) {
+            debugLog('texture-sprite-destroy-after-replace-failed', {
+                nodeId: entry.nodeRef.nodeId,
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+            })
+        }
+        try {
+            previousSpriteMask.destroy()
+        } catch (error) {
+            debugLog('texture-mask-destroy-after-replace-failed', {
+                nodeId: entry.nodeRef.nodeId,
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+            })
+        }
+    }
+
+    function bindTextureToEntrySprite(entry: PixiImageEntry, texture: Texture): void {
+        try {
+            entry.sprite.texture = texture
+        } catch (error) {
+            debugLog('texture-sprite-bind-replaced-after-error', {
+                nodeId: entry.nodeRef.nodeId,
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+            })
+            replaceEntrySprite(entry, texture)
+        }
     }
 
     function upsertEntry(node: ImageCanvasNode, worldPosition: WorldPosition): void {
@@ -1276,13 +1424,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 worldPosition,
                 dimensions: node.dimensions,
             })
-            const sprite = new Sprite(Texture.EMPTY)
-            sprite.label = `pixi-image-${node.nodeId}`
-            sprite.eventMode = 'none'
-            sprite.visible = false
-            const spriteMask = new Graphics()
-            spriteMask.label = `pixi-image-mask-${node.nodeId}`
-            spriteMask.eventMode = 'none'
+            const sprite = createImageSprite(node.nodeId)
+            const spriteMask = createImageSpriteMask(node.nodeId)
             sprite.mask = spriteMask
             const colorRect = new Graphics()
             colorRect.label = `pixi-image-color-${node.nodeId}`
@@ -1301,6 +1444,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 requestedTier: null,
                 requestId: 0,
                 textureKey: null,
+                forceFullOnNextLoad: false,
                 worldRect: rect,
                 isVisible: false,
                 colorRectW: -1,
@@ -1315,9 +1459,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
             }))
         } else if (entry.sourceKey !== newSourceKey) {
-            // Source image replaced. Keep the currently rendered texture visible
-            // until the replacement texture loads, otherwise final generated
-            // frames can briefly blank while PIXI refetches the stored object.
+            // Source image replaced. Most replacements keep the current texture
+            // visible while the next source loads; generated placeholder -> final
+            // image swaps clear the placeholder and load the stored file directly.
             debugLog('entry-source-change', (verbose) => ({
                 nodeId: node.nodeId,
                 oldSourceKey: cleanDebugUrl(entry.sourceKey),
@@ -1330,10 +1474,20 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     position: node.position,
                 },
             }))
+            const promoteFinalFrameDirectly = shouldPromoteGeneratedFinalFrameDirectly(entry.nodeRef, node)
             entry.loadedTier = null
             entry.requestedTier = null
             entry.requestId++
             entry.sourceKey = newSourceKey
+            entry.forceFullOnNextLoad = promoteFinalFrameDirectly
+            if (promoteFinalFrameDirectly) {
+                const oldKey = entry.textureKey
+                entry.textureKey = null
+                bindTextureToEntrySprite(entry, Texture.EMPTY)
+                entry.sprite.visible = false
+                entry.colorRect.visible = entry.isVisible && !isPreFrameCircleGeneratingNode(node.nodeId)
+                if (oldKey) releaseTexture(oldKey)
+            }
         }
 
         entry.nodeRef = node
@@ -1521,9 +1675,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         // 256px PNGs are tiny (~10–30KB) so the entire workspace can paint a
         // recognizable preview in well under a second, then upgrade in idle
         // time. This is the single most impactful change for first-paint.
-        const fetchTier: LodTier = (entry.loadedTier === null && desiredTier !== 'thumb-256')
-            ? 'thumb-256'
-            : desiredTier
+        const shouldFetchProgressivePreview = entry.loadedTier === null && desiredTier !== 'thumb-256'
+        const fetchTier: LodTier = entry.forceFullOnNextLoad
+            ? 'full'
+            : shouldFetchProgressivePreview
+                ? 'thumb-256'
+                : desiredTier
 
         entry.requestedTier = fetchTier
         entry.requestId = ++requestCounter
@@ -1561,7 +1718,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 })
                 const texture = await acquireTexture(resolved)
                 acquiredKey = resolved
-                if (destroyed || entry.requestId !== requestId) {
+                if (destroyed || entry.requestId !== requestId || entries.get(node.nodeId) !== entry) {
                     debugLog('texture-request-stale', {
                         nodeId: node.nodeId,
                         requestId,
@@ -1586,10 +1743,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     return
                 }
                 const oldKey = entry.textureKey
-                entry.textureKey = resolved
-                entry.loadedTier = fetchTier
-                entry.requestedTier = null
-                entry.sprite.texture = texture
+                bindTextureToEntrySprite(entry, texture)
                 if (Number.isFinite(texture.width) && Number.isFinite(texture.height) && texture.width > 0 && texture.height > 0) {
                     onImageIntrinsicSize?.({ nodeId: node.nodeId, width: texture.width, height: texture.height })
                 }
@@ -1597,6 +1751,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 entry.sprite.width = entry.nodeRef.dimensions.width
                 entry.sprite.height = entry.nodeRef.dimensions.height
                 syncSpriteMask(entry, entry.worldRect.minX, entry.worldRect.minY, entry.nodeRef.dimensions.width, entry.nodeRef.dimensions.height)
+                entry.textureKey = resolved
+                entry.loadedTier = fetchTier
+                entry.requestedTier = null
+                entry.forceFullOnNextLoad = false
                 entry.sprite.visible = true
                 entry.colorRect.visible = false
                 if (oldKey && oldKey !== resolved) releaseTexture(oldKey)

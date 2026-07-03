@@ -93,6 +93,7 @@ export const aiInteractionSubjects = [
                 referencedFeatureIds,
                 imageBranchCandidateSnapshot,
                 workspaceContextSnapshot,
+                canvasVisibleArea,
                 proseMirrorInitialDoc,
                 proseMirrorBaseVersion,
                 mediaGenerationRequest,
@@ -244,6 +245,7 @@ export const aiInteractionSubjects = [
                             referencedFeatureIds,
                             imageBranchCandidateSnapshot,
                             workspaceContextSnapshot,
+                            canvasVisibleArea,
                             proseMirrorInitialDoc,
                             proseMirrorBaseVersion,
                             eventMeta: {

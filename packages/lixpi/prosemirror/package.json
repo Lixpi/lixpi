@@ -4,6 +4,12 @@
     "private": true,
     "type": "module",
     "main": "./src/index.ts",
+    "scripts": {
+        "test:run": "vitest run"
+    },
+    "devDependencies": {
+        "vitest": "*"
+    },
     "exports": {
         ".": "./src/index.ts"
     },
