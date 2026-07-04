@@ -75,8 +75,11 @@
         "@codemirror/state": "*",
         "@codemirror/view": "*",
         "@lezer/highlight": "*",
+        "@nanostores/persistent": "*",
         "codemirror": "*",
         "crelt": "*",
+        "htm": "*",
+        "nanostores": "*",
         "prosemirror-commands": "*",
         "prosemirror-dropcursor": "*",
         "prosemirror-example-setup": "*",
@@ -88,8 +91,7 @@
         "prosemirror-schema-basic": "*",
         "prosemirror-schema-list": "*",
         "prosemirror-state": "*",
-        "prosemirror-view": "*",
-        "htm": "*"
+        "prosemirror-view": "*"
     },
     "packageManager": "pnpm@11.6.0"
 }

@@ -16,18 +16,18 @@ The translucent glass backdrop is a feature of this component — its element an
 
 ## Background Overlay
 
-The background overlay is optional and controlled by `overlay.enabled`. It is separate from the glass backdrop: `overlayElement` covers the host container behind the side panel while `backdropElement` stays panel-width and glassy. The overlay uses a dark tint with a low-intensity distortion filter — `backdrop-filter: blur(4px) saturate(108%)`, WebKit fallback, and a reduced-transparency fallback. It can request close on pointer down when `overlay.closeOnPointerDown` is enabled.
+The background overlay is optional and controlled by `overlay.enabled`. It is separate from the glass backdrop: `overlayElement` visually covers the host container behind the side panel while `backdropElement` stays panel-width and glassy. The overlay uses a dark tint with a low-intensity distortion filter — `backdrop-filter: blur(4px) saturate(108%)`, WebKit fallback, and a reduced-transparency fallback. Overlay pointer hit-testing stays transparent so drag movement reaches the host pan surface; document-level capture requests close on click/tap when `overlay.closeOnPointerDown` is enabled and blocks that click from leaking through.
 
 ## Open / close animation
 
-The component plays a drawer-style slide when the panel enters and leaves. The panel, glass backdrop, and optional toggle button translate in from (or out to) the edge they hug. The optional overlay fades behind them.
+The component plays a drawer-style slide when the panel enters and leaves. The panel and glass backdrop translate in from (or out to) the edge they hug. The optional toggle button uses the same slide by default, or it can stay fixed while the panel and backdrop animate underneath it. The optional overlay fades behind them.
 
-- `prepareOpen(panelElement)` puts the panel, backdrop, and toggle in their off-edge start transform before the host appends panel DOM.
+- `prepareOpen(panelElement)` puts the panel, backdrop, and sliding toggle in their off-edge start transform before the host appends panel DOM.
 - `mountOpen(panelElement)` mounts a panel that should appear already open, including persisted open state on page load and rebuilt panel DOM while already open.
 - `playOpen(panelElement)` slides the component surfaces in from the edge and resolves when the transform transition settles. The host calls it once, right after mounting the panel; re-renders (tab switches, content updates) that rebuild the panel while it is already on screen must not call it again.
 - `playClose()` slides them back out and resolves once the transform transition settles, so the host can wait before detaching panel DOM.
 
-The slide writes `transform` directly on the panel, backdrop, and toggle so the start and end positions cannot be lost during host re-renders. The overlay fade writes `opacity` directly on `overlayElement`. The transition value comes from `.side-panel-slide` and `.side-panel-overlay`; duration and easing come from `animation.durationMs` and `animation.easing`, applied by the component through local CSS variables used by `panelSlideTransition` in [`side-panel.scss`](./side-panel.scss). `playOpen` and `playClose` resolve through a timeout fallback when no `transitionend` fires.
+The slide writes `transform` directly on the panel, backdrop, and sliding toggle so the start and end positions cannot be lost during host re-renders. A fixed toggle keeps `translate3d(0, 0, 0)` and stays out of the slide target list. The overlay fade writes `opacity` directly on `overlayElement`. The transition value comes from `.side-panel-slide` and `.side-panel-overlay`; duration comes from `animation.durationMs`, opening easing comes from `animation.openEasing`, and closing easing comes from `animation.closeEasing`. The component applies those values through local CSS variables used by `panelSlideTransition` in [`side-panel.scss`](./side-panel.scss). `playOpen` and `playClose` resolve through a timeout fallback when no `transitionend` fires.
 
 ## Resize ownership
 
@@ -62,8 +62,8 @@ The component owns the panel width state, clamps it through the configured const
 - `grabWidth`: screen-pixel width of the invisible drag hit target.
 - `className`: optional extra class so a specific panel's resize handle can be styled separately.
 - `styles`: optional `gradient` and `width` overrides for the resize-handle line.
-- `toggle`: optional component-owned open/collapse button config: SVG markup, ARIA labels, positioning offsets, travel distance, class name, and `onToggle()`.
-- `animation`: optional slide `durationMs` and `easing`.
+- `toggle`: optional component-owned open/collapse button config: SVG markup, ARIA labels, positioning offsets, travel distance, motion mode, class name, and `onToggle()`. `motion: 'slide'` is the default; `motion: 'fixed'` keeps the toggle anchored while panel surfaces open under it.
+- `animation`: optional slide `durationMs`, `openEasing`, `closeEasing`, and fallback `easing`.
 - `overlay`: optional background overlay config: `enabled`, `fill`, `fillOpaque`, `opacity`, `className`, and `closeOnPointerDown`.
 - `drag`: optional swipe-to-close config: `enabled`, `closeThreshold`, `velocityThreshold`, `pointerSwipeStartThreshold`, and `touchSwipeStartThreshold`.
 - `minWidth`, `defaultWidth`: resize constraints. `defaultWidth` is the resolved width before the user has ever resized.
@@ -71,7 +71,7 @@ The component owns the panel width state, clamps it through the configured const
 - `measureWidth()`: optional measurement of the actual rendered panel width, used as the start width for the first drag before any width is stored.
 - `loadState()` / `persistState(state)`: persistence adapter.
 - `onResizeStart()`, `onResize(width)`, `onResizeEnd(width)`: drag lifecycle callbacks. `onResize` also fires for programmatic `setWidth`.
-- `onOpenChange(open)`: request open-state changes from component-owned overlay pointer down and swipe-to-close gestures.
+- `onOpenChange(open)`: request open-state changes from component-owned overlay click/tap and swipe-to-close gestures.
 
 ### Instance
 
@@ -92,18 +92,19 @@ The component owns the panel width state, clamps it through the configured const
 - `playOpen(panelElement)`: slide the panel/backdrop in from the hugged edge and fade in the optional overlay.
 - `playClose()`: slide them back out and fade the optional overlay; resolves when the transition settles.
 - `detachPanel()`: remove the resize handle/backdrop/overlay and cancel in-flight panel motion while keeping the toggle and width state alive.
-- `destroy()`: removes the resize handle element, backdrop element, overlay element, the `pointerdown` listener, in-flight pointer drag listeners on `document`, mounted-panel pointer listeners, any pending slide cleanup, and all subscribers.
+- `destroy()`: removes the resize handle element, backdrop element, overlay element, overlay listeners, in-flight pointer drag listeners on `document`, mounted-panel pointer listeners, any pending slide cleanup, and all subscribers.
 
 ## Styling
 
 Base presentation lives in [`side-panel.scss`](./side-panel.scss):
 
 - The resize handle: `.side-panel-resize-handle` and `.side-panel-resize-handle-line`, driven by `--side-panel-resize-handle-gradient` and `--side-panel-resize-handle-width`. The line spans the full panel height.
-- The toggle: `.side-panel-toggle` (+ `.side-panel-toggle-left` / `.side-panel-toggle-right` / `.side-panel-toggle-open`), driven by `--side-panel-toggle-closed-travel`.
+- The toggle: `.side-panel-toggle` (+ `.side-panel-toggle-left` / `.side-panel-toggle-right` / `.side-panel-toggle-open`), driven by `--side-panel-toggle-closed-travel` only when the toggle motion is `slide`.
 - The glass backdrop: `.side-panel-backdrop` (+ `.side-panel-backdrop-left` / `.side-panel-backdrop-right`). Width comes from `--side-panel-backdrop-width`, the tint from `--side-panel-backdrop-fill` / `--side-panel-backdrop-fill-opaque`.
 - The background overlay: `.side-panel-overlay` (+ `.side-panel-overlay-left` / `.side-panel-overlay-right` / `.side-panel-overlay-open`), driven by `--side-panel-overlay-fill` / `--side-panel-overlay-fill-opaque` and a lower-intensity blur/saturate glass filter.
 - Swipe-to-close state: `.side-panel-touch-drag` and `.side-panel-touch-dragging`.
-- The slide animation: `.side-panel-slide` provides the transform transition; `--side-panel-slide-duration` and `--side-panel-slide-easing` are set from component config, and the component applies the current transform inline to the panel element, backdrop, and toggle.
+- The slide animation: `.side-panel-slide` provides the transform transition; `--side-panel-slide-duration` and `--side-panel-slide-easing` are set from component config for the active open/close direction, and the component applies the current transform inline to the panel element, backdrop, and toggle.
+- Layering: `--side-panel-resize-handle-z-index`, `--side-panel-overlay-z-index`, `--side-panel-backdrop-z-index`, `--side-panel-surface-z-index`, and `--side-panel-toggle-z-index` let each host place the shared surfaces above its local content while preserving overlay below backdrop below panel below toggle order.
 
 Pass `className` to add panel-specific resize-handle overrides without touching the shared rules.
 
