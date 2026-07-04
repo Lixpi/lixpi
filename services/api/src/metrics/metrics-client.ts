@@ -6,9 +6,9 @@ import { warn } from '@lixpi/debug-tools'
 import type { CheckRequest, CheckResponse, ConfirmRequest, ConfirmResponse } from './contracts.ts'
 
 // CROSS-REPO WIRE CONTRACT — the metrics.* subjects and check/confirm shapes are
-// shared with lixpi-billing. Do NOT change without explicit user allowance, and
-// mirror any change on both sides (see ./contracts.ts and lixpi-billing
-// internal/billing + internal/natsx). A one-sided change breaks the wire.
+// shared with the hosted metering backend (a separate service, out of this repo).
+// Do NOT change without explicit user allowance, and mirror any change on both
+// sides (see ./contracts.ts). A one-sided change breaks the wire.
 const METRICS_SUBJECTS = (NATS_SUBJECTS as any).METRICS_SUBJECTS as {
     USAGE_CHECK: string
     USAGE_CONFIRM: string
@@ -47,7 +47,7 @@ export function metricsConfigFromEnv(): MetricsClientOptions {
 }
 
 // MetricsClient is the hosted binding of the abstract metering port: it issues the
-// synchronous check/confirm request/reply to lixpi-metrics (lixpi-billing). When
+// synchronous check/confirm request/reply to the hosted metering backend. When
 // disabled it is the plug — check approves, confirm no-ops — so local/OSS runs are
 // unaffected and never touch the network.
 export class MetricsClient {

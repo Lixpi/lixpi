@@ -14,7 +14,7 @@ Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_EVEN })
 export type UsageReport = {
     eventMeta: EventMeta
     aiModel: string
-    modelVersion: string // canonical vendor id for billing (aiModel is the display id)
+    modelVersion: string // canonical vendor id for the metering backend (aiModel is the display id)
     aiVendorRequestId: string
     aiRequestReceivedAt: number
     aiRequestFinishedAt: number
@@ -47,7 +47,7 @@ export type UsageReport = {
 export type ImageUsageReport = {
     eventMeta: EventMeta
     aiModel: string
-    modelVersion: string // canonical vendor id for billing (aiModel is the display id)
+    modelVersion: string // canonical vendor id for the metering backend (aiModel is the display id)
     aiVendorRequestId: string
     aiRequestReceivedAt: number
     aiRequestFinishedAt: number
@@ -65,7 +65,7 @@ export type ImageUsageReport = {
 export type VideoUsageReport = {
     eventMeta: EventMeta
     aiModel: string
-    modelVersion: string // canonical vendor id for billing (aiModel is the display id)
+    modelVersion: string // canonical vendor id for the metering backend (aiModel is the display id)
     aiVendorRequestId: string
     aiRequestReceivedAt: number
     aiRequestFinishedAt: number

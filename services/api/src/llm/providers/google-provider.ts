@@ -349,7 +349,7 @@ export class GoogleProvider extends BaseProvider {
                 // Gemini reports thinking (thoughts) separately from candidates but
                 // bills it as output. Fold reasoning into completionTokens so the
                 // contract invariant holds (completionTokens INCLUDES reasoning, like
-                // OpenAI's output_tokens) and billing charges it; keep the subset in
+                // OpenAI's output_tokens) and the metering backend charges it; keep the subset in
                 // completionReasoningTokens for reference.
                 const completionTokens = (usageMetadata.candidatesTokenCount ?? 0) + reasoningTokens
                 update.usage = {

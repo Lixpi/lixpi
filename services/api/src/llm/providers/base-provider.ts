@@ -38,7 +38,7 @@ export type BaseProviderDeps = {
     runVideoRouter: (state: ProviderState) => Promise<Partial<ProviderState>>
     // Metrics (optional — absent/disabled = the open-source plug, i.e. today's
     // behavior). The synchronous check/confirm run on the workflow path via this
-    // client; Lixpi never names billing (see metrics/metrics-client.ts).
+    // abstract metering client (see metrics/metrics-client.ts).
     metrics?: MetricsClient
 }
 

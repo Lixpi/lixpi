@@ -10,7 +10,7 @@ const head = {
     eventMeta,
     aiVendorRequestId: 'req_77',
     aiModel: 'OpenAI:gpt-5', // display id
-    modelVersion: 'gpt-5', // canonical vendor id sent to billing
+    modelVersion: 'gpt-5', // canonical vendor id sent to the metering backend
     aiRequestReceivedAt: 1000,
     aiRequestFinishedAt: Date.UTC(2026, 0, 1),
 }
