@@ -9,7 +9,8 @@ const eventMeta = { organizationId: 'org_1', userId: 'usr_1', workspaceId: 'ws_1
 const head = {
     eventMeta,
     aiVendorRequestId: 'req_77',
-    aiModel: 'OpenAI:gpt-5',
+    aiModel: 'OpenAI:gpt-5', // display id
+    modelVersion: 'gpt-5', // canonical vendor id sent to billing
     aiRequestReceivedAt: 1000,
     aiRequestFinishedAt: Date.UTC(2026, 0, 1),
 }
@@ -31,7 +32,7 @@ describe('tokenUsageConfirm', () => {
             workspaceId: 'ws_1',
             workflowId: 'wf_a1b2',
             workflowSeq: 1,
-            model: 'OpenAI:gpt-5',
+            model: 'gpt-5',
             modality: 'tokens',
             measuringUnit: 'tokens',
             usage: { promptTokens: 700, completionTokens: 112, cachedTokens: 100, reasoningTokens: 30 },

@@ -39,6 +39,10 @@ export interface CheckResponse {
 // video seconds-vs-tokens) is what makes accurate pricing possible.
 export interface UsageBreakdown {
     // Text tokens — kept split because input and output are priced differently.
+    // Invariants the backend relies on (normalize per-provider before sending):
+    //   promptTokens INCLUDES cachedTokens (cached ⊆ prompt);
+    //   completionTokens INCLUDES reasoningTokens (reasoning ⊆ completion).
+    // cachedTokens/reasoningTokens are the priced-differently / informational subsets.
     promptTokens?: number
     completionTokens?: number
     cachedTokens?: number

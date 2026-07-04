@@ -345,14 +345,20 @@ export class GoogleProvider extends BaseProvider {
 
             if (usageMetadata) {
                 const promptTokens = usageMetadata.promptTokenCount ?? 0
-                const completionTokens = usageMetadata.candidatesTokenCount ?? 0
+                const reasoningTokens = usageMetadata.thoughtsTokenCount ?? 0
+                // Gemini reports thinking (thoughts) separately from candidates but
+                // bills it as output. Fold reasoning into completionTokens so the
+                // contract invariant holds (completionTokens INCLUDES reasoning, like
+                // OpenAI's output_tokens) and billing charges it; keep the subset in
+                // completionReasoningTokens for reference.
+                const completionTokens = (usageMetadata.candidatesTokenCount ?? 0) + reasoningTokens
                 update.usage = {
                     promptTokens,
                     promptAudioTokens: 0,
                     promptCachedTokens: usageMetadata.cachedContentTokenCount ?? 0,
                     completionTokens,
                     completionAudioTokens: 0,
-                    completionReasoningTokens: usageMetadata.thoughtsTokenCount ?? 0,
+                    completionReasoningTokens: reasoningTokens,
                     totalTokens: usageMetadata.totalTokenCount ?? (promptTokens + completionTokens),
                 }
                 update.aiVendorRequestId = `google-${state.workspaceId}-${state.aiChatThreadId}`

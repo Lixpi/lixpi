@@ -141,6 +141,11 @@ export class AnthropicProvider extends BaseProvider {
 
             if (finalMessage.usage) {
                 const u = finalMessage.usage
+                // KNOWN GAP: Anthropic reports prompt caching as separate
+                // cache_read_input_tokens / cache_creation_input_tokens (input_tokens
+                // EXCLUDES them). We don't capture those yet, so cached-prompt cost is
+                // unbilled. If added later, fold cache reads into promptTokens AND
+                // promptCachedTokens to keep the cached ⊆ prompt invariant billing relies on.
                 update.usage = {
                     promptTokens: u.input_tokens ?? 0,
                     promptAudioTokens: 0,

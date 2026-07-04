@@ -10,7 +10,7 @@ import type { UsageReport, ImageUsageReport, VideoUsageReport } from './usage-re
 type ReportHead = {
     eventMeta: { organizationId?: string; userId?: string; workspaceId?: string; [k: string]: unknown }
     aiVendorRequestId: string
-    aiModel: string
+    modelVersion: string // canonical vendor id — must match what check sent, and the LiteLLM dataset key
     aiRequestFinishedAt: number
 }
 
@@ -21,7 +21,7 @@ const common = (report: ReportHead, workflowId: string, workflowSeq: number) => 
     workspaceId: report.eventMeta?.workspaceId,
     workflowId,
     workflowSeq,
-    model: report.aiModel,
+    model: report.modelVersion,
     currency: 'USD',
     occurredAt: new Date(report.aiRequestFinishedAt || Date.now()).toISOString(),
 })
