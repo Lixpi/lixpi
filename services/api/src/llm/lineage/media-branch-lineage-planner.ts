@@ -400,9 +400,11 @@ export class MediaBranchLineagePlanner {
                 generationRequestId: args.input.generationRequestId,
                 reasoningRunId: run.reasoningRunId,
                 reasoningModelId: run.reasoningModelId,
+                reasoningIndex: run.reasoningIndex,
                 ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
                 ...(run.mediaModelId ? { mediaModelId: run.mediaModelId } : {}),
                 ...(run.mediaType ? { mediaType: run.mediaType } : {}),
+                mediaIndex: run.mediaIndex,
                 branchId: args.branchId,
                 ...(args.sourceDecision.parentMediaNodeId
                     ? {

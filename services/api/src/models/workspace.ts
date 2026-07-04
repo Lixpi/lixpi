@@ -43,6 +43,32 @@ type WorkspaceWithCanvasToken = Partial<Workspace> & {
     canvasStateUpdatedAt?: number
 }
 
+type CanvasEdge = CanvasState['edges'][number]
+
+type ApiLineageGeneratedBy = {
+    generationRequestId?: string
+    reasoningRunId?: string
+    mediaRunId?: string
+    reasoningModelId?: string
+    mediaModelId?: string
+    mediaType?: 'image' | 'video'
+    branchId?: string
+    parentMediaNodeId?: string
+    parentImageNodeId?: string
+    branchOriginNodeId?: string
+    branchForkNodeId?: string
+    branchLineNodeId?: string
+    createdAt?: number
+}
+
+type ApiLineageCanvasNode = CanvasNode & {
+    generatedBy?: ApiLineageGeneratedBy
+    generationRequestId?: string
+    branchId?: string
+}
+
+const API_GENERATED_MEDIA_FULL_SAVE_PROTECTION_MS = 30 * 60 * 1000
+
 const addFileId = (fileIds: Set<string>, fileId: unknown): void => {
     if (typeof fileId === 'string' && fileId.length > 0) {
         fileIds.add(fileId)
@@ -64,6 +90,157 @@ const getCanvasStateWriteCondition = (hasExpectedCanvasStateUpdatedAt: boolean):
     }
 
     return '(#canvasStateUpdatedAt = :expectedCanvasStateUpdatedAt OR (attribute_not_exists(#canvasStateUpdatedAt) AND #updatedAt = :expectedCanvasStateUpdatedAt))'
+}
+
+const normalizeCanvasState = (canvasState: CanvasState | undefined): CanvasState => ({
+    viewport: canvasState?.viewport ?? { x: 0, y: 0, zoom: 1 },
+    nodes: canvasState?.nodes ?? [],
+    edges: canvasState?.edges ?? []
+})
+
+const isBranchMarkerNode = (node: CanvasNode): boolean =>
+    node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
+
+const isApiGeneratedMediaNode = (node: CanvasNode): node is ApiLineageCanvasNode =>
+    (node.type === 'image' || node.type === 'video')
+    && Boolean(
+        (node as ApiLineageCanvasNode).generatedBy?.generationRequestId
+        || (node as ApiLineageCanvasNode).generatedBy?.mediaRunId
+        || (node as ApiLineageCanvasNode).generatedBy?.branchId
+    )
+
+const isApiLineageNode = (node: CanvasNode): node is ApiLineageCanvasNode =>
+    isBranchMarkerNode(node) || isApiGeneratedMediaNode(node)
+
+const getApiLineageNodeStableKey = (node: ApiLineageCanvasNode): string => {
+    if (isBranchMarkerNode(node)) return `marker:${node.nodeId}`
+
+    const generatedBy = node.generatedBy
+    if (generatedBy?.mediaRunId) return `generated-media-run:${generatedBy.mediaRunId}`
+    if (generatedBy?.generationRequestId && generatedBy.reasoningRunId && generatedBy.mediaModelId) {
+        return `generated-media:${generatedBy.generationRequestId}:${generatedBy.reasoningRunId}:${generatedBy.mediaModelId}`
+    }
+
+    return `generated-media-node:${node.nodeId}`
+}
+
+const isFreshApiGeneratedMediaNode = (node: ApiLineageCanvasNode, currentDate: number): boolean => {
+    if (!isApiGeneratedMediaNode(node)) return false
+
+    const createdAt = node.generatedBy?.createdAt
+    if (typeof createdAt !== 'number') return false
+
+    return currentDate - createdAt <= API_GENERATED_MEDIA_FULL_SAVE_PROTECTION_MS
+}
+
+const addGeneratedLineageMarkerRefs = (node: ApiLineageCanvasNode, refs: Set<string>): void => {
+    const generatedBy = node.generatedBy
+    addFileId(refs, generatedBy?.branchOriginNodeId)
+    addFileId(refs, generatedBy?.branchForkNodeId)
+    addFileId(refs, generatedBy?.branchLineNodeId)
+}
+
+const applyIncomingLayoutFields = (currentNode: ApiLineageCanvasNode, incomingNode: ApiLineageCanvasNode): CanvasNode => {
+    const merged = { ...incomingNode, ...currentNode } as Record<string, unknown>
+
+    if ('position' in incomingNode) merged.position = incomingNode.position
+    if ('dimensions' in incomingNode) merged.dimensions = incomingNode.dimensions
+    if ('parentId' in incomingNode) merged.parentId = incomingNode.parentId
+    if ('extent' in incomingNode) merged.extent = incomingNode.extent
+    if ('expandParent' in incomingNode) merged.expandParent = incomingNode.expandParent
+
+    return merged as CanvasNode
+}
+
+function mergeApiLineageForFullCanvasSave(
+    currentCanvasState: CanvasState,
+    incomingCanvasState: CanvasState,
+    currentDate: number
+): CanvasState {
+    const currentApiNodes = currentCanvasState.nodes.filter(isApiLineageNode)
+    if (currentApiNodes.length === 0) return incomingCanvasState
+
+    const currentApiNodesById = new Map(currentApiNodes.map(node => [node.nodeId, node]))
+    const currentApiNodesByStableKey = new Map(currentApiNodes.map(node => [getApiLineageNodeStableKey(node), node]))
+    const incomingApiNodeIds = new Set<string>()
+    const protectedMarkerNodeIds = new Set<string>()
+    const nextNodes: CanvasNode[] = []
+    const includedNodeIds = new Set<string>()
+
+    const includeNode = (node: CanvasNode): void => {
+        if (includedNodeIds.has(node.nodeId)) {
+            const index = nextNodes.findIndex(candidate => candidate.nodeId === node.nodeId)
+            if (index >= 0) nextNodes[index] = node
+            return
+        }
+
+        nextNodes.push(node)
+        includedNodeIds.add(node.nodeId)
+    }
+
+    for (const incomingNode of incomingCanvasState.nodes) {
+        if (!isApiLineageNode(incomingNode)) {
+            includeNode(incomingNode)
+            continue
+        }
+
+        incomingApiNodeIds.add(incomingNode.nodeId)
+        const stableKey = getApiLineageNodeStableKey(incomingNode)
+        const currentNode = currentApiNodesByStableKey.get(stableKey)
+
+        if (!currentNode) continue
+
+        if (isApiGeneratedMediaNode(currentNode)) addGeneratedLineageMarkerRefs(currentNode, protectedMarkerNodeIds)
+
+        const nodeToInclude = currentNode.nodeId === incomingNode.nodeId
+            ? applyIncomingLayoutFields(currentNode, incomingNode)
+            : currentNode
+        includeNode(nodeToInclude)
+    }
+
+    for (const currentNode of currentApiNodes) {
+        if (includedNodeIds.has(currentNode.nodeId)) continue
+
+        if (isBranchMarkerNode(currentNode)) continue
+        if (!isFreshApiGeneratedMediaNode(currentNode, currentDate)) continue
+
+        addGeneratedLineageMarkerRefs(currentNode, protectedMarkerNodeIds)
+        includeNode(currentNode)
+    }
+
+    for (const currentNode of currentApiNodes) {
+        if (includedNodeIds.has(currentNode.nodeId)) continue
+        if (!isBranchMarkerNode(currentNode)) continue
+
+        if (protectedMarkerNodeIds.has(currentNode.nodeId)) {
+            includeNode(currentNode)
+        }
+    }
+
+    const apiNodeIds = new Set([
+        ...currentApiNodes.map(node => node.nodeId),
+        ...incomingApiNodeIds,
+    ])
+    const nextNodeIds = new Set(nextNodes.map(node => node.nodeId))
+    const nextEdgesById = new Map<string, CanvasEdge>()
+
+    for (const edge of incomingCanvasState.edges ?? []) {
+        if (apiNodeIds.has(edge.sourceNodeId) || apiNodeIds.has(edge.targetNodeId)) continue
+        if (!nextNodeIds.has(edge.sourceNodeId) || !nextNodeIds.has(edge.targetNodeId)) continue
+        nextEdgesById.set(edge.edgeId, edge)
+    }
+
+    for (const edge of currentCanvasState.edges ?? []) {
+        if (!currentApiNodesById.has(edge.sourceNodeId) && !currentApiNodesById.has(edge.targetNodeId)) continue
+        if (!nextNodeIds.has(edge.sourceNodeId) || !nextNodeIds.has(edge.targetNodeId)) continue
+        nextEdgesById.set(edge.edgeId, edge)
+    }
+
+    return {
+        ...incomingCanvasState,
+        nodes: nextNodes,
+        edges: [...nextEdgesById.values()],
+    }
 }
 
 const getCanvasStateReferencedFileIds = (canvasState: CanvasState | null | undefined): Set<string> => {
@@ -300,6 +477,17 @@ export default {
         const hasExpectedCanvasStateUpdatedAt = canvasStateSaveToken !== undefined
 
         try {
+            const currentWorkspace = await dynamoDBService.getItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                key: { workspaceId },
+                origin: 'updateWorkspaceCanvasState:get'
+            })
+            const nextCanvasState = mergeApiLineageForFullCanvasSave(
+                normalizeCanvasState(currentWorkspace?.canvasState),
+                normalizeCanvasState(canvasState),
+                currentDate
+            )
+
             await dynamoDBService.updateItem({
                 tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
                 key: { workspaceId },
@@ -311,7 +499,7 @@ export default {
                     '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
                 },
                 expressionAttributeValues: {
-                    ':canvasState': canvasState,
+                    ':canvasState': nextCanvasState,
                     ':updatedAt': currentDate,
                     ':canvasStateUpdatedAt': currentDate,
                     ...(hasExpectedCanvasStateUpdatedAt ? { ':expectedCanvasStateUpdatedAt': canvasStateSaveToken } : {})
@@ -370,11 +558,7 @@ export default {
                 return false
             }
 
-            const currentCanvasState: CanvasState = {
-                viewport: workspace.canvasState?.viewport ?? { x: 0, y: 0, zoom: 1 },
-                nodes: workspace.canvasState?.nodes ?? [],
-                edges: workspace.canvasState?.edges ?? []
-            }
+            const currentCanvasState = normalizeCanvasState(workspace.canvasState)
             const result = mutate(currentCanvasState)
             if (!result.changed) return false
 

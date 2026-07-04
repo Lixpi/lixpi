@@ -22,6 +22,30 @@ function makeImageNode(
     }
 }
 
+function rectsOverlap(
+    a: { x: number; y: number; width: number; height: number },
+    b: { x: number; y: number; width: number; height: number },
+): boolean {
+    return a.x < b.x + b.width
+        && a.x + a.width > b.x
+        && a.y < b.y + b.height
+        && a.y + a.height > b.y
+}
+
+function getGroupRect(nodes: CanvasNode[], nodeIds: string[]): { x: number; y: number; width: number; height: number } {
+    const groupNodes = nodes.filter(node => nodeIds.includes(node.nodeId))
+    const minX = Math.min(...groupNodes.map(node => node.position.x))
+    const minY = Math.min(...groupNodes.map(node => node.position.y))
+    const maxX = Math.max(...groupNodes.map(node => node.position.x + node.dimensions.width))
+    const maxY = Math.max(...groupNodes.map(node => node.position.y + node.dimensions.height))
+    return {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+    }
+}
+
 // =============================================================================
 // RIGID GROUP COLLISION RESOLUTION
 // =============================================================================
@@ -208,5 +232,46 @@ describe('resolveRigidCanvasNodeGroupCollisions', () => {
         ])
         expect(result.changed).toBe(false)
         expect(result.nodes).toBe(nodes)
+    })
+
+    it('separates overlapping multi-node groups while preserving each group as a rigid body', () => {
+        const nodes = [
+            makeImageNode('a-1', 0, 0),
+            makeImageNode('a-2', 0, 140),
+            makeImageNode('b-1', 40, 40),
+            makeImageNode('b-2', 40, 180),
+        ]
+
+        const result = resolveRigidCanvasNodeGroupCollisions(nodes, [
+            {
+                id: 'group:a',
+                nodeIds: ['a-1', 'a-2'],
+                rect: { x: 0, y: 0, width: 100, height: 240 },
+            },
+            {
+                id: 'group:b',
+                nodeIds: ['b-1', 'b-2'],
+                rect: { x: 40, y: 40, width: 100, height: 240 },
+            },
+        ], {
+            margin: 0,
+            overlapThreshold: 0,
+            iterations: 20,
+        })
+
+        const a1 = result.nodes.find(node => node.nodeId === 'a-1')!
+        const a2 = result.nodes.find(node => node.nodeId === 'a-2')!
+        const b1 = result.nodes.find(node => node.nodeId === 'b-1')!
+        const b2 = result.nodes.find(node => node.nodeId === 'b-2')!
+
+        expect(result.changed).toBe(true)
+        expect(a2.position.x - a1.position.x).toBe(0)
+        expect(a2.position.y - a1.position.y).toBe(140)
+        expect(b2.position.x - b1.position.x).toBe(0)
+        expect(b2.position.y - b1.position.y).toBe(140)
+        expect(rectsOverlap(
+            getGroupRect(result.nodes, ['a-1', 'a-2']),
+            getGroupRect(result.nodes, ['b-1', 'b-2']),
+        )).toBe(false)
     })
 })

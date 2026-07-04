@@ -8,6 +8,14 @@ import type {
     CollisionResult,
 } from './types.ts'
 
+function getFiniteNumber(value: number | undefined, fallback: number): number {
+    return Number.isFinite(value) ? Number(value) : fallback
+}
+
+function getNonNegativeFiniteNumber(value: number | undefined, fallback: number): number {
+    return Math.max(0, getFiniteNumber(value, fallback))
+}
+
 export function resolveCollisions(
     nodes: CollisionBox[],
     options: CollisionOptions = {},
@@ -19,21 +27,27 @@ export function resolveCollisions(
         excludePairs,
         shouldResolvePair,
     } = options
+    const safeIterations = Math.max(0, Math.floor(getFiniteNumber(iterations, 50)))
+    const safeMargin = getNonNegativeFiniteNumber(margin, 20)
+    const safeOverlapThreshold = getNonNegativeFiniteNumber(overlapThreshold, 0.5)
 
-    const boxes = nodes.map(node => ({
-        id: node.id,
-        x: node.x - (node.margin ?? margin),
-        y: node.y - (node.margin ?? margin),
-        width: node.width + (node.margin ?? margin) * 2,
-        height: node.height + (node.margin ?? margin) * 2,
-        margin: node.margin ?? margin,
-        overlapThreshold: node.overlapThreshold ?? overlapThreshold,
-        moved: false,
-    }))
+    const boxes = nodes.map((node) => {
+        const nodeMargin = getNonNegativeFiniteNumber(node.margin, safeMargin)
+        return {
+            id: node.id,
+            x: getFiniteNumber(node.x, 0) - nodeMargin,
+            y: getFiniteNumber(node.y, 0) - nodeMargin,
+            width: getNonNegativeFiniteNumber(node.width, 0) + nodeMargin * 2,
+            height: getNonNegativeFiniteNumber(node.height, 0) + nodeMargin * 2,
+            margin: nodeMargin,
+            overlapThreshold: getNonNegativeFiniteNumber(node.overlapThreshold, safeOverlapThreshold),
+            moved: false,
+        }
+    })
 
     let numIterations = 0
 
-    for (let iter = 0; iter < iterations; iter++) {
+    for (let iter = 0; iter < safeIterations; iter++) {
         let moved = false
 
         for (let i = 0; i < boxes.length; i++) {
