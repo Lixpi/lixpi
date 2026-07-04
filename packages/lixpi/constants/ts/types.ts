@@ -528,8 +528,10 @@ export type MediaRunLineageAssignment = {
     reasoningRunId?: string
     mediaRunId?: string
     reasoningModelId?: AiModelId
+    reasoningIndex?: number
     mediaModelId?: AiModelId
     mediaType?: 'image' | 'video'
+    mediaIndex?: number
     branchId: string
     parentMediaNodeId?: string
     // Image-named schema alias. Lineage code uses parentMediaNodeId so
@@ -753,8 +755,10 @@ export type GeneratedMediaVariantMetadata = {
     reasoningRunId?: string
     mediaRunId?: string
     reasoningModelId?: AiModelId
+    reasoningIndex?: number
     mediaModelId?: AiModelId
     mediaType?: 'image' | 'video'
+    mediaIndex?: number
     variantIndex?: number
     // API-assigned lineage marker IDs. The browser applies these to canvas
     // state and may compute layout, but it must not derive branch topology.

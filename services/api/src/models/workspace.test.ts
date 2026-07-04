@@ -11,6 +11,7 @@ const dynamo = {
 }
 
 beforeEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
     ;(globalThis as any).dynamoDBService = dynamo
 })
@@ -372,7 +373,13 @@ describe('Workspace.updateCanvasState', () => {
             name: 'ConditionalCheckFailedException',
         })
         dynamo.updateItem.mockRejectedValueOnce(conditionalFailure)
-        dynamo.getItem.mockResolvedValueOnce({ updatedAt: 22, canvasStateUpdatedAt: 18 })
+        dynamo.getItem
+            .mockResolvedValueOnce({
+                updatedAt: 12,
+                canvasStateUpdatedAt: 12,
+                canvasState: { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [] },
+            })
+            .mockResolvedValueOnce({ updatedAt: 22, canvasStateUpdatedAt: 18 })
 
         const result = await Workspace.updateCanvasState({
             userId: 'user-1',
@@ -418,6 +425,236 @@ describe('Workspace.updateCanvasState', () => {
                 ':expectedCanvasStateUpdatedAt': expect.anything(),
             }),
         }))
+    })
+
+    it('keeps canonical API lineage when a browser save contains a stale generated node for the same media run', async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(1_000_000)
+        dynamo.getItem.mockResolvedValueOnce({
+            updatedAt: 10,
+            canvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [
+                    {
+                        nodeId: 'fork-1',
+                        type: 'branchFork',
+                        branchId: 'branch-1',
+                        generationRequestId: 'request-1',
+                        reasoningRunId: 'reasoning-1',
+                        reasoningModelId: 'Provider:reasoning',
+                        reasoningIndex: 0,
+                        position: { x: 100, y: 100 },
+                        dimensions: { width: 375, height: 68 },
+                        temporary: true,
+                    },
+                    {
+                        nodeId: 'node-final-file',
+                        type: 'image',
+                        fileId: 'final-file',
+                        workspaceId: 'workspace-1',
+                        src: '/api/images/workspace-1/final-file',
+                        aspectRatio: 1,
+                        position: { x: 500, y: 100 },
+                        dimensions: { width: 800, height: 600 },
+                        generatedBy: {
+                            aiChatThreadId: 'thread-1',
+                            responseId: 'response-1',
+                            aiModel: 'Provider:reasoning',
+                            revisedPrompt: 'prompt',
+                            responseMessageId: '',
+                            generationRequestId: 'request-1',
+                            reasoningRunId: 'reasoning-1',
+                            mediaRunId: 'run-1',
+                            mediaModelId: 'Provider:image',
+                            branchId: 'branch-1',
+                            branchForkNodeId: 'fork-1',
+                            createdAt: 999_000,
+                        },
+                    },
+                ],
+                edges: [{
+                    edgeId: 'edge-fork-1-node-final-file',
+                    sourceNodeId: 'fork-1',
+                    targetNodeId: 'node-final-file',
+                    sourceHandle: 'right',
+                    targetHandle: 'left',
+                }],
+            },
+        })
+        dynamo.updateItem.mockResolvedValue(undefined)
+
+        await Workspace.updateCanvasState({
+            userId: 'user-1',
+            workspaceId: 'workspace-1',
+            expectedCanvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 1, y: 2, zoom: 1 },
+                nodes: [
+                    { nodeId: 'user-node', type: 'image', fileId: 'user-file' } as any,
+                    {
+                        nodeId: 'node-partial-file',
+                        type: 'image',
+                        fileId: 'partial-file',
+                        workspaceId: 'workspace-1',
+                        src: '/api/images/workspace-1/partial-file',
+                        aspectRatio: 1,
+                        position: { x: 700, y: 200 },
+                        dimensions: { width: 800, height: 600 },
+                        generatedBy: {
+                            aiChatThreadId: 'thread-1',
+                            responseId: '',
+                            aiModel: 'Provider:reasoning',
+                            revisedPrompt: 'prompt',
+                            responseMessageId: '',
+                            generationRequestId: 'request-1',
+                            reasoningRunId: 'reasoning-1',
+                            mediaRunId: 'run-1',
+                            mediaModelId: 'Provider:image',
+                            branchId: 'branch-1',
+                            branchForkNodeId: 'fork-1',
+                            createdAt: 999_000,
+                        },
+                    },
+                ],
+                edges: [{
+                    edgeId: 'edge-fork-1-node-partial-file',
+                    sourceNodeId: 'fork-1',
+                    targetNodeId: 'node-partial-file',
+                    sourceHandle: 'right',
+                    targetHandle: 'left',
+                }],
+            },
+        })
+
+        const writtenState = dynamo.updateItem.mock.calls[0]?.[0].expressionAttributeValues[':canvasState']
+        expect(writtenState.nodes).toEqual(expect.arrayContaining([
+            expect.objectContaining({ nodeId: 'user-node' }),
+            expect.objectContaining({ nodeId: 'fork-1' }),
+            expect.objectContaining({ nodeId: 'node-final-file', fileId: 'final-file' }),
+        ]))
+        expect(writtenState.nodes).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ nodeId: 'node-partial-file' }),
+        ]))
+        expect(writtenState.edges).toEqual([
+            expect.objectContaining({ edgeId: 'edge-fork-1-node-final-file' }),
+        ])
+    })
+
+    it('does not resurrect old API generated nodes omitted by a later browser save', async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(3_600_000)
+        dynamo.getItem.mockResolvedValueOnce({
+            updatedAt: 10,
+            canvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [
+                    {
+                        nodeId: 'fork-1',
+                        type: 'branchFork',
+                        branchId: 'branch-1',
+                        generationRequestId: 'request-1',
+                        reasoningRunId: 'reasoning-1',
+                        reasoningModelId: 'Provider:reasoning',
+                        reasoningIndex: 0,
+                        position: { x: 100, y: 100 },
+                        dimensions: { width: 375, height: 68 },
+                        temporary: true,
+                    },
+                    {
+                        nodeId: 'node-old-file',
+                        type: 'image',
+                        fileId: 'old-file',
+                        workspaceId: 'workspace-1',
+                        src: '/api/images/workspace-1/old-file',
+                        aspectRatio: 1,
+                        position: { x: 500, y: 100 },
+                        dimensions: { width: 800, height: 600 },
+                        generatedBy: {
+                            aiChatThreadId: 'thread-1',
+                            responseId: 'response-1',
+                            aiModel: 'Provider:reasoning',
+                            revisedPrompt: 'prompt',
+                            responseMessageId: '',
+                            generationRequestId: 'request-1',
+                            reasoningRunId: 'reasoning-1',
+                            mediaRunId: 'run-1',
+                            mediaModelId: 'Provider:image',
+                            branchId: 'branch-1',
+                            branchForkNodeId: 'fork-1',
+                            createdAt: 0,
+                        },
+                    },
+                ],
+                edges: [{
+                    edgeId: 'edge-fork-1-node-old-file',
+                    sourceNodeId: 'fork-1',
+                    targetNodeId: 'node-old-file',
+                    sourceHandle: 'right',
+                    targetHandle: 'left',
+                }],
+            },
+        })
+        dynamo.updateItem.mockResolvedValue(undefined)
+
+        await Workspace.updateCanvasState({
+            userId: 'user-1',
+            workspaceId: 'workspace-1',
+            expectedCanvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [{ nodeId: 'user-node', type: 'image', fileId: 'user-file' } as any],
+                edges: [],
+            },
+        })
+
+        const writtenState = dynamo.updateItem.mock.calls[0]?.[0].expressionAttributeValues[':canvasState']
+        expect(writtenState.nodes).toEqual([
+            expect.objectContaining({ nodeId: 'user-node' }),
+        ])
+        expect(writtenState.edges).toEqual([])
+    })
+
+    it('does not preserve abandoned marker-only API lineage across full browser saves', async () => {
+        dynamo.getItem.mockResolvedValueOnce({
+            updatedAt: 10,
+            canvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [{
+                    nodeId: 'fork-unreferenced',
+                    type: 'branchFork',
+                    branchId: 'branch-1',
+                    generationRequestId: 'request-1',
+                    reasoningRunId: 'reasoning-1',
+                    reasoningModelId: 'Provider:reasoning',
+                    reasoningIndex: 0,
+                    position: { x: 100, y: 100 },
+                    dimensions: { width: 375, height: 68 },
+                    temporary: true,
+                }],
+                edges: [],
+            },
+        })
+        dynamo.updateItem.mockResolvedValue(undefined)
+
+        await Workspace.updateCanvasState({
+            userId: 'user-1',
+            workspaceId: 'workspace-1',
+            expectedCanvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [{ nodeId: 'user-node', type: 'image', fileId: 'user-file' } as any],
+                edges: [],
+            },
+        })
+
+        const writtenState = dynamo.updateItem.mock.calls[0]?.[0].expressionAttributeValues[':canvasState']
+        expect(writtenState.nodes).toEqual([
+            expect.objectContaining({ nodeId: 'user-node' }),
+        ])
+        expect(writtenState.edges).toEqual([])
     })
 
     it('accepts a full canvas save after file upload changes only workspace updatedAt', async () => {
@@ -486,7 +723,10 @@ describe('Workspace.updateCanvasState', () => {
             updatedAt: expect.any(Number),
             canvasStateUpdatedAt: expect.any(Number),
         })
-        expect(dynamo.getItem).not.toHaveBeenCalled()
+        expect(dynamo.getItem).toHaveBeenCalledWith(expect.objectContaining({
+            key: { workspaceId: 'workspace-1' },
+            origin: 'updateWorkspaceCanvasState:get',
+        }))
         expect(workspaceItem.canvasState).toEqual(expect.objectContaining({
             nodes: [expect.objectContaining({ fileId: 'uploaded-file' })],
         }))

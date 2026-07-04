@@ -7,6 +7,33 @@ import {
     type CollisionBox,
 } from './resolve-collisions.ts'
 
+function rectsOverlap(
+    a: { x: number; y: number; width: number; height: number },
+    b: { x: number; y: number; width: number; height: number },
+): boolean {
+    return a.x < b.x + b.width
+        && a.x + a.width > b.x
+        && a.y < b.y + b.height
+        && a.y + a.height > b.y
+}
+
+function applyCollisionResult(nodes: CollisionBox[], result: ReturnType<typeof resolveCollisions>): CollisionBox[] {
+    return nodes.map((node) => {
+        const moved = result.nodes.get(node.id)
+        return moved ? { ...node, x: moved.x, y: moved.y } : node
+    })
+}
+
+function expectNoOverlaps(nodes: CollisionBox[]): void {
+    for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+            const a = nodes[i]
+            const b = nodes[j]
+            expect(rectsOverlap(a, b), `${a.id} should not overlap ${b.id}`).toBe(false)
+        }
+    }
+}
+
 // =============================================================================
 // BASE COLLISION RESOLUTION
 // =============================================================================
@@ -187,5 +214,36 @@ describe('resolveCollisions', () => {
         expect(result.hasChanges).toBe(false)
         expect(result.numIterations).toBe(1)
         expect(result.nodes.size).toBe(0)
+    })
+
+    it('separates boxes that all start with the exact same center', () => {
+        const nodes: CollisionBox[] = [
+            { id: 'stack-1', x: 0, y: 0, width: 100, height: 100 },
+            { id: 'stack-2', x: 0, y: 0, width: 100, height: 100 },
+            { id: 'stack-3', x: 0, y: 0, width: 100, height: 100 },
+            { id: 'stack-4', x: 0, y: 0, width: 100, height: 100 },
+        ]
+
+        const result = resolveCollisions(nodes, { margin: 0, overlapThreshold: 0, iterations: 100 })
+        const resolved = applyCollisionResult(nodes, result)
+
+        expect(result.hasChanges).toBe(true)
+        expectNoOverlaps(resolved)
+    })
+
+    it('handles non-finite and negative geometry without producing non-finite positions', () => {
+        const result = resolveCollisions([
+            { id: 'bad', x: Number.NaN, y: Number.POSITIVE_INFINITY, width: -100, height: Number.NaN, margin: -20 },
+            { id: 'good', x: 0, y: 0, width: 100, height: 100 },
+        ], {
+            margin: Number.NaN,
+            overlapThreshold: Number.NaN,
+            iterations: Number.POSITIVE_INFINITY,
+        })
+
+        for (const position of result.nodes.values()) {
+            expect(Number.isFinite(position.x)).toBe(true)
+            expect(Number.isFinite(position.y)).toBe(true)
+        }
     })
 })
