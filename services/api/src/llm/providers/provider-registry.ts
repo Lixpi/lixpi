@@ -10,12 +10,10 @@ import type { StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
 import type { StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
 import type { MetricsClient } from '../../metrics/metrics-client.ts'
-import type { Allowance } from '../../metrics/contracts.ts'
 
 // Metrics dependencies threaded into every provider's graph deps.
 export type MetricsDeps = {
     metrics?: MetricsClient
-    getOrgAllowance?: (userId: string) => Promise<Allowance | undefined>
 }
 
 export type ProviderConstructor = new (
@@ -75,7 +73,6 @@ export class ProviderRegistry {
                 return this.videoRouter(state)
             },
             metrics: this.metricsDeps.metrics,
-            getOrgAllowance: this.metricsDeps.getOrgAllowance,
         }
     }
 

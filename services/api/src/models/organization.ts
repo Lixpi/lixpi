@@ -69,23 +69,6 @@ export default {
         return orgDetails.items[getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE)]
     },
 
-    // getOrganizationMembers returns the userIds with access to an organization.
-    // Used by the metrics allowance projection to fan a balance change out to the
-    // org's members' user records (1:1 with the owner at launch).
-    getOrganizationMembers: async ({
-        organizationId
-    }: Pick<Organization, 'organizationId'>): Promise<string[]> => {
-        const accessList = await dynamoDBService.queryItems({
-            tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
-            indexName: 'organizationId',
-            keyConditions: { organizationId },
-            fetchAllItems: true,
-            origin: 'model::Organization->getOrganizationMembers()',
-        })
-
-        return accessList.items.map(({ userId }: { userId: string }) => userId)
-    },
-
     createOrganization: async ({
         name,
         userId,

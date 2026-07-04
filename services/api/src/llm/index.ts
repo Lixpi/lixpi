@@ -18,7 +18,6 @@ import type { StoreWorkspaceImageFn } from './graph/image-publisher.ts'
 import type { StoreWorkspaceVideoFn } from './graph/video-publisher.ts'
 import type { ExtractionInput, ExtractionResult } from './extraction/types.ts'
 import type { MetricsClient } from '../metrics/metrics-client.ts'
-import type { Allowance } from '../metrics/contracts.ts'
 
 export type LlmModule = {
     process: (instanceKey: string, providerName: ProviderName, requestData: Record<string, any>) => Promise<void>
@@ -36,9 +35,9 @@ export type LlmModuleDeps = {
     natsService: NatsService
     storeWorkspaceImage: StoreWorkspaceImageFn
     storeWorkspaceVideo: StoreWorkspaceVideoFn
-    // Metrics integration (optional — absent/disabled keeps today's behavior).
+    // Metrics integration (optional — absent/disabled = the open-source plug, i.e.
+    // today's behavior). Synchronous check/confirm run via this client.
     metrics?: MetricsClient
-    getOrgAllowance?: (userId: string) => Promise<Allowance | undefined>
 }
 
 export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
@@ -55,7 +54,6 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
         },
         {
             metrics: deps.metrics,
-            getOrgAllowance: deps.getOrgAllowance,
         },
     )
 

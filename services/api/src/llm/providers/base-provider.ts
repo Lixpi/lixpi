@@ -8,7 +8,7 @@ import { info, warn, err } from '@lixpi/debug-tools'
 import type { MediaGenerationRunMeta, ProviderName } from '@lixpi/constants'
 
 import type { MetricsClient } from '../../metrics/metrics-client.ts'
-import type { Allowance } from '../../metrics/contracts.ts'
+import type { Modality } from '../../metrics/contracts.ts'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
@@ -25,7 +25,7 @@ import { buildVideoGenerationTrace } from '../tools/video-generation-trace.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
-import { tokenUsageEvent, imageUsageEvent, videoUsageEvent } from '../usage/usage-event-mapper.ts'
+import { tokenUsageConfirm, imageUsageConfirm, videoUsageConfirm } from '../usage/usage-event-mapper.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 
@@ -36,10 +36,10 @@ export type BaseProviderDeps = {
     usageReporter: UsageReporter
     runImageRouter: (state: ProviderState) => Promise<Partial<ProviderState>>
     runVideoRouter: (state: ProviderState) => Promise<Partial<ProviderState>>
-    // Metrics (optional — absent/disabled means today's behavior). The gate reads
-    // the allowance locally; it never calls metrics on the workflow path.
+    // Metrics (optional — absent/disabled = the open-source plug, i.e. today's
+    // behavior). The synchronous check/confirm run on the workflow path via this
+    // client; Lixpi never names billing (see metrics/metrics-client.ts).
     metrics?: MetricsClient
-    getOrgAllowance?: (userId: string) => Promise<Allowance | undefined>
 }
 
 type FanoutRouterResult = Pick<ProviderState,
@@ -52,6 +52,10 @@ type FanoutRouterResult = Pick<ProviderState,
 
 const catalogModelIdFor = (model: AiModelMetaInfo): string =>
     `${model.provider}:${model.model}`
+
+// modalityForKind maps a workflow kind to the metering modality the check sends.
+const modalityForKind = (kind: string): Modality =>
+    kind === 'chat_video' ? 'video' : kind === 'chat_image' ? 'image' : 'tokens'
 
 const normalizeModelOption = (
     requested: string | number | undefined,
@@ -334,36 +338,39 @@ export abstract class BaseProvider {
         if (!state.messages?.length) throw new Error('messages list is required')
         if (!state.workspaceId) throw new Error('workspaceId is required')
         if (!state.aiChatThreadId) throw new Error('aiChatThreadId is required')
-        return this.metricsGate(state)
+        return this.metricsCheck(state)
     }
 
-    // Async spend gate: a local read of the allowance metrics maintains via
-    // metrics.balance.changed (projected onto the user record). No call to metrics
-    // on this path, so metrics latency/availability never affects the workflow.
-    // On admission, mints the per-run workflowId and emits a fire-and-forget
-    // run-start signal for metrics's usage-leak check.
-    private async metricsGate(state: ProviderState): Promise<Partial<ProviderState>> {
+    // Synchronous spend check before the paid provider call: ask the metering port
+    // whether the balance covers this run. Fail-closed — a denied (or, per the
+    // client's policy, an unreachable) port stops the run before any provider spend.
+    // Disabled = the open-source plug, which always approves. On admission, mint the
+    // per-run workflowId so the confirm calls can be grouped.
+    private async metricsCheck(state: ProviderState): Promise<Partial<ProviderState>> {
         const metrics = this.deps.metrics
         if (!metrics?.enabled) return {}
 
         const userId = state.eventMeta?.userId ?? ''
         const orgId = (state.eventMeta?.organizationId as string) ?? ''
         const workflowKind = this.deriveWorkflowKind(state)
-
-        let allowance: Allowance | undefined
-        try {
-            allowance = await this.deps.getOrgAllowance?.(userId)
-        } catch (e: any) {
-            // Read failure falls through to the configured cold-start default below.
-            warn(`[metrics] allowance read failed for ${userId}: ${e?.message ?? String(e)}`)
-        }
-
-        if (!metrics.gateAllows(allowance, workflowKind)) {
-            throw new Error(`Metrics: balance does not cover this workflow (${workflowKind})`)
-        }
-
         const workflowId = uuid()
-        metrics.publishWorkflowStarted({ workflowId, orgId, userId, workflowKind })
+
+        const res = await metrics.check({
+            orgId,
+            userId,
+            workspaceId: state.workspaceId,
+            workflowId,
+            model: state.modelVersion ?? '',
+            modality: modalityForKind(workflowKind),
+            // Best-effort upper bound; a real per-model estimate is a growth point
+            // (the metering backend prices conservatively from the model).
+            estimatedUnits: 0,
+            currency: 'USD',
+        })
+        if (!res.approved) {
+            const reason = res.reason ? `: ${res.reason}` : ''
+            throw new Error(`Metrics: balance does not cover this workflow (${workflowKind}${reason})`)
+        }
         return { workflowId, workflowSeq: 0 }
     }
 
@@ -739,9 +746,10 @@ export abstract class BaseProvider {
     protected async calculateUsage(state: ProviderState): Promise<Partial<ProviderState>> {
         if (state.error) return {}
 
-        // Publish one metrics usage event per provider call (modality), each with a
-        // 1-based workflowSeq under the run's workflowId so metrics can gap-detect.
-        // workflowId is only set when the metrics gate admitted the run (enabled).
+        // Confirm one provider call per modality, each with a 1-based workflowSeq
+        // under the run's workflowId (for grouping/display). confirm is awaited but
+        // best-effort — the client logs failures rather than failing the completed
+        // request. workflowId is only set when the check admitted the run (enabled).
         const metricsOn = !!(this.deps.metrics?.enabled && state.workflowId)
         let seq = state.workflowSeq ?? 0
 
@@ -756,7 +764,7 @@ export abstract class BaseProvider {
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
             if (metricsOn && report) {
-                this.deps.metrics!.publishUsage(tokenUsageEvent(report, state.workflowId!, ++seq))
+                await this.deps.metrics!.confirm(tokenUsageConfirm(report, state.workflowId!, ++seq))
             }
         }
         if (state.imageUsage) {
@@ -770,7 +778,7 @@ export abstract class BaseProvider {
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
             if (metricsOn && report) {
-                this.deps.metrics!.publishUsage(imageUsageEvent(report, state.workflowId!, ++seq))
+                await this.deps.metrics!.confirm(imageUsageConfirm(report, state.workflowId!, ++seq))
             }
         }
         if (state.videoUsage) {
@@ -787,7 +795,7 @@ export abstract class BaseProvider {
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
             if (metricsOn && report) {
-                this.deps.metrics!.publishUsage(videoUsageEvent(report, state.workflowId!, ++seq))
+                await this.deps.metrics!.confirm(videoUsageConfirm(report, state.workflowId!, ++seq))
             }
         }
         return { workflowSeq: seq }

@@ -43,10 +43,7 @@ import { createLlmModule } from './llm/index.ts'
 import { storeWorkspaceImage } from './services/image-storage.ts'
 import { storeWorkspaceVideo } from './services/video-storage.ts'
 
-import User from './models/user.ts'
-import Organization from './models/organization.ts'
 import { MetricsClient, metricsConfigFromEnv, type MetricsNats } from './metrics/metrics-client.ts'
-import { startAllowanceProjection } from './metrics/allowance-projection.ts'
 
 const env = process.env
 
@@ -264,36 +261,15 @@ await startNatsAuthCalloutService({
     serviceAuthConfigs,
 })
 
-// Metrics client. The spend gate is async — the client never sits on the workflow
-// path. publish goes through the NATS service; balance.changed is subscribed on the
-// raw connection so it bypasses the global JWT middleware (an internal metrics
-// subject carries no user token). Off (METRICS_ENABLED!=true) → today's behavior.
+// Metrics client. The spend guard is synchronous: check before a paid provider
+// call, confirm after. Requests use the raw NATS_Service.request so they bypass the
+// global JWT middleware — an internal metrics subject carries no user token. Off
+// (METRICS_ENABLED!=true) → the open-source plug (check approves, confirm no-ops).
 const metricsNatsConn = (await NATS_Service.getInstance())!
 const metricsNats: MetricsNats = {
-    publish: (subject, data) => metricsNatsConn.publish(subject, data),
-    subscribe: (subject, handler) => {
-        const conn = metricsNatsConn.getConnection()
-        if (!conn) return undefined
-        const sub = conn.subscribe(subject)
-        ;(async () => {
-            for await (const msg of sub) {
-                try {
-                    await handler(JSON.parse(new TextDecoder().decode(msg.data)))
-                } catch (e: any) {
-                    warn(`[metrics] balance.changed handler error: ${e?.message ?? String(e)}`)
-                }
-            }
-        })()
-        return sub
-    },
+    request: (subject, data, timeoutMs) => metricsNatsConn.request(subject, data, timeoutMs),
 }
 const metrics = new MetricsClient(metricsNats, metricsConfigFromEnv())
-
-// Project balance.changed onto user records so the pre-flight gate is a local read.
-startAllowanceProjection(metrics, {
-    getOrganizationMembers: (organizationId) => Organization.getOrganizationMembers({ organizationId }),
-    setUserAllowance: (args) => User.setMetricsAllowance(args),
-})
 
 // Initialize the in-process LLM module. The LangGraph workflow that previously
 // ran in the standalone services/llm-api Python service now runs here directly.
@@ -302,9 +278,6 @@ const llmModule = createLlmModule({
     storeWorkspaceImage,
     storeWorkspaceVideo,
     metrics,
-    // Gate read: the allowance metrics projected onto the user record. Re-reads the
-    // user here (auth already loaded it; threading it through is the prod optimization).
-    getOrgAllowance: async (userId: string) => (await User.get(userId) as any)?.metricsAllowed,
 })
 setLlmModule(llmModule)
 setExtractionLlmModule(llmModule)

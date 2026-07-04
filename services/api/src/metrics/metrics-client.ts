@@ -3,45 +3,49 @@
 import { NATS_SUBJECTS } from '@lixpi/constants'
 import { warn } from '@lixpi/debug-tools'
 
-import type { WorkflowStarted, BalanceChanged, UsageEvent, Allowance } from './contracts.ts'
+import type { CheckRequest, CheckResponse, ConfirmRequest, ConfirmResponse } from './contracts.ts'
 
 const METRICS_SUBJECTS = (NATS_SUBJECTS as any).METRICS_SUBJECTS as {
-    WORKFLOW_STARTED: string
-    USAGE: string
+    USAGE_CHECK: string
+    USAGE_CONFIRM: string
     BALANCE_GET: string
     BALANCE_CHANGED: string
 }
 
-// MetricsNats is the minimal slice of the NATS service the client needs.
-// Depending on an interface (not the singleton) keeps the client unit-testable.
-// The spend gate is async, so there is no request/reply here — only fire-and-forget
-// publishes and a subscription that feeds the allowance projection.
+// MetricsNats is the minimal slice of the NATS service the client needs: a
+// request/reply call. Depending on an interface (not the singleton) keeps the
+// client unit-testable. The spend guard is synchronous now, so this is a request,
+// not a fire-and-forget publish.
 export interface MetricsNats {
-    publish<T = any>(subject: string, data: T): void
-    subscribe<T = any>(subject: string, handler: (data: T) => void | Promise<void>): unknown
+    request<Req = any, Res = any>(subject: string, data: Req, timeoutMs: number): Promise<Res>
 }
 
 export interface MetricsClientOptions {
+    // enabled=false is the open-source plug: check always approves and confirm is a
+    // no-op, so Lixpi runs with no metering backend and makes no network call.
     enabled: boolean
-    // What the gate does when no allowance has been projected yet (cold start —
-    // metrics only learns of an org at its first top-up). Local dev sets this true
-    // so the happy-path mock isn't blocked; production sets it false (deny until
-    // the first top-up emits an allowance).
-    gateDefaultAllow: boolean
+    // Request timeout for the synchronous check/confirm calls.
+    requestTimeoutMs: number
+    // When a check errors or times out, deny (fail-closed, the default) or allow
+    // (fail-open). Fail-closed protects the balance at the cost of blocking on an
+    // unreachable metering backend.
+    failClosed: boolean
 }
 
 // metricsConfigFromEnv reads the integration flags from the environment.
 export function metricsConfigFromEnv(): MetricsClientOptions {
     return {
         enabled: process.env.METRICS_ENABLED === 'true',
-        gateDefaultAllow: process.env.METRICS_GATE_DEFAULT_ALLOW === 'true',
+        requestTimeoutMs: Number(process.env.METRICS_REQUEST_TIMEOUT_MS ?? 3000),
+        // Fail-closed by default; METRICS_FAIL_OPEN=true trades overspend risk for availability.
+        failClosed: process.env.METRICS_FAIL_OPEN !== 'true',
     }
 }
 
-// MetricsClient talks to lixpi-metrics over NATS without ever sitting on the
-// workflow's latency path. It publishes the run-start signal and usage events,
-// and subscribes to balance changes so the caller can project the allowance the
-// gate reads. When disabled it is inert, so local dev is unaffected.
+// MetricsClient is the hosted binding of the abstract metering port: it issues the
+// synchronous check/confirm request/reply to lixpi-metrics (lixpi-billing). When
+// disabled it is the plug — check approves, confirm no-ops — so local/OSS runs are
+// unaffected and never touch the network.
 export class MetricsClient {
     constructor(
         private readonly nats: MetricsNats,
@@ -52,42 +56,37 @@ export class MetricsClient {
         return this.opts.enabled
     }
 
-    // gateAllows is the local gate decision: read the projected allowance for the
-    // run's kind. When no allowance has been projected yet, fall back to the
-    // configured cold-start default. This never calls metrics.
-    gateAllows(allowance: Allowance | undefined, workflowKind: string): boolean {
-        if (allowance && workflowKind in allowance) {
-            return allowance[workflowKind] === true
-        }
-        return this.opts.gateDefaultAllow
-    }
-
-    // Fire-and-forget run-start signal. Never awaited, never blocks the workflow;
-    // a failure only weakens that one run's leak check.
-    publishWorkflowStarted(ws: WorkflowStarted): void {
-        if (!this.opts.enabled) return
+    // check runs before a paid provider call. Disabled → approve (plug). On a
+    // transport error the decision follows the fail-closed/open policy.
+    async check(req: CheckRequest): Promise<CheckResponse> {
+        if (!this.opts.enabled) return { approved: true }
         try {
-            this.nats.publish(METRICS_SUBJECTS.WORKFLOW_STARTED, ws)
+            return await this.nats.request<CheckRequest, CheckResponse>(
+                METRICS_SUBJECTS.USAGE_CHECK,
+                req,
+                this.opts.requestTimeoutMs,
+            )
         } catch (error: any) {
-            warn(`[metrics] workflow.started publish failed: ${error?.message ?? String(error)}`)
+            warn(`[metrics] check failed: ${error?.message ?? String(error)}`)
+            return { approved: !this.opts.failClosed, reason: 'metrics_unreachable' }
         }
     }
 
-    publishUsage(ev: UsageEvent): void {
-        if (!this.opts.enabled) return
-        try {
-            this.nats.publish(METRICS_SUBJECTS.USAGE, ev)
-        } catch (error: any) {
-            // Fire-and-forget: never block the user's response on usage publishing.
-            warn(`[metrics] usage publish failed: ${error?.message ?? String(error)}`)
-        }
-    }
-
-    // Subscribe to balance changes. The handler projects the allowance onto the
-    // user record the gate later reads. Returns the underlying subscription (or
-    // undefined when disabled) so the caller can manage its lifecycle.
-    subscribeBalanceChanged(handler: (ev: BalanceChanged) => void | Promise<void>): unknown {
+    // confirm runs after a paid provider call, reporting the measured usage.
+    // Disabled → no-op (plug). Best-effort when enabled: a failure is logged, not
+    // thrown, so a metering hiccup never fails the user's completed request. The
+    // caller may retry — confirm is idempotent on providerRequestId.
+    async confirm(req: ConfirmRequest): Promise<ConfirmResponse | undefined> {
         if (!this.opts.enabled) return undefined
-        return this.nats.subscribe<BalanceChanged>(METRICS_SUBJECTS.BALANCE_CHANGED, handler)
+        try {
+            return await this.nats.request<ConfirmRequest, ConfirmResponse>(
+                METRICS_SUBJECTS.USAGE_CONFIRM,
+                req,
+                this.opts.requestTimeoutMs,
+            )
+        } catch (error: any) {
+            warn(`[metrics] confirm failed (providerRequestId=${req.providerRequestId}): ${error?.message ?? String(error)}`)
+            return undefined
+        }
     }
 }

@@ -78,35 +78,6 @@ export default {
         }
     },
 
-    // setMetricsAllowance projects the metrics allowance onto the user record so the
-    // pre-flight gate is a local field read (see metrics/allowance-projection.ts).
-    // Metrics is per-org; at launch a user maps 1:1 to a default org, so the flat
-    // fields are unambiguous. When multi-member / multi-org lands, scope these by org.
-    setMetricsAllowance: async ({
-        userId,
-        allowed,
-        balance,
-    }: {
-        userId: string
-        allowed: Record<string, boolean>
-        balance: number
-    }): Promise<void> => {
-        try {
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
-                key: { userId },
-                updates: {
-                    metricsAllowed: allowed,
-                    metricsBalance: balance,
-                    metricsUpdatedAt: new Date().getTime(),
-                },
-                origin: 'model::User->setMetricsAllowance()',
-            })
-        } catch (e) {
-            console.error('Error setting metrics allowance:', e)
-        }
-    },
-
     addRecentTag: async ({
         userId,
         tagId

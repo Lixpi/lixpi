@@ -2,108 +2,91 @@
 
 import { describe, it, expect, vi } from 'vitest'
 
-import { MetricsClient, type MetricsNats } from './metrics-client.ts'
-import type { WorkflowStarted, BalanceChanged, UsageEvent } from './contracts.ts'
+import { MetricsClient, type MetricsNats, type MetricsClientOptions } from './metrics-client.ts'
+import type { CheckRequest, ConfirmRequest } from './contracts.ts'
 
-function stubNats(over: Partial<MetricsNats> = {}): MetricsNats {
-    return {
-        publish: vi.fn(),
-        subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })),
-        ...over,
-    }
+function stubNats(request: MetricsNats['request'] = vi.fn()): MetricsNats {
+    return { request }
 }
 
-const ws: WorkflowStarted = {
-    workflowId: 'wf_1',
+const opts = (over: Partial<MetricsClientOptions> = {}): MetricsClientOptions => ({
+    enabled: true,
+    requestTimeoutMs: 3000,
+    failClosed: true,
+    ...over,
+})
+
+const check: CheckRequest = {
     orgId: 'org_1',
     userId: 'usr_1',
-    workflowKind: 'chat_text',
+    workflowId: 'wf_1',
+    model: 'OpenAI:gpt-5',
+    modality: 'tokens',
+    estimatedUnits: 0,
+    currency: 'USD',
 }
 
-const opts = (enabled: boolean, gateDefaultAllow = false) => ({ enabled, gateDefaultAllow })
+const confirm: ConfirmRequest = {
+    providerRequestId: 'req_1',
+    orgId: 'org_1',
+    userId: 'usr_1',
+    workflowId: 'wf_1',
+    workflowSeq: 1,
+    model: 'OpenAI:gpt-5',
+    modality: 'tokens',
+    measuringUnit: 'tokens',
+    quantity: 100,
+    currency: 'USD',
+    occurredAt: '2026-01-01T00:00:00.000Z',
+}
 
-describe('MetricsClient.publishWorkflowStarted', () => {
-    it('does not publish when disabled', () => {
-        const publish = vi.fn()
-        new MetricsClient(stubNats({ publish }), opts(false)).publishWorkflowStarted(ws)
-        expect(publish).not.toHaveBeenCalled()
+describe('MetricsClient.check', () => {
+    it('approves without a request when disabled (the plug)', async () => {
+        const request = vi.fn()
+        const res = await new MetricsClient(stubNats(request), opts({ enabled: false })).check(check)
+        expect(res.approved).toBe(true)
+        expect(request).not.toHaveBeenCalled()
     })
 
-    it('publishes the run-start signal when enabled', () => {
-        const publish = vi.fn()
-        new MetricsClient(stubNats({ publish }), opts(true)).publishWorkflowStarted(ws)
-        expect(publish).toHaveBeenCalledTimes(1)
-        expect(publish).toHaveBeenCalledWith('metrics.workflow.started', ws)
+    it('requests usage.check and returns the decision when enabled', async () => {
+        const request = vi.fn().mockResolvedValue({ approved: true, balance: 1000 })
+        const res = await new MetricsClient(stubNats(request), opts()).check(check)
+        expect(request).toHaveBeenCalledWith('metrics.usage.check', check, 3000)
+        expect(res.approved).toBe(true)
     })
 
-    it('swallows publish errors (fire-and-forget)', () => {
-        const publish = vi.fn(() => {
-            throw new Error('nats down')
-        })
-        expect(() =>
-            new MetricsClient(stubNats({ publish }), opts(true)).publishWorkflowStarted(ws),
-        ).not.toThrow()
-    })
-})
-
-describe('MetricsClient.publishUsage', () => {
-    const ev = { providerRequestId: 'r1' } as UsageEvent
-
-    it('does not publish when disabled', () => {
-        const publish = vi.fn()
-        new MetricsClient(stubNats({ publish }), opts(false)).publishUsage(ev)
-        expect(publish).not.toHaveBeenCalled()
+    it('fails closed when the request errors', async () => {
+        const request = vi.fn().mockRejectedValue(new Error('timeout'))
+        const res = await new MetricsClient(stubNats(request), opts({ failClosed: true })).check(check)
+        expect(res.approved).toBe(false)
+        expect(res.reason).toBe('metrics_unreachable')
     })
 
-    it('publishes when enabled', () => {
-        const publish = vi.fn()
-        new MetricsClient(stubNats({ publish }), opts(true)).publishUsage(ev)
-        expect(publish).toHaveBeenCalledTimes(1)
-    })
-
-    it('swallows publish errors (fire-and-forget)', () => {
-        const publish = vi.fn(() => {
-            throw new Error('nats down')
-        })
-        expect(() => new MetricsClient(stubNats({ publish }), opts(true)).publishUsage(ev)).not.toThrow()
+    it('fails open when configured', async () => {
+        const request = vi.fn().mockRejectedValue(new Error('timeout'))
+        const res = await new MetricsClient(stubNats(request), opts({ failClosed: false })).check(check)
+        expect(res.approved).toBe(true)
     })
 })
 
-describe('MetricsClient.gateAllows', () => {
-    it('allows when the kind is true in the allowance', () => {
-        const c = new MetricsClient(stubNats(), opts(true, false))
-        expect(c.gateAllows({ chat_text: true, chat_video: false }, 'chat_text')).toBe(true)
+describe('MetricsClient.confirm', () => {
+    it('is a no-op without a request when disabled (the plug)', async () => {
+        const request = vi.fn()
+        const res = await new MetricsClient(stubNats(request), opts({ enabled: false })).confirm(confirm)
+        expect(res).toBeUndefined()
+        expect(request).not.toHaveBeenCalled()
     })
 
-    it('denies when the kind is false in the allowance', () => {
-        const c = new MetricsClient(stubNats(), opts(true, true))
-        expect(c.gateAllows({ chat_text: true, chat_video: false }, 'chat_video')).toBe(false)
+    it('requests usage.confirm when enabled', async () => {
+        const request = vi.fn().mockResolvedValue({ transferId: 'txn_1', resaleCost: 1000, balance: 999000 })
+        const res = await new MetricsClient(stubNats(request), opts()).confirm(confirm)
+        expect(request).toHaveBeenCalledWith('metrics.usage.confirm', confirm, 3000)
+        expect(res?.transferId).toBe('txn_1')
     })
 
-    it('uses the cold-start default when no allowance is projected yet', () => {
-        expect(new MetricsClient(stubNats(), opts(true, true)).gateAllows(undefined, 'chat_text')).toBe(true)
-        expect(new MetricsClient(stubNats(), opts(true, false)).gateAllows(undefined, 'chat_text')).toBe(false)
-    })
-
-    it('uses the cold-start default when the kind is absent from a partial allowance', () => {
-        const c = new MetricsClient(stubNats(), opts(true, false))
-        expect(c.gateAllows({ chat_text: true }, 'chat_video')).toBe(false)
-    })
-})
-
-describe('MetricsClient.subscribeBalanceChanged', () => {
-    const handler = (_ev: BalanceChanged) => {}
-
-    it('does not subscribe when disabled', () => {
-        const subscribe = vi.fn()
-        new MetricsClient(stubNats({ subscribe }), opts(false)).subscribeBalanceChanged(handler)
-        expect(subscribe).not.toHaveBeenCalled()
-    })
-
-    it('subscribes to balance.changed when enabled', () => {
-        const subscribe = vi.fn(() => ({ unsubscribe: vi.fn() }))
-        new MetricsClient(stubNats({ subscribe }), opts(true)).subscribeBalanceChanged(handler)
-        expect(subscribe).toHaveBeenCalledTimes(1)
-        expect(subscribe).toHaveBeenCalledWith('metrics.balance.changed', handler)
+    it('swallows request errors (best-effort, never throws)', async () => {
+        const request = vi.fn().mockRejectedValue(new Error('nats down'))
+        const client = new MetricsClient(stubNats(request), opts())
+        await expect(client.confirm(confirm)).resolves.toBeUndefined()
     })
 })

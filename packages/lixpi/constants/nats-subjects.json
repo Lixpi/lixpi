@@ -105,8 +105,8 @@
 		"GET_CUSTOMER": "get-customer"
 	},
 	"METRICS_SUBJECTS": {
-		"WORKFLOW_STARTED": "metrics.workflow.started",
-		"USAGE": "metrics.usage.ai",
+		"USAGE_CHECK": "metrics.usage.check",
+		"USAGE_CONFIRM": "metrics.usage.confirm",
 		"BALANCE_GET": "metrics.balance.get",
 		"BALANCE_CHANGED": "metrics.balance.changed"
 	}
