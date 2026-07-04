@@ -17,10 +17,12 @@ const head = {
 describe('tokenUsageConfirm', () => {
     const report = {
         ...head,
-        total: { usageTokens: 812, purchasedFor: '0.0021', soldToClientFor: '0.0034' },
+        prompt: { usageTokens: 700, cachedTokens: 100 },
+        completion: { usageTokens: 112, reasoningTokens: 30 },
+        total: { usageTokens: 812 },
     } as unknown as UsageReport
 
-    it('maps tokens to a confirm request carrying unit counts only (no cost)', () => {
+    it('maps tokens to a confirm request with the prompt/completion split (no cost)', () => {
         const req = tokenUsageConfirm(report, 'wf_a1b2', 1)
         expect(req).toMatchObject({
             providerRequestId: 'req_77',
@@ -32,12 +34,11 @@ describe('tokenUsageConfirm', () => {
             model: 'OpenAI:gpt-5',
             modality: 'tokens',
             measuringUnit: 'tokens',
-            quantity: 812,
+            usage: { promptTokens: 700, completionTokens: 112, cachedTokens: 100, reasoningTokens: 30 },
             currency: 'USD',
         })
         expect(req.occurredAt).toBe('2026-01-01T00:00:00.000Z')
         expect('resaleCost' in req).toBe(false)
-        expect('unitPrice' in req).toBe(false)
     })
 })
 
@@ -47,33 +48,41 @@ describe('imageUsageConfirm', () => {
         image: { size: '1024x1024', quality: 'high', count: 1, pricePerImageResale: '0.05', purchasedFor: '0.04', soldToClientFor: '0.05' },
     } as unknown as ImageUsageReport
 
-    it('maps an image call to images/image modality', () => {
+    it('maps an image call to count/size/quality dimensions', () => {
         const req = imageUsageConfirm(report, 'wf_a1b2', 2)
         expect(req).toMatchObject({
             modality: 'image',
             measuringUnit: 'images',
-            quantity: 1,
             workflowSeq: 2,
+            usage: { imageCount: 1, imageSize: '1024x1024', imageQuality: 'high' },
         })
     })
 })
 
 describe('videoUsageConfirm', () => {
-    it('maps a per-second (VEO) video call to seconds', () => {
+    it('maps a per-second (VEO) video call to durationSeconds + resolution', () => {
         const report = {
             ...head,
             video: { measuringUnit: 'seconds', durationSeconds: 8, resolution: '720p', aspectRatio: '16:9', purchasedFor: '0.64', soldToClientFor: '0.80' },
         } as unknown as VideoUsageReport
         const req = videoUsageConfirm(report, 'wf_a1b2', 3)
-        expect(req).toMatchObject({ modality: 'video', measuringUnit: 'seconds', quantity: 8 })
+        expect(req).toMatchObject({
+            modality: 'video',
+            measuringUnit: 'seconds',
+            usage: { durationSeconds: 8, resolution: '720p' },
+        })
     })
 
-    it('maps a token-metered (Seedance) video call to tokens', () => {
+    it('maps a token-metered (Seedance) video call to videoTokens', () => {
         const report = {
             ...head,
             video: { measuringUnit: 'tokens', durationSeconds: 5, totalTokens: 1000, completionTokens: 1000, purchasedFor: '0.02', soldToClientFor: '0.03' },
         } as unknown as VideoUsageReport
         const req = videoUsageConfirm(report, 'wf_a1b2', 4)
-        expect(req).toMatchObject({ modality: 'video', measuringUnit: 'tokens', quantity: 1000 })
+        expect(req).toMatchObject({
+            modality: 'video',
+            measuringUnit: 'tokens',
+            usage: { videoTokens: 1000 },
+        })
     })
 })

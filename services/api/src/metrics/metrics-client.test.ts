@@ -35,7 +35,7 @@ const confirm: ConfirmRequest = {
     model: 'OpenAI:gpt-5',
     modality: 'tokens',
     measuringUnit: 'tokens',
-    quantity: 100,
+    usage: { promptTokens: 100, completionTokens: 50 },
     currency: 'USD',
     occurredAt: '2026-01-01T00:00:00.000Z',
 }

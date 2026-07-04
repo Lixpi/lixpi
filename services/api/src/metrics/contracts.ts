@@ -31,9 +31,31 @@ export interface CheckResponse {
     reason?: string // e.g. insufficient_balance (when denied)
 }
 
+// UsageBreakdown carries the measured, cost-relevant dimensions of one provider
+// call. Only the fields relevant to the modality are set; the implementation
+// prices from these, so the split (prompt vs completion, image size/quality,
+// video seconds-vs-tokens) is what makes accurate pricing possible.
+export interface UsageBreakdown {
+    // Text tokens — kept split because input and output are priced differently.
+    promptTokens?: number
+    completionTokens?: number
+    cachedTokens?: number
+    reasoningTokens?: number
+    // Image — count plus the size/quality that drive the per-image rate.
+    imageCount?: number
+    imageSize?: string
+    imageQuality?: string
+    // Video — per-second metered (VEO) uses durationSeconds (+ resolution tier);
+    // token-metered (Seedance) uses videoTokens.
+    durationSeconds?: number
+    resolution?: string
+    videoTokens?: number
+}
+
 // ConfirmRequest reports one provider call's measured usage after it returns.
-// It carries unit counts only — the implementation prices them. Idempotent on
-// providerRequestId.
+// It carries dimensioned unit counts only — the implementation prices them.
+// measuringUnit is the primary unit for the modality (and disambiguates video:
+// seconds vs tokens). Idempotent on providerRequestId.
 export interface ConfirmRequest {
     providerRequestId: string
     orgId: string
@@ -44,7 +66,7 @@ export interface ConfirmRequest {
     model: string
     modality: Modality
     measuringUnit: MeasuringUnit
-    quantity: number // measured units from the provider response
+    usage: UsageBreakdown
     currency: string // 'USD' at launch
     occurredAt: string // ISO 8601
 }

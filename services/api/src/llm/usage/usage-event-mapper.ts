@@ -31,7 +31,12 @@ export function tokenUsageConfirm(report: UsageReport, workflowId: string, workf
         ...common(report, workflowId, workflowSeq),
         modality: 'tokens',
         measuringUnit: 'tokens',
-        quantity: report.total.usageTokens,
+        usage: {
+            promptTokens: report.prompt.usageTokens,
+            completionTokens: report.completion.usageTokens,
+            cachedTokens: report.prompt.cachedTokens,
+            reasoningTokens: report.completion.reasoningTokens,
+        },
     }
 }
 
@@ -40,7 +45,11 @@ export function imageUsageConfirm(report: ImageUsageReport, workflowId: string, 
         ...common(report, workflowId, workflowSeq),
         modality: 'image',
         measuringUnit: 'images',
-        quantity: report.image.count,
+        usage: {
+            imageCount: report.image.count,
+            imageSize: report.image.size,
+            imageQuality: report.image.quality,
+        },
     }
 }
 
@@ -48,13 +57,13 @@ export function videoUsageConfirm(report: VideoUsageReport, workflowId: string, 
     const v = report.video
 
     // Token-metered (Seedance) vs per-second (VEO). Modality stays 'video' either way;
-    // only the measuring unit + quantity differ.
+    // only the measuring unit + dimensions differ.
     if (v.measuringUnit === 'tokens') {
         return {
             ...common(report, workflowId, workflowSeq),
             modality: 'video',
             measuringUnit: 'tokens',
-            quantity: v.totalTokens ?? 0,
+            usage: { videoTokens: v.totalTokens ?? 0 },
         }
     }
 
@@ -62,6 +71,6 @@ export function videoUsageConfirm(report: VideoUsageReport, workflowId: string, 
         ...common(report, workflowId, workflowSeq),
         modality: 'video',
         measuringUnit: 'seconds',
-        quantity: v.durationSeconds,
+        usage: { durationSeconds: v.durationSeconds, resolution: v.resolution },
     }
 }
