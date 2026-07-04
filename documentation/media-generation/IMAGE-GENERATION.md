@@ -142,7 +142,7 @@ Other generation knobs are **hardcoded** for best output rather than exposed to 
 
 ## Storage and Deduplication
 
-Generated images are stored in the NATS Object Store exactly like uploaded images. To avoid duplicates, the storage path computes a **SHA-256 hash** of the image content and uses `hash-{sha256}` as the `fileId`. Before writing, it checks whether that `fileId` already exists; if so, it skips the upload and returns the existing URL. This content-hash dedup is the same mechanism video reuses (`storeWorkspaceVideo`) — see [Video Generation](./VIDEO-GENERATION.md). Saved-copy independence (Media Library) is covered in [Media Library](../library/MEDIA-LIBRARY.md).
+Generated images are stored through the unified workspace file storage adapter, with `kind: 'image'`, `modelSafe: true`, and NATS Object Store bytes in `workspace-{workspaceId}-files`. To avoid duplicates, the storage path computes a **SHA-256 hash** of the image content and uses `hash-{sha256}` as the `fileId`. Before returning a duplicate, it confirms the Object Store bytes still exist; if metadata exists but bytes are missing, it writes the image again so the reference self-heals. Video generation uses the same `storeWorkspaceFile` adapter through `storeWorkspaceVideo` — see [Video Generation](./VIDEO-GENERATION.md). Saved-copy independence (Media Library) is covered in [Media Library](../library/MEDIA-LIBRARY.md).
 
 ## Multi-Turn Image Editing
 
@@ -180,7 +180,7 @@ Because partials arrive asynchronously and `IMAGE_COMPLETE` can race them, the c
 
 ## Image-Specific Stream Nuances
 
-Image generation publishes its events on the same per-thread receive subject as every other AI response, and the complete catalog (with payloads and browser handling) is owned by [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The table below is **only** the image-specific nuance — how the two image events behave differently from a plain text delta — not the full catalog.
+Image generation publishes live pipeline events on the same per-thread receive subject as every other AI response, persists those events to the chat pipeline replay log, and mirrors trace/final media transcript nodes into the authoritative ProseMirror step stream. The complete catalog and replay behavior are owned by [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The table below is only the image-specific nuance - how the two image events behave differently from a plain text delta - not the full catalog.
 
 | Event | Image-specific nuance |
 |-------|-----------------------|
@@ -190,7 +190,7 @@ Image generation publishes its events on the same per-thread receive subject as 
 
 On the workspace canvas, `IMAGE_PARTIAL` updates one generated image node in place and marks it as generating; `pixiMediaLayer.ts` renders the partial pixels and supplies the active image bounds to the reusable `PixiTravelingOutlineRenderer`, and `IMAGE_COMPLETE` is the event that clears that outline. These events **bypass** the markdown stream parser — `AiInteractionService` routes them straight to the canvas/media handlers.
 
-In the AI chat history, `imageSelectionPlugin/ImageNodeView` renders generated images and the same generated-media provider badge used by canvas media chrome and in-chat generated videos. The badge resolves from `mediaModelId`; canvas rendering remains owned by PIXI and the canvas chrome layer.
+In the AI chat history, generated-image atom nodes are authored by the API-side ProseMirror assembler and rendered by `imageSelectionPlugin/ImageNodeView`. They carry the same generated-media provider badge used by canvas media chrome and in-chat generated videos. The badge resolves from `mediaModelId`; canvas rendering remains owned by PIXI and the canvas chrome layer.
 
 ## File Structure
 

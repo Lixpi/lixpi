@@ -1,8 +1,9 @@
 # Web-UI Testing Guide
 
 Everything in `services/web-ui` runs inside a Docker container (`lixpi-web-ui`).
-Tests are no exception — when the user explicitly asks for tests, always run
-them through Docker, never locally.
+Tests are the exception — they run inside the shared
+`lixpi-typescript-test-runner` container instead, never inside `lixpi-web-ui`
+and never locally.
 
 Follow the shared [`TypeScript Testing Guide`](../TESTING-GUIDE.md) for test structure, file naming, pure-function tests, source-shape helpers, and factory patterns. This guide covers what is specific to `services/web-ui`.
 
@@ -10,14 +11,14 @@ Follow the shared [`TypeScript Testing Guide`](../TESTING-GUIDE.md) for test str
 
 For web-ui changes, agents may run tests only after the user explicitly asks
 for tests in the current thread. When tests are requested, verify test behavior
-only through Dockerized Vitest runs:
+only through the Dockerized test-runner:
 
 ```bash
 # Run all tests
-docker exec lixpi-web-ui pnpm test:run
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui
 
 # Run a specific test file
-docker exec lixpi-web-ui pnpm test:run -- src/infographics/utils/zoomScaling.test.ts
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/infographics/utils/zoomScaling.test.ts
 ```
 
 ## Prohibited Verification
@@ -180,7 +181,8 @@ for (const { name, createNode } of imageNodeCases) {
 ## What NOT To Do
 
 - **Don't test DOM rendering** — we don't render Svelte components in tests. Test the logic layer underneath.
-- **Don't use `npx`** — it's `pnpm`. Always `pnpm test:run`.
-- **Don't run tests outside Docker** — the container has the correct node_modules and environment. Your host machine doesn't.
+- **Don't use `npx`** — it's `pnpm`. Always run through `lixpi-typescript-test-runner`'s `run-tests.sh web-ui`.
+- **Don't run tests outside Docker** — the `lixpi-typescript-test-runner` container has the correct node_modules and environment. Your host machine doesn't.
+- **Don't run tests inside `lixpi-web-ui`** — that container no longer has a test runner; use `lixpi-typescript-test-runner` instead.
 - **Don't run `svelte-check`** — directly or through another script; it is prohibited for agents.
 - **Don't use browser-based verification** — browsers, browser automation, screenshots, and manual visual inspection are prohibited for verifying agent work.

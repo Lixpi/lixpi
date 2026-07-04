@@ -1,0 +1,484 @@
+'use strict'
+
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
+
+const mocks = vi.hoisted(() => {
+    const appUseCalls: Array<{ args: unknown[] }> = []
+    const appGetCalls: Array<{ path: string; handler: (...args: unknown[]) => unknown }> = []
+    const appSetCalls: Array<{ key: string; value: unknown }> = []
+
+    const expressJson = vi.fn(() => 'json-middleware')
+    const expressUrlencoded = vi.fn(() => 'urlencoded-middleware')
+
+    const expressUse = vi.fn()
+    const app = {
+        set: vi.fn((key: string, value: unknown) => {
+            appSetCalls.push({ key, value })
+        }),
+        use: vi.fn((...args: unknown[]) => {
+            appUseCalls.push({ args })
+            expressUse(...args)
+        }),
+        get: vi.fn((path: string, handler: (...args: unknown[]) => unknown) => {
+            appGetCalls.push({ path, handler })
+        }),
+    }
+
+    const express = vi.fn(() => app)
+
+    const cors = vi.fn()
+    const cookieParser = vi.fn()
+
+    const httpServer = {
+        listening: true,
+        listen: vi.fn((port: number, host: string, callback?: () => void) => {
+            callback?.()
+            return undefined
+        }),
+    }
+
+    const createServer = vi.fn(() => httpServer)
+
+    const natsInstance = {
+        drain: vi.fn(async () => undefined),
+    }
+
+    const natsInit = vi.fn(async () => undefined)
+    const natsGetInstance = vi.fn(() => natsInstance)
+
+    const jwtAuthMiddleware = vi.fn(() => 'jwt-auth-middleware')
+    const userSubjects = ['user-subject']
+    const subscriptionSubjects = ['subscription-subject']
+    const aiModelSubjects = ['ai-model-subject']
+    const aiInteractionSubjects = ['ai-interaction-subject']
+    const extractionSubjects = ['extraction-subject']
+    const mediaDescriptorSubjects = ['media-descriptor-subject']
+    const workspaceSubjects = ['workspace-subject']
+    const documentSubjects = ['document-subject']
+    const aiChatThreadSubjects = ['ai-chat-thread-subject']
+    const imageSubjects = ['image-subject']
+    const videoSubjects = ['video-subject']
+    const fileConversionSubjects = ['file-conversion-subject']
+    const featureSubjects = ['feature-subject']
+    const mediaLibrarySubjects = ['media-library-subject']
+
+    const startNatsAuthCalloutService = vi.fn(async () => undefined)
+
+    const fileRoutes = {}
+    const workspaceExportRoutes = {}
+    const featureRoutes = {}
+    const mediaLibraryRoutes = {}
+
+    const createLlmModule = vi.fn()
+    let llmModule: { shutdown: ReturnType<typeof vi.fn> } | null = null
+
+    const setLlmModule = vi.fn()
+    const setExtractionLlmModule = vi.fn()
+
+    const storeWorkspaceImage = vi.fn()
+    const storeWorkspaceVideo = vi.fn()
+
+    const log = vi.fn()
+    const info = vi.fn()
+    const infoStr = vi.fn()
+    const warn = vi.fn()
+    const err = vi.fn()
+
+    const chalkGreen = vi.fn((value: string) => `green:${value}`)
+    const chalkBlue = vi.fn((value: string) => `blue:${value}`)
+
+    const DynamoDBService = vi.fn()
+
+    return {
+        app,
+        appSetCalls,
+        appUseCalls,
+        appGetCalls,
+        express,
+        expressJson,
+        expressUrlencoded,
+        expressUse,
+        cors,
+        cookieParser,
+        httpServer,
+        createServer,
+        natsInstance,
+        natsInit,
+        natsGetInstance,
+        jwtAuthMiddleware,
+        userSubjects,
+        subscriptionSubjects,
+        aiModelSubjects,
+        aiInteractionSubjects,
+        extractionSubjects,
+        mediaDescriptorSubjects,
+        workspaceSubjects,
+        documentSubjects,
+        aiChatThreadSubjects,
+        imageSubjects,
+        videoSubjects,
+        fileConversionSubjects,
+        featureSubjects,
+        mediaLibrarySubjects,
+        startNatsAuthCalloutService,
+        fileRoutes,
+        workspaceExportRoutes,
+        featureRoutes,
+        mediaLibraryRoutes,
+        createLlmModule: createLlmModule.mockImplementation(() => {
+            const module = { shutdown: vi.fn() }
+            llmModule = module
+            return module
+        }),
+        getLlmModule: () => llmModule,
+        setLlmModule,
+        setExtractionLlmModule,
+        storeWorkspaceImage,
+        storeWorkspaceVideo,
+        log,
+        info,
+        infoStr,
+        warn,
+        err,
+        chalkGreen,
+        chalkBlue,
+        DynamoDBService,
+    }
+})
+
+vi.mock('express', () => ({
+    default: Object.assign(mocks.express, {
+        json: mocks.expressJson,
+        urlencoded: mocks.expressUrlencoded,
+    }),
+}))
+vi.mock('cors', () => ({
+    default: mocks.cors,
+}))
+vi.mock('cookie-parser', () => ({
+    default: mocks.cookieParser,
+}))
+vi.mock('chalk', () => ({
+    default: {
+        green: mocks.chalkGreen,
+        blue: mocks.chalkBlue,
+    },
+}))
+vi.mock('http', () => ({
+    createServer: mocks.createServer,
+}))
+
+vi.mock('@lixpi/debug-tools', () => ({
+    log: mocks.log,
+    info: mocks.info,
+    infoStr: mocks.infoStr,
+    warn: mocks.warn,
+    err: mocks.err,
+}))
+
+vi.mock('@lixpi/dynamodb-service', () => ({
+    default: mocks.DynamoDBService,
+}))
+
+// @lixpi/ssm-service package removed — commented out pending re-enable
+// vi.mock('@lixpi/ssm-service', () => ({
+//     default: class {},
+// }))
+
+vi.mock('@lixpi/nats-service', () => ({
+    default: {
+        init: mocks.natsInit,
+        getInstance: mocks.natsGetInstance,
+    },
+}))
+
+vi.mock('@lixpi/nats-auth-callout-service', () => ({
+    startNatsAuthCalloutService: mocks.startNatsAuthCalloutService,
+}))
+
+vi.mock('./NATS/middleware/nats-auth-middleware.ts', () => ({
+    jwtAuthMiddleware: mocks.jwtAuthMiddleware,
+}))
+vi.mock('./NATS/subscriptions/user-subjects.ts', () => ({ userSubjects: mocks.userSubjects }))
+vi.mock('./NATS/subscriptions/subscription-subjects.ts', () => ({ subscriptionSubjects: mocks.subscriptionSubjects }))
+vi.mock('./NATS/subscriptions/ai-model-subjects.ts', () => ({ aiModelSubjects: mocks.aiModelSubjects }))
+vi.mock('./NATS/subscriptions/ai-interaction-subjects.ts', () => ({
+    aiInteractionSubjects: mocks.aiInteractionSubjects,
+    setLlmModule: mocks.setLlmModule,
+}))
+vi.mock('./NATS/subscriptions/extraction-subjects.ts', () => ({
+    extractionSubjects: mocks.extractionSubjects,
+    setExtractionLlmModule: mocks.setExtractionLlmModule,
+}))
+vi.mock('./NATS/subscriptions/media-descriptor-subjects.ts', () => ({ mediaDescriptorSubjects: mocks.mediaDescriptorSubjects }))
+vi.mock('./NATS/subscriptions/workspace-subjects.ts', () => ({ workspaceSubjects: mocks.workspaceSubjects }))
+vi.mock('./NATS/subscriptions/document-subjects.ts', () => ({ documentSubjects: mocks.documentSubjects }))
+vi.mock('./NATS/subscriptions/ai-chat-thread-subjects.ts', () => ({ aiChatThreadSubjects: mocks.aiChatThreadSubjects }))
+vi.mock('./NATS/subscriptions/image-subjects.ts', () => ({ imageSubjects: mocks.imageSubjects }))
+vi.mock('./NATS/subscriptions/video-subjects.ts', () => ({ videoSubjects: mocks.videoSubjects }))
+vi.mock('./NATS/subscriptions/file-conversion-subjects.ts', () => ({ fileConversionSubjects: mocks.fileConversionSubjects }))
+vi.mock('./NATS/subscriptions/feature-subjects.ts', () => ({ featureSubjects: mocks.featureSubjects }))
+vi.mock('./NATS/subscriptions/media-library-subjects.ts', () => ({ mediaLibrarySubjects: mocks.mediaLibrarySubjects }))
+
+vi.mock('./routes/file-routes.ts', () => ({
+    default: mocks.fileRoutes,
+}))
+vi.mock('./routes/workspace-export-routes.ts', () => ({
+    default: mocks.workspaceExportRoutes,
+}))
+vi.mock('./routes/feature-routes.ts', () => ({
+    default: mocks.featureRoutes,
+}))
+vi.mock('./routes/media-library-routes.ts', () => ({
+    default: mocks.mediaLibraryRoutes,
+}))
+
+vi.mock('./llm/index.ts', () => ({
+    createLlmModule: mocks.createLlmModule,
+    setLlmModule: mocks.setLlmModule,
+    setExtractionLlmModule: mocks.setExtractionLlmModule,
+}))
+
+vi.mock('./services/store-media-adapters.ts', () => ({
+    storeWorkspaceImage: mocks.storeWorkspaceImage,
+    storeWorkspaceVideo: mocks.storeWorkspaceVideo,
+}))
+
+async function loadServer(): Promise<void> {
+    vi.resetModules()
+    await import('./server.ts')
+}
+
+function routeForPath(path: string) {
+    return mocks.appUseCalls.find((call) => call.args.at(0) === path)?.args.at(1)
+}
+
+function resetServerEnv(overrides: Record<string, string | undefined>): void {
+    process.env.ENVIRONMENT = 'local'
+    process.env.NATS_SERVERS = 'nats://localhost:4222'
+    process.env.NATS_REGULAR_USER_PASSWORD = 'regular-password'
+    process.env.ORIGIN_HOST_URL = 'https://api.example.test'
+    process.env.MOCK_AUTH0 = 'false'
+    process.env.AUTH0_DOMAIN = 'https://auth.example.test'
+    process.env.AUTH0_API_IDENTIFIER = 'auth-audience'
+    process.env.NATS_AUTH_NKEY_ISSUER_SEED = 'nats-auth-nkey-seed'
+    process.env.NATS_AUTH_XKEY_ISSUER_SEED = 'nats-auth-xkey-seed'
+    process.env.NATS_AUTH_ACCOUNT = 'AUTH'
+
+    Object.keys(overrides).forEach((key) => {
+        const value = overrides[key]
+        if (value === undefined) {
+            delete process.env[key]
+            return
+        }
+        process.env[key] = value
+    })
+}
+
+function resetMockState(): void {
+    mocks.appUseCalls.length = 0
+    mocks.appGetCalls.length = 0
+    mocks.appSetCalls.length = 0
+
+    mocks.express.mockClear()
+    mocks.expressJson.mockClear()
+    mocks.expressUrlencoded.mockClear()
+    mocks.expressUse.mockClear()
+    mocks.cors.mockClear()
+    mocks.cookieParser.mockClear()
+    mocks.createServer.mockClear()
+    mocks.natsInit.mockClear()
+    mocks.natsGetInstance.mockClear()
+    mocks.natsInstance.drain.mockClear()
+    mocks.startNatsAuthCalloutService.mockClear()
+    mocks.createLlmModule.mockClear()
+    mocks.setLlmModule.mockClear()
+    mocks.setExtractionLlmModule.mockClear()
+    mocks.storeWorkspaceImage.mockClear()
+    mocks.storeWorkspaceVideo.mockClear()
+    mocks.log.mockClear()
+    mocks.info.mockClear()
+    mocks.infoStr.mockClear()
+    mocks.warn.mockClear()
+    mocks.err.mockClear()
+    mocks.chalkGreen.mockClear()
+    mocks.chalkBlue.mockClear()
+    mocks.app.set.mockClear()
+    mocks.app.use.mockClear()
+    mocks.app.get.mockClear()
+    mocks.httpServer.listen.mockClear()
+}
+
+describe('services/api server startup', () => {
+    const expectedSubscriptionOrder = [
+        ...mocks.userSubjects,
+        ...mocks.subscriptionSubjects,
+        ...mocks.aiModelSubjects,
+        ...mocks.aiInteractionSubjects,
+        ...mocks.extractionSubjects,
+        ...mocks.mediaDescriptorSubjects,
+        ...mocks.workspaceSubjects,
+        ...mocks.documentSubjects,
+        ...mocks.aiChatThreadSubjects,
+        ...mocks.imageSubjects,
+        ...mocks.videoSubjects,
+        ...mocks.fileConversionSubjects,
+        ...mocks.featureSubjects,
+        ...mocks.mediaLibrarySubjects,
+    ]
+
+    beforeEach(() => {
+        resetServerEnv({})
+        resetMockState()
+    })
+
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
+    it('initializes core services, middleware, routes, and shutdown handlers', async () => {
+        const processOnCalls: Array<{ event: string; handler: (...args: unknown[]) => unknown }> = []
+        const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event: string, handler: (...args: unknown[]) => unknown) => {
+            processOnCalls.push({ event, handler })
+            return process as NodeJS.Process
+        })
+        const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+
+        delete process.env.NATS_NEX_NODE_NKEY_PUBLIC
+
+        await loadServer()
+
+        expect(mocks.natsInit).toHaveBeenCalledTimes(1)
+        expect(mocks.natsInit.mock.calls[0]?.[0]).toMatchObject({
+            servers: 'nats://localhost:4222',
+            name: 'api-server',
+            user: 'regular_user',
+            pass: 'regular-password',
+            middleware: [mocks.jwtAuthMiddleware],
+            subscriptions: expectedSubscriptionOrder,
+        })
+
+        expect(mocks.startNatsAuthCalloutService).toHaveBeenCalledTimes(1)
+        expect(mocks.startNatsAuthCalloutService.mock.calls[0]?.[0]).toMatchObject({
+            serviceAuthConfigs: [],
+            jwtAudience: 'auth-audience',
+            jwtIssuer: 'https://auth.example.test/',
+            jwksUri: 'https://auth.example.test/.well-known/jwks.json',
+            natsAuthAccount: 'AUTH',
+        })
+        expect(mocks.startNatsAuthCalloutService.mock.calls[0]?.[0]).toMatchObject({
+            natsService: mocks.natsInstance,
+            subscriptions: expectedSubscriptionOrder,
+            nKeyIssuerSeed: 'nats-auth-nkey-seed',
+            xKeyIssuerSeed: 'nats-auth-xkey-seed',
+        })
+        expect(mocks.createLlmModule).toHaveBeenCalledWith({
+            natsService: mocks.natsInstance,
+            storeWorkspaceImage: mocks.storeWorkspaceImage,
+            storeWorkspaceVideo: mocks.storeWorkspaceVideo,
+        })
+
+        expect(mocks.warn).toHaveBeenCalledWith(
+            'NATS_NEX_NODE_NKEY_PUBLIC is not configured; NEX clients cannot authenticate through auth callout',
+        )
+
+        expect(mocks.app.use).toHaveBeenCalledTimes(8)
+        expect(mocks.expressJson).toHaveBeenCalledWith({ limit: '100mb' })
+        expect(mocks.expressUrlencoded).toHaveBeenCalledWith({ limit: '100mb', extended: true })
+        expect(mocks.cors).toHaveBeenCalledWith({ origin: 'https://api.example.test', credentials: true })
+        expect(mocks.cookieParser).toHaveBeenCalledWith()
+
+        expect(routeForPath('/api/files')).toBe(mocks.fileRoutes)
+        expect(routeForPath('/api/workspaces')).toBe(mocks.workspaceExportRoutes)
+        expect(routeForPath('/api/features')).toBe(mocks.featureRoutes)
+        expect(routeForPath('/api/media-library')).toBe(mocks.mediaLibraryRoutes)
+
+        const healthRoute = mocks.appGetCalls.find((call) => call.path === '/health-check')
+        expect(healthRoute).toBeDefined()
+
+        const req = {} as Record<string, unknown>
+        const res = {
+            json: vi.fn(),
+            status: vi.fn().mockReturnThis(),
+        }
+        healthRoute?.handler(req, res)
+        expect(res.json).toHaveBeenCalledWith({
+            status: 'healthy',
+            services: { httpServer: 'running' },
+        })
+
+        expect(mocks.httpServer.listen).toHaveBeenCalledWith(3000, '0.0.0.0', expect.any(Function))
+        expect(mocks.infoStr).toHaveBeenCalledWith([
+            'green:Server is running on: ',
+            'blue:http://localhost:3000',
+            '\n\n\n',
+        ])
+
+        expect(mocks.setLlmModule).toHaveBeenCalledWith(mocks.getLlmModule())
+        expect(mocks.setExtractionLlmModule).toHaveBeenCalledWith(mocks.getLlmModule())
+        expect(mocks.natsGetInstance).toHaveBeenCalledTimes(2)
+
+        const sigint = processOnCalls.find((entry) => entry.event === 'SIGINT')
+        const sigterm = processOnCalls.find((entry) => entry.event === 'SIGTERM')
+        expect(sigint).toBeDefined()
+        expect(sigterm).toBeDefined()
+
+        await sigint?.handler()
+
+        expect(mocks.getLlmModule()?.shutdown).toHaveBeenCalledTimes(1)
+        expect(mocks.natsInstance.drain).toHaveBeenCalledTimes(1)
+        expect(processExitSpy).toHaveBeenCalledWith(0)
+
+        processOnSpy.mockRestore()
+        processExitSpy.mockRestore()
+    })
+
+    it('uses immediate exit on SIGTERM without initiating graceful shutdown paths', async () => {
+        const processOnCalls: Array<{ event: string; handler: (...args: unknown[]) => unknown }> = []
+        const processOnSpy = vi.spyOn(process, 'on').mockImplementation((event: string, handler: (...args: unknown[]) => unknown) => {
+            processOnCalls.push({ event, handler })
+            return process as NodeJS.Process
+        })
+        const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+
+        delete process.env.NATS_NEX_NODE_NKEY_PUBLIC
+
+        await loadServer()
+
+        const sigterm = processOnCalls.find((entry) => entry.event === 'SIGTERM')
+        const llmModule = mocks.getLlmModule()
+
+        expect(sigterm).toBeDefined()
+
+        await sigterm?.handler()
+
+        expect(llmModule?.shutdown).not.toHaveBeenCalled()
+        expect(mocks.natsInstance.drain).not.toHaveBeenCalled()
+        expect(processExitSpy).toHaveBeenCalledWith(0)
+
+        processOnSpy.mockRestore()
+        processExitSpy.mockRestore()
+    })
+
+    it('registers configured NEX service auth identity when the public key is set', async () => {
+        resetServerEnv({
+            NATS_NEX_NODE_NKEY_PUBLIC: 'NEX_PUBLIC_KEY',
+            MOCK_AUTH0: 'false',
+        })
+
+        await loadServer()
+
+        expect(mocks.warn).not.toHaveBeenCalledWith(
+            'NATS_NEX_NODE_NKEY_PUBLIC is not configured; NEX clients cannot authenticate through auth callout',
+        )
+
+        expect(mocks.startNatsAuthCalloutService).toHaveBeenCalledTimes(1)
+        const authCalloutArgs = mocks.startNatsAuthCalloutService.mock.calls[0]?.[0]
+        expect(authCalloutArgs.serviceAuthConfigs).toHaveLength(1)
+        expect(authCalloutArgs.serviceAuthConfigs[0]).toMatchObject({
+            publicKey: 'NEX_PUBLIC_KEY',
+            userId: 'svc:nex-node',
+            account: 'NEX',
+        })
+    })
+})

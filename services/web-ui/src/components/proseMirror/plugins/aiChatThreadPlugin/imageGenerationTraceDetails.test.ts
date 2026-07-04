@@ -3,7 +3,11 @@
 import { describe, it, expect, vi } from 'vitest'
 
 import {
+    cacheImageGenerationTrace,
     createImageGenerationTraceDetails,
+    formatImageGenerationTraceReferenceSource,
+    formatImageGenerationTraceRole,
+    getImageGenerationTrace,
     formatTraceModelLabel,
     type ImageGenerationTraceDetailsAttrs,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
@@ -99,15 +103,15 @@ describe('createImageGenerationTraceDetails — reference tile load contract', (
 // =============================================================================
 
 describe('createImageGenerationTraceDetails — reference source resolution', () => {
-    it('resolves a nats-obj:// reference to an authenticated /api/images URL', async () => {
+    it('resolves a nats-obj:// reference to an authenticated /api/files URL', async () => {
         const { image } = renderTiles([makeReference({ imageUrl: 'nats-obj://workspace-workspace-1-files/person-file' })])
-        await vi.waitFor(() => expect(image.src).toContain('/api/images/workspace-1/person-file'))
+        await vi.waitFor(() => expect(image.src).toContain('/api/files/workspace-1/person-file'))
         expect(image.src).toContain('token=token-1')
     })
 
     it('falls back to fileId/workspaceId when imageUrl is empty', async () => {
         const { image } = renderTiles([makeReference({ imageUrl: '' })])
-        await vi.waitFor(() => expect(image.src).toContain('/api/images/workspace-1/person-file'))
+        await vi.waitFor(() => expect(image.src).toContain('/api/files/workspace-1/person-file'))
     })
 
     it('retries the next source (e.g. the canvas in-memory image) when the primary errors', async () => {
@@ -285,5 +289,65 @@ describe('formatTraceModelLabel', () => {
         expect(formatTraceModelLabel('')).toBe('')
         expect(formatTraceModelLabel(undefined)).toBe('')
         expect(formatTraceModelLabel(null)).toBe('')
+    })
+})
+
+describe('formatImageGenerationTraceRole', () => {
+    it('formats role strings into displayable labels', () => {
+        expect(formatImageGenerationTraceRole('target')).toBe('Target')
+        expect(formatImageGenerationTraceRole('style-reference')).toBe('Style Reference')
+        expect(formatImageGenerationTraceRole('context-only')).toBe('Context Only')
+        expect(formatImageGenerationTraceRole('')).toBe('')
+    })
+})
+
+describe('formatImageGenerationTraceReferenceSource', () => {
+    it('maps known reference sources to stable human labels', () => {
+        expect(formatImageGenerationTraceReferenceSource('branch-candidate')).toBe('Image from this branch')
+        expect(formatImageGenerationTraceReferenceSource('feature-reference')).toBe('Feature reference image')
+        expect(formatImageGenerationTraceReferenceSource('message-reference')).toBe('Attached to chat message')
+        expect(formatImageGenerationTraceReferenceSource('unknown-source')).toBe('Reference image')
+    })
+})
+
+describe('trace cache and fallback helpers', () => {
+    it('prefers cache lookups when imageGenerationTraceId is provided', () => {
+        const cachedTrace = makeTrace([makeReference({ id: 'cached', label: 'Cached trace image' })])
+        const inlineTrace = makeTrace([makeReference({ id: 'inline', label: 'Inline trace image' })])
+        cacheImageGenerationTrace('trace-1', cachedTrace)
+
+        const resolved = getImageGenerationTrace({
+            title: 'Image generation prompt',
+            isOpen: false,
+            isStreaming: false,
+            imageGenerationTraceId: 'trace-1',
+            imageGenerationTrace: inlineTrace,
+        })
+
+        expect(resolved).toBe(cachedTrace)
+        expect((resolved?.referenceImages[0] as ImageGenerationTraceReference).label).toBe('Cached trace image')
+    })
+
+    it('falls back to inline trace when no trace ID is supplied', () => {
+        const inlineTrace = makeTrace([makeReference({ id: 'inline', label: 'Inline trace image' })])
+
+        const resolved = getImageGenerationTrace({
+            title: 'Image generation prompt',
+            isOpen: false,
+            isStreaming: false,
+            imageGenerationTrace: inlineTrace,
+        })
+
+        expect(resolved).toBe(inlineTrace)
+    })
+
+    it('returns null when cached trace id is missing and no inline trace exists', () => {
+        const resolved = getImageGenerationTrace({
+            title: 'Image generation prompt',
+            isOpen: false,
+            isStreaming: false,
+            imageGenerationTraceId: 'missing',
+        })
+        expect(resolved).toBeNull()
     })
 })

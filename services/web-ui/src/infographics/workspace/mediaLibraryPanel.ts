@@ -19,6 +19,7 @@ import MediaLibraryService from '$src/services/media-library-service.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 import { renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
+import { resolveMediaUrl } from '$src/utils/workspaceFileUrls.ts'
 
 // Features are org-wide — a single scope. 'shared' (external sharing) is deferred.
 const FEATURE_SCOPES: Array<{ key: string; label: string }> = [
@@ -141,7 +142,7 @@ const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 const withApiBaseUrl = (url: string): string =>
-    url.startsWith('/api/') ? `${API_BASE_URL}${url}` : url
+    resolveMediaUrl(url, { apiBaseUrl: API_BASE_URL })
 
 const textValue = (value: unknown): string | undefined => {
     if (value === undefined || value === null) return undefined
@@ -323,10 +324,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions): Medi
     }
 
     function appendImageAuth(url: string): string {
-        const apiUrl = withApiBaseUrl(url)
-        if (!accessToken) return apiUrl
-        const separator = apiUrl.includes('?') ? '&' : '?'
-        return `${apiUrl}${separator}${new URLSearchParams({ token: accessToken }).toString()}`
+        return resolveMediaUrl(url, { apiBaseUrl: API_BASE_URL, token: accessToken })
     }
 
     function getStoredSampleUrl(feature: FeatureMeta, sampleIndex: number): string {

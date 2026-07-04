@@ -2,6 +2,7 @@ packages:
   - "packages/lixpi/constants/ts"
   - "packages/lixpi/debug-tools/ts"
   - "packages/lixpi/nats-service/ts"
+  - "packages/lixpi/prosemirror"
 
 allowBuilds:
   "@parcel/watcher": true

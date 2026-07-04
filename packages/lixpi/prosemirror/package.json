@@ -1,0 +1,22 @@
+{
+    "name": "@lixpi/prosemirror",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "main": "./src/index.ts",
+    "scripts": {
+        "test:run": "vitest run"
+    },
+    "devDependencies": {
+        "vitest": "*"
+    },
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "dependencies": {
+        "@lixpi/constants": "workspace:*",
+        "prosemirror-model": "*",
+        "prosemirror-state": "*",
+        "prosemirror-transform": "*"
+    }
+}

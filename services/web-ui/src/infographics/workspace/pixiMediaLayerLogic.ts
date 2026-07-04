@@ -3,6 +3,12 @@ import type {
     CanvasViewport,
     ImageCanvasNode,
 } from '@lixpi/constants'
+import {
+    buildWorkspaceFilePath,
+    isApiEndpoint,
+    resolveMediaUrl,
+    stripAuthTokenFromUrl,
+} from '$src/utils/workspaceFileUrls.ts'
 
 export type IndexedImage = {
     minX: number
@@ -85,22 +91,19 @@ export type PixiRendererHealth = 'initializing' | 'ready' | 'destroyed'
 export const transparentPixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 
 export function buildPixiImageSrc(imageUrl: string, apiBaseUrl: string, token: string | false): string {
-    if (!imageUrl) return transparentPixel
-    if (imageUrl.startsWith('data:')) return imageUrl
-    if (imageUrl.startsWith('/api/')) return `${apiBaseUrl}${imageUrl}${token ? `?token=${token}` : ''}`
-    return imageUrl
+    return resolveMediaUrl(imageUrl, { apiBaseUrl, emptyFallback: transparentPixel, token })
 }
 
 export function isStoredImageSrc(src: string): boolean {
-    const stripped = src.replace(/[?&]token=[^&]+/, '')
-    return stripped.startsWith('/api/') || (stripped.startsWith('http') && stripped.includes('/api/images/'))
+    const stripped = stripAuthTokenFromUrl(src)
+    return isApiEndpoint(stripped)
 }
 
 export function resolveStoredImagePath(node: ImageCanvasNode, workspaceId: string): string {
-    const strippedSrc = node.src.replace(/[?&]token=[^&]+/, '')
+    const strippedSrc = stripAuthTokenFromUrl(node.src)
     return isStoredImageSrc(strippedSrc)
-        ? `/api/images/${workspaceId}/${node.fileId}`
-        : strippedSrc
+        ? buildWorkspaceFilePath(workspaceId, node.fileId)
+        : resolveMediaUrl(strippedSrc)
 }
 
 export function getPixiLodTier(zoom: number): LodTier {
@@ -112,7 +115,7 @@ export function getPixiLodTier(zoom: number): LodTier {
 
 export function addPixiLodSizeParam(url: string, tier: LodTier): string {
     if (tier === 'full' || tier === 'color') return url
-    if (!url.includes('/api/images/')) return url
+    if (!url.includes('/api/files/')) return url
 
     try {
         const parsed = new URL(url, window.location.origin)

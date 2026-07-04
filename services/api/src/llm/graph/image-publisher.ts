@@ -3,7 +3,31 @@
 import type NatsService from '@lixpi/nats-service'
 import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
 
-import type { StoreImageInput, StoreImageResult } from '../../services/image-storage.ts'
+import {
+    logCanvasProjectionError,
+    upsertGeneratedImageToCanvas,
+} from '../../services/media-generation-canvas-projection.ts'
+import type { ChunkPayload, ProseMirrorContentHandler } from './stream-publisher.ts'
+
+// Store-function contract for the generation pipeline. The concrete
+// implementation injected at the composition root is a storeWorkspaceFile
+// adapter (see services/store-media-adapters.ts); the result is a superset of
+// these fields.
+export type StoreImageInput = {
+    workspaceId: string
+    buffer: Buffer
+    originalName?: string
+    mimeType?: string
+    useContentHash?: boolean
+}
+
+export type StoreImageResult = {
+    fileId: string
+    url: string
+    isDuplicate: boolean
+    size: number
+    mimeType: string
+}
 
 export type StoreWorkspaceImageFn = (input: StoreImageInput) => Promise<StoreImageResult>
 
@@ -18,22 +42,35 @@ export class ImagePublisher {
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
         private readonly generationRun?: MediaGenerationRunMeta,
+        private readonly onProseMirrorContent?: ProseMirrorContentHandler,
+        private readonly onPipelineContent?: ProseMirrorContentHandler,
+        private readonly canvasVisibleArea?: { width: number; height: number },
     ) {}
+
+    private publish(content: ChunkPayload['content']): void {
+        if (this.onPipelineContent) {
+            this.onPipelineContent(content)
+            return
+        }
+
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content,
+            aiChatThreadId: this.aiChatThreadId,
+        })
+        this.onProseMirrorContent?.(content)
+    }
 
     // Empty imageBase64 publishes a placeholder event (UI shows animated border).
     // Non-empty uploads to NATS Object Store with content-hash dedup, then publishes IMAGE_PARTIAL.
     async partial(imageBase64: string, partialIndex: number): Promise<void> {
         if (!imageBase64) {
-            this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-                content: {
-                    status: STREAM_STATUS.IMAGE_PARTIAL,
-                    imageUrl: '',
-                    fileId: '',
-                    partialIndex,
-                    aiProvider: this.provider,
-                    ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-                },
-                aiChatThreadId: this.aiChatThreadId,
+            this.publish({
+                status: STREAM_STATUS.IMAGE_PARTIAL,
+                imageUrl: '',
+                fileId: '',
+                partialIndex,
+                aiProvider: this.provider,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             })
             return
         }
@@ -48,16 +85,13 @@ export class ImagePublisher {
                 useContentHash: true,
             })
 
-            this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-                content: {
-                    status: STREAM_STATUS.IMAGE_PARTIAL,
-                    imageUrl: result.url,
-                    fileId: result.fileId,
-                    partialIndex,
-                    aiProvider: this.provider,
-                    ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-                },
-                aiChatThreadId: this.aiChatThreadId,
+            this.publish({
+                status: STREAM_STATUS.IMAGE_PARTIAL,
+                imageUrl: result.url,
+                fileId: result.fileId,
+                partialIndex,
+                aiProvider: this.provider,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             })
         } catch {
             // Match Python behavior: log-and-skip on partial failure rather than
@@ -97,9 +131,10 @@ export class ImagePublisher {
             useContentHash: true,
         })
 
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.IMAGE_COMPLETE,
+        try {
+            await upsertGeneratedImageToCanvas({
+                workspaceId: this.workspaceId,
+                aiChatThreadId: this.aiChatThreadId,
                 imageUrl: result.url,
                 fileId: result.fileId,
                 responseId,
@@ -107,9 +142,23 @@ export class ImagePublisher {
                 aiProvider: this.provider,
                 imageModelProvider: this.provider,
                 imageModelId,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+                generationRun: this.generationRun,
+                ...(this.canvasVisibleArea ? { canvasVisibleArea: this.canvasVisibleArea } : {}),
+            })
+        } catch (error) {
+            logCanvasProjectionError('failed to persist generated image to canvas', error)
+        }
+
+        this.publish({
+            status: STREAM_STATUS.IMAGE_COMPLETE,
+            imageUrl: result.url,
+            fileId: result.fileId,
+            responseId,
+            revisedPrompt,
+            aiProvider: this.provider,
+            imageModelProvider: this.provider,
+            imageModelId,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }
 }

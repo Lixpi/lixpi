@@ -1,20 +1,52 @@
 'use strict'
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STREAM_STATUS } from '@lixpi/constants'
+
+const canvasProjectionMocks = vi.hoisted(() => ({
+    upsertMediaLineagePlanToCanvas: vi.fn(async () => undefined),
+    logCanvasProjectionError: vi.fn(),
+}))
+
+vi.mock('../../services/media-generation-canvas-projection.ts', () => canvasProjectionMocks)
 
 import { StreamPublisher, TagAwareStream } from './stream-publisher.ts'
 
 type Published = { subject: string, payload: any }
+type JetStreamPublished = { subject: string, payload: any, options: any }
 
 const makeFakeNats = () => {
     const published: Published[] = []
+    const jetStreamPublished: JetStreamPublished[] = []
+    let nextStreamSeq = 0
     const fake = {
         publish: (subject: string, payload: any) => {
             published.push({ subject, payload })
         },
+        ensureJetStreamStream: vi.fn(async () => undefined),
+        publishJetStream: vi.fn(async (subject: string, payload: any, options: any) => {
+            nextStreamSeq += 1
+            jetStreamPublished.push({ subject, payload, options })
+            return { seq: nextStreamSeq }
+        }),
+        purgeJetStreamSubject: vi.fn(async () => undefined),
     } as any
-    return { fake, published }
+    return { fake, published, jetStreamPublished }
+}
+
+const makeTagAwareStream = () => {
+    const published: Published[] = []
+    const stream = new TagAwareStream(
+        'OpenAI',
+        undefined,
+        content => published.push({ subject: 'tag-aware', payload: { content } }),
+    )
+    return { stream, published }
+}
+
+const flushPipelinePublishes = async (): Promise<void> => {
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
 }
 
 const flatTexts = (published: Published[]): string =>
@@ -26,39 +58,50 @@ const flatTexts = (published: Published[]): string =>
 const statuses = (published: Published[]): string[] =>
     published.map(p => p.payload.content.status)
 
+const generationRun = {
+    generationRequestId: 'request-1',
+    reasoningRunId: 'reasoning-1',
+    reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+    mediaModelId: 'Google:gemini-2.5-flash-image',
+    mediaType: 'image',
+    reasoningIndex: 0,
+    mediaIndex: 0,
+    variantIndex: 0,
+} as const
+
 describe('TagAwareStream', () => {
-    let nats: ReturnType<typeof makeFakeNats>
+    let tagAware: ReturnType<typeof makeTagAwareStream>
     let stream: TagAwareStream
 
     beforeEach(() => {
-        nats = makeFakeNats()
-        stream = new TagAwareStream(nats.fake, 'ws1', 'thread1', 'OpenAI')
+        tagAware = makeTagAwareStream()
+        stream = tagAware.stream
     })
 
     it('passes plain text through after flush', () => {
         stream.push('Hello world')
         stream.flush()
-        expect(flatTexts(nats.published)).toBe('Hello world')
-        expect(statuses(nats.published)).toEqual([STREAM_STATUS.STREAMING])
+        expect(flatTexts(tagAware.published)).toBe('Hello world')
+        expect(statuses(tagAware.published)).toEqual([STREAM_STATUS.STREAMING])
     })
 
     it('emits COLLAPSIBLE_START / END around <image_prompt> content', () => {
         stream.push('before<image_prompt>inner content</image_prompt>after')
         stream.flush()
 
-        expect(statuses(nats.published)).toEqual([
+        expect(statuses(tagAware.published)).toEqual([
             STREAM_STATUS.STREAMING,           // 'before'
             STREAM_STATUS.COLLAPSIBLE_START,
             STREAM_STATUS.STREAMING,           // 'inner content'
             STREAM_STATUS.COLLAPSIBLE_END,
             STREAM_STATUS.STREAMING,           // 'after'
         ])
-        const texts = nats.published
+        const texts = tagAware.published
             .filter(p => p.payload.content.status === STREAM_STATUS.STREAMING)
             .map(p => p.payload.content.text)
         expect(texts).toEqual(['before', 'inner content', 'after'])
 
-        const collapsibleStart = nats.published.find(p => p.payload.content.status === STREAM_STATUS.COLLAPSIBLE_START)
+        const collapsibleStart = tagAware.published.find(p => p.payload.content.status === STREAM_STATUS.COLLAPSIBLE_START)
         expect(collapsibleStart?.payload.content.collapsibleTitle).toBe('Image generation prompt')
     })
 
@@ -66,19 +109,19 @@ describe('TagAwareStream', () => {
         stream.push('Sure!<video_prompt>Animate the provided reference image as the first frame.</video_prompt>done')
         stream.flush()
 
-        expect(statuses(nats.published)).toEqual([
+        expect(statuses(tagAware.published)).toEqual([
             STREAM_STATUS.STREAMING,           // 'Sure!'
             STREAM_STATUS.COLLAPSIBLE_START,
             STREAM_STATUS.STREAMING,           // inner video prompt
             STREAM_STATUS.COLLAPSIBLE_END,
             STREAM_STATUS.STREAMING,           // 'done'
         ])
-        const texts = nats.published
+        const texts = tagAware.published
             .filter(p => p.payload.content.status === STREAM_STATUS.STREAMING)
             .map(p => p.payload.content.text)
         expect(texts).toEqual(['Sure!', 'Animate the provided reference image as the first frame.', 'done'])
 
-        const collapsibleStart = nats.published.find(p => p.payload.content.status === STREAM_STATUS.COLLAPSIBLE_START)
+        const collapsibleStart = tagAware.published.find(p => p.payload.content.status === STREAM_STATUS.COLLAPSIBLE_START)
         expect(collapsibleStart?.payload.content.collapsibleTitle).toBe('Video generation prompt')
     })
 
@@ -87,7 +130,7 @@ describe('TagAwareStream', () => {
         stream.push('ompt>tail')
         stream.flush()
 
-        expect(statuses(nats.published)).toEqual([
+        expect(statuses(tagAware.published)).toEqual([
             STREAM_STATUS.COLLAPSIBLE_START,
             STREAM_STATUS.STREAMING,           // 'inner'
             STREAM_STATUS.COLLAPSIBLE_END,
@@ -100,7 +143,7 @@ describe('TagAwareStream', () => {
         stream.push('ompt>inner</image_prompt>')
         stream.flush()
 
-        expect(statuses(nats.published)).toEqual([
+        expect(statuses(tagAware.published)).toEqual([
             STREAM_STATUS.STREAMING,           // 'before'
             STREAM_STATUS.COLLAPSIBLE_START,
             STREAM_STATUS.STREAMING,           // 'inner'
@@ -113,7 +156,7 @@ describe('TagAwareStream', () => {
         stream.push('ompt>tail')
         stream.flush()
 
-        expect(statuses(nats.published)).toEqual([
+        expect(statuses(tagAware.published)).toEqual([
             STREAM_STATUS.COLLAPSIBLE_START,
             STREAM_STATUS.STREAMING,           // 'inner'
             STREAM_STATUS.COLLAPSIBLE_END,
@@ -126,7 +169,7 @@ describe('TagAwareStream', () => {
         stream.push('but never closed')
         stream.flush()
 
-        const ss = statuses(nats.published)
+        const ss = statuses(tagAware.published)
         expect(ss[0]).toBe(STREAM_STATUS.COLLAPSIBLE_START)
         expect(ss[ss.length - 1]).toBe(STREAM_STATUS.COLLAPSIBLE_END)
     })
@@ -135,7 +178,7 @@ describe('TagAwareStream', () => {
         // indexOf matches <image_prompt> inside <image_prompt_alt>: known substring-search limitation
         stream.push('<image_prompt_alt>x</image_prompt_alt>')
         stream.flush()
-        expect(nats.published.length).toBeGreaterThan(0)
+        expect(tagAware.published.length).toBeGreaterThan(0)
     })
 
     it('emits a single STREAMING event per safe-portion flush', () => {
@@ -144,7 +187,7 @@ describe('TagAwareStream', () => {
         const big = 'a'.repeat(100)
         stream.push(big)
         stream.flush()
-        const texts = nats.published
+        const texts = tagAware.published
             .filter(p => p.payload.content.status === STREAM_STATUS.STREAMING)
             .map(p => p.payload.content.text)
             .join('')
@@ -153,24 +196,29 @@ describe('TagAwareStream', () => {
 
     it('does not flush partial tag prefix until it can be confirmed', () => {
         stream.push('<image_pr')
-        expect(nats.published.length).toBe(0)
+        expect(tagAware.published.length).toBe(0)
         stream.push('ompt>x')
-        expect(statuses(nats.published)).toContain(STREAM_STATUS.COLLAPSIBLE_START)
+        expect(statuses(tagAware.published)).toContain(STREAM_STATUS.COLLAPSIBLE_START)
     })
 })
 
+afterEach(async () => {
+    await flushPipelinePublishes()
+})
+
 describe('StreamPublisher extraction progress', () => {
-    it('publishes START_STREAM only once when providers start after shared prework', () => {
+    it('publishes START_STREAM only once when providers start after shared prework', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
 
         publisher.start()
         publisher.start()
+        await flushPipelinePublishes()
 
         expect(statuses(nats.published)).toEqual([STREAM_STATUS.START_STREAM])
     })
 
-    it('publishes END_STREAM only once after duplicate starts', () => {
+    it('publishes END_STREAM only once after duplicate starts', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
 
@@ -179,6 +227,7 @@ describe('StreamPublisher extraction progress', () => {
         publisher.chunk('done')
         publisher.end()
         publisher.end()
+        await flushPipelinePublishes()
 
         expect(statuses(nats.published)).toEqual([
             STREAM_STATUS.START_STREAM,
@@ -197,11 +246,45 @@ describe('StreamPublisher extraction progress', () => {
         expect(nats.published).toHaveLength(0)
     })
 
-    it('publishes extraction status and detail on the chat stream', () => {
+    it('keeps publishing later chunks after a JetStream publish failure on an earlier chunk', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+        const nats = makeFakeNats()
+        nats.fake.publishJetStream
+            .mockRejectedValueOnce(new Error('jetstream unavailable'))
+            .mockResolvedValueOnce({ seq: 1 })
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'OpenAI')
+
+        publisher.start()
+        publisher.chunk('hello')
+        publisher.end()
+        await flushPipelinePublishes()
+
+        consoleErrorSpy.mockRestore()
+
+        expect(nats.published).toHaveLength(3)
+        expect(nats.published[0]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.START_STREAM,
+            aiProvider: 'OpenAI',
+        })
+        expect(nats.published[1]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.STREAMING,
+            text: 'hello',
+            aiProvider: 'OpenAI',
+        })
+        expect(nats.published[2]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.END_STREAM,
+            aiProvider: 'OpenAI',
+        })
+        expect(nats.fake.publishJetStream).toHaveBeenCalledTimes(3)
+    })
+
+    it('publishes extraction status and detail on the chat stream', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'run1', 'Anthropic')
 
         publisher.extractionProgress('generating_samples', 'Rendering a texture reference sheet.')
+        await flushPipelinePublishes()
 
         expect(nats.published).toHaveLength(1)
         expect(nats.published[0]?.subject).toBe('ai.interaction.chat.receiveMessage.ws1.run1')
@@ -213,7 +296,40 @@ describe('StreamPublisher extraction progress', () => {
         }))
     })
 
-    it('publishes workspace context relevance resolution on the chat stream', () => {
+    it('persists pipeline content before live publishing with replay metadata', async () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+
+        publisher.contextRelevanceError('bad context')
+        await flushPipelinePublishes()
+
+        expect(nats.jetStreamPublished).toHaveLength(1)
+        expect(nats.jetStreamPublished[0]).toMatchObject({
+            subject: 'ai.interaction.chat.pipelineEvents.ws1.thread1',
+            options: {
+                msgID: expect.any(String),
+                expect: { streamName: 'PIPELINE_EVENTS_ws1' },
+            },
+        })
+        expect(nats.jetStreamPublished[0]?.payload.payload.content).toMatchObject({
+            status: STREAM_STATUS.CONTEXT_RELEVANCE_ERROR,
+            error: 'bad context',
+        })
+        expect(nats.published[0]).toMatchObject({
+            subject: 'ai.interaction.chat.receiveMessage.ws1.thread1',
+            payload: {
+                aiChatThreadId: 'thread1',
+                pipelineEventId: expect.any(String),
+                pipelineStreamSeq: 1,
+                content: expect.objectContaining({
+                    status: STREAM_STATUS.CONTEXT_RELEVANCE_ERROR,
+                    error: 'bad context',
+                }),
+            },
+        })
+    })
+
+    it('publishes workspace context relevance resolution on the chat stream', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'OpenAI')
         const resolution = {
@@ -223,6 +339,7 @@ describe('StreamPublisher extraction progress', () => {
         }
 
         publisher.contextRelevanceResolved(resolution)
+        await flushPipelinePublishes()
 
         expect(nats.published).toHaveLength(1)
         expect(nats.published[0]?.payload.content).toEqual(expect.objectContaining({
@@ -232,11 +349,12 @@ describe('StreamPublisher extraction progress', () => {
         }))
     })
 
-    it('publishes workspace context relevance errors on the chat stream', () => {
+    it('publishes workspace context relevance errors on the chat stream', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'OpenAI')
 
         publisher.contextRelevanceError('bad context')
+        await flushPipelinePublishes()
 
         expect(nats.published).toHaveLength(1)
         expect(nats.published[0]?.payload.content).toEqual(expect.objectContaining({
@@ -246,7 +364,7 @@ describe('StreamPublisher extraction progress', () => {
         }))
     })
 
-    it('publishes image generation errors with media run metadata', () => {
+    it('publishes image generation errors with media run metadata', async () => {
         const nats = makeFakeNats()
         const generationRun = {
             generationRequestId: 'request-1',
@@ -262,6 +380,7 @@ describe('StreamPublisher extraction progress', () => {
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', generationRun)
 
         publisher.imageGenerationError('no inline image data')
+        await flushPipelinePublishes()
 
         expect(nats.published).toHaveLength(1)
         expect(nats.published[0]?.payload.content).toEqual({
@@ -274,7 +393,7 @@ describe('StreamPublisher extraction progress', () => {
 })
 
 describe('StreamPublisher trace payloads', () => {
-    it('propagates media generation metadata through image/video traces', () => {
+    it('propagates media generation metadata through image/video traces', async () => {
         const nats = makeFakeNats()
         const generationRun = {
             generationRequestId: 'request-1',
@@ -319,6 +438,7 @@ describe('StreamPublisher trace payloads', () => {
             durationSeconds: 6,
             generationRun: generationRun,
         } as any)
+        await flushPipelinePublishes()
 
         const imageTrace = nats.published[0]?.payload.content
         const videoTrace = nats.published[1]?.payload.content
@@ -339,5 +459,145 @@ describe('StreamPublisher trace payloads', () => {
             }),
             generationRun,
         })
+    })
+
+    it('publishes feature cards as structured stream updates', async () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+
+        const payload = { title: 'A feature', value: 'details' }
+        publisher.featureCard(payload)
+        await flushPipelinePublishes()
+
+        expect(nats.published).toHaveLength(1)
+        expect(nats.published[0]?.payload.content).toEqual({
+            status: STREAM_STATUS.STREAMING,
+            aiProvider: 'Anthropic',
+            featureCard: payload,
+        })
+    })
+
+    it('publishes image branch and lineage resolution events with generation-run defaults and overrides', async () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+            generationRun,
+        )
+        publisher.imageBranchResolved({ resolved: true } as any)
+        publisher.mediaLineagePlanned({ lineage: 'plan' } as any, {
+            ...generationRun,
+            mediaRunId: 'reasoning-1:image:override',
+        })
+        await flushPipelinePublishes()
+
+        expect(nats.published).toHaveLength(2)
+        expect(nats.published[0]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
+            resolution: { resolved: true },
+            generationRun,
+        })
+        expect(nats.published[1]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.MEDIA_LINEAGE_PLANNED,
+            lineagePlan: { lineage: 'plan' },
+            generationRun: {
+                ...generationRun,
+                mediaRunId: 'reasoning-1:image:override',
+            },
+        })
+        expect(canvasProjectionMocks.upsertMediaLineagePlanToCanvas).toHaveBeenCalledWith({
+            workspaceId: 'ws1',
+            aiChatThreadId: 'thread1',
+            lineagePlan: { lineage: 'plan' },
+        })
+    })
+})
+
+describe('StreamPublisher ProseMirror integration options', () => {
+    it('forwards publishProseMirrorContent payloads to the active assembler', () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+        ;(publisher as any).proseMirrorAssembler = { handleContent: vi.fn() }
+        const publisherSpy = vi.spyOn((publisher as any).proseMirrorAssembler, 'handleContent')
+
+        publisher.publishProseMirrorContent({
+            status: STREAM_STATUS.STREAMING,
+            text: 'streaming hint',
+            aiProvider: 'Anthropic',
+        })
+        publisher.publishProseMirrorContent({
+            status: STREAM_STATUS.ERROR,
+            error: 'temporary failure',
+            aiProvider: 'Anthropic',
+        })
+        expect(publisherSpy).toHaveBeenCalledTimes(2)
+        expect(publisherSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            status: STREAM_STATUS.STREAMING,
+            text: 'streaming hint',
+        }))
+        expect(publisherSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            status: STREAM_STATUS.ERROR,
+            error: 'temporary failure',
+        }))
+    })
+
+    it('delegates prose-mirror end strategy based on deferProseMirrorEnd', async () => {
+        const nats = makeFakeNats()
+        const finishTextPhase = vi.fn(() => Promise.resolve())
+        const end = vi.fn(() => Promise.resolve())
+        const publisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+            undefined,
+            {
+                enableProseMirrorStream: false,
+                deferProseMirrorEnd: true,
+            },
+        )
+        ;(publisher as any).proseMirrorAssembler = {
+            handleContent: vi.fn(),
+            finishTextPhase,
+            end,
+        }
+
+        publisher.start()
+        publisher.end()
+        expect(finishTextPhase).toHaveBeenCalledTimes(1)
+        expect(end).not.toHaveBeenCalled()
+
+        const nonDeferredFinishTextPhase = vi.fn(() => Promise.resolve())
+        const nonDeferredEnd = vi.fn(() => Promise.resolve())
+        const nonDeferred = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', undefined, {
+            enableProseMirrorStream: false,
+            deferProseMirrorEnd: false,
+        })
+        ;(nonDeferred as any).proseMirrorAssembler = {
+            handleContent: vi.fn(),
+            finishTextPhase: nonDeferredFinishTextPhase,
+            end: nonDeferredEnd,
+        }
+        nonDeferred.start()
+        nonDeferred.end()
+        await flushPipelinePublishes()
+        expect(nonDeferredFinishTextPhase).toHaveBeenCalledTimes(0)
+        expect(nonDeferredEnd).toHaveBeenCalledTimes(1)
+    })
+
+    it('returns immediately from finishProseMirrorStream when prose mirror assembler is absent', async () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+            undefined,
+            { enableProseMirrorStream: false },
+        )
+        await expect(publisher.finishProseMirrorStream()).resolves.toBeUndefined()
+        expect(nats.published).toHaveLength(0)
     })
 })

@@ -8,40 +8,34 @@ import chalk from 'chalk'
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 import DynamoDBService from '@lixpi/dynamodb-service'
-import SSMService from '@lixpi/ssm-service'
 import NATS_Service from '@lixpi/nats-service'
 import { startNatsAuthCalloutService } from '@lixpi/nats-auth-callout-service'
 import type { ServiceAuthConfig } from '@lixpi/auth-service'
 
 import { createServer } from 'http'
 
-// SQS pollers imports ******************************************
-// import SqsPollingService from './SQS-pollers/polling-service.ts'
-// import { userSubscriptionSqsPollers } from './SQS-pollers/polling-handlers/user-subscription.ts'
-
 import { jwtAuthMiddleware } from './NATS/middleware/nats-auth-middleware.ts'
 import { userSubjects } from './NATS/subscriptions/user-subjects.ts'
+import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects.ts'
 import { aiModelSubjects } from './NATS/subscriptions/ai-model-subjects.ts'
 import { aiInteractionSubjects, setLlmModule } from './NATS/subscriptions/ai-interaction-subjects.ts'
+import { extractionSubjects, setExtractionLlmModule } from './NATS/subscriptions/extraction-subjects.ts'
+import { mediaDescriptorSubjects } from './NATS/subscriptions/media-descriptor-subjects.ts'
 import { workspaceSubjects } from './NATS/subscriptions/workspace-subjects.ts'
 import { documentSubjects } from './NATS/subscriptions/document-subjects.ts'
 import { aiChatThreadSubjects } from './NATS/subscriptions/ai-chat-thread-subjects.ts'
-import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects.ts'
 import { imageSubjects } from './NATS/subscriptions/image-subjects.ts'
 import { videoSubjects } from './NATS/subscriptions/video-subjects.ts'
+import { fileConversionSubjects } from './NATS/subscriptions/file-conversion-subjects.ts'
 import { featureSubjects } from './NATS/subscriptions/feature-subjects.ts'
-import { mediaDescriptorSubjects } from './NATS/subscriptions/media-descriptor-subjects.ts'
 import { mediaLibrarySubjects } from './NATS/subscriptions/media-library-subjects.ts'
-import { extractionSubjects, setExtractionLlmModule } from './NATS/subscriptions/extraction-subjects.ts'
-import imageRoutes from './routes/image-routes.ts'
-import videoRoutes from './routes/video-routes.ts'
+import fileRoutes from './routes/file-routes.ts'
 import workspaceExportRoutes from './routes/workspace-export-routes.ts'
 import featureRoutes from './routes/feature-routes.ts'
 import mediaLibraryRoutes from './routes/media-library-routes.ts'
 
 import { createLlmModule } from './llm/index.ts'
-import { storeWorkspaceImage } from './services/image-storage.ts'
-import { storeWorkspaceVideo } from './services/video-storage.ts'
+import { storeWorkspaceImage, storeWorkspaceVideo } from './services/store-media-adapters.ts'
 
 import { MetricsClient, metricsConfigFromEnv, type MetricsNats } from './metrics/metrics-client.ts'
 
@@ -66,61 +60,38 @@ global.dynamoDBService = new DynamoDBService({
     ...(env.DYNAMODB_ENDPOINT && { endpoint: env.DYNAMODB_ENDPOINT }),    // For local development only
 })
 
-//Set the global SSM service instance to be used across the application for parameter store operations
-// const ssmService = new SSMService({
-//     region: env.AWS_REGION,
-//     ssoProfile: env.AWS_PROFILE,
-//     prefix: `/sst/${env.ORG_NAME}/${env.STAGE}/`
-// })
 
-// Fetch and set the global SSM parameters to be used across the application
-// global.ssmParams = {
-//     // // Queues ******************************************
-//     // UserSubscriptionEventsQueue: await ssmService.getParameter({
-//     //     parameterName: 'Queue/User_Subscription_Events/queueUrl',
-//     //     withDecryption: true,
-//     //     origin: 'server:start::getSsmParams'
-//     // }),
-//     // // SNS Topics **************************************
-//     // AiTokensUsageSnsTopic: await ssmService.getParameter({
-//     //     parameterName: 'Parameter/AI_TOKENS_USAGE_TOPIC_ARN/value',
-//     //     withDecryption: true,
-//     //     origin: 'server:start::getSsmParams'
-//     // }),
-//     // // Lambdas *****************************************
-//     // StripeBillingHandlerLambda: await ssmService.getParameter({
-//     //     parameterName: 'Function/Stripe_Billing_Handler/functionName',
-//     //     withDecryption: true,
-//     //     origin: 'server:start::getSsmParams'
-//     // }),
-
-// }
-
-// // Start the SQS polling service
-// const sqsPollingService = new SqsPollingService([
-//     ...userSubscriptionSqsPollers(ssmParams)
-// ])
-// sqsPollingService.startPolling()
 
 // AI models synchronization runs hourly on the NATS NEX execution-engine node
 // (services/nex). The API reads the AI_MODELS_LIST table live (model::AiModel
 // .getAvailableAiModels) and does not run the sync itself. See
 // documentation/platform/deployment/NEX-EXECUTION-ENGINE.md.
 
+// NATS registration order is the order below. Keep related subjects together
+// here instead of sorting after the fact so startup logs and generated auth
+// permissions stay readable and predictable.
 const subscriptions = [
+    // Identity, billing, and model metadata.
     ...userSubjects,
     ...subscriptionSubjects,
     ...aiModelSubjects,
+
+    // AI orchestration, replay streams, extraction, and media description.
     ...aiInteractionSubjects,
+    ...extractionSubjects,
+    ...mediaDescriptorSubjects,
+
+    // Workspace records, document authority, and chat-thread records.
     ...workspaceSubjects,
     ...documentSubjects,
     ...aiChatThreadSubjects,
+
+    // Workspace media, reusable features, and media library records.
     ...imageSubjects,
     ...videoSubjects,
+    ...fileConversionSubjects,
     ...featureSubjects,
     ...mediaLibrarySubjects,
-    ...extractionSubjects,
-    ...mediaDescriptorSubjects,
 ]
 
 // Registered NATS-internal identities that the auth callout can authenticate
@@ -299,11 +270,10 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }))
 app.use(cors(corsOptions))
 app.use(cookieParser())
 
-// Image upload/download routes
-app.use('/api/images', imageRoutes)
-
-// Video upload/download route (Range-capable for HTML5 <video> + PIXI VideoSource)
-app.use('/api/videos', videoRoutes)
+// Unified file upload/download route — accepts any media kind, sniffs the bytes,
+// transcodes to a model-safe canonical, and serves originals/canonicals/posters
+// with Range support for seekable media.
+app.use('/api/files', fileRoutes)
 
 // Workspace export routes
 app.use('/api/workspaces', workspaceExportRoutes)

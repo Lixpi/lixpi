@@ -8,12 +8,12 @@
 // handle separately.
 
 @function panelSlideTransition($property) {
-    @return #{$property} var(--side-panel-slide-duration, 1000ms) var(--side-panel-slide-easing, cubic-bezier(0.32, 0.72, 0, 1));
+    @return #{$property} var(--side-panel-slide-duration, 1000ms) var(--side-panel-slide-easing, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 .side-panel-resize-handle {
     position: absolute;
-    z-index: 10;
+    z-index: var(--side-panel-resize-handle-z-index, 9990);
     pointer-events: auto;
     cursor: ew-resize;
     touch-action: none;
@@ -36,7 +36,7 @@
 
 .side-panel-overlay {
     position: absolute;
-    z-index: 80;
+    z-index: var(--side-panel-overlay-z-index, 80);
     inset: 0;
     opacity: 0;
     pointer-events: none;
@@ -48,7 +48,7 @@
 }
 
 .side-panel-overlay-open {
-    pointer-events: auto;
+    pointer-events: none;
 }
 
 .side-panel-touch-drag {
@@ -57,7 +57,7 @@
 
 .side-panel-toggle {
     position: absolute;
-    z-index: 10040;
+    z-index: var(--side-panel-toggle-z-index, 10040);
     display: grid;
     place-items: center;
     padding: 0;
@@ -96,7 +96,7 @@
 // inner edge sits flush with the panel edge.
 .side-panel-backdrop {
     position: absolute;
-    z-index: 90;
+    z-index: var(--side-panel-backdrop-z-index, 90);
     top: 0;
     bottom: calc(0px - var(--workspace-canvas-padding-bottom, 0px));
     width: var(--side-panel-backdrop-width, 0px);

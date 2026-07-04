@@ -4,6 +4,7 @@ import { info, warn, err } from '@lixpi/debug-tools'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
+import type { ProseMirrorContentHandler } from '../graph/stream-publisher.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import {
     buildImageModelPrompt,
@@ -28,6 +29,10 @@ const fingerprintRef = (url: string): string => {
     return `${url.slice(0, 60)}…`
 }
 
+type ImageRouterOptions = {
+    onProseMirrorContent?: ProseMirrorContentHandler
+}
+
 // Routes a generate_image tool call from a text model to the configured image-model provider.
 // Spins up a transient provider keyed {ws}:{thread}:image with enableImageGeneration=true
 // so it skips its own START_STREAM/END_STREAM — the parent text stream owns the lifecycle.
@@ -36,7 +41,7 @@ export class ImageRouter {
 
     constructor(private readonly registry: ProviderRegistry) {}
 
-    async execute(state: ProviderState): Promise<Partial<ProviderState>> {
+    async execute(state: ProviderState, options: ImageRouterOptions = {}): Promise<Partial<ProviderState>> {
         const imageProvider = state.imageProviderName
         const imageModel = state.imageModelVersion
         const imageMeta = state.imageModelMetaInfo ?? ({} as any)
@@ -128,6 +133,7 @@ export class ImageRouter {
                 imageSize,
                 generationRun,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
+                proseMirrorContentHandler: options.onProseMirrorContent,
             }
 
             const finalState = await provider.process(requestData)

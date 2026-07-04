@@ -28,12 +28,12 @@ RUN pnpm install --force && pnpm store prune && rm -rf ~/.pnpm-store
 # Stage 2: Runtime
 FROM node:${NODE_VERSION}-alpine
 
-# Install necessary packages
-# ffmpeg is used by services/api/src/services/video-storage.ts to extract a
-# poster frame from generated VEO videos for the PIXI low-LoD texture path.
-# Poster extraction is best-effort — if ffmpeg is unavailable for any reason,
-# video generation still completes, the canvas just won't have a static poster.
-RUN apk add --update --no-cache curl ffmpeg
+# The API does NO heavy media processing. All transcode/poster/probe work
+# (ffmpeg/libreoffice/poppler/sharp) runs on the NATS NEX node in the
+# file-conversion workload (services/nex/workloads/file-conversion); the API only
+# stores the original and hands the heavy work off over NATS. Keep this image
+# lean — do not reintroduce media tooling here.
+RUN apk add --update --no-cache curl
 
 # Install pnpm globally (in the runtime stage)
 RUN npm install -g pnpm

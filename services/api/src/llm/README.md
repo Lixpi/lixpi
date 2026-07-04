@@ -6,12 +6,14 @@ The in-process LangGraph workflow that orchestrates AI provider streaming. It re
 
 - Receives a chat request from the NATS gateway handler (`services/api/src/NATS/subscriptions/ai-interaction-subjects.ts`).
 - Starts the top-level chat stream immediately, then runs a LangGraph state machine per provider: `resolveWorkspaceContext → resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration` or `executeVideoGeneration` → `calculateUsage → cleanup`.
-- Streams tokens to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) — the API HTTP server is not in the streaming path.
+- Publishes live chat pipeline events to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) — the API HTTP server is not in the streaming path.
+- Persists chat pipeline events to a workspace JetStream log before live publish, so refreshed or second clients can replay missed branch, lineage, media, and extraction events through `CHAT_PIPELINE_RESUME`.
+- Mirrors AI chat text and generated-media transcript mutations into a workspace ProseMirror JetStream step log through `AiChatProseMirrorStreamAssembler`, so browser clients render API-authored `START` / `STEP` / `END` events instead of parsing raw tokens.
 - Routes dual-model image/video generation: text model emits `generate_image` or `generate_video`, then the workflow spawns a transient image-model provider or VEO video provider that stores the generated media in NATS Object Store.
 - Routes multi-model media matrix requests by running one shared workspace/branch preflight, starting one reasoning run per selected reasoning model, then fanning each emitted media prompt out to the selected image or video models with per-run stream metadata and per-model media options from API-authored configuration groups.
 - Plans media branch topology in the API for media-enabled requests, including branch origin/fork marker IDs, lineage parent IDs, neutral branch-root provenance when needed, and per-run generated-media lineage assignments.
 - Assigns reasoning/media run metadata through a shared media-agnostic run planner, so image and video providers only receive already-planned run IDs and lineage assignments instead of deciding topology themselves.
-- Publishes `IMAGE_GENERATION_TRACE` and `VIDEO_GENERATION_TRACE` events immediately before invoking transient media providers. These traces contain the text-model tool prompt, routed media prompt, selected/excluded reference candidates, and preview-safe reference URLs when available.
+- Publishes `IMAGE_GENERATION_TRACE` and `VIDEO_GENERATION_TRACE` events immediately before invoking transient media providers, and mirrors those trace plus final media events into the authoritative ProseMirror stream. These traces contain the text-model tool prompt, routed media prompt, selected/excluded reference candidates, and preview-safe reference URLs when available.
 - Computes token, image, and video usage costs via `decimal.js` pricing math against the model's pricing metadata. The reporter currently logs/returns the calculations; publishing usage events is still pending.
 
 Frontend code must not recreate this orchestration. Branching, reasoning-run fanout, context relevance, resolver decisions, media lineage topology, marker provenance, and run assignments are API responsibilities. The browser may submit snapshots and render stream results, but any decision that changes generated-media graph state must be represented here or in another backend service through a typed contract.
@@ -55,7 +57,8 @@ src/llm/
     config.ts                    # LLM_TIMEOUT_MS, VEO_POLL_INTERVAL_MS, BYTEPLUS_ARK_BASE_URL, BYTEPLUS_VIDEO_POLL_INTERVAL_MS
     graph/
         state.ts                 # ProviderState type + channel reducers (partial-overlay semantics)
-        stream-publisher.ts      # START_STREAM, STREAMING, END_STREAM + image/video trace/error events
+        stream-publisher.ts      # START_STREAM, STREAMING, END_STREAM + image/video trace/error events; single-writer streams also mirror ProseMirror steps
+        pipeline-event-log.ts    # Workspace JetStream replay log for chat/media/extraction pipeline events
         image-publisher.ts       # IMAGE_PARTIAL, IMAGE_COMPLETE + content-hash deduped storage
         video-publisher.ts       # VIDEO_PENDING, VIDEO_GENERATING, VIDEO_COMPLETE, VIDEO_ERROR
         workspace-context-resolver.ts # Descriptor-first workspace relevance resolver
@@ -90,6 +93,9 @@ src/llm/
         image_generation_instructions.txt
         video_generation_instructions.txt
         anthropic_code_block_hack.txt
+    ../prosemirror/
+        ai-chat-stream-assembler.ts    # API-side markdown parser + ProseMirror step author for AI chat threads
+        prosemirror-step-transport.ts  # Workspace JetStream step stream ensure/publish/replay helpers
     usage/
         usage-reporter.ts        # decimal.js token, image, and video pricing math
 ```
@@ -122,7 +128,7 @@ cleanup
 END
 ```
 
-Top-level chat requests publish `START_STREAM` before graph invocation. This keeps the browser in a receiving state while pre-stream work such as workspace relevance, `/use` resolution, branch VLM resolution, image URL fetches, and image downscaling runs. Transient image-model providers spawned by `ImageRouter` still skip their own `START_STREAM`/`END_STREAM`; the parent chat stream owns that lifecycle.
+Top-level chat requests publish `START_STREAM` before graph invocation. This keeps the API-side stream lifecycle active while pre-stream work such as workspace relevance, `/use` resolution, branch VLM resolution, image URL fetches, and image downscaling runs. `StreamPublisher` records each pipeline event to a workspace JetStream subject before publishing the live `receiveMessage` event; clients call `CHAT_PIPELINE_RESUME` with their last stream sequence after reconnecting or mounting a second tab. For single-writer chat streams, `StreamPublisher` mirrors token content through the API-side `AiChatProseMirrorStreamAssembler`, which runs `@lixpi/markdown-stream-parser`, applies the shared ProseMirror assembly rules, and writes `START` / `STEP` / `END` events to the per-document JetStream subject. Browser clients apply text through that document step subject rather than parsing raw token events. Transient image-model providers spawned by `ImageRouter` and `VideoRouter` still skip their own `START_STREAM`/`END_STREAM`; the parent chat stream owns that lifecycle, receives their trace/partial/complete events through the same pipeline publisher, flushes the ProseMirror text phase as soon as the raw assistant stream ends, and defers only the final ProseMirror `END` until `cleanup` so the persisted thread includes generation details and final media atoms. Provider cleanup must await that finalization promise; otherwise a page refresh can cold-load the previous snapshot before DynamoDB has the generated-media transcript.
 
 `resolveWorkspaceContext` runs first on every request carrying a `WorkspaceContextSnapshot`. It ranks compact node descriptors with the resolver model config (falling back to the chat text model), force-includes explicit chips and edge-forced nodes, and runs one bounded self-heal round for selected nodes whose descriptors are missing, failed, analyzing, thin, or explicitly flagged by the ranker. Improved descriptors are persisted through a targeted `canvasState.nodes[index].descriptor` patch, emitted on `CONTEXT_RELEVANCE_RESOLVED`, and used for one rerank before selected document/thread/media context is prepended to `state.messages` and `imageBranchCandidateSnapshot` is narrowed to the selected media set. When a branch snapshot already exists, auto-selected workspace media outside that snapshot is ignored; only forced chips and edge-forced media may expand it. Missing snapshots no-op so older call sites do not crash.
 

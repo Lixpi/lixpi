@@ -7,6 +7,7 @@ import type {
 
 import AuthService from '$src/services/auth-service.ts'
 import { html } from '$src/utils/domTemplates.ts'
+import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
 
 // Image and video generation traces share an identical reference/excluded/
 // resolver/prompt shape, so this renderer is reused verbatim for both media
@@ -84,31 +85,9 @@ export const formatTraceModelLabel = (modelId?: string | null): string => {
     return parts[1] || parts[0] || ''
 }
 
-const appendAuthenticatedToken = async (imageUrl: string): Promise<string> => {
-    const token = await AuthService.getTokenSilently()
-    if (!token) return imageUrl
-    const isAbsoluteUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(imageUrl)
-
-    try {
-        const url = isAbsoluteUrl ? new URL(imageUrl) : new URL(imageUrl, window.location.origin)
-        url.searchParams.set('token', token)
-        if (isAbsoluteUrl) return url.toString()
-        return `${url.pathname}${url.search}${url.hash}`
-    } catch {
-        const separator = imageUrl.includes('?') ? '&' : '?'
-        return `${imageUrl}${separator}token=${encodeURIComponent(token)}`
-    }
-}
-
-const buildAuthenticatedImageUrl = async (path: string): Promise<string> => {
-    const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
-    const sourceUrl = path.startsWith('http') || !apiBaseUrl ? path : `${apiBaseUrl}${path}`
-    return appendAuthenticatedToken(sourceUrl)
-}
-
 const getReferenceWorkspaceImagePath = (reference: ImageGenerationTraceReference): string | null => {
     if (reference.fileId && reference.workspaceId) {
-        return `/api/images/${encodeURIComponent(reference.workspaceId)}/${encodeURIComponent(reference.fileId)}`
+        return `/api/files/${encodeURIComponent(reference.workspaceId)}/${encodeURIComponent(reference.fileId)}`
     }
     return null
 }
@@ -119,15 +98,7 @@ const getNatsWorkspaceImagePath = (imageUrl: string): string | null => {
 
     const [, workspaceId, objectKey] = match
     if (!workspaceId || !objectKey || objectKey.includes('/')) return null
-    return `/api/images/${encodeURIComponent(workspaceId)}/${encodeURIComponent(objectKey)}`
-}
-
-const isApiHttpUrl = (imageUrl: string): boolean => {
-    try {
-        return new URL(imageUrl).pathname.startsWith('/api/')
-    } catch {
-        return imageUrl.includes('/api/')
-    }
+    return `/api/files/${encodeURIComponent(workspaceId)}/${encodeURIComponent(objectKey)}`
 }
 
 const uniqueImageSources = (sources: string[]): string[] => {
@@ -151,17 +122,14 @@ const getReferenceImageSources = (
 }
 
 const resolveReferenceImageSrc = async (imageUrl: string): Promise<string> => {
-    if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) return imageUrl
-    if (imageUrl.startsWith('/api/')) return buildAuthenticatedImageUrl(imageUrl)
-    if (imageUrl.startsWith('http') && isApiHttpUrl(imageUrl)) {
-        return appendAuthenticatedToken(imageUrl)
-    }
-    if (imageUrl.startsWith('http')) return imageUrl
-    if (imageUrl.startsWith('nats-obj://')) {
-        const path = getNatsWorkspaceImagePath(imageUrl)
-        return path ? buildAuthenticatedImageUrl(path) : ''
-    }
-    return imageUrl
+    const source = imageUrl.startsWith('nats-obj://')
+        ? getNatsWorkspaceImagePath(imageUrl) ?? ''
+        : imageUrl
+
+    return resolveAuthenticatedMediaUrl(source, {
+        apiBaseUrl: import.meta.env.VITE_API_URL || '',
+        getAuthToken: () => AuthService.getTokenSilently(),
+    })
 }
 
 const resolveReferenceImageSources = async (

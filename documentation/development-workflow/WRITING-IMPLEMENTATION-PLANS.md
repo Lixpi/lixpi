@@ -14,6 +14,18 @@ This is the source of truth for how to author an implementation plan, technical 
 - Anti-patterns to avoid.
 - An end-to-end checklist.
 
+## Non-negotiable rules
+
+These rules override every other instinct. Breaking any of them is a hard failure, not a style nit.
+
+- **Never defer. Build the complete feature.** Do not split work into "v1 / v2", do not add a "phase 2 / later / future" escalation path, and do not write an "out of scope" or "parking lot" entry that is really a deferral of in-scope functionality. If the request implies a capability, that capability is in scope and must be fully designed in the plan.
+- **Never preserve backwards compatibility unless the user explicitly asks for it.** Do not keep legacy code paths, do not make new fields optional "for migration", and do not add compatibility shims. Replace old behavior outright.
+- **If a dependency is missing, add it — do not scope around it.** If the feature needs something the codebase does not have yet (a node type, a route, a primitive), the plan must fully include building that dependency. "X does not exist yet, so it is out of scope" is forbidden.
+- **You do not get to decide what is deferred or cut. The user does.** Never unilaterally remove, postpone, or shrink scope. The "Non-goals" and "Out of scope" sections may only contain items the user explicitly agreed are out — never your own scope cuts.
+- **If anything is unclear, STOP and ask the user before writing the plan.** Do not guess, do not fill the gap with a default, and do not write a plan around an assumption. When a requirement is ambiguous, halt and ask a narrow multi-choice question (see "Iterating with the user"). Producing a plan built on an unconfirmed assumption is a failure even if the assumption was reasonable.
+
+When in doubt between asking and assuming, ask. A short clarifying question is always cheaper than a plan written against the wrong assumption.
+
 ## When this guide applies
 
 Read and follow this guide whenever the user requests:
@@ -297,6 +309,11 @@ Do **not** delete artifacts (temp files, plan files, intermediate work) until th
 
 These are real failure modes from past planning sessions. Avoid:
 
+- **Deferring scope or proposing "v1 / v2".** See the Non-negotiable rules. Build the whole feature; never phase a capability into "later".
+- **Adding backwards-compatibility or migration paths the user did not ask for.** Replace old behavior outright.
+- **Scoping around a missing dependency** ("X does not exist yet, so it is out of scope"). Add the dependency as part of the plan.
+- **Cutting or deferring scope on your own authority.** Only the user decides what is out of scope. If you think something should be cut, STOP and ask.
+- **Writing the plan on an unconfirmed assumption.** If anything is unclear, STOP and ask before writing — do not fill the gap with a default.
 - **Opening with "Phase 1: types".** The reader has no idea what or why. Always write WHAT/WHY before HOW.
 - **Skipping the alternative evaluation.** If the user asked you to consider X vs Y — even casually — write the comparison. Never silently default.
 - **Citing files without context.** A bare path like `services/api/src/...` doesn't help; a markdown link with a line range and a one-line description does.

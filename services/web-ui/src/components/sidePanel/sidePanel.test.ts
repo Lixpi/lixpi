@@ -54,6 +54,46 @@ function emitTransitionEnd(element: HTMLElement, propertyName = 'transform'): vo
     element.dispatchEvent(event)
 }
 
+function stubRect(element: HTMLElement, rect: { left: number; top: number; right: number; bottom: number }): void {
+    Object.defineProperty(element, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => ({
+            ...rect,
+            width: rect.right - rect.left,
+            height: rect.bottom - rect.top,
+        }),
+    })
+}
+
+function overlayPointerDown(clientX: number, clientY: number, options: {
+    button?: number
+    isPrimary?: boolean
+    target?: HTMLElement
+} = {}): void {
+    const event = new PointerEvent('pointerdown', {
+        clientX,
+        clientY,
+        button: options.button ?? 0,
+        bubbles: true,
+        cancelable: true,
+    })
+    // happy-dom defaults `isPrimary` to false; real browsers default it to true
+    // for the first active contact, so force it unless the test opts out.
+    Object.defineProperty(event, 'isPrimary', { value: options.isPrimary ?? true })
+    ;(options.target ?? document).dispatchEvent(event)
+}
+
+function overlayClick(clientX: number, clientY: number, options: { button?: number; target?: HTMLElement } = {}): void {
+    const event = new MouseEvent('click', {
+        clientX,
+        clientY,
+        button: options.button ?? 0,
+        bubbles: true,
+        cancelable: true,
+    })
+    ;(options.target ?? document).dispatchEvent(event)
+}
+
 const RIGHT_CLOSED_TOGGLE_TRANSFORM = 'translate3d(var(--side-panel-toggle-closed-travel, var(--side-panel-backdrop-width, 0px)), 0, 0)'
 
 function stubAnimationFrames(): () => void {
@@ -376,6 +416,96 @@ describe('SidePanel', () => {
         sidePanel.destroy()
     })
 
+    it('uses distinct default open/close easing and a 500ms default duration when unconfigured', () => {
+        const sidePanel = createSidePanel(buildConfig())
+        const panel = document.createElement('div')
+
+        sidePanel.mountOpen(panel)
+        expect(panel.style.getPropertyValue('--side-panel-slide-duration')).toBe('500ms')
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('cubic-bezier(0.22, 1, 0.36, 1)')
+
+        sidePanel.playClose()
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('cubic-bezier(0.64, 0, 0.78, 0)')
+
+        sidePanel.destroy()
+    })
+
+    it('lets a generic animation.easing override both open and close directions', () => {
+        const sidePanel = createSidePanel(buildConfig({
+            animation: { durationMs: 200, easing: 'ease-in-out' },
+        }))
+        const panel = document.createElement('div')
+
+        sidePanel.mountOpen(panel)
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('ease-in-out')
+
+        sidePanel.playClose()
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('ease-in-out')
+
+        sidePanel.destroy()
+    })
+
+    it('lets per-direction openEasing/closeEasing take priority over the generic easing fallback', () => {
+        const sidePanel = createSidePanel(buildConfig({
+            animation: {
+                durationMs: 200,
+                easing: 'ease-in-out',
+                openEasing: 'ease-out',
+                closeEasing: 'ease-in',
+            },
+        }))
+        const panel = document.createElement('div')
+
+        sidePanel.mountOpen(panel)
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('ease-out')
+
+        sidePanel.playClose()
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('ease-in')
+
+        sidePanel.destroy()
+    })
+
+    it('keeps a fixed-motion toggle stationary and out of the slide target list', async () => {
+        const restoreAnimationFrames = stubAnimationFrames()
+        try {
+            const sidePanel = createSidePanel(buildConfig({
+                toggle: {
+                    iconSvg: '<svg></svg>',
+                    openAriaLabel: 'Collapse panel',
+                    closedAriaLabel: 'Open panel',
+                    motion: 'fixed',
+                    onToggle: vi.fn(),
+                },
+            }))
+            const toggle = sidePanel.toggleElement as HTMLButtonElement
+
+            // Fixed toggles start without the 'none' transition guard the sliding
+            // default applies, and their closed transform is the identity.
+            expect(toggle.style.transition).toBe('')
+            expect(toggle.style.transform).toBe('translate3d(0, 0, 0)')
+
+            const panel = document.createElement('div')
+            document.body.appendChild(toggle)
+            sidePanel.mountOpen(panel)
+            expect(toggle.classList.contains('side-panel-slide')).toBe(false)
+            expect(toggle.style.transform).toBe('translate3d(0, 0, 0)')
+
+            const closed = sidePanel.playClose()
+            await flushSlideFrames()
+            // A fixed toggle never receives an animated transform, in either direction.
+            expect(toggle.style.transform).toBe('translate3d(0, 0, 0)')
+            expect(toggle.classList.contains('side-panel-slide')).toBe(false)
+
+            emitTransitionEnd(panel, 'transform')
+            emitTransitionEnd(sidePanel.backdropElement, 'transform')
+            await closed
+
+            sidePanel.destroy()
+        } finally {
+            restoreAnimationFrames()
+        }
+    })
+
     it('slides the toggle with the panel and waits for every moving surface to finish', async () => {
         const restoreAnimationFrames = stubAnimationFrames()
         try {
@@ -514,7 +644,7 @@ describe('SidePanel', () => {
         expect(onResize).not.toHaveBeenCalled()
     })
 
-    it('requests close from the overlay only while open and dismissible', () => {
+    it('requests close from a plain click inside the overlay only while open and dismissible', () => {
         const onOpenChange = vi.fn()
         const sidePanel = createSidePanel(buildConfig({
             overlay: {
@@ -523,12 +653,16 @@ describe('SidePanel', () => {
             },
             onOpenChange,
         }))
+        stubRect(sidePanel.overlayElement as HTMLElement, { left: 0, top: 0, right: 400, bottom: 800 })
 
-        pointerdown(sidePanel.overlayElement as HTMLElement, 200)
+        // Closed: a stray click inside the overlay bounds must not fire onOpenChange.
+        overlayPointerDown(200, 200)
+        overlayClick(200, 200)
         expect(onOpenChange).not.toHaveBeenCalled()
 
         sidePanel.setOpen(true)
-        pointerdown(sidePanel.overlayElement as HTMLElement, 200)
+        overlayPointerDown(200, 200)
+        overlayClick(200, 200)
         expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false)
 
         sidePanel.destroy()
@@ -540,13 +674,104 @@ describe('SidePanel', () => {
             },
             onOpenChange,
         }))
+        stubRect(disabledOverlayPanel.overlayElement as HTMLElement, { left: 0, top: 0, right: 400, bottom: 800 })
 
         onOpenChange.mockClear()
         disabledOverlayPanel.setOpen(true)
-        pointerdown(disabledOverlayPanel.overlayElement as HTMLElement, 200)
+        overlayPointerDown(200, 200)
+        overlayClick(200, 200)
         expect(onOpenChange).not.toHaveBeenCalled()
 
         disabledOverlayPanel.destroy()
+    })
+
+    it('ignores an overlay click outside the overlay bounds', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            overlay: { enabled: true },
+            onOpenChange,
+        }))
+        stubRect(sidePanel.overlayElement as HTMLElement, { left: 0, top: 0, right: 400, bottom: 800 })
+        sidePanel.setOpen(true)
+
+        overlayPointerDown(900, 900)
+        overlayClick(900, 900)
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        sidePanel.destroy()
+    })
+
+    it('ignores overlay clicks that started or land on the panel, toggle, or resize handle', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            overlay: { enabled: true },
+            toggle: {
+                iconSvg: '<svg></svg>',
+                openAriaLabel: 'Collapse panel',
+                closedAriaLabel: 'Open panel',
+                onToggle: vi.fn(),
+            },
+            onOpenChange,
+        }))
+        stubRect(sidePanel.overlayElement as HTMLElement, { left: 0, top: 0, right: 400, bottom: 800 })
+        const panel = document.createElement('div')
+        document.body.appendChild(panel)
+        sidePanel.mountOpen(panel)
+        sidePanel.setOpen(true)
+
+        overlayPointerDown(200, 200, { target: panel })
+        overlayClick(200, 200, { target: panel })
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        overlayPointerDown(200, 200, { target: sidePanel.toggleElement as HTMLElement })
+        overlayClick(200, 200, { target: sidePanel.toggleElement as HTMLElement })
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        overlayPointerDown(200, 200, { target: sidePanel.element })
+        overlayClick(200, 200, { target: sidePanel.element })
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        sidePanel.destroy()
+    })
+
+    it('ignores non-primary-button clicks for overlay dismissal', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            overlay: { enabled: true },
+            onOpenChange,
+        }))
+        stubRect(sidePanel.overlayElement as HTMLElement, { left: 0, top: 0, right: 400, bottom: 800 })
+        sidePanel.setOpen(true)
+
+        overlayPointerDown(200, 200)
+        overlayClick(200, 200, { button: 1 })
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        sidePanel.destroy()
+    })
+
+    it('treats an overlay pointerdown-then-drag-then-release as a drag, not a dismiss click', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            overlay: { enabled: true },
+            onOpenChange,
+        }))
+        stubRect(sidePanel.overlayElement as HTMLElement, { left: 0, top: 0, right: 400, bottom: 800 })
+        sidePanel.setOpen(true)
+
+        // Pointer starts inside the overlay but the click lands far enough away
+        // (e.g. a text-selection drag) that it must not count as a dismiss click.
+        overlayPointerDown(200, 200)
+        overlayClick(210, 210)
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        // A click with no prior recorded overlay pointerdown (e.g. the browser
+        // only ever fired 'click', as happens with keyboard/synthetic activation)
+        // still dismisses, since there is no drag distance to disqualify it.
+        overlayClick(200, 200)
+        expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false)
+
+        sidePanel.destroy()
     })
 
     it('swipe-closes from panel body drag while fading the overlay from the dragged distance', () => {

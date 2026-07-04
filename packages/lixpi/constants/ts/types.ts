@@ -5,18 +5,6 @@ import type { Merge, Except } from 'type-fest'
 export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability', 'BytePlus'] as const
 export type ProviderName = typeof PROVIDER_NAMES[number]
 
-// Shared image upload/import validation limits (API routes, remote URL import, web-ui uploader).
-export const MAX_IMAGE_FILE_SIZE = 1024 * 1024 * 1024
-
-export const ALLOWED_IMAGE_MIME_TYPES: readonly string[] = [
-    'image/jpeg',
-    'image/png',
-    'image/gif',
-    'image/webp',
-    'image/svg+xml',
-    'image/avif',
-]
-
 // NOTE: User type restored exactly as originally defined per instruction (commas retained intentionally)
 export type User = {
     userId: string,
@@ -62,15 +50,161 @@ export type OrganizationAccessList = {
     updatedAt: number
 }
 
+// Detected media kind. Drives canvas node type, serving headers, and which
+// transcoder runs. A fifth value is intentionally NOT added — a new kind means
+// a new transcoder + renderer, by design (unified-upload Principle 4).
+export type MediaKind = 'image' | 'video' | 'audio' | 'document'
+
+// The stored-file record. `kind`/`modelSafe` are recorded on every uploaded or
+// generated file; `canonical*` is present iff the original was not model-safe
+// and a transcoded derivative was produced.
 export type DocumentFile = {
     id: string
     name: string
-    mimeType: string
+    mimeType: string            // SNIFFED mime of the stored original
     size: number
     uploadedAt: number
+    kind: MediaKind             // detected media kind
+    modelSafe: boolean          // is `mimeType` directly model-consumable?
+    canonicalFileId?: string    // object key of the model-safe derivative
+    canonicalMimeType?: string  // mime of that derivative
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'video' | 'branchOrigin' | 'branchFork' | 'branchLine'
+// One row of the ingest policy. Absence from MEDIA_POLICY == not allowed.
+export type MediaPolicyEntry = {
+    kind: MediaKind
+    modelSafe: boolean          // true => no transcode needed
+    canonicalMime: string       // target mime when modelSafe is false
+}
+
+// Allow-list: sniffed-mime -> policy. The single source of truth for what may
+// be uploaded and what it transcodes to. The map keys are the exact sniffed
+// MIME strings (authoritative); `canonicalMime` records the transcode target so
+// the decision lives in data, not branching code.
+export const MEDIA_POLICY: Readonly<Record<string, MediaPolicyEntry>> = {
+    'image/png':       { kind: 'image', modelSafe: true,  canonicalMime: 'image/png' },
+    'image/jpeg':      { kind: 'image', modelSafe: true,  canonicalMime: 'image/jpeg' },
+    'image/webp':      { kind: 'image', modelSafe: true,  canonicalMime: 'image/webp' },
+    'image/gif':       { kind: 'image', modelSafe: true,  canonicalMime: 'image/gif' },
+    'image/svg+xml':   { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
+    'image/avif':      { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
+    'image/heic':      { kind: 'image', modelSafe: false, canonicalMime: 'image/jpeg' },
+    'image/heif':      { kind: 'image', modelSafe: false, canonicalMime: 'image/jpeg' },
+    'image/tiff':      { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
+    'video/mp4':       { kind: 'video', modelSafe: true,  canonicalMime: 'video/mp4' },
+    'video/quicktime': { kind: 'video', modelSafe: false, canonicalMime: 'video/mp4' },
+    'video/webm':      { kind: 'video', modelSafe: false, canonicalMime: 'video/mp4' },
+    'video/x-matroska':{ kind: 'video', modelSafe: false, canonicalMime: 'video/mp4' },
+    'audio/mpeg':      { kind: 'audio', modelSafe: true,  canonicalMime: 'audio/mpeg' },
+    'audio/wav':       { kind: 'audio', modelSafe: true,  canonicalMime: 'audio/wav' },
+    'audio/mp4':       { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
+    'audio/x-m4a':     { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
+    'audio/aac':       { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
+    'audio/ogg':       { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
+    'audio/flac':      { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
+    'application/pdf': { kind: 'document', modelSafe: true,  canonicalMime: 'application/pdf' },
+    'text/plain':      { kind: 'document', modelSafe: true,  canonicalMime: 'text/plain' },
+    'text/markdown':   { kind: 'document', modelSafe: true,  canonicalMime: 'text/markdown' },
+    'application/msword': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
+    'application/vnd.oasis.opendocument.text': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
+    'application/rtf': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
+}
+
+// Deny-list: matched BEFORE the allow-list so these produce a specific
+// "executables/scripts/archives are not permitted" error rather than a generic
+// "unsupported type". Belt-and-suspenders on top of deny-by-default.
+export const UPLOAD_DENYLIST_MIME: readonly string[] = [
+    'application/x-msdownload', 'application/x-executable', 'application/x-mach-binary',
+    'application/x-elf', 'application/vnd.microsoft.portable-executable',
+    'application/x-sh', 'application/x-shellscript', 'text/x-shellscript',
+    'application/zip', 'application/x-tar', 'application/gzip', 'application/x-rar-compressed', 'application/x-7z-compressed',
+    'application/x-msi', 'application/x-apple-diskimage', 'application/java-archive',
+    'application/vnd.ms-word.document.macroEnabled.12',
+    'application/vnd.ms-excel.sheet.macroEnabled.12',
+    'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
+]
+
+// 1 GiB ceiling for any uploaded file. The single upload size limit across the
+// API route, remote-URL import, and the web-ui uploader.
+export const MAX_UPLOAD_FILE_SIZE = 1024 * 1024 * 1024
+
+// Async file-conversion contract. The API stores the uploaded original, then
+// hands the heavy transcode off to the NEX file-conversion workload over NATS
+// request/reply (WORKSPACE_SUBJECTS.FILE_SUBJECTS.CONVERT). The workload reads
+// the original from the workspace Object Store bucket, transcodes it, writes the
+// canonical (+ poster) back, and replies with these hints — never carrying the
+// bytes themselves over NATS. No heavy processing ever runs on the API.
+export type ConvertFileRequest = {
+    workspaceId: string
+    fileId: string              // Object Store key of the stored original
+    originalName: string
+    mimeType: string            // sniffed mime of the original
+    kind: MediaKind
+    modelSafe: boolean          // when true the workload SKIPS transcode and only
+                                // probes the original for hints (poster/duration/
+                                // pageCount) — e.g. a model-safe mp4 still needs a
+                                // poster frame, but no re-encode.
+    canonicalMime: string       // transcode target from MEDIA_POLICY
+}
+
+export type ConvertFileResult =
+    | {
+          success: true
+          // Present only when a transcode produced a derivative (non-model-safe
+          // input). Absent when the original is already model-safe.
+          canonicalFileId?: string
+          canonicalMimeType?: string
+          aspectRatio?: number
+          durationSeconds?: number
+          hasAudio?: boolean
+          posterFileId?: string
+          pageCount?: number
+      }
+    | {
+          success: false
+          error: string          // user-facing failure reason for the placeholder
+      }
+
+// Frame-extraction contract. The AI video-generation providers (VEO / Seedance)
+// must not run ffmpeg on the API either — they stage the freshly generated video
+// to a temp Object Store key in the workspace bucket and ask the file-conversion
+// workload (WORKSPACE_SUBJECTS.FILE_SUBJECTS.EXTRACT_FRAMES) to extract the poster
+// and the representative (image-to-video anchor) frame. The workload writes those
+// frames back to temp keys and returns them; the provider reads them, then
+// deletes all three temp objects.
+export type ExtractFramesRequest = {
+    workspaceId: string
+    videoFileId: string         // temp Object Store key of the staged video
+    atSeconds?: number          // representative-frame seek target (clip midpoint)
+}
+
+export type ExtractFramesResult =
+    | {
+          success: true
+          posterFileId?: string   // temp Object Store key of the poster PNG
+          frameFileId?: string    // temp Object Store key of the representative PNG
+      }
+    | {
+          success: false
+          error: string
+      }
+
+// Pushed to the browser on WORKSPACE_SUBJECTS.FILE_SUBJECTS.CONVERT_RESPONSE
+// .<workspaceId>.<conversionId> once conversion settles, so the canvas can
+// replace or fail the upload placeholder. `conversionId` correlates with the
+// value the upload route returned.
+export type ConvertFileNotification = {
+    conversionId: string
+    workspaceId: string
+    fileId: string
+} & ConvertFileResult
+
+// NOTE: 'document' is the thread/text node (server-authoritative ProseMirror).
+// Uploaded documents use the distinct 'mediaDocument' type to avoid colliding
+// with it. 'audio' is the uploaded-audio node.
+export type CanvasNodeType = 'document' | 'mediaDocument' | 'image' | 'video' | 'audio' | 'uploadPlaceholder' | 'branchOrigin' | 'branchFork' | 'branchLine'
 
 type CanvasNodePosition = {
     x: number
@@ -394,8 +528,10 @@ export type MediaRunLineageAssignment = {
     reasoningRunId?: string
     mediaRunId?: string
     reasoningModelId?: AiModelId
+    reasoningIndex?: number
     mediaModelId?: AiModelId
     mediaType?: 'image' | 'video'
+    mediaIndex?: number
     branchId: string
     parentMediaNodeId?: string
     // Image-named schema alias. Lineage code uses parentMediaNodeId so
@@ -442,6 +578,17 @@ export type MediaLineagePlannedStreamPayload = {
     aiProvider: string
     generationRun?: MediaGenerationRunMeta
     lineagePlan: MediaBranchLineagePlan
+}
+
+// Published when a lineage plan was announced but the reasoning model finished
+// without emitting a generate_image/generate_video tool call, so the planned
+// media runs will never start. Lets the UI settle the pending markers instead
+// of spinning forever.
+export type MediaGenerationSkippedStreamPayload = {
+    status: 'MEDIA_GENERATION_SKIPPED'
+    aiProvider: string
+    generationRun?: MediaGenerationRunMeta
+    generationRequestId: string
 }
 
 export type ImageBranchResolutionErrorStreamPayload = {
@@ -608,8 +755,10 @@ export type GeneratedMediaVariantMetadata = {
     reasoningRunId?: string
     mediaRunId?: string
     reasoningModelId?: AiModelId
+    reasoningIndex?: number
     mediaModelId?: AiModelId
     mediaType?: 'image' | 'video'
+    mediaIndex?: number
     variantIndex?: number
     // API-assigned lineage marker IDs. The browser applies these to canvas
     // state and may compute layout, but it must not derive branch topology.
@@ -754,6 +903,60 @@ export type VideoCanvasNode = CanvasNodeParentingFields & {
     descriptor?: MediaDescriptor
 }
 
+// Uploaded-audio node. Mirrors VideoCanvasNode minus poster geometry — the
+// canonical audio (MP3/WAV) lives in the workspace Object Store under `fileId`
+// and is played through a DOM <audio> surface, the audio analogue of the DOM
+// <video> surface used by VideoCanvasNode.
+export type AudioCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'audio'
+    fileId: string                // audio object key in workspace-{workspaceId}-files
+    workspaceId: string
+    src: string                   // tokenized audio URL (Range-capable file route)
+    durationSeconds: number
+    hasAudio: true
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    descriptor?: MediaDescriptor
+}
+
+// Uploaded-document node (PDF or office doc converted to PDF, or plain
+// text/Markdown). `posterFileId` is a first-page PNG render used by the PIXI
+// media layer; `pageCount` drives the page badge. Distinct from the
+// thread/text 'document' node (see CanvasNodeType note).
+export type DocumentMediaCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'mediaDocument'
+    fileId: string                // document object key in workspace-{workspaceId}-files
+    workspaceId: string
+    src: string                   // tokenized document URL (file route)
+    posterFileId?: string         // first-page poster (an image object), if rendered
+    posterSrc?: string            // tokenized poster image URL (PIXI low-LoD)
+    pageCount?: number
+    aspectRatio: number           // poster width / height (default to page ratio)
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    descriptor?: ContentDescriptor
+}
+
+export type UploadPlaceholderCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'uploadPlaceholder'
+    fileName: string
+    status: 'converting' | 'failed'
+    message?: string
+    // Set while status === 'converting' so the canvas can re-attach to the async
+    // file-conversion completion subject (CONVERT_RESPONSE.<workspaceId>.<conversionId>)
+    // after a reload. `fileId`/`kind` let the re-attach build the real node.
+    conversionId?: string
+    fileId?: string
+    kind?: MediaKind
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    createdAt: number
+    updatedAt: number
+}
+
 export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'branchOrigin'
@@ -807,7 +1010,7 @@ export type BranchLineCanvasNode = CanvasNodeParentingFields & {
     temporary: true
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | VideoCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
+export type CanvasNode = DocumentCanvasNode | DocumentMediaCanvasNode | ImageCanvasNode | VideoCanvasNode | AudioCanvasNode | UploadPlaceholderCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 
 export type CanvasViewport = {
     x: number
@@ -1055,6 +1258,8 @@ export type MediaLibraryScope = typeof MEDIA_LIBRARY_SCOPE[keyof typeof MEDIA_LI
 export const MEDIA_LIBRARY_ITEM_KIND = {
     IMAGE: 'image',
     VIDEO: 'video',
+    AUDIO: 'audio',
+    DOCUMENT: 'document',
 } as const
 export type MediaLibraryItemKind = typeof MEDIA_LIBRARY_ITEM_KIND[keyof typeof MEDIA_LIBRARY_ITEM_KIND]
 
@@ -1069,6 +1274,8 @@ export const MEDIA_LIBRARY_CATEGORY = {
     FEATURES: 'features',
     IMAGES: 'images',
     VIDEOS: 'videos',
+    AUDIO: 'audio',
+    DOCUMENTS: 'documents',
 } as const
 export type MediaLibraryCategory = typeof MEDIA_LIBRARY_CATEGORY[keyof typeof MEDIA_LIBRARY_CATEGORY]
 
@@ -1188,9 +1395,103 @@ export type MediaLibraryVideoMeta = {
     updatedAt: number
 }
 
+// Audio items reuse the same scope/access model. The canonical audio (MP3/WAV)
+// lives in the library asset bucket; there is no poster (audio has no still
+// frame). Duration drives the panel's playback chip.
+export type MediaLibraryAudioData = {
+    durationSeconds: number
+    hasAudio: true
+}
+
+export type MediaLibraryAudioItem = {
+    itemId: string
+    version: 1
+    kind: 'audio'
+    displayName: string
+    ownerUserId: string
+    originWorkspaceId: string
+    sourceFileId: string          // workspace-{ws}-files audio object key the item was saved from
+    scope: MediaLibraryScope
+    scopeOwnerId: string
+    scopeAndOwner: string
+    status: MediaLibraryItemStatus
+    asset: MediaLibraryAssetRef         // audio in library bucket
+    audio: MediaLibraryAudioData
+    descriptor?: MediaDescriptor
+    createdAt: number
+    updatedAt: number
+}
+
+export type MediaLibraryAudioMeta = {
+    itemId: string
+    kind: 'audio'
+    displayName: string
+    ownerUserId: string
+    originWorkspaceId: string
+    scope: MediaLibraryScope
+    scopeOwnerId: string
+    scopeAndOwner: string
+    status: MediaLibraryItemStatus
+    mimeType: string
+    byteSize: number
+    durationSeconds: number
+    previewUrl: string          // audio content route (Range-capable)
+    createdAt: number
+    updatedAt: number
+}
+
+// Document items reuse the same scope/access model. The canonical document (PDF
+// or model-safe text) lives in the library asset bucket; `poster` is a separate
+// first-page PNG so the panel can render a thumbnail without rendering the PDF.
+export type MediaLibraryDocumentData = {
+    pageCount?: number
+    aspectRatio: number  // poster width / height
+}
+
+export type MediaLibraryDocumentItem = {
+    itemId: string
+    version: 1
+    kind: 'document'
+    displayName: string
+    ownerUserId: string
+    originWorkspaceId: string
+    sourceFileId: string          // workspace-{ws}-files document object key the item was saved from
+    sourcePosterFileId?: string   // workspace-{ws}-files poster object key (may be missing)
+    scope: MediaLibraryScope
+    scopeOwnerId: string
+    scopeAndOwner: string
+    status: MediaLibraryItemStatus
+    asset: MediaLibraryAssetRef         // document in library bucket
+    poster?: MediaLibraryAssetRef       // first-page PNG poster in library bucket
+    document: MediaLibraryDocumentData
+    descriptor?: ContentDescriptor
+    createdAt: number
+    updatedAt: number
+}
+
+export type MediaLibraryDocumentMeta = {
+    itemId: string
+    kind: 'document'
+    displayName: string
+    ownerUserId: string
+    originWorkspaceId: string
+    scope: MediaLibraryScope
+    scopeOwnerId: string
+    scopeAndOwner: string
+    status: MediaLibraryItemStatus
+    mimeType: string
+    byteSize: number
+    pageCount?: number
+    aspectRatio: number
+    previewUrl: string          // document content route
+    posterPreviewUrl?: string   // poster image route (PNG/JPEG)
+    createdAt: number
+    updatedAt: number
+}
+
 // Unions for call-sites that switch on `kind`.
-export type MediaLibraryItem = MediaLibraryImageItem | MediaLibraryVideoItem
-export type MediaLibraryMeta = MediaLibraryImageMeta | MediaLibraryVideoMeta
+export type MediaLibraryItem = MediaLibraryImageItem | MediaLibraryVideoItem | MediaLibraryAudioItem | MediaLibraryDocumentItem
+export type MediaLibraryMeta = MediaLibraryImageMeta | MediaLibraryVideoMeta | MediaLibraryAudioMeta | MediaLibraryDocumentMeta
 
 export type MediaLibraryAccessList = {
     itemId: string
@@ -1306,6 +1607,7 @@ export type Workspace = {
     files?: DocumentFile[]
     canvasState: CanvasState
     createdAt: number
+    canvasStateUpdatedAt?: number
     updatedAt: number
 }
 
@@ -1331,6 +1633,7 @@ export type Document = {
     title: string
     content: string
     prevRevision: number
+    proseMirrorVersion?: number
     createdAt: number
     updatedAt: number
     revisionExpiresAt?: number
@@ -1367,7 +1670,10 @@ export type MessageContent = string | MessageContentBlock[]
 
 export type AiInteractionChatSendMessagePayload = {
     messages: Array<{ role: string; content: MessageContent }>
-    aiModel: AiModelId
+    // Ordered reasoning-model selection (length 1 = singular). The legacy
+    // single-model API path reads index 0; the matrix path reads the full list
+    // via `mediaGenerationRequest.reasoningModelIds`.
+    aiReasoningModels: AiModelId[]
     threadId: string
     referencedFeatureIds?: string[]
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
@@ -1375,6 +1681,10 @@ export type AiInteractionChatSendMessagePayload = {
     // Whole-workspace, descriptors-only index sent each turn; consumed by the
     // API `resolveWorkspaceContext` relevance stage (later phase).
     workspaceContextSnapshot?: WorkspaceContextSnapshot
+    canvasVisibleArea?: {
+        width: number
+        height: number
+    }
 }
 
 export type AiInteractionMediaGenerationRequest = {
@@ -1405,7 +1715,7 @@ export type AiInteractionChatSendMessagePayloadV2 = AiInteractionChatSendMessage
 }
 
 export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {
-    aiImageModel: AiModelId
+    aiImageModels: AiModelId[]
     imageSize?: ImageGenerationSize
     previousResponseId?: string
 }
@@ -1556,28 +1866,6 @@ export type TokensUsageEvent = {
     }
 }
 
-export type SNS_OutputMessage = {
-    TopicArn: string
-    Message: any
-    MessageAttributes?: {
-        [key: string]: {
-            DataType: 'String' | 'String.Array' | 'Number' | 'Binary'
-            Value?: string | Uint8Array
-        }
-    }
-}
-
-export type SQS_OutputMessage = {
-    TopicArn: string
-    Message: any
-    messageAttributes?: {
-        [key: string]: {
-            dataType: 'String' | `String.${string}` | 'Number' | `Number.${string}` | 'Binary' | `Binary.${string}`;
-            stringValue?: string;
-            binaryValue?: Uint8Array;
-        }
-    }
-}
 
 export type FinancialTransaction = {
     userId: string

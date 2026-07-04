@@ -12,7 +12,7 @@ import type { Modality } from '../../metrics/contracts.ts'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
-import { StreamPublisher } from '../graph/stream-publisher.ts'
+import { StreamPublisher, type ProseMirrorContentHandler } from '../graph/stream-publisher.ts'
 import { ImagePublisher, type StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
 import { VideoPublisher, type StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
@@ -34,8 +34,8 @@ export type BaseProviderDeps = {
     storeWorkspaceImage: StoreWorkspaceImageFn
     storeWorkspaceVideo: StoreWorkspaceVideoFn
     usageReporter: UsageReporter
-    runImageRouter: (state: ProviderState) => Promise<Partial<ProviderState>>
-    runVideoRouter: (state: ProviderState) => Promise<Partial<ProviderState>>
+    runImageRouter: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
+    runVideoRouter: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
     // Metrics (optional — absent/disabled = the open-source plug, i.e. today's
     // behavior). The synchronous check/confirm run on the workflow path via this
     // abstract metering client (see metrics/metrics-client.ts).
@@ -49,6 +49,10 @@ type FanoutRouterResult = Pick<ProviderState,
     'generatedImages' |
     'generatedVideos'
 >
+
+type MediaRouterOptions = {
+    onProseMirrorContent?: ProseMirrorContentHandler
+}
 
 const catalogModelIdFor = (model: AiModelMetaInfo): string =>
     `${model.provider}:${model.model}`
@@ -172,12 +176,32 @@ export abstract class BaseProvider {
     // Run a request through the LangGraph workflow.
     async process(requestData: Record<string, any>): Promise<ProviderState> {
         this.abortController = new AbortController()
+        const ownsServerProseMirrorStream = Boolean(
+            requestData.proseMirrorInitialDoc
+            && requestData.generationRun?.requestKind !== 'media-generation-matrix',
+        )
+        const deferProseMirrorEnd = ownsServerProseMirrorStream && Boolean(
+            requestData.enableImageGeneration
+            || requestData.enableVideoGeneration
+            || requestData.imageModelMetaInfo
+            || requestData.videoModelMetaInfo,
+        )
+        const onPipelineContent: ProseMirrorContentHandler = typeof requestData.proseMirrorContentHandler === 'function'
+            ? requestData.proseMirrorContentHandler as ProseMirrorContentHandler
+            : (content: Parameters<ProseMirrorContentHandler>[0]) => this.streamPublisher?.publishChatContent(content)
         this.streamPublisher = new StreamPublisher(
             this.deps.natsService,
             requestData.workspaceId,
             requestData.aiChatThreadId,
             this.providerName,
             requestData.generationRun,
+            {
+                enableProseMirrorStream: ownsServerProseMirrorStream,
+                proseMirrorBaseVersion: requestData.proseMirrorBaseVersion,
+                proseMirrorInitialDoc: requestData.proseMirrorInitialDoc,
+                deferProseMirrorEnd,
+                canvasVisibleArea: requestData.canvasVisibleArea,
+            },
         )
         this.imagePublisher = new ImagePublisher(
             this.deps.natsService,
@@ -186,6 +210,9 @@ export abstract class BaseProvider {
             requestData.aiChatThreadId,
             this.providerName,
             requestData.generationRun,
+            undefined,
+            onPipelineContent,
+            requestData.canvasVisibleArea,
         )
         this.videoPublisher = new VideoPublisher(
             this.deps.natsService,
@@ -195,6 +222,9 @@ export abstract class BaseProvider {
             requestData.aiChatThreadId,
             this.providerName,
             requestData.generationRun,
+            undefined,
+            onPipelineContent,
+            requestData.canvasVisibleArea,
         )
 
         const initialState: ProviderState = {
@@ -221,6 +251,7 @@ export abstract class BaseProvider {
             imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
             imageBranchResolution: requestData.imageBranchResolution,
             mediaBranchLineagePlan: requestData.mediaBranchLineagePlan,
+            canvasVisibleArea: requestData.canvasVisibleArea,
             referencedFeatureIds: requestData.referencedFeatureIds,
             featureReferenceImages: requestData.featureReferenceImages,
             featureReferenceImageTraceUrls: requestData.featureReferenceImageTraceUrls,
@@ -262,6 +293,7 @@ export abstract class BaseProvider {
             }
             this.streamPublisher.error(message)
             this.streamPublisher.end()
+            await this.streamPublisher.finishProseMirrorStream()
             return {
                 ...initialState,
                 error: message,
@@ -423,6 +455,12 @@ export abstract class BaseProvider {
     protected routeAfterStream(state: ProviderState): 'generate_image' | 'generate_video' | 'skip' {
         if (state.generatedVideoPrompt) return 'generate_video'
         if (state.generatedImagePrompt) return 'generate_image'
+        // A lineage plan was already announced to clients, but no media tool
+        // call was emitted — the planned runs will never start. Tell the UI so
+        // pending branch markers settle instead of spinning forever.
+        if (state.mediaBranchLineagePlan) {
+            this.publisher.mediaGenerationSkipped(state.mediaBranchLineagePlan.generationRequestId)
+        }
         return 'skip'
     }
 
@@ -497,7 +535,9 @@ export abstract class BaseProvider {
             }
         }
 
-        const imageResult = await this.deps.runImageRouter(state)
+        const imageResult = await this.deps.runImageRouter(state, {
+            onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+        })
         if (imageResult.error) {
             this.streamPublisher?.imageGenerationError(imageResult.error, state.generationRun)
             this.streamPublisher?.error(imageResult.error, imageResult.errorCode, imageResult.errorType)
@@ -525,7 +565,9 @@ export abstract class BaseProvider {
             }
         }
 
-        const videoResult = await this.deps.runVideoRouter(state)
+        const videoResult = await this.deps.runVideoRouter(state, {
+            onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+        })
         if (videoResult.error) {
             this.streamPublisher?.error(videoResult.error, videoResult.errorCode, videoResult.errorType)
         }
@@ -615,7 +657,9 @@ export abstract class BaseProvider {
                 }
             }
 
-            const imageResult = await this.deps.runImageRouter(fanoutState)
+            const imageResult = await this.deps.runImageRouter(fanoutState, {
+                onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+            })
             if (imageResult.error) {
                 this.streamPublisher?.imageGenerationError(imageResult.error, generationRun)
             }
@@ -718,7 +762,9 @@ export abstract class BaseProvider {
                 }
             }
 
-            const videoResult = await this.deps.runVideoRouter(fanoutState)
+            const videoResult = await this.deps.runVideoRouter(fanoutState, {
+                onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+            })
             return {
                 error: videoResult.error,
                 errorCode: videoResult.errorCode,
@@ -804,6 +850,7 @@ export abstract class BaseProvider {
     }
 
     protected async cleanup(_state: ProviderState): Promise<Partial<ProviderState>> {
+        await this.streamPublisher?.finishProseMirrorStream()
         return {}
     }
 

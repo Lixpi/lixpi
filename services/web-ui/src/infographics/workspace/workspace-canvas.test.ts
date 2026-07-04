@@ -111,8 +111,12 @@ function loadLayout(): string {
 	return readSourceFile('../../views/layouts/layout.svelte', 'views/layouts/layout.svelte')
 }
 
-function loadSidebar(): string {
-	return readSourceFile('../../components/Sidebar.svelte', 'components/Sidebar.svelte')
+function loadNavigationSidePanel(): string {
+	return readSourceFile('../../components/navigationSidePanel/navigationSidePanel.ts', 'components/navigationSidePanel/navigationSidePanel.ts')
+}
+
+function loadNavigationSidePanelScss(): string {
+	return readSourceFile('../../components/navigationSidePanel/navigation-side-panel.scss', 'components/navigationSidePanel/navigation-side-panel.scss')
 }
 
 function loadSettings(): string {
@@ -439,7 +443,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 
 		const partialHandler = ts.slice(partialStart, completeStart)
 		expectExcerptToContain(partialHandler, "const imageSrc = buildImageSrc(imageUrl, '', false)")
-		expectExcerptToContain(partialHandler, 'commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: resolvedNodes })')
+		expectExcerptToContain(partialHandler, 'commitTransientCanvasStatePreservingEditors({ ...currentCanvasState, nodes: resolvedNodes })')
 		expectExcerptNotToContain(partialHandler, 'imgEl.src', 'partial image handler')
 	})
 
@@ -481,7 +485,8 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceNotToContain(ts, 'image-generating-spinner')
 		expectSourceNotToContain(ts, 'img-dot-bounce')
 		expectSourceNotToContain(scss, '.workspace-image-progress-viewport')
-		expectExcerptNotToContain(partialHandler, 'partialImageTracker.delete', 'partial image handler')
+		expectExcerptToContain(partialHandler, 'if (existing && !getCurrentCanvasMediaNode(existing.nodeId)) {', 'partial image handler')
+		expectExcerptToContain(partialHandler, 'partialImageTracker.delete(runKey)', 'partial image handler')
 		expectExcerptToContain(completeHandler, 'partialImageTracker.delete(runKey)')
 		expectExcerptToContain(completeHandler, 'commitCanvasState({')
 	})
@@ -496,7 +501,9 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectExcerptToContain(completeHandler, "const imageSrc = buildGeneratedImageFrameSrc({")
 		expectExcerptToContain(completeHandler, "fallbackSrc: imgNode.src,")
 		expectExcerptToContain(completeHandler, 'commitCanvasState({')
-		expect([...completeHandler.matchAll(/\.\.\.\(currentCanvasState \?\? \{\}\)/g)]).toHaveLength(2)
+		expect([...completeHandler.matchAll(/\.\.\.\(currentCanvasState \?\? \{\}\)/g)]).toHaveLength(1)
+		expectExcerptToContain(completeHandler, 'const deduped = withoutGeneratedMediaDuplicateNodes({', 'complete image handler')
+		expectExcerptToContain(completeHandler, 'const resolvedNodes = rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)', 'complete image handler')
 		expectExcerptNotToContain(completeHandler, 'imgEl.src', 'complete image handler')
 	})
 
@@ -510,10 +517,11 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		const completeHandler = ts.slice(completeStart, videoStart)
 		const errorHandler = ts.slice(errorStart, partialStart)
 
-		expectExcerptToContain(partialHandler, '...(currentCanvasState ?? {})', 'partial image handler')
-		expectExcerptToContain(completeHandler, '...(currentCanvasState ?? {})', 'complete image handler')
-		expectExcerptToContain(errorHandler, 'const resolvedTreeState = resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)', 'error image handler')
-		expectExcerptToContain(errorHandler, 'commitCanvasStatePreservingEditors(nextState)', 'error image handler')
+		expectExcerptToContain(partialHandler, '...currentCanvasState,', 'partial image handler')
+		expectExcerptToContain(completeHandler, 'currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 }', 'complete image handler')
+		expectExcerptToContain(errorHandler, 'const existing = partialImageTracker.get(runKey)', 'error image handler')
+		expectExcerptToContain(errorHandler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'error image handler')
+		expectExcerptToContain(errorHandler, 'finishFailedGeneratedMediaRun(threadId, generationRun)', 'error image handler')
 		expectSourceToContain(ts, 'commitCanvasStatePreservingEditors({')
 		expectSourceToContain(ts, 'commitCanvasState({')
 		expectSourceToContain(ts, 'viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 }')
@@ -547,7 +555,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceNotToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
 		// Wired into every generated-media add path (image partial + complete, video).
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithImage, newEdges)')
-		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, edges)')
+		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)')
 		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(allNodes, newEdges)')
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithVideo, newEdges)')
 		// Re-tidies on delete only when the removed node was a lineage member.
@@ -581,8 +589,8 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const errorHandler = ts.slice(errorStart, errorEnd)
 
 		expectExcerptToContain(pendingHandler, '...(currentCanvasState ?? {})', 'video pending handler')
-		expectExcerptToContain(completeHandler, '...currentCanvasState', 'video complete handler')
-		expectExcerptToContain(errorHandler, '...currentCanvasState', 'video error handler')
+		expectExcerptToContain(completeHandler, 'commitCanvasState({', 'video complete handler')
+		expectExcerptToContain(errorHandler, 'const errorNodeId = existing.nodeId', 'video error handler')
 	})
 
 	it('renders shared SVG controls for completed video nodes in the chrome layer', () => {
@@ -626,9 +634,12 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const errorStart = ts.indexOf('onVideoErrorToCanvas:', completeStart)
 		const completeHandler = ts.slice(completeStart, errorStart)
 
-		expectExcerptToContain(completeHandler, 'rebalanceGeneratedMediaTrees(nodes, currentCanvasState.edges)', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)', 'video complete handler')
 		expectExcerptToContain(completeHandler, 'nodes: resolvedNodes,', 'video complete handler')
-		expectExcerptToContain(completeHandler, 'edges: currentCanvasState.edges,', 'video complete handler')
+		// Completed videos are renamed to the API-assigned node id (node-<fileId>),
+		// so lineage edges are retargeted from the placeholder id before commit.
+		expectExcerptToContain(completeHandler, 'const edges = currentCanvasState.edges.map((edge: WorkspaceEdge) => {', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'targetNodeId: completedNodeId,', 'video complete handler')
 	})
 
 	it('threads the representative mid-frame fileId onto the completed video node', () => {
@@ -748,9 +759,10 @@ describe('Workspace canvas — video node interaction', () => {
 // Media descriptors
 // =============================================================================
 
-describe('Workspace canvas — media descriptors', () => {
-	const ts = loadTs()
-	const scss = loadScss()
+	describe('Workspace canvas — media descriptors', () => {
+		const ts = loadTs()
+		const svelte = loadWorkspaceCanvasSvelte()
+		const scss = loadScss()
 
 	it('derives a descriptor from generated media metadata for free (no extra model call)', () => {
 		expectSourceToContain(ts, 'function analyzeCanvasMediaStill(nodeId: string, stillFileId: string, analysisAttempt = 0): Promise<void>')
@@ -777,15 +789,33 @@ describe('Workspace canvas — media descriptors', () => {
 		expectSourceToContain(ts, 'mediaNodeNeedsAnalysis && (preparedNode.type === \'image\' || preparedNode.type === \'video\')')
 	})
 
-	it('shows an unobtrusive animated analyzing indicator with an explanation', () => {
-		expectSourceToContain(ts, "node.descriptor?.status === 'analyzing'")
-		const buttonBlock = extractBlock(scss, '.media-info-button')
-		expectExcerptToContain(buttonBlock, '&.is-analyzing', '.media-info-button')
-		expectSourceToContain(scss, '@keyframes workspace-media-analyzing-pulse')
-		const descriptorBlock = extractBlock(scss, '.canvas-media-descriptor')
-		expectExcerptToContain(descriptorBlock, '&.is-analyzing', '.canvas-media-descriptor')
+		it('shows an unobtrusive animated analyzing indicator with an explanation', () => {
+			expectSourceToContain(ts, "node.descriptor?.status === 'analyzing'")
+			const buttonBlock = extractBlock(scss, '.media-info-button')
+			expectExcerptToContain(buttonBlock, '&.is-analyzing', '.media-info-button')
+			expectSourceToContain(scss, '@keyframes workspace-media-analyzing-pulse')
+			const descriptorBlock = extractBlock(scss, '.canvas-media-descriptor')
+			expectExcerptToContain(descriptorBlock, '&.is-analyzing', '.canvas-media-descriptor')
+		})
+
+		it('keeps uploaded exotic media inert until the canonical object is returned', () => {
+			expectSourceToContain(svelte, "type: 'uploadPlaceholder',")
+			expectSourceToContain(svelte, 'placeholderNodeId = insertUploadPlaceholder(file.name)')
+			expectSourceToContain(svelte, 'placeholderNodeId = insertUploadPlaceholder(getRemotePlaceholderName(url))')
+			expectSourceToContain(svelte, 'renderer?.replaceUploadPlaceholder(placeholderNodeId, imageNode)')
+			expectSourceToContain(ts, "candidate.type === 'uploadPlaceholder' && candidate.nodeId === placeholderNodeId")
+			expectSourceToContain(ts, 'queueCanvasMediaAnalysis(preparedNode.nodeId, getMediaDescriptorStillFileId(preparedNode))')
+			expectSourceNotToContain(svelte, 'new Image()')
+		})
+
+		it('renders upload placeholders and non-image upload node shells after reload', () => {
+			expectSourceToContain(ts, "node.type === 'mediaDocument'")
+			expectSourceToContain(ts, "node.type === 'audio'")
+			expectSourceToContain(ts, "node.type === 'uploadPlaceholder'")
+			expectSourceToContain(ts, 'function createUploadPlaceholderNode(node: UploadPlaceholderCanvasNode): HTMLElement')
+			expectSourceToContain(scss, '.workspace-upload-placeholder-node')
+		})
 	})
-})
 
 // =============================================================================
 // Content descriptors (documents & threads)
@@ -813,9 +843,10 @@ describe('Workspace canvas — content descriptors (documents & threads)', () =>
 		expectSourceToContain(ts, 'settings.contentDescriptor.editDebounceMs')
 	})
 
-	it('triggers a descriptor refresh on document edits and on node creation', () => {
-		// Edit trigger: document editor.
-		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(node.nodeId, value, doc.title)')
+	it('seeds descriptors on node creation without analyzing every document edit', () => {
+		// Edit handlers must not call the descriptor service. API self-heal repairs
+		// missing or weak text descriptors when an AI turn actually needs them.
+		expectSourceNotToContain(ts, 'scheduleTextNodeDescriptor(node.nodeId, value, doc.title)')
 		// Create trigger: a newly inserted document node with existing content.
 		expectSourceToContain(ts, 'if (doc?.content !== undefined) scheduleTextNodeDescriptor(preparedNode.nodeId, doc.content, doc.title)')
 	})
@@ -849,7 +880,7 @@ describe('Workspace canvas — parent-child world positioning', () => {
 		expect(syncMatch).not.toBeNull()
 		const syncBody = syncMatch![0]
 		expectExcerptToContain(syncBody, 'syncCanvasNodeDomGeometry([branchMarkerNode])')
-		expectExcerptToContain(syncBody, 'syncBranchMarkerNodeContent(branchMarkerNode)')
+		expectExcerptToContain(syncBody, 'syncBranchMarkerNodeContent(branchMarkerNode, nodeEl)')
 		expectExcerptToContain(syncBody, 'syncConnectionsAfterManualNodeAppend()')
 
 		const originMatch = ts.match(/function\s+appendBranchOriginNodeToDOM[\s\S]*?^    \}/m)
@@ -929,8 +960,157 @@ describe('Workspace canvas — AI panel reload stability', () => {
 		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(prunedState)')
 		expectSourceToContain(ts, 'const renderStatePlan = mergeIncomingCanvasStateWithPendingVisualCommit({')
 		expectSourceToContain(ts, 'const normalizedCanvasState = renderStatePlan.state')
-		expectSourceToContain(ts, 'const effectiveCanvasState = prunedCanvasState.state')
+		expectSourceToContain(ts, 'preserveActiveGeneratedMediaTrackersInState(persistedCanvasState)')
 		expectSourceToContain(ts, 'currentCanvasState = shouldPreserveLiveViewport && effectiveCanvasState')
+	})
+})
+
+// =============================================================================
+// Workspace canvas — detached generation resume stability
+// =============================================================================
+
+describe('Workspace canvas — detached generation resume stability', () => {
+	const ts = loadTs()
+
+	it('reattaches hidden receive-only editors for active detached canvas runs after reload', () => {
+		const getActiveThreadIdsBody = extractFunctionBody(ts, 'getActiveDetachedCanvasRunThreadIds')
+		const reattachBody = extractFunctionBody(ts, 'reattachDetachedCanvasRunListenersForActiveMarkers')
+		const createEditorBody = extractFunctionBody(ts, 'createDetachedCanvasThreadEditor')
+
+		expectExcerptToContain(getActiveThreadIdsBody, 'if (currentCanvasState) {', 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, 'for (const node of currentCanvasState.nodes)', 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, 'for (const thread of currentAiChatThreads)', 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, "thread.owner?.type !== 'standalone'", 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, 'hasDetachedCanvasRunCanvasProjection(thread.threadId)', 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, 'isRecentDetachedCanvasThreadUpdate(thread)', 'detached run active thread lookup')
+		expectExcerptToContain(getActiveThreadIdsBody, 'aiChatThreadHasRecoverableDetachedCanvasTurn(thread)', 'detached run active thread lookup')
+		expectSourceNotToContain(ts, 'aiChatThreadHasSubmittedUserMessageWithoutResponse')
+		const restoreIndex = reattachBody.indexOf('restoreDetachedCanvasPreflightMarkersForActiveThreads()')
+		const loopIndex = reattachBody.indexOf('for (const threadId of getActiveDetachedCanvasRunThreadIds())')
+		expect(restoreIndex).toBeGreaterThan(-1)
+		expect(loopIndex).toBeGreaterThan(restoreIndex)
+		expectExcerptToContain(reattachBody, 'for (const threadId of getActiveDetachedCanvasRunThreadIds())', 'detached run reattach')
+		expectExcerptToContain(reattachBody, 'ensureDetachedCanvasRunTeardown(threadId)', 'detached run reattach')
+		expectExcerptToContain(reattachBody, 'promptInputController.setReceiving(threadId, true)', 'detached run reattach')
+		expectExcerptToContain(reattachBody, 'createDetachedCanvasThreadEditor({ thread })', 'detached run reattach')
+		expectExcerptToContain(createEditorBody, 'receiveOnly: true', 'detached canvas editor')
+		expectExcerptToContain(createEditorBody, 'baseVersion: getStoredProseMirrorVersion(thread)', 'detached canvas editor')
+		expectSourceToContain(ts, 'reattachDetachedCanvasRunListenersForActiveMarkers()')
+	})
+
+	it('creates detached canvas threads with the submitted user message already persisted', () => {
+		const submitBody = extractFunctionBody(ts, 'submitCanvasGenerationRun')
+		const submitPersistedBody = extractFunctionBody(ts, 'submitPersistedDetachedCanvasThreadMessage')
+
+		expectExcerptToContain(submitBody, 'const initialContent = {', 'detached run submit')
+		expectExcerptToContain(submitBody, "type: 'aiUserMessage'", 'detached run submit')
+		expectExcerptToContain(submitBody, 'referenceNodeIds: explicitContextNodeIds', 'detached run submit')
+		expectExcerptToContain(submitBody, 'content: initialContent', 'detached run submit')
+		expectExcerptToContain(submitBody, 'createDetachedCanvasThreadEditor({', 'detached run submit')
+		expectExcerptToContain(submitBody, 'submitPersistedDetachedCanvasThreadMessage(threadId)', 'detached run submit')
+		expectExcerptNotToContain(submitBody, 'promptInputController.submitMessage', 'detached run submit')
+		expectExcerptToContain(submitPersistedBody, 'editorView.state.doc.descendants', 'persisted detached submit')
+		expectExcerptToContain(submitPersistedBody, 'node.type?.name === \'aiChatThread\' && node.attrs?.threadId === threadId', 'persisted detached submit')
+		expectExcerptToContain(submitPersistedBody, 'setMeta(USE_AI_CHAT_META, { threadId, nodePos })', 'persisted detached submit')
+	})
+
+	it('restores preflight markers from persisted standalone canvas threads after early reload', () => {
+		const restoreBody = extractFunctionBody(ts, 'restoreDetachedCanvasPreflightMarkersForActiveThreads')
+		const insertBody = extractFunctionBody(ts, 'insertPendingBranchMarkerForPersistedCanvasThread')
+		const activeTurnBody = extractFunctionBody(ts, 'aiChatThreadHasRecoverableDetachedCanvasTurn')
+
+		expectExcerptToContain(activeTurnBody, 'aiChatThreadHasSubmittedUserMessage(thread)', 'recoverable detached turn')
+		expectExcerptToContain(activeTurnBody, 'aiChatThreadHasInProgressContent(thread)', 'recoverable detached turn')
+		expectExcerptToContain(restoreBody, 'for (const threadId of getActiveDetachedCanvasRunThreadIds())', 'detached preflight restore')
+		expectExcerptToContain(restoreBody, 'getPersistedAiChatThread(threadId)', 'detached preflight restore')
+		expectExcerptToContain(restoreBody, 'insertPendingBranchMarkerForPersistedCanvasThread(thread)', 'detached preflight restore')
+		expectExcerptToContain(insertBody, 'const promptText = getLatestAiUserMessageText(thread)', 'persisted marker restore')
+		expectExcerptToContain(insertBody, 'getDetachedThreadPendingModelStates(thread, promptText)', 'persisted marker restore')
+		expectExcerptToContain(insertBody, 'const nodeId = `pending-branch-${threadId}-${index}`', 'persisted marker restore')
+		expectExcerptToContain(insertBody, 'generationRequestId: threadId', 'persisted marker restore')
+		expectExcerptToContain(insertBody, 'commitTransientCanvasStatePreservingEditors({', 'persisted marker restore')
+		expectExcerptToContain(insertBody, 'syncPendingBranchMarkerScreenPlacements()', 'persisted marker restore')
+	})
+
+	it('recovers pending branch marker records from persisted canvas state when memory maps are empty', () => {
+		const recoverBody = extractFunctionBody(ts, 'recoverPendingBranchMarkerRecordFromCanvasState')
+		const getRecordBody = extractFunctionBody(ts, 'getPendingBranchMarkerRecord')
+		const ensureRecordBody = extractFunctionBody(ts, 'ensurePendingBranchMarkerRecordForApiRun')
+
+		expectExcerptToContain(recoverBody, 'isBranchMarkerNode(node)\n            && Boolean(node.pendingState)\n            && getBranchMarkerThreadId(node) === threadId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'lineageAssignment?.branchForkNodeId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'lineageAssignment?.branchLineNodeId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'lineageAssignment?.branchOriginNodeId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'generationRun?.reasoningRunId && runNode.reasoningRunId === generationRun.reasoningRunId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'generationRun?.mediaRunId && runNode.mediaRunId === generationRun.mediaRunId', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'node.pendingState?.reasoningIndex === generationRun.reasoningIndex', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'normalizeBranchMarkerModelValue(node.pendingState?.reasoningModelId)', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'requestMatches.length === 1 ? requestMatches[0] : undefined', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'pendingBranchMarkers.set(placementKey, record)', 'pending marker recovery')
+		expectExcerptToContain(recoverBody, 'setPendingBranchMarkerRecordAliases(threadId, generationRun, record)', 'pending marker recovery')
+		expectExcerptToContain(getRecordBody, 'return recoverPendingBranchMarkerRecordFromCanvasState(threadId, generationRun)', 'pending marker lookup')
+		expectExcerptToContain(ensureRecordBody, 'return recoverPendingBranchMarkerRecordFromCanvasState(threadId, generationRun)', 'pending marker lookup')
+	})
+
+	it('recreates preflight pending branch markers from replayed lineage plans after early reload', () => {
+		const insertBody = extractFunctionBody(ts, 'insertPendingBranchMarkersFromLineagePlan')
+		const specBody = extractFunctionBody(ts, 'buildPendingBranchMarkerSpecsFromLineagePlan')
+		const applyLineageBody = extractFunctionBody(ts, 'applyMediaBranchLineagePlan')
+		const insertIndex = applyLineageBody.indexOf('insertPendingBranchMarkersFromLineagePlan(threadId, lineagePlan, generationRun)')
+		const resolveIndex = applyLineageBody.indexOf('resolvePendingBranchMarkersForLineagePlan(threadId, lineagePlan, generationRun)')
+
+		expectExcerptToContain(specBody, 'getUniqueLineageAssignmentsForMarkers(lineagePlan)', 'lineage preflight marker specs')
+		expectExcerptToContain(specBody, 'buildGenerationRunFromLineageAssignment(lineagePlan, assignment, sourceGenerationRun)', 'lineage preflight marker specs')
+		expectExcerptToContain(specBody, "phase: 'preflight'", 'lineage preflight marker specs')
+		expectExcerptToContain(specBody, 'promptText: assignment.promptText || lineagePlan.promptText', 'lineage preflight marker specs')
+		expectExcerptToContain(insertBody, 'const lineagePlacementKey = `${threadId}:${lineagePlan.generationRequestId}`', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'hasPendingBranchMarkerForPlacement(lineagePlacementKey)', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'hasCanvasBranchMarkerForPlacement(lineagePlacementKey)', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'generationRequestId: lineagePlan.generationRequestId', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'aiChatThreadId: threadId', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'setPendingBranchMarkerRecordAliases(threadId, spec.generationRun, record)', 'lineage preflight marker insert')
+		expectExcerptToContain(insertBody, 'commitTransientCanvasStatePreservingEditors({', 'lineage preflight marker insert')
+		expect(insertIndex).toBeGreaterThan(-1)
+		expect(resolveIndex).toBeGreaterThan(insertIndex)
+	})
+
+	it('persists branch marker planning and pending-state clearing instead of using transient canvas commits', () => {
+		const resolveBody = extractFunctionBody(ts, 'resolvePendingBranchMarkerWithLineagePlan')
+		const clearBody = extractFunctionBody(ts, 'clearPendingBranchMarkerStateForRun')
+
+		expectExcerptToContain(resolveBody, 'commitCanvasStatePreservingEditors({', 'pending marker promotion')
+		expectExcerptNotToContain(resolveBody, 'commitTransientCanvasStatePreservingEditors', 'pending marker promotion')
+		expectExcerptToContain(clearBody, 'commitCanvasStatePreservingEditors({', 'pending marker clearing')
+		expectExcerptNotToContain(clearBody, 'commitTransientCanvasStatePreservingEditors', 'pending marker clearing')
+	})
+
+	it('clears pending marker state and refreshes persisted thread content when a media run finishes', () => {
+		const finishBody = extractFunctionBody(ts, 'finishGeneratedMediaRun')
+		const clearIndex = finishBody.indexOf('clearPendingBranchMarkerStateForRun(threadId, generationRun)')
+		const refreshIndex = finishBody.indexOf('schedulePersistedAiChatThreadRefreshForBranchMarkers(threadId)')
+		const activeRunIndex = finishBody.indexOf('if (activeRunKeys.size > 0)')
+
+		expect(clearIndex).toBeGreaterThan(-1)
+		expect(refreshIndex).toBeGreaterThan(clearIndex)
+		expect(activeRunIndex).toBeGreaterThan(refreshIndex)
+		expectExcerptToContain(finishBody, 'if (generationRun.reasoningRunId) activeRunKeys.delete(generationRun.reasoningRunId)', 'finish generated media run')
+		expectExcerptToContain(finishBody, 'if (generationRun.mediaRunId) activeRunKeys.delete(generationRun.mediaRunId)', 'finish generated media run')
+		expectExcerptNotToContain(finishBody, 'scheduleDetachedCanvasRunTeardown', 'finish generated media run')
+	})
+
+	it('performs bounded post-completion fetches to replace live thread overrides with persisted content', () => {
+		const refreshBody = extractFunctionBody(ts, 'refreshPersistedAiChatThreadForBranchMarkers')
+		const scheduleBody = extractFunctionBody(ts, 'schedulePersistedAiChatThreadRefreshForBranchMarkers')
+
+		expectExcerptToContain(refreshBody, "servicesStore.getData('aiChatThreadService')", 'persisted AI thread refresh')
+		expectExcerptToContain(refreshBody, 'aiChatThreadService.getAiChatThread({ workspaceId, threadId })', 'persisted AI thread refresh')
+		expectExcerptToContain(refreshBody, 'if (fetchedVersion < currentVersion) return', 'persisted AI thread refresh')
+		expectExcerptToContain(refreshBody, 'rememberAiChatThreadRecord(thread)', 'persisted AI thread refresh')
+		expectExcerptToContain(refreshBody, 'liveAiChatThreadContentOverrides.delete(threadId)', 'persisted AI thread refresh')
+		expectExcerptToContain(refreshBody, 'refreshBranchMarkersForAiChatThread(threadId)', 'persisted AI thread refresh')
+		expectExcerptToContain(scheduleBody, 'window.clearTimeout(timer)', 'persisted AI thread refresh scheduler')
+		expectExcerptToContain(scheduleBody, 'const timers = [400, 1400, 3000].map(delayMs =>', 'persisted AI thread refresh scheduler')
+		expectExcerptToContain(scheduleBody, 'void refreshPersistedAiChatThreadForBranchMarkers(threadId).catch', 'persisted AI thread refresh scheduler')
 	})
 })
 
@@ -982,6 +1162,17 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 		expectSourceToContain(svelte, 'viewport.y !== scheduledViewport.y')
 		expectSourceToContain(svelte, 'viewport.zoom !== scheduledViewport.zoom')
 		expectSourceToContain(svelte, 'viewport: scheduledViewport')
+	})
+
+	it('debounces fallback document saves in the Svelte canvas host', () => {
+		expectSourceToContain(svelte, 'const DOCUMENT_SAVE_DEBOUNCE_MS = 5000')
+		expectSourceToContain(svelte, 'const documentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()')
+		expectSourceToContain(svelte, 'const pendingDocumentUpdates = new Map<string, PendingDocumentUpdate>()')
+		expectSourceToContain(svelte, 'function scheduleDocumentUpdate(update: PendingDocumentUpdate): void')
+		expectSourceToContain(svelte, 'if (existingTimer) clearTimeout(existingTimer)')
+		expectSourceToContain(svelte, '}, DOCUMENT_SAVE_DEBOUNCE_MS)')
+		expectSourceToContain(svelte, 'documentService.updateDocument(pending)')
+		expectSourceToContain(svelte, 'for (const timer of documentSaveTimers.values()) clearTimeout(timer)')
 	})
 })
 
@@ -1469,7 +1660,7 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(ts, 'referenceToMarkerMinGap: getBranchLineageNodeGap(),')
 		expectSourceToContain(ts, 'settings.mediaBranchLineage.rootToFirstMediaGap')
 		expectSourceToContain(settingsTs, 'nodeGap: number')
-		expectSourceToContain(settingsTs, 'nodeGap: 64')
+		expectSourceToContain(settingsTs, 'nodeGap: mediaGenerationLayoutSettings.nodeGap')
 		expectSourceToContain(settingsTs, 'mediaBranchLineage.nodeGap')
 		expectSourceToContain(ts, 'const referenceRootPosition = getReferenceBranchRootMarkerPositionForGeneratedMedia(')
 		expectSourceNotToContain(ts, 'referencePosition.x - getRootBranchMarkerOutputGap() - markerDimensions.width')
@@ -1539,7 +1730,7 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(sidePanel, 'playOpen = (panelElement: HTMLElement)')
 		expectSourceToContain(sidePanel, 'playClose = (): Promise<void>')
 		expectSourceToContain(sidePanel, 'private runSlide = async (panelElement: HTMLElement | null, direction: \'in\' | \'out\'): Promise<void>')
-		expectSourceToContain(sidePanel, 'this.applyAnimationSettings(target.element)')
+		expectSourceToContain(sidePanel, 'this.applyAnimationSettings(target.element, direction)')
 		expectSourceToContain(sidePanel, 'transition: SLIDE_TRANSITION')
 		expectSourceToContain(sidePanel, 'this.getSlideDurationMs() + SLIDE_FALLBACK_BUFFER_MS')
 
@@ -1552,7 +1743,8 @@ describe('Right side panel — TS infrastructure', () => {
 		const scss = loadScss()
 		const svelte = loadWorkspaceCanvasSvelte()
 		const layout = loadLayout()
-		const sidebar = loadSidebar()
+		const navigationSidePanel = loadNavigationSidePanel()
+		const navigationSidePanelScss = loadNavigationSidePanelScss()
 
 		const sidePanelScss = loadSidePanelScss()
 		expectSourceToContain(svelte, 'const rightSidePanelSettings = settings.rightSidePanel')
@@ -1561,7 +1753,7 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(svelte, 'class:workspace-canvas-right-side-panel-open')
 		// The glass backdrop is owned by the SidePanel component.
 		expectSourceToContain(sidePanelScss, '.side-panel-backdrop')
-		expectSourceToContain(sidePanelScss, 'z-index: 90')
+		expectSourceToContain(sidePanelScss, 'z-index: var(--side-panel-backdrop-z-index, 90)')
 		expectSourceToContain(sidePanelScss, '--side-panel-backdrop-width')
 		expectSourceToContain(sidePanelScss, 'backdrop-filter: blur(24px) saturate(145%)')
 		expectSourceToContain(sidePanelScss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
@@ -1583,15 +1775,54 @@ describe('Right side panel — TS infrastructure', () => {
 			'width: 100%',
 			'global composer'
 		)
-		expectSourceToContain(layout, 'workspace-sidebar-shell')
-		expectSourceToContain(layout, 'workspace-sidebar-body')
-		expectSourceToContain(layout, 'workspace-sidebar-footer')
-		expectSourceToContain(layout, '<Separator />')
-		expectSourceToContain(layout, 'sidebar-user-menu')
+		expectSourceToContain(layout, 'navigation-side-panel-pane')
+		expectSourceToContain(layout, 'createNavigationSidePanel')
+		expectSourceNotToContain(layout, 'Resizable.PaneGroup')
 		expectSourceNotToContain(layout, 'user-menu-workspace-chat-panel')
-		expectSourceToContain(sidebar, 'height: auto !important')
-		expectSourceToContain(sidebar, 'flex: 1 1 auto')
-		expectSourceToContain(sidebar, 'max-height: none !important')
+		expectSourceToContain(navigationSidePanel, "side: 'left'")
+		expectSourceToContain(navigationSidePanel, 'createSidePanel')
+		expectSourceToContain(navigationSidePanelScss, '.navigation-side-panel {')
+		expectSourceToContain(navigationSidePanelScss, 'position: fixed')
+	})
+
+	it('lifts the canvas-hosted side-panel overlay/backdrop above canvas content via workspace-canvas-scoped z-index variables', () => {
+		const scss = loadScss()
+		const sidePanelScss = loadSidePanelScss()
+
+		expectExcerptToContain(
+			extractBlock(scss, '.workspace-canvas'),
+			'--side-panel-resize-handle-z-index: 9990',
+			'.workspace-canvas'
+		)
+		expectExcerptToContain(
+			extractBlock(scss, '.workspace-canvas'),
+			'--side-panel-overlay-z-index: 10010',
+			'.workspace-canvas'
+		)
+		expectExcerptToContain(
+			extractBlock(scss, '.workspace-canvas'),
+			'--side-panel-backdrop-z-index: 10020',
+			'.workspace-canvas'
+		)
+		expectExcerptToContain(
+			extractBlock(scss, '.workspace-canvas'),
+			'--side-panel-surface-z-index: 10030',
+			'.workspace-canvas'
+		)
+		expectExcerptToContain(
+			extractBlock(scss, '.workspace-canvas'),
+			'--side-panel-toggle-z-index: 10040',
+			'.workspace-canvas'
+		)
+
+		// The component now reads its own z-index custom properties (with the
+		// component's low-stacking defaults) instead of the host overriding
+		// .side-panel-overlay-right/.side-panel-backdrop-right by selector.
+		expectSourceNotToContain(scss, '.side-panel-overlay-right')
+		expectSourceNotToContain(scss, '.side-panel-backdrop-right')
+		expectSourceToContain(sidePanelScss, 'z-index: var(--side-panel-overlay-z-index, 80)')
+		expectSourceToContain(sidePanelScss, 'z-index: var(--side-panel-toggle-z-index, 10040)')
+		expectSourceToContain(sidePanelScss, 'z-index: var(--side-panel-resize-handle-z-index, 9990)')
 	})
 })
 
@@ -2025,7 +2256,7 @@ describe('Workspace canvas — collision resolution ownership', () => {
 	it('uses the image-node theme width for toolbar image insertion sizing', () => {
 		expectSourceToContain(svelte, 'const width = settings.mediaNode.image.defaultInsertionWidth')
 		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(aspectRatio)')
-		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(1)')
+		expectSourceToContain(svelte, 'dimensions,')
 		expectSourceNotToContain(svelte, 'const maxWidth = 400')
 		expectSourceNotToContain(svelte, 'FALLBACK_IMAGE_DIMENSIONS')
 	})
@@ -2206,16 +2437,17 @@ describe('Image loading — PIXI ownership and URL resolution strategy', () => {
 	})
 
 	it('PIXI uses canonical workspaceId path for stored API images', () => {
-		expectSourceToContain(pixiLogicTs, '`/api/images/${workspaceId}/${node.fileId}`')
+		expectSourceToContain(pixiLogicTs, 'buildWorkspaceFilePath(workspaceId, node.fileId)')
 		expectSourceToContain(pixiLogicTs, 'isStoredImageSrc(strippedSrc)')
 	})
 
 	it('PIXI strips stale tokens from node sources before resolving them', () => {
-		expect(pixiLogicTs).toMatch(/node\.src\.replace\([^)]*token[^)]*\)/)
+		expectSourceToContain(pixiLogicTs, 'const strippedSrc = stripAuthTokenFromUrl(node.src)')
+		expectSourceToContain(pixiLogicTs, 'return isStoredImageSrc(strippedSrc)')
 	})
 
 	it('PIXI passes through data and external sources without DOM loading', () => {
-		expectSourceToContain(pixiLogicTs, "if (imageUrl.startsWith('data:')) return imageUrl")
+		expectSourceToContain(pixiLogicTs, 'resolveMediaUrl(strippedSrc)')
 		expectSourceToContain(pixiLayerTs, 'const resolvedSrc = resolveStoredImagePath(node, workspaceId)')
 	})
 
@@ -2253,14 +2485,12 @@ describe('Image generation error cleanup', () => {
 	it('removes the failed partial image node from state and DOM immediately', () => {
 		const handler = getImageErrorHandler()
 
+		expectExcerptToContain(handler, 'const runKey = getGeneratedMediaRunKey(threadId, generationRun)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'const existing = partialImageTracker.get(runKey)', 'onImageErrorToCanvas')
 		expectExcerptToContain(handler, 'partialImageTracker.delete(runKey)', 'onImageErrorToCanvas')
 		expectExcerptToContain(handler, 'selectedNodeIds.delete(existing.nodeId)', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'const remainingNodes = currentCanvasState.nodes.filter', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'const remainingEdges = currentCanvasState.edges.filter', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'commitCanvasStatePreservingEditors(nextState)', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'nodeEl?.remove()', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'finishGeneratedMediaRun(threadId, generationRun)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'finishFailedGeneratedMediaRun(threadId, generationRun)', 'onImageErrorToCanvas')
 		expectExcerptNotToContain(handler, 'setTimeout', 'onImageErrorToCanvas')
 	})
 
@@ -2278,22 +2508,27 @@ describe('Image generation error cleanup', () => {
 
 describe('buildImageSrc — URL construction logic', () => {
 	const ts = loadTs()
+	const buildImageSrcFn = extractFunctionBody(ts, 'buildImageSrc')
 
 	it('returns transparent pixel for empty imageUrl', () => {
-		expect(ts).toMatch(/if\s*\(\s*!imageUrl\s*\)\s*return\s*['"]data:image\/png;base64,/)
+		expect(buildImageSrcFn).not.toBe('')
+		expectExcerptToContain(buildImageSrcFn, "base64MimeType: 'image/png'")
+		expectExcerptToContain(
+			buildImageSrcFn,
+			'emptyFallback: \'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=\'',
+		)
 	})
 
 	it('returns data: URLs unchanged', () => {
-		expect(ts).toMatch(/if\s*\(\s*imageUrl\.startsWith\(\s*['"]data:['"]\s*\)\s*\)\s*return\s+imageUrl/)
+		expectExcerptToContain(buildImageSrcFn, 'return resolveMediaUrl(imageUrl, {')
 	})
 
 	it('prepends apiBaseUrl for /api/ paths', () => {
-		expect(ts).toMatch(/if\s*\(\s*imageUrl\.startsWith\(\s*['"]\/api\/['"]\s*\)/)
-		expectSourceToContain(ts, '`${apiBaseUrl}${imageUrl}')
+		expectExcerptToContain(buildImageSrcFn, 'apiBaseUrl,')
 	})
 
 	it('appends token as query param for API URLs', () => {
-		expectSourceToContain(ts, '`?token=${token}`')
+		expectExcerptToContain(buildImageSrcFn, 'token,')
 	})
 })
 
@@ -2451,8 +2686,11 @@ describe('video generation — canvas + plugin source shape', () => {
 		// with images, while keeping dedicated Delete behavior.
 		const bubbleMenuTs = readSourceFile('canvasBubbleMenuItems.ts')
 		expectSourceToContain(ts, "import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT")
-		expectSourceToContain(ts, "node.type !== 'image' && node.type !== 'video'")
-		expectSourceToContain(ts, "node.type === 'video' ? CANVAS_VIDEO_CONTEXT : CANVAS_IMAGE_CONTEXT")
+		// Every uploaded media kind maps to a bubble-menu context (image, video,
+		// mediaDocument, audio) — so documents/audio also get a menu (Delete).
+		expectSourceToContain(ts, "video: CANVAS_VIDEO_CONTEXT,")
+		expectSourceToContain(ts, "mediaDocument: CANVAS_DOCUMENT_CONTEXT,")
+		expectSourceToContain(ts, "const context = node ? bubbleContextByType[node.type] : undefined")
 		expectSourceToContain(ts, 'onDownloadMedia: (nodeId) => {')
 		expectSourceToContain(ts, 'onReplaceMedia: (nodeId) => {')
 		expectSourceToContain(bubbleMenuTs, "export const CANVAS_VIDEO_CONTEXT = 'canvasVideo'")

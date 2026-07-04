@@ -129,7 +129,7 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 
 **Submit + poll.** `client.models.generateVideos(...)` returns an operation; the provider loops on `client.operations.getVideosOperation(...)` every `VEO_POLL_INTERVAL_MS`, publishing a `VIDEO_GENERATING` keepalive each tick and honoring the abort signal, until `operation.done`.
 
-**Download.** `fetchVideoBytes` uses inline `videoBytes` (base64) when present, otherwise `client.files.download(...)` to a temp file. `VideoPublisher.complete` validates the MP4 (`ftyp` box) before storing; non-MP4 bytes throw.
+**Download.** `fetchVideoBytes` uses inline `videoBytes` (base64) when present, otherwise `client.files.download(...)` to a temp file. `VideoPublisher.complete` validates the MP4 (`ftyp` box) before storing; non-MP4 bytes throw. Poster and representative-frame extraction is requested from the NEX file-conversion workload through `extractVideoFramesViaWorkload`, so ffmpeg work stays out of the API process.
 
 ## Seedance 2.0 via BytePlus ModelArk
 
@@ -179,23 +179,23 @@ VEO's `image` (first frame) and `referenceImages` are **mutually exclusive** per
 
 Video reuses the workspace bucket and the **same content-hash dedup as images**.
 
-- **MP4** → `workspace-{workspaceId}-files/{fileId}` via `storeWorkspaceVideo` ([`video-storage.ts`](../../services/api/src/services/video-storage.ts)), a sibling of `storeWorkspaceImage` with SHA-256 content-hash dedup and `mimeType: 'video/mp4'`.
-- **Poster** → stored as a normal workspace **image** via `storeWorkspaceImage`, so the existing `GET /api/images/...` route serves it for PIXI at low LoD.
+- **MP4** -> `workspace-{workspaceId}-files/{fileId}` via `storeWorkspaceVideo`, an adapter over [`storeWorkspaceFile`](../../services/api/src/services/file-storage.ts) with `kind: 'video'`, `modelSafe: true`, SHA-256 content-hash dedup, and `mimeType: 'video/mp4'`.
+- **Poster and representative frame** -> stored as normal workspace image objects via `storeWorkspaceImage`, so the unified `GET /api/files/:workspaceId/:fileId` route serves them for PIXI and VLM grounding.
 
-**Poster + representative frame.** Both shell `ffmpeg` through a shared single-frame extractor in `video-storage.ts`. `extractPosterFrame` grabs frame 0 (the PIXI low-LoD poster); `extractRepresentativeFrame` seeks to the clip midpoint (`durationSeconds / 2`) for the still that grounds the video to the VLM and anchors image-to-video continuations. Both are **best-effort**: if ffmpeg is unavailable or a seek fails, generation still completes without that frame (mid-frame consumers fall back to the poster). `ffmpeg` is baked into the API container image. `VideoPublisher.complete` stores each frame as a normal workspace image and publishes its `frameUrl` / `frameFileId` alongside the poster.
+**Poster + representative frame.** Generated-video providers stage the completed MP4 into a temporary workspace Object Store key and call [`extractVideoFramesViaWorkload`](../../services/api/src/services/video-frame-extraction.ts). That helper sends `FILE_SUBJECTS.EXTRACT_FRAMES` to the NEX file-conversion workload, which runs ffmpeg, writes temporary poster/frame objects, and returns their keys. The API reads those temporary objects, deletes the temporary keys, then stores the final poster and representative frame through the normal workspace image adapter. Frame extraction is **best-effort**: if the workload is unavailable or a seek fails, generation still completes without that frame.
 
 **Self-healing dedup.** In line with the NATS Object Store durability work, the hash-dedup short-circuit only returns "duplicate" after confirming the bytes are actually present (`getObjectInfo`). If a hash is registered in `workspace.files` but its bytes are missing, `storeWorkspaceVideo` re-stores them, so a dangling reference self-heals instead of returning a URL to lost bytes. Object-store reads/deletes are open-only and never auto-create a bucket.
 
-**HTTP routes** ([`video-routes.ts`](../../services/api/src/routes/video-routes.ts)).
+**HTTP routes** ([`file-routes.ts`](../../services/api/src/routes/file-routes.ts)).
 
 | Route | Behavior |
 |-------|----------|
-| `GET /api/videos/:workspaceId/:fileId` | Streams the MP4 with **HTTP Range support** (`206 Partial Content`) so the HTML `<video>` element can seek and scrub; returns `404` when the object or bucket is missing. |
-| `POST /api/videos/:workspaceId` | Accepts a replacement/user-supplied video, stores it through the same workspace-video path, and best-effort extracts a poster as a normal workspace image. |
+| `GET /api/files/:workspaceId/:fileId` | Streams video and audio with **HTTP Range support** (`206 Partial Content`) so media elements can seek and scrub; returns `404` when the object or bucket is missing. Images, posters, PDFs, text, and other documents are served whole. |
+| `POST /api/files/:workspaceId` | Accepts user uploads, sniffs bytes, stores the original, and either returns a ready file or queues the NEX file-conversion workload for probing/transcoding. |
 
-Authentication mirrors the image route (Bearer or `?token=`). The poster reuses `GET /api/images/...`.
+Authentication supports Bearer tokens and `?token=` for browser media element URLs.
 
-**Deletion.** `workspace.video.delete` (`video-subjects.ts`) removes the MP4 from the Object Store and its `workspace.files` entry. On the canvas, `canvasMediaNodeLifecycle.ts` tracks configured media node types across state commits. For `VideoCanvasNode`, when the node disappears it fires `deleteVideo(fileId, workspaceId, posterFileId)` — the MP4 via the video subject and the poster via the image-delete subject (the poster is a normal image). Workspace deletion cleans up video Media Library items by branching on `item.kind`.
+**Deletion.** `workspace.video.delete` (`video-subjects.ts`) removes the MP4 metadata and Object Store bytes only after the API re-reads canonical canvas state and confirms no media node still references the file, its original/canonical pair, or related frame objects. On the canvas, `canvasMediaNodeLifecycle.ts` tracks configured media node types across state commits. For `VideoCanvasNode`, when the node disappears it fires `deleteVideo(fileId, workspaceId, posterFileId)` — the MP4 via the video subject and the poster via the image-delete subject (the poster is a normal image). Workspace deletion cleans up video Media Library items by branching on `item.kind`.
 
 ## The `VideoCanvasNode`
 
@@ -209,7 +209,7 @@ Generated videos persist as a discriminated member of the `CanvasNode` union (`t
 | `posterFileId` | `string` | ffmpeg frame-0 poster (an image object key). |
 | `frameFileId` | `string?` | ffmpeg representative mid-frame (image object key) used to ground the video to the VLM and as VEO's image-to-video anchor; falls back to `posterFileId`. |
 | `workspaceId` | `string` | Deletion + bucket context. |
-| `src` | `string` | Tokenized MP4 URL (Range-capable video route). |
+| `src` | `string` | Tokenized MP4 URL from the Range-capable file route. |
 | `posterSrc` | `string` | Tokenized poster image URL used by PIXI for initial paint and by the DOM `<video>` as its native poster. |
 | `aspectRatio` | `number` | width / height (e.g. 16:9 → 1.778). |
 | `durationSeconds` | `number` | Effective generated duration from the synced model option. |
@@ -220,7 +220,7 @@ Generated videos persist as a discriminated member of the `CanvasNode` union (`t
 
 ## Video-Specific Stream Nuances
 
-Video events reuse the per-thread receive subject `ai.interaction.chat.receiveMessage.{workspaceId}.{aiChatThreadId}` — only the `status` values are new. The complete catalog (with payloads and browser handling) is owned by [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The table below is **only** the video-specific nuance — how the video lifecycle differs from the image lifecycle, which is the core consequence of VEO being async with no partial frames.
+Video events use the same live per-thread receive subject as the rest of the AI pipeline and are also persisted to the chat pipeline replay log. Trace/final generated-video transcript nodes are mirrored into the authoritative ProseMirror step stream, so branch-marker and generated-media provenance panels can recover after refresh. The complete catalog and replay behavior are owned by [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The table below is only the video-specific nuance - how the video lifecycle differs from the image lifecycle, which is the core consequence of VEO being async with no partial frames.
 
 | Status | Video-specific nuance |
 |--------|-----------------------|
@@ -230,10 +230,15 @@ Video events reuse the per-thread receive subject `ai.interaction.chat.receiveMe
 | `VIDEO_COMPLETE` | Carries `videoUrl`, `fileId`, `posterUrl`, `posterFileId`, `frameUrl`, `frameFileId`, `durationSeconds`, `aspectRatio`, `hasAudio`, plus provenance. PIXI renders the poster behind the browser-composited `<video>`; `frameFileId` enables cheap re-grounding of later edits. |
 | `VIDEO_ERROR` | Surfaces the VEO failure and cleans up the placeholder. Because the trace was published first, the failed attempt still leaves an auditable record in chat. |
 
-One new subject group under `WORKSPACE_SUBJECTS` in [`nats-subjects.json`](../../packages/lixpi/constants/nats-subjects.json):
+The relevant workspace subject groups in [`nats-subjects.json`](../../packages/lixpi/constants/nats-subjects.json):
 
 ```jsonc
-"VIDEO_SUBJECTS": { "DELETE_VIDEO": "workspace.video.delete" }
+"VIDEO_SUBJECTS": { "DELETE_VIDEO": "workspace.video.delete" },
+"FILE_SUBJECTS": {
+  "CONVERT": "workspace.file.convert",
+  "CONVERT_RESPONSE": "workspace.file.convert.response",
+  "EXTRACT_FRAMES": "workspace.file.extractFrames"
+}
 ```
 
 The `CHAT_SEND_MESSAGE` payload gains `aiVideoModel`, `videoAspectRatio`, `videoResolution`, `videoDuration`, and `videoSourceForExtension`. The gateway (`ai-interaction-subjects.ts`) resolves `aiVideoModel` (`Provider:model`) to `videoModelMetaInfo`, normalizes the requested video params against the synced model option lists, and forwards the selected duration as a number.
@@ -327,11 +332,14 @@ services/api/src/
 │       ├── load-prompts.ts           # getSystemPrompt(includeVideoGeneration)
 │       └── video_generation_instructions.txt
 ├── services/
-│   ├── video-storage.ts              # storeWorkspaceVideo (self-healing dedup) + ffmpeg frame extractors
+│   ├── file-storage.ts               # storeWorkspaceFile, content-hash dedup, canonical pointers
+│   ├── store-media-adapters.ts       # storeWorkspaceImage/storeWorkspaceVideo adapters over file storage
+│   ├── video-frame-extraction.ts     # stages generated MP4s and requests NEX frame extraction
 │   └── media-library-storage.ts      # copy/materialize/scope video helpers
-├── routes/video-routes.ts            # POST /api/videos/:ws + GET /api/videos/:ws/:fileId (Range)
+├── routes/file-routes.ts             # POST /api/files/:ws + GET /api/files/:ws/:fileId (Range for audio/video)
 └── NATS/subscriptions/
     ├── video-subjects.ts             # workspace.video.delete
+    ├── file-conversion-subjects.ts   # browser permission for conversion completion subjects
     ├── ai-interaction-subjects.ts    # resolve videoModelMetaInfo + forward video params
     └── media-library-subjects.ts     # createFromVideo / materializeVideo
 

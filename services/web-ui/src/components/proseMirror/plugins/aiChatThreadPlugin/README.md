@@ -1,19 +1,20 @@
 # AI Chat Thread Plugin
 
-`aiChatThreadPlugin` powers the ProseMirror editor inside an AI chat thread canvas node. The thread editor is a conversation log and streaming target. Composer UI is provided by `aiPromptInputPlugin`.
+`aiChatThreadPlugin` powers the ProseMirror editor for AI chat thread documents in the panel, provenance projections, and compatibility canvas-thread surfaces. The thread editor is a conversation log and streaming target. Composer UI is provided by `aiPromptInputPlugin`.
 
 ## Input Flow
 
 1. `aiPromptInputPlugin` owns the composer editor and model controls.
 2. `AiPromptInputController` injects an `aiUserMessage` into the target thread editor.
 3. The controller dispatches `USE_AI_CHAT_META` with `{ threadId, nodePos }`.
-4. `aiChatThreadPlugin` extracts the thread messages, calls `sendAiRequestHandler`, and streams response nodes into the same thread.
+4. `aiChatThreadPlugin` extracts the thread messages and calls `sendAiRequestHandler` with the post-placeholder ProseMirror doc JSON.
+5. The API authors response nodes into the authoritative ProseMirror step stream; the browser applies those steps through `ProseMirrorAuthorityService`.
 
 ## What It Does
 
 - Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiLineageEvent`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
-- Parses `aiUserInput` through the schema compatibility path, then removes those children in `appendTransaction()`.
-- Streams parsed text, image, video, context-resolution, branch-resolution, and trace events from `SegmentsReceiver`.
+- Handles image, video, context-resolution, branch-resolution, trace, and error side-effect events from `SegmentsReceiver`.
+- Applies ProseMirror document changes only through authority step events. Raw media/control pipeline events are routed to canvas placement without locally mutating the same ProseMirror doc.
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
 - Delegates generated-image and generated-video canvas side effects through callback surfaces registered by `createAiChatThreadPlugin`.
 - Preserves API media-lineage assignments on durable response/media nodes, then projects those ids into reusable lineage-event markers for the live thread, branch-root panels, branch-fork panels, and generated-media provenance.
@@ -51,16 +52,19 @@ sequenceDiagram
     participant Controller as AiPromptInputController
     participant Thread as aiChatThreadPlugin
     participant Service as AiInteractionService
+    participant Authority as ProseMirrorAuthorityService
     participant Receiver as SegmentsReceiver
 
     User->>Prompt: Cmd/Ctrl+Enter or submit button
     Prompt->>Controller: onSubmit(contentJSON, model attrs, media opts)
     Controller->>Thread: insert aiUserMessage + USE_AI_CHAT_META
     Thread->>Thread: extract thread messages
-    Thread->>Service: sendAiRequestHandler(payload)
-    Service->>Receiver: stream events for workspaceId + threadId
-    Receiver->>Thread: START_STREAM / STREAMING / END_STREAM
-    Thread->>Thread: insert or update response/media nodes
+    Thread->>Service: sendAiRequestHandler(payload + post-placeholder doc JSON)
+    Authority->>Thread: DOC_RESUME + document step subscription
+    Authority->>Thread: START / STEP / END
+    Authority->>Thread: apply Step.fromJSON(schema, step)
+    Service->>Receiver: replayed/live pipeline side events
+    Receiver->>Thread: branch/media/trace/error events
 ```
 
 ## Schema Nodes
@@ -79,20 +83,16 @@ Attrs declared in `aiChatThreadNode.ts`:
 
 - `threadId`
 - `status`
-- `aiModel`
-- `aiModels`
-- `useMultipleModels`
+- `aiReasoningModels` (JSON-serialized ordered model-id array; length 1 = singular selection)
 - `useMultipleReasoningModels`
 - `useMultipleImageModels`
 - `useMultipleVideoModels`
-- `aiImageModel`
-- `aiImageModels`
+- `aiImageModels` (JSON-serialized ordered model-id array)
 - `imageGenerationEnabled`
 - `imageGenerationSize`
 - `imageGenerationConfigGroups`
 - `previousResponseId`
-- `aiVideoModel`
-- `aiVideoModels`
+- `aiVideoModels` (JSON-serialized ordered model-id array)
 - `videoAspectRatio`
 - `videoResolution`
 - `videoDuration`
@@ -177,15 +177,6 @@ Inline generation trace block.
 - Generated prompt text uses the same left-border output treatment as extraction-stage model output.
 - The NodeView accepts `traceDetailsOptions` from `renderContext`, which lets generated-media provenance previews resolve canvas-only reference sources while still rendering the real `aiCollapsibleBlock` node.
 
-### `aiUserInput`
-
-Compatibility schema node.
-
-- `editor.ts` adds `aiUserInputNodeSpec` to the AI chat thread schema for stored thread document parsing.
-- `aiChatThreadPlugin.appendTransaction()` deletes `aiUserInput` children when they appear.
-- Thread creation inserts conversation nodes through `AiPromptInputController`.
-- The active composer lives in `aiPromptInputPlugin`.
-
 ## Request Construction
 
 `handleChatRequest()` reads model and media attrs from the `aiChatThread` node after the controller injects the submitted user message.
@@ -193,14 +184,14 @@ Compatibility schema node.
 The request payload includes:
 
 - `messages`
-- `aiModel`
-- `aiModels`
+- `aiReasoningModels` (ordered model-id array; collapsed to the first entry when `useMultipleReasoningModels` is off)
+- `useMultipleReasoningModels` / `useMultipleImageModels` / `useMultipleVideoModels`
 - `threadId`
-- `imageOptions`
-- `videoOptions`
+- `imageOptions` (carries `aiImageModels`)
+- `videoOptions` (carries `aiVideoModels`)
 - `referencedFeatureIds`
 
-Model-list attrs are JSON-like strings parsed with `parseAiModelSelectionAttr()`. `useMultipleModels` is accepted as an aggregate multi-model flag when section-specific flags are absent.
+Each section's selection is a single JSON-like model-id array parsed with `parseAiModelSelectionAttr()`. Multi-model mode is controlled independently per section through `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels`; when a flag is off, that section's array is collapsed to its first model before submit.
 
 Media configuration group attrs are JSON strings parsed through `parseMediaGenerationConfigSelectionAttr()`. They come from the API-authored media generation config matrix and are forwarded to `mediaGenerationRequest.imageOptions.configGroups` / `videoOptions.configGroups`; thread code does not derive provider-specific controls from selected model metadata.
 
@@ -216,9 +207,6 @@ Media configuration group attrs are JSON strings parsed through `parseMediaGener
 
 The plugin subscribes through `SegmentsReceiver` and handles these event families:
 
-- `START_STREAM`
-- `STREAMING`
-- `END_STREAM`
 - stream errors
 - `image_partial`
 - `image_complete`
@@ -234,8 +222,19 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 - `video_complete`
 - `video_error`
 - `video_generation_trace`
-- `collapsible_start`
-- `collapsible_end`
+
+Single-writer text streams are applied by `ProseMirrorAuthorityService`, which
+subscribes to the document step subject and applies `STEP` events with
+`Step.fromJSON(view.state.schema, event.step)`. The plugin still owns the
+non-ProseMirror pipeline event families delivered through `SegmentsReceiver`.
+Raw `START_STREAM` / `STREAMING` / `END_STREAM` text events are not parsed in
+the browser. Generated-prompt collapsible blocks are authored by the API-side
+ProseMirror assembler; legacy collapsible segment handlers are compatibility
+code and are not the primary AI chat text path.
+When a mounted editor receives a step that was authored against a different
+seed document, the authority service enters snapshot recovery instead of
+retrying the same structural failure. The final API-persisted snapshot is the
+recovery source for that stale editor.
 
 Image and video completion/error events finalize the generated media node state
 and close the matching receiving run so prompt inputs leave stop mode when the
@@ -316,7 +315,6 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 - `aiChatMessageShells.ts`: shared user/assistant message shells.
 - `aiChatThreadContentUtils.ts`: helpers for generated-media provenance.
 - `aiChatThreadPluginConstants.ts`: shared `PluginKey` and transaction meta constants.
-- `aiChatThreadPositionUtils.ts`, `aiChatThreadSend.ts`, `aiChatThreadControls.ts`, `aiUserInputNode.ts`: compatibility/helper modules outside the active prompt-input path.
 - `ai-chat-thread.scss`: thread-log, message, media, and compatibility styles.
 
 ## Transaction Meta
@@ -329,9 +327,9 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 
 ## Extension Points
 
-Add new streamed block types in `StreamingInserter.insertBlockContent()`.
+Add new streamed block types in `packages/lixpi/prosemirror/src/stream-assembly.ts`.
 
-Add new inline stream segment behavior in `StreamingInserter.insertInlineContent()`.
+Add new inline stream segment behavior in `packages/lixpi/prosemirror/src/stream-assembly.ts`.
 
 Add provider/model attribution in the generation trace block or the shared shell helpers.
 

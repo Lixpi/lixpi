@@ -1,6 +1,8 @@
 'use strict'
 
+import { randomUUID } from 'node:crypto'
 import type NatsService from '@lixpi/nats-service'
+import { err } from '@lixpi/debug-tools'
 import {
     STREAM_STATUS,
     type ImageBranchVlmResolution,
@@ -14,8 +16,17 @@ import {
     type WorkspaceContextResolution,
 } from '@lixpi/constants'
 
+import { AiChatProseMirrorStreamAssembler } from '../../prosemirror/ai-chat-stream-assembler.ts'
+import {
+    logCanvasProjectionError,
+    upsertMediaLineagePlanToCanvas,
+} from '../../services/media-generation-canvas-projection.ts'
+import { PipelineEventLog } from './pipeline-event-log.ts'
+
 const subject = (workspaceId: string, aiChatThreadId: string): string =>
     `ai.interaction.chat.receiveMessage.${workspaceId}.${aiChatThreadId}`
+
+const COMPLETED_PIPELINE_EVENT_RETENTION_MS = 10 * 60 * 1000
 
 export type ChunkPayload = {
     content: {
@@ -26,10 +37,20 @@ export type ChunkPayload = {
         imageUrl?: string
         fileId?: string
         partialIndex?: number
+        videoUrl?: string
+        posterUrl?: string
+        posterFileId?: string
+        frameUrl?: string
+        frameFileId?: string
+        durationSeconds?: number
+        aspectRatio?: string | number
+        hasAudio?: boolean
         responseId?: string
         revisedPrompt?: string
         imageModelProvider?: string
         imageModelId?: string
+        videoModelProvider?: string
+        videoModelId?: string
         resolution?: ImageBranchVlmResolution
         workspaceContextResolution?: WorkspaceContextResolution
         imageGenerationTrace?: ImageGenerationTrace
@@ -43,6 +64,25 @@ export type ChunkPayload = {
         generationRun?: MediaGenerationRunMeta
     }
     aiChatThreadId: string
+}
+
+type PipelineChunkPayload = ChunkPayload & {
+    pipelineEventId: string
+    pipelineStreamSeq?: number
+}
+
+export type StreamPublisherOptions = {
+    enableProseMirrorStream?: boolean
+    proseMirrorBaseVersion?: number
+    proseMirrorInitialDoc?: object
+    deferProseMirrorEnd?: boolean
+    canvasVisibleArea?: { width: number; height: number }
+}
+
+export type ProseMirrorContentHandler = (content: ChunkPayload['content']) => void
+
+type PublishChatContentOptions = {
+    mirrorProseMirror?: boolean
 }
 
 // A collapsible-wrapped prompt tag pair. The text model wraps the enhanced
@@ -73,21 +113,17 @@ export class TagAwareStream {
     private active: CollapsiblePromptTag | null = null
 
     constructor(
-        private readonly nats: NatsService,
-        private readonly workspaceId: string,
-        private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
         private readonly generationRun?: MediaGenerationRunMeta,
+        private readonly onContent?: (content: ChunkPayload['content']) => void,
     ) {}
 
     private publish(content: ChunkPayload['content']): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                ...content,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
-        })
+        const publishedContent = {
+            ...content,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+        }
+        this.onContent?.(publishedContent)
     }
 
     reset(): void {
@@ -201,8 +237,13 @@ export class TagAwareStream {
 
 export class StreamPublisher {
     private tagBuffer: TagAwareStream
+    private readonly proseMirrorAssembler: AiChatProseMirrorStreamAssembler | null
+    private readonly pipelineEventLog: PipelineEventLog
     private hasStarted = false
     private hasEnded = false
+    private proseMirrorFinishPromise: Promise<void> | null = null
+    private responsePublishChain: Promise<void> = Promise.resolve()
+    private canvasProjectionChain: Promise<void> = Promise.resolve()
 
     constructor(
         private readonly nats: NatsService,
@@ -210,8 +251,96 @@ export class StreamPublisher {
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
         private readonly generationRun?: MediaGenerationRunMeta,
+        private readonly options: StreamPublisherOptions = {},
     ) {
-        this.tagBuffer = new TagAwareStream(nats, workspaceId, aiChatThreadId, provider, generationRun)
+        this.pipelineEventLog = new PipelineEventLog(nats)
+        this.proseMirrorAssembler = options.enableProseMirrorStream
+            ? new AiChatProseMirrorStreamAssembler({
+                workspaceId,
+                aiChatThreadId,
+                provider,
+                generationRun,
+                baseVersion: options.proseMirrorBaseVersion,
+                initialDoc: options.proseMirrorInitialDoc,
+            })
+            : null
+        this.tagBuffer = new TagAwareStream(
+            provider,
+            generationRun,
+            content => this.publishChatContent(content),
+        )
+    }
+
+    publishChatContent(content: ChunkPayload['content'], options: PublishChatContentOptions = {}): void {
+        if (options.mirrorProseMirror !== false) {
+            this.proseMirrorAssembler?.handleContent(content)
+        }
+
+        this.responsePublishChain = this.publishResponseAfterCurrent(this.responsePublishChain, {
+            content,
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    private async publishResponseAfterCurrent(previous: Promise<void>, payload: ChunkPayload): Promise<void> {
+        try {
+            await previous
+        } catch {
+            // A failed previous JetStream write falls back to live publish and should
+            // not prevent later pipeline events from being delivered in order.
+        }
+        await this.publishResponseNow(payload)
+    }
+
+    private async publishResponseNow(payload: ChunkPayload): Promise<void> {
+        const pipelineEventId = randomUUID()
+        const pipelinePayload: PipelineChunkPayload = {
+            ...payload,
+            pipelineEventId,
+        }
+        try {
+            const event = await this.pipelineEventLog.publishEvent({
+                workspaceId: this.workspaceId,
+                pipelineId: this.aiChatThreadId,
+                eventId: pipelineEventId,
+                payload: pipelinePayload as unknown as Record<string, any>,
+            })
+            this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+                ...pipelinePayload,
+                pipelineStreamSeq: event.streamSequence,
+            })
+        } catch (error) {
+            err('[StreamPublisher] Failed to persist pipeline event before live publish:', error)
+            this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), pipelinePayload)
+        }
+    }
+
+    private async drainResponsePublishes(): Promise<void> {
+        try {
+            await this.responsePublishChain
+        } catch {
+            // publishResponseNow already logs and falls back to live publish.
+        }
+    }
+
+    private enqueueCanvasProjection(write: () => Promise<void>, errorContext: string): void {
+        this.canvasProjectionChain = this.canvasProjectionChain
+            .catch(() => undefined)
+            .then(async () => {
+                try {
+                    await write()
+                } catch (error) {
+                    logCanvasProjectionError(errorContext, error)
+                }
+            })
+    }
+
+    private async drainCanvasProjectionWrites(): Promise<void> {
+        try {
+            await this.canvasProjectionChain
+        } catch {
+            // enqueueCanvasProjection already logs and swallows individual failures.
+        }
     }
 
     start(): void {
@@ -219,15 +348,50 @@ export class StreamPublisher {
 
         this.hasStarted = true
         this.hasEnded = false
+        this.proseMirrorFinishPromise = null
         this.tagBuffer.reset()
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.START_STREAM,
-                aiProvider: this.provider,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
-        })
+        const content: ChunkPayload['content'] = {
+            status: STREAM_STATUS.START_STREAM,
+            aiProvider: this.provider,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+        }
+        this.publishChatContent(content)
+    }
+
+    publishProseMirrorContent(content: ChunkPayload['content']): void {
+        this.proseMirrorAssembler?.handleContent(content)
+    }
+
+    finishProseMirrorStream(): Promise<void> {
+        if (this.proseMirrorFinishPromise) return this.proseMirrorFinishPromise
+
+        this.proseMirrorFinishPromise = this.finishPipelineStream()
+        return this.proseMirrorFinishPromise
+    }
+
+    private async finishPipelineStream(): Promise<void> {
+        await this.drainResponsePublishes()
+        await this.drainCanvasProjectionWrites()
+        if (this.proseMirrorAssembler) {
+            await this.proseMirrorAssembler.end()
+        }
+        this.schedulePipelineEventPurge()
+    }
+
+    private schedulePipelineEventPurge(): void {
+        const timer = setTimeout(() => {
+            const purgeCompletedPipeline = async (): Promise<void> => {
+                try {
+                    await this.pipelineEventLog.purgePipelineEvents(this.workspaceId, this.aiChatThreadId)
+                } catch (error) {
+                    err('[StreamPublisher] Failed to purge completed pipeline event log:', error)
+                }
+            }
+            void purgeCompletedPipeline()
+        }, COMPLETED_PIPELINE_EVENT_RETENTION_MS)
+        if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') {
+            timer.unref()
+        }
     }
 
     chunk(text: string): void {
@@ -239,149 +403,142 @@ export class StreamPublisher {
 
         this.hasEnded = true
         this.tagBuffer.flush()
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                text: '',
-                status: STREAM_STATUS.END_STREAM,
-                aiProvider: this.provider,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
-        })
+        const content: ChunkPayload['content'] = {
+            text: '',
+            status: STREAM_STATUS.END_STREAM,
+            aiProvider: this.provider,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+        }
+        this.publishChatContent(content, { mirrorProseMirror: !this.options.deferProseMirrorEnd })
+        if (this.options.deferProseMirrorEnd) {
+            void this.proseMirrorAssembler?.finishTextPhase()
+        } else {
+            void this.finishProseMirrorStream()
+        }
     }
 
     extractionProgress(status: string, detail: string): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.STREAMING,
-                aiProvider: this.provider,
-                extractionStatus: status,
-                extractionDetail: detail,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publishChatContent({
+            status: STREAM_STATUS.STREAMING,
+            aiProvider: this.provider,
+            extractionStatus: status,
+            extractionDetail: detail,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }
 
     stageTrace(event: StageTraceEvent): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.STREAMING,
-                aiProvider: this.provider,
-                stageTraceEvent: event,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publishChatContent({
+            status: STREAM_STATUS.STREAMING,
+            aiProvider: this.provider,
+            stageTraceEvent: event,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }
 
     // Publishes the extracted feature as structured content. Sent this way (not as JSON
     // embedded in the token stream) so TagAwareStream's tail buffering can't truncate it.
     featureCard(payload: Record<string, any>): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.STREAMING,
-                aiProvider: this.provider,
-                featureCard: payload,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publishChatContent({
+            status: STREAM_STATUS.STREAMING,
+            aiProvider: this.provider,
+            featureCard: payload,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }
 
     imageBranchResolved(resolution: ImageBranchVlmResolution, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
-                aiProvider: this.provider,
-                resolution,
-                ...(generationRun ? { generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publishChatContent({
+            status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
+            aiProvider: this.provider,
+            resolution,
+            ...(generationRun ? { generationRun } : {}),
         })
     }
 
     mediaLineagePlanned(lineagePlan: MediaBranchLineagePlan, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.MEDIA_LINEAGE_PLANNED,
-                aiProvider: this.provider,
+        this.enqueueCanvasProjection(
+            () => upsertMediaLineagePlanToCanvas({
+                workspaceId: this.workspaceId,
+                aiChatThreadId: this.aiChatThreadId,
                 lineagePlan,
-                ...(generationRun ? { generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+                ...(this.options.canvasVisibleArea ? { canvasVisibleArea: this.options.canvasVisibleArea } : {}),
+            }),
+            'failed to persist media lineage plan to canvas',
+        )
+
+        this.publishChatContent({
+            status: STREAM_STATUS.MEDIA_LINEAGE_PLANNED,
+            aiProvider: this.provider,
+            lineagePlan,
+            ...(generationRun ? { generationRun } : {}),
+        })
+    }
+
+    // The reasoning model finished without emitting a media tool call after a
+    // lineage plan was already published; the planned runs will never start.
+    mediaGenerationSkipped(generationRequestId: string, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+        this.publishChatContent({
+            status: STREAM_STATUS.MEDIA_GENERATION_SKIPPED,
+            aiProvider: this.provider,
+            generationRequestId,
+            ...(generationRun ? { generationRun } : {}),
         })
     }
 
     contextRelevanceResolved(workspaceContextResolution: WorkspaceContextResolution, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED,
-                aiProvider: this.provider,
-                workspaceContextResolution,
-                ...(generationRun ? { generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publishChatContent({
+            status: STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED,
+            aiProvider: this.provider,
+            workspaceContextResolution,
+            ...(generationRun ? { generationRun } : {}),
         })
     }
 
     contextRelevanceError(message: string): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.CONTEXT_RELEVANCE_ERROR,
-                aiProvider: this.provider,
-                error: message,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publishChatContent({
+            status: STREAM_STATUS.CONTEXT_RELEVANCE_ERROR,
+            aiProvider: this.provider,
+            error: message,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }
 
     imageGenerationTrace(trace: ImageGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.generationRun): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.IMAGE_GENERATION_TRACE,
-                aiProvider: this.provider,
-                imageGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
-                ...(generationRun ? { generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
-        })
+        const content: ChunkPayload['content'] = {
+            status: STREAM_STATUS.IMAGE_GENERATION_TRACE,
+            aiProvider: this.provider,
+            imageGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
+            ...(generationRun ? { generationRun } : {}),
+        }
+        this.publishChatContent(content)
     }
 
     imageGenerationError(message: string, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.IMAGE_ERROR,
-                aiProvider: this.provider,
-                error: message,
-                ...(generationRun ? { generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publishChatContent({
+            status: STREAM_STATUS.IMAGE_ERROR,
+            aiProvider: this.provider,
+            error: message,
+            ...(generationRun ? { generationRun } : {}),
         })
     }
 
     videoGenerationTrace(trace: VideoGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.generationRun): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.VIDEO_GENERATION_TRACE,
-                aiProvider: this.provider,
-                videoGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
-                ...(generationRun ? { generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
-        })
+        const content: ChunkPayload['content'] = {
+            status: STREAM_STATUS.VIDEO_GENERATION_TRACE,
+            aiProvider: this.provider,
+            videoGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
+            ...(generationRun ? { generationRun } : {}),
+        }
+        this.publishChatContent(content)
     }
 
     imageBranchResolutionError(message: string): void {
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                status: STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR,
-                aiProvider: this.provider,
-                error: message,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
+        this.publishChatContent({
+            status: STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR,
+            aiProvider: this.provider,
+            error: message,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }
 
@@ -394,14 +551,12 @@ export class StreamPublisher {
         if (code) payload.errorCode = code
         if (type) payload.errorType = type
         this.nats.publish(`ai.interaction.chat.error.${instanceKey}`, payload)
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content: {
-                text: message,
-                status: STREAM_STATUS.ERROR,
-                aiProvider: this.provider,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
-            },
-            aiChatThreadId: this.aiChatThreadId,
-        })
+        const content: ChunkPayload['content'] = {
+            text: message,
+            status: STREAM_STATUS.ERROR,
+            aiProvider: this.provider,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+        }
+        this.publishChatContent(content)
     }
 }

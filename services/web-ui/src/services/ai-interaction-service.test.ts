@@ -1,10 +1,11 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
+
 const workspaceId = 'workspace-1'
 const aiChatThreadId = 'thread-1'
 const responseSubject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`
@@ -13,23 +14,19 @@ const getDataMock = vi.hoisted(() => vi.fn())
 const natsPublishMock = vi.hoisted(() => vi.fn())
 const natsSubscribeMock = vi.hoisted(() => vi.fn())
 const natsGetSubscriptionsMock = vi.hoisted(() => vi.fn())
+const natsRequestMock = vi.hoisted(() => vi.fn())
 const getTokenSilentlyMock = vi.hoisted(() => vi.fn())
 const receiveSegmentMock = vi.hoisted(() => vi.fn())
 const uuidMock = vi.hoisted(() => vi.fn(() => 'matrix-request-id'))
 const organizationGetMock = vi.hoisted(() => vi.fn())
 const userGetMock = vi.hoisted(() => vi.fn())
 
-let parserTokenCallback: ((segment: unknown, unsubscribe: () => void) => void) | undefined
-let parserSubscribeMock = vi.fn()
-let parserStartParsingMock = vi.fn()
-let parserParseTokenMock = vi.fn()
-let parserStopParsingMock = vi.fn()
-let parserRemoveInstanceMock = vi.fn()
-let parserInstance: {
-    subscribeToTokenParse: typeof parserSubscribeMock
-    startParsing: typeof parserStartParsingMock
-    parseToken: typeof parserParseTokenMock
-    stopParsing: typeof parserStopParsingMock
+let consoleErrorSpy: { mockRestore: () => void } | null = null
+let consoleLogSpy: { mockRestore: () => void } | null = null
+let consoleWarnSpy: { mockRestore: () => void } | null = null
+
+const flushPromises = async (): Promise<void> => {
+    await new Promise(resolve => setTimeout(resolve, 0))
 }
 
 vi.mock('uuid', () => ({ v4: uuidMock }))
@@ -64,83 +61,168 @@ vi.mock('$src/stores/userStore.ts', () => ({
     },
 }))
 
-vi.mock('@lixpi/markdown-stream-parser', () => ({
-    MarkdownStreamParser: {
-        getInstance: vi.fn(() => parserInstance),
-        removeInstance: (...args: unknown[]) => parserRemoveInstanceMock(...args),
-    },
-}))
-
 describe('AiInteractionService', () => {
     let service: AiInteractionService
 
     beforeEach(async () => {
         vi.clearAllMocks()
-
-        parserTokenCallback = undefined
-        parserSubscribeMock = vi.fn((callback: (segment: unknown, unsubscribe: () => void) => void) => {
-            parserTokenCallback = callback
-            return undefined
-        })
-        parserStartParsingMock = vi.fn()
-        parserParseTokenMock = vi.fn()
-        parserStopParsingMock = vi.fn()
-        parserRemoveInstanceMock = vi.fn()
-        parserInstance = {
-            subscribeToTokenParse: parserSubscribeMock,
-            startParsing: parserStartParsingMock,
-            parseToken: parserParseTokenMock,
-            stopParsing: parserStopParsingMock,
-        }
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
         getDataMock.mockReturnValue({
             publish: natsPublishMock,
             subscribe: natsSubscribeMock,
             getSubscriptions: natsGetSubscriptionsMock,
+            request: natsRequestMock,
         })
         getTokenSilentlyMock.mockResolvedValue('auth-token')
         organizationGetMock.mockReturnValue('org-1')
         userGetMock.mockReturnValue({ userId: 'user-1' })
         natsGetSubscriptionsMock.mockReturnValue([])
+        natsRequestMock.mockResolvedValue({ events: [] })
 
         service = new AiInteractionService({
             workspaceId,
             aiChatThreadId,
         })
 
-        await Promise.resolve()
+        await flushPromises()
     })
 
-    it('subscribes to the thread response subject when initialized', () => {
+    afterEach(() => {
+        service?.disconnect()
+        consoleErrorSpy?.mockRestore()
+        consoleLogSpy?.mockRestore()
+        consoleWarnSpy?.mockRestore()
+        consoleErrorSpy = null
+        consoleLogSpy = null
+        consoleWarnSpy = null
+    })
+
+    it('subscribes to thread responses and resumes pipeline events', async () => {
+        await flushPromises()
+
         expect(getDataMock).toHaveBeenCalledWith('nats')
         expect(natsGetSubscriptionsMock).toHaveBeenCalledWith([responseSubject])
         expect(natsSubscribeMock).toHaveBeenCalledWith(responseSubject, expect.any(Function))
+        expect(natsRequestMock).toHaveBeenCalledWith(
+            AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
+            expect.objectContaining({
+                token: 'auth-token',
+                workspaceId,
+                aiChatThreadId,
+                localStreamSeq: 0,
+            }),
+        )
     })
 
-    it('resolves run keys and selected metadata consistently', () => {
+    it('computes run keys, chat subject, and generation-run detection', () => {
         expect(service.getRunKey({ reasoningRunId: 'reasoning-run' } as any)).toBe('reasoning-run')
         expect(service.getRunKey()).toBe(aiChatThreadId)
-
-        expect(service.getGenerationRun({ reasoningRunId: 'legacy' } as any)).toBeUndefined()
-        expect(service.getGenerationRun({ generationRun: { reasoningRunId: 'trace-run' } as any })).toEqual({ reasoningRunId: 'trace-run' })
+        expect(service.getGenerationRun({ generationRun: { reasoningRunId: 'trace-run' } } as any)).toEqual({ reasoningRunId: 'trace-run' })
         expect(service.getGenerationRun({ imageGenerationTrace: { generationRun: { reasoningRunId: 'image-run' } } } as any)).toEqual({ reasoningRunId: 'image-run' })
         expect(service.getGenerationRun({ videoGenerationTrace: { generationRun: { reasoningRunId: 'video-run' } } } as any)).toEqual({ reasoningRunId: 'video-run' })
+        expect(service.getChatResponseSubject()).toBe(responseSubject)
     })
 
-    it('tracks and falls back provider state for run keys', () => {
-        expect(service.updateRunProvider(aiChatThreadId, 'reasoning-provider')).toBe('reasoning-provider')
-        expect(service.updateRunProvider(aiChatThreadId)).toBe('reasoning-provider')
-    })
+    it('tracks provider per run key and falls back when events omit aiProvider', () => {
+        service.updateRunProvider('reasoning-run', 'provider-A')
 
-    it('emits context relevance resolved chunks as dedicated segment types', () => {
         service.onChatMessageResponse({
             content: {
-            status: STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED,
-            workspaceContextResolution: {
-                selections: [{ nodeId: 'node-1', mediaKind: 'image' }],
-                improvedDescriptors: {},
-                narrowedMediaNodeIds: ['node-1'],
+                status: STREAM_STATUS.IMAGE_PARTIAL,
+                generationRun: { reasoningRunId: 'reasoning-run' },
+                imageUrl: 'https://images.example/one.png',
+                fileId: 'file-1',
+                partialIndex: 0,
             },
+        })
+
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.IMAGE_PARTIAL,
+                generationRun: { reasoningRunId: 'reasoning-run' },
+                imageUrl: 'https://images.example/two.png',
+                fileId: 'file-2',
+                partialIndex: 1,
+            },
+        })
+
+        expect(receiveSegmentMock).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({
+                type: 'image_partial',
+                imageUrl: 'https://images.example/one.png',
+                aiProvider: 'provider-A',
+                generationRun: { reasoningRunId: 'reasoning-run' },
+            }),
+        )
+        expect(receiveSegmentMock).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({
+                type: 'image_partial',
+                imageUrl: 'https://images.example/two.png',
+                aiProvider: 'provider-A',
+            }),
+        )
+        expect(service.updateRunProvider('reasoning-run')).toBe('provider-A')
+    })
+
+    it('deduplicates pipeline events using pipelineEventId and advances stream cursor', () => {
+        service.onChatMessageResponse({
+            pipelineEventId: 'event-1',
+            pipelineStreamSeq: 3,
+            content: {
+                status: STREAM_STATUS.IMAGE_PARTIAL,
+                imageUrl: 'first',
+                fileId: 'file-1',
+                partialIndex: 1,
+            },
+        })
+
+        service.onChatMessageResponse({
+            pipelineEventId: 'event-1',
+            pipelineStreamSeq: 2,
+            content: {
+                status: STREAM_STATUS.IMAGE_PARTIAL,
+                imageUrl: 'duplicate',
+                fileId: 'file-2',
+                partialIndex: 2,
+            },
+        })
+
+        expect(receiveSegmentMock).toHaveBeenCalledTimes(1)
+        expect(service.pipelineLocalStreamSeq).toBe(3)
+    })
+
+    it('handles context relevance events and image/media branches', () => {
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED,
+                workspaceContextResolution: {
+                    selections: [{ nodeId: 'node-1' }],
+                    improvedDescriptors: {},
+                    narrowedMediaNodeIds: ['image-1'],
+                },
+            },
+        })
+
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
+                resolution: { target: 'node-1' },
+            },
+        })
+
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.MEDIA_LINEAGE_PLANNED,
+                lineagePlan: {
+                    generationRequestId: 'lineage-1',
+                    branchForks: [],
+                    runAssignments: [],
+                },
             },
         })
 
@@ -148,173 +230,282 @@ describe('AiInteractionService', () => {
             expect.objectContaining({
                 type: 'context_relevance_resolved',
                 workspaceContextResolution: expect.objectContaining({
-                    selections: [{ nodeId: 'node-1', mediaKind: 'image' }],
+                    selections: [{ nodeId: 'node-1' }],
                 }),
-                aiChatThreadId,
-                aiProvider: null,
             }),
         )
-    })
-
-    it('forwards context relevance errors as chat segments', () => {
-        service.onChatMessageResponse({
-            content: {
-                status: STREAM_STATUS.CONTEXT_RELEVANCE_ERROR,
-                error: 'context failed',
-            },
-        })
-
         expect(receiveSegmentMock).toHaveBeenCalledWith(
             expect.objectContaining({
-                type: 'context_relevance_error',
-                error: 'context failed',
-                aiChatThreadId,
+                type: 'image_branch_resolved',
+                imageBranchResolution: expect.objectContaining({ target: 'node-1' }),
+            }),
+        )
+        expect(receiveSegmentMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: 'media_lineage_planned',
+                mediaBranchLineagePlan: expect.objectContaining({
+                    generationRequestId: 'lineage-1',
+                }),
             }),
         )
     })
 
-    it('emits image completion segments with trace metadata', () => {
+    it('maps image and video status events to dedicated segment kinds', () => {
         service.onChatMessageResponse({
             content: {
                 status: STREAM_STATUS.IMAGE_COMPLETE,
-                imageUrl: 'https://images.example/one.png',
-                fileId: 'file-1',
-                responseId: 'response-1',
-                revisedPrompt: 'sunset by the sea',
-                imageModelProvider: 'provider-image',
-                generationRun: { reasoningRunId: 'reasoning-run' },
-                aiProvider: 'provider-text',
+                imageUrl: 'https://img.example/final.png',
+                fileId: 'file-final',
+                responseId: 'img-response',
+                revisedPrompt: 'sunset',
+                aiProvider: 'image-provider',
+                generationRun: { reasoningRunId: 'run-image' },
             },
         })
 
-        expect(receiveSegmentMock).toHaveBeenCalledWith(
-            expect.objectContaining({
-                type: 'image_complete',
-                imageUrl: 'https://images.example/one.png',
-                fileId: 'file-1',
-                responseId: 'response-1',
-                revisedPrompt: 'sunset by the sea',
-                aiProvider: 'provider-text',
-                imageModelProvider: 'provider-image',
-                aiChatThreadId,
-                generationRun: { reasoningRunId: 'reasoning-run' },
-            }),
-        )
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.VIDEO_PENDING,
+                generationRun: { reasoningRunId: 'run-video' },
+            },
+        })
+
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.VIDEO_GENERATING,
+                generationRun: { reasoningRunId: 'run-video' },
+            },
+        })
+
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.VIDEO_COMPLETE,
+                videoUrl: 'https://vid.example/final.mp4',
+                fileId: 'video-file',
+                responseId: 'video-response',
+                revisedPrompt: 'city',
+                durationSeconds: 9,
+                aspectRatio: '16:9',
+                hasAudio: true,
+                generationRun: { reasoningRunId: 'run-video' },
+                aiProvider: 'video-provider',
+                videoModelId: 'v-model',
+                videoModelProvider: 'provider-X',
+            },
+        })
+
+        expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'image_complete',
+            fileId: 'file-final',
+            responseId: 'img-response',
+            revisedPrompt: 'sunset',
+            aiProvider: 'image-provider',
+            generationRun: { reasoningRunId: 'run-image' },
+        }))
+        expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'video_complete',
+            fileId: 'video-file',
+            responseId: 'video-response',
+            videoModel: 'v-model',
+            videoModelProvider: 'provider-X',
+            hasAudio: true,
+            durationSeconds: 9,
+        }))
     })
 
-    it('routes markdown token streaming through the parser lifecycle', () => {
+    it('alerts on transport errors and does not create segments', () => {
+        const windowAlert = vi.fn()
+        const originalAlert = (globalThis as { alert?: (...args: unknown[]) => void }).alert
+        ;(globalThis as { alert?: (...args: unknown[]) => void }).alert = windowAlert
+
+        service.onChatMessageResponse({ error: { message: 'transport failed' } })
+
+        expect(windowAlert).toHaveBeenCalledWith('Failed to receive chat message: \n{"message":"transport failed"}')
+        expect(receiveSegmentMock).not.toHaveBeenCalled()
+        ;(globalThis as { alert?: (...args: unknown[]) => void }).alert = originalAlert
+    })
+
+    it('replays pipeline resume events through the same handling path', async () => {
+        natsRequestMock
+            .mockReset()
+            .mockResolvedValue({
+                events: [
+                    {
+                        eventId: 'replay-1',
+                        streamSequence: 4,
+                        payload: {
+                            pipelineEventId: 'replay-1',
+                            pipelineStreamSeq: 4,
+                            content: {
+                                status: STREAM_STATUS.VIDEO_ERROR,
+                                error: 'frame dropped',
+                            },
+                        },
+                    },
+                    {
+                        eventId: 'replay-2',
+                        streamSequence: 9,
+                        payload: {
+                            pipelineEventId: 'replay-2',
+                            pipelineStreamSeq: 9,
+                            content: {
+                                status: STREAM_STATUS.MEDIA_GENERATION_SKIPPED,
+                                generationRequestId: 'media-req',
+                            },
+                        },
+                    },
+                ],
+            })
+
+        await service.resumePipelineEventStream()
+
+        expect(natsRequestMock).toHaveBeenLastCalledWith(
+            AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
+            expect.objectContaining({
+                token: 'auth-token',
+                workspaceId,
+                aiChatThreadId,
+                localStreamSeq: 0,
+            }),
+        )
+        expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'video_error',
+            error: 'frame dropped',
+        }))
+        expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'media_generation_skipped',
+            generationRequestId: 'media-req',
+        }))
+        expect(service.pipelineLocalStreamSeq).toBe(9)
+    })
+
+    it('ignores text-only streaming status payloads', () => {
         service.onChatMessageResponse({
             content: {
                 status: STREAM_STATUS.START_STREAM,
-                aiProvider: 'provider-stream',
-                generationRun: { reasoningRunId: 'run-stream' },
+                aiProvider: 'provider',
+                generationRun: { reasoningRunId: 'text-run' },
             },
         })
-        expect(parserStartParsingMock).toHaveBeenCalled()
 
         service.onChatMessageResponse({
             content: {
                 status: STREAM_STATUS.STREAMING,
-                text: 'hello',
-                generationRun: { reasoningRunId: 'run-stream' },
+                text: 'hello world',
+                generationRun: { reasoningRunId: 'text-run' },
             },
         })
-        expect(parserParseTokenMock).toHaveBeenCalledWith('hello')
 
-        expect(parserTokenCallback).toBeDefined()
         service.onChatMessageResponse({
             content: {
                 status: STREAM_STATUS.END_STREAM,
-                generationRun: { reasoningRunId: 'run-stream' },
+                generationRun: { reasoningRunId: 'text-run' },
             },
         })
-        expect(parserStopParsingMock).toHaveBeenCalled()
 
-        const callbackUnsubscribe = vi.fn()
-        expect(parserTokenCallback).toBeDefined()
-        parserTokenCallback?.({ status: STREAM_STATUS.END_STREAM }, callbackUnsubscribe)
-        expect(callbackUnsubscribe).toHaveBeenCalled()
-        expect(parserRemoveInstanceMock).toHaveBeenCalledWith(`${aiChatThreadId}:run-stream`)
-        expect(service.markdownParserContexts.has('run-stream')).toBe(false)
+        expect(receiveSegmentMock).not.toHaveBeenCalled()
     })
 
-    it('sends rich payloads and matrix metadata for multi-model requests', async () => {
+    it('collapses model selections when multiple-mode is disabled', async () => {
         await service.sendChatMessage({
-            messages: [{ role: 'user', content: 'paint me' }],
-            aiModel: 'reasoner',
-            aiModels: ['reasoner-a', 'reasoner-b'],
-            aiImageModel: 'img-model',
-            aiImageModels: ['img-a', 'img-b'],
-            aiVideoModel: 'video-model',
-            videoDuration: '12',
-            videoResolution: '1080p',
+            messages: [{ role: 'user', content: 'paint' }],
+            aiReasoningModels: ['reasoner-a', 'reasoner-b'],
+            useMultipleReasoningModels: false,
+            aiImageModels: ['image-a', 'image-b'],
             imageSize: '1024x1024',
-            referencedFeatureIds: ['feature-a'],
+            useMultipleImageModels: false,
+            aiVideoModels: ['video-a'],
+            videoResolution: '1080p',
+            videoDuration: '6',
+            useMultipleVideoModels: false,
+        })
+
+        const payload = natsPublishMock.mock.calls.at(-1)?.[1] as Record<string, unknown>
+        expect(payload.aiReasoningModels).toEqual(['reasoner-a'])
+        expect(payload.aiImageModels).toEqual(['image-a'])
+        expect(payload.aiVideoModels).toEqual(['video-a'])
+        expect(payload.imageSize).toBe('1024x1024')
+        expect(payload.videoResolution).toBe('1080p')
+        expect(payload).not.toHaveProperty('mediaGenerationRequest')
+    })
+
+    it('sends media matrix payload when multi-model mode is enabled', async () => {
+        await service.sendChatMessage({
+            messages: [{ role: 'user', content: 'film' }],
+            aiReasoningModels: ['reasoner-a', 'reasoner-b'],
+            useMultipleReasoningModels: true,
+            aiImageModels: ['image-a', 'image-b'],
+            imageSize: '768x768',
+            imageConfigGroups: [{ id: 'size', configs: [] }],
+            useMultipleImageModels: true,
+            aiVideoModels: ['video-a', 'video-b'],
+            videoAspectRatio: '16:9',
+            videoResolution: '720p',
+            videoDuration: '6',
+            videoSourceForExtension: 's3://video-source',
+            useMultipleVideoModels: true,
+            videoConfigGroups: [{ id: 'quality', configs: [] }],
+            referencedFeatureIds: ['feat-1'],
             imageBranchCandidateSnapshot: {
                 resolverVersion: 'image-branch-v1',
                 threadId: aiChatThreadId,
                 regionNodeId: 'node-1',
-                promptText: 'paint me',
+                promptText: 'film',
                 candidates: [],
-                promptFingerprint: 'abc',
-                transcriptContext: 'transcript',
+                promptFingerprint: 'fingerprint-1',
+                transcriptContext: 'context',
             },
             workspaceContextSnapshot: {
                 resolverVersion: 'workspace-context-v1',
                 workspaceId,
                 threadId: aiChatThreadId,
-                promptText: 'paint me',
+                promptText: 'film',
                 nodes: [],
             },
+            proseMirrorInitialDoc: { type: 'doc' },
+            proseMirrorBaseVersion: 12,
+            canvasVisibleArea: { x: 5, y: 6 },
         })
 
-        const [subject, payload] = natsPublishMock.mock.calls.at(-1) ?? []
-        expect(subject).toBe(AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE)
+        const payload = natsPublishMock.mock.calls.at(-1)?.[1] as Record<string, unknown>
         expect(payload).toMatchObject({
-            token: 'auth-token',
-            workspaceId,
-            aiChatThreadId,
-            aiModel: 'reasoner',
-            imageSize: '1024x1024',
-            referencedFeatureIds: ['feature-a'],
-            aiImageModel: 'img-model',
-            aiVideoModel: 'video-model',
-            videoResolution: '1080p',
-            videoDuration: '12',
-            imageBranchCandidateSnapshot: {
-                regionNodeId: 'node-1',
-            },
+            aiReasoningModels: ['reasoner-a', 'reasoner-b'],
+            aiImageModels: ['image-a', 'image-b'],
+            aiVideoModels: ['video-a', 'video-b'],
+            imageSize: '768x768',
+            imageBranchCandidateSnapshot: { resolverVersion: 'image-branch-v1', threadId: aiChatThreadId },
             workspaceContextSnapshot: {
                 workspaceId,
+                nodes: [],
             },
+            referencedFeatureIds: ['feat-1'],
             mediaGenerationRequest: {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: 'matrix-request-id',
                 reasoningModelIds: ['reasoner-a', 'reasoner-b'],
-                imageModelIds: ['img-a', 'img-b'],
-                videoModelIds: ['video-model'],
-                imageOptions: { imageSize: '1024x1024' },
+                imageModelIds: ['image-a', 'image-b'],
+                videoModelIds: ['video-a', 'video-b'],
+                imageOptions: {
+                    imageSize: '768x768',
+                    configGroups: [{ id: 'size', configs: [] }],
+                },
                 videoOptions: {
-                    duration: '12',
-                    resolution: '1080p',
+                    aspectRatio: '16:9',
+                    resolution: '720p',
+                    duration: '6',
+                    sourceForExtension: 's3://video-source',
+                    configGroups: [{ id: 'quality', configs: [] }],
                 },
             },
+            proseMirrorBaseVersion: 12,
+            proseMirrorInitialDoc: { type: 'doc' },
+            canvasVisibleArea: { x: 5, y: 6 },
+            organizationId: 'org-1',
         })
+        expect(payload.token).toBe('auth-token')
     })
 
-    it('omits matrix payload when only single models are used', async () => {
-        await service.sendChatMessage({
-            messages: [{ role: 'user', content: 'hello' }],
-            aiModel: 'reasoner',
-            aiImageModel: 'img-model',
-            aiVideoModel: 'video-model',
-        })
-
-        const payload = natsPublishMock.mock.calls.at(-1)?.[1] as Record<string, unknown>
-        expect(payload).not.toHaveProperty('mediaGenerationRequest')
-    })
-
-    it('stops markdown streams with a stop message on request', async () => {
+    it('publishes stop event through NATS', async () => {
         await service.stopChatMessage()
 
         expect(natsPublishMock).toHaveBeenCalledWith(
@@ -327,75 +518,21 @@ describe('AiInteractionService', () => {
         )
     })
 
-    it('disconnects parser contexts and response subscriptions', () => {
+    it('disconnects from the thread response subject and clears runtime provider state', () => {
         const unsubscribeMock = vi.fn()
         natsGetSubscriptionsMock.mockReturnValue([{ unsubscribe: unsubscribeMock }])
 
-        service.initMarkdownParser({ reasoningRunId: 'disconnect-run' }, 'provider-x')
+        service.updateRunProvider(aiChatThreadId, 'provider-x')
+        service.shouldProcessPipelinePayload({
+            pipelineEventId: 'event-to-forget',
+            pipelineStreamSeq: 7,
+        })
         service.disconnect()
 
         expect(unsubscribeMock).toHaveBeenCalled()
-        expect(parserRemoveInstanceMock).toHaveBeenCalledWith(`${aiChatThreadId}:disconnect-run`)
+        expect(natsGetSubscriptionsMock).toHaveBeenCalledWith([responseSubject])
         expect(service.currentAiProvider).toBeNull()
-        expect(service.markdownParserContexts.size).toBe(0)
-    })
-
-    it('ignores malformed response payloads without dispatching segments', () => {
-        service.onChatMessageResponse({} as any)
-        service.onChatMessageResponse({ content: null } as any)
-
-        expect(receiveSegmentMock).not.toHaveBeenCalled()
-    })
-
-    it('emits image and video non-text statuses with generated run metadata', () => {
-        service.onChatMessageResponse({
-            content: {
-                status: STREAM_STATUS.IMAGE_PARTIAL,
-                imageUrl: 'https://images.example/partial.png',
-                fileId: 'partial-file',
-                partialIndex: 4,
-                generationRun: { reasoningRunId: 'reasoning-run' },
-            },
-        })
-
-        expect(receiveSegmentMock).toHaveBeenCalledWith(
-            expect.objectContaining({
-                type: 'image_partial',
-                imageUrl: 'https://images.example/partial.png',
-                fileId: 'partial-file',
-                partialIndex: 4,
-                generationRun: { reasoningRunId: 'reasoning-run' },
-            }),
-        )
-
-        service.onChatMessageResponse({
-            content: {
-                status: STREAM_STATUS.VIDEO_PENDING,
-                generationRun: { reasoningRunId: 'video-run' },
-            },
-        })
-
-        expect(receiveSegmentMock).toHaveBeenCalledWith(
-            expect.objectContaining({
-                type: 'video_pending',
-                generationRun: { reasoningRunId: 'video-run' },
-                aiChatThreadId,
-            }),
-        )
-
-        service.onChatMessageResponse({
-            content: {
-                status: STREAM_STATUS.ERROR,
-                text: 'backend failed',
-            },
-        })
-
-        expect(receiveSegmentMock).toHaveBeenCalledWith(
-            expect.objectContaining({
-                status: 'ERROR',
-                error: 'backend failed',
-                aiChatThreadId,
-            }),
-        )
+        expect(service.providersByRunKey.size).toBe(0)
+        expect(service.pipelineEventIds.size).toBe(0)
     })
 })

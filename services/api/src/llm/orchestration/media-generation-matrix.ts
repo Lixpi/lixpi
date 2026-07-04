@@ -27,9 +27,11 @@ import type { ProviderRegistry } from '../providers/provider-registry.ts'
 export type MatrixRequestData = Record<string, any> & {
     workspaceId: string
     aiChatThreadId: string
-    aiModel?: AiModelId
-    aiImageModel?: AiModelId
-    aiVideoModel?: AiModelId
+    // Ordered per-section selections (length 1 = singular). Used as the scalar
+    // fallback (index 0) when `mediaGenerationRequest` omits a section's list.
+    aiReasoningModels?: AiModelId[]
+    aiImageModels?: AiModelId[]
+    aiVideoModels?: AiModelId[]
     imageSize?: string
     videoAspectRatio?: string
     videoResolution?: string
@@ -88,11 +90,11 @@ const uniqueModelIds = (modelIds: Array<string | undefined>): AiModelId[] =>
     ))
 
 const normalizeModelIdsForMode = (
-    useMultipleModels: boolean,
+    useMultipleForSection: boolean,
     requestedModelIds: AiModelId[] | undefined,
     scalarModelId: AiModelId | undefined,
 ): AiModelId[] => {
-    if (useMultipleModels) return uniqueModelIds(requestedModelIds ?? [])
+    if (useMultipleForSection) return uniqueModelIds(requestedModelIds ?? [])
     return uniqueModelIds([scalarModelId ?? requestedModelIds?.[0]])
 }
 
@@ -333,9 +335,9 @@ export class MediaGenerationMatrixOrchestrator {
         const useMultipleReasoningModels = request?.useMultipleReasoningModels ?? ((request?.reasoningModelIds?.length ?? 0) > 1)
         const useMultipleImageModels = request?.useMultipleImageModels ?? ((request?.imageModelIds?.length ?? 0) > 1)
         const useMultipleVideoModels = request?.useMultipleVideoModels ?? ((request?.videoModelIds?.length ?? 0) > 1)
-        const reasoningModelIds = normalizeModelIdsForMode(useMultipleReasoningModels, request?.reasoningModelIds, requestData.aiModel)
-        const imageModelIds = normalizeModelIdsForMode(useMultipleImageModels, request?.imageModelIds, requestData.aiImageModel)
-        const videoModelIds = normalizeModelIdsForMode(useMultipleVideoModels, request?.videoModelIds, requestData.aiVideoModel)
+        const reasoningModelIds = normalizeModelIdsForMode(useMultipleReasoningModels, request?.reasoningModelIds, requestData.aiReasoningModels?.[0])
+        const imageModelIds = normalizeModelIdsForMode(useMultipleImageModels, request?.imageModelIds, requestData.aiImageModels?.[0])
+        const videoModelIds = normalizeModelIdsForMode(useMultipleVideoModels, request?.videoModelIds, requestData.aiVideoModels?.[0])
 
         if (reasoningModelIds.length === 0) {
             throw new Error('mediaGenerationRequest requires at least one reasoning model')
@@ -494,6 +496,7 @@ export class MediaGenerationMatrixOrchestrator {
             requestData.aiChatThreadId,
             reasoningModel.provider,
             generationRun,
+            { canvasVisibleArea: requestData.canvasVisibleArea },
         )
         let state: ProviderState = {
             messages: requestData.messages ?? [],
@@ -516,6 +519,7 @@ export class MediaGenerationMatrixOrchestrator {
             imagePromptRetryCount: 0,
             workspaceContextSnapshot: requestData.workspaceContextSnapshot,
             imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
+            canvasVisibleArea: requestData.canvasVisibleArea,
             referencedFeatureIds: requestData.referencedFeatureIds,
             enableVideoGeneration: requestData.enableVideoGeneration ?? false,
             videoModelMetaInfo: primaryVideoModel?.meta,

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
     NATS_SUBJECTS,
     LoadingStatus,
@@ -14,6 +14,9 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 import { aiChatThreadStore } from '$src/stores/aiChatThreadStore.ts'
 import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
+
+let consoleErrorSpy: { mockRestore: () => void } | null = null
+let consoleWarnSpy: { mockRestore: () => void } | null = null
 
 // The service module pulls in several stores at import time; mock them so the
 // context-resolution logic can run deterministically under happy-dom.
@@ -109,12 +112,21 @@ const testDocumentsById = (documents: TestDocument[]) => {
 let service: AiChatThreadService
 
 beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.clearAllMocks()
     getRouteParams.mockReturnValue({ workspaceId: 'ws-1' })
     vi.mocked(AuthService.getTokenSilently).mockResolvedValue('token-123')
     testDocumentsById([])
     servicesStore.getData.mockReturnValue(undefined as never)
     service = new AiChatThreadService()
+})
+
+afterEach(() => {
+    consoleErrorSpy?.mockRestore()
+    consoleWarnSpy?.mockRestore()
+    consoleErrorSpy = null
+    consoleWarnSpy = null
 })
 
 // =============================================================================

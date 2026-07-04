@@ -1,45 +1,41 @@
 'use strict'
 
 import { v4 as uuidv4 } from 'uuid'
-import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
-import type {
-    AiInteractionChatSendMessagePayload,
-    AiInteractionChatStopMessagePayload,
-    ImageGenerationTrace,
-    ImageGenerationSize,
-    MediaBranchLineagePlan,
-    MediaGenerationConfigSelectionGroup,
-    MediaGenerationRunMeta,
-    VideoGenerationTrace,
-    WorkspaceContextResolution
+import {
+    NATS_SUBJECTS,
+    STREAM_STATUS,
+    type AiInteractionChatSendMessagePayload,
+    type ImageGenerationTrace,
+    type ImageGenerationSize,
+    type MediaBranchLineagePlan,
+    type MediaGenerationConfigSelectionGroup,
+    type MediaGenerationRunMeta,
+    type VideoGenerationTrace,
+    type WorkspaceContextResolution
 } from '@lixpi/constants'
-
-const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
-
 import AuthService from '$src/services/auth-service.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
-import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
 
+const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
+
 type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadId'> & {
-    aiModels?: string[]
-    useMultipleModels?: boolean
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
-    aiImageModel?: string
     aiImageModels?: string[]
     imageSize?: ImageGenerationSize
     imageConfigGroups?: MediaGenerationConfigSelectionGroup[]
-    aiVideoModel?: string
     aiVideoModels?: string[]
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string
     videoConfigGroups?: MediaGenerationConfigSelectionGroup[]
+    proseMirrorInitialDoc?: object
+    proseMirrorBaseVersion?: number
     // Workspace Object Store URI of an existing generated video that VEO should
     // extend (continuation generation). Built by WorkspaceCanvas from the
     // source VideoCanvasNode's fileId + workspaceId when the thread is rooted
@@ -47,26 +43,38 @@ type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadI
     videoSourceForExtension?: string
 }
 
-type MarkdownParserContext = {
-    parser: ReturnType<typeof MarkdownStreamParser.getInstance>
-    unsubscribe?: () => void
-    aiProvider: string | null
-    generationRun?: MediaGenerationRunMeta
+type PipelineEventEnvelope = {
+    kind: 'PIPELINE_EVENT'
+    workspaceId: string
+    pipelineId: string
+    eventId: string
+    payload: Record<string, any>
+    publishedAt: number
+    streamSequence: number
+}
+
+type PipelineReplayResult = {
+    error?: unknown
+    events?: PipelineEventEnvelope[]
 }
 
 export default class AiInteractionService {
     workspaceId: string
     aiChatThreadId: string
     segmentsReceiver: any
-    markdownParserContexts: Map<string, MarkdownParserContext>
     currentAiProvider: string | null
+    providersByRunKey: Map<string, string>
+    pipelineEventIds: Set<string>
+    pipelineLocalStreamSeq: number
 
     constructor({ workspaceId, aiChatThreadId }: { workspaceId: string; aiChatThreadId: string }) {
         this.workspaceId = workspaceId
         this.aiChatThreadId = aiChatThreadId
         this.segmentsReceiver = SegmentsReceiver
-        this.markdownParserContexts = new Map()
         this.currentAiProvider = null
+        this.providersByRunKey = new Map()
+        this.pipelineEventIds = new Set()
+        this.pipelineLocalStreamSeq = 0
 
         this.initNatsSubscriptions()
     }
@@ -75,73 +83,22 @@ export default class AiInteractionService {
         return generationRun?.reasoningRunId || this.aiChatThreadId
     }
 
-    getParserInstanceId(runKey: string): string {
-        return runKey === this.aiChatThreadId ? this.aiChatThreadId : `${this.aiChatThreadId}:${runKey}`
-    }
-
     getGenerationRun(content: any): MediaGenerationRunMeta | undefined {
         return content?.generationRun
             ?? content?.imageGenerationTrace?.generationRun
             ?? content?.videoGenerationTrace?.generationRun
     }
 
-    cleanupMarkdownParserContext(runKey: string): void {
-        const context = this.markdownParserContexts.get(runKey)
-        context?.unsubscribe?.()
-        MarkdownStreamParser.removeInstance(this.getParserInstanceId(runKey))
-        this.markdownParserContexts.delete(runKey)
-        if (runKey === this.aiChatThreadId) {
-            this.currentAiProvider = null
-        }
-    }
-
-    initMarkdownParser(generationRun?: MediaGenerationRunMeta, aiProvider?: string) {
-        const runKey = this.getRunKey(generationRun)
-        this.cleanupMarkdownParserContext(runKey)
-
-        const parserInstanceId = this.getParserInstanceId(runKey)
-        // Initialize markdown stream parser (exact replication of backend pattern)
-        const parser = MarkdownStreamParser.getInstance(parserInstanceId)
-
-        const context: MarkdownParserContext = {
-            parser,
-            aiProvider: aiProvider || null,
-            ...(generationRun ? { generationRun } : {}),
-        }
-        this.markdownParserContexts.set(runKey, context)
-
-        // Subscribe to parsed segments from the markdown stream parser
-        context.unsubscribe = parser.subscribeToTokenParse((parsedSegment, unsubscribe) => {
-            // Emit parsed content to segmentsReceiver with aiProvider and aiChatThreadId
-            const currentContext = this.markdownParserContexts.get(runKey) ?? context
-            this.segmentsReceiver.receiveSegment({
-                ...parsedSegment,
-                aiProvider: currentContext.aiProvider,
-                aiChatThreadId: this.aiChatThreadId,
-                ...(currentContext.generationRun ? { generationRun: currentContext.generationRun } : {}),
-            })
-
-            // Cleanup on stream end
-            if (parsedSegment.status === 'END_STREAM') {
-                unsubscribe()
-                MarkdownStreamParser.removeInstance(parserInstanceId)
-                this.markdownParserContexts.delete(runKey)
-                if (runKey === this.aiChatThreadId) {
-                    this.currentAiProvider = null
-                }
-            }
-        })
+    getChatResponseSubject(): string {
+        return `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
     }
 
     updateRunProvider(runKey: string, aiProvider: string | undefined): string | null {
         if (!aiProvider) {
-            return this.markdownParserContexts.get(runKey)?.aiProvider ?? this.currentAiProvider
+            return this.providersByRunKey.get(runKey) ?? this.currentAiProvider
         }
 
-        const existingContext = this.markdownParserContexts.get(runKey)
-        if (existingContext) {
-            existingContext.aiProvider = aiProvider
-        }
+        this.providersByRunKey.set(runKey, aiProvider)
         if (runKey === this.aiChatThreadId) {
             this.currentAiProvider = aiProvider
         }
@@ -153,32 +110,77 @@ export default class AiInteractionService {
             if (!this.workspaceId || !this.aiChatThreadId)
                 throw new Error('AiInteractionService requires workspaceId and aiChatThreadId')
 
-            const subject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
+            const subject = this.getChatResponseSubject()
 
             // Only unsubscribe previous subscriptions for THIS specific thread, not all threads
-            servicesStore.getData('nats')!.getSubscriptions([subject]).forEach(sub => sub.unsubscribe())
+            servicesStore.getData('nats')!.getSubscriptions([subject]).forEach((sub: { unsubscribe: () => void }) => sub.unsubscribe())
 
             console.log(`[AI_INTERACTION] Subscribing to NATS response channel: ${subject}`)
             this.subscribeToChatMessages()
+            void this.resumePipelineEventStream()
         } catch (error) {
             console.error('Failed to initialize NATS service:', error)
         }
     }
 
     async subscribeToChatMessages() {
-        const subject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
+        const subject = this.getChatResponseSubject()
         // Subscribe to responses for this specific workspace and thread
         servicesStore.getData('nats')!.subscribe(
             subject,
-            (data, msg) => {
+            (data: any, _msg: unknown) => {
                 this.onChatMessageResponse(data)
             }
         )
     }
 
+    shouldProcessPipelinePayload(data: any): boolean {
+        const pipelineEventId = typeof data?.pipelineEventId === 'string' ? data.pipelineEventId : ''
+        const pipelineStreamSeq = typeof data?.pipelineStreamSeq === 'number' ? data.pipelineStreamSeq : 0
+
+        if (pipelineEventId) {
+            if (this.pipelineEventIds.has(pipelineEventId)) {
+                this.pipelineLocalStreamSeq = Math.max(this.pipelineLocalStreamSeq, pipelineStreamSeq)
+                return false
+            }
+            this.pipelineEventIds.add(pipelineEventId)
+        }
+
+        this.pipelineLocalStreamSeq = Math.max(this.pipelineLocalStreamSeq, pipelineStreamSeq)
+        return true
+    }
+
+    async resumePipelineEventStream(): Promise<void> {
+        try {
+            const result = await servicesStore.getData('nats')!.request(
+                AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
+                {
+                    token: await AuthService.getTokenSilently(),
+                    workspaceId: this.workspaceId,
+                    aiChatThreadId: this.aiChatThreadId,
+                    localStreamSeq: this.pipelineLocalStreamSeq,
+                },
+            ) as PipelineReplayResult
+            if (result?.error) {
+                console.error('[AI_INTERACTION] CHAT_PIPELINE_RESUME failed:', result.error)
+                return
+            }
+            for (const event of result.events ?? []) {
+                this.onChatMessageResponse({
+                    ...event.payload,
+                    pipelineStreamSeq: event.streamSequence,
+                })
+            }
+        } catch (error) {
+            console.error('[AI_INTERACTION] CHAT_PIPELINE_RESUME failed:', error)
+        }
+    }
+
 
     onChatMessageResponse(data: any) {
         try {
+            if (!this.shouldProcessPipelinePayload(data)) return
+
             if (data?.error) {
                 alert(`Failed to receive chat message: \n${JSON.stringify(data.error)}`)
                 return
@@ -197,6 +199,7 @@ export default class AiInteractionService {
             const segmentBase = {
                 aiProvider,
                 aiChatThreadId: this.aiChatThreadId,
+                usesServerProseMirror: true,
                 ...(generationRun ? { generationRun } : {}),
             }
 
@@ -279,6 +282,18 @@ export default class AiInteractionService {
                 return
             }
 
+            if (content.status === STREAM_STATUS.MEDIA_GENERATION_SKIPPED) {
+                console.log('[AI_INTERACTION] MEDIA_GENERATION_SKIPPED received:', {
+                    generationRequestId: content.generationRequestId,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'media_generation_skipped',
+                    generationRequestId: content.generationRequestId || '',
+                    ...segmentBase,
+                })
+                return
+            }
+
             if (content.status === STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR) {
                 console.log('[AI_INTERACTION] IMAGE_BRANCH_RESOLUTION_ERROR received:', content)
                 this.segmentsReceiver.receiveSegment({
@@ -300,6 +315,7 @@ export default class AiInteractionService {
                     responseId: content.responseId,
                     revisedPrompt: content.revisedPrompt,
                     aiProvider: aiProvider || '',
+                    usesServerProseMirror: true,
                     imageModelProvider: content.imageModelProvider || content.aiProvider || '',
                     imageModelId: content.imageModelId || '',
                     ...(generationRun ? { generationRun } : {}),
@@ -395,37 +411,6 @@ export default class AiInteractionService {
                 })
                 return
             }
-
-            if (content.status === STREAM_STATUS.COLLAPSIBLE_START) {
-                this.segmentsReceiver.receiveSegment({
-                    type: 'collapsible_start',
-                    collapsibleTitle: content.collapsibleTitle || 'Image generation prompt',
-                    ...segmentBase,
-                })
-                return
-            }
-
-            if (content.status === STREAM_STATUS.COLLAPSIBLE_END) {
-                this.segmentsReceiver.receiveSegment({
-                    type: 'collapsible_end',
-                    ...segmentBase,
-                })
-                return
-            }
-
-            // Route raw tokens through markdown parser (exact replication of backend pattern)
-            if (content.status === STREAM_STATUS.START_STREAM) {
-                // Initialize fresh parser instance for this stream
-                this.initMarkdownParser(generationRun, aiProvider || undefined)
-                // startParsing() emits START_STREAM event via subscribeToTokenParse callback
-                this.markdownParserContexts.get(runKey)?.parser.startParsing()
-            } else if (content.status === STREAM_STATUS.STREAMING && content.text) {
-                // Feed raw token to parser - it will emit parsed segments via subscribeToTokenParse callback
-                this.markdownParserContexts.get(runKey)?.parser.parseToken(content.text)
-            } else if (content.status === STREAM_STATUS.END_STREAM) {
-                // stopParsing() will emit END_STREAM event internally via subscribeToTokenParse callback
-                this.markdownParserContexts.get(runKey)?.parser.stopParsing()
-            }
         } catch (error) {
             console.error('[AI_INTERACTION] onChatMessageResponse failed:', { data }, error)
         }
@@ -433,17 +418,13 @@ export default class AiInteractionService {
 
     async sendChatMessage({
         messages,
-        aiModel,
-        aiModels,
-        useMultipleModels,
+        aiReasoningModels,
         useMultipleReasoningModels,
         useMultipleImageModels,
         useMultipleVideoModels,
-        aiImageModel,
         aiImageModels,
         imageSize,
         imageConfigGroups,
-        aiVideoModel,
         aiVideoModels,
         videoAspectRatio,
         videoResolution,
@@ -453,16 +434,31 @@ export default class AiInteractionService {
         referencedFeatureIds,
         imageBranchCandidateSnapshot,
         workspaceContextSnapshot,
+        canvasVisibleArea,
+        proseMirrorInitialDoc,
+        proseMirrorBaseVersion,
     }: SendChatMessageOptions) {
         const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
+
+        // When a section flag is omitted, infer multi-model mode from the model
+        // count; otherwise multi off collapses the section to its first model.
+        const inferModeFromModels = (modelIds: string[] | undefined): boolean => (modelIds?.length ?? 0) > 1
+        const reasoningModelsEnabled = useMultipleReasoningModels ?? inferModeFromModels(aiReasoningModels)
+        const imageModelsEnabled = useMultipleImageModels ?? inferModeFromModels(aiImageModels)
+        const videoModelsEnabled = useMultipleVideoModels ?? inferModeFromModels(aiVideoModels)
+        const collapseForMode = (modelIds: string[] | undefined, useMultiple: boolean): string[] =>
+            useMultiple ? (modelIds ?? []) : (modelIds ?? []).slice(0, 1)
+        const reasoningModelIds = collapseForMode(aiReasoningModels, reasoningModelsEnabled)
+        const imageModelIds = collapseForMode(aiImageModels, imageModelsEnabled)
+        const videoModelIds = collapseForMode(aiVideoModels, videoModelsEnabled)
 
         const payload: Record<string, any> = {
             token: await AuthService.getTokenSilently(),
             workspaceId: this.workspaceId,
             aiChatThreadId: this.aiChatThreadId,
             messages,
-            aiModel,
+            aiReasoningModels: reasoningModelIds,
             organizationId
         }
 
@@ -480,41 +476,41 @@ export default class AiInteractionService {
             payload.workspaceContextSnapshot = workspaceContextSnapshot
         }
 
+        if (canvasVisibleArea) {
+            payload.canvasVisibleArea = canvasVisibleArea
+        }
+
+        if (proseMirrorInitialDoc) {
+            payload.proseMirrorInitialDoc = proseMirrorInitialDoc
+        }
+
+        if (typeof proseMirrorBaseVersion === 'number') {
+            payload.proseMirrorBaseVersion = proseMirrorBaseVersion
+        }
+
         // Add image model routing options if an image model is selected
-        if (aiImageModel) {
-            payload.aiImageModel = aiImageModel
+        if (imageModelIds.length > 0) {
+            payload.aiImageModels = imageModelIds
             payload.imageSize = imageSize || 'auto'
         }
 
         // Add video model routing options if a video model is selected. The
         // text model decides between generate_image vs generate_video at runtime
         // when both are present — see ImageBranchResolver + LangGraph routing.
-        if (aiVideoModel) {
-            payload.aiVideoModel = aiVideoModel
+        if (videoModelIds.length > 0) {
+            payload.aiVideoModels = videoModelIds
             if (videoAspectRatio) payload.videoAspectRatio = videoAspectRatio
             if (videoResolution) payload.videoResolution = videoResolution
             if (videoDuration) payload.videoDuration = videoDuration
             if (videoSourceForExtension) payload.videoSourceForExtension = videoSourceForExtension
         }
 
-        const legacyUseMultipleModels = Boolean(useMultipleModels)
-        const inferModeFromModels = (modelIds: string[] | undefined): boolean =>
-            useMultipleModels === undefined ? (modelIds?.length ?? 0) > 1 : legacyUseMultipleModels
-        const reasoningModelsEnabled = useMultipleReasoningModels ?? inferModeFromModels(aiModels)
-        const imageModelsEnabled = useMultipleImageModels ?? inferModeFromModels(aiImageModels)
-        const videoModelsEnabled = useMultipleVideoModels ?? inferModeFromModels(aiVideoModels)
-        const reasoningModelIds = reasoningModelsEnabled
-            ? aiModels ?? []
-            : aiModel ? [aiModel] : []
-        const imageModelIds = imageModelsEnabled
-            ? aiImageModels ?? []
-            : aiImageModel ? [aiImageModel] : []
-        const videoModelIds = videoModelsEnabled
-            ? aiVideoModels ?? []
-            : aiVideoModel ? [aiVideoModel] : []
-        const selectedModelCount = reasoningModelIds.length + imageModelIds.length + videoModelIds.length
-        const scalarModelCount = (aiModel ? 1 : 0) + (aiImageModel ? 1 : 0) + (aiVideoModel ? 1 : 0)
-        if (selectedModelCount > scalarModelCount) {
+        // The media-generation matrix is needed only when some section carries
+        // more than one model; a single model per section runs the plain path.
+        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, videoModelIds.length]
+        const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
+        const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
+        if (totalSelectedModelCount > sectionsWithSelection) {
             payload.mediaGenerationRequest = {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: uuidv4(),
@@ -541,7 +537,6 @@ export default class AiInteractionService {
         console.log(`[AI_INTERACTION] Publishing message to ${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE}`, {
             workspaceId: this.workspaceId,
             aiChatThreadId: this.aiChatThreadId,
-            aiModel,
             reasoningModelCount: reasoningModelIds.length,
             messageCount: messages.length,
             imageModelCount: imageModelIds.length,
@@ -567,12 +562,11 @@ export default class AiInteractionService {
     }
 
     disconnect() {
-        const subject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
-        for (const runKey of Array.from(this.markdownParserContexts.keys())) {
-            this.cleanupMarkdownParserContext(runKey)
-        }
-        servicesStore.getData('nats')?.getSubscriptions([subject]).forEach(sub => sub.unsubscribe())
+        const subject = this.getChatResponseSubject()
+        servicesStore.getData('nats')?.getSubscriptions([subject]).forEach((sub: { unsubscribe: () => void }) => sub.unsubscribe())
         this.currentAiProvider = null
+        this.providersByRunKey.clear()
+        this.pipelineEventIds.clear()
     }
 
     destroy() {

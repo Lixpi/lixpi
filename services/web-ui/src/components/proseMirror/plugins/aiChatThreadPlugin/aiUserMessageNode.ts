@@ -7,8 +7,17 @@ import {
     type ContextPreviewTileInstance,
 } from '$src/components/contextPreview/index.ts'
 import type { CanvasNode } from '@lixpi/constants'
+import {
+    aiUserMessageNodeSpec,
+    aiUserMessageNodeType,
+    normalizeReferenceNodeIds,
+} from '@lixpi/prosemirror'
 
-export const aiUserMessageNodeType = 'aiUserMessage'
+export {
+    aiUserMessageNodeSpec,
+    aiUserMessageNodeType,
+    normalizeReferenceNodeIds,
+}
 
 export type AiUserMessageContextPreviewRenderer = {
     getNodeById: (nodeId: string) => CanvasNode | undefined
@@ -25,67 +34,6 @@ function createId(): string {
         return crypto.randomUUID()
     }
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-function normalizeReferenceNodeIds(value: unknown): string[] {
-    const rawIds = Array.isArray(value)
-        ? value
-        : typeof value === 'string' && value.trim()
-            ? parseReferenceNodeIds(value)
-            : []
-    const ids: string[] = []
-    const seen = new Set<string>()
-    for (const rawId of rawIds) {
-        const nodeId = typeof rawId === 'string' ? rawId.trim() : ''
-        if (!nodeId || seen.has(nodeId)) continue
-        seen.add(nodeId)
-        ids.push(nodeId)
-    }
-    return ids
-}
-
-function parseReferenceNodeIds(value: string): unknown[] {
-    try {
-        const parsed = JSON.parse(value)
-        return Array.isArray(parsed) ? parsed : []
-    } catch {
-        return value.split(',')
-    }
-}
-
-export const aiUserMessageNodeSpec = {
-    attrs: {
-        id: { default: '' },
-        createdAt: { default: 0 },
-        referenceNodeIds: { default: [] },
-    },
-    content: '(paragraph | block)+',
-    group: 'block',
-    draggable: false,
-    parseDOM: [
-        {
-            tag: 'div.ai-user-message',
-            getAttrs(dom: HTMLElement) {
-                return {
-                    id: dom.getAttribute('data-id') || '',
-                    createdAt: Number(dom.getAttribute('data-created-at') || 0),
-                    referenceNodeIds: normalizeReferenceNodeIds(dom.getAttribute('data-reference-node-ids') || ''),
-                }
-            },
-        },
-    ],
-    toDOM(node: any) {
-        return [
-            'div',
-            {
-                class: 'ai-user-message',
-                'data-id': node.attrs.id,
-                'data-created-at': String(node.attrs.createdAt || 0),
-                'data-reference-node-ids': JSON.stringify(normalizeReferenceNodeIds(node.attrs.referenceNodeIds)),
-            },
-            0,
-        ]
-    },
 }
 
 export function createAiUserMessageNodeAttrs(): { id: string; createdAt: number } {

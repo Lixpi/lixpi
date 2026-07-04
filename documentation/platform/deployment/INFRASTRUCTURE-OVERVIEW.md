@@ -104,7 +104,7 @@ flowchart TB
 | Component | AWS Resource | Purpose |
 |-----------|--------------|---------|
 | `web-ui` | S3 + CloudFront | Static SPA served from a global CDN with HTTP/3 |
-| `api` | ECS/Fargate (private subnets) | CRUD, auth callout, DynamoDB access, AND in-process LangGraph LLM workflow (token streaming, image generation, vendor SDK egress) |
+| `api` | ECS/Fargate (private subnets) | CRUD, auth callout, DynamoDB access, AND in-process LangGraph LLM workflow (pipeline events, ProseMirror transcript steps, image generation, vendor SDK egress) |
 | `nex` | ECS/Fargate (private subnets, 1 task) | NATS NEX node — runs background workloads (the hourly AI-models sync), writes the `AI_MODELS_LIST` table. See [NEX Execution Engine](./NEX-EXECUTION-ENGINE.md) |
 | `nats` | ECS/Fargate (public subnets, 3 tasks) | Message bus — clients connect directly |
 | `cert-manager` | Lambda (Caddy + ACME) | Issues real TLS certs for the NATS domain |
@@ -255,13 +255,13 @@ The `api` service follows the standard pattern: a Docker image pushed to ECR, a 
 |---------|-----|--------|---------|-----------|---------|-------|
 | `api` | 512 | 1024 MB | Private | no | none in current AWS topology | configurable |
 
-The CPU/memory baseline is sized to accommodate the in-process LangGraph LLM workflow (token streaming + image generation + vendor SDK egress) that previously ran in the separate `llm-api` Fargate task.
+The CPU/memory baseline is sized to accommodate the in-process LangGraph LLM workflow (live pipeline events, ProseMirror step assembly, image generation, and vendor SDK egress) that previously ran in the separate `llm-api` Fargate task.
 
 ### Why No Load Balancer for NATS Subjects?
 
 For NATS request/reply subjects, there is nothing HTTP-shaped to route. The service pulls work off NATS subjects using **queue groups**. When you add another `api` task, it joins the same queue group, NATS starts distributing messages across the tasks, and no external load balancer needs to know about that subject.
 
-That does not remove the need for an HTTP front door for byte routes. The Express routes under `/api/images`, `/api/videos`, `/api/workspaces`, `/api/features`, and `/api/media-library` exist in the API service; exposing them from the hosted SPA is a separate deployment concern.
+That does not remove the need for an HTTP front door for byte routes. The Express routes under `/api/files`, `/api/workspaces`, `/api/features`, and `/api/media-library` exist in the API service; exposing them from the hosted SPA is a separate deployment concern.
 
 ### Deployment Strategy
 
@@ -420,7 +420,7 @@ sequenceDiagram
 
 Two things to note:
 
-1. **Stream tokens flow directly from API to NATS.** The API does the setup work (DynamoDB lookup, context enrichment, auth) then runs the LangGraph workflow in-process and publishes tokens to a subject the browser is already subscribed to. Streaming latency is dominated by the AI provider, not by Lixpi's infrastructure.
+1. **AI events flow directly from API to NATS.** The API does the setup work (DynamoDB lookup, context enrichment, auth), then runs the LangGraph workflow in-process. Live pipeline events publish to a subject the browser is already subscribed to, while AI chat text is mirrored into ProseMirror document steps with short-lived JetStream replay logs. Streaming latency is dominated by the AI provider, not by Lixpi's infrastructure.
 2. **Scale-out is drop-in.** Add a second `api` task and NATS starts splitting `ai.interaction.chat.sendMessage` messages between the two workers automatically. No load balancer config to update.
 
 ## Related Pages

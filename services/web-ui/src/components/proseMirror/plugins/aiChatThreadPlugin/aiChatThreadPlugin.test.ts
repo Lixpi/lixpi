@@ -1,17 +1,31 @@
 'use strict'
 
 import { describe, expect, it, vi } from 'vitest'
-import { beforeEach, beforeAll } from 'vitest'
+import { afterEach, beforeEach, beforeAll } from 'vitest'
 import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
 import { EditorState } from 'prosemirror-state'
+import { documentStore } from '$src/stores/documentStore.ts'
 import { STOP_AI_CHAT_META, USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
 import {
     doc,
+    createStateWithTextSelection,
     findNodePosition,
     schema,
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
 import { nodes as sharedNodes } from '$src/components/proseMirror/components/schema.ts'
+
+vi.mock('prosemirror-transform', () => ({
+    Step: {
+        fromJSON: vi.fn(() => ({
+            apply: vi.fn((doc: unknown) => ({
+                doc,
+                failed: null,
+                maps: [],
+            })),
+        })),
+    },
+}))
 
 const schemaWithFeatureReference = new Schema({
     nodes: {
@@ -30,11 +44,21 @@ function createPlugin(sendAiRequestHandler = vi.fn(), stopAiRequestHandler = vi.
 }
 
 const alertMock = vi.fn()
+let consoleWarnSpy: { mockRestore: () => void } | null = null
+let consoleErrorSpy: { mockRestore: () => void } | null = null
 beforeAll(() => {
     ;(globalThis as any).alert = alertMock
 })
 beforeEach(() => {
     alertMock.mockReset()
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+})
+afterEach(() => {
+    consoleWarnSpy?.mockRestore()
+    consoleWarnSpy = null
+    consoleErrorSpy?.mockRestore()
+    consoleErrorSpy = null
 })
 
 function collectNodes(state: EditorState, nodeType: string): ProseMirrorNode[] {
@@ -136,7 +160,7 @@ function makeFeatureReferenceParagraphMessage(
 function makeThread(attrs: Record<string, unknown> = {}, children: ProseMirrorNode[] = []): ProseMirrorNode {
     return schema.nodes.aiChatThread.create({
         threadId: 'thread-1',
-        aiModel: 'Anthropic:claude-sonnet-4-6',
+        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
         ...attrs,
     }, children)
 }
@@ -158,10 +182,9 @@ describe('aiChatThreadPlugin — local media response templates', () => {
             doc: doc(
                 makeThread(
                     {
-                        aiModel: selectedReasoningModels[0],
-                        aiModels: JSON.stringify(selectedReasoningModels),
+                        aiReasoningModels: JSON.stringify(selectedReasoningModels),
                         useMultipleReasoningModels: true,
-                        aiImageModel: imageModel,
+                        aiImageModels: JSON.stringify([imageModel]),
                         imageGenerationSize: 'auto',
                     },
                     [makeUserMessage('Swap the characters')]
@@ -194,11 +217,9 @@ describe('aiChatThreadPlugin — local media response templates', () => {
         await Promise.resolve()
 
         expect(sendAiRequestHandler).toHaveBeenCalledWith(expect.objectContaining({
-            aiModel: selectedReasoningModels[0],
-            aiModels: selectedReasoningModels,
+            aiReasoningModels: selectedReasoningModels,
             imageOptions: expect.objectContaining({
-                aiImageModel: imageModel,
-                aiImageModels: [],
+                aiImageModels: [imageModel],
                 imageGenerationSize: 'auto',
             }),
             threadId: 'thread-1',
@@ -225,7 +246,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const state = EditorState.create({
             doc: doc(
                 makeThread(
-                    { threadId: 'thread-featured', aiModel: 'Anthropic:claude-sonnet-4-6' },
+                    { threadId: 'thread-featured', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
                     [userMessage, responseMessageWithFeature]
                 )
             ),
@@ -285,9 +306,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 makeThread(
                     {
                         threadId: 'thread-image-config',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
                         useMultipleImageModels: true,
-                        aiImageModel: 'Google:gemini-2.5-flash-image',
                         aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
                         imageGenerationConfigGroups,
                     },
@@ -339,9 +359,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 makeThread(
                     {
                         threadId: 'thread-video-config',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
                         useMultipleVideoModels: true,
-                        aiVideoModel: 'OpenAI:o4-mini',
                         aiVideoModels: JSON.stringify(['OpenAI:o4-mini']),
                         videoGenerationConfigGroups,
                         videoAspectRatio: '16:9',
@@ -385,7 +404,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 schemaWithFeatureReference.nodes.aiChatThread.create(
                     {
                         threadId: 'thread-featured-refs',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
                     },
                     [
                         makeFeatureReferenceParagraphMessage(
@@ -465,11 +484,11 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const plugin = createPlugin(sendAiRequestHandler)
 
         const threadOne = makeThread(
-            { threadId: 'thread-a', aiModel: 'Anthropic:claude-sonnet-4-6' },
+            { threadId: 'thread-a', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
             [makeUserMessage('Thread one prompt')]
         )
         const threadTwo = makeThread(
-            { threadId: 'thread-b', aiModel: 'Anthropic:claude-sonnet-4-6' },
+            { threadId: 'thread-b', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
             [makeUserMessage('Thread two prompt')]
         )
 
@@ -499,7 +518,161 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         expect(joined).not.toContain('Thread two prompt')
     })
 
-    it('expands legacy multi-model settings into image/video request options', async () => {
+    it('falls back to active-thread scope when thread context metadata is unavailable', async () => {
+        const sendAiRequestHandler = vi.fn()
+        const plugin = createPlugin(sendAiRequestHandler)
+
+        let currentThreadPos: number | null = null
+
+        const state = EditorState.create({
+            doc: doc(
+                makeThread(
+                    {
+                        threadId: 'thread-workspace',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                        threadContext: 'Workspace',
+                        workspaceSelected: true,
+                    },
+                    [makeUserMessage('Workspace prompt')],
+                ),
+                makeThread(
+                    {
+                        threadId: 'thread-current',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                        threadContext: 'Workspace',
+                        workspaceSelected: false,
+                    },
+                    [makeUserMessage('Current thread prompt')],
+                ),
+            ),
+            schema,
+            plugins: [plugin],
+        })
+
+        state.doc.descendants((node, pos) => {
+            if (node.type.name === 'aiChatThread' && node.attrs.threadId === 'thread-current') {
+                currentThreadPos = pos
+                return false
+            }
+            return true
+        })
+
+        expect(currentThreadPos).not.toBeNull()
+
+        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
+            threadId: 'thread-current',
+            nodePos: currentThreadPos,
+        })
+        state.applyTransaction(trigger)
+
+        await Promise.resolve()
+
+        const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
+        expect(payload).toBeTruthy()
+        expect(payload.threadId).toBe('thread-current')
+        expect(payload.messages).toHaveLength(1)
+
+        const messageContent = payload.messages[0].content
+        expect(typeof messageContent).toBe('string')
+        expect(messageContent).toContain('Current thread prompt')
+        expect(messageContent).not.toContain('Workspace prompt')
+    })
+
+    it('updates ai reasoning model dropdown selection into thread attrs', () => {
+        const setMetaValuesSpy = vi.spyOn(documentStore, 'setMetaValues').mockImplementation(() => {})
+
+        const plugin = createPlugin(vi.fn())
+        const state = EditorState.create({
+            doc: doc(makeThread({
+                threadId: 'thread-dropdown',
+                aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+            }, [makeUserMessage('dropdown selection')])),
+            schema,
+            plugins: [plugin],
+        })
+
+        const threadPos = findNodePosition(state.doc, 'aiChatThread')
+        expect(threadPos).not.toBeNull()
+
+        const transaction = state.tr.setMeta('dropdownOptionSelected', {
+            dropdownId: 'ai-model-dropdown-thread',
+            nodePos: threadPos! + 1,
+            option: {
+                provider: 'OpenAI',
+                model: 'o4-mini',
+            },
+        })
+
+        const { state: nextState } = state.applyTransaction(transaction)
+        const nextThread = nextState.doc.nodeAt(threadPos!)
+
+        expect(nextThread?.attrs.aiReasoningModels).toBe('["OpenAI:o4-mini"]')
+        expect(setMetaValuesSpy).toHaveBeenCalledWith({ requiresSave: true })
+
+        setMetaValuesSpy.mockRestore()
+    })
+
+    it('updates threadContext on thread-context dropdown selection and requires saving', () => {
+        const setMetaValuesSpy = vi.spyOn(documentStore, 'setMetaValues').mockImplementation(() => {})
+
+        const plugin = createPlugin(vi.fn())
+
+        const state = EditorState.create({
+            doc: doc(makeThread({
+                threadId: 'thread-context',
+                threadContext: 'Thread',
+            }, [makeUserMessage('thread context update')])),
+            schema,
+            plugins: [plugin],
+        })
+
+        const threadPos = findNodePosition(state.doc, 'aiChatThread')
+        expect(threadPos).not.toBeNull()
+
+        const transaction = state.tr.setMeta('dropdownOptionSelected', {
+            dropdownId: 'thread-context-dropdown-thread',
+            nodePos: threadPos! + 1,
+            option: {
+                value: 'Workspace',
+            },
+        })
+
+        const { state: nextState } = state.applyTransaction(transaction)
+        const nextThread = nextState.doc.nodeAt(threadPos!)
+
+        expect(setMetaValuesSpy).toHaveBeenCalledWith({ requiresSave: true })
+        expect(nextThread?.attrs.threadContext).toBeUndefined()
+
+        setMetaValuesSpy.mockRestore()
+    })
+
+    it('blocks paste inside an aiChatThread and allows it outside', () => {
+        const plugin = createPlugin(vi.fn())
+
+        const state = EditorState.create({
+            doc: doc(makeThread({
+                threadId: 'thread-paste',
+            }, [makeUserMessage('paste test')])),
+            schema,
+            plugins: [plugin],
+        })
+
+        const threadPos = findNodePosition(state.doc, 'aiChatThread')
+        const stateInsideThread = createStateWithTextSelection(state.doc, threadPos! + 1, threadPos! + 1)
+
+        const handlePaste = plugin.spec.props.handlePaste
+        expect(handlePaste).toBeDefined()
+
+        const insidePaste = handlePaste!({ state: stateInsideThread } as any, {} as ClipboardEvent, null as any)
+        const outsidePaste = handlePaste!({
+            state: createStateWithTextSelection(state.doc, state.doc.content.size, state.doc.content.size),
+        } as any, {} as ClipboardEvent, null as any)
+
+        expect(insidePaste).toBe(true)
+        expect(outsidePaste).toBe(false)
+    })
+
+    it('passes section multi-model settings into image/video request options', async () => {
         const sendAiRequestHandler = vi.fn()
         const plugin = createPlugin(sendAiRequestHandler)
 
@@ -508,17 +681,16 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 makeThread(
                     {
                         threadId: 'thread-legacy',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
-                        aiModels: JSON.stringify([
+                        aiReasoningModels: JSON.stringify([
                             'Anthropic:claude-sonnet-4-6',
                             'OpenAI:gpt-4.1',
                         ]),
-                        useMultipleModels: true,
-                        aiImageModel: 'Google:gemini-2.5-flash-image',
+                        useMultipleReasoningModels: true,
+                        useMultipleImageModels: true,
+                        useMultipleVideoModels: true,
                         aiImageModels: JSON.stringify([
                             'Google:gemini-2.5-flash-image',
                         ]),
-                        aiVideoModel: 'OpenAI:o4-mini',
                         aiVideoModels: JSON.stringify([
                             'OpenAI:o4-mini',
                         ]),
@@ -544,17 +716,15 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         await Promise.resolve()
 
         const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
-        expect(payload.aiModels).toEqual([
+        expect(payload.aiReasoningModels).toEqual([
             'Anthropic:claude-sonnet-4-6',
             'OpenAI:gpt-4.1',
         ])
         expect(payload.imageOptions).toMatchObject({
-            aiImageModel: 'Google:gemini-2.5-flash-image',
             aiImageModels: ['Google:gemini-2.5-flash-image'],
             imageGenerationSize: '1024x1024',
         })
         expect(payload.videoOptions).toMatchObject({
-            aiVideoModel: 'OpenAI:o4-mini',
             aiVideoModels: ['OpenAI:o4-mini'],
             videoAspectRatio: '16:9',
             videoResolution: '1080p',
@@ -572,9 +742,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 makeThread(
                     {
                         threadId: 'thread-invalid-image-models',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
                         useMultipleImageModels: true,
-                        aiImageModel: 'Google:gemini-2.5-flash-image',
                         aiImageModels: 'not-json',
                     },
                     [makeUserMessage('Image model payload validation')]
@@ -594,7 +763,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         expect(sendAiRequestHandler).not.toHaveBeenCalled()
     })
 
-    it('falls back to configured single image model when multi-model list is invalid but mode is single', async () => {
+    it('collapses a multi-entry image list to the first model when image multi-mode is disabled', async () => {
         const sendAiRequestHandler = vi.fn()
         const plugin = createPlugin(sendAiRequestHandler)
 
@@ -602,12 +771,14 @@ describe('aiChatThreadPlugin — request payload construction', () => {
             doc: doc(
                 makeThread(
                     {
-                        threadId: 'thread-single-image-invalid-list',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
-                        aiImageModel: 'Google:gemini-2.5-flash-image',
-                        aiImageModels: 'not-json',
+                        threadId: 'thread-single-image-collapse',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                        aiImageModels: JSON.stringify([
+                            'Google:gemini-2.5-flash-image',
+                            'OpenAI:gpt-image-1',
+                        ]),
                     },
-                    [makeUserMessage('Single-image-model fallback')]
+                    [makeUserMessage('Single-image-model collapse')]
                 )
             ),
             schema,
@@ -615,7 +786,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         })
 
         const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
-            threadId: 'thread-single-image-invalid-list',
+            threadId: 'thread-single-image-collapse',
             nodePos: findNodePosition(state.doc, 'aiChatThread'),
         })
         state.applyTransaction(trigger)
@@ -624,8 +795,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
 
         const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
         expect(payload.imageOptions).toMatchObject({
-            aiImageModel: 'Google:gemini-2.5-flash-image',
-            aiImageModels: [],
+            aiImageModels: ['Google:gemini-2.5-flash-image'],
         })
     })
 
@@ -638,9 +808,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 makeThread(
                     {
                         threadId: 'thread-invalid-video-models',
-                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
                         useMultipleVideoModels: true,
-                        aiVideoModel: 'OpenAI:o4-mini',
                         aiVideoModels: 'not-json',
                     },
                     [makeUserMessage('Video model payload validation')]
@@ -667,7 +836,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const state = EditorState.create({
             doc: doc(
                 makeThread(
-                    { threadId: 'thread-stop', aiModel: 'Anthropic:claude-sonnet-4-6' },
+                    { threadId: 'thread-stop', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
                     [makeUserMessage('Stopping request')]
                 )
             ),
@@ -688,7 +857,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const plugin = createPlugin()
 
         const thread = makeThread(
-            { threadId: 'thread-delete', aiModel: 'Anthropic:claude-sonnet-4-6' },
+            { threadId: 'thread-delete', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
             [makeUserMessage('Only message')]
         )
         const state = EditorState.create({

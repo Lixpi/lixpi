@@ -163,6 +163,15 @@ function containerContainsGeneratedMedia(container: ProseMirrorJsonNode, locator
     return Boolean(container.content?.some((child) => containerContainsGeneratedMedia(child, locator)))
 }
 
+function nodeRunAttrsMatchLocator(node: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): boolean {
+    const attrs = node.attrs ?? {}
+    if (locator.mediaRunId && attrs.mediaRunId === locator.mediaRunId) return true
+    if (locator.reasoningRunId && attrs.reasoningRunId === locator.reasoningRunId) return true
+    if (locator.mediaRunId || locator.reasoningRunId) return false
+    if (locator.reasoningModelId && attrs.reasoningModelId === locator.reasoningModelId) return true
+    return false
+}
+
 // A multi-model response holds one aiReasoningSection per reasoning model; the
 // content owner for a given image/video is the section whose model produced it
 // so each generated-media projection shows only its matching model branch.
@@ -172,6 +181,7 @@ function getReasoningContainer(responseNode: ProseMirrorJsonNode, locator: Gener
         if (locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.fileId && !locator.reasoningModelId) {
             return responseNode
         }
+        if (nodeRunAttrsMatchLocator(responseNode, locator)) return responseNode
         return containerContainsGeneratedMedia(responseNode, locator) ? responseNode : null
     }
 

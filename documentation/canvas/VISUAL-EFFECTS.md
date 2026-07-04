@@ -130,10 +130,10 @@ Do not route ordinary CSS background treatments through `FreeformGradientRendere
 | [`pixiGlassBorderRenderer.test.ts`](../../services/web-ui/src/utils/animations/gradients/pixiGlassBorderRenderer.test.ts) | Screen-space target lifecycle, stable displacement texture/source updates, capture visibility toggling, ring-only displacement pixels, and mesh cleanup |
 | [`shiftingGradientRenderer.test.ts`](../../services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.test.ts) | Singleton lifecycle, animation phase changes, pixels, subscriptions, resize redraw, patterns, and teardown |
 
-Run the web UI suite inside its container:
+Run the web UI suite via the shared test-runner image:
 
 ```bash
-docker exec lixpi-web-ui pnpm test:run
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui
 ```
 
 ## Shifting Gradient Background

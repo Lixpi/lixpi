@@ -1,0 +1,226 @@
+networks:
+    nats:
+        name: nats
+
+services:
+
+    # No container_name: this service is invoked via `docker compose run --rm`
+    # (never `up`/`exec`) so Compose creates a fresh, uniquely-named container
+    # per invocation — always reflects the current compose config, and
+    # concurrent invocations never collide on a fixed name.
+    lixpi-typescript-test-runner:
+        profiles: ["dev"]
+        image: lixpi/typescript-test-runner
+        build:
+            dockerfile: services/typescript-test-runner/Dockerfile
+            context: .
+        environment:
+            # web-ui source reads these via import.meta.env at module-eval time,
+            # including in code paths exercised by tests (e.g. VITE_API_URL in
+            # WorkspaceCanvas.ts) — mirrors the lixpi-web-ui service's env block.
+            VITE_MOCK_AUTH: ${VITE_MOCK_AUTH}
+            VITE_MOCK_AUTH0_DOMAIN: ${VITE_MOCK_AUTH0_DOMAIN}
+            VITE_API_URL: ${VITE_API_URL}
+            VITE_AUTH0_LOGIN_URL: ${VITE_AUTH0_LOGIN_URL}
+            VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
+            VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID}
+            VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
+            VITE_AUTH0_REDIRECT_URI: ${VITE_AUTH0_REDIRECT_URI}
+            VITE_STRIPE_PUBLIC_KEY: ${VITE_STRIPE_PUBLIC_KEY}
+            VITE_NATS_SERVER: ${VITE_NATS_SERVER}
+            # Shared content-addressable pnpm store (see the named volume
+            # below) — caches downloaded package content across runs. pnpm's
+            # store has its own locking, so concurrent ephemeral containers
+            # can safely read/write it at once. node_modules itself is a
+            # separate concern: it lives in each domain's directory (mounted
+            # below via the typescript-test-runner-node-modules-* volumes)
+            # so pnpm's linking step is incremental across runs instead of
+            # starting from an empty node_modules every time — the pnpm
+            # store alone only avoids re-downloading, not re-linking.
+            npm_config_store_dir: /pnpm-store
+        volumes:
+            - ./services/typescript-test-runner/run-tests.sh:/usr/src/service/run-tests.sh:cached
+            - typescript-test-runner-pnpm-store:/pnpm-store
+
+            # --- api domain (bind-mounts services/api's own files — same
+            #     package.json/pnpm-workspace.yaml/vitest.config.ts the
+            #     lixpi-api container uses, no separate copies) ---
+            - ./services/api/package.json:/usr/src/service/api/package.json:cached
+            - ./services/api/pnpm-workspace.yaml:/usr/src/service/api/pnpm-workspace.yaml:cached
+            - ./services/api/vitest.config.ts:/usr/src/service/api/vitest.config.ts:cached
+            - ./services/api/src:/usr/src/service/api/src:cached
+            - ./services/api/config:/usr/src/service/api/config:cached
+            - ./packages/lixpi/auth-service/package.json:/usr/src/service/api/packages/lixpi/auth-service/package.json:ro,cached
+            - ./packages/lixpi/auth-service/src:/usr/src/service/api/packages/lixpi/auth-service/src:ro,cached
+            - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/api/packages/lixpi/canvas-engine/package.json:ro,cached
+            - ./packages/lixpi/canvas-engine/src:/usr/src/service/api/packages/lixpi/canvas-engine/src:ro,cached
+            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/api/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
+            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/api/packages/lixpi/constants/nats-subjects.json:ro,cached
+            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/api/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
+            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/api/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/api/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/api/packages/lixpi/constants/ts/package.json:ro,cached
+            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/api/packages/lixpi/constants/ts/types.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/api/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/api/packages/lixpi/debug-tools/ts/package.json:ro,cached
+            - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/api/packages/lixpi/dynamodb-service/package.json:ro,cached
+            - ./packages/lixpi/dynamodb-service/src:/usr/src/service/api/packages/lixpi/dynamodb-service/src:ro,cached
+            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/api/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/api/packages/lixpi/nats-service/ts/package.json:ro,cached
+            - ./packages/lixpi/nats-auth-callout-service/package.json:/usr/src/service/api/packages/lixpi/nats-auth-callout-service/package.json:ro,cached
+            - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/service/api/packages/lixpi/nats-auth-callout-service/src:ro,cached
+            - ./packages/lixpi/prosemirror/package.json:/usr/src/service/api/packages/lixpi/prosemirror/package.json:ro,cached
+            - ./packages/lixpi/prosemirror/src:/usr/src/service/api/packages/lixpi/prosemirror/src:ro,cached
+
+            # --- api domain: persisted node_modules (see the
+            #     typescript-test-runner-node-modules-* comment above) ---
+            - typescript-test-runner-node-modules-api:/usr/src/service/api/node_modules
+            - typescript-test-runner-node-modules-api-auth-service:/usr/src/service/api/packages/lixpi/auth-service/node_modules
+            - typescript-test-runner-node-modules-api-canvas-engine:/usr/src/service/api/packages/lixpi/canvas-engine/node_modules
+            - typescript-test-runner-node-modules-api-constants-ts:/usr/src/service/api/packages/lixpi/constants/ts/node_modules
+            - typescript-test-runner-node-modules-api-debug-tools-ts:/usr/src/service/api/packages/lixpi/debug-tools/ts/node_modules
+            - typescript-test-runner-node-modules-api-dynamodb-service:/usr/src/service/api/packages/lixpi/dynamodb-service/node_modules
+            - typescript-test-runner-node-modules-api-nats-service-ts:/usr/src/service/api/packages/lixpi/nats-service/ts/node_modules
+            - typescript-test-runner-node-modules-api-nats-auth-callout-service:/usr/src/service/api/packages/lixpi/nats-auth-callout-service/node_modules
+            - typescript-test-runner-node-modules-api-prosemirror:/usr/src/service/api/packages/lixpi/prosemirror/node_modules
+
+            # --- web-ui domain (bind-mounts services/web-ui's own files — same
+            #     package.json/pnpm-workspace.yaml/vitest.config.ts the
+            #     lixpi-web-ui container uses, no separate copies) ---
+            - ./services/web-ui/package.json:/usr/src/service/web-ui/package.json:cached
+            - ./services/web-ui/pnpm-workspace.yaml:/usr/src/service/web-ui/pnpm-workspace.yaml:cached
+            - ./services/web-ui/vitest.config.ts:/usr/src/service/web-ui/vitest.config.ts:cached
+            - ./services/web-ui/src:/usr/src/service/web-ui/src:cached
+            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/web-ui/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
+            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/web-ui/packages/lixpi/constants/nats-subjects.json:ro,cached
+            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
+            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/web-ui/packages/lixpi/constants/ts/package.json:ro,cached
+            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/types.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/web-ui/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/web-ui/packages/lixpi/debug-tools/ts/package.json:ro,cached
+            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/package.json:ro,cached
+            - ./packages/lixpi/prosemirror/package.json:/usr/src/service/web-ui/packages/lixpi/prosemirror/package.json:ro,cached
+            - ./packages/lixpi/prosemirror/src:/usr/src/service/web-ui/packages/lixpi/prosemirror/src:ro,cached
+            - ./packages-vendor/shadcn-svelte/docs/src/lib:/usr/src/service/web-ui/packages/shadcn-svelte/lib:cached
+
+            # --- web-ui domain: persisted node_modules (see the
+            #     typescript-test-runner-node-modules-* comment above) ---
+            - typescript-test-runner-node-modules-web-ui:/usr/src/service/web-ui/node_modules
+            - typescript-test-runner-node-modules-web-ui-constants-ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/node_modules
+            - typescript-test-runner-node-modules-web-ui-debug-tools-ts:/usr/src/service/web-ui/packages/lixpi/debug-tools/ts/node_modules
+            - typescript-test-runner-node-modules-web-ui-nats-service-ts:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/node_modules
+            - typescript-test-runner-node-modules-web-ui-prosemirror:/usr/src/service/web-ui/packages/lixpi/prosemirror/node_modules
+
+            # --- nex domain (bind-mounts services/nex's own files, plus a
+            #     vitest.config.ts that services/nex didn't have before —
+            #     nex ran bare `vitest run` with no config file) ---
+            - ./services/nex/package.json:/usr/src/service/nex/package.json:cached
+            - ./services/nex/pnpm-workspace.yaml:/usr/src/service/nex/pnpm-workspace.yaml:cached
+            - ./services/nex/vitest.config.ts:/usr/src/service/nex/vitest.config.ts:cached
+            - ./services/nex/workloads:/usr/src/service/nex/workloads:cached
+            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/nex/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
+            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/nex/packages/lixpi/constants/nats-subjects.json:ro,cached
+            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/nex/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
+            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/nex/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/nex/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/nex/packages/lixpi/constants/ts/package.json:ro,cached
+            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/nex/packages/lixpi/constants/ts/types.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/nex/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/nex/packages/lixpi/debug-tools/ts/package.json:ro,cached
+            - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/nex/packages/lixpi/dynamodb-service/package.json:ro,cached
+            - ./packages/lixpi/dynamodb-service/src:/usr/src/service/nex/packages/lixpi/dynamodb-service/src:ro,cached
+            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/nex/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/nex/packages/lixpi/nats-service/ts/package.json:ro,cached
+
+            # --- nex domain: persisted node_modules (see the
+            #     typescript-test-runner-node-modules-* comment above) ---
+            - typescript-test-runner-node-modules-nex:/usr/src/service/nex/node_modules
+            - typescript-test-runner-node-modules-nex-constants-ts:/usr/src/service/nex/packages/lixpi/constants/ts/node_modules
+            - typescript-test-runner-node-modules-nex-debug-tools-ts:/usr/src/service/nex/packages/lixpi/debug-tools/ts/node_modules
+            - typescript-test-runner-node-modules-nex-dynamodb-service:/usr/src/service/nex/packages/lixpi/dynamodb-service/node_modules
+            - typescript-test-runner-node-modules-nex-nats-service-ts:/usr/src/service/nex/packages/lixpi/nats-service/ts/node_modules
+
+            # --- shared domain: this IS the source under test (read-write),
+            #     but mounted file-by-file like the domains above rather than
+            #     as a whole directory. Mounting the whole packages/lixpi dir
+            #     would make `pnpm install` write node_modules/.pnpm-store/
+            #     pnpm-lock.yaml straight onto the host through the bind
+            #     mount; enumerating files keeps those install artifacts
+            #     inside the container filesystem only ---
+            - ./packages/lixpi/pnpm-workspace.yaml:/usr/src/service/shared/pnpm-workspace.yaml:cached
+            - ./packages/lixpi/auth-service/package.json:/usr/src/service/shared/auth-service/package.json:cached
+            - ./packages/lixpi/auth-service/src:/usr/src/service/shared/auth-service/src:cached
+            - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/shared/canvas-engine/package.json:cached
+            - ./packages/lixpi/canvas-engine/src:/usr/src/service/shared/canvas-engine/src:cached
+            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/shared/constants/ai-interaction-constants.json:cached
+            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/shared/constants/nats-subjects.json:cached
+            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/shared/constants/ts/aws-resources.ts:cached
+            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/shared/constants/ts/index.ts:cached
+            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/shared/constants/ts/media-generation-layout-settings.ts:cached
+            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/shared/constants/ts/package.json:cached
+            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/shared/constants/ts/types.ts:cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/shared/debug-tools/ts/debug-tools.ts:cached
+            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/shared/debug-tools/ts/package.json:cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.test.ts:/usr/src/service/shared/debug-tools/ts/debug-tools.test.ts:cached
+            - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/shared/dynamodb-service/package.json:cached
+            - ./packages/lixpi/dynamodb-service/src:/usr/src/service/shared/dynamodb-service/src:cached
+            - ./packages/lixpi/nats-auth-callout-service/package.json:/usr/src/service/shared/nats-auth-callout-service/package.json:cached
+            - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/service/shared/nats-auth-callout-service/src:cached
+            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/shared/nats-service/ts/nats-service.ts:cached
+            - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/shared/nats-service/ts/package.json:cached
+            - ./packages/lixpi/nats-service/ts/nats-service.test.ts:/usr/src/service/shared/nats-service/ts/nats-service.test.ts:cached
+            - ./packages/lixpi/prosemirror/package.json:/usr/src/service/shared/prosemirror/package.json:cached
+            - ./packages/lixpi/prosemirror/src:/usr/src/service/shared/prosemirror/src:cached
+
+            # --- shared domain: persisted node_modules (see the
+            #     typescript-test-runner-node-modules-* comment above) ---
+            - typescript-test-runner-node-modules-shared-auth-service:/usr/src/service/shared/auth-service/node_modules
+            - typescript-test-runner-node-modules-shared-canvas-engine:/usr/src/service/shared/canvas-engine/node_modules
+            - typescript-test-runner-node-modules-shared-constants:/usr/src/service/shared/constants/node_modules
+            - typescript-test-runner-node-modules-shared-debug-tools-ts:/usr/src/service/shared/debug-tools/ts/node_modules
+            - typescript-test-runner-node-modules-shared-dynamodb-service:/usr/src/service/shared/dynamodb-service/node_modules
+            - typescript-test-runner-node-modules-shared-nats-auth-callout-service:/usr/src/service/shared/nats-auth-callout-service/node_modules
+            - typescript-test-runner-node-modules-shared-nats-service-ts:/usr/src/service/shared/nats-service/ts/node_modules
+            - typescript-test-runner-node-modules-shared-prosemirror:/usr/src/service/shared/prosemirror/node_modules
+        networks:
+            - nats
+        working_dir: /usr/src/service
+
+volumes:
+    typescript-test-runner-pnpm-store: # Shared pnpm content store for ephemeral test-runner containers
+
+    # Persisted node_modules for the test-runner's ephemeral containers (see
+    # the comment above npm_config_store_dir on lixpi-typescript-test-runner
+    # for why these are needed in addition to the pnpm store above). One
+    # volume per workspace directory that gets its own node_modules — the
+    # domain root plus each bind-mounted packages/lixpi/* member.
+    typescript-test-runner-node-modules-api:
+    typescript-test-runner-node-modules-api-auth-service:
+    typescript-test-runner-node-modules-api-canvas-engine:
+    typescript-test-runner-node-modules-api-constants-ts:
+    typescript-test-runner-node-modules-api-debug-tools-ts:
+    typescript-test-runner-node-modules-api-dynamodb-service:
+    typescript-test-runner-node-modules-api-nats-service-ts:
+    typescript-test-runner-node-modules-api-nats-auth-callout-service:
+    typescript-test-runner-node-modules-api-prosemirror:
+    typescript-test-runner-node-modules-web-ui:
+    typescript-test-runner-node-modules-web-ui-constants-ts:
+    typescript-test-runner-node-modules-web-ui-debug-tools-ts:
+    typescript-test-runner-node-modules-web-ui-nats-service-ts:
+    typescript-test-runner-node-modules-web-ui-prosemirror:
+    typescript-test-runner-node-modules-nex:
+    typescript-test-runner-node-modules-nex-constants-ts:
+    typescript-test-runner-node-modules-nex-debug-tools-ts:
+    typescript-test-runner-node-modules-nex-dynamodb-service:
+    typescript-test-runner-node-modules-nex-nats-service-ts:
+    typescript-test-runner-node-modules-shared-auth-service:
+    typescript-test-runner-node-modules-shared-canvas-engine:
+    typescript-test-runner-node-modules-shared-constants:
+    typescript-test-runner-node-modules-shared-debug-tools-ts:
+    typescript-test-runner-node-modules-shared-dynamodb-service:
+    typescript-test-runner-node-modules-shared-nats-auth-callout-service:
+    typescript-test-runner-node-modules-shared-nats-service-ts:
+    typescript-test-runner-node-modules-shared-prosemirror:

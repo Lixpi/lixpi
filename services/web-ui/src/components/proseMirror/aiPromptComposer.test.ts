@@ -75,9 +75,7 @@ const createComposer = (overrides: Record<string, any> = {}) => createAiPromptCo
 
 const baseSubmitPayload = {
     contentJSON: [],
-    aiModel: 'Anthropic:claude-sonnet-4-6',
-    aiModels: [],
-    useMultipleModels: false,
+    aiReasoningModels: ['Anthropic:claude-sonnet-4-6'],
     useMultipleReasoningModels: false,
     useMultipleImageModels: false,
     useMultipleVideoModels: false,

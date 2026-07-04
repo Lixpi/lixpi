@@ -12,7 +12,7 @@ This guide gets Lixpi running locally. Everything runs in **Docker** via `docker
 | Service | Path | Purpose |
 |---------|------|---------|
 | **web-ui** | `services/web-ui/` | Svelte SPA — canvas, ProseMirror editors, AI chat UI |
-| **api** | `services/api/` | Node.js / TypeScript gateway — auth, CRUD, DynamoDB, plus the in-process LangGraph LLM workflow (token streaming, image generation, video generation) |
+| **api** | `services/api/` | Node.js / TypeScript gateway — auth, CRUD, DynamoDB, plus the in-process LangGraph LLM workflow (pipeline events, ProseMirror transcript steps, image generation, video generation) |
 | **nats** | `services/nats/` | NATS message bus (3-node cluster) |
 | **localauth0** | `services/localauth0/` | Mock Auth0 for zero-config offline dev (Rust — vendored `primait/localauth0` image) |
 
@@ -34,7 +34,23 @@ init-config.bat
 
 For CI/automation (non-interactive), see [`infrastructure/init-script/README.md`](../../infrastructure/init-script/README.md).
 
-### 2. Initialize infrastructure
+### 2. Point Docker Compose at your environment file
+
+The wizard above writes `.env.<stage-name>` (e.g. `.env.shelby-local`), not a plain `.env` — and Docker Compose only auto-loads a file literally named `.env`. Without one, every `docker compose` command in this repo needs `--env-file .env.<stage-name>` typed out explicitly, or every variable in `docker-compose.yml` comes back unset with a wall of `variable is not set` warnings.
+
+Run the picker once to symlink `.env` to your chosen file — after that, every command below works with no `--env-file` flag needed:
+
+```bash
+# macOS / Linux
+./set-env.sh
+
+# Windows
+set-env.bat
+```
+
+Safe to re-run whenever you want to switch environments; it only ever replaces a symlink it created itself, never a real file.
+
+### 3. Initialize infrastructure
 
 Set up TLS certificates and DynamoDB tables. This is required before starting the application for the first time:
 
@@ -52,7 +68,7 @@ This script will:
 - Extract and install the CA certificate into your system's trust store.
 - Initialize DynamoDB tables using Pulumi.
 
-### 3. Start the application
+### 4. Start the application
 
 Run the startup script and select an environment when prompted:
 
@@ -73,7 +89,7 @@ start.bat
 ./rebuild-containers.sh lixpi-web-ui
 
 # Then run the single service
-docker-compose --env-file .env.<stage-name> up lixpi-web-ui
+docker-compose up lixpi-web-ui   # requires .env set (./set-env.sh); override with --env-file otherwise
 ```
 
 ### API
@@ -83,7 +99,7 @@ docker-compose --env-file .env.<stage-name> up lixpi-web-ui
 ./rebuild-containers.sh lixpi-api
 
 # Then run the single service
-docker-compose --env-file .env.<stage-name> up lixpi-api
+docker-compose up lixpi-api   # requires .env set (./set-env.sh); override with --env-file otherwise
 ```
 
 {% callout type="note" %}
@@ -128,7 +144,7 @@ To rebuild the Pulumi container from scratch:
 To run Pulumi:
 
 ```shell
-docker-compose --env-file .env.<stage-name> up lixpi-pulumi
+docker-compose up lixpi-pulumi   # requires .env set (./set-env.sh); override with --env-file otherwise
 ```
 
 For how the Pulumi program is structured and the full set of commands (`up`, `preview`, `destroy`, …), see [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md).

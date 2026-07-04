@@ -144,6 +144,10 @@ For **regular users**, permissions come from subscription definitions:
 ```
 
 The `{userId}` placeholder is replaced with the authenticated user's ID.
+When multiple subscription definitions need the same event or wildcard subject,
+the first occurrence in the API subscription list is kept and later duplicates
+are omitted. This preserves the explicit startup/group order without sorting the
+permission lists after assembly.
 
 For **services**, permissions are defined in `serviceAuthConfigs`:
 ```typescript

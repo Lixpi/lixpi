@@ -4,6 +4,7 @@ import { NodeSelection } from 'prosemirror-state'
 import { imageResizeCornerIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
 import { settings } from '$src/settings.ts'
 import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
@@ -25,33 +26,10 @@ function getImageSrcAttr(node: ProseMirrorNode): string {
 
 // Build image src with auth token if needed
 async function buildImageSrc(src: string): Promise<string> {
-    if (!src) return ''
-
-    // Data URLs or blob URLs don't need auth
-    if (src.startsWith('data:') || src.startsWith('blob:')) {
-        return src
-    }
-
-    // API paths need auth token
-    if (src.startsWith('/api/')) {
-        const token = await AuthService.getTokenSilently()
-        const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-        return `${API_BASE_URL}${src}${token ? `?token=${encodeURIComponent(token)}` : ''}`
-    }
-
-    // Full URLs pointing to /api/images/ — strip stale token and re-apply fresh one
-    if (src.startsWith('http') && src.includes('/api/images/')) {
-        const stripped = src.replace(/[?&]token=[^&]+/, '')
-        const token = await AuthService.getTokenSilently()
-        return `${stripped}${token ? `?token=${encodeURIComponent(token)}` : ''}`
-    }
-
-    // External URLs or already full URLs
-    if (src.startsWith('http')) {
-        return src
-    }
-
-    return src
+    return resolveAuthenticatedMediaUrl(src, {
+        apiBaseUrl: import.meta.env.VITE_API_URL || '',
+        getAuthToken: () => AuthService.getTokenSilently(),
+    })
 }
 
 export class ImageNodeView implements NodeView {

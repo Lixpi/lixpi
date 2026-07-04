@@ -115,57 +115,58 @@ NODE_PID=$!
 # Forward termination to the node for a clean shutdown (compose stop_signal=SIGTERM).
 trap 'echo "Stopping NEX node..."; kill -TERM "$NODE_PID" 2>/dev/null' TERM INT
 
-# Build the workload start-request, injecting the env the child needs. The native
+# Build a workload start-request, injecting the env the child needs. The native
 # nexlet does NOT inherit the container env (agents/native/state.go sets cmd.Env
-# to ONLY start_request.environment + NEX_WORKLOAD_* creds), so the workload's
-# ORG_NAME/STAGE/AWS/DynamoDB/provider config MUST be passed in here. Node builds
-# the JSON so values are escaped safely.
+# to ONLY start_request.environment + NEX_WORKLOAD_* creds), so each workload's
+# config MUST be passed in here. Args: <entry> [env-key ...]. Node builds the JSON
+# so values are escaped safely. Default interval handling for ai-models lives in
+# its index.ts, so no key needs a shell-side default.
 build_start_request() {
+    entry="$1"
+    shift
     node -e '
         const e = process.env
         const entry = process.argv[1]
-        const keys = [
-            "ORG_NAME", "STAGE", "ENVIRONMENT",
-            "AWS_REGION", "AWS_PROFILE",
-            "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
-            "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "AWS_CONTAINER_CREDENTIALS_FULL_URI",
-            "DYNAMODB_ENDPOINT",
-            "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY",
-            "STABLE_DIFFUSION_API_KEY", "ARK_API_KEY",
-            "LIXPI_SYNC_INTERVAL_MS",
-        ]
+        const keys = process.argv.slice(2)
         const environment = {
             HOME: e.HOME || "/root",
             PATH: e.PATH || "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         }
         for (const k of keys) if (e[k]) environment[k] = e[k]
-        if (!environment.LIXPI_SYNC_INTERVAL_MS) environment.LIXPI_SYNC_INTERVAL_MS = "3600000"
         process.stdout.write(JSON.stringify({
             uri: "file:///usr/local/bin/node",
             argv: ["--experimental-transform-types", "--disable-warning=ExperimentalWarning", entry],
             environment,
         }))
-    ' "${WORKLOAD_ENTRY}"
+    ' "${entry}" "$@"
 }
 
-if [ -f "${WORKLOAD_ENTRY}" ]; then
-    echo "=== Deploying workload '${WORKLOAD_NAME}' (namespace=${LIXPI_WORKLOAD_NAMESPACE}) ==="
-    START_REQUEST="$(build_start_request)"
+# Deploy a single workload, retrying until the node accepts auctions. Args:
+# <name> <entry> <start-request-json>.
+deploy_workload() {
+    wl_name="$1"
+    wl_entry="$2"
+    wl_start_request="$3"
+
+    if [ ! -f "${wl_entry}" ]; then
+        echo "No workload entry at ${wl_entry}; skipping ${wl_name}"
+        return 0
+    fi
+
+    echo "=== Deploying workload '${wl_name}' (namespace=${LIXPI_WORKLOAD_NAMESPACE}) ==="
     i=0
-    deployed=0
     while [ "$i" -lt 30 ]; do
         i=$((i + 1))
         if DEPLOY_OUTPUT="$(run_nex --namespace "${LIXPI_WORKLOAD_NAMESPACE}" workload start \
-            --type native --lifecycle service --name "${WORKLOAD_NAME}" \
-            --start-request "${START_REQUEST}" 2>&1)"; then
+            --type native --lifecycle service --name "${wl_name}" \
+            --start-request "${wl_start_request}" 2>&1)"; then
             printf '%s\n' "${DEPLOY_OUTPUT}"
             case "${DEPLOY_OUTPUT}" in
                 *"error:"*|*"no NATS connection available"*)
                     ;;
                 *)
-                    echo "✅ Workload '${WORKLOAD_NAME}' deployed"
-                    deployed=1
-                    break
+                    echo "✅ Workload '${wl_name}' deployed"
+                    return 0
                     ;;
             esac
         else
@@ -174,10 +175,27 @@ if [ -f "${WORKLOAD_ENTRY}" ]; then
         echo "... node not ready yet (attempt ${i}); retrying in 2s"
         sleep 2
     done
-    [ "$deployed" = "1" ] || echo "WARN: workload deploy did not succeed after retries; node stays up"
-else
-    echo "No workload entry at ${WORKLOAD_ENTRY}; starting node only (no workload deploy)"
-fi
+    echo "WARN: workload ${wl_name} deploy did not succeed after retries; node stays up"
+}
+
+# ai-models-sync: AWS/DynamoDB/provider config (NEX-account creds minted by the
+# native nexlet for its own NATS publish).
+AI_MODELS_KEYS="ORG_NAME STAGE ENVIRONMENT AWS_REGION AWS_PROFILE \
+AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
+AWS_CONTAINER_CREDENTIALS_RELATIVE_URI AWS_CONTAINER_CREDENTIALS_FULL_URI \
+DYNAMODB_ENDPOINT OPENAI_API_KEY ANTHROPIC_API_KEY GOOGLE_API_KEY \
+STABLE_DIFFUSION_API_KEY ARK_API_KEY LIXPI_SYNC_INTERVAL_MS"
+
+# file-conversion: connects to NATS as the AUTH-account regular_user (not the
+# NEX-account creds) so it can read/write the workspace Object Store buckets.
+FILE_CONVERSION_ENTRY="${SERVICE_DIR}/workloads/file-conversion/index.ts"
+FILE_CONVERSION_KEYS="NATS_SERVERS NATS_REGULAR_USER_PASSWORD"
+
+# shellcheck disable=SC2086  # intentional word-splitting of the key lists
+deploy_workload "${WORKLOAD_NAME}" "${WORKLOAD_ENTRY}" \
+    "$(build_start_request "${WORKLOAD_ENTRY}" ${AI_MODELS_KEYS})"
+deploy_workload "file-conversion" "${FILE_CONVERSION_ENTRY}" \
+    "$(build_start_request "${FILE_CONVERSION_ENTRY}" ${FILE_CONVERSION_KEYS})"
 
 # Supervise the node in the foreground; exits when the node exits or on signal.
 wait "$NODE_PID"

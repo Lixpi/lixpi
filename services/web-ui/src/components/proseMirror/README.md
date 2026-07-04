@@ -6,29 +6,31 @@ This document is the canonical, deep-dive reference for the ProseMirror-based ed
 ## High-level overview
 
 - The Svelte component `ProseMirror.svelte` owns editor lifecycle and data synchronization to app stores and services.
-- `components/editor.js` constructs a ProseMirror Schema by extending a base schema with custom nodes, and wires all editor plugins.
-- A rich plugin stack handles state propagation, AI triggers, streaming insertion, placeholder/menus, CodeMirror code blocks, and UX behaviors.
+- `components/editor.ts` imports the shared ProseMirror schema factory from `@lixpi/prosemirror` and wires all editor plugins.
+- A rich plugin stack handles state propagation, AI triggers, authority-backed step application, placeholders/menus, CodeMirror code blocks, and UX behaviors.
 - Transaction meta flags (e.g., `use:aiChat`, `insert:<nodeType>`) are the core intra-plugin signaling mechanism.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
   Svelte[ProseMirror.svelte] -->|instantiates| PMEditor[ProseMirrorEditor]
-  PMEditor -->|builds| Schema[schema.ts + nodesBuilder]
+  PMEditor -->|builds| SharedSchema["@lixpi/prosemirror schema builder"]
     PMEditor -->|creates| Plugins[Plugin Stack]
     Plugins -->|compose| EditorView
     EditorView -->|doc JSON| DocumentService
     Svelte --> AiInteractionService
+    Svelte --> ProseMirrorAuthorityService
     AiInteractionService --> SegmentsReceiver
-    SegmentsReceiver -->|events| aiChatThreadPlugin
-    aiChatThreadPlugin -->|insert nodes/marks| EditorView
+    SegmentsReceiver -->|media/branch/pipeline events| aiChatThreadPlugin
+    ProseMirrorAuthorityService -->|START/STEP/END| EditorView
+    aiChatThreadPlugin -->|NodeViews/decorations/callbacks| EditorView
     EditorView --> BubbleMenu[bubbleMenuPlugin]
 ```
 
 
 ## Schema and custom nodes
 
-Base schema is defined in `components/schema.ts` (extended CommonMark-like schema, adds `strikethrough` mark) and then extended via `nodesBuilder` in `components/editor.js`.
+The schema contract lives in `packages/lixpi/prosemirror`. That package exports the base CommonMark-like schema, custom node specs, AI chat node specs, the AI prompt input node spec, model-selection attr normalizers, streaming segment assembly helpers, and the schema builder used by both browser and API code. Web-ui files under `components/schema.ts` and `customNodes/` are compatibility exports so older imports do not create a second schema definition.
 
 We have two editor modes with different document shapes:
 
@@ -37,27 +39,26 @@ We have two editor modes with different document shapes:
 - AI chat threads (`documentType: 'aiChatThread'`)
   - doc content: `documentTitle aiChatThread+`
 
-`nodesBuilder` does two important things:
+The shared schema builder does two important things:
 
 - Adds *new* custom nodes before `paragraph` (so they behave like normal block nodes).
 - Updates *existing* base nodes (e.g. `code_block`) **in place** to preserve the base schema order. This avoids ProseMirror picking `code_block` as the “default block” when leaving the title.
 
 Custom nodes are intentionally split by responsibility:
 
-- Base custom nodes (always present via `customNodes/index.js`):
+- Base custom nodes (exported by `@lixpi/prosemirror`, re-exported through `customNodes/index.js`):
   - `documentTitleNode` (`documentTitle`): h1 title, non-selectable, defining.
   - `code_block` override (`codeBlockNode`): extends the base `code_block` with attrs (e.g. theme) used by the CodeMirror NodeView.
   - `taskRowNode`: placeholder for future Svelte-backed rendering.
 
-- AI chat nodes (only present in `documentType: 'aiChatThread'` via `plugins/aiChatThreadPlugin/`):
+- AI chat nodes (schema specs exported by `@lixpi/prosemirror`; browser NodeViews stay in `plugins/aiChatThreadPlugin/`):
   - `aiChatThreadNode` (`aiChatThread`): conversation container. Content expression: `(aiUserMessage | aiResponseMessage)+`. Pure conversation log — no inline composer.
   - `aiUserMessageNode` (`aiUserMessage`): sent user message bubble. Content: `(paragraph | block)+`. Attributes: `id, createdAt`.
-  - `aiUserInputNode` (`aiUserInput`): **DEPRECATED** — kept in schema for legacy content migration only. Silently stripped from loaded documents.
   - `aiResponseMessageNode` (`aiResponseMessage`): assistant message. Content: `(paragraph | block)*` so it can start empty and be filled by streaming.
   - `aiReasoningSectionNode` (`aiReasoningSection`): per-reasoning-run section inside one media response message. Content: `(paragraph | block)*`.
   - `aiLineageEventNode` (`aiLineageEvent`): atom block for projected workflow events such as `Branch started` and `Branch fork created`. Live streamed content stores lineage ids on reasoning/media nodes; read-only canvas projections materialize only the lineage events that belong to the projected workflow node.
 
-- AI prompt input (separate `documentType: 'aiPromptInput'` via `plugins/aiPromptInputPlugin/`):
+- AI prompt input (schema spec exported by `@lixpi/prosemirror`; browser NodeView stays in `plugins/aiPromptInputPlugin/`):
   - `aiPromptInputNode` (`aiPromptInput`): floating composer used to send messages to any selected canvas node. Content: `(paragraph | block)+`. Renders as a floating element below the active node.
 
 ```mermaid
@@ -81,9 +82,9 @@ Notes
 - NodeViews: AI chat thread NodeViews live inside `plugins/aiChatThreadPlugin/`. `code_block` node view is provided by the codeBlock plugin.
 
 
-## Editor construction (`components/editor.js`)
+## Editor construction (`components/editor.ts`)
 
-- Creates a `Schema` based on `documentType`:
+- Creates a `Schema` through `createProseMirrorSchema(documentType)` from `@lixpi/prosemirror`:
   - Regular documents use only base `customNodes`.
   - AI chat threads extend base `customNodes` with AI chat node specs from `aiChatThreadPlugin`.
 - Initializes `EditorView` with:
@@ -161,7 +162,9 @@ graph LR
   end
 
   KM-- setMeta use:aiChat -->ACT
-  ACT-- START/STREAM/END -->EditorView
+  AUTH[ProseMirrorAuthorityService]
+  AUTH-- START/STEP/END -->EditorView
+  ACT-- media/branch side effects -->EditorView
   CBP-- CM6 NodeView and code fences -->EditorView
   SP-- docChanged --> Svelte
   BM-- floating menu --> EditorView
@@ -170,6 +173,8 @@ graph LR
 ### statePlugin (`plugins/statePlugin.js`)
 - Emits full doc JSON on any doc-changing transaction unless `skipDispatch` is set.
 - Detects first child (title) text change and calls `documentTitleChangeCallback` to sync stores/services.
+- Skips persistence callbacks for AI chat thread documents. AI chat final snapshots are written by the API when the authoritative stream ends; the live callback still mirrors in-flight docs for canvas previews.
+- Authority-backed editors call `DOC_RESUME` on mount and use the returned JetStream stream sequence only as a replay cursor. Document freshness is tracked through ProseMirror document versions from step/control payloads, so START/END control messages do not make the browser wait for nonexistent edit versions.
 
 ### focusPlugin (`plugins/focusPlugin.js`)
 - Listens to DOM focus/blur and sets plugin meta. Callback toggles `editable` prop based on `isDisabled`.
@@ -290,7 +295,7 @@ Usage pattern
   `insert:<nodeName>`, attrs
 )` to insert a component-backed node at the selection.
 
-Note: The editor currently ships with the TaskRow Svelte renderer commented out in `components/editor.js`. It can be re-enabled by providing the actual component and desired default attrs.
+Note: The editor currently ships with the TaskRow Svelte renderer commented out in `components/editor.ts`. It can be re-enabled by providing the actual component and desired default attrs.
 
 
 ## AI interactions and streaming
@@ -304,21 +309,21 @@ The main plugin orchestrating AI chat functionality. All AI chat logic is consol
 - `aiUserMessage` - Sent user message bubble with `id` and `createdAt` attributes
 - `aiResponseMessage` - AI response container with streaming animations; media matrix responses contain one `aiReasoningSection` per reasoning run
 - `aiReasoningSection` - Per-model media response slice with its own prose, generation details, and generated thumbnail
-- `aiUserInput` - **DEPRECATED** — kept in schema for legacy migration only, silently stripped
 
 **User input is handled separately by `aiPromptInputPlugin`** — a floating canvas element that renders below the selected node, with its own `ProseMirrorEditor` instance. An `AiPromptInputController` service coordinates message injection between the floating input and thread editors.
 
 **Message submission flow:**
 1. User types in the floating `aiPromptInput` and presses Cmd/Ctrl+Enter or clicks submit
 2. `AiPromptInputController` extracts content, creates an `aiUserMessage` node in the target thread
-3. Dispatches `USE_AI_CHAT_META` on the thread editor to trigger the AI request
+3. Dispatches `USE_AI_CHAT_META` on the thread editor to trigger the AI request; this submit-seed transaction uses `skipDispatch` because the API receives the post-submit doc and persists the final authoritative snapshot
 4. Plugin calls `onAiChatSubmit` callback with the message array
 
 **Streaming response handling:**
 - Subscribes to `SegmentsReceiver.subscribeToeceiveSegment()` for streaming events
-- START_STREAM: inserts or adopts an `aiResponseMessage`; media matrix streams target an `aiReasoningSection`
-- STREAMING: inserts text/blocks into the response or section node, handles marks and block types
-- END_STREAM: clears animation flags, finalizes the response or section
+- `ProseMirrorAuthorityService` subscribes to the live ProseMirror step subject and applies `Step.fromJSON(schema, step)` events from the API
+- The submit payload includes the post-placeholder thread doc JSON so API-authored step positions match the browser doc
+- If a remote step is structurally invalid for a mounted editor, the authority service stops retrying that step and waits for a newer persisted snapshot to recover the document
+- `SegmentsReceiver` remains for non-ProseMirror pipeline events such as media trace, lineage, partial, complete, and error events
 
 See `plugins/aiChatThreadPlugin/README.md` for complete documentation.
 
@@ -329,6 +334,7 @@ sequenceDiagram
   participant Ctrl as AiPromptInputController
   participant Plugin as aiChatThreadPlugin
   participant S as AiInteractionService
+  participant Auth as ProseMirrorAuthorityService
   participant SR as SegmentsReceiver
   %% ═══════════════════════════════════════════════════════════════
   %% PHASE 1: SUBMIT
@@ -339,8 +345,9 @@ sequenceDiagram
       activate Ctrl
       Ctrl->>Plugin: Inject aiUserMessage + USE_AI_CHAT_META
       activate Plugin
-      Plugin->>S: onAiChatSubmit(messages, aiModel)
+      Plugin->>S: onAiChatSubmit(messages, aiReasoningModels)
       activate S
+      S->>Auth: live document subscription + DOC_RESUME
       deactivate Ctrl
   end
   %% ═══════════════════════════════════════════════════════════════
@@ -348,20 +355,21 @@ sequenceDiagram
   %% ═══════════════════════════════════════════════════════════════
   rect rgb(195, 222, 221)
       Note over FI, SR: PHASE 2 - STREAM
-      SR-->>Plugin: START_STREAM(provider, threadId)
-      activate SR
-      Plugin->>Plugin: Insert aiResponseMessage at end of thread
-      SR-->>Plugin: STREAMING(segments)
-      Plugin->>Plugin: Insert text/blocks into aiResponseMessage
+      Auth-->>Plugin: document START
+      activate Auth
+      Auth->>Plugin: setReceiving meta
+      Auth-->>Plugin: document STEP events
+      Auth->>Plugin: Apply Step.fromJSON into EditorView
+      SR-->>Plugin: media/branch/trace pipeline events
   end
   %% ═══════════════════════════════════════════════════════════════
   %% PHASE 3: COMPLETE
   %% ═══════════════════════════════════════════════════════════════
   rect rgb(246, 199, 179)
       Note over FI, SR: PHASE 3 - COMPLETE
-      SR-->>Plugin: END_STREAM
-      deactivate SR
-      Plugin->>Plugin: Clear animations
+      Auth-->>Plugin: document END after finalVersion
+      deactivate Auth
+      Plugin->>Plugin: Clear receiving animations
       deactivate S
       deactivate Plugin
   end
@@ -376,9 +384,10 @@ sequenceDiagram
 ## Svelte integration (`ProseMirror.svelte`)
 
 - Instantiates `ProseMirrorEditor` with initial doc JSON and callbacks:
-  - `onEditorChange(json)`: debounced save via `DocumentService.updateDocument` and store flags.
+  - `onEditorChange(json)`: legacy/fallback snapshot callback and store mirroring. Authority-backed editors submit local transactions through `ProseMirrorAuthorityService`.
+  - `onStreamingUpdate(json)`: live, non-persisting projection used by canvas branch marker previews while authority steps arrive.
   - `onProjectTitleChange(title)`: immediate title sync to stores and persistence.
-  - `onAiChatSubmit(messages, aiModel)`: forwards to `AiInteractionService.sendChatMessage` (which feeds `SegmentsReceiver`).
+  - `onAiChatSubmit(messages, aiReasoningModels, …)`: forwards to `AiInteractionService.sendChatMessage` (which feeds `SegmentsReceiver`).
   - `onAiChatStop()`: stops active AI streaming.
 - Manages teardown on unmount and re-creation when document metadata changes.
 
@@ -387,11 +396,14 @@ sequenceDiagram
 flowchart LR
   Svelte --> PMEditor
   PMEditor -->|statePlugin| onEditorChange
+  PMEditor -->|authority live doc| onStreamingUpdate
   PMEditor -->|title change| onProjectTitleChange
   PMEditor -->|aiChatThreadPlugin| onAiChatSubmit
   onEditorChange --> DocumentService
+  onStreamingUpdate --> CanvasPreviews[Branch marker previews]
   onProjectTitleChange --> DocumentService & Stores
   onAiChatSubmit --> AiInteractionService --> SegmentsReceiver --> aiChatThreadPlugin
+  ProseMirrorAuthorityService --> PMEditor
 ```
 
 
@@ -425,7 +437,7 @@ flowchart LR
 - React to Mod+Enter differently:
   - Update `buildKeymap` or the `aiChatThreadPlugin` meta handling.
 - Add a new AI streaming style:
-  - Extend `aiChatThreadPlugin` style mapping (`segment.styles` → PM marks) or add block handlers for new segment types.
+  - Extend `packages/lixpi/prosemirror/src/stream-assembly.ts` so browser and server assembly stay identical.
 
 
 ## Edge cases and invariants
@@ -433,7 +445,7 @@ flowchart LR
 - Regular document shape: The first node is always `documentTitle`, followed by one or more `block` nodes.
 - AI chat thread shape: The first node is always `documentTitle`, followed by one or more `aiChatThread` nodes.
 - Thread shape: `aiChatThread` content is `(aiUserMessage | aiResponseMessage)+`. The thread is a pure conversation log with no inline composer.
-- aiResponse streaming insertion locates the target node within the thread identified by `threadId`: legacy text streams target `aiResponseMessage`, while media matrix streams target the matching `aiReasoningSection` inside the shared response.
+- AI response document steps are authored by the API against the submitted post-placeholder thread document. The browser applies them through `ProseMirrorAuthorityService`; media matrix steps target the matching `aiReasoningSection` inside the shared response when the API run metadata declares one.
 - **Multiple concurrent streams ARE supported**: Each thread can have independent AI streaming via `threadId` parameter. The plugin maintains a `Set<string>` of active `receivingThreadIds` to track concurrent streams across different threads.
 - CodeMirror selection sync: Avoid infinite loops by guarding with `this.updating` and focus checks; keep `forwardUpdate` fast.
 - Mod-A behavior intentionally excludes the title from "select all" when cursor isn't in the title; consider that in bulk ops.
@@ -448,9 +460,10 @@ flowchart LR
 ## File map
 
 - Svelte: `ProseMirror.svelte`
-- Editor driver: `components/editor.js`
+- Editor driver: `components/editor.ts`
 - Prompt composer wrapper: `aiPromptComposer.ts`
-- Schema base: `components/schema.ts`
+- Shared schema package: `packages/lixpi/prosemirror`
+- Schema compatibility export: `components/schema.ts`
 - Bubble menu: `plugins/bubbleMenuPlugin/*`
 - Keymap & rules: `components/keyMap.js`, `components/inputRules.js`, `components/prompt.js`, `components/commands.js`
 - Custom nodes: `customNodes/*` and `customNodes/index.js`
@@ -468,13 +481,13 @@ flowchart LR
 ## Extensibility checklist
 
 - Define your NodeSpec in `customNodes` and export via `customNodes/index.js`.
-- Ensure `nodesBuilder` order places the node appropriately (before `paragraph` for blocks that must be early).
+- Ensure the shared schema builder order places the node appropriately (before `paragraph` for blocks that must be early).
 - If needed, add a NodeView via a plugin’s `props.nodeViews`.
 - Define input rules and key bindings if your node needs text-based triggers.
 - Add a menu entry if user-facing.
 - If your feature flows through AI, produce/consume transaction meta consistently and consider streaming updates.
 
-## Current Architecture Summary
+## Architecture Summary
 
 **AI Chat Thread Document Structure**
 
@@ -497,8 +510,7 @@ User input is handled by a separate `aiPromptInputPlugin` which renders as a flo
 **Key design decisions**:
 - Fresh documents are created using ProseMirror's `createAndFill()` which auto-populates required nodes based on schema
 - The editor accepts a `threadId` parameter to ensure the `aiChatThread` node has the correct ID for streaming routing
-- Streaming events (START_STREAM, STREAMING, END_STREAM) are scoped by `threadId` for multi-thread support
-- Legacy `aiUserInput` nodes in old thread documents are silently stripped during load via `appendTransaction`
+- Live document step events and pipeline side-effect events are scoped by `threadId` for multi-thread support
 
 ---
 This knowledge base is hand-audited against the current codebase (see paths above) and aims to be stable, specific, and actionable for future development.

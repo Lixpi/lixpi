@@ -1,113 +1,20 @@
 import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { NodeSelection } from 'prosemirror-state'
 import type { ImageBranchVlmResolution, MediaBranchLineagePlan, MediaGenerationRunMeta, WorkspaceContextResolution } from '@lixpi/constants'
+import {
+    aiGeneratedImageNodeSpec,
+    aiGeneratedImageNodeType,
+} from '@lixpi/prosemirror'
 
-export const aiGeneratedImageNodeType = 'aiGeneratedImage'
-
-function parseVariantIndex(value: string | null): number | null {
-    if (!value) return null
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : null
-}
-
-export const aiGeneratedImageNodeSpec = {
-    attrs: {
-        imageData: { default: '' },
-        fileId: { default: '' },
-        workspaceId: { default: '' },
-        revisedPrompt: { default: '' },
-        responseId: { default: '' },
-        aiModel: { default: '' },
-        isPartial: { default: true },
-        partialIndex: { default: 0 },
-        generationRequestId: { default: '' },
-        reasoningRunId: { default: '' },
-        mediaRunId: { default: '' },
-        reasoningModelId: { default: '' },
-        mediaModelId: { default: '' },
-        mediaType: { default: '' },
-        variantIndex: { default: null },
-        branchId: { default: '' },
-        parentMediaNodeId: { default: '' },
-        branchOriginNodeId: { default: '' },
-        branchForkNodeId: { default: '' },
-        branchLineNodeId: { default: '' },
-        lineageParentNodeId: { default: '' },
-        // Image display attributes (same as regular image node)
-        width: { default: null },
-        alignment: { default: 'left' },
-        textWrap: { default: 'none' },
-    },
-    group: 'block',
-    draggable: false,
-    atom: true,
-    parseDOM: [
-        {
-            tag: 'div.ai-generated-image',
-            getAttrs(dom: HTMLElement) {
-                return {
-                    imageData: dom.getAttribute('data-image-data') || '',
-                    fileId: dom.getAttribute('data-file-id') || '',
-                    workspaceId: dom.getAttribute('data-workspace-id') || '',
-                    revisedPrompt: dom.getAttribute('data-revised-prompt') || '',
-                    responseId: dom.getAttribute('data-response-id') || '',
-                    aiModel: dom.getAttribute('data-ai-model') || '',
-                    isPartial: dom.getAttribute('data-is-partial') === 'true',
-                    partialIndex: parseInt(dom.getAttribute('data-partial-index') || '0', 10),
-                    generationRequestId: dom.getAttribute('data-generation-request-id') || '',
-                    reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
-                    mediaRunId: dom.getAttribute('data-media-run-id') || '',
-                    reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
-                    mediaModelId: dom.getAttribute('data-media-model-id') || '',
-                    mediaType: dom.getAttribute('data-media-type') || '',
-                    variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
-                    branchId: dom.getAttribute('data-branch-id') || '',
-                    parentMediaNodeId: dom.getAttribute('data-parent-media-node-id') || '',
-                    branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
-                    branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
-                    branchLineNodeId: dom.getAttribute('data-branch-line-node-id') || '',
-                    lineageParentNodeId: dom.getAttribute('data-lineage-parent-node-id') || '',
-                    width: dom.getAttribute('data-width') || null,
-                    alignment: dom.getAttribute('data-alignment') || 'left',
-                    textWrap: dom.getAttribute('data-text-wrap') || 'none',
-                }
-            },
-        },
-    ],
-    toDOM(node: any) {
-        return ['div', {
-            class: 'ai-generated-image',
-            'data-image-data': node.attrs.imageData,
-            'data-file-id': node.attrs.fileId,
-            'data-workspace-id': node.attrs.workspaceId,
-            'data-revised-prompt': node.attrs.revisedPrompt,
-            'data-response-id': node.attrs.responseId,
-            'data-ai-model': node.attrs.aiModel,
-            'data-is-partial': String(node.attrs.isPartial),
-            'data-partial-index': String(node.attrs.partialIndex),
-            'data-generation-request-id': node.attrs.generationRequestId,
-            'data-reasoning-run-id': node.attrs.reasoningRunId,
-            'data-media-run-id': node.attrs.mediaRunId,
-            'data-reasoning-model-id': node.attrs.reasoningModelId,
-            'data-media-model-id': node.attrs.mediaModelId,
-            'data-media-type': node.attrs.mediaType,
-            'data-variant-index': node.attrs.variantIndex == null ? '' : String(node.attrs.variantIndex),
-            'data-branch-id': node.attrs.branchId,
-            'data-parent-media-node-id': node.attrs.parentMediaNodeId,
-            'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
-            'data-branch-fork-node-id': node.attrs.branchForkNodeId,
-            'data-branch-line-node-id': node.attrs.branchLineNodeId,
-            'data-lineage-parent-node-id': node.attrs.lineageParentNodeId,
-            'data-width': node.attrs.width || '',
-            'data-alignment': node.attrs.alignment || 'left',
-            'data-text-wrap': node.attrs.textWrap || 'none',
-        }]
-    },
+export {
+    aiGeneratedImageNodeSpec,
+    aiGeneratedImageNodeType,
 }
 
 export type AiGeneratedImageCallbacks = {
@@ -152,6 +59,11 @@ export type AiGeneratedImageCallbacks = {
     onMediaLineagePlannedToCanvas?: (data: {
         threadId: string
         lineagePlan: MediaBranchLineagePlan
+        generationRun?: MediaGenerationRunMeta
+    }) => void
+    onMediaGenerationSkippedToCanvas?: (data: {
+        threadId: string
+        generationRequestId: string
         generationRun?: MediaGenerationRunMeta
     }) => void
     onWorkspaceContextResolvedToCanvas?: (data: {
@@ -241,28 +153,11 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         spinnerElement.classList.remove('is-active')
         imageElement.classList.add('is-visible')
 
-        // imageData is now a URL path like /api/images/workspaceId/fileId
-        // It can also be a data URL or base64 for backwards compatibility
-        let imageSrc: string
-        if (imageData.startsWith('data:')) {
-            imageSrc = imageData
-        } else if (imageData.startsWith('/api/')) {
-            const token = await AuthService.getTokenSilently()
-            const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-            imageSrc = `${API_BASE_URL}${imageData}${token ? `?token=${token}` : ''}`
-        } else if (imageData.startsWith('http')) {
-            // Full URL — strip any stale token and re-apply a fresh one
-            const stripped = imageData.replace(/[?&]token=[^&]+/, '')
-            if (stripped.includes('/api/images/')) {
-                const token = await AuthService.getTokenSilently()
-                imageSrc = `${stripped}${token ? `?token=${token}` : ''}`
-            } else {
-                imageSrc = imageData
-            }
-        } else {
-            // Legacy base64 data
-            imageSrc = `data:image/png;base64,${imageData}`
-        }
+        const imageSrc = await resolveAuthenticatedMediaUrl(imageData, {
+            apiBaseUrl: import.meta.env.VITE_API_URL || '',
+            base64MimeType: 'image/png',
+            getAuthToken: () => AuthService.getTokenSilently(),
+        })
 
         if (imageElement.src !== imageSrc) {
             imageElement.src = imageSrc

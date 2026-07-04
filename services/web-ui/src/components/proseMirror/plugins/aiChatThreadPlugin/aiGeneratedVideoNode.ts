@@ -1,5 +1,6 @@
 import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { NodeSelection } from 'prosemirror-state'
@@ -9,6 +10,10 @@ import { select } from 'd3-selection'
 import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
 import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
+import {
+    aiGeneratedVideoNodeSpec,
+    aiGeneratedVideoNodeType,
+} from '@lixpi/prosemirror'
 
 // Sibling of aiGeneratedImageNode.ts. The in-chat representation of a generated
 // video. While VIDEO_PENDING is the active state, the node renders a placeholder
@@ -16,122 +21,9 @@ import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 // VIDEO_COMPLETE the node swaps to a poster + controls-less <video> element,
 // then mounts the shared SVG videoControls bar as an external row below it.
 
-export const aiGeneratedVideoNodeType = 'aiGeneratedVideo'
-
-function parseVariantIndex(value: string | null): number | null {
-    if (!value) return null
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : null
-}
-
-export const aiGeneratedVideoNodeSpec = {
-    attrs: {
-        videoUrl: { default: '' },
-        fileId: { default: '' },
-        workspaceId: { default: '' },
-        posterUrl: { default: '' },
-        posterFileId: { default: '' },
-        durationSeconds: { default: 0 },
-        aspectRatio: { default: 1.777 },
-        hasAudio: { default: true },
-        revisedPrompt: { default: '' },
-        responseId: { default: '' },
-        videoModel: { default: '' },
-        isPending: { default: true },
-        errorMessage: { default: '' },
-        generationRequestId: { default: '' },
-        reasoningRunId: { default: '' },
-        mediaRunId: { default: '' },
-        reasoningModelId: { default: '' },
-        mediaModelId: { default: '' },
-        mediaType: { default: '' },
-        variantIndex: { default: null },
-        branchId: { default: '' },
-        parentMediaNodeId: { default: '' },
-        branchOriginNodeId: { default: '' },
-        branchForkNodeId: { default: '' },
-        branchLineNodeId: { default: '' },
-        lineageParentNodeId: { default: '' },
-        // Display attributes (mirror the image node)
-        width: { default: null },
-        alignment: { default: 'left' },
-        textWrap: { default: 'none' },
-    },
-    group: 'block',
-    draggable: false,
-    atom: true,
-    parseDOM: [
-        {
-            tag: 'div.ai-generated-video',
-            getAttrs(dom: HTMLElement) {
-                return {
-                    videoUrl: dom.getAttribute('data-video-url') || '',
-                    fileId: dom.getAttribute('data-file-id') || '',
-                    workspaceId: dom.getAttribute('data-workspace-id') || '',
-                    posterUrl: dom.getAttribute('data-poster-url') || '',
-                    posterFileId: dom.getAttribute('data-poster-file-id') || '',
-                    durationSeconds: Number(dom.getAttribute('data-duration-seconds') || 0),
-                    aspectRatio: Number(dom.getAttribute('data-aspect-ratio') || 1.777),
-                    hasAudio: dom.getAttribute('data-has-audio') === 'true',
-                    revisedPrompt: dom.getAttribute('data-revised-prompt') || '',
-                    responseId: dom.getAttribute('data-response-id') || '',
-                    videoModel: dom.getAttribute('data-video-model') || '',
-                    isPending: dom.getAttribute('data-is-pending') === 'true',
-                    errorMessage: dom.getAttribute('data-error-message') || '',
-                    generationRequestId: dom.getAttribute('data-generation-request-id') || '',
-                    reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
-                    mediaRunId: dom.getAttribute('data-media-run-id') || '',
-                    reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
-                    mediaModelId: dom.getAttribute('data-media-model-id') || '',
-                    mediaType: dom.getAttribute('data-media-type') || '',
-                    variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
-                    branchId: dom.getAttribute('data-branch-id') || '',
-                    parentMediaNodeId: dom.getAttribute('data-parent-media-node-id') || '',
-                    branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
-                    branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
-                    branchLineNodeId: dom.getAttribute('data-branch-line-node-id') || '',
-                    lineageParentNodeId: dom.getAttribute('data-lineage-parent-node-id') || '',
-                    width: dom.getAttribute('data-width') || null,
-                    alignment: dom.getAttribute('data-alignment') || 'left',
-                    textWrap: dom.getAttribute('data-text-wrap') || 'none',
-                }
-            },
-        },
-    ],
-    toDOM(node: any) {
-        return ['div', {
-            class: 'ai-generated-video',
-            'data-video-url': node.attrs.videoUrl,
-            'data-file-id': node.attrs.fileId,
-            'data-workspace-id': node.attrs.workspaceId,
-            'data-poster-url': node.attrs.posterUrl,
-            'data-poster-file-id': node.attrs.posterFileId,
-            'data-duration-seconds': String(node.attrs.durationSeconds),
-            'data-aspect-ratio': String(node.attrs.aspectRatio),
-            'data-has-audio': String(node.attrs.hasAudio),
-            'data-revised-prompt': node.attrs.revisedPrompt,
-            'data-response-id': node.attrs.responseId,
-            'data-video-model': node.attrs.videoModel,
-            'data-is-pending': String(node.attrs.isPending),
-            'data-error-message': node.attrs.errorMessage,
-            'data-generation-request-id': node.attrs.generationRequestId,
-            'data-reasoning-run-id': node.attrs.reasoningRunId,
-            'data-media-run-id': node.attrs.mediaRunId,
-            'data-reasoning-model-id': node.attrs.reasoningModelId,
-            'data-media-model-id': node.attrs.mediaModelId,
-            'data-media-type': node.attrs.mediaType,
-            'data-variant-index': node.attrs.variantIndex == null ? '' : String(node.attrs.variantIndex),
-            'data-branch-id': node.attrs.branchId,
-            'data-parent-media-node-id': node.attrs.parentMediaNodeId,
-            'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
-            'data-branch-fork-node-id': node.attrs.branchForkNodeId,
-            'data-branch-line-node-id': node.attrs.branchLineNodeId,
-            'data-lineage-parent-node-id': node.attrs.lineageParentNodeId,
-            'data-width': node.attrs.width || '',
-            'data-alignment': node.attrs.alignment || 'left',
-            'data-text-wrap': node.attrs.textWrap || 'none',
-        }]
-    },
+export {
+    aiGeneratedVideoNodeSpec,
+    aiGeneratedVideoNodeType,
 }
 
 export type AiGeneratedVideoCallbacks = {
@@ -205,26 +97,11 @@ export function getAiGeneratedVideoCallbacks(): AiGeneratedVideoCallbacks {
     return globalCallbacks
 }
 
-// Resolves a path like /api/videos/{ws}/{fileId} or /api/images/... to a full
-// authenticated URL. Mirrors the helper inlined in aiGeneratedImageNode.ts so
-// the same auth-token attachment logic applies to both video and poster URLs.
 const buildAuthenticatedUrl = async (url: string): Promise<string> => {
-    if (!url) return ''
-    if (url.startsWith('data:') || url.startsWith('blob:')) return url
-    if (url.startsWith('/api/')) {
-        const token = await AuthService.getTokenSilently()
-        const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-        return `${API_BASE_URL}${url}${token ? `?token=${token}` : ''}`
-    }
-    if (url.startsWith('http')) {
-        const stripped = url.replace(/[?&]token=[^&]+/, '')
-        if (stripped.includes('/api/videos/') || stripped.includes('/api/images/')) {
-            const token = await AuthService.getTokenSilently()
-            return `${stripped}${token ? `?token=${token}` : ''}`
-        }
-        return url
-    }
-    return url
+    return resolveAuthenticatedMediaUrl(url, {
+        apiBaseUrl: import.meta.env.VITE_API_URL || '',
+        getAuthToken: () => AuthService.getTokenSilently(),
+    })
 }
 
 export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => number | undefined) => {

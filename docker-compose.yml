@@ -1,3 +1,6 @@
+include:
+    - docker-compose.typescript-test-runner.yml
+
 services:
 
     lixpi-dynamodb:
@@ -260,6 +263,10 @@ services:
             NATS_SERVERS: "nats://lixpi-nats-1:4222,nats://lixpi-nats-2:4222,nats://lixpi-nats-3:4222"
             NATS_NEX_NODE_NKEY_SEED: ${NATS_NEX_NODE_NKEY_SEED}
             NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            # AUTH-account regular_user password — the file-conversion workload
+            # connects with this (not the NEX node creds) so it can read/write the
+            # workspace Object Store buckets that live in the AUTH account.
+            NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
             NATS_JS_DOMAIN: lixpi
             NEX_NAMESPACE: system
             NEX_NODE_NAME: lixpi-nex-1
@@ -292,14 +299,13 @@ services:
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
             - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:ro,cached
             - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:ro,cached
-            - ./packages/lixpi/ssm-service/package.json:/usr/src/service/packages/lixpi/ssm-service/package.json:ro,cached
-            - ./packages/lixpi/ssm-service/src:/usr/src/service/packages/lixpi/ssm-service/src:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
 
@@ -379,12 +385,15 @@ services:
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
+            - ./packages/lixpi/prosemirror/package.json:/usr/src/service/packages/lixpi/prosemirror/package.json:ro,cached
+            - ./packages/lixpi/prosemirror/src:/usr/src/service/packages/lixpi/prosemirror/src:ro,cached
 
             # - ./packages-vendor/bits-ui/packages/bits-ui:/usr/src/service/packages/bits-ui
             - ./packages-vendor/shadcn-svelte/docs/src/lib:/usr/src/service/packages/shadcn-svelte/lib:cached
@@ -408,13 +417,13 @@ services:
         stop_signal: SIGTERM
         ports:
             - 3001:5173
-        depends_on:
-            lixpi-api:
-                condition: service_healthy
-                restart: true
-            lixpi-nex-1:
-                condition: service_healthy
-                restart: true
+        # depends_on:
+        #     lixpi-api:
+        #         condition: service_healthy
+        #         restart: true
+        #     lixpi-nex-1:
+        #         condition: service_healthy
+        #         restart: true
 
     lixpi-api:
         container_name: lixpi-api
@@ -501,28 +510,25 @@ services:
 
             - ./packages/lixpi/auth-service/package.json:/usr/src/service/packages/lixpi/auth-service/package.json:ro,cached
             - ./packages/lixpi/auth-service/src:/usr/src/service/packages/lixpi/auth-service/src:ro,cached
+            - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/packages/lixpi/canvas-engine/package.json:ro,cached
+            - ./packages/lixpi/canvas-engine/src:/usr/src/service/packages/lixpi/canvas-engine/src:ro,cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
             - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:ro,cached
             - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:ro,cached
-            - ./packages/lixpi/lambda-service/package.json:/usr/src/service/packages/lixpi/lambda-service/package.json:ro,cached
-            - ./packages/lixpi/lambda-service/src:/usr/src/service/packages/lixpi/lambda-service/src:ro,cached
-            - ./packages/lixpi/sqs-service/package.json:/usr/src/service/packages/lixpi/sqs-service/package.json:ro,cached
-            - ./packages/lixpi/sqs-service/src:/usr/src/service/packages/lixpi/sqs-service/src:ro,cached
-            - ./packages/lixpi/ssm-service/package.json:/usr/src/service/packages/lixpi/ssm-service/package.json:ro,cached
-            - ./packages/lixpi/ssm-service/src:/usr/src/service/packages/lixpi/ssm-service/src:ro,cached
-            - ./packages/lixpi/sns-service/package.json:/usr/src/service/packages/lixpi/sns-service/package.json:ro,cached
-            - ./packages/lixpi/sns-service/src:/usr/src/service/packages/lixpi/sns-service/src:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
             - ./packages/lixpi/nats-auth-callout-service/package.json:/usr/src/service/packages/lixpi/nats-auth-callout-service/package.json:ro,cached
             - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/service/packages/lixpi/nats-auth-callout-service/src:ro,cached
+            - ./packages/lixpi/prosemirror/package.json:/usr/src/service/packages/lixpi/prosemirror/package.json:ro,cached
+            - ./packages/lixpi/prosemirror/src:/usr/src/service/packages/lixpi/prosemirror/src:ro,cached
 
         networks:
             - nats

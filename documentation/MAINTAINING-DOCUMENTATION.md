@@ -50,7 +50,7 @@ Write the contract directly:
 Mention removed or replaced behavior only in an explicit archive, migration
 plan, changelog, or compatibility section where that history is the subject. If
 a symbol remains for compatibility, document the live compatibility contract:
-"parses `aiUserInput` and removes it in `appendTransaction()`", not "this used
+"parses `legacyFooNode` and removes it in `appendTransaction()`", not "this used
 to be the composer."
 
 ## Keep the Structure Flexible

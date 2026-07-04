@@ -232,6 +232,8 @@ describe('MediaBranchLineagePlanner', () => {
             lineageParentNodeId: 'branch-fork-request-3-reasoning-0',
             reasoningRunId: 'request-3:reasoning:0',
             reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            reasoningIndex: 0,
+            mediaIndex: 0,
             createdAt: 1700000002000,
             referenceNodeIds: ['portrait-source', 'landscape-source'],
         })
@@ -240,6 +242,8 @@ describe('MediaBranchLineagePlanner', () => {
             lineageParentNodeId: 'branch-fork-request-3-reasoning-1',
             reasoningRunId: 'request-3:reasoning:1',
             reasoningModelId: 'Anthropic:claude-opus-4-1',
+            reasoningIndex: 1,
+            mediaIndex: 0,
             createdAt: 1700000002001,
             referenceNodeIds: ['portrait-source', 'landscape-source'],
         })
@@ -329,6 +333,8 @@ describe('MediaBranchLineagePlanner', () => {
             mediaRunId: 'request-5:reasoning:0:image:0',
             mediaModelId: 'OpenAI:gpt-image-1-mini',
             mediaType: 'image',
+            reasoningIndex: 0,
+            mediaIndex: 0,
             branchForkNodeId: 'branch-fork-request-5-reasoning-0',
             lineageParentNodeId: 'branch-fork-request-5-reasoning-0',
         })
@@ -336,6 +342,8 @@ describe('MediaBranchLineagePlanner', () => {
             mediaRunId: 'request-5:reasoning:0:image:1',
             mediaModelId: 'Google:gemini-2.5-flash-image',
             mediaType: 'image',
+            reasoningIndex: 0,
+            mediaIndex: 1,
             branchForkNodeId: 'branch-fork-request-5-reasoning-0',
         })
     })

@@ -9,6 +9,7 @@ const createImageCallbacks = () => ({
     onImageGenerationTraceToCanvas: vi.fn(),
     onImagePartialToCanvas: vi.fn(),
     onImageCompleteToCanvas: vi.fn(),
+    onMediaGenerationSkippedToCanvas: vi.fn(),
     onImageBranchResolvedToCanvas: vi.fn(),
     onMediaLineagePlannedToCanvas: vi.fn(),
     onWorkspaceContextResolvedToCanvas: vi.fn(),
@@ -238,6 +239,108 @@ describe('routeSegmentEventToCanvas', () => {
             responseMessageId: 'response-message-id',
             generationRun: undefined,
         })
+    })
+
+    it('uses aiChatThreadId when threadId is not provided', () => {
+        routeSegmentEventToCanvas({
+            aiChatThreadId: 'thread-id-fallback',
+            type: 'image_partial',
+            imageUrl: 'https://cdn.example.com/image-partial.png',
+            fileId: 'fallback-file',
+            workspaceId: 'workspace-fallback',
+            aiProvider: 'OpenAI',
+        } as any)
+        routeSegmentEventToCanvas({
+            aiChatThreadId: 'thread-id-fallback',
+            type: 'video_complete',
+            videoUrl: '/api/videos/workspace-id/fallback-video',
+            fileId: 'fallback-video',
+            workspaceId: 'workspace-id',
+            responseId: 'fallback-video-response',
+            revisedPrompt: 'Fallback prompt',
+            videoModel: 'OpenAI:o4-mini',
+        }, {
+            responseMessageId: 'response-message-id',
+        })
+
+        expect(imageCallbacks.onImagePartialToCanvas).toHaveBeenCalledWith({
+            threadId: 'thread-id-fallback',
+            imageUrl: 'https://cdn.example.com/image-partial.png',
+            fileId: 'fallback-file',
+            workspaceId: 'workspace-fallback',
+            partialIndex: 0,
+            aiProvider: 'OpenAI',
+            generationRun: undefined,
+        })
+        expect(videoCallbacks.onVideoCompleteToCanvas).toHaveBeenCalledWith({
+            threadId: 'thread-id-fallback',
+            videoUrl: '/api/videos/workspace-id/fallback-video',
+            fileId: 'fallback-video',
+            workspaceId: 'workspace-id',
+            posterUrl: '',
+            posterFileId: '',
+            frameUrl: '',
+            frameFileId: '',
+            durationSeconds: 0,
+            aspectRatio: 1.777,
+            hasAudio: true,
+            responseId: 'fallback-video-response',
+            revisedPrompt: 'Fallback prompt',
+            videoModel: 'OpenAI:o4-mini',
+            videoModelProvider: '',
+            responseMessageId: 'response-message-id',
+            generationRun: undefined,
+        })
+    })
+
+    it('does not emit callbacks for events without the payload fields that route requires', () => {
+        routeSegmentEventToCanvas({
+            threadId: 'thread-1',
+            type: 'image_complete',
+        } as any)
+
+        routeSegmentEventToCanvas({
+            threadId: 'thread-1',
+            type: 'image_branch_resolved',
+        } as any)
+
+        routeSegmentEventToCanvas({
+            threadId: 'thread-1',
+            type: 'media_lineage_planned',
+        } as any)
+
+        routeSegmentEventToCanvas({
+            threadId: 'thread-1',
+            type: 'context_relevance_resolved',
+        } as any)
+
+        expect(imageCallbacks.onImageCompleteToCanvas).not.toHaveBeenCalled()
+        expect(imageCallbacks.onImageBranchResolvedToCanvas).not.toHaveBeenCalled()
+        expect(imageCallbacks.onMediaLineagePlannedToCanvas).not.toHaveBeenCalled()
+        expect(imageCallbacks.onWorkspaceContextResolvedToCanvas).not.toHaveBeenCalled()
+    })
+
+    it('defaults generationRequestId for skipped media generations', () => {
+        routeSegmentEventToCanvas({
+            threadId: 'thread-1',
+            type: 'media_generation_skipped',
+        } as any)
+
+        expect(imageCallbacks.onMediaGenerationSkippedToCanvas).toHaveBeenCalledWith({
+            threadId: 'thread-1',
+            generationRequestId: '',
+            generationRun: undefined,
+        })
+    })
+
+    it('is a no-op for unrecognized segment types', () => {
+        routeSegmentEventToCanvas({
+            threadId: 'thread-1',
+            type: 'weird_event' as any,
+        } as any)
+
+        expect(Object.keys(imageCallbacks).every((key) => (imageCallbacks as any)[key].mock.calls.length === 0)).toBe(true)
+        expect(Object.keys(videoCallbacks).every((key) => (videoCallbacks as any)[key].mock.calls.length === 0)).toBe(true)
     })
 
     it('maps video trace and error callbacks', () => {

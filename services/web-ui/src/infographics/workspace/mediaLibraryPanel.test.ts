@@ -16,6 +16,9 @@ const panelSource = readFileSync(resolve(__dirname, 'mediaLibraryPanel.ts'), 'ut
 const panelStyles = readFileSync(resolve(__dirname, 'media-library-panel.scss'), 'utf-8')
 const canvasSource = readFileSync(resolve(__dirname, 'WorkspaceCanvas.ts'), 'utf-8')
 const workspaceSvelteSource = readFileSync(resolve(__dirname, '../../components/WorkspaceCanvas.svelte'), 'utf-8')
+const WORKSPACE_IMPORT_GUARD_SNIPPET =
+    'if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return'
+const WORKSPACE_IMPORT_FINALIZE_SNIPPET = 'await finalizeIngest(data, token, targetWorkspaceId, placeholderNodeId)'
 
 describe('Media Library panel contract', () => {
     it('is an embedded renderer the right side panel hosts, not a standalone drawer', () => {
@@ -95,15 +98,28 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(canvasSource, 'mediaLibraryService.materializeImage')
         expectSourceToContain(canvasSource, 'insertNodeAtViewportCenterInternal(imageNode)')
         expectSourceToContain(canvasSource, "type: 'image'")
-        expectSourceToContain(workspaceSvelteSource, '/api/images/${targetWorkspaceId}/import-url')
-        expectSourceToContain(workspaceSvelteSource, 'addImageToCanvas({ fileId: data.fileId, src: imageUrl, targetWorkspaceId })')
+        expectSourceToContain(workspaceSvelteSource, '/api/files/${targetWorkspaceId}/import-url')
+        expectSourceToContain(workspaceSvelteSource, 'insertNodeAtViewportCenter(imageNode)')
     })
 
     it('imports remote images with the current workspace target and encoded auth token', () => {
-        expectSourceToContain(workspaceSvelteSource, 'const targetWorkspaceId = workspaceId')
-        expectSourceToContain(workspaceSvelteSource, 'fetch(`${API_BASE_URL}/api/images/${targetWorkspaceId}/import-url`, {')
+        expectSourceToContain(workspaceSvelteSource, "const targetWorkspaceId = workspaceId")
+        expectSourceToContain(workspaceSvelteSource, "fetch(`${API_BASE_URL}/api/files/${targetWorkspaceId}/import-url`, {")
         expectSourceToContain(workspaceSvelteSource, "'Authorization': `Bearer ${token}`")
-        expectSourceToContain(workspaceSvelteSource, 'const imageUrl = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`')
-        expectSourceToContain(workspaceSvelteSource, 'if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return')
+        expectSourceToContain(workspaceSvelteSource, 'const src = tokenizeUrl(result.url, token)')
+        expectSourceToContain(workspaceSvelteSource, WORKSPACE_IMPORT_FINALIZE_SNIPPET)
+        expectSourceToContain(
+            workspaceSvelteSource,
+            WORKSPACE_IMPORT_GUARD_SNIPPET,
+        )
+    })
+
+    it('bails out early if the workspace context changed while importing a remote media sample', () => {
+        const guardIndex = workspaceSvelteSource.indexOf(WORKSPACE_IMPORT_GUARD_SNIPPET)
+        const finalizeIndex = workspaceSvelteSource.indexOf(WORKSPACE_IMPORT_FINALIZE_SNIPPET)
+
+        expect(guardIndex, 'stale-workspace guard should be present').toBeGreaterThan(-1)
+        expect(finalizeIndex, 'import finalize call should be present').toBeGreaterThan(-1)
+        expect(finalizeIndex).toBeGreaterThan(guardIndex)
     })
 })

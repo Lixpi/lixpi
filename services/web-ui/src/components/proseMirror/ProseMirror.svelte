@@ -25,12 +25,6 @@
 
     import Spinner from `$src/components/spinner.svelte`
 
-    /**
-     * @typedef {Object} Props
-     * @property {boolean} [isDisabled]
-     */
-
-    /** @type {Props} */
     let { isDisabled = false } = $props();
 
     let isFocused = false
@@ -39,24 +33,44 @@
 
     const documentService = new DocumentService()
 
-
     type ImageOptions = {
-        aiImageModel: string
+        aiImageModels: string[]
         imageGenerationSize: ImageGenerationSize
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
 
     type VideoOptions = {
-        aiVideoModel?: string
+        aiVideoModels: string[]
         videoAspectRatio?: string
         videoResolution?: string
         videoDuration?: string
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
 
-    const onAiChatSubmit = ({ messages, aiModel, threadId, imageOptions, videoOptions, referencedFeatureIds }: AiChatSendMessagePayload & { imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => {
-        // console.log('onAiChatSubmit', {messages, aiModel, threadId, aiInteractionInstance})
+    type AiChatSubmitOptions = AiChatSendMessagePayload & {
+        aiReasoningModels?: string[]
+        useMultipleReasoningModels?: boolean
+        useMultipleImageModels?: boolean
+        useMultipleVideoModels?: boolean
+        imageOptions?: ImageOptions
+        videoOptions?: VideoOptions
+        proseMirrorInitialDoc?: object
+        proseMirrorBaseVersion?: number
+    }
 
+    const onAiChatSubmit = ({
+        messages,
+        aiReasoningModels,
+        useMultipleReasoningModels,
+        useMultipleImageModels,
+        useMultipleVideoModels,
+        threadId,
+        imageOptions,
+        videoOptions,
+        referencedFeatureIds,
+        proseMirrorInitialDoc,
+        proseMirrorBaseVersion,
+    }: AiChatSubmitOptions) => {
         if (!aiInteractionInstance) {
             console.log('call->onAiChatSubmit', {aiInteractionInstance, projectKey: $routerStore.data.currentRoute?.routeParams.key})
             alert('🚫 call->onAiChatSubmit :: aiInteractionInstance is not initialized...');
@@ -66,16 +80,21 @@
 
         aiInteractionInstance.sendChatMessage({
             messages,
-            aiModel,
-            aiImageModel: imageOptions?.aiImageModel,
+            aiReasoningModels: aiReasoningModels ?? [],
+            useMultipleReasoningModels,
+            useMultipleImageModels,
+            useMultipleVideoModels,
+            aiImageModels: imageOptions?.aiImageModels,
             imageSize: imageOptions?.imageGenerationSize,
             imageConfigGroups: imageOptions?.configGroups,
-            aiVideoModel: videoOptions?.aiVideoModel,
+            aiVideoModels: videoOptions?.aiVideoModels,
             videoAspectRatio: videoOptions?.videoAspectRatio,
             videoResolution: videoOptions?.videoResolution,
             videoDuration: videoOptions?.videoDuration,
             videoConfigGroups: videoOptions?.configGroups,
             referencedFeatureIds,
+            proseMirrorInitialDoc,
+            proseMirrorBaseVersion,
         })
     }
 
@@ -88,7 +107,7 @@
             return false
         }
 
-        aiInteractionInstance.stopChatMessage({ threadId })
+        aiInteractionInstance.stopChatMessage()
     }
 
     const onProjectTitleChange = inputValue => {
@@ -185,7 +204,11 @@
                 onAiChatSubmit,
                 onAiChatStop
             });
-            aiInteractionInstance = new AiInteractionService(RouterService.getRouteParams().documentId as string)
+            const routeParams = RouterService.getRouteParams()
+            aiInteractionInstance = new AiInteractionService({
+                workspaceId: routeParams.workspaceId as string,
+                aiChatThreadId: routeParams.documentId as string,
+            })
             documentStore.setMetaValues({ isRendered: true })
         }
     });

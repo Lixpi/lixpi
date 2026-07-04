@@ -1,3 +1,5 @@
+import { mediaGenerationLayoutSettings } from '@lixpi/constants'
+
 import type { WorkspaceEdgePathType } from '@lixpi/constants'
 import type { CircularGlassMaterialStyle } from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
 
@@ -91,16 +93,19 @@ export type RightSidePanelSettings = {
         }
     }
     toggle: {
+        motion?: 'slide' | 'fixed'
         openAriaLabel: string
         closedAriaLabel: string
         openOffset: string
-        closedTravel: string
+        closedTravel?: string
         top: string
         size: string
     }
     animation: {
         durationMs: number
-        easing: string
+        easing?: string
+        openEasing?: string
+        closeEasing?: string
     }
     overlay: {
         enabled: boolean
@@ -123,6 +128,8 @@ export type RightSidePanelSettings = {
         toggleHoverColor: string
     }
 }
+
+export type NavigationSidePanelSettings = Omit<RightSidePanelSettings, 'layout'>
 
 export type AiChatThreadPanelTabsSettings = {
     minTabWidth: number
@@ -621,6 +628,8 @@ export type Settings = {
 
     rightSidePanel: RightSidePanelSettings
 
+    navigationSidePanel: NavigationSidePanelSettings
+
     aiChatThread: AiChatThreadSettings
 
     aiPromptInput: AiPromptInputSettings
@@ -834,8 +843,10 @@ export const settings: Settings = {
         },
         animation: {
             // Drawer-style slide duration.
-            durationMs: 150,
-            easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+            durationMs: 100,
+            // Opening decelerates into place; closing accelerates away.
+            openEasing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            closeEasing: 'cubic-bezier(0.64, 0, 0.78, 0)',
         },
         overlay: {
             // Full-canvas dark glass tint layer behind the side panel.
@@ -855,6 +866,71 @@ export const settings: Settings = {
         },
         styles: {
             backdropFill: 'rgba(248, 250, 253, 0.84)',
+            backdropFillOpaque: '#f8fafd',
+            toggleColor: '#4b5563',
+            toggleHoverColor: '#1f2937',
+        },
+    },
+
+    // Navigation side panel (workspace list) surface, resize, toggle, and slide settings.
+    navigationSidePanel: {
+        defaultDimensions: {
+            // Screen-pixel width before the user has resized the panel.
+            width: 280,
+        },
+        dimensions: {
+            // Minimum screen-pixel width while resizing.
+            minWidth: 220,
+            // Remaining pane width kept visible when computing the dynamic max width.
+            maxPaneMargin: 64,
+        },
+        resizeHandle: {
+            // Horizontal offset in pixels from the panel's right edge to the resize handle center.
+            offset: 0,
+            // Screen-pixel width of the invisible resize hit target.
+            grabWidth: 20,
+            styles: {
+                // Background gradient painted on the visible resize-handle line.
+                gradient: 'linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%)',
+                // Visible line width; this does not change the draggable hit target.
+                width: '3px',
+            },
+        },
+        toggle: {
+            openAriaLabel: 'Collapse navigation side panel',
+            closedAriaLabel: 'Open navigation side panel',
+            // Keep the navigation toggle anchored; the panel opens underneath
+            // it instead of pushing the button to the panel edge.
+            motion: 'fixed',
+            openOffset: '20px',
+            top: '20px',
+            size: '20px',
+        },
+        animation: {
+            // Drawer-style slide duration.
+            durationMs: 100,
+            // Opening decelerates into place; closing accelerates away.
+            openEasing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            closeEasing: 'cubic-bezier(0.64, 0, 0.78, 0)',
+        },
+        overlay: {
+            // Full-viewport dark glass tint layer behind the side panel.
+            enabled: true,
+            closeOnPointerDown: true,
+            fill: 'rgba(15, 23, 42, 0.18)',
+            fillOpaque: 'rgba(15, 23, 42, 0.22)',
+            opacity: 1,
+        },
+        drag: {
+            // Vaul-style horizontal swipe-to-close gesture for pointer/touch input.
+            enabled: true,
+            closeThreshold: 0.25,
+            velocityThreshold: 0.4,
+            pointerSwipeStartThreshold: 2,
+            touchSwipeStartThreshold: 10,
+        },
+        styles: {
+            backdropFill: 'rgba(248, 250, 253, 0.94)',
             backdropFillOpaque: '#f8fafd',
             toggleColor: '#4b5563',
             toggleHoverColor: '#1f2937',
@@ -1416,24 +1492,28 @@ export const settings: Settings = {
     },
 
     // Generated media branch-lineage placement settings for image and video nodes.
+    // The dimensions and gaps come from the shared mediaGenerationLayoutSettings in
+    // @lixpi/constants: the API canvas projection persists node geometry with the
+    // same values, so editing them here-and-there separately is what caused nodes
+    // to jump or overlap. Tune them in @lixpi/constants only.
     mediaBranchLineage: {
         // Canvas-unit base width and height for new generated media nodes. Increasing it makes each generated branch artifact larger when inserted.
-        generatedMediaSize: 800,
+        generatedMediaSize: mediaGenerationLayoutSettings.generatedMediaSize,
         // Canvas-unit minimum empty space reserved around every branchOrigin, branchFork, and branchLine marker during placement, drag release, and branch-tree rebalance.
-        nodeGap: 64,
+        nodeGap: mediaGenerationLayoutSettings.nodeGap,
         // Canvas-unit horizontal gap between a chat root or reference group and the first generated media node in that branch.
-        rootToFirstMediaGap: 384,
+        rootToFirstMediaGap: mediaGenerationLayoutSettings.rootToFirstMediaGap,
         // Canvas-unit vertical gap between separate branch rows spawned from the same chat root. Increasing it moves new branches farther below the previous branch.
-        branchRowGap: 160,
+        branchRowGap: mediaGenerationLayoutSettings.branchRowGap,
         // Canvas-unit base horizontal gap between consecutive generated media nodes in the same branch lineage.
-        mediaToMediaGap: 712,
+        mediaToMediaGap: mediaGenerationLayoutSettings.mediaToMediaGap,
         // Canvas-unit horizontal gap from a temporary branchOrigin marker to its first generated media node.
-        branchOriginToFirstMediaGap: 312,
+        branchOriginToFirstMediaGap: mediaGenerationLayoutSettings.branchOriginToFirstMediaGap,
         // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
-        branchFanoutExtraGap: 200,
-        // Vertical gap between the global prompt input and pending branch marker; the same numeric gap separates stacked pending branch markers.
+        branchFanoutExtraGap: mediaGenerationLayoutSettings.branchFanoutExtraGap,
+        // Vertical gap between stacked screen-fixed pending branch markers.
         pendingMarkerInputGap: 8,
-        // Milliseconds for moving and scaling a pending branch marker from the global prompt input to its API-planned canvas position.
+        // Milliseconds for moving and scaling a pending branch marker from its screen-fixed preflight position to its API-planned canvas position.
         pendingMarkerMoveDurationMs: 420,
         // Temporary root marker used when a fresh multi-model branch has no real source node.
         branchOrigin: {
@@ -1794,9 +1874,9 @@ export const settings: Settings = {
             minWidthMultiplier: 2.6,
             // Multiplier on the minimum width capping how wide an on-canvas (already-placed) marker may grow before its preview wraps to a second line and truncates. Lower it to keep long placed messages more compact.
             maxWidthGrowth: 1.5,
-            // Multiplier on the minimum width capping the docked, above-the-composer pose (single line). Kept wider than maxWidthGrowth so long prompts stay on one line while still being assessed; once the marker lands on the canvas it tightens to maxWidthGrowth.
+            // Multiplier on the minimum width capping the screen-fixed preflight pose. Kept wider than maxWidthGrowth so long prompts stay on one line while still being assessed; once the marker lands on the canvas it tightens to maxWidthGrowth.
             screenFixedMaxWidthGrowth: 6,
-            // Hard cap on the docked pose's on-screen width as a fraction of the prompt input field width. The pill hugs its content but never grows past this share of the input; longer messages truncate with an ellipsis.
+            // Hard cap on the screen-fixed preflight pose's on-screen width as a fraction of the prompt input field width. The pill hugs its content but never grows past this share of the input; longer messages truncate with an ellipsis.
             screenFixedMaxWidthFraction: 0.8,
             // Text sizing for the marker's preview lines. Matches the floating detail panel's body text (1rem / 16px) so a marker reads at the same size as the thread it represents.
             text: {
@@ -1810,8 +1890,8 @@ export const settings: Settings = {
 
     // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).
     contentDescriptor: {
-        // Quiet period (ms) after the last edit before a text node's descriptor is regenerated. Increasing it batches more typing into one describe call; decreasing it refreshes the descriptor sooner.
-        editDebounceMs: 2500,
+        // Quiet period (ms) before a text node descriptor seed/refresh runs. Canvas document typing does not proactively call this path.
+        editDebounceMs: 5000,
         // Minimum trimmed plain-text length before a document/thread is worth describing. Below this we skip the model call (nothing meaningful to summarize).
         minTextLength: 16,
     },

@@ -1,12 +1,15 @@
 // @ts-nocheck
 'use strict'
 
-import { EditorState, Plugin, PluginKey } from "prosemirror-state"
+import { EditorState } from "prosemirror-state"
 import { EditorView } from "prosemirror-view"
-import { Schema, DOMParser } from "prosemirror-model"
-import customNodes from '$src/components/proseMirror/customNodes'
-// import { schema } from "prosemirror-schema-basic"
-import { schema } from '$src/components/proseMirror/components/schema'
+import { DOMParser } from "prosemirror-model"
+import {
+    DOCUMENT_TYPE,
+    aiChatThreadNodeType,
+    aiPromptInputNodeType,
+    createProseMirrorSchema
+} from '@lixpi/prosemirror'
 import { keymap } from "prosemirror-keymap"
 import { history } from "prosemirror-history"
 import { baseKeymap } from "prosemirror-commands"
@@ -18,38 +21,13 @@ import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.js'
 import focusPlugin from '$src/components/proseMirror/plugins/focusPlugin.js'
 import lockCursorPositionPlugin from '$src/components/proseMirror/plugins/lockCursorPositionPlugin.js'
 import {
-    createAiChatThreadPlugin,
-    aiChatThreadNodeType,
-    aiChatThreadNodeSpec,
-    aiResponseMessageNodeType,
-    aiResponseMessageNodeSpec,
-    aiUserMessageNodeType,
-    aiUserMessageNodeSpec,
-    aiGeneratedImageNodeType,
-    aiGeneratedImageNodeSpec,
-    aiGeneratedImageNodeView,
-    aiGeneratedVideoNodeType,
-    aiGeneratedVideoNodeSpec,
-    aiGeneratedVideoNodeView,
-    aiCollapsibleBlockNodeType,
-    aiCollapsibleBlockNodeSpec,
-    aiCollapsibleBlockNodeView,
-    aiReasoningSectionNodeType,
-    aiReasoningSectionNodeSpec,
-    aiReasoningSectionNodeView,
-    aiLineageEventNodeType,
-    aiLineageEventNodeSpec
+    createAiChatThreadPlugin
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
 import {
-    createAiPromptInputPlugin,
-    aiPromptInputNodeType,
-    aiPromptInputNodeSpec
+    createAiPromptInputPlugin
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin'
 import { createCodeBlockPlugin, codeBlockInputRule } from '$src/components/proseMirror/plugins/codeBlockPlugin.js'
 import { activeNodePlugin } from "$src/components/proseMirror/plugins/activeNodePlugin"
-
-// Node types
-import { documentTitleNodeType } from "$src/components/proseMirror/customNodes/documentTitleNode.ts"
 
 import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/index.ts'
 import { linkTooltipPlugin } from '$src/components/proseMirror/plugins/linkTooltipPlugin/linkTooltipPlugin.ts'
@@ -60,60 +38,38 @@ import { imageSelectionPlugin } from '$src/components/proseMirror/plugins/imageS
 import {buildKeymap} from "$src/components/proseMirror/components/keyMap.js"
 import {buildInputRules} from "$src/components/proseMirror/components/inputRules.js"
 import { createSvelteComponentRendererPlugin } from '$src/components/proseMirror/plugins/svelteComponentRenderer/svelteComponentRendererPlugin.js'
+import { ProseMirrorAuthorityService } from '$src/services/prosemirror-authority-service.ts'
 // import TaskRow from '$src/rows/TaskRow.svelte'
 
 import { defaultAttrs as defautSubtaskAttrs } from '$src/components/proseMirror/customNodes/taskRowNode.js'
 
-// Document type constants
-const DOCUMENT_TYPE = {
-    DOCUMENT: 'document',
-    AI_CHAT_THREAD: 'aiChatThread',
-    AI_PROMPT_INPUT: 'aiPromptInput'
-}
-
-// `nodesBuilder` extends the base ProseMirror `schema` with custom node types defined in `supportedNodes`.
-// `schema`: Base ProseMirror schema to be extended.
-// `supportedNodes`: Object with custom node types. Each key is a node type name, value is its spec.
-// `documentType`: Determines the doc content model.
-// Returns the extended schema.
-const nodesBuilder = (schema, supportedNodes, documentType) => {
-    const nodesKeys = Object.keys(supportedNodes)
-
-    // Determine doc content based on documentType
-    // - 'document': Regular documents with title and block content
-    // - 'aiChatThread': AI chat thread with title and aiChatThread nodes
-    // - 'aiPromptInput': Floating AI prompt input (single aiPromptInput node)
-    let docContent
-    if (documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
-        docContent = `${documentTitleNodeType} ${aiChatThreadNodeType}+`
-    } else if (documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
-        docContent = `${aiPromptInputNodeType}`
-    } else {
-        docContent = `${documentTitleNodeType} block+`
-    }
-
-    let extendedSchema = schema.spec.nodes
-    .update('doc', {
-        content: docContent,
-        marks: "_",
-    })
-
-    // IMPORTANT: Preserve base schema order when overriding existing nodes.
-    // If we add (or re-add) existing textblocks like `code_block` *before* `paragraph`,
-    // ProseMirror's default block selection can pick `code_block` when you press Enter
-    // out of the title, which makes regular documents feel broken.
-    nodesKeys.forEach((nodeKey) => {
-        const spec = supportedNodes[nodeKey]
-        if (extendedSchema.get(nodeKey)) {
-            extendedSchema = extendedSchema.update(nodeKey, spec)
-        } else {
-            extendedSchema = extendedSchema.addBefore("paragraph", nodeKey, spec)
-        }
-    })
-    return extendedSchema
+type ProseMirrorEditorConfig = {
+    editorMountElement: HTMLElement
+    content: HTMLElement
+    initialVal?: any
+    isDisabled: boolean
+    documentType?: string
+    threadId?: string | null
+    onEditorChange?: (value: any) => void
+    onStreamingUpdate?: (value: any) => void
+    onProjectTitleChange?: (value: any) => void
+    onAiChatSubmit?: (value: any) => void
+    onAiChatStop?: (value: any) => void
+    onPromptSubmit?: (value: any) => void
+    onPromptStop?: () => void
+    isPromptReceiving?: () => boolean
+    promptControlFactories?: any
+    onReceivingStateChange?: (threadId: string, receiving: boolean) => void
+    readOnly?: boolean
+    proseMirrorAuthority?: any
+    aiChatThreadRenderContext?: any
 }
 
 export class ProseMirrorEditor {
+    editorView!: EditorView
+    editorSchema: any = null
+    proseMirrorAuthority: ProseMirrorAuthorityService | null = null
+
     constructor({
         editorMountElement,
         content,
@@ -132,8 +88,9 @@ export class ProseMirrorEditor {
         promptControlFactories,
         onReceivingStateChange,
         readOnly = false,
+        proseMirrorAuthority,
         aiChatThreadRenderContext
-    }) {
+    }: ProseMirrorEditorConfig) {
         this.onEditorChange = onEditorChange
         this.onStreamingUpdate = onStreamingUpdate
         this.onProjectTitleChange = onProjectTitleChange
@@ -144,6 +101,8 @@ export class ProseMirrorEditor {
         this.isPromptReceiving = isPromptReceiving
         this.promptControlFactories = promptControlFactories
         this.onReceivingStateChange = onReceivingStateChange
+        this.proseMirrorAuthorityOptions = proseMirrorAuthority
+        this.proseMirrorAuthority = null
         this.isDisabled = isDisabled
         this.readOnly = readOnly
         this.aiChatThreadRenderContext = {
@@ -163,6 +122,14 @@ export class ProseMirrorEditor {
             }),
             editable: () => this.isEditorEditable()
         })
+
+        if (this.proseMirrorAuthorityOptions) {
+            this.proseMirrorAuthority = new ProseMirrorAuthorityService({
+                ...this.proseMirrorAuthorityOptions,
+                getView: () => this.editorView,
+                onRemoteDocumentChange: value => this.dispatchStreamingUpdate(value),
+            })
+        }
     }
 
     createInitialDocument(initialVal, content) {
@@ -218,36 +185,18 @@ export class ProseMirrorEditor {
     }
 
     createSchema() {
-        let allNodes
-        if (this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
-            allNodes = {
-                ...customNodes,
-                [aiChatThreadNodeType]: aiChatThreadNodeSpec,
-                [aiResponseMessageNodeType]: aiResponseMessageNodeSpec,
-                [aiUserMessageNodeType]: aiUserMessageNodeSpec,
-                [aiGeneratedImageNodeType]: aiGeneratedImageNodeSpec,
-                [aiGeneratedVideoNodeType]: aiGeneratedVideoNodeSpec,
-                [aiCollapsibleBlockNodeType]: aiCollapsibleBlockNodeSpec,
-                [aiReasoningSectionNodeType]: aiReasoningSectionNodeSpec,
-                [aiLineageEventNodeType]: aiLineageEventNodeSpec
-            }
-        } else if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
-            allNodes = {
-                [aiPromptInputNodeType]: aiPromptInputNodeSpec
-            }
-        } else {
-            allNodes = { ...customNodes }
-        }
-
-        return new Schema({
-            nodes: nodesBuilder(schema, allNodes, this.documentType),
-            marks: schema.spec.marks
-        })
+        return createProseMirrorSchema(this.documentType)
     }
 
     createPlugins(initialValue, isDisabled) {
         const basePlugins = [
-            statePlugin(initialValue, this.dispatchStateChange.bind(this), this.onProjectTitleChange.bind(this), this.dispatchStreamingUpdate.bind(this)),
+            statePlugin(
+                initialValue,
+                this.dispatchStateChange.bind(this),
+                this.onProjectTitleChange.bind(this),
+                this.dispatchStreamingUpdate.bind(this),
+                this.proseMirrorAuthorityOptions ? this.dispatchLocalTransaction.bind(this) : null
+            ),
             focusPlugin(this.updateEditorFocusState.bind(this)), // Allows to enable editor if it was disabled and user clicks on the editor area
             bubbleMenuPlugin(),
             linkTooltipPlugin(),
@@ -327,7 +276,13 @@ export class ProseMirrorEditor {
         this.onStreamingUpdate?.(json)
     }
 
+    dispatchLocalTransaction(transaction) {
+        this.proseMirrorAuthority?.submitLocalTransaction(transaction)
+    }
+
     destroy() {
+        this.proseMirrorAuthority?.disconnect()
+        this.proseMirrorAuthority = null
         if (this.editorView) {
             this.editorView.destroy()
             this.editorView = null

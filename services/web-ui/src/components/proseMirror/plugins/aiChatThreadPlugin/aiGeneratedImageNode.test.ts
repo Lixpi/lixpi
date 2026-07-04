@@ -4,6 +4,7 @@ import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { EditorState } from 'prosemirror-state'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import { testSchema as schema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeView,
@@ -63,6 +64,11 @@ const createNodeView = (overrides: Record<string, unknown> = {}, getPos: () => n
 
     const nodeView = aiGeneratedImageNodeView(node as any, view as any, getPos)
     return { nodeView, node, dispatch, focus, state, doc, view: view as any }
+}
+
+const getImageSrc = (nodeView: { dom: HTMLElement }): string => {
+    const image = nodeView.dom.querySelector('.ai-generated-image-content') as HTMLImageElement
+    return image.getAttribute('src') ?? ''
 }
 
 // =============================================================================
@@ -167,27 +173,39 @@ describe('aiGeneratedImageNodeView', () => {
             imageData: '/api/images/workspace-images/final-file',
             isPartial: false,
         })
-        const image = nodeView.dom.querySelector('.ai-generated-image-content') as HTMLImageElement
 
         await Promise.resolve()
+        await vi.waitFor(() => expect(getImageSrc(nodeView)).toContain('token=token-1'))
 
         expect(AuthService.getTokenSilently).toHaveBeenCalledTimes(1)
-        expect(image.src).toContain('/api/images/workspace-images/final-file?token=token-1')
+        expect(getImageSrc(nodeView)).toContain('/api/files/workspace-images/final-file')
+        expect(getImageSrc(nodeView)).toContain('token=token-1')
     })
 
     it('replaces stale tokenized image URLs with a refreshed token', async () => {
         vi.mocked(AuthService.getTokenSilently).mockResolvedValue('fresh-token')
 
         const { nodeView } = createNodeView({
-            imageData: 'https://cdn.example.com/api/images/workspace-images/final-file?token=stale',
+            imageData: 'https://cdn.example.com/api/files/workspace-images/final-file?token=stale',
+            isPartial: false,
+        })
+
+        await Promise.resolve()
+
+        await vi.waitFor(() => expect(getImageSrc(nodeView)).toContain('token=fresh-token'))
+        expect(getImageSrc(nodeView)).not.toContain('token=stale')
+    })
+
+    it('keeps non-file HTTP URLs unchanged when they include query params', async () => {
+        const { nodeView } = createNodeView({
+            imageData: 'https://cdn.example.com/assets/preview.png?token=stale',
             isPartial: false,
         })
         const image = nodeView.dom.querySelector('.ai-generated-image-content') as HTMLImageElement
 
         await Promise.resolve()
 
-        expect(image.src).not.toContain('token=stale')
-        expect(image.src).toContain('token=fresh-token')
+        expect(image.src).toBe('https://cdn.example.com/assets/preview.png?token=stale')
     })
 
     it('falls back to inline base64 URL construction for legacy payloads', async () => {
@@ -252,7 +270,22 @@ describe('aiGeneratedImageNodeView', () => {
         expect(updated).toBe(true)
         expect(spinner.classList.contains('is-active')).toBe(false)
         expect(image.classList.contains('is-visible')).toBe(true)
-        expect(image.src).toContain('/api/images/workspace-images/new-file?token=token-1')
+        await vi.waitFor(() => expect(getImageSrc(nodeView)).toContain('/api/files/workspace-images/new-file'))
+        expect(getImageSrc(nodeView)).toContain('token=token-1')
+    })
+
+    it('does not request auth tokens for plain external URLs', async () => {
+        vi.mocked(AuthService.getTokenSilently).mockReset().mockResolvedValue('token-1')
+        const { nodeView } = createNodeView({
+            imageData: 'https://cdn.example.com/preview/public-image.png',
+            isPartial: false,
+        })
+        const image = nodeView.dom.querySelector('.ai-generated-image-content') as HTMLImageElement
+
+        await Promise.resolve()
+
+        expect(AuthService.getTokenSilently).not.toHaveBeenCalled()
+        expect(image.getAttribute('src')).toBe('https://cdn.example.com/preview/public-image.png')
     })
 
     it('adds an inline error placeholder only once when image fails to load', async () => {
@@ -287,6 +320,37 @@ describe('aiGeneratedImageNodeView', () => {
         expect(tr.selection.toJSON()).toMatchObject({ type: 'node', anchor: 0 })
         const selection = tr.selection
         expect(selection.from).toBe(0)
+    })
+
+    it('does not dispatch node selection when editor is not editable', () => {
+        const node = createImageNode()
+        const doc = schema.nodes.doc.create(null, [node])
+        const state = EditorState.create({ doc, schema })
+        const dispatch = vi.fn()
+        const focus = vi.fn()
+
+        const nonEditableNodeView = aiGeneratedImageNodeView(node as any, {
+            state,
+            dispatch,
+            focus,
+            editable: false,
+        } as any, () => 0)
+
+        nonEditableNodeView.dom.dispatchEvent(new MouseEvent('click'))
+
+        expect(dispatch).not.toHaveBeenCalled()
+        expect(focus).not.toHaveBeenCalled()
+    })
+
+    it('unsubscribes from aiModelsStore on destroy', () => {
+        const unsubscribe = vi.fn()
+        const subscribeSpy = vi.spyOn(aiModelsStore, 'subscribe').mockReturnValue(unsubscribe)
+
+        const { nodeView } = createNodeView()
+        nodeView.destroy()
+
+        expect(unsubscribe).toHaveBeenCalledTimes(1)
+        subscribeSpy.mockRestore()
     })
 
     it('returns false when a different node type is passed to update()', () => {

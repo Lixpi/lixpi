@@ -1,28 +1,62 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
+
+import * as debugTools from '@lixpi/debug-tools'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
 import type { AiModelMetaInfo, ProviderState } from '../graph/state.ts'
+import { validateImagePrompt } from '../tools/image-generation.ts'
 
 type Published = { subject: string, payload: any }
 
 const makeFakeNats = () => {
     const published: Published[] = []
+    let nextStreamSeq = 0
     const fake = {
         publish: (subject: string, payload: any) => {
             published.push({ subject, payload })
         },
+        ensureJetStreamStream: vi.fn(async () => undefined),
+        publishJetStream: vi.fn(async () => {
+            nextStreamSeq += 1
+            return { seq: nextStreamSeq }
+        }),
+        purgeJetStreamSubject: vi.fn(async () => undefined),
     } as any
     return { fake, published }
+}
+
+const flushPipelinePublishes = async (): Promise<void> => {
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
 }
 
 const makeImageModel = (model: string): AiModelMetaInfo => ({
     provider: 'Google',
     model,
     modelVersion: model,
+})
+
+let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
+let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
+
+beforeEach(() => {
+    debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
+    debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
+    debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+    debugInfoSpy?.mockRestore()
+    debugInfoSpy = null
+    debugWarnSpy?.mockRestore()
+    debugWarnSpy = null
+    debugErrSpy?.mockRestore()
+    debugErrSpy = null
 })
 
 const createFanoutState = (overrides: Partial<ProviderState> = {}): ProviderState => ({
@@ -80,6 +114,14 @@ class TestProvider extends BaseProvider {
     }
 }
 
+class FailingStreamProvider extends BaseProvider {
+    readonly providerName: ProviderName = 'Anthropic'
+
+    protected async streamImpl(): Promise<Partial<ProviderState>> {
+        throw new Error('streamer exploded')
+    }
+}
+
 describe('BaseProvider image fanout errors', () => {
     it('publishes IMAGE_ERROR for the failed media child while returning successful siblings', async () => {
         const nats = makeFakeNats()
@@ -128,6 +170,7 @@ describe('BaseProvider image fanout errors', () => {
         } as ProviderState
 
         const result = await provider.runImageGeneration(state)
+        await flushPipelinePublishes()
 
         expect(result).toEqual({ generatedImages: ['final-image-base64'] })
         expect(runImageRouter).toHaveBeenCalledTimes(2)
@@ -233,6 +276,68 @@ describe('BaseProvider routing', () => {
         expect((provider as any).routeAfterStream({ generatedImagePrompt: 'paint' } as any)).toBe('generate_image')
         expect((provider as any).routeAfterStream({} as any)).toBe('skip')
     })
+
+    it('emits MEDIA_GENERATION_SKIPPED when lineage is planned but no media prompt was generated', () => {
+        const nats = makeFakeNats()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        })
+        ;(provider as any).streamPublisher = new StreamPublisher(
+            nats.fake,
+            'ws-1',
+            'thread-1',
+            'Anthropic',
+        )
+        const skippedSpy = vi.spyOn((provider as any).streamPublisher, 'mediaGenerationSkipped')
+
+        expect((provider as any).routeAfterStream({
+            mediaBranchLineagePlan: { generationRequestId: 'request-matrix-1' },
+        } as any)).toBe('skip')
+
+        expect(skippedSpy).toHaveBeenCalledTimes(1)
+        expect(skippedSpy).toHaveBeenCalledWith('request-matrix-1')
+    })
+
+    it('does not emit MEDIA_GENERATION_SKIPPED when no lineage plan is available', () => {
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        })
+
+        expect((provider as any).routeAfterStream({} as any)).toBe('skip')
+        expect((provider as any).streamPublisher).toBeUndefined()
+    })
+
+    it('does not call MEDIA_GENERATION_SKIPPED when lineage is not available', () => {
+        const nats = makeFakeNats()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        })
+        ;(provider as any).streamPublisher = new StreamPublisher(
+            nats.fake,
+            'ws-1',
+            'thread-1',
+            'Anthropic',
+        )
+        const skippedSpy = vi.spyOn((provider as any).streamPublisher, 'mediaGenerationSkipped')
+
+        expect((provider as any).routeAfterStream({} as any)).toBe('skip')
+        expect(skippedSpy).not.toHaveBeenCalled()
+    })
 })
 
 describe('BaseProvider fanout', () => {
@@ -255,6 +360,7 @@ describe('BaseProvider fanout', () => {
         const provider = new TestProvider('ws1:thread1', deps)
 
         const result = await provider.runImageGeneration(createFanoutState())
+        await flushPipelinePublishes()
 
         expect(result).toEqual({ generatedImages: ['final-image-base64'] })
         expect(runImageRouter).toHaveBeenCalledTimes(2)
@@ -296,6 +402,7 @@ describe('BaseProvider fanout', () => {
         const provider = new TestProvider('ws1:thread1', deps)
 
         const result = await provider.runImageGeneration(createFanoutState())
+        await flushPipelinePublishes()
 
         expect(result).toEqual({ generatedImages: ['final-image-base64'] })
         expect(runImageRouter).toHaveBeenCalledTimes(2)
@@ -327,6 +434,7 @@ describe('BaseProvider fanout', () => {
             generatedImagePrompt: undefined,
             generatedVideoPrompt: 'Animate this cat in a loop.',
         }))
+        await flushPipelinePublishes()
 
         expect(result).toEqual({ generatedVideos: ['final-video-url'] })
         expect(runVideoRouter).toHaveBeenCalledTimes(2)
@@ -354,6 +462,7 @@ describe('BaseProvider fanout', () => {
             generatedVideoPrompt: undefined,
             generatedImagePrompt: 'Render with all models failing',
         }))
+        await flushPipelinePublishes()
 
         expect(result).toMatchObject({ error: 'Image model unavailable' })
         expect(runImageRouter).toHaveBeenCalledTimes(2)
@@ -415,5 +524,334 @@ describe('BaseProvider fanout', () => {
         expect(result).toEqual({ generatedVideos: ['only-video', 'only-video'] })
         expect((deps.runVideoRouter as any)).toHaveBeenCalledTimes(2)
         expect((deps.runImageRouter as any)).not.toHaveBeenCalled()
+    })
+})
+
+describe('BaseProvider image fanout prompt validation', () => {
+    class FanoutRewriteProvider extends TestProvider {
+        readonly providerName = 'Anthropic' as const
+
+        constructor(instanceKey: string, deps: BaseProviderDeps, private readonly rewrittenImage: string | undefined) {
+            super(instanceKey, deps)
+        }
+
+        protected override async rewriteImagePromptToFitLimit(
+            _state: ProviderState,
+            prompt: string,
+            maxChars: number,
+        ): Promise<string | undefined> {
+            if (this.rewrittenImage !== undefined) {
+                return this.rewrittenImage
+            }
+            return `${prompt.slice(0, maxChars)}`
+        }
+    }
+
+    it('uses a successful rewritten prompt when a fanout prompt exceeds limits', async () => {
+        const nats = makeFakeNats()
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(async () => ({ generatedImages: ['ok'] })),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps
+        const provider = new FanoutRewriteProvider('ws1:thread1', deps, 'short')
+
+        const state = createFanoutState({
+            generatedImagePrompt: 'this prompt is intentionally and clearly too long for this model',
+            imageModelMetaInfo: {
+                provider: 'Anthropic',
+                model: 'claude-sonnet-4-6',
+                modelVersion: 'claude-sonnet-4-6',
+                imagePromptMaxChars: 5,
+            } as any,
+            imageModelVersion: 'claude-sonnet-4-6',
+            imageProviderName: 'Anthropic',
+        } as any)
+
+        const result = await (provider as any).validateImageFanoutPrompt(state)
+
+        expect(result).toEqual({ generatedImagePrompt: 'short' })
+    })
+
+    it('returns validation error when rewritten fanout prompt still violates provider constraints', async () => {
+        const nats = makeFakeNats()
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(async () => ({ generatedImages: ['ok'] })),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps
+        const provider = new FanoutRewriteProvider('ws1:thread1', deps, 'this rewritten prompt is still too long')
+
+        const state = createFanoutState({
+            generatedImagePrompt: 'this prompt is intentionally and clearly too long for this model',
+            imageModelMetaInfo: {
+                provider: 'Anthropic',
+                model: 'claude-sonnet-4-6',
+                modelVersion: 'claude-sonnet-4-6',
+                imagePromptMaxChars: 5,
+            } as any,
+            imageModelVersion: 'claude-sonnet-4-6',
+            imageProviderName: 'Anthropic',
+        } as any)
+
+        const result = await (provider as any).validateImageFanoutPrompt(state)
+        const expectedError = validateImagePrompt(
+            'this rewritten prompt is still too long',
+            state.imageModelMetaInfo,
+            state.imageProviderName,
+        )
+
+        expect(result).toEqual({ error: expectedError })
+    })
+
+    it('falls back to the original validation error if rewrite throws', async () => {
+        class ThrowingRewriteProvider extends TestProvider {
+            readonly providerName = 'Anthropic' as const
+
+            protected override async rewriteImagePromptToFitLimit(
+                _state: ProviderState,
+                _prompt: string,
+                _maxChars: number,
+            ): Promise<string | undefined> {
+                throw new Error('rewrite service unavailable')
+            }
+        }
+
+        const nats = makeFakeNats()
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(async () => ({ generatedImages: ['ok'] })),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps
+        const provider = new ThrowingRewriteProvider('ws1:thread1', deps)
+
+        const state = createFanoutState({
+            generatedImagePrompt: 'this prompt is intentionally and clearly too long for this model',
+            imageModelMetaInfo: {
+                provider: 'Anthropic',
+                model: 'claude-sonnet-4-6',
+                modelVersion: 'claude-sonnet-4-6',
+                imagePromptMaxChars: 5,
+            } as any,
+            imageModelVersion: 'claude-sonnet-4-6',
+            imageProviderName: 'Anthropic',
+        } as any)
+
+        const result = await (provider as any).validateImageFanoutPrompt(state)
+        const expectedError = validateImagePrompt(
+            'this prompt is intentionally and clearly too long for this model',
+            state.imageModelMetaInfo,
+            state.imageProviderName,
+        )
+
+        expect(result).toEqual({
+            error: expectedError,
+        })
+        expect(debugWarnSpy).toHaveBeenCalledWith(
+            '[BaseProvider] Image fanout prompt rewrite failed for ws1:thread1: rewrite service unavailable',
+        )
+    })
+
+    it('falls back to the original validation error when rewrite returns undefined', async () => {
+        class MissingRewriteProvider extends TestProvider {
+            readonly providerName = 'Anthropic' as const
+
+            protected override async rewriteImagePromptToFitLimit(
+                _state: ProviderState,
+                _prompt: string,
+                _maxChars: number,
+            ): Promise<string | undefined> {
+                return undefined
+            }
+        }
+
+        const nats = makeFakeNats()
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(async () => ({ generatedImages: ['ok'] })),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps
+        const provider = new MissingRewriteProvider('ws1:thread1', deps)
+
+        const state = createFanoutState({
+            generatedImagePrompt: 'this prompt is intentionally and clearly too long for this model',
+            imageModelMetaInfo: {
+                provider: 'Anthropic',
+                model: 'claude-sonnet-4-6',
+                modelVersion: 'claude-sonnet-4-6',
+                imagePromptMaxChars: 5,
+            } as any,
+            imageModelVersion: 'claude-sonnet-4-6',
+            imageProviderName: 'Anthropic',
+        } as any)
+
+        const result = await (provider as any).validateImageFanoutPrompt(state)
+        const expectedError = validateImagePrompt(
+            'this prompt is intentionally and clearly too long for this model',
+            state.imageModelMetaInfo,
+            state.imageProviderName,
+        )
+
+        expect(result).toEqual({ error: expectedError })
+    })
+})
+
+describe('BaseProvider streamTokens failure path', () => {
+    it('returns terminal error metadata and marks stream as finished when streamImpl throws', async () => {
+        const provider = new FailingStreamProvider('ws1:thread1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+
+        const streamError = vi.fn()
+        const streamEnd = vi.fn()
+        ;(provider as any).streamPublisher = {
+            error: streamError,
+            end: streamEnd,
+        } as any
+
+        const update = await (provider as any).streamTokens({
+            workspaceId: 'ws1',
+            aiChatThreadId: 'thread1',
+            instanceKey: 'ws1:thread1',
+            provider: 'Anthropic',
+            modelVersion: 'claude-sonnet-4-6',
+            messages: [{ role: 'user', content: 'make fire' }],
+            streamActive: false,
+            aiRequestReceivedAt: 1,
+            aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
+            eventMeta: {},
+            temperature: 0.7,
+            imageSize: 'auto',
+        } as any)
+
+        expect(update).toMatchObject({
+            streamActive: false,
+            error: 'streamer exploded',
+            aiRequestFinishedAt: expect.any(Number),
+        })
+        expect(streamError).toHaveBeenCalledWith('streamer exploded')
+        expect(streamEnd).toHaveBeenCalledTimes(1)
+        expect(debugErrSpy).toHaveBeenCalledWith('Streaming error (Anthropic): streamer exploded')
+    })
+})
+
+describe('BaseProvider usage lifecycle', () => {
+    it('skips usage reporter calls when the workflow failed upstream', async () => {
+        const reportTokensUsage = vi.fn()
+        const reportImageUsage = vi.fn()
+        const reportVideoUsage = vi.fn()
+        const provider = new TestProvider('ws1:thread1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {
+                reportTokensUsage,
+                reportImageUsage,
+                reportVideoUsage,
+            },
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+
+        await (provider as any).calculateUsage({
+            workspaceId: 'ws1',
+            aiChatThreadId: 'thread1',
+            instanceKey: 'ws1:thread1',
+            provider: 'Anthropic',
+            modelVersion: 'claude-sonnet-4-6',
+            aiModelMetaInfo: { provider: 'Anthropic', model: 'claude-sonnet-4-6' },
+            temperature: 0.7,
+            streamActive: false,
+            aiRequestReceivedAt: 10,
+            error: 'provider failed',
+            usage: { promptTokens: 4 },
+            eventMeta: {},
+        } as any)
+
+        expect(reportTokensUsage).not.toHaveBeenCalled()
+        expect(reportImageUsage).not.toHaveBeenCalled()
+        expect(reportVideoUsage).not.toHaveBeenCalled()
+    })
+
+    it('reports token, image, and video usage with generated metadata', async () => {
+        const reportTokensUsage = vi.fn()
+        const reportImageUsage = vi.fn()
+        const reportVideoUsage = vi.fn()
+        const provider = new TestProvider('ws1:thread1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {
+                reportTokensUsage,
+                reportImageUsage,
+                reportVideoUsage,
+            },
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+
+        await (provider as any).calculateUsage({
+            workspaceId: 'ws1',
+            aiChatThreadId: 'thread1',
+            instanceKey: 'ws1:thread1',
+            provider: 'Anthropic',
+            modelVersion: 'claude-sonnet-4.6',
+            aiModelMetaInfo: { provider: 'Anthropic', model: 'claude-sonnet-4.6', modelVersion: 'claude-sonnet-4.6' },
+            videoModelMetaInfo: { provider: 'Google', model: 'veo-3.1-generate-preview', modelVersion: 'veo-3.1-generate-preview' },
+            temperature: 0.7,
+            streamActive: false,
+            aiRequestReceivedAt: 10,
+            usage: { promptTokens: 12, completionTokens: 8, totalTokens: 20 },
+            imageUsage: { size: '1024x1024', quality: 'high' },
+            videoUsage: {
+                durationSeconds: 8,
+                resolution: '720p',
+                aspectRatio: '16:9',
+                totalTokens: 456,
+                completionTokens: 123,
+            },
+            eventMeta: { requestId: 'req-1' },
+        } as any)
+
+        expect(reportTokensUsage).toHaveBeenCalledOnce()
+        expect(reportImageUsage).toHaveBeenCalledOnce()
+        expect(reportVideoUsage).toHaveBeenCalledOnce()
+    })
+
+    it('finishes prose-mirror stream during cleanup', async () => {
+        const finishProseMirrorStream = vi.fn().mockResolvedValue(undefined)
+        const provider = new TestProvider('ws1:thread1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        ;(provider as any).streamPublisher = {
+            finishProseMirrorStream,
+        } as StreamPublisher
+
+        const result = await (provider as any).cleanup({} as any)
+
+        expect(finishProseMirrorStream).toHaveBeenCalledOnce()
+        expect(result).toEqual({})
     })
 })

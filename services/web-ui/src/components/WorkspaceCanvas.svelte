@@ -4,11 +4,18 @@
         type Viewport
     } from '@xyflow/system'
     import {
-        MAX_IMAGE_FILE_SIZE,
+        MAX_UPLOAD_FILE_SIZE,
+        NATS_SUBJECTS,
         type CanvasState,
         type DocumentCanvasNode,
-        type ImageCanvasNode
-    } from '@lixpi/constants'
+	        type DocumentMediaCanvasNode,
+	        type ImageCanvasNode,
+	        type VideoCanvasNode,
+	        type AudioCanvasNode,
+	        type UploadPlaceholderCanvasNode,
+	        type MediaKind,
+	        type ConvertFileNotification
+	    } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
     import DocumentService from '$src/services/document-service.ts'
@@ -24,6 +31,14 @@
     import '$src/components/sidePanel/side-panel.scss'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
+
+    type PendingDocumentUpdate = {
+        workspaceId: string
+        documentId: string
+        title?: string
+        prevRevision?: number
+        content?: any
+    }
 
     let paneEl: HTMLDivElement
     let viewportEl: HTMLDivElement
@@ -48,6 +63,9 @@
     let imageWrapperEl: HTMLDivElement
     let fileInputEl: HTMLInputElement
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
+    const documentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+    const pendingDocumentUpdates = new Map<string, PendingDocumentUpdate>()
+    const DOCUMENT_SAVE_DEBOUNCE_MS = 5000
     const documentService = new DocumentService()
     const aiChatThreadService = new AiChatThreadService()
     const DEFAULT_DOCUMENT_NODE_DIMENSIONS = { width: 400, height: 350 }
@@ -106,6 +124,32 @@
                 persistCanvasState(newCanvasState)
             }
         }, 1000)
+    }
+
+    function scheduleDocumentUpdate(update: PendingDocumentUpdate): void {
+        const { workspaceId: targetWorkspaceId, documentId } = update
+        const pendingUpdate = {
+            ...pendingDocumentUpdates.get(documentId),
+            workspaceId: targetWorkspaceId,
+            documentId,
+            ...(update.title !== undefined ? { title: update.title } : {}),
+            ...(update.prevRevision !== undefined ? { prevRevision: update.prevRevision } : {}),
+            ...(update.content !== undefined ? { content: update.content } : {}),
+        }
+        pendingDocumentUpdates.set(documentId, pendingUpdate)
+
+        const existingTimer = documentSaveTimers.get(documentId)
+        if (existingTimer) clearTimeout(existingTimer)
+
+        const timer = setTimeout(() => {
+            documentSaveTimers.delete(documentId)
+            const pending = pendingDocumentUpdates.get(documentId)
+            pendingDocumentUpdates.delete(documentId)
+            if (!pending) return
+            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
+            documentService.updateDocument(pending)
+        }, DOCUMENT_SAVE_DEBOUNCE_MS)
+        documentSaveTimers.set(documentId, timer)
     }
 
     async function handleCreateDocument() {
@@ -177,8 +221,124 @@
         const input = e.target as HTMLInputElement
         if (input.files && input.files.length > 0) {
             closeImageSubmenu()
-            uploadAndAddImage(input.files[0])
+            uploadAndAddFile(input.files[0])
             input.value = ''
+        }
+    }
+
+    // Shape the unified upload/import endpoint returns. The API does no heavy
+    // processing: it stores the original and returns immediately. `status` is
+    // 'ready' (model-safe image / text — build the node now) or 'processing'
+    // (a transcode/probe is running on the NEX file-conversion workload; subscribe
+    // to the completion subject keyed by `conversionId`). The per-kind hints are
+    // present on the async completion notification, not the initial response.
+    type IngestResult = {
+        status: 'ready' | 'processing'
+        fileId: string
+        kind: MediaKind
+        url: string
+        modelSafe: boolean
+        conversionId?: string
+        sourceFileId?: string
+        canonicalFileId?: string
+        canonicalMimeType?: string
+        aspectRatio?: number
+        durationSeconds?: number
+        hasAudio?: boolean
+        posterFileId?: string
+        posterUrl?: string
+        pageCount?: number
+    }
+
+    const { FILE_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
+
+    // Subscribe to the per-upload conversion completion subject. The API publishes
+    // a ConvertFileNotification here once the NEX workload settles; we then replace
+    // the upload placeholder with the real node, or fail it. Best-effort like the
+    // feature-extraction run subscription it mirrors.
+    function subscribeToConversion(
+        targetWorkspaceId: string,
+        conversionId: string,
+        token: string,
+        placeholderNodeId: string | null,
+        fileId: string,
+        kind: MediaKind,
+    ) {
+        const nats = servicesStore.getData('nats')
+        if (!nats) return
+        const subject = `${FILE_SUBJECTS.CONVERT_RESPONSE}.${targetWorkspaceId}.${conversionId}`
+
+        const handle = (data: ConvertFileNotification) => {
+            nats.getSubscriptions?.([subject])?.forEach((sub: any) => sub.unsubscribe())
+            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
+
+            if (!data?.success) {
+                markUploadPlaceholderFailed(placeholderNodeId, data?.error || 'The file could not be converted to a supported format.')
+                return
+            }
+
+            // The canvas file is the canonical derivative when one was produced,
+            // else the stored original (model-safe inputs that only needed probing).
+            const canvasFileId = data.canonicalFileId ?? fileId
+            const result: IngestResult = {
+                status: 'ready',
+                fileId: canvasFileId,
+                kind,
+                url: `/api/files/${targetWorkspaceId}/${canvasFileId}`,
+                modelSafe: true,
+                canonicalFileId: data.canonicalFileId,
+                canonicalMimeType: data.canonicalMimeType,
+                aspectRatio: data.aspectRatio,
+                durationSeconds: data.durationSeconds,
+                hasAudio: data.hasAudio,
+                posterFileId: data.posterFileId,
+                posterUrl: data.posterFileId ? `/api/files/${targetWorkspaceId}/${data.posterFileId}` : undefined,
+                pageCount: data.pageCount,
+            }
+            addFileToCanvas(result, token, targetWorkspaceId, placeholderNodeId)
+        }
+
+        nats.subscribe(subject, handle)
+    }
+
+    function tokenizeUrl(url: string, token: string): string {
+        return `${API_BASE_URL}${url}?token=${encodeURIComponent(token)}`
+    }
+
+    function getUploadPlaceholderNodeId(): string {
+        const randomId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+        return `upload-${randomId}`
+    }
+
+    function insertUploadPlaceholder(fileName: string): string | null {
+        const nodeId = getUploadPlaceholderNodeId()
+        const now = Date.now()
+        const placeholderNode: Omit<UploadPlaceholderCanvasNode, 'position'> = {
+            nodeId,
+            type: 'uploadPlaceholder',
+            fileName,
+            status: 'converting',
+            message: 'Creating a supported copy before adding it to the canvas.',
+            dimensions: { width: 360, height: 84 },
+            createdAt: now,
+            updatedAt: now,
+        }
+        renderer?.insertNodeAtViewportCenter(placeholderNode)
+        return renderer ? nodeId : null
+    }
+
+    function markUploadPlaceholderFailed(placeholderNodeId: string | null, message: string) {
+        if (!placeholderNodeId) return
+        renderer?.markUploadPlaceholderFailed(placeholderNodeId, message)
+    }
+
+    function getRemotePlaceholderName(url: string): string {
+        try {
+            return new URL(url).pathname.split('/').filter(Boolean).at(-1) || 'Remote file'
+        } catch {
+            return 'Remote file'
         }
     }
 
@@ -187,11 +347,13 @@
         const targetWorkspaceId = workspaceId
         if (!url || !targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
+        let placeholderNodeId: string | null = null
         try {
             const token = await AuthService.getTokenSilently()
             if (!token) return
 
-            const response = await fetch(`${API_BASE_URL}/api/images/${targetWorkspaceId}/import-url`, {
+            placeholderNodeId = insertUploadPlaceholder(getRemotePlaceholderName(url))
+            const response = await fetch(`${API_BASE_URL}/api/files/${targetWorkspaceId}/import-url`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -199,62 +361,96 @@
                 },
                 body: JSON.stringify({ url }),
             })
-            if (!response.ok) throw new Error('Image URL import failed')
 
             const data = await response.json()
-            const imageUrl = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`
+            if (!response.ok) {
+                markUploadPlaceholderFailed(placeholderNodeId, data?.error || 'File URL import failed')
+                return
+            }
             if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
             closeImageSubmenu()
-            addImageToCanvas({ fileId: data.fileId, src: imageUrl, targetWorkspaceId })
+            await finalizeIngest(data, token, targetWorkspaceId, placeholderNodeId)
         } catch (error) {
-            console.error('Image URL import failed:', error)
+            console.error('File URL import failed:', error)
+            markUploadPlaceholderFailed(placeholderNodeId, 'File URL import failed')
         }
     }
 
-    async function uploadAndAddImage(file: File) {
-        if (!file.type.startsWith('image/')) return
-        if (file.size > MAX_IMAGE_FILE_SIZE) return
+    // Generalized device upload — accepts ANY file. The client no longer
+    // pre-rejects by MIME (the server sniffs the bytes); it only enforces the
+    // size ceiling and surfaces the server's specific rejection inline.
+    async function uploadAndAddFile(file: File) {
         const targetWorkspaceId = workspaceId
         if (!targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
+
+        let placeholderNodeId: string | null = null
+        // Show the failure on the canvas placeholder, never in the picker menu.
+        if (file.size > MAX_UPLOAD_FILE_SIZE) {
+            placeholderNodeId = insertUploadPlaceholder(file.name)
+            markUploadPlaceholderFailed(placeholderNodeId, 'File is too large.')
+            return
+        }
 
         try {
             const token = await AuthService.getTokenSilently()
             if (!token) return
 
+            placeholderNodeId = insertUploadPlaceholder(file.name)
             const formData = new FormData()
             formData.append('file', file)
 
-            const response = await fetch(`${API_BASE_URL}/api/images/${targetWorkspaceId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/files/${targetWorkspaceId}`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             })
 
-            if (!response.ok) throw new Error('Upload failed')
-
             const data = await response.json()
-            const imageUrl = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`
+            if (!response.ok) {
+                markUploadPlaceholderFailed(placeholderNodeId, data?.error || 'Upload failed')
+                return
+            }
             if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
-            addImageToCanvas({ fileId: data.fileId, src: imageUrl, targetWorkspaceId })
+            await finalizeIngest(data, token, targetWorkspaceId, placeholderNodeId)
         } catch (error) {
-            console.error('Image upload failed:', error)
+            console.error('File upload failed:', error)
+            markUploadPlaceholderFailed(placeholderNodeId, 'Upload failed')
         }
     }
 
-    function addImageToCanvas({ fileId, src, targetWorkspaceId }: { fileId: string, src: string, targetWorkspaceId: string }) {
+    // Settle an ingest response: a `ready` file (plain text / Markdown) becomes a
+    // node now; a `processing` file keeps its placeholder and subscribes for the
+    // async conversion completion. The browser never inspects file bytes — every
+    // server-derived hint (image aspectRatio, video/audio duration + poster, PDF
+    // page count) arrives on the completion notification.
+    function finalizeIngest(result: IngestResult, token: string, targetWorkspaceId: string, placeholderNodeId: string | null) {
+        if (result.status === 'processing') {
+            if (result.conversionId) {
+                subscribeToConversion(targetWorkspaceId, result.conversionId, token, placeholderNodeId, result.fileId, result.kind)
+            } else {
+                markUploadPlaceholderFailed(placeholderNodeId, 'Upload could not be queued for conversion.')
+            }
+            return
+        }
+
+        addFileToCanvas(result, token, targetWorkspaceId, placeholderNodeId)
+    }
+
+    // Dispatch an ingested file onto the canvas as the typed node its `kind`
+    // selects. Uploads stay client-placed at the viewport center (they have no
+    // server-side lineage to position against).
+    function addFileToCanvas(result: IngestResult, token: string, targetWorkspaceId: string, placeholderNodeId: string | null = null) {
         if (!targetWorkspaceId || workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
-        const img = new Image()
-        img.onload = () => {
-            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
+        const { fileId, kind } = result
+        const src = tokenizeUrl(result.url, token)
+        const posterSrc = result.posterUrl ? tokenizeUrl(result.posterUrl, token) : undefined
 
-            const aspectRatio = img.naturalWidth > 0 && img.naturalHeight > 0
-                ? img.naturalWidth / img.naturalHeight
-                : 1
+        if (kind === 'image') {
+            const aspectRatio = result.aspectRatio && result.aspectRatio > 0 ? result.aspectRatio : 1
             const dimensions = getImageInsertionDimensions(aspectRatio)
-
             const imageNode: Omit<ImageCanvasNode, 'position'> = {
                 nodeId: `node-${fileId}`,
                 type: 'image',
@@ -264,29 +460,64 @@
                 aspectRatio,
                 dimensions,
             }
-
+            if (placeholderNodeId && renderer?.replaceUploadPlaceholder(placeholderNodeId, imageNode)) return
             renderer?.insertNodeAtViewportCenter(imageNode)
+            return
         }
 
-        img.onerror = () => {
-            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
-
-            console.error('Failed to load image for dimension calculation')
-            const dimensions = getImageInsertionDimensions(1)
-            const imageNode: Omit<ImageCanvasNode, 'position'> = {
+        if (kind === 'video') {
+            const aspectRatio = result.aspectRatio && result.aspectRatio > 0 ? result.aspectRatio : 1
+            const videoNode: Omit<VideoCanvasNode, 'position'> = {
                 nodeId: `node-${fileId}`,
-                type: 'image',
+                type: 'video',
+                fileId,
+                posterFileId: result.posterFileId ?? '',
+                workspaceId: targetWorkspaceId,
+                src,
+                posterSrc: posterSrc ?? '',
+                aspectRatio,
+                durationSeconds: result.durationSeconds ?? 0,
+                hasAudio: result.hasAudio ?? true,
+                dimensions: getImageInsertionDimensions(aspectRatio),
+            }
+            if (placeholderNodeId && renderer?.replaceUploadPlaceholder(placeholderNodeId, videoNode)) return
+            renderer?.insertNodeAtViewportCenter(videoNode)
+            return
+        }
+
+        if (kind === 'audio') {
+            // Audio has no aspect; use a compact fixed strip.
+            const audioNode: Omit<AudioCanvasNode, 'position'> = {
+                nodeId: `node-${fileId}`,
+                type: 'audio',
                 fileId,
                 workspaceId: targetWorkspaceId,
                 src,
-                aspectRatio: 1,
-                dimensions,
+                durationSeconds: result.durationSeconds ?? 0,
+                hasAudio: true,
+                dimensions: { width: 360, height: 96 },
             }
-
-            renderer?.insertNodeAtViewportCenter(imageNode)
+            if (placeholderNodeId && renderer?.replaceUploadPlaceholder(placeholderNodeId, audioNode)) return
+            renderer?.insertNodeAtViewportCenter(audioNode)
+            return
         }
 
-        img.src = src
+        // document (PDF / converted office doc / text)
+        const aspectRatio = result.aspectRatio && result.aspectRatio > 0 ? result.aspectRatio : 0.7727 // ~A4 portrait
+        const documentNode: Omit<DocumentMediaCanvasNode, 'position'> = {
+            nodeId: `node-${fileId}`,
+            type: 'mediaDocument',
+            fileId,
+            workspaceId: targetWorkspaceId,
+            src,
+            posterFileId: result.posterFileId,
+            posterSrc,
+            pageCount: result.pageCount,
+            aspectRatio,
+            dimensions: getImageInsertionDimensions(aspectRatio),
+        }
+        if (placeholderNodeId && renderer?.replaceUploadPlaceholder(placeholderNodeId, documentNode)) return
+        renderer?.insertNodeAtViewportCenter(documentNode)
     }
 
     onMount(() => {
@@ -303,10 +534,9 @@
             onCanvasStateChange: persistCanvasState,
             onDocumentContentChange: ({ documentId, title, prevRevision, content }) => {
                 if (!workspaceId || loadedWorkspaceId !== workspaceId) return
-                documentService.updateDocument({
+                scheduleDocumentUpdate({
                     workspaceId,
                     documentId,
-                    title: title ?? '',
                     prevRevision: prevRevision || 1,
                     content
                 })
@@ -314,7 +544,7 @@
             onDocumentTitleChange: ({ documentId, title }) => {
                 if (!workspaceId || loadedWorkspaceId !== workspaceId) return
                 documentsStore.updateDocument(documentId, { title })
-                documentService.updateDocument({
+                scheduleDocumentUpdate({
                     workspaceId,
                     documentId,
                     title
@@ -357,6 +587,9 @@
 
     onDestroy(() => {
         if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
+        for (const timer of documentSaveTimers.values()) clearTimeout(timer)
+        documentSaveTimers.clear()
+        pendingDocumentUpdates.clear()
         renderer?.destroy()
     })
 </script>
@@ -427,7 +660,7 @@
 
     <input
         type="file"
-        accept="image/*"
+        accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.ppt,.pptx,.odt,.rtf,.txt,.md"
         style="display: none"
         bind:this={fileInputEl}
         onchange={handleFileInputChange}

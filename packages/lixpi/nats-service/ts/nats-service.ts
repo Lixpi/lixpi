@@ -1,7 +1,7 @@
 'use strict'
 
 import c from 'chalk'
-import { wsconnect } from '@nats-io/nats-core'
+import { wsconnect, tokenAuthenticator } from '@nats-io/nats-core'
 import { connect } from "@nats-io/transport-node"
 import { fromSeed } from '@nats-io/nkeys'
 import { jetstream, jetstreamManager } from '@nats-io/jetstream'
@@ -40,6 +40,14 @@ export type NatsServiceConfig = {
     pass?: string
     nkeySeed?: string       // Optional NKey seed for self-issued JWT
     userId?: string         // Optional user ID for JWT subject (used with nkeySeed)
+    // Optional async provider used to (re)fetch a fresh auth token before every
+    // connect/reconnect attempt. When supplied it takes precedence over the
+    // static `token` and lets the connection recover from token expiry or
+    // signing-key rotation without a page reload.
+    getToken?: () => Promise<string | false>
+    // Invoked when the server rejects our credentials (AuthorizationError) so the
+    // caller can invalidate any cached token before `getToken` is called again.
+    onAuthError?: (error: unknown) => void | Promise<void>
     subscriptions?: NatsSubjectSubscription[]
     middleware?: NatsMiddleware[]              // Middleware for all subscriptions
     replyMiddleware?: ReplyMiddleware[]        // Middleware specifically for replies
@@ -68,6 +76,17 @@ export type SubscriptionOptions = {
 
 export type MessageHandler = (data: any, msg: Msg) => void | Promise<void>
 export type ReplyHandler<T = any, R = any> = (data: T, msg: Msg) => Promise<R> | R
+
+export type JetStreamPublishOptions = {
+    msgID?: string
+    expect?: Record<string, string | number>
+    headers?: any
+}
+
+export type JetStreamConsumeOptions = {
+    maxMessages?: number
+    expiresMs?: number
+}
 
 const encode = (value: any, type: 'json' | 'buffer'): any => {
     if (type === 'json') {
@@ -157,6 +176,18 @@ export default class NatsService {
     private isConnecting = false
     private reconnectTimer: NodeJS.Timeout | null = null
     private subscriptionsInitialized = false
+    // Latest token handed to the NATS authenticator. Kept in sync so the client's
+    // own internal reconnect loop always presents fresh credentials rather than a
+    // stale token that was captured once at connect time.
+    private currentToken: string | null = null
+    // Set during graceful disconnect()/drain() so the status monitor does not try
+    // to reconnect after an intentional close.
+    private intentionalClose = false
+    // Consecutive failed connect attempts, used for exponential backoff so a
+    // persistent auth failure does not flood the auth callout / JWKS endpoint.
+    private reconnectAttempts = 0
+    // Timeout (ms) applied to each connect attempt; captured from connect().
+    private connectTimeout = 2000
 
     static getInstance(): NatsService | null {
         return NatsService.instance || null
@@ -175,9 +206,14 @@ export default class NatsService {
         this.streamReplicas = config.streamReplicas ?? DEFAULT_STREAM_REPLICAS
     }
 
-    private scheduleReconnect(delay = 500) {
+    private scheduleReconnect(delay?: number) {
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
-        this.reconnectTimer = setTimeout(() => this.connect(), delay)
+        // Exponential backoff: 500ms, 1s, 2s, 4s, 8s, capped at 16s. Prevents a
+        // stale token or a down server from hammering the auth callout / JWKS
+        // endpoint (which is itself rate-limited) tens of times per second.
+        const backoff = delay ?? Math.min(500 * (2 ** this.reconnectAttempts), 16000)
+        this.reconnectAttempts++
+        this.reconnectTimer = setTimeout(() => this.connect(this.connectTimeout), backoff)
     }
 
     private monitorStatus(): void {
@@ -202,11 +238,23 @@ export default class NatsService {
                         break
                     case "error":
                         err('NATS -> connection error:', status)
+                        // The client keeps retrying internally (maxReconnectAttempts: -1),
+                        // but with the credentials captured at connect time. If the server
+                        // rejected our token (expired or signing key rotated), refresh it so
+                        // the next internal reconnect presents valid credentials.
+                        if (this.isAuthError((status as any).error ?? status)) {
+                            await this.handleAuthError((status as any).error ?? status)
+                            await this.refreshToken()
+                        }
                         break
                     case "close":
                         warn('NATS -> connection closed:', status)
                         // Reset the initialized flag on close so we can reconnect properly
                         this.subscriptionsInitialized = false
+                        // Reconnect unless we intentionally closed the connection.
+                        if (!this.intentionalClose) {
+                            this.scheduleReconnect()
+                        }
                         break
                 }
             }
@@ -222,7 +270,7 @@ export default class NatsService {
             return
         }
 
-        subs.forEach(listener => {
+        for (const listener of subs) {
             try {
                 const subscriptionType = listener.type ?? 'subscribe'
 
@@ -256,7 +304,7 @@ export default class NatsService {
             } catch (error) {
                 err(`Failed to subscribe to NATS subject ${listener.subject}`, error)
             }
-        })
+        }
 
         this.subscriptionsInitialized = true
     }
@@ -308,15 +356,21 @@ export default class NatsService {
     async connect(initialConnectTimeout = 2000): Promise<void> {
         if (this.isConnecting || this.isConnected()) return
         this.isConnecting = true
+        this.intentionalClose = false
+        this.connectTimeout = initialConnectTimeout
 
         try {
+            // Fetch a fresh token before every attempt so a reload/reconnect after a
+            // token expiry or signing-key rotation does not keep replaying stale creds.
+            await this.refreshToken()
+
             const options = this.buildConnectionOptions()
-            this.nc = await Promise.race([
-                this.config.webSocket ? wsconnect(options) : connect(options),
-                new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('Initial connect timeout')), initialConnectTimeout)
-                )
-            ])
+            // The client honours `options.timeout` and rejects on failure (see
+            // waitOnFirstConnect: false), so there is no need for a Promise.race
+            // timeout that would leave a background client retrying forever.
+            this.nc = await (this.config.webSocket ? wsconnect(options) : connect(options))
+            // Connected: reset the reconnect backoff.
+            this.reconnectAttempts = 0
             infoStr([
                 c.green('NATS -> listening on: '),
                 c.blue(`${this.config.webSocket ? 'wss://' : 'nats://'}${this.nc.getServer()}`)
@@ -324,11 +378,52 @@ export default class NatsService {
             this.monitorStatus()
             await this.initSubscriptions()
         } catch (error) {
-            err('NATS -> connection error or timeout', error)
+            if (this.isAuthError(error)) {
+                // Server rejected our credentials. Let the caller invalidate its cached
+                // token so the next refreshToken() obtains a valid one instead of looping
+                // forever on the same rejected token.
+                err('NATS -> authorization failed, refreshing credentials', error)
+                await this.handleAuthError(error)
+            } else {
+                err('NATS -> connection error or timeout', error)
+            }
             this.scheduleReconnect()
         } finally {
             this.isConnecting = false
         }
+    }
+
+    // Refresh the token used by the authenticator. Prefers the async provider so
+    // credentials can be regenerated on demand; falls back to the static token.
+    private async refreshToken(): Promise<void> {
+        if (this.config.getToken) {
+            try {
+                const fresh = await this.config.getToken()
+                if (fresh) this.currentToken = fresh
+            } catch (error) {
+                err('NATS -> failed to refresh auth token', error)
+            }
+        } else if (this.config.token) {
+            this.currentToken = this.config.token
+        }
+    }
+
+    // Notify the caller that the server rejected our credentials so it can clear
+    // any cached token before the next refreshToken() call.
+    private async handleAuthError(error: unknown): Promise<void> {
+        try {
+            await this.config.onAuthError?.(error)
+        } catch (cbError) {
+            err('NATS -> onAuthError handler failed', cbError)
+        }
+    }
+
+    // Detect authorization/authentication failures across the various error shapes
+    // the client surfaces them in (thrown errors and status events).
+    private isAuthError(error: unknown): boolean {
+        const name = (error as any)?.name
+        const message = String((error as any)?.message ?? error ?? '')
+        return name === 'AuthorizationError' || /authoriz|authentic/i.test(message)
     }
 
     private buildConnectionOptions(): ConnectionOptions {
@@ -339,7 +434,17 @@ export default class NatsService {
             name,
             maxReconnectAttempts: -1,
             reconnectTimeWait: 500,
-            waitOnFirstConnect: true,
+            // Reject the initial connect on failure instead of retrying silently in
+            // the background. With `waitOnFirstConnect: true` an auth failure never
+            // surfaced to our catch block: the client kept retrying forever with the
+            // rejected token, our own connect timeout fired, and we spawned yet
+            // another background client that also retried forever — flooding the
+            // auth callout / JWKS endpoint. Failing fast lets us detect the auth
+            // error, refresh the token, and back off.
+            waitOnFirstConnect: false,
+            // Let the client enforce the connect timeout so a slow/hanging attempt
+            // is torn down cleanly rather than leaked behind a Promise.race.
+            timeout: this.connectTimeout,
         }
 
         this.applyAuthentication(options)
@@ -353,10 +458,13 @@ export default class NatsService {
             // Priority 1: Self-issued JWT using NKey seed (Ed25519 signing)
             // Used by services that need cryptographically signed authentication
             options.token = generateSelfIssuedJWT(nkeySeed, userId, 1)
-        } else if (token) {
-            // Priority 2: Pre-generated JWT token
-            // Used when token is already available from external source
-            options.token = token
+        } else if (this.config.getToken || token || this.currentToken) {
+            // Priority 2: Pre-generated / provider-supplied JWT token.
+            // Use a token authenticator that reads `currentToken` on every (re)connect
+            // so the client's internal reconnect loop always presents the freshest
+            // token instead of the one captured when the connection was first opened.
+            if (!this.currentToken && token) this.currentToken = token
+            options.authenticator = tokenAuthenticator(() => this.currentToken ?? '')
         } else if (user && pass) {
             // Priority 3: Basic username/password authentication
             // Legacy auth method, less secure than JWT
@@ -368,6 +476,8 @@ export default class NatsService {
 
     async disconnect(): Promise<void> {
         if (this.nc && !this.nc.isClosed()) {
+            this.intentionalClose = true
+            if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
             await this.nc.close()
             info('NATS disconnected gracefully.')
         }
@@ -375,6 +485,8 @@ export default class NatsService {
 
     async drain(): Promise<void> {
         if (this.nc && !this.nc.isClosed()) {
+            this.intentionalClose = true
+            if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
             await this.nc.drain()
             info('NATS drained all subscriptions and disconnected.')
         }
@@ -388,9 +500,7 @@ export default class NatsService {
         return this.nc
     }
 
-    /**
-     * Publish JSON data to a subject
-     */
+    // Publish JSON data to a subject.
     publish<T = any>(subject: string, data: T): void {
         if (!this.nc) {
             err('NATS client is not connected.')
@@ -399,9 +509,7 @@ export default class NatsService {
         this.nc.publish(subject, JSON.stringify(data))
     }
 
-    /**
-     * Subscribe to a subject
-     */
+    // Subscribe to a subject.
     subscribe<T = any>(
         subject: string,
         handler: (data: T, msg: Msg) => void | Promise<void>,
@@ -603,6 +711,104 @@ export default class NatsService {
         }
         await jsm.streams.update(streamName, { num_replicas: replicas })
         return { name: streamName, from, to: replicas, changed: true }
+    }
+
+    async ensureJetStreamStream(config: Record<string, any>): Promise<any> {
+        const jsm = await this.getJetStreamManager()
+        try {
+            const streamInfo = await jsm.streams.info(config.name)
+            const existingSubjects = streamInfo.config.subjects ?? []
+            const nextSubjects = Array.from(new Set([...existingSubjects, ...(config.subjects ?? [])]))
+            await jsm.streams.update(config.name, {
+                ...streamInfo.config,
+                ...config,
+                subjects: nextSubjects,
+            })
+            return await jsm.streams.info(config.name)
+        } catch (e: any) {
+            if (!this.isStreamNotFoundError(e)) throw e
+            return await jsm.streams.add(config)
+        }
+    }
+
+    async getJetStreamStreamInfo(streamName: string, options: Record<string, any> = {}): Promise<any> {
+        const jsm = await this.getJetStreamManager()
+        return await (jsm.streams as any).info(streamName, options)
+    }
+
+    async getJetStreamStreamInfoOrNull(streamName: string, options: Record<string, any> = {}): Promise<any | null> {
+        try {
+            return await this.getJetStreamStreamInfo(streamName, options)
+        } catch (e: any) {
+            if (this.isStreamNotFoundError(e)) return null
+            throw e
+        }
+    }
+
+    async getJetStreamMessage<T = any>(streamName: string, request: Record<string, any>): Promise<{ data: T; subject: string; seq: number } | null> {
+        const jsm = await this.getJetStreamManager()
+        try {
+            const message = await (jsm.streams as any).getMessage(streamName, request)
+            if (!message) return null
+            return {
+                data: JSON.parse(new TextDecoder().decode(message.data)) as T,
+                subject: message.subject,
+                seq: message.seq,
+            }
+        } catch (e: any) {
+            if (this.isStreamNotFoundError(e)) return null
+            throw e
+        }
+    }
+
+    async publishJetStream<T = any>(
+        subject: string,
+        data: T | Uint8Array,
+        options: JetStreamPublishOptions = {},
+    ): Promise<any> {
+        const payload = data instanceof Uint8Array
+            ? data
+            : new TextEncoder().encode(JSON.stringify(data))
+        return await (this.getJetStream() as any).publish(subject, payload, options)
+    }
+
+    async ensureJetStreamConsumer(streamName: string, config: Record<string, any>): Promise<any> {
+        const jsm = await this.getJetStreamManager()
+        try {
+            return await (jsm.consumers as any).info(streamName, config.durable_name)
+        } catch (e: any) {
+            if (!this.isStreamNotFoundError(e)) throw e
+            return await (jsm.consumers as any).add(streamName, config)
+        }
+    }
+
+    async consumeJetStreamMessages<T = any>(
+        streamName: string,
+        consumerName: string,
+        options: JetStreamConsumeOptions = {},
+    ): Promise<Array<{ data: T; subject: string; seq: number }>> {
+        const consumer = await (this.getJetStream() as any).consumers.get(streamName, consumerName)
+        const messages = await consumer.consume({
+            max_messages: options.maxMessages ?? 100,
+            expires: options.expiresMs ?? 1000,
+        })
+        const decodedMessages: Array<{ data: T; subject: string; seq: number }> = []
+
+        for await (const message of messages) {
+            decodedMessages.push({
+                data: JSON.parse(message.string()) as T,
+                subject: message.subject,
+                seq: message.seq,
+            })
+            message.ack()
+        }
+
+        return decodedMessages
+    }
+
+    async purgeJetStreamSubject(streamName: string, subject: string): Promise<void> {
+        const jsm = await this.getJetStreamManager()
+        await jsm.streams.purge(streamName, { filter: subject })
     }
 
     // Helper to convert Uint8Array to ReadableStream (required by @nats-io/obj)

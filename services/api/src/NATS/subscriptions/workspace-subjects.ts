@@ -131,16 +131,13 @@ export const workspaceSubjects = [
             sub: { allow: [WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE] }
         },
         handler: async (data: any, msg: any) => {
-            await Workspace.updateCanvasState({
+            return await Workspace.updateCanvasState({
                 userId: data.user.userId,
                 workspaceId: data.workspaceId,
-                canvasState: data.canvasState
+                canvasState: data.canvasState,
+                expectedCanvasStateUpdatedAt: data.expectedCanvasStateUpdatedAt,
+                expectedUpdatedAt: data.expectedUpdatedAt
             })
-
-            return {
-                success: true,
-                workspaceId: data.workspaceId
-            }
         }
     },
 

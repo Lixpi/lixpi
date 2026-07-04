@@ -13,8 +13,12 @@
     "files": [
         "*.ts"
     ],
-    "scripts": {},
-    "devDependencies": {},
+    "scripts": {
+        "test:run": "vitest run"
+    },
+    "devDependencies": {
+        "vitest": "*"
+    },
     "dependencies": {
         "@lixpi/constants": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",

@@ -25,7 +25,7 @@ import {
     VIDEO_TOOL_NAME,
     getVideoToolForProvider,
 } from '../tools/video-generation.ts'
-import { extractPosterFrame, extractRepresentativeFrame } from '../../services/video-storage.ts'
+import { extractVideoFramesViaWorkload } from '../../services/video-frame-extraction.ts'
 import { VEO_POLL_INTERVAL_MS } from '../config.ts'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -550,10 +550,15 @@ export class GoogleProvider extends BaseProvider {
             }
 
             const durationSeconds = Number(state.videoDurationSeconds) || 0
-            const posterBuffer = await extractPosterFrame(videoBuffer)
-            // Seek to the clip midpoint for the representative frame; fall back to
-            // frame-0 semantics when the duration is unknown.
-            const frameBuffer = await extractRepresentativeFrame(videoBuffer, durationSeconds > 0 ? durationSeconds / 2 : undefined)
+            // Heavy ffmpeg frame extraction runs on the NEX file-conversion
+            // workload, never on the API. Seek to the clip midpoint for the
+            // representative frame; fall back to frame-0 semantics when the
+            // duration is unknown.
+            const { posterBuffer, frameBuffer } = await extractVideoFramesViaWorkload({
+                workspaceId: state.workspaceId,
+                videoBuffer,
+                atSeconds: durationSeconds > 0 ? durationSeconds / 2 : undefined,
+            })
 
             await this.videoPub.complete({
                 videoBuffer,
