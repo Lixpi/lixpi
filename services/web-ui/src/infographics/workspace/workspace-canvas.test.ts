@@ -111,12 +111,12 @@ function loadLayout(): string {
 	return readSourceFile('../../views/layouts/layout.svelte', 'views/layouts/layout.svelte')
 }
 
-function loadLeftSidebar(): string {
-	return readSourceFile('../../components/leftSidebar/leftSidebar.ts', 'components/leftSidebar/leftSidebar.ts')
+function loadNavigationSidePanel(): string {
+	return readSourceFile('../../components/navigationSidePanel/navigationSidePanel.ts', 'components/navigationSidePanel/navigationSidePanel.ts')
 }
 
-function loadLeftSidebarScss(): string {
-	return readSourceFile('../../components/leftSidebar/left-sidebar.scss', 'components/leftSidebar/left-sidebar.scss')
+function loadNavigationSidePanelScss(): string {
+	return readSourceFile('../../components/navigationSidePanel/navigation-side-panel.scss', 'components/navigationSidePanel/navigation-side-panel.scss')
 }
 
 function loadSettings(): string {
@@ -1743,8 +1743,8 @@ describe('Right side panel — TS infrastructure', () => {
 		const scss = loadScss()
 		const svelte = loadWorkspaceCanvasSvelte()
 		const layout = loadLayout()
-		const leftSidebar = loadLeftSidebar()
-		const leftSidebarScss = loadLeftSidebarScss()
+		const navigationSidePanel = loadNavigationSidePanel()
+		const navigationSidePanelScss = loadNavigationSidePanelScss()
 
 		const sidePanelScss = loadSidePanelScss()
 		expectSourceToContain(svelte, 'const rightSidePanelSettings = settings.rightSidePanel')
@@ -1753,7 +1753,7 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(svelte, 'class:workspace-canvas-right-side-panel-open')
 		// The glass backdrop is owned by the SidePanel component.
 		expectSourceToContain(sidePanelScss, '.side-panel-backdrop')
-		expectSourceToContain(sidePanelScss, 'z-index: 90')
+		expectSourceToContain(sidePanelScss, 'z-index: var(--side-panel-backdrop-z-index, 90)')
 		expectSourceToContain(sidePanelScss, '--side-panel-backdrop-width')
 		expectSourceToContain(sidePanelScss, 'backdrop-filter: blur(24px) saturate(145%)')
 		expectSourceToContain(sidePanelScss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
@@ -1775,14 +1775,54 @@ describe('Right side panel — TS infrastructure', () => {
 			'width: 100%',
 			'global composer'
 		)
-		expectSourceToContain(layout, 'left-sidebar-pane')
-		expectSourceToContain(layout, 'createLeftSidebar')
+		expectSourceToContain(layout, 'navigation-side-panel-pane')
+		expectSourceToContain(layout, 'createNavigationSidePanel')
 		expectSourceNotToContain(layout, 'Resizable.PaneGroup')
 		expectSourceNotToContain(layout, 'user-menu-workspace-chat-panel')
-		expectSourceToContain(leftSidebar, "side: 'left'")
-		expectSourceToContain(leftSidebar, 'createSidePanel')
-		expectSourceToContain(leftSidebarScss, '.left-sidebar-panel')
-		expectSourceToContain(leftSidebarScss, 'position: fixed')
+		expectSourceToContain(navigationSidePanel, "side: 'left'")
+		expectSourceToContain(navigationSidePanel, 'createSidePanel')
+		expectSourceToContain(navigationSidePanelScss, '.navigation-side-panel {')
+		expectSourceToContain(navigationSidePanelScss, 'position: fixed')
+	})
+
+	it('lifts the canvas-hosted side-panel overlay/backdrop above canvas content via workspace-canvas-scoped z-index variables', () => {
+		const scss = loadScss()
+		const sidePanelScss = loadSidePanelScss()
+
+		expectExcerptToContain(
+			extractBlock(scss, '.workspace-canvas'),
+			'--side-panel-resize-handle-z-index: 9990',
+			'.workspace-canvas'
+		)
+		expectExcerptToContain(
+			extractBlock(scss, '.workspace-canvas'),
+			'--side-panel-overlay-z-index: 10010',
+			'.workspace-canvas'
+		)
+		expectExcerptToContain(
+			extractBlock(scss, '.workspace-canvas'),
+			'--side-panel-backdrop-z-index: 10020',
+			'.workspace-canvas'
+		)
+		expectExcerptToContain(
+			extractBlock(scss, '.workspace-canvas'),
+			'--side-panel-surface-z-index: 10030',
+			'.workspace-canvas'
+		)
+		expectExcerptToContain(
+			extractBlock(scss, '.workspace-canvas'),
+			'--side-panel-toggle-z-index: 10040',
+			'.workspace-canvas'
+		)
+
+		// The component now reads its own z-index custom properties (with the
+		// component's low-stacking defaults) instead of the host overriding
+		// .side-panel-overlay-right/.side-panel-backdrop-right by selector.
+		expectSourceNotToContain(scss, '.side-panel-overlay-right')
+		expectSourceNotToContain(scss, '.side-panel-backdrop-right')
+		expectSourceToContain(sidePanelScss, 'z-index: var(--side-panel-overlay-z-index, 80)')
+		expectSourceToContain(sidePanelScss, 'z-index: var(--side-panel-toggle-z-index, 10040)')
+		expectSourceToContain(sidePanelScss, 'z-index: var(--side-panel-resize-handle-z-index, 9990)')
 	})
 })
 
