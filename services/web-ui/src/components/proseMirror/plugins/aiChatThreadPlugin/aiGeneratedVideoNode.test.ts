@@ -224,13 +224,13 @@ describe('aiGeneratedVideoNodeView', () => {
         expect(view.stopEvent!({ target: container } as Event)).toBe(false)
     })
 
-    it('cleans up controls and listeners on destroy', async () => {
+    it('creates controls when ready and destroys them on cleanup', async () => {
         const view = createNodeView({
             isPending: false,
             videoUrl: 'data:video/mp4;base64,AAAA',
             errorMessage: '',
         })
-        await Promise.resolve()
+        await vi.waitFor(() => expect(vi.mocked(createVideoControls)).toHaveBeenCalled())
 
         view.destroy()
 
@@ -258,7 +258,7 @@ describe('aiGeneratedVideoNodeView', () => {
         expect(resolvedPosterSrc).not.toContain('token=stale')
     })
 
-    it('does not refresh non-file full URLs for legacy video/http sources', async () => {
+    it('refreshes API urls but preserves non-API poster URLs', async () => {
         const view = createNodeView({
             isPending: false,
             videoUrl: 'https://cdn.example.com/api/videos/workspace-id/video.mp4?token=stale',
@@ -270,7 +270,7 @@ describe('aiGeneratedVideoNodeView', () => {
 
         await vi.waitFor(() => {
             const resolvedVideoSrc = video.getAttribute('src') || video.src
-            expect(resolvedVideoSrc).toContain('token=stale')
+            expect(resolvedVideoSrc).toContain('token=token-1')
         })
 
         const resolvedPosterSrc = video.poster || video.getAttribute('poster')

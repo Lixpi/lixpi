@@ -259,7 +259,7 @@ app.use(cookieParser())
 
 // Unified file upload/download route — accepts any media kind, sniffs the bytes,
 // transcodes to a model-safe canonical, and serves originals/canonicals/posters
-// (Range-capable for audio/video). Replaces the retired /api/images + /api/videos.
+// with Range support for seekable media.
 app.use('/api/files', fileRoutes)
 
 // Workspace export routes

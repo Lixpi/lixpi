@@ -11,11 +11,12 @@ import {
     type SubstepView,
 } from '$src/infographics/workspace/extractionTimelineModel.ts'
 import { MarkdownStreamRenderer, renderMarkdownStatic } from '$src/utils/markdownStreamRenderer.ts'
+import { resolveMediaUrl } from '$src/utils/workspaceFileUrls.ts'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 const withApiBaseUrl = (url: string): string =>
-    url.startsWith('/api/') ? `${API_BASE_URL}${url}` : url
+    resolveMediaUrl(url, { apiBaseUrl: API_BASE_URL })
 
 export type ExtractionTabContext = {
     imageNatsUrl?: string
@@ -147,10 +148,7 @@ function buildPhaseTimeline(phases: PhaseView[], containerEl: HTMLElement, isLiv
 }
 
 function appendImageAuth(url: string, accessToken = ''): string {
-    const apiUrl = withApiBaseUrl(url)
-    if (!accessToken) return apiUrl
-    const separator = apiUrl.includes('?') ? '&' : '?'
-    return `${apiUrl}${separator}${new URLSearchParams({ token: accessToken }).toString()}`
+    return resolveMediaUrl(url, { apiBaseUrl: API_BASE_URL, token: accessToken })
 }
 
 function getFeatureSampleUrl(feature: any, sample: any, accessToken = '', workspaceId = ''): string {

@@ -1,135 +1,273 @@
 'use strict'
 
-import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'fs'
-import { resolve } from 'path'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
+import { EditorState } from 'prosemirror-state'
+import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
+import { ImageNodeView } from '$src/components/proseMirror/plugins/imageSelectionPlugin/imageNodeView.ts'
+import AuthService from '$src/services/auth-service.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 
-// =============================================================================
-// HELPERS
-// =============================================================================
+vi.mock('$src/services/auth-service.ts', () => ({
+    default: {
+        getTokenSilently: vi.fn(),
+    },
+}))
 
-function loadTs(): string {
-	return readFileSync(
-		resolve(__dirname, 'imageNodeView.ts'),
-		'utf-8'
-	)
+afterEach(() => {
+    vi.clearAllMocks()
+})
+
+beforeEach(() => {
+    vi.mocked(AuthService.getTokenSilently).mockReset().mockResolvedValue('token-1')
+})
+
+const createImageNode = (overrides: Record<string, unknown> = {}): ProseMirrorNode => {
+    return testSchema.nodes.image.create({
+        src: 'https://cdn.example.com/example.jpg',
+        alt: 'Example source image',
+        title: '',
+        ...overrides,
+    })
+}
+
+const createGeneratedImageNode = (overrides: Record<string, unknown> = {}): ProseMirrorNode => {
+    return testSchema.nodes.aiGeneratedImage.create({
+        imageData: '/api/images/workspace-1/final-file',
+        fileId: 'generated-file',
+        workspaceId: 'workspace-1',
+        revisedPrompt: 'final generated image',
+        responseId: 'response-1',
+        isPartial: false,
+        partialIndex: 0,
+        generationRequestId: '',
+        reasoningRunId: '',
+        mediaRunId: '',
+        reasoningModelId: '',
+        mediaModelId: 'Google:gemini-2.5-flash',
+        mediaType: 'image',
+        variantIndex: null,
+        alignment: 'left',
+        textWrap: 'none',
+        ...overrides,
+    })
+}
+
+const createImageView = (node: ProseMirrorNode, editable = true, getPos: () => number | undefined = () => 0) => {
+    const doc = testSchema.nodes.doc.create(null, [node])
+    const state = EditorState.create({ doc, schema: testSchema })
+    const dispatch = vi.fn()
+    const focus = vi.fn()
+    const view = {
+        state,
+        dispatch,
+        focus,
+        editable,
+        dom: document.createElement('div'),
+    }
+
+    const nodeView = new ImageNodeView({
+        node,
+        view: view as any,
+        getPos,
+    })
+
+    return {
+        nodeView,
+        node,
+        doc,
+        state,
+        dispatch,
+        focus,
+        view: view as any,
+    }
+}
+
+const getImageElement = (nodeView: ImageNodeView): HTMLImageElement => {
+    return nodeView.dom.querySelector('img') as HTMLImageElement
+}
+
+const getResolvedImageSrc = (nodeView: ImageNodeView): string => {
+    return getImageElement(nodeView).getAttribute('src') ?? ''
 }
 
 // =============================================================================
-// Imports — brokenImageIcon from svgIcons, html from domTemplates
+// Initialization and source resolution
 // =============================================================================
 
-describe('ImageNodeView — imports', () => {
-	const ts = loadTs()
+describe('ImageNodeView — initialization and source resolution', () => {
+    it('keeps inline data URLs untouched and skips auth for them', async () => {
+        const imageData = 'data:image/png;base64,AAABBB'
+        const { nodeView } = createImageView(testSchema.nodes.image.create({
+            src: imageData,
+            alt: '',
+            title: '',
+        }))
 
-	it('imports brokenImageIcon from svgIcons', () => {
-		expect(ts).toMatch(/import\s*\{[^}]*brokenImageIcon[^}]*\}\s*from\s*['"]\$src\/svgIcons\/index\.ts['"]/)
-	})
+        await vi.waitFor(() => expect(getImageElement(nodeView).getAttribute('src')).toBe(imageData))
+        expect(AuthService.getTokenSilently).not.toHaveBeenCalled()
+    })
 
-	it('imports html from domTemplates', () => {
-		expect(ts).toMatch(/import\s*\{[^}]*html[^}]*\}\s*from\s*['"]\$src\/utils\/domTemplates\.ts['"]/)
-	})
+    it('resolves API image paths through resolveAuthenticatedMediaUrl', async () => {
+        const { nodeView } = createImageView(createImageNode({
+            src: '/api/images/workspace-1/final-file',
+        }))
+
+        await vi.waitFor(() => expect(getResolvedImageSrc(nodeView)).toContain('token=token-1'))
+        expect(getResolvedImageSrc(nodeView)).toContain('/api/files/workspace-1/final-file')
+        expect(AuthService.getTokenSilently).toHaveBeenCalledTimes(1)
+    })
+
+    it('updates resolved image source when image node attrs change', async () => {
+        const { nodeView } = createImageView(createImageNode({
+            src: '/api/images/workspace-1/old',
+        }))
+
+        await vi.waitFor(() => expect(getResolvedImageSrc(nodeView)).toContain('/api/files/workspace-1/old'))
+
+        const updated = nodeView.update(createImageNode({
+            src: '/api/images/workspace-1/new',
+        }))
+        expect(updated).toBe(true)
+
+        await vi.waitFor(() => expect(getResolvedImageSrc(nodeView)).toContain('/api/files/workspace-1/new'))
+    })
 })
 
 // =============================================================================
-// Image error placeholder — uses html template + innerHTML for SVG
+// Generated media chrome and placeholder behavior
 // =============================================================================
 
-describe('ImageNodeView — error placeholder', () => {
-	const ts = loadTs()
+describe('ImageNodeView — generated image behaviors', () => {
+    it('renders generation placeholders only while partial data is absent', () => {
+        const { nodeView } = createImageView(createGeneratedImageNode({
+            imageData: '',
+            isPartial: true,
+        }))
 
-	it('uses html template for the error placeholder, not document.createElement', () => {
-		// Find the error handler block
-		const errorBlock = ts.match(/this\.img\.addEventListener\('error'[\s\S]*?\n\s*\}\)\n\n\s*\/\/ Handle selection/)
-		expect(errorBlock).not.toBeNull()
-		const block = errorBlock![0]
+        const placeholder = nodeView.dom.querySelector('.pm-image-generating-placeholder')
+        const title = nodeView.dom.querySelector('.ai-generated-media-section-title')
+        const image = getImageElement(nodeView)
 
-		expect(block).toContain('html`')
-		expect(block).not.toContain('document.createElement')
-	})
+        expect(nodeView.dom.classList.contains('is-partial')).toBe(true)
+        expect(placeholder).not.toBeNull()
+        expect(title).toBeNull()
+        expect(image.style.display).toBe('none')
+    })
 
-	it('injects brokenImageIcon via innerHTML attribute, not string interpolation', () => {
-		const errorBlock = ts.match(/this\.img\.addEventListener\('error'[\s\S]*?\n\s*\}\)\n\n\s*\/\/ Handle selection/)
-		expect(errorBlock).not.toBeNull()
-		const block = errorBlock![0]
+    it('shows the generated-image title when complete image data is present', async () => {
+        const { nodeView } = createImageView(createGeneratedImageNode({
+            imageData: '',
+            isPartial: true,
+        }))
 
-		expect(block).toContain('innerHTML=${brokenImageIcon}')
-	})
+        const updated = nodeView.update(createGeneratedImageNode({
+            imageData: 'https://cdn.example.com/final-generated.png',
+            isPartial: false,
+        }))
 
-	it('checks for existing placeholder before appending (deduplication)', () => {
-		const errorBlock = ts.match(/this\.img\.addEventListener\('error'[\s\S]*?\n\s*\}\)\n\n\s*\/\/ Handle selection/)
-		expect(errorBlock).not.toBeNull()
-		const block = errorBlock![0]
+        expect(updated).toBe(true)
+        await vi.waitFor(() => expect(nodeView.dom.querySelector('.ai-generated-media-section-title')).not.toBeNull())
+    })
 
-		expect(block).toContain(".querySelector('.image-error-placeholder')")
-	})
+    it('shows generated model chrome and updates it when media model changes', async () => {
+        const { nodeView } = createImageView(createGeneratedImageNode({
+            mediaModelId: 'Google:gemini-2.5-flash',
+        }))
 
-	it('hides the img element on error', () => {
-		const errorBlock = ts.match(/this\.img\.addEventListener\('error'[\s\S]*?\n\s*\}\)\n\n\s*\/\/ Handle selection/)
-		expect(errorBlock).not.toBeNull()
-		const block = errorBlock![0]
+        await vi.waitFor(() => expect(getImageElement(nodeView).getAttribute('src')).toContain('token=token-1'))
+        const modelChrome = nodeView.dom.querySelector('.ai-generated-media-run-meta') as HTMLElement
+        expect(modelChrome).not.toBeNull()
+        expect(modelChrome.textContent).toContain('Google')
 
-		expect(block).toContain("applyStyle(this.img, { display: 'none' })")
-	})
+        nodeView.update(createGeneratedImageNode({
+            mediaModelId: 'OpenAI:gpt-4.1',
+        }))
+        expect(modelChrome.textContent).toContain('OpenAI')
+        expect(modelChrome.textContent).toContain('gpt-4.1')
+    })
 
-	it('no inline SVG markup in source', () => {
-		const errorBlock = ts.match(/this\.img\.addEventListener\('error'[\s\S]*?\n\s*\}\)\n\n\s*\/\/ Handle selection/)
-		expect(errorBlock).not.toBeNull()
-		const block = errorBlock![0]
+    it('adds an unavailable placeholder and keeps it deduplicated on repeated image errors', () => {
+        const { nodeView } = createImageView(createImageNode({
+            src: '/api/images/workspace-1/not-found.jpg',
+        }))
+        const image = getImageElement(nodeView)
 
-		expect(block).not.toContain('<svg')
-		expect(block).not.toContain('viewBox')
-	})
+        image.dispatchEvent(new Event('error'))
+        image.dispatchEvent(new Event('error'))
+
+        const placeholders = nodeView.dom.querySelectorAll('.image-error-placeholder')
+        expect(placeholders).toHaveLength(1)
+    })
 })
 
 // =============================================================================
-// Partial generated image placeholder
+// Interaction and state transitions
 // =============================================================================
 
-describe('ImageNodeView — partial generated image placeholder', () => {
-	const ts = loadTs()
+describe('ImageNodeView — interactions', () => {
+    it('selects the node and focuses editor when clicked while editable', () => {
+        const { nodeView, dispatch, focus, view } = createImageView(createImageNode())
 
-	it('renders a generating placeholder for partial image nodes without image data', () => {
-		expect(ts).toContain('syncPartialPlaceholder')
-		expect(ts).toContain('pm-image-generating-placeholder')
-		expect(ts).toContain('pm-image-generating-dot')
-		expect(ts).toContain('Boolean(this.node.attrs.isPartial) && !getImageSrcAttr(this.node)')
-	})
+        nodeView.dom.dispatchEvent(new MouseEvent('click'))
 
-	it('does not assign an empty string as an img src', () => {
-		const updateBlock = ts.match(/private async updateImageSrc[\s\S]*?\n    \}/)
-		expect(updateBlock).not.toBeNull()
-		const block = updateBlock![0]
+        expect(dispatch).toHaveBeenCalledTimes(1)
+        expect(focus).toHaveBeenCalledTimes(1)
+        expect(view.state.tr).toBeDefined()
+        expect(dispatch.mock.calls[0]?.[0].selection.toJSON()).toMatchObject({
+            type: 'node',
+            anchor: 0,
+        })
+    })
 
-		expect(block).toContain("if (!src)")
-		expect(block).toContain("this.img.removeAttribute('src')")
-		expect(block).toContain("applyStyle(this.img, { display: 'none' })")
-	})
+    it('does not dispatch selection when editor is read-only', () => {
+        const { nodeView, dispatch, focus } = createImageView(createImageNode(), false)
+
+        nodeView.dom.dispatchEvent(new MouseEvent('click'))
+
+        expect(dispatch).not.toHaveBeenCalled()
+        expect(focus).not.toHaveBeenCalled()
+    })
+
+    it('allows all events except resize handle events to bubble through stopEvent', () => {
+        const { nodeView } = createImageView(createImageNode())
+        const handle = nodeView.dom.querySelector('.pm-image-resize-handle')
+        const container = nodeView.dom.querySelector('.pm-image-media-frame') as HTMLElement
+
+        expect(handle).not.toBeNull()
+        expect(nodeView.stopEvent({ target: handle as unknown as HTMLElement } as Event)).toBe(true)
+        expect(nodeView.stopEvent({ target: container } as Event)).toBe(false)
+    })
 })
 
 // =============================================================================
-// buildImageSrc — handles various URL formats
+// Lifecycle and cleanup
 // =============================================================================
 
-describe('ImageNodeView — buildImageSrc', () => {
-	const ts = loadTs()
+describe('ImageNodeView — lifecycle cleanup', () => {
+    it('does not render resize handles when the editor is not editable', () => {
+        const { nodeView } = createImageView(createImageNode(), false)
 
-	it('returns empty string for empty src', () => {
-		expect(ts).toMatch(/if\s*\(\s*!src\s*\)\s*return\s*['"]/)
-	})
+        expect(nodeView.dom.querySelectorAll('.pm-image-resize-handle')).toHaveLength(0)
+    })
 
-	it('passes through data: and blob: URLs without auth', () => {
-		expect(ts).toContain("src.startsWith('data:')")
-		expect(ts).toContain("src.startsWith('blob:')")
-	})
+    it('removes resize handles and unsubscribes model badge updates on destroy', () => {
+        const unsubscribe = vi.fn()
+        const subscribeSpy = vi.spyOn(aiModelsStore, 'subscribe').mockReturnValue(unsubscribe)
 
-	it('prepends API base URL and appends token for /api/ paths', () => {
-		expect(ts).toContain("src.startsWith('/api/')")
-		expect(ts).toContain('`${API_BASE_URL}${src}')
-	})
+        const { nodeView } = createImageView(createGeneratedImageNode())
 
-	it('strips stale tokens from full URLs pointing to /api/files/', () => {
-		expect(ts).toContain("src.includes('/api/files/')")
-		expect(ts).toMatch(/src\.replace\([^)]*token[^)]*\)/)
-	})
+        nodeView.destroy()
+
+        expect(unsubscribe).toHaveBeenCalledTimes(1)
+        expect(nodeView.dom.querySelectorAll('.pm-image-resize-handle')).toHaveLength(0)
+        subscribeSpy.mockRestore()
+    })
+
+    it('rejects incompatible nodes in update()', () => {
+        const { nodeView, doc } = createImageView(createImageNode())
+        const wrongNode = doc.type.schema.nodes.doc.create(null)
+
+        expect(nodeView.update(wrongNode as ProseMirrorNode)).toBe(false)
+    })
 })

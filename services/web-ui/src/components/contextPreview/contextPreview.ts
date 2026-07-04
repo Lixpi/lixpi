@@ -8,6 +8,10 @@ import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/hel
 import { extractContentFromProseMirror } from '$src/services/ai-chat-thread-service.ts'
 import { documentIcon, videoPlayGlyphIcon } from '$src/svgIcons/index.ts'
 import { html } from '$src/utils/domTemplates.ts'
+import {
+    resolveAuthenticatedMediaUrl,
+    resolveMediaUrl,
+} from '$src/utils/workspaceFileUrls.ts'
 
 export type ContextPreviewDocumentSource = {
     documentId: string
@@ -118,43 +122,19 @@ export function getContextPreviewAccessibleLabel(node: CanvasNode, environment: 
 }
 
 function buildContextPreviewInitialMediaSrc(mediaUrl: string): string {
-    if (!mediaUrl) return TRANSPARENT_PIXEL_SRC
-    if (mediaUrl.startsWith('data:') || mediaUrl.startsWith('blob:')) return mediaUrl
-    if (mediaUrl.startsWith('/api/') || mediaUrl.startsWith('http')) return mediaUrl
-    return `data:image/png;base64,${mediaUrl}`
-}
-
-function setContextPreviewMediaTokenParam(mediaUrl: string, token: string): string {
-    if (!token) return mediaUrl
-    const isAbsoluteUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(mediaUrl)
-    try {
-        const url = isAbsoluteUrl ? new URL(mediaUrl) : new URL(mediaUrl, window.location.origin)
-        url.searchParams.set('token', token)
-        if (isAbsoluteUrl) return url.toString()
-        return `${url.pathname}${url.search}${url.hash}`
-    } catch {
-        const separator = mediaUrl.includes('?') ? '&' : '?'
-        return `${mediaUrl}${separator}token=${encodeURIComponent(token)}`
-    }
+    return resolveMediaUrl(mediaUrl, {
+        base64MimeType: 'image/png',
+        emptyFallback: TRANSPARENT_PIXEL_SRC,
+    })
 }
 
 async function buildContextPreviewAuthenticatedMediaSrc(mediaUrl: string, environment: ContextPreviewEnvironment): Promise<string> {
-    if (!mediaUrl) return TRANSPARENT_PIXEL_SRC
-    if (mediaUrl.startsWith('data:') || mediaUrl.startsWith('blob:')) return mediaUrl
-    if (mediaUrl.startsWith('/api/')) {
-        const token = await environment.getAuthToken()
-        const apiBaseUrl = environment.getApiBaseUrl().replace(/\/$/, '')
-        const sourceUrl = apiBaseUrl ? `${apiBaseUrl}${mediaUrl}` : mediaUrl
-        return setContextPreviewMediaTokenParam(sourceUrl, token)
-    }
-    if (mediaUrl.startsWith('http')) {
-        if (mediaUrl.includes('/api/files/')) {
-            const token = await environment.getAuthToken()
-            return setContextPreviewMediaTokenParam(mediaUrl, token)
-        }
-        return mediaUrl
-    }
-    return `data:image/png;base64,${mediaUrl}`
+    return resolveAuthenticatedMediaUrl(mediaUrl, {
+        apiBaseUrl: environment.getApiBaseUrl(),
+        base64MimeType: 'image/png',
+        emptyFallback: TRANSPARENT_PIXEL_SRC,
+        getAuthToken: environment.getAuthToken,
+    })
 }
 
 function hydrateContextPreviewMedia(

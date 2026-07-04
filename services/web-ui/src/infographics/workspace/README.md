@@ -465,13 +465,13 @@ When an image node, video node, or edge is selected on the canvas, a bubble menu
 
 ### Image Node Actions
 - **Create Variant** — dispatches a `canvas-create-image-variant` custom event on the viewport element
-- **Download** — fetches the image as a blob and triggers a browser download via `downloadImage()` utility
+- **Download** — downloads the stored file through the authenticated `/api/files` attachment route
 - **Add to Media Library** — saves a completed stored image as an independent library copy
 - **Delete** — removes the node and its associated edges from canvas state
 
 ### Video Node Actions
 - **Replace** — uploads a new video for the selected node, swaps the MP4/poster IDs on the existing node, and keeps the node in place
-- **Download** — downloads the stored MP4 through the Range-capable file route with `download=true`
+- **Download** — downloads the stored MP4 through the authenticated `/api/files` attachment route
 - **Add to Media Library** — saves a completed stored video and poster as independent library copies
 - **Connect to node** — starts the same menu-driven graph connection flow as images
 - **Delete** — removes the node and its associated edges from canvas state
