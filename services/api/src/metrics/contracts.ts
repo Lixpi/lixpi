@@ -23,9 +23,11 @@ export interface CheckRequest {
     currency: string // 'USD' at launch
 }
 
-// CheckResponse is the admission decision.
+// CheckResponse is the admission decision. operationId correlates this admission
+// to the later confirm (opaque to Lixpi; the metering side's handle for the call).
 export interface CheckResponse {
     approved: boolean
+    operationId?: string
     estimatedCost?: number // micro-dollars, for display/telemetry
     balance?: number // micro-dollars
     reason?: string // e.g. insufficient_balance (when denied)
@@ -58,6 +60,7 @@ export interface UsageBreakdown {
 // seconds vs tokens). Idempotent on providerRequestId.
 export interface ConfirmRequest {
     providerRequestId: string
+    operationId?: string // from the matching check; empty/unknown → the backend charges by actuals
     orgId: string
     userId: string
     workspaceId?: string

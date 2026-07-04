@@ -371,7 +371,9 @@ export abstract class BaseProvider {
             const reason = res.reason ? `: ${res.reason}` : ''
             throw new Error(`Metrics: balance does not cover this workflow (${workflowKind}${reason})`)
         }
-        return { workflowId, workflowSeq: 0 }
+        // Thread the operationId from the check into graph state so the confirm(s)
+        // can correlate back to this admission.
+        return { workflowId, workflowSeq: 0, metricsOperationId: res.operationId }
     }
 
     // The run's gate kind is its broadest enabled modality — gating conservatively
@@ -764,7 +766,7 @@ export abstract class BaseProvider {
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
             if (metricsOn && report) {
-                await this.deps.metrics!.confirm(tokenUsageConfirm(report, state.workflowId!, ++seq))
+                await this.deps.metrics!.confirm({ ...tokenUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId })
             }
         }
         if (state.imageUsage) {
@@ -778,7 +780,7 @@ export abstract class BaseProvider {
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
             if (metricsOn && report) {
-                await this.deps.metrics!.confirm(imageUsageConfirm(report, state.workflowId!, ++seq))
+                await this.deps.metrics!.confirm({ ...imageUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId })
             }
         }
         if (state.videoUsage) {
@@ -795,7 +797,7 @@ export abstract class BaseProvider {
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
             if (metricsOn && report) {
-                await this.deps.metrics!.confirm(videoUsageConfirm(report, state.workflowId!, ++seq))
+                await this.deps.metrics!.confirm({ ...videoUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId })
             }
         }
         return { workflowSeq: seq }

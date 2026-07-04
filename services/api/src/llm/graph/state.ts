@@ -167,11 +167,13 @@ export type ProviderState = {
     featureUsagePrompt?: string | undefined
 
     // Metrics — transient per-run identity. workflowId is minted in validateRequest
-    // and groups this run's start signal + usage events; workflowSeq is a 1-based
-    // counter incremented per emitted usage event (gap detection on the metrics side).
+    // and groups this run's calls; workflowSeq is a 1-based counter per confirmed
+    // provider call. metricsOperationId correlates the check to its confirm(s)
+    // (opaque; from the check response; empty when metrics is disabled).
     workflowId?: string | undefined
     workflowSeq?: number | undefined
-    
+    metricsOperationId?: string | undefined
+
     // Multi-model media generation request-group metadata.
     generationRun?: MediaGenerationRunMeta | undefined
     mediaFanoutPlan?: MediaFanoutPlan | undefined
@@ -237,7 +239,8 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     featureUsagePrompt: { reducer: keep },
     workflowId: { reducer: keep },
     workflowSeq: { reducer: keep },
-    
+    metricsOperationId: { reducer: keep },
+
     generationRun: { reducer: keep },
     mediaFanoutPlan: { reducer: keep },
     preflightResolved: { reducer: keep, default: () => false },
