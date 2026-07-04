@@ -6,6 +6,7 @@ import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { decodeImageInWorker } from '$src/infographics/workspace/pixiImageDecoder.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
 
 import type { MediaNodeHandler } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
 import type { WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
@@ -72,22 +73,10 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
     }
 
     const buildAuthenticatedUrl = async (url: string): Promise<string> => {
-        if (!url) return ''
-        if (url.startsWith('data:') || url.startsWith('blob:')) return url
-        if (url.startsWith('/api/')) {
-            const token = await AuthService.getTokenSilently()
-            const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-            return `${API_BASE_URL}${url}${token ? `?token=${token}` : ''}`
-        }
-        if (url.startsWith('http')) {
-            const stripped = url.replace(/[?&]token=[^&]+/, '')
-            if (stripped.includes('/api/files/')) {
-                const token = await AuthService.getTokenSilently()
-                return `${stripped}${token ? `?token=${token}` : ''}`
-            }
-            return url
-        }
-        return url
+        return resolveAuthenticatedMediaUrl(url, {
+            apiBaseUrl: import.meta.env.VITE_API_URL || '',
+            getAuthToken: () => AuthService.getTokenSilently(),
+        })
     }
 
     const getBorderRadius = (w: number, h: number): number => {

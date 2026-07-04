@@ -11,13 +11,17 @@
 //                        which triggers the browser's native save dialog.
 //                        This avoids cross-origin fetch issues entirely.
 //
-// When a getAuthToken callback is provided, any existing ?token= query param
-// in the URL is replaced with a freshly obtained token. This prevents 401
-// errors from expired JWTs that were baked into the URL at creation time
-// (e.g. canvas image nodes).
+// When a getAuthToken callback is provided, API media URLs get a freshly
+// obtained token. This prevents 401 errors from expired JWTs that were baked
+// into stored canvas media URLs.
 // =============================================================================
 
 import { applyStyle } from '$src/utils/domTemplates.ts'
+import {
+    isApiEndpoint,
+    normalizeWorkspaceFileEndpoint,
+    resolveApiMediaUrl,
+} from '$src/utils/workspaceFileUrls.ts'
 
 type DownloadImageOptions = {
     filename?: string
@@ -58,14 +62,6 @@ function appendDownloadParam(url: string): string {
     return `${url}${separator}download=true`
 }
 
-function replaceTokenInUrl(url: string, freshToken: string): string {
-    // Replace existing token= param with a fresh one
-    return url.replace(
-        /([?&])token=[^&]*/,
-        `$1token=${encodeURIComponent(freshToken)}`
-    )
-}
-
 async function downloadViaFetch(imageUrl: string, filename?: string): Promise<void> {
     const response = await fetch(imageUrl)
     if (!response.ok) throw new Error(`Fetch failed: ${response.status}`)
@@ -89,12 +85,12 @@ async function downloadViaFetch(imageUrl: string, filename?: string): Promise<vo
 }
 
 async function downloadViaNavigation(imageUrl: string, getAuthToken?: () => Promise<string>): Promise<void> {
-    let url = imageUrl
+    let url = normalizeWorkspaceFileEndpoint(imageUrl)
 
-    // Refresh stale auth token if a token refresher is provided
-    if (getAuthToken && url.includes('token=')) {
+    // Refresh stale auth token if a token refresher is provided.
+    if (getAuthToken && isApiEndpoint(url)) {
         const freshToken = await getAuthToken()
-        url = replaceTokenInUrl(url, freshToken)
+        url = resolveApiMediaUrl(url, { token: freshToken })
     }
 
     const downloadUrl = appendDownloadParam(url)

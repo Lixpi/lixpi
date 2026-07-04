@@ -66,6 +66,11 @@ const createNodeView = (overrides: Record<string, unknown> = {}, getPos: () => n
     return { nodeView, node, dispatch, focus, state, doc, view: view as any }
 }
 
+const getImageSrc = (nodeView: { dom: HTMLElement }): string => {
+    const image = nodeView.dom.querySelector('.ai-generated-image-content') as HTMLImageElement
+    return image.getAttribute('src') ?? ''
+}
+
 // =============================================================================
 // aiGeneratedImageNodeSpec
 // =============================================================================
@@ -168,12 +173,13 @@ describe('aiGeneratedImageNodeView', () => {
             imageData: '/api/images/workspace-images/final-file',
             isPartial: false,
         })
-        const image = nodeView.dom.querySelector('.ai-generated-image-content') as HTMLImageElement
 
         await Promise.resolve()
+        await vi.waitFor(() => expect(getImageSrc(nodeView)).toContain('token=token-1'))
 
         expect(AuthService.getTokenSilently).toHaveBeenCalledTimes(1)
-        expect(image.src).toContain('/api/images/workspace-images/final-file?token=token-1')
+        expect(getImageSrc(nodeView)).toContain('/api/files/workspace-images/final-file')
+        expect(getImageSrc(nodeView)).toContain('token=token-1')
     })
 
     it('replaces stale tokenized image URLs with a refreshed token', async () => {
@@ -183,12 +189,11 @@ describe('aiGeneratedImageNodeView', () => {
             imageData: 'https://cdn.example.com/api/files/workspace-images/final-file?token=stale',
             isPartial: false,
         })
-        const image = nodeView.dom.querySelector('.ai-generated-image-content') as HTMLImageElement
 
         await Promise.resolve()
 
-        expect(image.src).not.toContain('token=stale')
-        expect(image.src).toContain('token=fresh-token')
+        await vi.waitFor(() => expect(getImageSrc(nodeView)).toContain('token=fresh-token'))
+        expect(getImageSrc(nodeView)).not.toContain('token=stale')
     })
 
     it('keeps non-file HTTP URLs unchanged when they include query params', async () => {
@@ -265,7 +270,22 @@ describe('aiGeneratedImageNodeView', () => {
         expect(updated).toBe(true)
         expect(spinner.classList.contains('is-active')).toBe(false)
         expect(image.classList.contains('is-visible')).toBe(true)
-        expect(image.src).toContain('/api/images/workspace-images/new-file?token=token-1')
+        await vi.waitFor(() => expect(getImageSrc(nodeView)).toContain('/api/files/workspace-images/new-file'))
+        expect(getImageSrc(nodeView)).toContain('token=token-1')
+    })
+
+    it('does not request auth tokens for plain external URLs', async () => {
+        vi.mocked(AuthService.getTokenSilently).mockReset().mockResolvedValue('token-1')
+        const { nodeView } = createNodeView({
+            imageData: 'https://cdn.example.com/preview/public-image.png',
+            isPartial: false,
+        })
+        const image = nodeView.dom.querySelector('.ai-generated-image-content') as HTMLImageElement
+
+        await Promise.resolve()
+
+        expect(AuthService.getTokenSilently).not.toHaveBeenCalled()
+        expect(image.getAttribute('src')).toBe('https://cdn.example.com/preview/public-image.png')
     })
 
     it('adds an inline error placeholder only once when image fails to load', async () => {

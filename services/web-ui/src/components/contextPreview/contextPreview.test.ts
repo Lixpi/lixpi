@@ -7,19 +7,26 @@ function createMockEnvironment(overrides: {
     threads?: { threadId: string; title?: string; content?: string | object }[]
     authToken?: string
     apiBaseUrl?: string
-} = {}): ContextPreviewEnvironment {
+} = {}): ContextPreviewEnvironment & {
+    getDocuments: ReturnType<typeof vi.fn>
+    getThreads: ReturnType<typeof vi.fn>
+    getAuthToken: ReturnType<typeof vi.fn>
+} {
     const {
         documents = [],
         threads = [],
         authToken = 'token-123',
         apiBaseUrl = 'https://api.example.com',
     } = overrides
+    const getDocuments = vi.fn(() => documents)
+    const getThreads = vi.fn(() => threads)
+    const getAuthToken = vi.fn(async () => authToken)
 
     return {
-        getDocuments: () => documents,
-        getThreads: () => threads,
+        getDocuments,
+        getThreads,
         getApiBaseUrl: () => apiBaseUrl,
-        getAuthToken: vi.fn(async () => authToken),
+        getAuthToken,
     }
 }
 
@@ -119,6 +126,41 @@ describe('context preview labels', () => {
             ),
         ).toBe('unknown')
     })
+
+    it('trims document titles before using them as the accessible label', () => {
+        const env = createMockEnvironment({
+            documents: [{ documentId: 'document-node', title: '  Project Notes  ' }],
+        })
+
+        expect(getContextPreviewAccessibleLabel(createDocumentNode(), env)).toBe('Project Notes')
+    })
+
+    it('falls back to extracted document content when the descriptor summary is blank', async () => {
+        const env = createMockEnvironment({
+            documents: [
+                {
+                    documentId: 'document-node',
+                    title: 'Draft Note',
+                    content: createTextDoc('Draft content should win over blank summary'),
+                },
+            ],
+        })
+        const { dom } = createContextPreviewTile({
+            node: createDocumentNode({
+                descriptor: { status: 'ready', summary: '   ' },
+            }),
+            environment: env,
+        })
+        document.body.appendChild(dom)
+
+        const trigger = dom.querySelector('.help-tooltip-trigger') as HTMLElement
+        trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
+        await waitForMicrotasks()
+
+        const tooltipContent = document.body.querySelector('.help-tooltip-content') as HTMLElement
+        expect(tooltipContent.querySelector('.workspace-ai-chat-panel-context-preview-document-text')?.textContent)
+            .toBe('Draft content should win over blank summary')
+    })
 })
 
 describe('createContextPreviewTile', () => {
@@ -172,6 +214,53 @@ describe('createContextPreviewTile', () => {
         const imageEl = document.body.querySelector('.help-tooltip-content .workspace-ai-chat-panel-context-preview-image') as HTMLImageElement
         expect(imageEl.src).toBe('data:image/png;base64,QUJD')
         expect(env.getAuthToken).not.toHaveBeenCalled()
+    })
+
+    it('does not apply authenticated media URLs after the tile is detached before token resolution', async () => {
+        const env = createMockEnvironment()
+        let resolveAuth: ((value: string | undefined) => void) | null = null
+        env.getAuthToken = vi.fn(() => new Promise((resolve) => {
+            resolveAuth = resolve
+        }))
+
+        const { dom } = createContextPreviewTile({
+            node: createImageNode({ src: '/api/files/images/raw.png' }),
+            environment: env,
+        })
+        document.body.appendChild(dom)
+
+        const imageEl = dom.querySelector('.workspace-ai-chat-panel-context-preview-image') as HTMLImageElement
+        expect(imageEl).not.toBeNull()
+
+        dom.remove()
+        resolveAuth?.('auth-token')
+        await waitForNextTick()
+
+        expect(imageEl.src).toContain('/api/files/images/raw.png')
+        expect(imageEl.src).not.toContain('token=auth-token')
+    })
+
+    it('uses the base popover class when image/video metadata is missing', async () => {
+        const env = createMockEnvironment()
+        const { dom, destroy } = createContextPreviewTile({
+            node: createImageNode(),
+            environment: env,
+        })
+        document.body.appendChild(dom)
+
+        const trigger = dom.querySelector('.help-tooltip-trigger') as HTMLElement
+        trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
+        await waitForMicrotasks()
+
+        const tooltipContent = document.body.querySelector('.help-tooltip-content') as HTMLElement
+        expect(tooltipContent.className).toContain('workspace-ai-chat-panel-context-preview-popover')
+        expect(tooltipContent.className).not.toContain('workspace-ai-chat-panel-context-preview-popover-portrait')
+        expect(tooltipContent.className).not.toContain('workspace-ai-chat-panel-context-preview-popover-landscape')
+
+        const popoverBody = tooltipContent.querySelector('.workspace-ai-chat-panel-context-preview-popover-body') as HTMLElement
+        expect(popoverBody.className).toContain('workspace-ai-chat-panel-context-preview-popover-body-landscape')
+
+        destroy()
     })
 
     it('applies preferred inline popover placement to generated class names', () => {

@@ -1,5 +1,6 @@
 import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
@@ -152,28 +153,11 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         spinnerElement.classList.remove('is-active')
         imageElement.classList.add('is-visible')
 
-        // imageData is now a URL path like /api/files/workspaceId/fileId
-        // It can also be a data URL or base64 for backwards compatibility
-        let imageSrc: string
-        if (imageData.startsWith('data:')) {
-            imageSrc = imageData
-        } else if (imageData.startsWith('/api/')) {
-            const token = await AuthService.getTokenSilently()
-            const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-            imageSrc = `${API_BASE_URL}${imageData}${token ? `?token=${token}` : ''}`
-        } else if (imageData.startsWith('http')) {
-            // Full URL — strip any stale token and re-apply a fresh one
-            const stripped = imageData.replace(/[?&]token=[^&]+/, '')
-            if (stripped.includes('/api/files/')) {
-                const token = await AuthService.getTokenSilently()
-                imageSrc = `${stripped}${token ? `?token=${token}` : ''}`
-            } else {
-                imageSrc = imageData
-            }
-        } else {
-            // Legacy base64 data
-            imageSrc = `data:image/png;base64,${imageData}`
-        }
+        const imageSrc = await resolveAuthenticatedMediaUrl(imageData, {
+            apiBaseUrl: import.meta.env.VITE_API_URL || '',
+            base64MimeType: 'image/png',
+            getAuthToken: () => AuthService.getTokenSilently(),
+        })
 
         if (imageElement.src !== imageSrc) {
             imageElement.src = imageSrc

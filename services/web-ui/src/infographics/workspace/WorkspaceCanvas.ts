@@ -131,6 +131,12 @@ import { settings, type WorkspaceCollisionFlowSettings, type WorkspaceCollisionN
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
+import {
+    buildWorkspaceFilePath,
+    buildWorkspaceFilesPath,
+    isWorkspaceFileEndpoint,
+    resolveMediaUrl,
+} from '$src/utils/workspaceFileUrls.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import MediaLibraryService from '$src/services/media-library-service.ts'
 import { describeMedia, describeText } from '$src/services/media-descriptor-service.ts'
@@ -1257,15 +1263,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
                 if (!node) return
 
-                // Uploaded documents/audio live under the unified /api/files route;
-                // download via a tokenized attachment link (the route honors
-                // ?download=true). Image/video keep their existing path below.
+                // Uploaded documents/audio use a tokenized attachment link.
                 if (node.type === 'mediaDocument' || node.type === 'audio') {
                     void (async () => {
                         const API_BASE_URL = import.meta.env.VITE_API_URL || ''
                         const token = await AuthService.getTokenSilently()
                         if (!token) return
-                        const href = `${API_BASE_URL}/api/files/${workspaceId}/${node.fileId}?download=true&token=${encodeURIComponent(token)}`
+                        const href = `${API_BASE_URL}${buildWorkspaceFilePath(workspaceId, node.fileId)}?download=true&token=${encodeURIComponent(token)}`
                         const a = document.createElement('a')
                         a.href = href
                         a.rel = 'noopener'
@@ -1282,10 +1286,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 void (async () => {
                     const API_BASE_URL = import.meta.env.VITE_API_URL || ''
                     const token = await AuthService.getTokenSilently()
-                    const strippedSrc = node.src.replace(/[?&]token=[^&]+/, '')
-                    const route = node.type === 'video' ? 'videos' : 'images'
-                    const isStoredMedia = strippedSrc.startsWith('/api/') || (strippedSrc.startsWith('http') && strippedSrc.includes(`/api/${route}/`))
-                    const resolvedSrc = isStoredMedia ? `/api/${route}/${workspaceId}/${node.fileId}` : strippedSrc
+                    const resolvedSrc = node.fileId
+                        ? buildWorkspaceFilePath(node.workspaceId || workspaceId, node.fileId)
+                        : node.src
                     const mediaSrc = buildImageSrc(resolvedSrc, API_BASE_URL, token || false)
                     await downloadImage(mediaSrc, {
                         getAuthToken: async () => {
@@ -1314,8 +1317,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const formData = new FormData()
                     formData.append('file', file)
 
-                    const route = node.type === 'video' ? 'videos' : 'images'
-                    const response = await fetch(`${API_BASE_URL}/api/${route}/${workspaceId}`, {
+                    const response = await fetch(`${API_BASE_URL}${buildWorkspaceFilesPath(workspaceId)}`, {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${token}` },
                         body: formData
@@ -10190,16 +10192,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function buildImageSrc(imageUrl: string, apiBaseUrl: string, token: string | false): string {
-        if (!imageUrl) return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
-        if (imageUrl.startsWith('data:')) return imageUrl
-        if (imageUrl.startsWith('/api/')) return `${apiBaseUrl}${imageUrl}${token ? `?token=${token}` : ''}`
-        if (imageUrl.startsWith('http') && imageUrl.includes('/api/files/')) return `${imageUrl}${token ? `?token=${token}` : ''}`
-        if (imageUrl.startsWith('http')) return imageUrl
-        return `data:image/png;base64,${imageUrl}`
+        return resolveMediaUrl(imageUrl, {
+            apiBaseUrl,
+            base64MimeType: 'image/png',
+            emptyFallback: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+            token,
+        })
     }
 
     function buildStoredImageSrc(workspaceId: string, fileId: string): string {
-        return `/api/files/${encodeURIComponent(workspaceId)}/${encodeURIComponent(fileId)}`
+        return buildWorkspaceFilePath(workspaceId, fileId)
     }
 
     function buildGeneratedImageFrameSrc({
@@ -10213,7 +10215,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         fileId?: string
         fallbackSrc?: string
     }): string {
-        if (imageUrl?.trim()) return buildImageSrc(imageUrl, '', false)
+        const trimmedImageUrl = imageUrl?.trim()
+        if (fileId && (!trimmedImageUrl || isWorkspaceFileEndpoint(trimmedImageUrl))) return buildStoredImageSrc(imageWorkspaceId, fileId)
+        if (trimmedImageUrl) return buildImageSrc(trimmedImageUrl, '', false)
         if (fileId) return buildStoredImageSrc(imageWorkspaceId, fileId)
         if (fallbackSrc) return fallbackSrc
         return buildImageSrc('', '', false)

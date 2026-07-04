@@ -2437,16 +2437,17 @@ describe('Image loading — PIXI ownership and URL resolution strategy', () => {
 	})
 
 	it('PIXI uses canonical workspaceId path for stored API images', () => {
-		expectSourceToContain(pixiLogicTs, '`/api/files/${workspaceId}/${node.fileId}`')
+		expectSourceToContain(pixiLogicTs, 'buildWorkspaceFilePath(workspaceId, node.fileId)')
 		expectSourceToContain(pixiLogicTs, 'isStoredImageSrc(strippedSrc)')
 	})
 
 	it('PIXI strips stale tokens from node sources before resolving them', () => {
-		expect(pixiLogicTs).toMatch(/node\.src\.replace\([^)]*token[^)]*\)/)
+		expectSourceToContain(pixiLogicTs, 'const strippedSrc = stripAuthTokenFromUrl(node.src)')
+		expectSourceToContain(pixiLogicTs, 'return isStoredImageSrc(strippedSrc)')
 	})
 
 	it('PIXI passes through data and external sources without DOM loading', () => {
-		expectSourceToContain(pixiLogicTs, "if (imageUrl.startsWith('data:')) return imageUrl")
+		expectSourceToContain(pixiLogicTs, 'resolveMediaUrl(strippedSrc)')
 		expectSourceToContain(pixiLayerTs, 'const resolvedSrc = resolveStoredImagePath(node, workspaceId)')
 	})
 
@@ -2507,22 +2508,27 @@ describe('Image generation error cleanup', () => {
 
 describe('buildImageSrc — URL construction logic', () => {
 	const ts = loadTs()
+	const buildImageSrcFn = extractFunctionBody(ts, 'buildImageSrc')
 
 	it('returns transparent pixel for empty imageUrl', () => {
-		expect(ts).toMatch(/if\s*\(\s*!imageUrl\s*\)\s*return\s*['"]data:image\/png;base64,/)
+		expect(buildImageSrcFn).not.toBe('')
+		expectExcerptToContain(buildImageSrcFn, "base64MimeType: 'image/png'")
+		expectExcerptToContain(
+			buildImageSrcFn,
+			'emptyFallback: \'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=\'',
+		)
 	})
 
 	it('returns data: URLs unchanged', () => {
-		expect(ts).toMatch(/if\s*\(\s*imageUrl\.startsWith\(\s*['"]data:['"]\s*\)\s*\)\s*return\s+imageUrl/)
+		expectExcerptToContain(buildImageSrcFn, 'return resolveMediaUrl(imageUrl, {')
 	})
 
 	it('prepends apiBaseUrl for /api/ paths', () => {
-		expect(ts).toMatch(/if\s*\(\s*imageUrl\.startsWith\(\s*['"]\/api\/['"]\s*\)/)
-		expectSourceToContain(ts, '`${apiBaseUrl}${imageUrl}')
+		expectExcerptToContain(buildImageSrcFn, 'apiBaseUrl,')
 	})
 
 	it('appends token as query param for API URLs', () => {
-		expectSourceToContain(ts, '`?token=${token}`')
+		expectExcerptToContain(buildImageSrcFn, 'token,')
 	})
 })
 
