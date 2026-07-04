@@ -31,6 +31,8 @@
 }
 
 .navigation-side-panel {
+    --navigation-side-panel-section-separator-gradient: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.04) 10%, rgba(0, 0, 0, 0.08) 26%, rgba(0, 0, 0, 0.14) 50%, rgba(0, 0, 0, 0.08) 74%, rgba(0, 0, 0, 0.04) 90%, rgba(0, 0, 0, 0) 100%);
+
     position: fixed;
     top: 0;
     left: 0;
@@ -72,10 +74,23 @@
 
 .navigation-side-panel-header {
     flex: 0 0 auto;
+    position: relative;
     display: flex;
     justify-content: flex-end;
     align-items: center;
     padding: 12px 12px 0;
+}
+
+.navigation-side-panel-header::after {
+    content: '';
+    position: absolute;
+    left: 4%;
+    right: 4%;
+    bottom: -8px;
+    height: 1px;
+    border-radius: 999px;
+    background: var(--navigation-side-panel-section-separator-gradient);
+    pointer-events: none;
 }
 
 .navigation-side-panel-new-workspace-button {
@@ -195,9 +210,11 @@
 }
 
 .navigation-side-panel-footer-separator {
+    width: 92%;
     height: 1px;
-    background: rgba(0, 0, 0, 0.09);
-    margin-bottom: 8px;
+    margin: 0 auto 8px;
+    border-radius: 999px;
+    background: var(--navigation-side-panel-section-separator-gradient);
 }
 
 .navigation-side-panel-avatar {
