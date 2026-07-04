@@ -25,3 +25,7 @@ After the user confirms, delete only the confirmed path(s). If the user does not
 ## Updating or writing documentation or any md files
 
 You must NEVER truncate text at 80 chars or whatever length, lines must never be broken like in ancient technical documentaion.
+
+## Cross-repo billing (metering) contract
+
+The metering wire contract shared with the `lixpi-billing` repo — the `metrics.*` subjects in `packages/lixpi/constants/nats-subjects.json` (`METRICS_SUBJECTS`) and the check/confirm/balance request/response shapes in `services/api/src/metrics/contracts.ts` (used by `metrics-client.ts`) — must not be changed without explicit user allowance. If the user does allow a change, mirror it in the billing repo in the same change (`lixpi-billing/internal/billing/billing.go` and `internal/natsx/natsx.go`), and remind the user that both repos must be updated and released together — a one-sided change silently breaks the wire.

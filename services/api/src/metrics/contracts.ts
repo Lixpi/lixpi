@@ -1,5 +1,17 @@
 'use strict'
 
+// ============================================================================
+// CROSS-REPO WIRE CONTRACT — do NOT change without explicit user allowance.
+//
+// These types are the Lixpi↔billing metering wire contract, mirrored in the
+// billing repo. They must stay byte-compatible on the wire (JSON field names,
+// types). If you change anything here you MUST mirror it, in the same change, in
+// lixpi-billing: internal/billing/billing.go (Go request/response structs). Keep
+// the metrics.* subjects in @lixpi/constants (packages/lixpi/constants/nats-subjects.json,
+// METRICS_SUBJECTS) in sync with lixpi-billing internal/natsx. A one-sided change
+// silently breaks the wire.
+// ============================================================================
+
 // Metrics contract types for the abstract usage-metering port. Lixpi calls this
 // port (check before a paid provider call, confirm after) and never names billing;
 // the hosted implementation is lixpi-billing, reached over the metrics.usage.*

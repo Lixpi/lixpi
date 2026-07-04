@@ -5,6 +5,10 @@ import { warn } from '@lixpi/debug-tools'
 
 import type { CheckRequest, CheckResponse, ConfirmRequest, ConfirmResponse } from './contracts.ts'
 
+// CROSS-REPO WIRE CONTRACT — the metrics.* subjects and check/confirm shapes are
+// shared with lixpi-billing. Do NOT change without explicit user allowance, and
+// mirror any change on both sides (see ./contracts.ts and lixpi-billing
+// internal/billing + internal/natsx). A one-sided change breaks the wire.
 const METRICS_SUBJECTS = (NATS_SUBJECTS as any).METRICS_SUBJECTS as {
     USAGE_CHECK: string
     USAGE_CONFIRM: string
