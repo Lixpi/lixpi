@@ -93,16 +93,19 @@ export type RightSidePanelSettings = {
         }
     }
     toggle: {
+        motion?: 'slide' | 'fixed'
         openAriaLabel: string
         closedAriaLabel: string
         openOffset: string
-        closedTravel: string
+        closedTravel?: string
         top: string
         size: string
     }
     animation: {
         durationMs: number
-        easing: string
+        easing?: string
+        openEasing?: string
+        closeEasing?: string
     }
     overlay: {
         enabled: boolean
@@ -840,8 +843,10 @@ export const settings: Settings = {
         },
         animation: {
             // Drawer-style slide duration.
-            durationMs: 150,
-            easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+            durationMs: 100,
+            // Opening decelerates into place; closing accelerates away.
+            openEasing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            closeEasing: 'cubic-bezier(0.64, 0, 0.78, 0)',
         },
         overlay: {
             // Full-canvas dark glass tint layer behind the side panel.
@@ -894,17 +899,19 @@ export const settings: Settings = {
         toggle: {
             openAriaLabel: 'Collapse navigation side panel',
             closedAriaLabel: 'Open navigation side panel',
-            // Position when the panel is open.
-            openOffset: 'calc(var(--workspace-navigation-side-panel-width) + 5px)',
-            // Travel distance used when the panel is closed.
-            closedTravel: 'calc(var(--workspace-navigation-side-panel-width) - 10px)',
+            // Keep the navigation toggle anchored; the panel opens underneath
+            // it instead of pushing the button to the panel edge.
+            motion: 'fixed',
+            openOffset: '20px',
             top: '20px',
             size: '20px',
         },
         animation: {
             // Drawer-style slide duration.
-            durationMs: 150,
-            easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+            durationMs: 100,
+            // Opening decelerates into place; closing accelerates away.
+            openEasing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            closeEasing: 'cubic-bezier(0.64, 0, 0.78, 0)',
         },
         overlay: {
             // Full-viewport dark glass tint layer behind the side panel.

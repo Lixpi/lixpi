@@ -92,6 +92,7 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
             toggle: {
                 iconSvg: navigationSidePanelToggleIcon,
                 className: 'navigation-side-panel-toggle',
+                motion: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.motion,
                 openAriaLabel: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.openAriaLabel,
                 closedAriaLabel: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.closedAriaLabel,
                 openOffset: NAVIGATION_SIDE_PANEL_SETTINGS.toggle.openOffset,

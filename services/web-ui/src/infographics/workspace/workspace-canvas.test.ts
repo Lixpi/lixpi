@@ -1730,7 +1730,7 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(sidePanel, 'playOpen = (panelElement: HTMLElement)')
 		expectSourceToContain(sidePanel, 'playClose = (): Promise<void>')
 		expectSourceToContain(sidePanel, 'private runSlide = async (panelElement: HTMLElement | null, direction: \'in\' | \'out\'): Promise<void>')
-		expectSourceToContain(sidePanel, 'this.applyAnimationSettings(target.element)')
+		expectSourceToContain(sidePanel, 'this.applyAnimationSettings(target.element, direction)')
 		expectSourceToContain(sidePanel, 'transition: SLIDE_TRANSITION')
 		expectSourceToContain(sidePanel, 'this.getSlideDurationMs() + SLIDE_FALLBACK_BUFFER_MS')
 

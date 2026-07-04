@@ -416,6 +416,96 @@ describe('SidePanel', () => {
         sidePanel.destroy()
     })
 
+    it('uses distinct default open/close easing and a 500ms default duration when unconfigured', () => {
+        const sidePanel = createSidePanel(buildConfig())
+        const panel = document.createElement('div')
+
+        sidePanel.mountOpen(panel)
+        expect(panel.style.getPropertyValue('--side-panel-slide-duration')).toBe('500ms')
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('cubic-bezier(0.22, 1, 0.36, 1)')
+
+        sidePanel.playClose()
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('cubic-bezier(0.64, 0, 0.78, 0)')
+
+        sidePanel.destroy()
+    })
+
+    it('lets a generic animation.easing override both open and close directions', () => {
+        const sidePanel = createSidePanel(buildConfig({
+            animation: { durationMs: 200, easing: 'ease-in-out' },
+        }))
+        const panel = document.createElement('div')
+
+        sidePanel.mountOpen(panel)
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('ease-in-out')
+
+        sidePanel.playClose()
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('ease-in-out')
+
+        sidePanel.destroy()
+    })
+
+    it('lets per-direction openEasing/closeEasing take priority over the generic easing fallback', () => {
+        const sidePanel = createSidePanel(buildConfig({
+            animation: {
+                durationMs: 200,
+                easing: 'ease-in-out',
+                openEasing: 'ease-out',
+                closeEasing: 'ease-in',
+            },
+        }))
+        const panel = document.createElement('div')
+
+        sidePanel.mountOpen(panel)
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('ease-out')
+
+        sidePanel.playClose()
+        expect(panel.style.getPropertyValue('--side-panel-slide-easing')).toBe('ease-in')
+
+        sidePanel.destroy()
+    })
+
+    it('keeps a fixed-motion toggle stationary and out of the slide target list', async () => {
+        const restoreAnimationFrames = stubAnimationFrames()
+        try {
+            const sidePanel = createSidePanel(buildConfig({
+                toggle: {
+                    iconSvg: '<svg></svg>',
+                    openAriaLabel: 'Collapse panel',
+                    closedAriaLabel: 'Open panel',
+                    motion: 'fixed',
+                    onToggle: vi.fn(),
+                },
+            }))
+            const toggle = sidePanel.toggleElement as HTMLButtonElement
+
+            // Fixed toggles start without the 'none' transition guard the sliding
+            // default applies, and their closed transform is the identity.
+            expect(toggle.style.transition).toBe('')
+            expect(toggle.style.transform).toBe('translate3d(0, 0, 0)')
+
+            const panel = document.createElement('div')
+            document.body.appendChild(toggle)
+            sidePanel.mountOpen(panel)
+            expect(toggle.classList.contains('side-panel-slide')).toBe(false)
+            expect(toggle.style.transform).toBe('translate3d(0, 0, 0)')
+
+            const closed = sidePanel.playClose()
+            await flushSlideFrames()
+            // A fixed toggle never receives an animated transform, in either direction.
+            expect(toggle.style.transform).toBe('translate3d(0, 0, 0)')
+            expect(toggle.classList.contains('side-panel-slide')).toBe(false)
+
+            emitTransitionEnd(panel, 'transform')
+            emitTransitionEnd(sidePanel.backdropElement, 'transform')
+            await closed
+
+            sidePanel.destroy()
+        } finally {
+            restoreAnimationFrames()
+        }
+    })
+
     it('slides the toggle with the panel and waits for every moving surface to finish', async () => {
         const restoreAnimationFrames = stubAnimationFrames()
         try {

@@ -28,6 +28,8 @@ import { html, applyStyle } from '$src/utils/domTemplates.ts'
 
 export type SidePanelSide = 'left' | 'right'
 
+export type SidePanelToggleMotion = 'slide' | 'fixed'
+
 export type SidePanelStyles = {
     // Background gradient painted on the visible resize handle line.
     gradient?: string
@@ -38,6 +40,9 @@ export type SidePanelStyles = {
 export type SidePanelToggleConfig = {
     iconSvg: string
     className?: string
+    // `slide` keeps the existing drawer behavior: the toggle travels with the
+    // panel edge. `fixed` leaves the toggle anchored so the panel opens under it.
+    motion?: SidePanelToggleMotion
     openAriaLabel: string
     closedAriaLabel: string
     openOffset?: string
@@ -49,7 +54,9 @@ export type SidePanelToggleConfig = {
 
 export type SidePanelAnimationConfig = {
     durationMs: number
-    easing: string
+    easing?: string
+    openEasing?: string
+    closeEasing?: string
 }
 
 export type SidePanelOverlayConfig = {
@@ -131,7 +138,7 @@ export type SidePanelInstance = {
     // the same container as the panel, before the backdrop/panel surfaces.
     overlayElement: HTMLDivElement | null
     // Optional component-owned open/collapse button. Appended by the host into the
-    // same container as the panel and animated by the component.
+    // same container as the panel; it either slides with the drawer or stays fixed.
     toggleElement: HTMLButtonElement | null
     // Resolved, clamped current width (always a concrete number).
     getWidth: () => number
@@ -168,8 +175,9 @@ function clamp(value: number, min: number, max: number): number {
     return Math.min(Math.max(value, min), max)
 }
 
-const SLIDE_DEFAULT_DURATION_MS = 1000
-const SLIDE_DEFAULT_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
+const SLIDE_DEFAULT_DURATION_MS = 500
+const SLIDE_DEFAULT_OPEN_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+const SLIDE_DEFAULT_CLOSE_EASING = 'cubic-bezier(0.64, 0, 0.78, 0)'
 const SLIDE_FALLBACK_BUFFER_MS = 80
 const SLIDE_TRANSITION = 'var(--side-panel-slide-transition)'
 const OVERLAY_TRANSITION = 'var(--side-panel-overlay-transition)'
@@ -269,7 +277,12 @@ class SidePanel implements SidePanelInstance {
             document.addEventListener('click', this.handleOverlayClick, true)
         }
         this.setOpen(false)
-        if (this.toggleElement) applyStyle(this.toggleElement, { transition: 'none', transform: this.getToggleClosedTransform() })
+        if (this.toggleElement) {
+            applyStyle(this.toggleElement, {
+                transition: this.config.toggle?.motion === 'fixed' ? '' : 'none',
+                transform: this.getToggleClosedTransform(),
+            })
+        }
     }
 
     getWidth = (): number => {
@@ -318,18 +331,25 @@ class SidePanel implements SidePanelInstance {
             : SLIDE_DEFAULT_DURATION_MS
     }
 
-    private getSlideEasing = (): string => {
-        const easing = this.config.animation?.easing?.trim()
-        return easing ? easing : SLIDE_DEFAULT_EASING
+    private getSlideEasing = (direction?: 'in' | 'out'): string => {
+        const easing = direction === 'in'
+            ? this.config.animation?.openEasing?.trim()
+            : direction === 'out'
+                ? this.config.animation?.closeEasing?.trim()
+                : this.config.animation?.easing?.trim()
+        const fallback = this.config.animation?.easing?.trim()
+        if (easing) return easing
+        if (fallback) return fallback
+        return direction === 'in' ? SLIDE_DEFAULT_OPEN_EASING : SLIDE_DEFAULT_CLOSE_EASING
     }
 
-    private applyAnimationSettings = (element: HTMLElement): void => {
+    private applyAnimationSettings = (element: HTMLElement, direction?: 'in' | 'out'): void => {
         element.style.setProperty('--side-panel-slide-duration', `${this.getSlideDurationMs()}ms`)
-        element.style.setProperty('--side-panel-slide-easing', this.getSlideEasing())
+        element.style.setProperty('--side-panel-slide-easing', this.getSlideEasing(direction))
     }
 
-    private applyOverlaySettings = (element: HTMLElement): void => {
-        this.applyAnimationSettings(element)
+    private applyOverlaySettings = (element: HTMLElement, direction?: 'in' | 'out'): void => {
+        this.applyAnimationSettings(element, direction)
         const overlay = this.config.overlay
         if (overlay?.fill) element.style.setProperty('--side-panel-overlay-fill', overlay.fill)
         if (overlay?.fillOpaque) element.style.setProperty('--side-panel-overlay-fill-opaque', overlay.fillOpaque)
@@ -513,7 +533,7 @@ class SidePanel implements SidePanelInstance {
         this.setOpen(true)
         const targets = this.getSlideTargets(panelElement, 'in')
         for (const target of targets) {
-            this.applyAnimationSettings(target.element)
+            this.applyAnimationSettings(target.element, 'in')
             target.element.classList.add('side-panel-slide')
             applyStyle(target.element, { transition: 'none', transform: target.endTransform })
         }
@@ -525,7 +545,7 @@ class SidePanel implements SidePanelInstance {
         this.setOpen(true)
         const targets = this.getSlideTargets(panelElement, 'in')
         for (const target of targets) {
-            this.applyAnimationSettings(target.element)
+            this.applyAnimationSettings(target.element, 'in')
             target.element.classList.add('side-panel-slide')
             applyStyle(target.element, { transition: 'none', transform: target.startTransform })
         }
@@ -560,6 +580,7 @@ class SidePanel implements SidePanelInstance {
     )
 
     private getToggleClosedTransform = (): string => {
+        if (this.config.toggle?.motion === 'fixed') return 'translate3d(0, 0, 0)'
         const travel = 'var(--side-panel-toggle-closed-travel, var(--side-panel-backdrop-width, 0px))'
         return this.config.side === 'left'
             ? `translate3d(calc(-1 * ${travel}), 0, 0)`
@@ -576,7 +597,7 @@ class SidePanel implements SidePanelInstance {
         if (panelElement) {
             targets.unshift({ element: panelElement, startTransform: panelStartTransform, endTransform: panelEndTransform })
         }
-        if (this.toggleElement) {
+        if (this.toggleElement && this.config.toggle?.motion !== 'fixed') {
             const toggleClosedTransform = this.getToggleClosedTransform()
             targets.push({
                 element: this.toggleElement,
@@ -630,7 +651,7 @@ class SidePanel implements SidePanelInstance {
         this.closeFromCurrentTransforms = false
 
         for (const target of targets) {
-            this.applyAnimationSettings(target.element)
+            this.applyAnimationSettings(target.element, direction)
             target.element.classList.add('side-panel-slide')
             const startTransform = shouldStartCloseFromCurrent
                 ? target.element.style.transform || target.startTransform
@@ -638,7 +659,7 @@ class SidePanel implements SidePanelInstance {
             applyStyle(target.element, { transition: 'none', transform: startTransform })
         }
         if (this.overlayElement) {
-            this.applyOverlaySettings(this.overlayElement)
+            this.applyOverlaySettings(this.overlayElement, direction)
             const startOpacity = shouldStartCloseFromCurrent
                 ? this.overlayElement.style.opacity || this.getOverlayOpacityForDirection(direction, 'start')
                 : this.getOverlayOpacityForDirection(direction, 'start')
@@ -828,12 +849,12 @@ class SidePanel implements SidePanelInstance {
         if (!this.animatedPanel) return
         const targets = this.getSlideTargets(this.animatedPanel, 'in')
         for (const target of targets) {
-            this.applyAnimationSettings(target.element)
+            this.applyAnimationSettings(target.element, 'in')
             target.element.classList.add('side-panel-slide')
             applyStyle(target.element, { transition: SLIDE_TRANSITION, transform: target.endTransform })
         }
         if (this.overlayElement) {
-            this.applyOverlaySettings(this.overlayElement)
+            this.applyOverlaySettings(this.overlayElement, 'in')
             applyStyle(this.overlayElement, { transition: OVERLAY_TRANSITION, opacity: `${this.getOverlayOpacity()}` })
         }
     }

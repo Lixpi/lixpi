@@ -47,8 +47,27 @@
 }
 
 .navigation-side-panel-toggle svg {
+    position: relative;
+    z-index: 1;
+    width: 20px;
+    height: 20px;
     fill: none;
     stroke: currentColor;
+}
+
+.navigation-side-panel-toggle {
+    border-radius: 999px;
+    background: transparent;
+    transition: var(--side-panel-slide-transition), #{hoverTransition(color, 150ms)};
+}
+
+.navigation-side-panel-toggle::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 999px;
+    background: transparent;
+    transition: #{hoverTransition(background, 150ms)};
 }
 
 .navigation-side-panel-header {
@@ -56,7 +75,7 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    padding: 20px 12px 0;
+    padding: 12px 12px 0;
 }
 
 .navigation-side-panel-new-workspace-button {
@@ -66,11 +85,11 @@
     height: 36px;
     padding: 0;
     border: 0;
-    border-radius: 8px;
+    border-radius: 999px;
     background: transparent;
-    color: inherit;
+    color: var(--side-panel-toggle-color, inherit);
     cursor: pointer;
-    transition: #{hoverTransition(background, 150ms)};
+    transition: #{hoverTransition(background, 150ms)}, #{hoverTransition(color, 150ms)};
 }
 
 .navigation-side-panel-new-workspace-button svg {
@@ -79,8 +98,22 @@
     fill: currentColor;
 }
 
-.navigation-side-panel-new-workspace-button:hover {
+.navigation-side-panel-toggle:hover::before,
+.navigation-side-panel-toggle:focus-visible::before,
+.navigation-side-panel-new-workspace-button:hover,
+.navigation-side-panel-new-workspace-button:focus-visible {
     background: rgba(0, 0, 0, 0.06);
+}
+
+.navigation-side-panel-toggle:focus-visible,
+.navigation-side-panel-new-workspace-button:hover,
+.navigation-side-panel-new-workspace-button:focus-visible {
+    color: var(--side-panel-toggle-hover-color, #1f2937);
+}
+
+.navigation-side-panel-toggle:focus-visible,
+.navigation-side-panel-new-workspace-button:focus-visible {
+    outline: none;
 }
 
 .navigation-side-panel-list {
@@ -91,7 +124,7 @@
     flex-direction: column;
     gap: 8px;
     padding: 12px;
-    padding-top: 24px;
+    padding-top: 15px;
     user-select: none;
 }
 
