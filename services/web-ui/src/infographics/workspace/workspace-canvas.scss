@@ -18,6 +18,12 @@
 }
 
 .workspace-canvas {
+    --side-panel-resize-handle-z-index: 9990;
+    --side-panel-overlay-z-index: 10010;
+    --side-panel-backdrop-z-index: 10020;
+    --side-panel-surface-z-index: 10030;
+    --side-panel-toggle-z-index: 10040;
+
     width: 100%;
     height: 100%;
     display: flex;
@@ -884,7 +890,7 @@
     display: flex;
     flex-direction: column;
     padding: 0 var(--workspace-right-side-panel-content-inset);
-    z-index: 10030;
+    z-index: var(--side-panel-surface-z-index, 10030);
     pointer-events: auto;
     border-radius: 10px;
     background: transparent;
@@ -900,23 +906,6 @@
         flex: 1 1 auto;
         overflow-y: auto;
     }
-}
-
-// The overlay and translucent glass backdrop behind the right side panel are
-// owned by the reusable SidePanel component (see components/sidePanel). Their
-// base presentation lives there, under .side-panel-overlay and .side-panel-backdrop.
-//
-// The component's default background z-index is low (it only needs to sit behind
-// its own panel body). On the canvas, though, these layers must cover
-// canvas content — the bottom composer pill (9991) and selection overlays
-// (10000/10001). Lift them above that content while keeping them below the
-// panel body (10030) and the open/collapse toggle (10040).
-.workspace-canvas .side-panel-overlay-right {
-    z-index: 10010;
-}
-
-.workspace-canvas .side-panel-backdrop-right {
-    z-index: 10020;
 }
 
 .workspace-ai-chat-panel-tabs {

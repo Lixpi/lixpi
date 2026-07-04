@@ -1,11 +1,13 @@
 <script lang="ts">
 
-    import { setContext, getContext, untrack, tick } from 'svelte'
+    import { setContext, getContext, onMount, onDestroy } from 'svelte'
     import { fade } from 'svelte/transition'
 
     import { PaymentProcessingStatus } from '@lixpi/constants'
 
-    import Sidebar from '$src/components/Sidebar.svelte'
+    import { createNavigationSidePanel } from '$src/components/navigationSidePanel/index.ts'
+    import '$src/components/sidePanel/side-panel.scss'
+    import '$src/components/navigationSidePanel/navigation-side-panel.scss'
     import IntroPage from '$src/components/intro-page.svelte'
     import WorkspaceCanvas from '$src/components/WorkspaceCanvas.svelte'
     import ProjectDetails from '$src/components/project-details/project-details.svelte'
@@ -16,10 +18,10 @@
     import { routerStore } from '$src/stores/routerStore.ts'
     import { userStore } from '$src/stores/userStore.ts'
     import { subscriptionStore } from '$src/stores/subscriptionStore.ts'
+    import { userInfoPanelStore } from '$src/stores/navigationSidePanelStore.ts'
 
 
     // import UserMenu from '$src/components/user-menu.svelte'
-    import UserAvatar from '$src/components/user-avatar.svelte'
     // import Spinner from '$src/components/spinner.svelte'
 
 
@@ -32,9 +34,6 @@
     import * as Drawer from '$lib/registry/ui/drawer/index.ts'
     import * as Card from '$lib/registry/ui/card/index.ts'
 
-    import EllipsisIcon from '@lucide/svelte/icons/ellipsis'
-    import PanelLeftOpen from '@lucide/svelte/icons/panel-left-open'
-    import PanelRightOpen from '@lucide/svelte/icons/panel-right-open'
     import LogOutIcon from '@lucide/svelte/icons/log-out'
 
 
@@ -50,7 +49,6 @@
 
 	import { cn } from "$lib/utils.ts";
 	import { Input } from '$lib/registry/ui/input/index.ts';
-	import * as Resizable from '$lib/registry/ui/resizable/index.ts';
 	import { Separator } from '$lib/registry/ui/separator/index.ts';
 	import * as Tabs from '$lib/registry/ui/tabs/index.ts';
 	// import MailLight from '$lib/img/examples/mail-light.png?enhanced';
@@ -62,41 +60,19 @@
         layout,
     } = $props()
 
-	// export let accounts: Account[];
-	// export let mails: Mail[];
-	// export let defaultCollapsed = false;
-    // export let layout: number[] | undefined = undefined;
-	// export let navCollapsedSize: number;
+    let navigationSidePanelPaneEl: HTMLDivElement
+    let navigationSidePanel: ReturnType<typeof createNavigationSidePanel> | null = null
 
-	// let isSidebarCollapsed = false;
-    // let sidebarPane = null
-
-
-    let sidebarPane: Resizable.Pane = $state(null!);
-    let isSidebarCollapsed = $state(true);
-
-    let isUserInfoSidePanelOpen = $state(false);
-    let didInitialCollapse = false;
-
-    $effect(() => {
-        if (sidebarPane && !didInitialCollapse) {
-            didInitialCollapse = true;
-            if (!layout) {
-                (async () => {
-                    await tick();
-                    untrack(() => sidebarPane.collapse());
-                })();
-            }
-        }
+    onMount(() => {
+        navigationSidePanel = createNavigationSidePanel({ paneEl: navigationSidePanelPaneEl })
     })
 
-    const triggerUserInfoSidePanel = () => {
-        isUserInfoSidePanelOpen = true
-    }
+    onDestroy(() => {
+        navigationSidePanel?.destroy()
+    })
 
     const triggerAddFundsDialogOpen = () => {
-        // isPaymentDialogOpen = true
-        isUserInfoSidePanelOpen = false
+        userInfoPanelStore.set(false)
 
         subscriptionStore.setMetaValues({ isPaymentDialogOpen: true })
         subscriptionStore.setUiValues({
@@ -139,7 +115,7 @@
 <div class="sidebar-right-menu-wrapper">
     <Drawer.Root
         direction="right"
-        bind:open={isUserInfoSidePanelOpen}
+        bind:open={$userInfoPanelStore}
     >
         <Drawer.Content>
             <Drawer.Header>
@@ -194,89 +170,22 @@
 
 
 
-<div class="sidebar-collapse-actions absolute left-5 top-5">
-    <Button variant="ghost" size="icon" onclick={() => { isSidebarCollapsed ? sidebarPane.expand() : sidebarPane.collapse() }}>
-        {#if isSidebarCollapsed}
-            <PanelLeftOpen class="size-6" />
-        {:else}
-            <PanelRightOpen class="size-6" />
-        {/if}
-    </Button>
-</div>
-
-
-
+<div class="navigation-side-panel-pane" bind:this={navigationSidePanelPaneEl}></div>
 
 <div class="md:block h-full">
-	<Resizable.PaneGroup
-		direction="horizontal"
-		class="h-full items-stretch"
-		onLayoutChange = {(sizes: number[]) => {
-            // console.log('onLayoutChange', sizes);
-            document.cookie = `PaneForge:layout=${JSON.stringify(sizes)}`;
-        }}
-	>
-		<Resizable.Pane
-            class="hidden md:block"
-            collapsible
-			defaultSize={ layout ? layout[0] : 14 }
-			collapsedSize={0}
-			minSize={10}
-			maxSize={25}
-            bind:this={sidebarPane}
-			onCollapse = {() => {
-                isSidebarCollapsed = true;
-                document.cookie = `PaneForge:collapsed=${true}`;
-            }}
-			onExpand = {() => {
-                isSidebarCollapsed = false;
-                document.cookie = `PaneForge:collapsed=${false}`;
-            }}
-		>
-            <div class="workspace-sidebar-shell">
-                <div class="workspace-sidebar-body">
-                    <Sidebar />
-                </div>
-                <div class="workspace-sidebar-footer">
-                    <Separator />
-                    <div class="sidebar-user-menu">
-                        <UserAvatar
-                            avatar={$authStore.data.user?.picture}
-                            name={$authStore.data.user?.given_name || 'User'}
-                            isLightTheme={true}
-                            size="25px"
-                            onclick={triggerUserInfoSidePanel}
-                        />
-                    </div>
-                </div>
-            </div>
-		</Resizable.Pane>
-		<Resizable.Handle withHandle={false} />
-		<Resizable.Pane
-
-            >
-			<!-- <MailDisplay mail={mails.find((item) => item.id === $mailStore.selected) || null} /> -->
-
-            {#if $routerStore.data.currentRoute.path === '/document/:documentId'}
-                <ProjectDetails />
-            {:else if $routerStore.data.currentRoute.path === '/workspace/:workspaceId'}
-                <WorkspaceCanvas />
-            {:else}
-                <!-- <PaymentDetails /> -->
-                <IntroPage />
-            {/if}
-		</Resizable.Pane>
-	</Resizable.PaneGroup>
-
-
+    <div class="workspace-main-content h-full">
+        {#if $routerStore.data.currentRoute.path === '/document/:documentId'}
+            <ProjectDetails />
+        {:else if $routerStore.data.currentRoute.path === '/workspace/:workspaceId'}
+            <WorkspaceCanvas />
+        {:else}
+            <IntroPage />
+        {/if}
+    </div>
 </div>
 
 <style global lang="scss">
     @import '$src/sass/styles.scss';
-
-    .sidebar-collapse-actions {
-        z-index: 10;
-    }
 
     .sidebar-right-menu-wrapper {
         position: absolute;
@@ -285,29 +194,8 @@
         right: .5rem;
     }
 
-    .workspace-sidebar-shell {
-        height: 100%;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .workspace-sidebar-body {
-        min-height: 0;
-        flex: 1 1 auto;
-        overflow: hidden;
-    }
-
-    .workspace-sidebar-footer {
-        flex: 0 0 auto;
-        background: hsl(var(--sidebar-background));
-    }
-
-    .sidebar-user-menu {
-        padding: 8px 12px;
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
+    .workspace-main-content {
+        width: 100%;
     }
 
     :global([data-vaul-drawer]) {

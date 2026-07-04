@@ -111,8 +111,12 @@ function loadLayout(): string {
 	return readSourceFile('../../views/layouts/layout.svelte', 'views/layouts/layout.svelte')
 }
 
-function loadSidebar(): string {
-	return readSourceFile('../../components/Sidebar.svelte', 'components/Sidebar.svelte')
+function loadLeftSidebar(): string {
+	return readSourceFile('../../components/leftSidebar/leftSidebar.ts', 'components/leftSidebar/leftSidebar.ts')
+}
+
+function loadLeftSidebarScss(): string {
+	return readSourceFile('../../components/leftSidebar/left-sidebar.scss', 'components/leftSidebar/left-sidebar.scss')
 }
 
 function loadSettings(): string {
@@ -1739,7 +1743,8 @@ describe('Right side panel — TS infrastructure', () => {
 		const scss = loadScss()
 		const svelte = loadWorkspaceCanvasSvelte()
 		const layout = loadLayout()
-		const sidebar = loadSidebar()
+		const leftSidebar = loadLeftSidebar()
+		const leftSidebarScss = loadLeftSidebarScss()
 
 		const sidePanelScss = loadSidePanelScss()
 		expectSourceToContain(svelte, 'const rightSidePanelSettings = settings.rightSidePanel')
@@ -1770,15 +1775,14 @@ describe('Right side panel — TS infrastructure', () => {
 			'width: 100%',
 			'global composer'
 		)
-		expectSourceToContain(layout, 'workspace-sidebar-shell')
-		expectSourceToContain(layout, 'workspace-sidebar-body')
-		expectSourceToContain(layout, 'workspace-sidebar-footer')
-		expectSourceToContain(layout, '<Separator />')
-		expectSourceToContain(layout, 'sidebar-user-menu')
+		expectSourceToContain(layout, 'left-sidebar-pane')
+		expectSourceToContain(layout, 'createLeftSidebar')
+		expectSourceNotToContain(layout, 'Resizable.PaneGroup')
 		expectSourceNotToContain(layout, 'user-menu-workspace-chat-panel')
-		expectSourceToContain(sidebar, 'height: auto !important')
-		expectSourceToContain(sidebar, 'flex: 1 1 auto')
-		expectSourceToContain(sidebar, 'max-height: none !important')
+		expectSourceToContain(leftSidebar, "side: 'left'")
+		expectSourceToContain(leftSidebar, 'createSidePanel')
+		expectSourceToContain(leftSidebarScss, '.left-sidebar-panel')
+		expectSourceToContain(leftSidebarScss, 'position: fixed')
 	})
 })
 

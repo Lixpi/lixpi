@@ -18,6 +18,7 @@ These docs are authored as Markdoc-friendly Markdown and render to a static HTML
 | [Product Overview](PRODUCT-OVERVIEW.md) | The product thesis: canvas primitives, artifact piping, character consistency, the image/video pipelines, multi-model support |
 | [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Services, the NATS backbone, subject naming, key design decisions, horizontal scaling |
 | [Development](platform/DEVELOPMENT.md) | Local dev quick start: env wizard, infrastructure init, running services |
+| [Nano Stores](platform/NANOSTORES.md) | Frontend store conventions for `nanostores` and `@nanostores/persistent` |
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to keep docs accurate, flexible, Markdoc-compatible, and readable as the architecture changes |
 
 ## Finding the Right Guide
@@ -42,6 +43,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md) | The shared LangGraph workflow, `ProviderState`, the post-stream 3-way router, dual-model routing, tool injection/extraction, `ImageRouter`/`VideoRouter`, stream lifecycle, usage |
 | [Streaming & Events](platform/STREAMING-AND-EVENTS.md) | Live AI pipeline subjects, JetStream replay logs, ProseMirror step streams, and the stream-event catalog |
 | [Authentication](platform/AUTHENTICATION.md) | Dual auth model, NATS auth callout, `@lixpi/auth-service`, LocalAuth0 |
+| [Nano Stores](platform/NANOSTORES.md) | Browser-side store conventions for `nanostores`, persistent stores, and framework-agnostic TypeScript consumers |
 | [Infrastructure Overview](platform/deployment/INFRASTRUCTURE-OVERVIEW.md) | Pulumi, AWS topology, network, ECS `api`, web-ui delivery, DynamoDB |
 | [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | NATS on Fargate, CloudMap discovery, the Route53 sidecar, Caddy-in-Lambda TLS, the auth-callout boundary |
 | [NEX Execution Engine](platform/deployment/NEX-EXECUTION-ENGINE.md) | The background-workload node — AI-models sync, file conversion/frame extraction, the NEX account and credentials, local and AWS deployment |

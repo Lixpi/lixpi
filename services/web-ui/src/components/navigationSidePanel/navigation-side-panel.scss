@@ -1,0 +1,201 @@
+@import '$src/sass/_transitions.scss';
+
+// NavigationSidePanel workspace-list layout. Shared resize, backdrop, overlay,
+// toggle, and slide animation styles live in components/sidePanel.
+
+.navigation-side-panel-pane {
+    --side-panel-resize-handle-z-index: 9990;
+    --side-panel-overlay-z-index: 10010;
+    --side-panel-backdrop-z-index: 10020;
+    --side-panel-surface-z-index: 10030;
+    --side-panel-toggle-z-index: 10040;
+
+    display: contents;
+    pointer-events: none;
+}
+
+.navigation-side-panel-pane .side-panel-overlay-left {
+    position: fixed;
+}
+
+.navigation-side-panel-pane .side-panel-backdrop-left {
+    position: fixed;
+}
+
+.navigation-side-panel-pane .side-panel-toggle-left {
+    position: fixed;
+}
+
+.info-bubble-wrapper[data-bubble-id^="dropdown-navigation-side-panel-workspace-menu-"] {
+    z-index: 10050;
+}
+
+.navigation-side-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--workspace-navigation-side-panel-width, 280px);
+    box-sizing: border-box;
+    z-index: var(--side-panel-surface-z-index, 10030);
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: hsl(var(--sidebar-background));
+    overflow: hidden;
+}
+
+.navigation-side-panel-toggle svg {
+    fill: none;
+    stroke: currentColor;
+}
+
+.navigation-side-panel-header {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 20px 12px 0;
+}
+
+.navigation-side-panel-new-workspace-button {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    transition: #{hoverTransition(background, 150ms)};
+}
+
+.navigation-side-panel-new-workspace-button svg {
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+}
+
+.navigation-side-panel-new-workspace-button:hover {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.navigation-side-panel-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    padding-top: 24px;
+    user-select: none;
+}
+
+.navigation-side-panel-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    border: 0;
+    border-radius: 8px;
+    padding: 4px 4px 4px 12px;
+    background: transparent;
+    text-align: left;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: #{hoverTransition(background, 75ms)};
+}
+
+.navigation-side-panel-row:hover {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.navigation-side-panel-row-active {
+    background: rgba(0, 0, 0, 0.09);
+}
+
+.navigation-side-panel-row-top {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.navigation-side-panel-row-title {
+    font-weight: 500;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.navigation-side-panel-row-menu {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+.navigation-side-panel-row-tags {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 8px;
+    padding-left: 0;
+}
+
+.navigation-side-panel-row-tag {
+    background: #f97316;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 400;
+    padding: 1px 6px;
+    border-radius: 9px;
+}
+
+.navigation-side-panel-footer {
+    flex: 0 0 auto;
+    background: hsl(var(--sidebar-background));
+    padding: 0 12px 8px;
+}
+
+.navigation-side-panel-footer-separator {
+    height: 1px;
+    background: rgba(0, 0, 0, 0.09);
+    margin-bottom: 8px;
+}
+
+.navigation-side-panel-avatar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.navigation-side-panel-avatar img,
+.navigation-side-panel-avatar-initial {
+    width: 25px;
+    height: 25px;
+    border-radius: 99px;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.navigation-side-panel-avatar img {
+    object-fit: cover;
+}
+
+.navigation-side-panel-avatar-initial {
+    display: block;
+    background: #5c656d;
+    color: #fcfcfc;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 25px;
+    font-size: 0.75rem;
+}
+
+.navigation-side-panel-import-input {
+    display: none;
+}
