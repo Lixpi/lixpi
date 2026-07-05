@@ -365,7 +365,6 @@ const resolveDocumentText = async (
     const document = await (deps.getDocument ?? DocumentModel.getDocument)({
         workspaceId: state.workspaceId,
         documentId: referenceId,
-        revision: 1,
     } as any)
     if (hasModelError(document)) {
         const text = getFallbackText(node)

@@ -1223,6 +1223,7 @@ export type FeatureMeta = {
     scopeOwnerId: string
     status: FeatureStatus
     ownerUserId: string
+    scopeAndOwner?: string    // PK of the Features-Meta table — `${scope}#${scopeOwnerId}`; present on persisted rows
     sampleZeroKey?: string
     sampleZeroUrl?: string
     updatedAt: number
@@ -1324,6 +1325,7 @@ export type MediaLibraryImageMeta = {
     displayName: string
     ownerUserId: string
     originWorkspaceId: string
+    sourceFileId?: string         // source object key — lets save-time dedup query the meta partition
     scope: MediaLibraryScope
     scopeOwnerId: string
     scopeAndOwner: string
@@ -1378,6 +1380,7 @@ export type MediaLibraryVideoMeta = {
     displayName: string
     ownerUserId: string
     originWorkspaceId: string
+    sourceFileId?: string         // source object key — lets save-time dedup query the meta partition
     scope: MediaLibraryScope
     scopeOwnerId: string
     scopeAndOwner: string
@@ -1627,16 +1630,13 @@ export type WorkspaceAccessList = {
 }
 
 export type Document = {
-    documentId: string
-    workspaceId: string
-    revision: number
+    documentId: string        // SK — immutable id within the workspace partition
+    workspaceId: string       // PK — the scope the document is listed by
     title: string
     content: string
-    prevRevision: number
     proseMirrorVersion?: number
     createdAt: number
     updatedAt: number
-    revisionExpiresAt?: number
 }
 
 export type DocumentMeta = {

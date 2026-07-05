@@ -37,7 +37,6 @@
         workspaceId: string
         documentId: string
         title?: string
-        prevRevision?: number
         content?: any
     }
 
@@ -134,7 +133,6 @@
             workspaceId: targetWorkspaceId,
             documentId,
             ...(update.title !== undefined ? { title: update.title } : {}),
-            ...(update.prevRevision !== undefined ? { prevRevision: update.prevRevision } : {}),
             ...(update.content !== undefined ? { content: update.content } : {}),
         }
         pendingDocumentUpdates.set(documentId, pendingUpdate)
@@ -533,12 +531,11 @@
             aiChatThreads,
             onViewportChange: handleViewportChange,
             onCanvasStateChange: persistCanvasState,
-            onDocumentContentChange: ({ documentId, title, prevRevision, content }) => {
+            onDocumentContentChange: ({ documentId, title, content }) => {
                 if (!workspaceId || loadedWorkspaceId !== workspaceId) return
                 scheduleDocumentUpdate({
                     workspaceId,
                     documentId,
-                    prevRevision: prevRevision || 1,
                     content
                 })
             },

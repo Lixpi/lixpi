@@ -8,7 +8,15 @@ import type { ContentDescriptor, DocumentFile } from '@lixpi/constants'
 const dynamo = {
     getItem: vi.fn(),
     updateItem: vi.fn(),
+    transactWrite: vi.fn(),
 }
+
+// Transactions surface a failed per-item condition as a cancelled transaction,
+// not as ConditionalCheckFailedException.
+const transactionalConditionalFailure = (message: string) => Object.assign(new Error(message), {
+    name: 'TransactionCanceledException',
+    CancellationReasons: [{ Code: 'ConditionalCheckFailed' }, { Code: 'None' }],
+})
 
 beforeEach(() => {
     vi.useRealTimers()
@@ -81,7 +89,7 @@ describe('Workspace.patchCanvasNodeDescriptor', () => {
                 ],
             },
         })
-        dynamo.updateItem.mockResolvedValue(undefined)
+        dynamo.transactWrite.mockResolvedValue(undefined)
 
         await expect(Workspace.patchCanvasNodeDescriptor({
             workspaceId: 'workspace-1',
@@ -89,7 +97,10 @@ describe('Workspace.patchCanvasNodeDescriptor', () => {
             descriptor,
         })).resolves.toBe(true)
 
-        expect(dynamo.updateItem).toHaveBeenCalledWith(expect.objectContaining({
+        expect(dynamo.transactWrite).toHaveBeenCalledTimes(1)
+        const { operations } = dynamo.transactWrite.mock.calls[0][0]
+        expect(operations[0]).toEqual(expect.objectContaining({
+            type: 'update',
             key: { workspaceId: 'workspace-1' },
             updateExpression: 'SET #canvasState.#nodes[1].#descriptor = :descriptor, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt',
             conditionExpression: '#canvasState.#nodes[1].#nodeId = :nodeId',
@@ -97,6 +108,11 @@ describe('Workspace.patchCanvasNodeDescriptor', () => {
                 ':descriptor': descriptor,
                 ':nodeId': 'node-b',
             }),
+        }))
+        expect(operations[1]).toEqual(expect.objectContaining({
+            type: 'update',
+            tableName: expect.stringContaining('Workspaces-Meta'),
+            updates: { updatedAt: expect.any(Number) },
         }))
     })
 
@@ -121,7 +137,7 @@ describe('Workspace.patchCanvasNodeDescriptor', () => {
             },
         })).resolves.toBe(false)
 
-        expect(dynamo.updateItem).not.toHaveBeenCalled()
+        expect(dynamo.transactWrite).not.toHaveBeenCalled()
     })
 })
 
@@ -140,7 +156,7 @@ describe('Workspace.mutateCanvasState', () => {
                 edges: [],
             },
         })
-        dynamo.updateItem.mockResolvedValue(undefined)
+        dynamo.transactWrite.mockResolvedValue(undefined)
 
         const changed = await Workspace.mutateCanvasState({
             workspaceId: 'workspace-1',
@@ -155,8 +171,11 @@ describe('Workspace.mutateCanvasState', () => {
         })
 
         expect(changed).toBe(true)
-        expect(dynamo.updateItem).toHaveBeenCalledTimes(2)
-        expect(dynamo.updateItem.mock.calls[0][0]).toEqual(expect.objectContaining({
+        expect(dynamo.transactWrite).toHaveBeenCalledTimes(1)
+        const { operations, origin } = dynamo.transactWrite.mock.calls[0][0]
+        expect(origin).toBe('testCanvasMutation')
+        expect(operations[0]).toEqual(expect.objectContaining({
+            type: 'update',
             tableName: expect.stringContaining('Workspaces'),
             key: { workspaceId: 'workspace-1' },
             updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt',
@@ -176,13 +195,12 @@ describe('Workspace.mutateCanvasState', () => {
                 ':updatedAt': expect.any(Number),
                 ':canvasStateUpdatedAt': expect.any(Number),
             }),
-            origin: 'testCanvasMutation',
         }))
-        expect(dynamo.updateItem.mock.calls[1][0]).toEqual(expect.objectContaining({
+        expect(operations[1]).toEqual(expect.objectContaining({
+            type: 'update',
             tableName: expect.stringContaining('Workspaces-Meta'),
             key: { workspaceId: 'workspace-1' },
             updates: { updatedAt: expect.any(Number) },
-            origin: 'testCanvasMutation:meta',
         }))
     })
 
@@ -202,7 +220,7 @@ describe('Workspace.mutateCanvasState', () => {
         })
 
         expect(changed).toBe(false)
-        expect(dynamo.updateItem).not.toHaveBeenCalled()
+        expect(dynamo.transactWrite).not.toHaveBeenCalled()
     })
 
     it('uses legacy updatedAt as the canvas save token when canvasStateUpdatedAt is missing', async () => {
@@ -214,7 +232,7 @@ describe('Workspace.mutateCanvasState', () => {
                 edges: [],
             },
         })
-        dynamo.updateItem.mockResolvedValue(undefined)
+        dynamo.transactWrite.mockResolvedValue(undefined)
 
         await Workspace.mutateCanvasState({
             workspaceId: 'workspace-1',
@@ -227,7 +245,7 @@ describe('Workspace.mutateCanvasState', () => {
             }),
         })
 
-        expect(dynamo.updateItem.mock.calls[0][0]).toEqual(expect.objectContaining({
+        expect(dynamo.transactWrite.mock.calls[0][0].operations[0]).toEqual(expect.objectContaining({
             conditionExpression: '(#canvasStateUpdatedAt = :expectedCanvasStateUpdatedAt OR (attribute_not_exists(#canvasStateUpdatedAt) AND #updatedAt = :expectedCanvasStateUpdatedAt))',
             expressionAttributeValues: expect.objectContaining({
                 ':expectedCanvasStateUpdatedAt': 10,
@@ -243,7 +261,7 @@ describe('Workspace.mutateCanvasState', () => {
                 edges: [],
             },
         })
-        dynamo.updateItem.mockResolvedValue(undefined)
+        dynamo.transactWrite.mockResolvedValue(undefined)
 
         await Workspace.mutateCanvasState({
             workspaceId: 'workspace-1',
@@ -256,7 +274,7 @@ describe('Workspace.mutateCanvasState', () => {
             }),
         })
 
-        expect(dynamo.updateItem.mock.calls[0][0]).toEqual(expect.objectContaining({
+        expect(dynamo.transactWrite.mock.calls[0][0].operations[0]).toEqual(expect.objectContaining({
             conditionExpression: '(attribute_not_exists(#canvasStateUpdatedAt) AND attribute_not_exists(#updatedAt))',
             expressionAttributeValues: expect.not.objectContaining({
                 ':expectedCanvasStateUpdatedAt': expect.anything(),
@@ -265,9 +283,7 @@ describe('Workspace.mutateCanvasState', () => {
     })
 
     it('re-reads and retries when a concurrent canvas write wins the canvasStateUpdatedAt condition', async () => {
-        const conditionalFailure = Object.assign(new Error('stale canvas write'), {
-            name: 'ConditionalCheckFailedException',
-        })
+        const conditionalFailure = transactionalConditionalFailure('stale canvas write')
         dynamo.getItem
             .mockResolvedValueOnce({
                 updatedAt: 10,
@@ -287,9 +303,8 @@ describe('Workspace.mutateCanvasState', () => {
                     edges: [],
                 },
             })
-        dynamo.updateItem
+        dynamo.transactWrite
             .mockRejectedValueOnce(conditionalFailure)
-            .mockResolvedValueOnce(undefined)
             .mockResolvedValueOnce(undefined)
 
         const changed = await Workspace.mutateCanvasState({
@@ -309,10 +324,10 @@ describe('Workspace.mutateCanvasState', () => {
 
         expect(changed).toBe(true)
         expect(dynamo.getItem).toHaveBeenCalledTimes(2)
-        expect(dynamo.updateItem).toHaveBeenCalledTimes(3)
-        expect(dynamo.updateItem.mock.calls[0][0].expressionAttributeValues[':expectedCanvasStateUpdatedAt']).toBe(5)
-        expect(dynamo.updateItem.mock.calls[1][0].expressionAttributeValues[':expectedCanvasStateUpdatedAt']).toBe(6)
-        expect(dynamo.updateItem.mock.calls[1][0].expressionAttributeValues[':canvasState'].nodes).toEqual([
+        expect(dynamo.transactWrite).toHaveBeenCalledTimes(2)
+        expect(dynamo.transactWrite.mock.calls[0][0].operations[0].expressionAttributeValues[':expectedCanvasStateUpdatedAt']).toBe(5)
+        expect(dynamo.transactWrite.mock.calls[1][0].operations[0].expressionAttributeValues[':expectedCanvasStateUpdatedAt']).toBe(6)
+        expect(dynamo.transactWrite.mock.calls[1][0].operations[0].expressionAttributeValues[':canvasState'].nodes).toEqual([
             expect.objectContaining({ nodeId: 'concurrent-node' }),
             expect.objectContaining({ nodeId: 'projection-node' }),
         ])
@@ -325,7 +340,7 @@ describe('Workspace.mutateCanvasState', () => {
 
 describe('Workspace.updateCanvasState', () => {
     it('writes full canvas state with a canvasStateUpdatedAt condition when the client supplies a save token', async () => {
-        dynamo.updateItem.mockResolvedValue(undefined)
+        dynamo.transactWrite.mockResolvedValue(undefined)
 
         const result = await Workspace.updateCanvasState({
             userId: 'user-1',
@@ -344,7 +359,11 @@ describe('Workspace.updateCanvasState', () => {
             updatedAt: expect.any(Number),
             canvasStateUpdatedAt: expect.any(Number),
         })
-        expect(dynamo.updateItem).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        expect(dynamo.transactWrite).toHaveBeenCalledTimes(1)
+        const { operations, origin } = dynamo.transactWrite.mock.calls[0][0]
+        expect(origin).toBe('updateWorkspaceCanvasState')
+        expect(operations[0]).toEqual(expect.objectContaining({
+            type: 'update',
             key: { workspaceId: 'workspace-1' },
             updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt',
             conditionExpression: '(#canvasStateUpdatedAt = :expectedCanvasStateUpdatedAt OR (attribute_not_exists(#canvasStateUpdatedAt) AND #updatedAt = :expectedCanvasStateUpdatedAt))',
@@ -360,19 +379,17 @@ describe('Workspace.updateCanvasState', () => {
                 }),
                 ':canvasStateUpdatedAt': expect.any(Number),
             }),
-            origin: 'updateWorkspaceCanvasState',
         }))
-        expect(dynamo.updateItem).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        expect(operations[1]).toEqual(expect.objectContaining({
+            type: 'update',
             tableName: expect.stringContaining('Workspaces-Meta'),
             updates: { updatedAt: expect.any(Number) },
         }))
     })
 
     it('rejects stale full canvas saves instead of overwriting newer canonical state', async () => {
-        const conditionalFailure = Object.assign(new Error('stale canvas write'), {
-            name: 'ConditionalCheckFailedException',
-        })
-        dynamo.updateItem.mockRejectedValueOnce(conditionalFailure)
+        const conditionalFailure = transactionalConditionalFailure('stale canvas write')
+        dynamo.transactWrite.mockRejectedValueOnce(conditionalFailure)
         dynamo.getItem
             .mockResolvedValueOnce({
                 updatedAt: 12,
@@ -399,7 +416,7 @@ describe('Workspace.updateCanvasState', () => {
             currentUpdatedAt: 22,
             currentCanvasStateUpdatedAt: 18,
         })
-        expect(dynamo.updateItem).toHaveBeenCalledTimes(1)
+        expect(dynamo.transactWrite).toHaveBeenCalledTimes(1)
         expect(dynamo.getItem).toHaveBeenCalledWith(expect.objectContaining({
             key: { workspaceId: 'workspace-1' },
             origin: 'updateWorkspaceCanvasState:stale(workspace-1)',
@@ -407,7 +424,7 @@ describe('Workspace.updateCanvasState', () => {
     })
 
     it('allows tokenless full canvas saves only for rows without any canvas token', async () => {
-        dynamo.updateItem.mockResolvedValue(undefined)
+        dynamo.transactWrite.mockResolvedValue(undefined)
 
         await Workspace.updateCanvasState({
             userId: 'user-1',
@@ -419,7 +436,7 @@ describe('Workspace.updateCanvasState', () => {
             },
         })
 
-        expect(dynamo.updateItem).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        expect(dynamo.transactWrite.mock.calls[0][0].operations[0]).toEqual(expect.objectContaining({
             conditionExpression: '(attribute_not_exists(#canvasStateUpdatedAt) AND attribute_not_exists(#updatedAt))',
             expressionAttributeValues: expect.not.objectContaining({
                 ':expectedCanvasStateUpdatedAt': expect.anything(),
@@ -482,7 +499,7 @@ describe('Workspace.updateCanvasState', () => {
                 }],
             },
         })
-        dynamo.updateItem.mockResolvedValue(undefined)
+        dynamo.transactWrite.mockResolvedValue(undefined)
 
         await Workspace.updateCanvasState({
             userId: 'user-1',
@@ -527,7 +544,7 @@ describe('Workspace.updateCanvasState', () => {
             },
         })
 
-        const writtenState = dynamo.updateItem.mock.calls[0]?.[0].expressionAttributeValues[':canvasState']
+        const writtenState = dynamo.transactWrite.mock.calls[0]?.[0].operations[0].expressionAttributeValues[':canvasState']
         expect(writtenState.nodes).toEqual(expect.arrayContaining([
             expect.objectContaining({ nodeId: 'user-node' }),
             expect.objectContaining({ nodeId: 'fork-1' }),
@@ -596,7 +613,7 @@ describe('Workspace.updateCanvasState', () => {
                 }],
             },
         })
-        dynamo.updateItem.mockResolvedValue(undefined)
+        dynamo.transactWrite.mockResolvedValue(undefined)
 
         await Workspace.updateCanvasState({
             userId: 'user-1',
@@ -609,7 +626,7 @@ describe('Workspace.updateCanvasState', () => {
             },
         })
 
-        const writtenState = dynamo.updateItem.mock.calls[0]?.[0].expressionAttributeValues[':canvasState']
+        const writtenState = dynamo.transactWrite.mock.calls[0]?.[0].operations[0].expressionAttributeValues[':canvasState']
         expect(writtenState.nodes).toEqual([
             expect.objectContaining({ nodeId: 'user-node' }),
         ])
@@ -637,7 +654,7 @@ describe('Workspace.updateCanvasState', () => {
                 edges: [],
             },
         })
-        dynamo.updateItem.mockResolvedValue(undefined)
+        dynamo.transactWrite.mockResolvedValue(undefined)
 
         await Workspace.updateCanvasState({
             userId: 'user-1',
@@ -650,7 +667,7 @@ describe('Workspace.updateCanvasState', () => {
             },
         })
 
-        const writtenState = dynamo.updateItem.mock.calls[0]?.[0].expressionAttributeValues[':canvasState']
+        const writtenState = dynamo.transactWrite.mock.calls[0]?.[0].operations[0].expressionAttributeValues[':canvasState']
         expect(writtenState.nodes).toEqual([
             expect.objectContaining({ nodeId: 'user-node' }),
         ])
@@ -676,21 +693,23 @@ describe('Workspace.updateCanvasState', () => {
                 return undefined
             }
 
-            if (params.origin === 'updateWorkspaceCanvasState' && params.updateExpression) {
-                const expectedCanvasStateUpdatedAt = params.expressionAttributeValues[':expectedCanvasStateUpdatedAt']
+            return undefined
+        })
+
+        dynamo.transactWrite.mockImplementation(async ({ operations, origin }: any) => {
+            const canvasOperation = operations[0]
+            if (origin === 'updateWorkspaceCanvasState' && canvasOperation?.updateExpression) {
+                const expectedCanvasStateUpdatedAt = canvasOperation.expressionAttributeValues[':expectedCanvasStateUpdatedAt']
                 const canvasTokenMatches = workspaceItem.canvasStateUpdatedAt === expectedCanvasStateUpdatedAt
                 const legacyTokenMatches = workspaceItem.canvasStateUpdatedAt === undefined && workspaceItem.updatedAt === expectedCanvasStateUpdatedAt
 
                 if (!canvasTokenMatches && !legacyTokenMatches) {
-                    throw Object.assign(new Error('stale canvas write'), {
-                        name: 'ConditionalCheckFailedException',
-                    })
+                    throw transactionalConditionalFailure('stale canvas write')
                 }
 
-                workspaceItem.canvasState = params.expressionAttributeValues[':canvasState']
-                workspaceItem.canvasStateUpdatedAt = params.expressionAttributeValues[':canvasStateUpdatedAt']
-                workspaceItem.updatedAt = params.expressionAttributeValues[':updatedAt']
-                return undefined
+                workspaceItem.canvasState = canvasOperation.expressionAttributeValues[':canvasState']
+                workspaceItem.canvasStateUpdatedAt = canvasOperation.expressionAttributeValues[':canvasStateUpdatedAt']
+                workspaceItem.updatedAt = canvasOperation.expressionAttributeValues[':updatedAt']
             }
 
             return undefined

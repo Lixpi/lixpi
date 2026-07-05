@@ -11,7 +11,23 @@ const {
     STAGE
 } = process.env
 
-export default {
+// Internal loader that keeps the accessList map — permission checks and the
+// access-list fan-out need it; getOrganization strips it before returning.
+const getOrganizationRecord = async (organizationId: string): Promise<Record<string, any> | null> => {
+    const org = await dynamoDBService.getItem({
+        tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+        key: { organizationId },
+        origin: 'model::Organization->getRecord()'
+    })
+
+    if (!org || Object.keys(org).length === 0) {
+        return null
+    }
+
+    return org
+}
+
+const OrganizationModel = {
     getOrganization: async ({
         organizationId,
         userId
@@ -87,23 +103,26 @@ export default {
         }
 
         try {
-            // Insert the new organization data into the database
-            await dynamoDBService.putItem({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
-                item: newOrgData,
-                origin: 'createOrganization'
-            })
-
-            // Insert the new organization access list into the database
-            await dynamoDBService.putItem({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
-                item: {
-                    userId: userId,    // Partition key
-                    organizationId,    // Sort key
-                    accessLevel,
-                    createdAt: currentDate,
-                    updatedAt: currentDate
-                },
+            // Organization row + owner's access-list row commit or fail together
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'put',
+                        tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                        item: newOrgData
+                    },
+                    {
+                        type: 'put',
+                        tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
+                        item: {
+                            userId: userId,    // Partition key
+                            organizationId,    // Sort key
+                            accessLevel,
+                            createdAt: currentDate,
+                            updatedAt: currentDate
+                        }
+                    }
+                ],
                 origin: 'createOrganization'
             })
 
@@ -122,9 +141,12 @@ export default {
         const currentDate = new Date().getTime()
 
         try {
-            const org = await this.getOrganization({ organizationId, userId })
-            if (org.error) {
-                return org
+            const org = await getOrganizationRecord(organizationId)
+            if (!org) {
+                return { error: 'NOT_FOUND' }
+            }
+            if (!org.accessList?.[userId]) {
+                return { error: 'PERMISSION_DENIED' }
             }
 
             const updates = {
@@ -151,38 +173,34 @@ export default {
         userId
     }: Pick<Organization, 'organizationId'> & { userId: string }): Promise<{ status: string; organizationId: string } | { error: string }> => {
         try {
-            const org = await this.getOrganization({ organizationId, userId })
-            if (org.error) {
-                return org
+            const org = await getOrganizationRecord(organizationId)
+            if (!org) {
+                return { error: 'NOT_FOUND' }
             }
 
-            if (org.accessList[userId] !== 'owner') {
+            if (org.accessList?.[userId] !== 'owner') {
                 return { error: 'PERMISSION_DENIED' }
             }
 
-            // Delete the organization
-            await dynamoDBService.deleteItems({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
-                key: { organizationId },
-                origin: 'deleteOrganization:Organizations'
-            })
+            // The org row's accessList map names every member whose access-list
+            // row must go. Delete the org and all member rows in one transaction.
+            const memberIds = Object.keys(org.accessList ?? {})
 
-            // Delete all access list entries for this organization
-            const accessListEntries = await dynamoDBService.queryItems({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
-                indexName: 'organizationId',
-                keyConditions: { organizationId },
-                fetchAllItems: true,
-                origin: 'deleteOrganization:AccessList',
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'delete',
+                        tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                        key: { organizationId }
+                    },
+                    ...memberIds.map((memberId) => ({
+                        type: 'delete' as const,
+                        tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
+                        key: { userId: memberId, organizationId }
+                    }))
+                ],
+                origin: 'deleteOrganization'
             })
-
-            for (const entry of accessListEntries.items) {
-                await dynamoDBService.deleteItems({
-                    tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
-                    key: { userId: entry.userId, organizationId },
-                    origin: 'deleteOrganization:AccessList'
-                })
-            }
 
             return { status: 'deleted', organizationId }
         } catch (e) {
@@ -200,37 +218,40 @@ export default {
         const currentDate = new Date().getTime()
 
         try {
-            const org = await this.getOrganization({ organizationId, userId: addedByUserId })
-            if (org.error) {
-                return org
+            const org = await getOrganizationRecord(organizationId)
+            if (!org) {
+                return { error: 'NOT_FOUND' }
             }
 
-            if (org.accessList[addedByUserId] !== 'owner') {
+            if (org.accessList?.[addedByUserId] !== 'owner') {
                 return { error: 'PERMISSION_DENIED' }
             }
 
-            // Update Organizations table
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
-                key: { organizationId },
-                updates: {
-                    [`accessList.${userId}`]: accessLevel,
-                    updatedAt: currentDate
-                },
-                origin: 'addUserToOrganization:Organizations'
-            })
-
-            // Add entry to Organizations-Access-List table
-            await dynamoDBService.putItem({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
-                item: {
-                    userId: userId,    // Partition key
-                    organizationId,    // Sort key
-                    accessLevel,
-                    createdAt: currentDate,
-                    updatedAt: currentDate
-                },
-                origin: 'addUserToOrganization:AccessList'
+            // Org row accessList map + member's access-list row commit together
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'update',
+                        tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                        key: { organizationId },
+                        updates: {
+                            [`accessList.${userId}`]: accessLevel,
+                            updatedAt: currentDate
+                        }
+                    },
+                    {
+                        type: 'put',
+                        tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
+                        item: {
+                            userId: userId,    // Partition key
+                            organizationId,    // Sort key
+                            accessLevel,
+                            createdAt: currentDate,
+                            updatedAt: currentDate
+                        }
+                    }
+                ],
+                origin: 'addUserToOrganization'
             })
 
             return { status: 'added', userId, organizationId, accessLevel }
@@ -248,31 +269,34 @@ export default {
         const currentDate = new Date().getTime()
 
         try {
-            const org = await this.getOrganization({ organizationId, userId: removedByUserId })
-            if (org.error) {
-                return org
+            const org = await getOrganizationRecord(organizationId)
+            if (!org) {
+                return { error: 'NOT_FOUND' }
             }
 
-            if (org.accessList[removedByUserId] !== 'owner' && removedByUserId !== userId) {
+            if (org.accessList?.[removedByUserId] !== 'owner' && removedByUserId !== userId) {
                 return { error: 'PERMISSION_DENIED' }
             }
 
-            // Update Organizations table
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
-                key: { organizationId },
-                updates: {
-                    [`accessList.${userId}`]: null,
-                    updatedAt: currentDate
-                },
-                origin: 'removeUserFromOrganization:Organizations'
-            })
-
-            // Remove entry from Organizations-Access-List table
-            await dynamoDBService.deleteItems({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
-                key: { userId: userId, organizationId },
-                origin: 'removeUserFromOrganization:AccessList'
+            // Org row accessList map + member's access-list row commit together
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'update',
+                        tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                        key: { organizationId },
+                        updates: {
+                            [`accessList.${userId}`]: null,
+                            updatedAt: currentDate
+                        }
+                    },
+                    {
+                        type: 'delete',
+                        tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
+                        key: { userId: userId, organizationId }
+                    }
+                ],
+                origin: 'removeUserFromOrganization'
             })
 
             return { status: 'removed', userId, organizationId }
@@ -387,3 +411,5 @@ export default {
         }
     },
 }
+
+export default OrganizationModel

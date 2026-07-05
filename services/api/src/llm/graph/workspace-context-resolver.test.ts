@@ -224,13 +224,11 @@ function createDeps(parsedInput: { selections: Array<Record<string, unknown>> } 
     const getDocument = vi.fn(async () => ({
         documentId: 'doc-cubist',
         workspaceId: 'workspace-1',
-        revision: 1,
         title: 'Cubist Dog',
         content: JSON.stringify({
             type: 'doc',
             content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Full cubist dog document text.' }] }],
         }),
-        prevRevision: 1,
         createdAt: 1,
         updatedAt: 1,
     }))
@@ -454,7 +452,7 @@ describe('resolveWorkspaceContext', () => {
         ])
         expect(update.workspaceContextResolution?.narrowedMediaNodeIds).toEqual(['team-video', 'goat-image'])
         expect(publisher.contextRelevanceResolved).toHaveBeenCalledOnce()
-        expect(getDocument).toHaveBeenCalledWith(expect.objectContaining({ documentId: 'doc-cubist', workspaceId: 'workspace-1', revision: 1 }))
+        expect(getDocument).toHaveBeenCalledWith(expect.objectContaining({ documentId: 'doc-cubist', workspaceId: 'workspace-1' }))
         expect(getAiChatThread).toHaveBeenCalledWith(expect.objectContaining({ threadId: 'thread-notes', workspaceId: 'workspace-1' }))
 
         const textBlocks = getInputTextBlocks(update)

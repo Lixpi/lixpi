@@ -817,7 +817,7 @@ type DragStartOptions = {
 type WorkspaceCanvasCallbacks = {
     onViewportChange?: (viewport: Viewport) => void
     onCanvasStateChange?: (state: CanvasState) => void
-    onDocumentContentChange?: (params: { documentId: string; title?: string; prevRevision?: number; content: any }) => void
+    onDocumentContentChange?: (params: { documentId: string; title?: string; content: any }) => void
     onDocumentTitleChange?: (params: { documentId: string; title: string }) => void
     onAiChatThreadContentChange?: (params: { workspaceId: string; threadId: string; content: any }) => void
 }
@@ -12557,7 +12557,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         onDocumentContentChange?.({
                             documentId: node.referenceId,
                             title: doc.title,
-                            prevRevision: doc.prevRevision || 1,
                             content: value
                         })
                     },

@@ -341,7 +341,7 @@ Highlights:
 | `USERS` | `userId` | — | |
 | `WORKSPACES` / `WORKSPACES_META` | `workspaceId` | — | Split for hot canvas state vs cold meta |
 | `WORKSPACES_ACCESS_LIST` | `userId / workspaceId` | LSI on createdAt, updatedAt | |
-| `DOCUMENTS` | `documentId / revision` | GSI on `workspaceId`, TTL `revisionExpiresAt` | Versioned documents |
+| `DOCUMENTS` | `workspaceId / documentId` | LSI on createdAt, updatedAt | Documents partitioned by workspace |
 | `AI_CHAT_THREADS` | `workspaceId / threadId` | LSI on createdAt | Threads scoped per workspace |
 | `AI_TOKENS_USAGE_TRANSACTIONS` | `userId / transactionProcessedAt` | LSI x4 (document, model, org, formatted date) | Usage ledger |
 | `FINANCIAL_TRANSACTIONS` | `userId / transactionId` | LSI on status, createdAt, provider | Billing |
