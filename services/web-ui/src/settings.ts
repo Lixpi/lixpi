@@ -1,7 +1,7 @@
 import { mediaGenerationLayoutSettings } from '@lixpi/constants'
 
 import type { WorkspaceEdgePathType } from '@lixpi/constants'
-import type { CircularGlassMaterialStyle } from '@lixpi/canvas-engine/frontend/rendering'
+import type { CircularGlassMaterialStyle } from '@lixpi/canvas-engine'
 
 export const colorPalette = {
     nightBlue: '#42494f',

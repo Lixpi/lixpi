@@ -13,17 +13,22 @@ src/
     rendering/ Actual rendering modules. DOM, PIXI, canvas, and SVG drawing code belongs here.
 ```
 
-The package root exports the shared rendering-agnostic surface directly:
+The package root is the public import surface for application code. Root exports must use wildcard re-exports for shared, app-facing frontend rendering, and app-facing frontend connector modules:
 
 ```typescript
-import { resolveRigidCanvasNodeGroupCollisions } from '@lixpi/canvas-engine'
+export * from './shared/index.ts'
+export * from './frontend/rendering/index.ts'
+export * from './frontend/connectors/index.ts'
+export * as backend from './backend/index.ts'
+export * as frontend from './frontend/index.ts'
 ```
 
-Runtime-specific imports should use subpath exports:
+Application code should not import package implementation subpaths from `@lixpi/canvas-engine`.
+
+Application imports should come from the package root:
 
 ```typescript
-import { resolveRigidCanvasNodeGroupCollisions } from '@lixpi/canvas-engine/backend'
-import { resolveRigidCanvasNodeGroupCollisions } from '@lixpi/canvas-engine/frontend'
+import { resolveRigidCanvasNodeGroupCollisions, PixiTravelingOutlineRenderer } from '@lixpi/canvas-engine'
 ```
 
 There are no implementation modules directly under `src`. New code belongs under `shared`, `backend`, or `frontend` according to its runtime boundary.
@@ -112,6 +117,6 @@ The collision flow is:
 - Put browser orchestration in `frontend`.
 - Put DOM/PIXI/canvas/SVG drawing in `frontend/rendering`.
 - Do not import `services/web-ui` modules from this package.
-- Keep package-root exports stable and small; prefer explicit subpath exports for runtime-specific surfaces.
+- Keep `src/index.ts` as wildcard re-exports in this order: `shared`, `frontend/rendering`, `frontend/connectors`, then the `backend` and `frontend` namespace exports. Do not replace these with curated symbol lists.
 - Do not add rendering imports to `shared` or `backend`.
 - Do not add new implementation directories directly under `src`; choose `shared`, `backend`, or `frontend`.

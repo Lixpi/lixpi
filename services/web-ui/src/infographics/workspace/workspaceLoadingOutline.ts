@@ -1,12 +1,13 @@
 import { Application, Container } from 'pixi.js'
 
-import { getAdaptiveBoundedZoomScalingOptions, scaleCanvasChromeWorldSizeForZoom } from '@lixpi/canvas-engine'
 import {
+    getAdaptiveBoundedZoomScalingOptions,
     getRoundedOutlinePerimeter,
     PixiTravelingOutlineRenderer,
+    scaleCanvasChromeWorldSizeForZoom,
     type PixiTravelingOutlineDatum,
     type PixiTravelingOutlineStyle,
-} from '@lixpi/canvas-engine/frontend/rendering'
+} from '@lixpi/canvas-engine'
 import { html } from '$src/utils/domTemplates.ts'
 import { settings } from '$src/settings.ts'
 

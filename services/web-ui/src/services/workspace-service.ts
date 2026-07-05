@@ -19,6 +19,7 @@ import { workspaceStore } from '$src/stores/workspaceStore.ts'
 type CanvasSaveQueue = {
     inFlight: boolean
     pendingCanvasState: CanvasState | null
+    staleRetryCount: number
 }
 
 type CanvasStateUpdateResponse = {
@@ -33,6 +34,7 @@ type CanvasStateUpdateResponse = {
 
 class WorkspaceService {
     private readonly canvasSaveQueues = new Map<string, CanvasSaveQueue>()
+    private static readonly MAX_CANVAS_SAVE_STALE_RETRIES = 3
 
     constructor() {}
 
@@ -159,6 +161,7 @@ class WorkspaceService {
     public updateCanvasState({ workspaceId, canvasState }: { workspaceId: string; canvasState: CanvasState }): void {
         const queue = this.getCanvasSaveQueue(workspaceId)
         queue.pendingCanvasState = canvasState
+        queue.staleRetryCount = 0
 
         if (!queue.inFlight) {
             void this.flushCanvasStateSaveQueue(workspaceId, queue)
@@ -169,7 +172,7 @@ class WorkspaceService {
         const existing = this.canvasSaveQueues.get(workspaceId)
         if (existing) return existing
 
-        const queue = { inFlight: false, pendingCanvasState: null }
+        const queue = { inFlight: false, pendingCanvasState: null, staleRetryCount: 0 }
         this.canvasSaveQueues.set(workspaceId, queue)
         return queue
     }
@@ -194,9 +197,25 @@ class WorkspaceService {
                 })
 
                 if (result.error === 'STALE_CANVAS_STATE') {
+                    const routeStillOwnsWorkspace = RouterService.getRouteParams().workspaceId === workspaceId
+                    const canRetryWithCurrentToken = typeof result.currentCanvasStateUpdatedAt === 'number'
+                    if (routeStillOwnsWorkspace && canRetryWithCurrentToken && queue.staleRetryCount < WorkspaceService.MAX_CANVAS_SAVE_STALE_RETRIES) {
+                        queue.staleRetryCount += 1
+                        if (typeof result.currentUpdatedAt === 'number') {
+                            workspaceStore.setDataValues({ updatedAt: result.currentUpdatedAt })
+                            workspacesStore.updateWorkspace(workspaceId, { updatedAt: result.currentUpdatedAt })
+                        }
+                        workspaceStore.setDataValues({ canvasStateUpdatedAt: result.currentCanvasStateUpdatedAt })
+                        if (!queue.pendingCanvasState) {
+                            queue.pendingCanvasState = canvasState
+                        }
+                        continue
+                    }
+
                     queue.pendingCanvasState = null
+                    queue.staleRetryCount = 0
                     workspaceStore.setMetaValues({ requiresSave: false })
-                    if (RouterService.getRouteParams().workspaceId === workspaceId) {
+                    if (routeStillOwnsWorkspace) {
                         await this.getWorkspace({ workspaceId })
                     }
                     queue.pendingCanvasState = null
@@ -217,6 +236,7 @@ class WorkspaceService {
                     workspaceStore.setDataValues({ canvasStateUpdatedAt: result.canvasStateUpdatedAt })
                 }
 
+                queue.staleRetryCount = 0
                 if (!queue.pendingCanvasState) {
                     workspaceStore.setMetaValues({ requiresSave: false })
                 }

@@ -179,4 +179,117 @@ describe('videoUtils.deleteVideo', () => {
             },
         )
     })
+
+    // =========================================================================
+    // FILE_STILL_REFERENCED_BY_CANVAS RETRY
+    // =========================================================================
+
+    it('retries the video delete with backoff while the file is still referenced, then succeeds', async () => {
+        vi.useFakeTimers()
+        try {
+            mocks.request
+                .mockResolvedValueOnce({ error: 'FILE_STILL_REFERENCED_BY_CANVAS' })
+                .mockResolvedValueOnce({ error: 'FILE_STILL_REFERENCED_BY_CANVAS' })
+                .mockResolvedValueOnce({})
+
+            const promise = deleteVideo('video-file-id', 'workspace-1')
+
+            await vi.advanceTimersByTimeAsync(750)
+            await vi.advanceTimersByTimeAsync(2000)
+            await promise
+
+            expect(mocks.request).toHaveBeenCalledTimes(3)
+            expect(consoleWarnSpy).not.toHaveBeenCalled()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('gives up after exhausting all retries and warns that cleanup was deferred', async () => {
+        vi.useFakeTimers()
+        try {
+            mocks.request.mockResolvedValue({ error: 'FILE_STILL_REFERENCED_BY_CANVAS' })
+
+            const promise = deleteVideo('video-file-id', 'workspace-1')
+
+            await vi.advanceTimersByTimeAsync(750)
+            await vi.advanceTimersByTimeAsync(2000)
+            await vi.advanceTimersByTimeAsync(5000)
+            await promise
+
+            expect(mocks.request).toHaveBeenCalledTimes(4)
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                '[videoUtils] deleteVideo deferred because file is still referenced by canvas',
+                { fileId: 'video-file-id', workspaceId: 'workspace-1', error: 'FILE_STILL_REFERENCED_BY_CANVAS' },
+            )
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('does not attempt poster cleanup when the primary video delete is deferred after retries', async () => {
+        vi.useFakeTimers()
+        try {
+            mocks.request.mockResolvedValue({ error: 'FILE_STILL_REFERENCED_BY_CANVAS' })
+
+            const promise = deleteVideo('video-file-id', 'workspace-1', 'poster-file-id')
+
+            await vi.advanceTimersByTimeAsync(750)
+            await vi.advanceTimersByTimeAsync(2000)
+            await vi.advanceTimersByTimeAsync(5000)
+            await promise
+
+            expect(mocks.request).toHaveBeenCalledTimes(4)
+            expect(mocks.request).not.toHaveBeenCalledWith(IMAGE_SUBJECTS.DELETE_IMAGE, expect.anything())
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('retries poster cleanup independently of the primary video delete outcome', async () => {
+        vi.useFakeTimers()
+        try {
+            mocks.request
+                .mockResolvedValueOnce({})
+                .mockResolvedValueOnce({ error: 'FILE_STILL_REFERENCED_BY_CANVAS' })
+                .mockResolvedValueOnce({})
+
+            const promise = deleteVideo('video-file-id', 'workspace-1', 'poster-file-id')
+
+            await vi.advanceTimersByTimeAsync(750)
+            await promise
+
+            expect(mocks.request).toHaveBeenCalledTimes(3)
+            expect(mocks.request).toHaveBeenNthCalledWith(1, VIDEO_SUBJECTS.DELETE_VIDEO, {
+                token: 'token-123',
+                workspaceId: 'workspace-1',
+                fileId: 'video-file-id',
+            })
+            expect(mocks.request).toHaveBeenNthCalledWith(2, IMAGE_SUBJECTS.DELETE_IMAGE, {
+                token: 'token-123',
+                workspaceId: 'workspace-1',
+                fileId: 'poster-file-id',
+            })
+            expect(mocks.request).toHaveBeenNthCalledWith(3, IMAGE_SUBJECTS.DELETE_IMAGE, {
+                token: 'token-123',
+                workspaceId: 'workspace-1',
+                fileId: 'poster-file-id',
+            })
+            expect(consoleWarnSpy).not.toHaveBeenCalled()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('does not retry on a non-referenced error, returning immediately', async () => {
+        mocks.request.mockResolvedValueOnce({ error: 'SOME_OTHER_ERROR' })
+
+        await deleteVideo('video-file-id', 'workspace-1')
+
+        expect(mocks.request).toHaveBeenCalledTimes(1)
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+            '[videoUtils] deleteVideo refused',
+            { fileId: 'video-file-id', workspaceId: 'workspace-1', error: 'SOME_OTHER_ERROR' },
+        )
+    })
 })

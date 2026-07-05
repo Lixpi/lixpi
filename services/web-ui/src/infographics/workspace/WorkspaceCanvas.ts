@@ -76,6 +76,8 @@ import {
 import type { AiLineageProjectionScope } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import {
+    CircularGlassMaterial,
+    createShiftingGradientBackground,
     getAdaptiveBoundedZoomScalingOptions,
     getCanvasChromeScreenLayout,
     getResizeHandleScaledSizes,
@@ -133,7 +135,6 @@ import { planWorkspaceRenderTransition } from '$src/infographics/workspace/works
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { loadWorkspaceRouteData } from '$src/services/router-service.ts'
-import { CircularGlassMaterial, createShiftingGradientBackground } from '@lixpi/canvas-engine/frontend/rendering'
 import { tPatternSvgTexture } from '$src/svgIcons/svgTextures.ts'
 import { settings, type WorkspaceCollisionFlowSettings, type WorkspaceCollisionNodeTypeSettings } from '$src/settings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
@@ -1362,10 +1363,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                     // Update canvas state; the PIXI sprite replaces its texture.
                     if (!currentCanvasState) return
+                    const mediaReplacement = {
+                        replacedAt: Date.now(),
+                        previousFileId: node.fileId,
+                        ...(node.type === 'video' ? { previousPosterFileId: node.posterFileId } : {}),
+                    }
                     const updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) => {
                         if (n.nodeId !== nodeId) return n
                         if (n.type === 'image' && node.type === 'image') {
-                            return { ...n, fileId: data.fileId, src: newSrc, descriptor: buildAnalyzingDescriptor() } as ImageCanvasNode
+                            return { ...n, fileId: data.fileId, src: newSrc, descriptor: buildAnalyzingDescriptor(), mediaReplacement } as ImageCanvasNode
                         }
                         if (n.type === 'video' && node.type === 'video') {
                             return {
@@ -1376,6 +1382,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                                 src: newSrc,
                                 posterSrc: newPosterSrc,
                                 descriptor: data.posterFileId ? buildAnalyzingDescriptor() : n.descriptor,
+                                mediaReplacement,
                             } as VideoCanvasNode
                         }
                         return n
@@ -3220,6 +3227,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function pruneGeneratedMediaTrackerAliases(
+        trackerMap: Map<string, PendingGeneratedMediaTracker>,
+        runKey: string,
+        nodeId: string,
+    ): void {
+        for (const [existingRunKey, existingTracker] of trackerMap.entries()) {
+            if (existingRunKey !== runKey && existingTracker.nodeId === nodeId) {
+                trackerMap.delete(existingRunKey)
+            }
+        }
+    }
+
+    function setGeneratedMediaTracker(
+        trackerMap: Map<string, PendingGeneratedMediaTracker>,
+        runKey: string,
+        tracker: PendingGeneratedMediaTracker,
+    ): void {
+        pruneGeneratedMediaTrackerAliases(trackerMap, runKey, tracker.nodeId)
+        trackerMap.set(runKey, tracker)
+    }
+
     function keepGeneratedImageCompletionOutlineUntilTextureReady(
         runKey: string,
         previousTracker: PendingGeneratedMediaTracker,
@@ -3230,7 +3258,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .map(([nodeId]) => nodeId)
         for (const nodeId of staleNodeIds) clearFinalizingGeneratedImageOutline(nodeId)
 
-        partialImageTracker.set(runKey, {
+        setGeneratedMediaTracker(partialImageTracker, runKey, {
             ...previousTracker,
             nodeId: completedImageNode.nodeId,
             fileId: completedImageNode.fileId || previousTracker.fileId,
@@ -6782,7 +6810,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function getGeneratedMediaRunKey(threadId: string, generationRun?: MediaGenerationRunMeta): string {
-        return generationRun?.mediaRunId ?? generationRun?.reasoningRunId ?? threadId
+        return generationRun?.mediaRunId
+            ?? generationRun?.lineageAssignment?.mediaRunId
+            ?? generationRun?.reasoningRunId
+            ?? threadId
     }
 
     function getPendingBranchMarkerReasoningModelKey(placementKey: string, reasoningModelId: string): string {
@@ -9882,14 +9913,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         clearPendingBranchMarkerStateForRun(threadId, generationRun)
         const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
         const nodeId = `node-${fileId || uuidv4()}`
-        const tracker: PendingGeneratedMediaTracker = {
+        partialImageTracker.set(runKey, {
             nodeId,
             fileId: fileId || '',
             placementKey,
             hasReceivedFrame: Boolean(imageUrl),
             sourceNodeId: edgeSourceNode.nodeId,
-        }
-        partialImageTracker.set(runKey, tracker)
+        })
+        pruneGeneratedMediaTrackerAliases(partialImageTracker, runKey, nodeId)
+        const tracker = partialImageTracker.get(runKey)
+        if (!tracker) return undefined
         debugGeneratedMediaLifecycle('create-image-placeholder', {
             runKey,
             threadId,
@@ -10457,7 +10490,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             hasReceivedFrame: hasGeneratedImageFrame(imageNode),
             ...(sourceNodeId ? { sourceNodeId } : {}),
         }
-        partialImageTracker.set(getGeneratedMediaRunKey(threadId, generationRun), tracker)
+        setGeneratedMediaTracker(partialImageTracker, getGeneratedMediaRunKey(threadId, generationRun), tracker)
         return tracker
     }
 
@@ -10474,7 +10507,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             hasReceivedFrame: hasGeneratedVideoFrame(videoNode),
             ...(sourceNodeId ? { sourceNodeId } : {}),
         }
-        videoGenerationTracker.set(getGeneratedMediaRunKey(threadId, generationRun), tracker)
+        setGeneratedMediaTracker(videoGenerationTracker, getGeneratedMediaRunKey(threadId, generationRun), tracker)
         return tracker
     }
 
@@ -10972,7 +11005,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     fileId: fileId || existing.fileId,
                     hasReceivedFrame: existing.hasReceivedFrame || Boolean(imageUrl),
                 }
-                partialImageTracker.set(runKey, updatedTracker)
+                setGeneratedMediaTracker(partialImageTracker, runKey, updatedTracker)
                 debugGeneratedMediaLifecycle('image-partial-update', {
                     runKey,
                     threadId,
@@ -11332,7 +11365,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             clearPendingBranchMarkerStateForRun(threadId, generationRun)
             const nodeId = `node-${uuidv4()}`
-            videoGenerationTracker.set(runKey, {
+            setGeneratedMediaTracker(videoGenerationTracker, runKey, {
                 nodeId,
                 fileId: '',
                 placementKey,
