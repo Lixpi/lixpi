@@ -51,7 +51,7 @@ workspace-export.zip
         canvasStateUpdatedAt: number,   // Canvas save token
         updatedAt: number,
     },
-    documents: Document[],             // All documents (latest revisions)
+    documents: Document[],             // All documents in the workspace
     aiChatThreads: AiChatThread[],     // All AI chat threads with messages
 }
 ```

@@ -100,7 +100,7 @@ class DocumentService {
 	}
 
 
-	public async updateDocument({ workspaceId, documentId, title, prevRevision, content }: { workspaceId?: string; documentId: string; title?: string; prevRevision?: number; content?: any }): Promise<void> {
+	public async updateDocument({ workspaceId, documentId, title, content }: { workspaceId?: string; documentId: string; title?: string; content?: any }): Promise<void> {
 		try {
 			const updatePayload: any = {
 				token: await AuthService.getTokenSilently(),
@@ -108,7 +108,6 @@ class DocumentService {
 			}
 			if (workspaceId) updatePayload.workspaceId = workspaceId
 			if (title !== undefined) updatePayload.title = title
-			if (prevRevision !== undefined) updatePayload.prevRevision = prevRevision
 			if (content !== undefined) updatePayload.content = content
 
 			const documentUpdateResult: any = await servicesStore.getData('nats')!.request(DOCUMENT_SUBJECTS.UPDATE_DOCUMENT, updatePayload)

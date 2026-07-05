@@ -14,6 +14,7 @@ import {
     type DocumentFile
 } from '@lixpi/constants'
 import { err } from '@lixpi/debug-tools'
+import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 
 const {
     ORG_NAME,
@@ -373,32 +374,37 @@ export default {
         }
 
         try {
-            await dynamoDBService.putItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
-                item: newWorkspaceData,
-                origin: 'createWorkspace'
-            })
-
-            await dynamoDBService.putItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
-                item: {
-                    workspaceId: newWorkspaceData.workspaceId,
-                    name: newWorkspaceData.name,
-                    createdAt: newWorkspaceData.createdAt,
-                    updatedAt: newWorkspaceData.updatedAt
-                },
-                origin: 'createWorkspace'
-            })
-
-            await dynamoDBService.putItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES_ACCESS_LIST', ORG_NAME, STAGE),
-                item: {
-                    userId: permissions.userId,
-                    workspaceId: newWorkspaceData.workspaceId,
-                    accessLevel: permissions.accessLevel,
-                    createdAt: newWorkspaceData.createdAt,
-                    updatedAt: newWorkspaceData.updatedAt
-                },
+            // Main + Meta + Access-List commit or fail together — a torn triad
+            // (workspace invisible to its owner) is a permanent integrity fault.
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'put',
+                        tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                        item: newWorkspaceData
+                    },
+                    {
+                        type: 'put',
+                        tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                        item: {
+                            workspaceId: newWorkspaceData.workspaceId,
+                            name: newWorkspaceData.name,
+                            createdAt: newWorkspaceData.createdAt,
+                            updatedAt: newWorkspaceData.updatedAt
+                        }
+                    },
+                    {
+                        type: 'put',
+                        tableName: getDynamoDbTableStageName('WORKSPACES_ACCESS_LIST', ORG_NAME, STAGE),
+                        item: {
+                            userId: permissions.userId,
+                            workspaceId: newWorkspaceData.workspaceId,
+                            accessLevel: permissions.accessLevel,
+                            createdAt: newWorkspaceData.createdAt,
+                            updatedAt: newWorkspaceData.updatedAt
+                        }
+                    }
+                ],
                 origin: 'createWorkspace'
             })
 
@@ -434,26 +440,28 @@ export default {
                 workspaceSetExpressions.push('#name = :name')
             }
 
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
-                key: { workspaceId },
-                updateExpression: `SET ${workspaceSetExpressions.join(', ')}`,
-                expressionAttributeNames: workspaceExpressionNames,
-                expressionAttributeValues: workspaceExpressionValues,
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'update',
+                        tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                        key: { workspaceId },
+                        updateExpression: `SET ${workspaceSetExpressions.join(', ')}`,
+                        expressionAttributeNames: workspaceExpressionNames,
+                        expressionAttributeValues: workspaceExpressionValues
+                    },
+                    ...(name !== undefined ? [{
+                        type: 'update' as const,
+                        tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                        key: { workspaceId },
+                        updates: {
+                            name,
+                            updatedAt: currentDate
+                        }
+                    }] : [])
+                ],
                 origin: 'updateWorkspace'
             })
-
-            if (name !== undefined) {
-                await dynamoDBService.updateItem({
-                    tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
-                    key: { workspaceId },
-                    updates: {
-                        name,
-                        updatedAt: currentDate
-                    },
-                    origin: 'updateWorkspace'
-                })
-            }
         } catch (error) {
             err('Failed to update workspace:', error)
         }
@@ -488,38 +496,42 @@ export default {
                 currentDate
             )
 
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
-                key: { workspaceId },
-                updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt',
-                conditionExpression: getCanvasStateWriteCondition(hasExpectedCanvasStateUpdatedAt),
-                expressionAttributeNames: {
-                    '#canvasState': 'canvasState',
-                    '#updatedAt': 'updatedAt',
-                    '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
-                },
-                expressionAttributeValues: {
-                    ':canvasState': nextCanvasState,
-                    ':updatedAt': currentDate,
-                    ':canvasStateUpdatedAt': currentDate,
-                    ...(hasExpectedCanvasStateUpdatedAt ? { ':expectedCanvasStateUpdatedAt': canvasStateSaveToken } : {})
-                },
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'update',
+                        tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                        key: { workspaceId },
+                        updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt',
+                        conditionExpression: getCanvasStateWriteCondition(hasExpectedCanvasStateUpdatedAt),
+                        expressionAttributeNames: {
+                            '#canvasState': 'canvasState',
+                            '#updatedAt': 'updatedAt',
+                            '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
+                        },
+                        expressionAttributeValues: {
+                            ':canvasState': nextCanvasState,
+                            ':updatedAt': currentDate,
+                            ':canvasStateUpdatedAt': currentDate,
+                            ...(hasExpectedCanvasStateUpdatedAt ? { ':expectedCanvasStateUpdatedAt': canvasStateSaveToken } : {})
+                        }
+                    },
+                    {
+                        type: 'update',
+                        tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                        key: { workspaceId },
+                        updates: {
+                            updatedAt: currentDate
+                        }
+                    }
+                ],
                 logConditionalCheckFailures: false,
-                origin: 'updateWorkspaceCanvasState'
-            })
-
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
-                key: { workspaceId },
-                updates: {
-                    updatedAt: currentDate
-                },
                 origin: 'updateWorkspaceCanvasState'
             })
 
             return { success: true, workspaceId, updatedAt: currentDate, canvasStateUpdatedAt: currentDate }
         } catch (error) {
-            if ((error as any)?.name === 'ConditionalCheckFailedException') {
+            if (isTransactionConditionalCheckFailure(error)) {
                 const workspace = await dynamoDBService.getItem({
                     tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
                     key: { workspaceId },
@@ -572,32 +584,36 @@ export default {
                     ':canvasStateUpdatedAt': currentDate,
                     ...(hasExpectedCanvasStateUpdatedAt ? { ':expectedCanvasStateUpdatedAt': expectedCanvasStateUpdatedAt } : {})
                 }
-                await dynamoDBService.updateItem({
-                    tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
-                    key: { workspaceId },
-                    updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt',
-                    conditionExpression: getCanvasStateWriteCondition(hasExpectedCanvasStateUpdatedAt),
-                    expressionAttributeNames: {
-                        '#canvasState': 'canvasState',
-                        '#updatedAt': 'updatedAt',
-                        '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
-                    },
-                    expressionAttributeValues,
+                await dynamoDBService.transactWrite({
+                    operations: [
+                        {
+                            type: 'update',
+                            tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                            key: { workspaceId },
+                            updateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt',
+                            conditionExpression: getCanvasStateWriteCondition(hasExpectedCanvasStateUpdatedAt),
+                            expressionAttributeNames: {
+                                '#canvasState': 'canvasState',
+                                '#updatedAt': 'updatedAt',
+                                '#canvasStateUpdatedAt': 'canvasStateUpdatedAt'
+                            },
+                            expressionAttributeValues
+                        },
+                        {
+                            type: 'update',
+                            tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                            key: { workspaceId },
+                            updates: {
+                                updatedAt: currentDate
+                            }
+                        }
+                    ],
                     logConditionalCheckFailures: false,
                     origin
                 })
-
-                await dynamoDBService.updateItem({
-                    tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
-                    key: { workspaceId },
-                    updates: {
-                        updatedAt: currentDate
-                    },
-                    origin: `${origin}:meta`
-                })
                 return true
             } catch (error: any) {
-                if (error?.name === 'ConditionalCheckFailedException') continue
+                if (isTransactionConditionalCheckFailure(error)) continue
                 err('Failed to mutate workspace canvas state:', error)
                 throw error
             }
@@ -624,35 +640,39 @@ export default {
             const nodeIndex = nodes.findIndex((node: { nodeId?: string }) => node.nodeId === nodeId)
             if (nodeIndex < 0) return false
 
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
-                key: { workspaceId },
-                updateExpression: `SET #canvasState.#nodes[${nodeIndex}].#descriptor = :descriptor, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt`,
-                conditionExpression: `#canvasState.#nodes[${nodeIndex}].#nodeId = :nodeId`,
-                expressionAttributeNames: {
-                    '#canvasState': 'canvasState',
-                    '#nodes': 'nodes',
-                    '#descriptor': 'descriptor',
-                    '#updatedAt': 'updatedAt',
-                    '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
-                    '#nodeId': 'nodeId'
-                },
-                expressionAttributeValues: {
-                    ':descriptor': descriptor,
-                    ':updatedAt': currentDate,
-                    ':canvasStateUpdatedAt': currentDate,
-                    ':nodeId': nodeId
-                },
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'update',
+                        tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                        key: { workspaceId },
+                        updateExpression: `SET #canvasState.#nodes[${nodeIndex}].#descriptor = :descriptor, #updatedAt = :updatedAt, #canvasStateUpdatedAt = :canvasStateUpdatedAt`,
+                        conditionExpression: `#canvasState.#nodes[${nodeIndex}].#nodeId = :nodeId`,
+                        expressionAttributeNames: {
+                            '#canvasState': 'canvasState',
+                            '#nodes': 'nodes',
+                            '#descriptor': 'descriptor',
+                            '#updatedAt': 'updatedAt',
+                            '#canvasStateUpdatedAt': 'canvasStateUpdatedAt',
+                            '#nodeId': 'nodeId'
+                        },
+                        expressionAttributeValues: {
+                            ':descriptor': descriptor,
+                            ':updatedAt': currentDate,
+                            ':canvasStateUpdatedAt': currentDate,
+                            ':nodeId': nodeId
+                        }
+                    },
+                    {
+                        type: 'update',
+                        tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                        key: { workspaceId },
+                        updates: {
+                            updatedAt: currentDate
+                        }
+                    }
+                ],
                 origin: 'patchWorkspaceCanvasNodeDescriptor'
-            })
-
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
-                key: { workspaceId },
-                updates: {
-                    updatedAt: currentDate
-                },
-                origin: 'patchWorkspaceCanvasNodeDescriptor:meta'
             })
 
             return true
@@ -667,22 +687,25 @@ export default {
         userId
     }: { workspaceId: string; userId: string }): Promise<{ status: string; workspaceId: string }> => {
         try {
-            await dynamoDBService.deleteItems({
-                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
-                key: { workspaceId },
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'delete',
+                        tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                        key: { workspaceId }
+                    },
+                    {
+                        type: 'delete',
+                        tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                        key: { workspaceId }
+                    },
+                    {
+                        type: 'delete',
+                        tableName: getDynamoDbTableStageName('WORKSPACES_ACCESS_LIST', ORG_NAME, STAGE),
+                        key: { userId, workspaceId }
+                    }
+                ],
                 origin: 'deleteWorkspace'
-            })
-
-            await dynamoDBService.deleteItems({
-                tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
-                key: { workspaceId },
-                origin: 'deleteWorkspace:Meta'
-            })
-
-            await dynamoDBService.deleteItems({
-                tableName: getDynamoDbTableStageName('WORKSPACES_ACCESS_LIST', ORG_NAME, STAGE),
-                key: { userId, workspaceId },
-                origin: 'deleteWorkspace:AccessList'
             })
 
             return { status: 'deleted', workspaceId }
@@ -891,25 +914,29 @@ export default {
         const currentDate = new Date().getTime()
 
         try {
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
-                key: { workspaceId },
-                updates: {
-                    canvasState,
-                    files,
-                    canvasStateUpdatedAt: currentDate,
-                    updatedAt: currentDate
-                },
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'update',
+                        tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                        key: { workspaceId },
+                        updates: {
+                            canvasState,
+                            files,
+                            canvasStateUpdatedAt: currentDate,
+                            updatedAt: currentDate
+                        }
+                    },
+                    {
+                        type: 'update',
+                        tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                        key: { workspaceId },
+                        updates: {
+                            updatedAt: currentDate
+                        }
+                    }
+                ],
                 origin: 'replaceWorkspaceContent'
-            })
-
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
-                key: { workspaceId },
-                updates: {
-                    updatedAt: currentDate
-                },
-                origin: 'replaceWorkspaceContent:meta'
             })
         } catch (error) {
             err('Failed to replace workspace content:', error)

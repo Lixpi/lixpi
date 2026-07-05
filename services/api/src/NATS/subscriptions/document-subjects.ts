@@ -71,7 +71,6 @@ async function loadProseMirrorSnapshot(coordinate: DocCoordinate): Promise<DocSn
     const document = await Document.getDocument({
         workspaceId: coordinate.workspaceId,
         documentId: coordinate.docId,
-        revision: 1,
     })
     if (!document || 'error' in document) return null
     const doc = parseStoredDocContent(document.content)
@@ -228,8 +227,7 @@ export const documentSubjects = [
 
             return await Document.getDocument({
                 workspaceId,
-                documentId,
-                revision: 1
+                documentId
             })
         }
     },
@@ -286,7 +284,6 @@ export const documentSubjects = [
                 workspaceId,
                 documentId,
                 title: data.title,
-                prevRevision: data.prevRevision,
                 content: data.content
             })
 

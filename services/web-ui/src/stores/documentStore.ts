@@ -19,8 +19,6 @@ type Meta = {
 export type Document = {
     documentId: string
     title: string
-    revision?: number
-    prevRevision?: number
     proseMirrorVersion?: number
     content?: Record<string, any>
     tags?: Tag[]
@@ -45,8 +43,6 @@ const document: DocumentStore = {
     data: {
         documentId: '',
         title: '',
-        revision: 0,
-        prevRevision: 0,
         content: {},
         createdAt: '',
         updatedAt: '',

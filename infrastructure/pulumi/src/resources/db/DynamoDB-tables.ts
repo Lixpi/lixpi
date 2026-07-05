@@ -82,21 +82,16 @@ export const getTableDefinitions = () => [
     {
         name: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
         attributes: [
-            { name: 'documentId', type: 'S' as const },
-            { name: 'revision', type: 'N' as const },
-            { name: 'createdAt', type: 'N' as const },
             { name: 'workspaceId', type: 'S' as const },
+            { name: 'documentId', type: 'S' as const },
+            { name: 'createdAt', type: 'N' as const },
         ],
-        hashKey: 'documentId',
-        rangeKey: 'revision',
+        hashKey: 'workspaceId',
+        rangeKey: 'documentId',
         localSecondaryIndexes: [
             { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
             { name: 'updatedAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
         ],
-        globalSecondaryIndexes: [
-            { name: 'workspaceId', hashKey: 'workspaceId', projectionType: 'ALL' as const },
-        ],
-        ttl: { attributeName: 'revisionExpiresAt', enabled: true },
     },
     {
         name: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
@@ -193,26 +188,18 @@ export const getTableDefinitions = () => [
         attributes: [
             { name: 'itemId', type: 'S' as const },
             { name: 'version', type: 'N' as const },
-            { name: 'scopeAndOwner', type: 'S' as const },
-            { name: 'updatedAt', type: 'N' as const },
         ],
         hashKey: 'itemId',
         rangeKey: 'version',
-        globalSecondaryIndexes: [
-            { name: 'scopeAndOwner', hashKey: 'scopeAndOwner', rangeKey: 'updatedAt', projectionType: 'ALL' as const },
-        ],
     },
     {
         name: getDynamoDbTableStageName('MEDIA_LIBRARY_ITEMS_META', ORG_NAME, STAGE),
         attributes: [
-            { name: 'itemId', type: 'S' as const },
             { name: 'scopeAndOwner', type: 'S' as const },
-            { name: 'updatedAt', type: 'N' as const },
+            { name: 'itemId', type: 'S' as const },
         ],
-        hashKey: 'itemId',
-        globalSecondaryIndexes: [
-            { name: 'scopeAndOwner', hashKey: 'scopeAndOwner', rangeKey: 'updatedAt', projectionType: 'ALL' as const },
-        ],
+        hashKey: 'scopeAndOwner',
+        rangeKey: 'itemId',
     },
     {
         name: getDynamoDbTableStageName('MEDIA_LIBRARY_ITEMS_ACCESS_LIST', ORG_NAME, STAGE),
@@ -232,19 +219,18 @@ export const getTableDefinitions = () => [
         attributes: [
             { name: 'featureId', type: 'S' as const },
             { name: 'version', type: 'N' as const },
-            { name: 'scopeAndOwner', type: 'S' as const },
-            { name: 'updatedAt', type: 'N' as const },
         ],
         hashKey: 'featureId',
         rangeKey: 'version',
-        globalSecondaryIndexes: [
-            { name: 'byScopeAndOwner', hashKey: 'scopeAndOwner', rangeKey: 'updatedAt', projectionType: 'ALL' as const },
-        ],
     },
     {
         name: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE),
-        attributes: [{ name: 'featureId', type: 'S' as const }],
-        hashKey: 'featureId',
+        attributes: [
+            { name: 'scopeAndOwner', type: 'S' as const },
+            { name: 'featureId', type: 'S' as const },
+        ],
+        hashKey: 'scopeAndOwner',
+        rangeKey: 'featureId',
     },
     {
         name: getDynamoDbTableStageName('FEATURES_ACCESS_LIST', ORG_NAME, STAGE),

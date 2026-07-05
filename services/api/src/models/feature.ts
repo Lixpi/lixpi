@@ -66,21 +66,28 @@ const FeatureModel = {
         }
 
         try {
-            await dynamoDBService.putItem({
-                tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
-                item: feature, origin: 'Feature.createFeature',
-            })
-            await dynamoDBService.putItem({
-                tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE),
-                item: {
-                    featureId, category: data.category, name: data.name, summary: data.summary,
-                    tags: data.tags, scope, scopeOwnerId, status: 'active',
-                    ownerUserId: data.ownerUserId,
-                    sampleZeroKey: buildSampleKey(featureId, data.sampleImages[0]),
-                    sampleZeroUrl: getSampleUrl(data.sampleImages[0]),
-                    updatedAt: now,
-                } as FeatureMeta,
-                origin: 'Feature.createFeature:meta',
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'put',
+                        tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
+                        item: feature,
+                    },
+                    {
+                        type: 'put',
+                        tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE),
+                        item: {
+                            featureId, category: data.category, name: data.name, summary: data.summary,
+                            tags: data.tags, scope, scopeOwnerId, status: 'active',
+                            ownerUserId: data.ownerUserId,
+                            scopeAndOwner: buildScopeAndOwnerKey(scope, scopeOwnerId),
+                            sampleZeroKey: buildSampleKey(featureId, data.sampleImages[0]),
+                            sampleZeroUrl: getSampleUrl(data.sampleImages[0]),
+                            updatedAt: now,
+                        } as FeatureMeta,
+                    },
+                ],
+                origin: 'Feature.createFeature',
             })
             return feature
         } catch (error) {
@@ -116,26 +123,28 @@ const FeatureModel = {
         scope: FeatureScope; scopeOwnerId: string; requesterContext: RequesterContext
         paging?: { limit?: number; lastKey?: Record<string, any> }
     }): Promise<{ items: FeatureMeta[]; lastKey?: Record<string, any> }> => {
-        const gsiKey = buildScopeAndOwnerKey(scope, scopeOwnerId)
+        // Meta partition query — the meta rows are projections, so this reads
+        // fewer bytes than the main-table GSI it replaces. Recency ordering is
+        // an in-memory sort over one org's features.
         const result = await dynamoDBService.queryItems({
-            tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
-            indexName: 'byScopeAndOwner', keyConditions: { scopeAndOwner: gsiKey },
-            fetchAllItems: !paging?.limit, limit: paging?.limit,
-            exclusiveStartKey: paging?.lastKey, scanIndexForward: false,
+            tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE),
+            keyConditions: { scopeAndOwner: buildScopeAndOwnerKey(scope, scopeOwnerId) },
+            fetchAllItems: true,
             origin: `Feature.listByScope(${scope})`,
         })
-        const items = (result?.items || []) as (Feature & { scopeAndOwner: string })[]
-        const visible = items.filter((f) => f.status === 'active' && canRead(requesterContext.userId, f, requesterContext.workspaceId, requesterContext.organizationId))
+        const items = (result?.items || []) as FeatureMeta[]
+        const visible = items
+            .filter((f) => f.status === 'active' && canRead(requesterContext.userId, f as unknown as Feature, requesterContext.workspaceId, requesterContext.organizationId))
+            .sort((left, right) => right.updatedAt - left.updatedAt)
         return {
             items: visible.map((f) => ({
                 featureId: f.featureId, category: f.category, name: f.name, summary: f.summary,
                 tags: f.tags, scope: f.scope, scopeOwnerId: f.scopeOwnerId, status: f.status,
                 ownerUserId: f.ownerUserId,
-                sampleZeroKey: buildSampleKey(f.featureId, f.sampleImages[0]),
-                sampleZeroUrl: getSampleUrl(f.sampleImages[0]),
+                sampleZeroKey: f.sampleZeroKey,
+                sampleZeroUrl: f.sampleZeroUrl,
                 updatedAt: f.updatedAt,
             })),
-            lastKey: result?.lastKey,
         }
     },
 
@@ -146,16 +155,53 @@ const FeatureModel = {
         const feature = await FeatureModel.getOwnedFeature({ featureId, ownerUserId })
         if ('error' in feature) return feature
         const now = Date.now()
-        await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE), key: { featureId, version: 1 }, updates: { ...updates, updatedAt: now }, origin: 'Feature.updateFeature' })
         const metaUp: any = { updatedAt: now }
         if (updates.summary !== undefined) metaUp.summary = updates.summary
         if (updates.tags !== undefined) metaUp.tags = updates.tags
-        await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE), key: { featureId }, updates: metaUp, origin: 'Feature.updateFeature:meta' })
+        await dynamoDBService.transactWrite({
+            operations: [
+                {
+                    type: 'update',
+                    tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
+                    key: { featureId, version: 1 },
+                    updates: { ...updates, updatedAt: now },
+                },
+                {
+                    type: 'update',
+                    tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE),
+                    key: { scopeAndOwner: buildScopeAndOwnerKey(feature.scope, feature.scopeOwnerId), featureId },
+                    updates: metaUp,
+                },
+            ],
+            origin: 'Feature.updateFeature',
+        })
     },
 
     deleteFeature: async ({ featureId }: { featureId: string }): Promise<void> => {
-        await dynamoDBService.deleteItems({ tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE), key: { featureId, version: 1 }, origin: 'Feature.deleteFeature' })
-        await dynamoDBService.deleteItems({ tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE), key: { featureId }, origin: 'Feature.deleteFeature:meta' })
+        // The meta row is addressed by scopeAndOwner — load the feature first
+        // to obtain it. Missing feature means there is nothing to delete.
+        const item = await dynamoDBService.getItem({
+            tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
+            key: { featureId, version: 1 },
+            origin: `Feature.deleteFeature(${featureId})`,
+        })
+        if (!item || Object.keys(item).length === 0) return
+        const feature = item as Feature
+        await dynamoDBService.transactWrite({
+            operations: [
+                {
+                    type: 'delete',
+                    tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
+                    key: { featureId, version: 1 },
+                },
+                {
+                    type: 'delete',
+                    tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE),
+                    key: { scopeAndOwner: buildScopeAndOwnerKey(feature.scope, feature.scopeOwnerId), featureId },
+                },
+            ],
+            origin: 'Feature.deleteFeature',
+        })
     },
 
 }

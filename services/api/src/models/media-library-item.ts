@@ -57,6 +57,7 @@ const buildMeta = (item: MediaLibraryImageItem): MediaLibraryImageMeta => ({
     displayName: item.displayName,
     ownerUserId: item.ownerUserId,
     originWorkspaceId: item.originWorkspaceId,
+    sourceFileId: item.sourceFileId,
     scope: item.scope,
     scopeOwnerId: item.scopeOwnerId,
     scopeAndOwner: item.scopeAndOwner,
@@ -77,6 +78,7 @@ const buildVideoMeta = (item: MediaLibraryVideoItem): MediaLibraryVideoMeta => (
     displayName: item.displayName,
     ownerUserId: item.ownerUserId,
     originWorkspaceId: item.originWorkspaceId,
+    sourceFileId: item.sourceFileId,
     scope: item.scope,
     scopeOwnerId: item.scopeOwnerId,
     scopeAndOwner: item.scopeAndOwner,
@@ -109,35 +111,15 @@ export default {
             updatedAt: item.updatedAt,
         }
 
-        await dynamoDBService.putItem({
-            tableName: itemTableName(),
-            item,
+        // All three rows commit or fail together — atomicity is the database's job.
+        await dynamoDBService.transactWrite({
+            operations: [
+                { type: 'put', tableName: itemTableName(), item },
+                { type: 'put', tableName: metaTableName(), item: meta },
+                { type: 'put', tableName: accessListTableName(), item: ownerAccess },
+            ],
             origin: 'MediaLibraryItem.createImageItem',
         })
-        try {
-            await dynamoDBService.putItem({
-                tableName: metaTableName(),
-                item: meta,
-                origin: 'MediaLibraryItem.createImageItem:meta',
-            })
-            await dynamoDBService.putItem({
-                tableName: accessListTableName(),
-                item: ownerAccess,
-                origin: 'MediaLibraryItem.createImageItem:accessList',
-            })
-        } catch (error) {
-            await dynamoDBService.deleteItems({
-                tableName: itemTableName(),
-                key: { itemId: item.itemId, version: item.version },
-                origin: 'MediaLibraryItem.createImageItem:rollback',
-            }).catch(() => {})
-            await dynamoDBService.deleteItems({
-                tableName: metaTableName(),
-                key: { itemId: item.itemId },
-                origin: 'MediaLibraryItem.createImageItem:metaRollback',
-            }).catch(() => {})
-            throw error
-        }
 
         return item
     },
@@ -204,10 +186,8 @@ export default {
             for (const scopeOwnerId of scopeOwnerIds[scope] ?? []) {
                 const result = await dynamoDBService.queryItems({
                     tableName: metaTableName(),
-                    indexName: 'scopeAndOwner',
                     keyConditions: { scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(scope, scopeOwnerId) },
                     fetchAllItems: true,
-                    scanIndexForward: false,
                     origin: `MediaLibraryItem.listAvailable(${scope})`,
                 })
                 records.push(...(result?.items ?? []) as MediaLibraryMeta[])
@@ -223,20 +203,13 @@ export default {
     },
 
     deleteImageItem: async ({ item }: { item: MediaLibraryImageItem }): Promise<void> => {
-        await dynamoDBService.deleteItems({
-            tableName: itemTableName(),
-            key: { itemId: item.itemId, version: item.version },
+        await dynamoDBService.transactWrite({
+            operations: [
+                { type: 'delete', tableName: itemTableName(), key: { itemId: item.itemId, version: item.version } },
+                { type: 'delete', tableName: metaTableName(), key: { scopeAndOwner: item.scopeAndOwner, itemId: item.itemId } },
+                { type: 'delete', tableName: accessListTableName(), key: { principalId: item.ownerUserId, itemId: item.itemId } },
+            ],
             origin: 'MediaLibraryItem.deleteImageItem',
-        })
-        await dynamoDBService.deleteItems({
-            tableName: metaTableName(),
-            key: { itemId: item.itemId },
-            origin: 'MediaLibraryItem.deleteImageItem:meta',
-        })
-        await dynamoDBService.deleteItems({
-            tableName: accessListTableName(),
-            key: { principalId: item.ownerUserId, itemId: item.itemId },
-            origin: 'MediaLibraryItem.deleteImageItem:accessList',
         })
     },
 
@@ -251,19 +224,25 @@ export default {
         sourceFileId: string
         userId: string
     }): Promise<MediaLibraryImageItem | undefined> => {
+        // The meta projection carries sourceFileId precisely so dedup can run
+        // against the scope partition; the full body is a point read after a hit.
         const result = await dynamoDBService.queryItems({
-            tableName: itemTableName(),
-            indexName: 'scopeAndOwner',
+            tableName: metaTableName(),
             keyConditions: { scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(MEDIA_LIBRARY_SCOPE.ORGANIZATION, organizationId) },
             fetchAllItems: true,
-            scanIndexForward: false,
             origin: `MediaLibraryItem.findActiveOrgImageBySource(${organizationId})`,
         })
-        return ((result?.items ?? []) as MediaLibraryImageItem[])
+        const match = ((result?.items ?? []) as MediaLibraryMeta[])
             .find((existing) => existing.status === MEDIA_LIBRARY_ITEM_STATUS.ACTIVE
                 && existing.kind === 'image'
                 && existing.sourceFileId === sourceFileId
                 && existing.ownerUserId === userId)
+        if (!match) return undefined
+        return await dynamoDBService.getItem({
+            tableName: itemTableName(),
+            key: { itemId: match.itemId, version: 1 },
+            origin: `MediaLibraryItem.findActiveOrgImageBySource(${organizationId}):item`,
+        }) as MediaLibraryImageItem | undefined
     },
 
     // =============================================================================
@@ -281,35 +260,15 @@ export default {
             updatedAt: item.updatedAt,
         }
 
-        await dynamoDBService.putItem({
-            tableName: itemTableName(),
-            item,
+        // All three rows commit or fail together — atomicity is the database's job.
+        await dynamoDBService.transactWrite({
+            operations: [
+                { type: 'put', tableName: itemTableName(), item },
+                { type: 'put', tableName: metaTableName(), item: meta },
+                { type: 'put', tableName: accessListTableName(), item: ownerAccess },
+            ],
             origin: 'MediaLibraryItem.createVideoItem',
         })
-        try {
-            await dynamoDBService.putItem({
-                tableName: metaTableName(),
-                item: meta,
-                origin: 'MediaLibraryItem.createVideoItem:meta',
-            })
-            await dynamoDBService.putItem({
-                tableName: accessListTableName(),
-                item: ownerAccess,
-                origin: 'MediaLibraryItem.createVideoItem:accessList',
-            })
-        } catch (error) {
-            await dynamoDBService.deleteItems({
-                tableName: itemTableName(),
-                key: { itemId: item.itemId, version: item.version },
-                origin: 'MediaLibraryItem.createVideoItem:rollback',
-            }).catch(() => {})
-            await dynamoDBService.deleteItems({
-                tableName: metaTableName(),
-                key: { itemId: item.itemId },
-                origin: 'MediaLibraryItem.createVideoItem:metaRollback',
-            }).catch(() => {})
-            throw error
-        }
 
         return item
     },
@@ -412,20 +371,13 @@ export default {
     },
 
     deleteVideoItem: async ({ item }: { item: MediaLibraryVideoItem }): Promise<void> => {
-        await dynamoDBService.deleteItems({
-            tableName: itemTableName(),
-            key: { itemId: item.itemId, version: item.version },
+        await dynamoDBService.transactWrite({
+            operations: [
+                { type: 'delete', tableName: itemTableName(), key: { itemId: item.itemId, version: item.version } },
+                { type: 'delete', tableName: metaTableName(), key: { scopeAndOwner: item.scopeAndOwner, itemId: item.itemId } },
+                { type: 'delete', tableName: accessListTableName(), key: { principalId: item.ownerUserId, itemId: item.itemId } },
+            ],
             origin: 'MediaLibraryItem.deleteVideoItem',
-        })
-        await dynamoDBService.deleteItems({
-            tableName: metaTableName(),
-            key: { itemId: item.itemId },
-            origin: 'MediaLibraryItem.deleteVideoItem:meta',
-        })
-        await dynamoDBService.deleteItems({
-            tableName: accessListTableName(),
-            key: { principalId: item.ownerUserId, itemId: item.itemId },
-            origin: 'MediaLibraryItem.deleteVideoItem:accessList',
         })
     },
 
@@ -438,18 +390,23 @@ export default {
         sourceFileId: string
         userId: string
     }): Promise<MediaLibraryVideoItem | undefined> => {
+        // Same meta-partition dedup path as the image lookup.
         const result = await dynamoDBService.queryItems({
-            tableName: itemTableName(),
-            indexName: 'scopeAndOwner',
+            tableName: metaTableName(),
             keyConditions: { scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(MEDIA_LIBRARY_SCOPE.ORGANIZATION, organizationId) },
             fetchAllItems: true,
-            scanIndexForward: false,
             origin: `MediaLibraryItem.findActiveOrgVideoBySource(${organizationId})`,
         })
-        return ((result?.items ?? []) as MediaLibraryItem[])
-            .filter((it): it is MediaLibraryVideoItem => it.kind === 'video')
+        const match = ((result?.items ?? []) as MediaLibraryMeta[])
             .find((existing) => existing.status === MEDIA_LIBRARY_ITEM_STATUS.ACTIVE
+                && existing.kind === 'video'
                 && existing.sourceFileId === sourceFileId
                 && existing.ownerUserId === userId)
+        if (!match) return undefined
+        return await dynamoDBService.getItem({
+            tableName: itemTableName(),
+            key: { itemId: match.itemId, version: 1 },
+            origin: `MediaLibraryItem.findActiveOrgVideoBySource(${organizationId}):item`,
+        }) as MediaLibraryVideoItem | undefined
     },
 }
