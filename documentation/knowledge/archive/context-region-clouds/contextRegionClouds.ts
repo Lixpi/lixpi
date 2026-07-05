@@ -2,7 +2,7 @@ import {
     settings,
     type ContextRegionCloudThemeStyle,
 } from '$src/settings.ts'
-import { scaleCanvasChromeForZoom } from '$src/infographics/utils/zoomScaling.ts'
+import { scaleCanvasChromeForZoom } from '@lixpi/canvas-engine'
 
 export type ContextRegionCloudAspect = ContextRegionCloudThemeStyle['aspect']
 

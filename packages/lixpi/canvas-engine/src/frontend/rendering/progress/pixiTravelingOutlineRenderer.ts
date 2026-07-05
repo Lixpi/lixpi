@@ -4,12 +4,12 @@ import {
     MeshGeometry,
     Texture,
 } from 'pixi.js'
-import { Easing } from '$src/utils/animations/easing.ts'
+import { Easing } from '../../animation/easing.ts'
 import {
     TravelingSnakeGlassMaterial,
     interpolateTravelingOutlineColor,
     type GlassMaterialStyle,
-} from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
+} from '../glass/pixiGlassMaterial.ts'
 
 // Re-exported for back-compat with existing call sites and tests that import
 // these names from the renderer.

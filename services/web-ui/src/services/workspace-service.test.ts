@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => {
         routeWorkspaceId,
         request: vi.fn(),
         getTokenSilently: vi.fn(),
-        setDataValues: vi.fn((values: { updatedAt?: number; canvasStateUpdatedAt?: number }) => {
+        setDataValues: vi.fn((values: Record<string, any>) => {
             if (typeof values.updatedAt === 'number') {
                 workspaceData.updatedAt = values.updatedAt
             }
@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => {
             }
         }),
         setMetaValues: vi.fn(),
+        beginWorkspaceLoad: vi.fn(),
         updateWorkspace: vi.fn(),
     }
 })
@@ -55,6 +56,7 @@ vi.mock('$src/stores/workspaceStore.ts', () => ({
         }),
         setDataValues: mocks.setDataValues,
         setMetaValues: mocks.setMetaValues,
+        beginWorkspaceLoad: mocks.beginWorkspaceLoad,
     },
 }))
 
@@ -65,6 +67,7 @@ vi.mock('$src/stores/workspacesStore.ts', () => ({
 }))
 
 import WorkspaceService from './workspace-service.ts'
+import { WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS } from './requestTimeouts.ts'
 
 const makeCanvasState = (nodeId: string) => ({
     viewport: { x: 0, y: 0, zoom: 1 },
@@ -81,6 +84,8 @@ describe('WorkspaceService canvas save queue', () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
+        mocks.request.mockReset()
+        mocks.getTokenSilently.mockReset()
         mocks.workspaceData.updatedAt = 10
         mocks.workspaceData.canvasStateUpdatedAt = 5
         mocks.routeWorkspaceId = 'workspace-1'
@@ -276,12 +281,22 @@ describe('WorkspaceService canvas save queue', () => {
 })
 
 describe('WorkspaceService state loading', () => {
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null
+
     beforeEach(() => {
         vi.clearAllMocks()
+        mocks.request.mockReset()
+        mocks.getTokenSilently.mockReset()
         mocks.workspaceData.updatedAt = 10
         mocks.workspaceData.canvasStateUpdatedAt = 5
         mocks.routeWorkspaceId = 'workspace-1'
         mocks.getTokenSilently.mockResolvedValue('token-1')
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    })
+
+    afterEach(() => {
+        consoleErrorSpy?.mockRestore()
+        consoleErrorSpy = null
     })
 
     it('loads workspace data and normalizes missing canvas state edges', async () => {
@@ -298,7 +313,11 @@ describe('WorkspaceService state loading', () => {
 
         await service.getWorkspace({ workspaceId: 'workspace-1' })
 
-        expect(mocks.setMetaValues).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.loading })
+        expect(mocks.beginWorkspaceLoad).toHaveBeenCalledWith('workspace-1')
+        expect(mocks.request).toHaveBeenCalledWith(NATS_SUBJECTS.WORKSPACE_SUBJECTS.GET_WORKSPACE, {
+            token: 'token-1',
+            workspaceId: 'workspace-1',
+        }, WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS)
         expect(mocks.setMetaValues).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.success })
         expect(mocks.setDataValues).toHaveBeenCalledWith(expect.objectContaining({
             workspaceId: 'workspace-1',
@@ -321,8 +340,25 @@ describe('WorkspaceService state loading', () => {
 
         await service.getWorkspace({ workspaceId: 'workspace-1' })
 
-        expect(mocks.setMetaValues).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.loading })
+        expect(mocks.beginWorkspaceLoad).not.toHaveBeenCalled()
         expect(mocks.setMetaValues).not.toHaveBeenCalledWith({ loadingStatus: LoadingStatus.success })
         expect(mocks.setDataValues).not.toHaveBeenCalled()
+    })
+
+    it('keeps stale canvas cleared when the active workspace load times out', async () => {
+        const timeout = new Error('timeout')
+        const service = new WorkspaceService()
+        mocks.request.mockRejectedValueOnce(timeout)
+
+        await service.getWorkspace({ workspaceId: 'workspace-1' })
+
+        expect(mocks.beginWorkspaceLoad).toHaveBeenCalledWith('workspace-1')
+        expect(mocks.setMetaValues).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.error })
+        expect(mocks.setDataValues).toHaveBeenCalledWith({ error: timeout })
+        expect(mocks.setDataValues).not.toHaveBeenCalledWith(expect.objectContaining({
+            canvasState: expect.objectContaining({
+                nodes: expect.arrayContaining([expect.anything()]),
+            }),
+        }))
     })
 })

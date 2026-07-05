@@ -8,7 +8,7 @@ import {
 	getEdgeAnchorPositions,
 	type SpreadResult,
 } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
-import { getAdaptiveBoundedZoomScalingOptions, scaleCanvasChromeWorldSizeForZoom } from '$src/infographics/utils/zoomScaling.ts'
+import { getAdaptiveBoundedZoomScalingOptions, scaleCanvasChromeWorldSizeForZoom } from '@lixpi/canvas-engine'
 import { settings } from '$src/settings.ts'
 
 // =============================================================================

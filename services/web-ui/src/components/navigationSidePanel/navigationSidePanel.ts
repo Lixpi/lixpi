@@ -3,7 +3,7 @@
 // Renderer: TypeScript `html` DOM. Store access stays behind small store APIs
 // so the panel remains a framework-agnostic DOM component.
 
-import { LoadingStatus, type WorkspaceMeta } from '@lixpi/constants'
+import { type WorkspaceMeta } from '@lixpi/constants'
 
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { createSidePanel, type SidePanelInstance } from '$src/components/sidePanel/index.ts'
@@ -284,11 +284,11 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     }
 
     private handleWorkspaceClick(workspaceId: string): void {
-        workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.idle })
         routerService.navigateTo('/workspace/:workspaceId', {
             params: { workspaceId },
             shouldFetchData: true,
         })
+        workspaceStore.beginWorkspaceLoad(workspaceId)
     }
 
     private handleCreateNewWorkspaceClick = async (): Promise<void> => {

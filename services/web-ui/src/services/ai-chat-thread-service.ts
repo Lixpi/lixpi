@@ -13,6 +13,7 @@ const { AI_CHAT_THREAD_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 
 import AuthService from '$src/services/auth-service.ts'
 import RouterService from '$src/services/router-service.ts'
+import { WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS } from '$src/services/requestTimeouts.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { aiChatThreadStore } from '$src/stores/aiChatThreadStore.ts'
@@ -228,7 +229,7 @@ class AiChatThreadService {
             const threads: any = await servicesStore.getData('nats')!.request(AI_CHAT_THREAD_SUBJECTS.GET_WORKSPACE_AI_CHAT_THREADS, {
                 token: await AuthService.getTokenSilently(),
                 workspaceId
-            })
+            }, WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS)
 
             if (RouterService.getRouteParams().workspaceId !== workspaceId) return
 

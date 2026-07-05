@@ -1,7 +1,7 @@
 import { mediaGenerationLayoutSettings } from '@lixpi/constants'
 
 import type { WorkspaceEdgePathType } from '@lixpi/constants'
-import type { CircularGlassMaterialStyle } from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
+import type { CircularGlassMaterialStyle } from '@lixpi/canvas-engine/frontend/rendering'
 
 export const colorPalette = {
     nightBlue: '#42494f',
@@ -494,6 +494,11 @@ export type VideoControlsSettings = {
     }
 }
 
+export type WorkspaceLoadingOutlineSettings = {
+    // Diameter of the workspace-switch loading circle relative to the generated-media pending circle.
+    diameterScale: number
+}
+
 export type MediaBranchLineageColorMixSettings = {
     targetColor: string
     amount: number
@@ -641,6 +646,8 @@ export type Settings = {
     workspaceCollision: WorkspaceCollisionSettings
 
     mediaNode: MediaNodeSettings
+
+    workspaceLoadingOutline: WorkspaceLoadingOutlineSettings
 
     videoControls: VideoControlsSettings
 
@@ -914,8 +921,8 @@ export const settings: Settings = {
             closeEasing: 'cubic-bezier(0.64, 0, 0.78, 0)',
         },
         overlay: {
-            // Full-viewport dark glass tint layer behind the side panel.
-            enabled: true,
+            // The workspace list should not dim or intercept the canvas behind it.
+            enabled: false,
             closeOnPointerDown: true,
             fill: 'rgba(15, 23, 42, 0.18)',
             fillOpaque: 'rgba(15, 23, 42, 0.22)',
@@ -1379,6 +1386,11 @@ export const settings: Settings = {
             // Canvas-unit width for manually inserted image nodes. Height is derived from the image aspect ratio; failed dimension probes use this as a square fallback.
             defaultInsertionWidth: 600,
         },
+    },
+
+    workspaceLoadingOutline: {
+        // Relative to the generated-media pending circle. 0.6 makes the workspace-switch spinner 40% smaller in diameter.
+        diameterScale: 0.6,
     },
 
     // Shared SVG video player controls used by canvas video nodes and in-chat generated videos.

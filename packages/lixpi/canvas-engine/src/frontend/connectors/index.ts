@@ -1,7 +1,7 @@
 // Connector / Infographics System
 // Shared path math and data shapes for drawing connections between visual nodes.
 
-export { computePath, computeLabelPosition, applyOffset } from '$src/infographics/connectors/paths.ts'
+export { computePath, computeLabelPosition, applyOffset } from './paths.ts'
 
 export type {
     AnchorPosition,
@@ -14,4 +14,4 @@ export type {
     NodeShape,
     NodeAnchorOverride,
     ComputedPath
-} from '$src/infographics/connectors/types.ts'
+} from './types.ts'

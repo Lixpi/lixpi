@@ -377,6 +377,8 @@ services:
             - ./services/web-ui/tsconfig.json:/usr/src/service/tsconfig.json:cached
 
 
+            - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/packages/lixpi/canvas-engine/package.json:ro,cached
+            - ./packages/lixpi/canvas-engine/src:/usr/src/service/packages/lixpi/canvas-engine/src:ro,cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached

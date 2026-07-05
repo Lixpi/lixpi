@@ -65,7 +65,7 @@ The documentation describes how Lixpi uses each module. Verify these integration
 
 - `WorkspaceCanvas.ts` — Where `XYPanZoom` is created and how viewport transforms are applied
 - `WorkspaceConnectionManager.ts` — How connections are handled (two-tier system: XYHandle + menu)
-- `workspace/rendering/pixiEdgeRenderer.ts` and `connectors/paths.ts` — How edge paths are computed and rendered as PIXI `Graphics`
+- `workspace/rendering/pixiEdgeRenderer.ts` and `packages/lixpi/canvas-engine/src/frontend/connectors/paths.ts` — How edge paths are computed and rendered as PIXI `Graphics`
 - Synthetic handle pattern — Whether Lixpi still defines handles programmatically rather than via DOM measurement
 
 Search for `XYPanZoom`, `XYDrag`, `XYHandle`, `XYResizer`, `getBezierPath`, `adoptUserNodes` in `services/web-ui/src/infographics/` to find current usage sites.

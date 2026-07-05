@@ -55,6 +55,7 @@
     },
     "dependencies": {
         "@lixpi/constants": "workspace:*",
+        "@lixpi/canvas-engine": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
         "@lixpi/prosemirror": "workspace:*",
         "pixi.js": "*",

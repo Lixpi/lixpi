@@ -7,6 +7,7 @@ const { DOCUMENT_SUBJECTS } = WORKSPACE_SUBJECTS
 
 import AuthService from '$src/services/auth-service.ts'
 import RouterService from '$src/services/router-service.ts'
+import { WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS } from '$src/services/requestTimeouts.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
@@ -49,7 +50,7 @@ class DocumentService {
 			const documents: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.GET_WORKSPACE_DOCUMENTS, {
 				token: await AuthService.getTokenSilently(),
 				workspaceId
-			})
+			}, WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS)
 
 			if (RouterService.getRouteParams().workspaceId !== workspaceId) return
 

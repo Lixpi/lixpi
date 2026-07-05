@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 'use strict'
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -5,8 +6,7 @@ import {
 	getShiftingGradientRenderer,
 	createShiftingGradientBackground,
 } from './shiftingGradientRenderer.ts'
-import { Easing } from '../easing.ts'
-import { settings } from '$src/settings.ts'
+import { Easing } from '../../animation/easing.ts'
 
 // The 8 phase positions (mirrored from source to verify against)
 const EXPECTED_PHASE_POSITIONS = [
@@ -163,28 +163,20 @@ describe('ShiftingGradientRenderer — singleton', () => {
 })
 
 // =============================================================================
-// SETTINGS PATHING
+// PALETTE SELECTION
 // =============================================================================
 
-describe('ShiftingGradientRenderer — settings pathing', () => {
-	it('defaults to the nested settings palette in settings.gradient.styles.shiftingColors', () => {
-		const originalPalette = settings.gradient.styles.shiftingColors
-		settings.gradient.styles.shiftingColors = ['#123456', '#654321', '#aabbcc', '#ccbbaa']
+describe('ShiftingGradientRenderer — palette selection', () => {
+	it('uses the caller-provided palette when one is supplied', () => {
+		const renderer = getShiftingGradientRenderer(['#123456', '#654321', '#aabbcc', '#ccbbaa']) as RendererAny
 
-		try {
-			getShiftingGradientRenderer().destroy()
-			const renderer = getShiftingGradientRenderer()
-
-			expect(renderer.colors).toEqual([
-				{ r: 0x12, g: 0x34, b: 0x56 },
-				{ r: 0x65, g: 0x43, b: 0x21 },
-				{ r: 0xaa, g: 0xbb, b: 0xcc },
-				{ r: 0xcc, g: 0xbb, b: 0xaa },
-			])
-		} finally {
-			settings.gradient.styles.shiftingColors = originalPalette
-			getShiftingGradientRenderer().destroy()
-		}
+		expect(renderer.colors).toEqual([
+			{ r: 0x12, g: 0x34, b: 0x56 },
+			{ r: 0x65, g: 0x43, b: 0x21 },
+			{ r: 0xaa, g: 0xbb, b: 0xcc },
+			{ r: 0xcc, g: 0xbb, b: 0xaa },
+		])
+		renderer.destroy()
 	})
 })
 

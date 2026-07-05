@@ -8,6 +8,14 @@ type RouteDefinition = {
     load?: (params: Record<string, unknown>, query: Record<string, unknown>) => Promise<any>
 }
 
+function routeValuesMatch(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+    const leftEntries = Object.entries(left)
+    const rightEntries = Object.entries(right)
+    if (leftEntries.length !== rightEntries.length) return false
+
+    return leftEntries.every(([key, value]) => String(value) === String(right[key]))
+}
+
 export const routes: RouteDefinition[] = [
     {
         path: '/',
@@ -15,15 +23,18 @@ export const routes: RouteDefinition[] = [
     {
         path: '/workspace/:workspaceId',
         load: async (params: any) => {
-            const workspaceId = params.workspaceId as string
-            await servicesStore.getData('workspaceService').getWorkspace({ workspaceId })
-            await Promise.all([
-                servicesStore.getData('documentService').getWorkspaceDocuments({ workspaceId }),
-                servicesStore.getData('aiChatThreadService').getWorkspaceAiChatThreads({ workspaceId })
-            ])
+            await loadWorkspaceRouteData(params.workspaceId as string)
         },
     },
 ]
+
+export async function loadWorkspaceRouteData(workspaceId: string): Promise<void> {
+    await Promise.all([
+        servicesStore.getData('workspaceService').getWorkspace({ workspaceId }),
+        servicesStore.getData('documentService').getWorkspaceDocuments({ workspaceId }),
+        servicesStore.getData('aiChatThreadService').getWorkspaceAiChatThreads({ workspaceId }),
+    ])
+}
 
 export type Router = {
     currentRoute: {
@@ -112,12 +123,18 @@ class RouterService {
         return null
     }
 
-    private runDataLoaderIfNeeded(routeDef: RouteDefinition, params: any, query: any): Promise<void> {
-        if (typeof routeDef.load !== 'function') return Promise.resolve()
+    private async runDataLoaderIfNeeded(routeDef: RouteDefinition, params: any, query: any): Promise<void> {
+        if (typeof routeDef.load !== 'function') return
 
-        return routeDef.load(params, query).then((result) => {
-            this.markRouteDataFetched()
-        })
+        await routeDef.load(params, query)
+        const currentRoute = routerStore.getData('currentRoute')
+        if (
+            currentRoute.path !== routeDef.path
+            || !routeValuesMatch(currentRoute.routeParams, params)
+            || !routeValuesMatch(currentRoute.routeQuery, query)
+        ) return
+
+        this.markRouteDataFetched()
     }
 
     private shouldUpdateBrowserHistory(route: Router['currentRoute']): boolean {

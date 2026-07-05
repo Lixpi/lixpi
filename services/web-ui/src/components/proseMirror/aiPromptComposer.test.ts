@@ -41,7 +41,7 @@ vi.mock('$src/components/proseMirror/components/editor.ts', () => ({
     },
 }))
 
-vi.mock('$src/utils/animations/gradients/shiftingGradientRenderer.ts', () => ({
+vi.mock('@lixpi/canvas-engine/frontend/rendering', () => ({
     createShiftingGradientBackground: (...args: unknown[]) => {
         createShiftingGradientBackgroundMock(...args)
         return mockGradient

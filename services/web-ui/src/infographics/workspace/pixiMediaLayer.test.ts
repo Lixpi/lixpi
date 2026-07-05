@@ -194,26 +194,6 @@ vi.mock('pixi.js', () => {
     }
 })
 
-vi.mock('$src/utils/animations/gradients/pixiGlassBorderRenderer.ts', () => ({
-    PixiGlassBorderRenderer: class FakePixiGlassBorderRenderer {
-        public sync = vi.fn()
-        public getCaptureTexture = vi.fn(() => glassCaptureTexture)
-        public setCapturing = vi.fn()
-        public destroy = vi.fn()
-
-        public constructor(public options: { container: unknown; style: unknown }) {
-            glassBorderRendererInstances.push({
-                sync: this.sync,
-                getCaptureTexture: this.getCaptureTexture,
-                setCapturing: this.setCapturing,
-                destroy: this.destroy,
-                container: options.container,
-                style: options.style,
-            })
-        }
-    },
-}))
-
 vi.mock('$src/utils/domTemplates.ts', () => ({
     html: (_template: unknown, ..._values: unknown[]) => document.createElement('div'),
     applyStyle: vi.fn(),
@@ -260,13 +240,30 @@ vi.mock('$src/infographics/workspace/rendering/mediaNodeRegistry.ts', () => ({
     createMediaNodeRegistry: () => mediaNodeRegistryCalls,
 }))
 
-vi.mock('$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts', async () => {
-    const actual = await vi.importActual<typeof import('$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts')>(
-        '$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts'
+vi.mock('@lixpi/canvas-engine/frontend/rendering', async () => {
+    const actual = await vi.importActual<typeof import('@lixpi/canvas-engine/frontend/rendering')>(
+        '@lixpi/canvas-engine/frontend/rendering'
     )
 
     return {
         ...actual,
+        PixiGlassBorderRenderer: class FakePixiGlassBorderRenderer {
+            public sync = vi.fn()
+            public getCaptureTexture = vi.fn(() => glassCaptureTexture)
+            public setCapturing = vi.fn()
+            public destroy = vi.fn()
+
+            public constructor(public options: { container: unknown; style: unknown }) {
+                glassBorderRendererInstances.push({
+                    sync: this.sync,
+                    getCaptureTexture: this.getCaptureTexture,
+                    setCapturing: this.setCapturing,
+                    destroy: this.destroy,
+                    container: options.container,
+                    style: options.style,
+                })
+            }
+        },
         PixiTravelingOutlineRenderer: class FakePixiTravelingOutlineRenderer {
             public sync = vi.fn()
             public updateGeometry = vi.fn()
@@ -759,6 +756,36 @@ describe('createPixiMediaLayer runtime behavior', () => {
         expect(sprite?.destroy).toHaveBeenCalledTimes(1)
         expect(mask?.destroy).toHaveBeenCalledTimes(1)
         expect(colorRect?.destroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('clears all PIXI scene content when canvas state is absent during workspace navigation', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const imageNode = makeImageNode('stale-image')
+        const videoNode = makeNonImageNode('stale-video', 'video')
+        layer.sync(makeCanvasState({ nodes: [imageNode, videoNode] }))
+        layer.setGeneratingImageNodes(new Set(['stale-image']))
+        layer.setPixiEdges([{ edgeId: 'stale-edge' } as any])
+        layer.setMarqueeRect({ x: 1, y: 2, width: 30, height: 40 })
+        layer.setSelectionOverlayBounds({ x: 3, y: 4, width: 50, height: 60 })
+
+        const sprite = pixiSpriteInstances.find((instance) => instance.label === 'pixi-image-stale-image')
+        const mask = pixiGraphicsInstances.find((instance) => instance.label === 'pixi-image-mask-stale-image')
+        const colorRect = pixiGraphicsInstances.find((instance) => instance.label === 'pixi-image-color-stale-image')
+        const outlineRenderer = outlineRendererInstances.at(-1)!
+        const edgeRenderer = edgeRendererInstances.at(-1)!
+        expect(getDebugDump().entries).toHaveLength(1)
+
+        layer.sync(null)
+
+        expect(getDebugDump().entries).toHaveLength(0)
+        expect(sprite?.destroy).toHaveBeenCalledTimes(1)
+        expect(mask?.destroy).toHaveBeenCalledTimes(1)
+        expect(colorRect?.destroy).toHaveBeenCalledTimes(1)
+        expect(mediaNodeRegistryCalls.dispatchRemove).toHaveBeenCalledWith('stale-video')
+        expect(outlineRenderer.sync.mock.calls.at(-1)?.[0]).toEqual([])
+        expect(edgeRenderer.render.mock.calls.at(-1)).toEqual([[], { x: 0, y: 0, zoom: 1 }])
     })
 
     it('forwards live transforms to registry for non-image nodes', async () => {

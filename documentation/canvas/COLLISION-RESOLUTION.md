@@ -19,7 +19,7 @@ Collision resolution is implemented as two layers with a hard separation of conc
 
 | Layer | File | Responsibility |
 |---|---|---|
-| Shared resolver | [`resolveCollisions.ts`](../../services/web-ui/src/infographics/utils/resolveCollisions.ts) | Geometry-agnostic. Accepts rectangular boxes and pushes overlapping boxes apart. Knows nothing about canvas node types, parentage, Svelte, PIXI, or viewport state. |
+| Shared resolver | [`resolve-collisions.ts`](../../packages/lixpi/canvas-engine/src/shared/collision/resolve-collisions.ts) | Geometry-agnostic. Accepts rectangular boxes and pushes overlapping boxes apart. Knows nothing about canvas node types, parentage, Svelte, PIXI, or viewport state. |
 | Workspace plan | [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) | Builds workspace-specific collision plans. Converts canvas nodes into world-space resolver boxes, applies parent/child exclusions, and converts resolved world positions back to persisted node positions. |
 
 The split is deliberate: all workspace-specific knowledge (node types, generated-image metadata, parent-child containment, framework state) lives in the plan; the resolver stays a pure rectangle pusher that any future surface can reuse.
@@ -84,7 +84,7 @@ Generated images and videos that share a lineage form a **branch tree** (see [Br
 
 | Layer | File | Responsibility |
 |---|---|---|
-| Pure tidy tree | [`utils/layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) | Geometry-agnostic, block-allocation tidy-tree layout (left-to-right). Places abstract `{ id, parentId, width, height }` nodes; each subtree owns a disjoint vertical band, so the output is provably overlap-free. Knows nothing about the canvas, PIXI, or `branchId`. |
+| Pure tidy tree | [`layout-tree.ts`](../../packages/lixpi/canvas-engine/src/shared/tree-layout/layout-tree.ts) | Geometry-agnostic, block-allocation tidy-tree layout (left-to-right). Places abstract `{ id, parentId, width, height }` nodes; each subtree owns a disjoint vertical band, so the output is provably overlap-free. Knows nothing about the canvas, PIXI, or `branchId`. |
 | Branch-lineage state | [`workspace/branchLineageState.ts`](../../services/web-ui/src/infographics/workspace/branchLineageState.ts) | Shared branch-marker and generated-media state derivation so renderer refresh, drag behavior, connector anchoring, marker overlap separation, and rebalance proxying agree on which lineage markers have started generated-media children. |
 | Generated-media rebalance pipeline | [`workspace/generatedMediaRebalancePipeline.ts`](../../services/web-ui/src/infographics/workspace/generatedMediaRebalancePipeline.ts) | Owns the deterministic generated-media rebalance sequence: proxy pending media to visible pre-frame geometry, add planned-media proxies for sibling markers whose media has not started, call the branch-tree adapter, restore persisted node geometry, and report markers that now own generated children so rendering overrides can be cleared. |
 | Branch-tree adapter | [`workspace/branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts) | Builds the generated-media forest from canvas nodes + lineage edges, tidies each tree (roots keep their anchor), then feeds **one rigid bounding box per tree** plus one box per loose top-level node into the unchanged `resolveCollisions`. |
@@ -124,7 +124,7 @@ These properties must hold across all collision-producing flows:
 - Parent/child pairs must be excluded from collision resolution so containment does not push children out of their parent container.
 - Persisted child positions must remain parent-relative after world-space collision resolution.
 - Group drags must preserve rigid spacing unless the drag plan explicitly allows collision resolution.
-- Generated branch media is normalized by [`generatedMediaRebalancePipeline.ts`](../../services/web-ui/src/infographics/workspace/generatedMediaRebalancePipeline.ts), then laid out by the tidy-tree algorithm ([`layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) → [`branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts)); the resolver receives one rigid box per tree as a cleanup pass and never lays out the tree itself.
+- Generated branch media is normalized by [`generatedMediaRebalancePipeline.ts`](../../services/web-ui/src/infographics/workspace/generatedMediaRebalancePipeline.ts), then laid out by the tidy-tree algorithm ([`layout-tree.ts`](../../packages/lixpi/canvas-engine/src/shared/tree-layout/layout-tree.ts) → [`branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts)); the resolver receives one rigid box per tree as a cleanup pass and never lays out the tree itself.
 
 ## Troubleshooting
 

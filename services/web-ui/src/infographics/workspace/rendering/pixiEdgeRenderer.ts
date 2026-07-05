@@ -5,7 +5,7 @@ import {
     type PixiEdgeArrow,
     type PixiEdgeRenderDatum,
 } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
-import { getAdaptiveBoundedZoomScalingOptions, scaleCanvasChromeToScreenForZoom } from '$src/infographics/utils/zoomScaling.ts'
+import { getAdaptiveBoundedZoomScalingOptions, scaleCanvasChromeToScreenForZoom } from '@lixpi/canvas-engine'
 import { settings } from '$src/settings.ts'
 
 export type PixiEdgeRenderer = {

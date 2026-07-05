@@ -144,7 +144,7 @@ afterEach(() => {
 // =============================================================================
 
 describe('NavigationSidePanel — mounting', () => {
-    it('mounts the panel, its side-panel surfaces, and the new-workspace button into the host pane', () => {
+    it('mounts the panel, enabled side-panel surfaces, and the new-workspace button into the host pane', () => {
         const { paneEl, instance } = mount()
 
         expect(paneEl.querySelector('.navigation-side-panel')).not.toBeNull()
@@ -154,7 +154,7 @@ describe('NavigationSidePanel — mounting', () => {
         expect(paneEl.querySelector('.navigation-side-panel-new-workspace-button')).not.toBeNull()
         expect(paneEl.querySelector('.navigation-side-panel-resize-handle')).not.toBeNull()
         expect(paneEl.querySelector('.navigation-side-panel-toggle')).not.toBeNull()
-        expect(paneEl.querySelector('.side-panel-overlay')).not.toBeNull()
+        expect(paneEl.querySelector('.side-panel-overlay')).toBeNull()
         expect(paneEl.querySelector('.side-panel-backdrop')).not.toBeNull()
 
         instance.destroy()
@@ -356,18 +356,32 @@ describe('NavigationSidePanel — workspace list', () => {
 // =============================================================================
 
 describe('NavigationSidePanel — navigation and creation', () => {
-    it('navigates to the clicked workspace and resets its loading status to idle', () => {
+    it('begins loading the clicked workspace in the click handler so stale canvas content clears immediately', () => {
         workspacesStore.setWorkspaces([makeWorkspace({ workspaceId: 'ws-1', name: 'Alpha' })])
-        workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.loading })
+        workspaceStore.setDataValues({
+            workspaceId: 'old-workspace',
+            canvasState: {
+                viewport: { x: 1, y: 2, zoom: 1 },
+                nodes: [{ nodeId: 'old-node', type: 'image' } as any],
+                edges: [],
+            },
+        })
+        workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.success })
         const { paneEl, instance } = mount()
 
         paneEl.querySelector<HTMLButtonElement>('.navigation-side-panel-row')?.click()
 
+        expect(workspaceStore.getData('workspaceId')).toBe('ws-1')
+        expect(workspaceStore.getData('canvasState')).toEqual({
+            viewport: { x: 0, y: 0, zoom: 1 },
+            nodes: [],
+            edges: [],
+        })
+        expect(workspaceStore.getMeta('loadingStatus')).toBe(LoadingStatus.loading)
         expect(mocks.navigateTo).toHaveBeenCalledExactlyOnceWith('/workspace/:workspaceId', {
             params: { workspaceId: 'ws-1' },
             shouldFetchData: true,
         })
-        expect(workspaceStore.getMeta('loadingStatus')).toBe(LoadingStatus.idle)
 
         instance.destroy()
     })

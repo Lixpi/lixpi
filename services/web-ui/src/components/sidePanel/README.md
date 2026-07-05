@@ -18,6 +18,8 @@ The translucent glass backdrop is a feature of this component — its element an
 
 The background overlay is optional and controlled by `overlay.enabled`. It is separate from the glass backdrop: `overlayElement` visually covers the host container behind the side panel while `backdropElement` stays panel-width and glassy. The overlay uses a dark tint with a low-intensity distortion filter — `backdrop-filter: blur(4px) saturate(108%)`, WebKit fallback, and a reduced-transparency fallback. Overlay pointer hit-testing stays transparent so drag movement reaches the host pan surface; document-level capture requests close on click/tap when `overlay.closeOnPointerDown` is enabled and blocks that click from leaking through.
 
+Overlay close ignores the mounted panel, the toggle, the resize handle, and any target inside `[data-side-panel-no-drag]`. Body-mounted popovers and menus launched from the panel should use that attribute so their option clicks run instead of collapsing the drawer first.
+
 ## Open / close animation
 
 The component plays a drawer-style slide when the panel enters and leaves. The panel and glass backdrop translate in from (or out to) the edge they hug. The optional toggle button uses the same slide by default, or it can stay fixed while the panel and backdrop animate underneath it. The optional overlay fades behind them.

@@ -187,6 +187,7 @@ const DRAG_VELOCITY_THRESHOLD = 0.4
 const DRAG_MOUSE_START_THRESHOLD = 2
 const DRAG_TOUCH_START_THRESHOLD = 10
 const OVERLAY_CLICK_DISTANCE = 4
+const SIDE_PANEL_INTERACTION_BLOCK_SELECTOR = '[data-side-panel-no-drag]'
 
 type SlideTarget = {
     element: HTMLElement
@@ -522,6 +523,8 @@ class SidePanel implements SidePanelInstance {
 
     private shouldIgnoreOverlayCloseTarget = (target: EventTarget | null): boolean => {
         if (!(target instanceof Node)) return false
+        const targetElement = target instanceof Element ? target : target.parentElement
+        if (targetElement?.closest(SIDE_PANEL_INTERACTION_BLOCK_SELECTOR)) return true
         if (this.animatedPanel?.contains(target)) return true
         if (this.toggleElement?.contains(target)) return true
         if (this.element.contains(target)) return true
@@ -739,7 +742,7 @@ class SidePanel implements SidePanelInstance {
 
     private shouldIgnorePanelDragTarget = (target: EventTarget | null): boolean => {
         if (!(target instanceof HTMLElement)) return true
-        if (target.closest('[data-side-panel-no-drag]')) return true
+        if (target.closest(SIDE_PANEL_INTERACTION_BLOCK_SELECTOR)) return true
         if (target.closest('button, a, input, textarea, select, [role="button"], [role="tab"], [contenteditable="true"]')) return true
         return false
     }

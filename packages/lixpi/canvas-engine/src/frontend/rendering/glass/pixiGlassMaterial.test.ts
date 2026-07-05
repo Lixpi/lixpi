@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 'use strict'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -181,6 +182,27 @@ function mockCanvasElements(): ReturnType<typeof vi.spyOn> {
 }
 
 let offscreenCanvasDescriptor: PropertyDescriptor | undefined
+let documentDescriptor: PropertyDescriptor | undefined
+
+function installMockDocument(): void {
+    documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'document')
+    Object.defineProperty(globalThis, 'document', {
+        value: {
+            createElement: () => ({}),
+        },
+        writable: true,
+        configurable: true,
+        enumerable: true,
+    })
+}
+
+function restoreDocument(): void {
+    if (documentDescriptor) {
+        Object.defineProperty(globalThis, 'document', documentDescriptor)
+    } else {
+        delete (globalThis as { document?: unknown }).document
+    }
+}
 
 beforeEach(() => {
     offscreenCanvasDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'OffscreenCanvas')
@@ -190,6 +212,7 @@ beforeEach(() => {
         configurable: true,
         enumerable: true,
     })
+    installMockDocument()
     textureFromCalls.length = 0
     vi.clearAllMocks()
     mockCanvasElements()
@@ -202,6 +225,7 @@ afterEach(() => {
     } else {
         delete (globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas
     }
+    restoreDocument()
 })
 
 describe('interpolateTravelingOutlineColor', () => {

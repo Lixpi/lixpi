@@ -4,6 +4,7 @@
         type Viewport
     } from '@xyflow/system'
     import {
+        LoadingStatus,
         MAX_UPLOAD_FILE_SIZE,
         NATS_SUBJECTS,
         type CanvasState,
@@ -51,7 +52,7 @@
     let workspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId as string)
     let loadedWorkspaceId = $derived($workspaceStore.data.workspaceId)
     let isRouteWorkspaceLoaded = $derived(Boolean(workspaceId && loadedWorkspaceId === workspaceId))
-    let canvasState = $derived(isRouteWorkspaceLoaded ? $workspaceStore.data.canvasState : null)
+    let canvasState = $derived(isRouteWorkspaceLoaded && $workspaceStore.meta.loadingStatus === LoadingStatus.success ? $workspaceStore.data.canvasState : null)
     let isRightSidePanelOpen = $derived(Boolean(isRouteWorkspaceLoaded && (canvasState?.aiChatPanel?.isOpen ?? canvasState?.lastActiveAiChatThreadId)))
     let documents = $derived(isRouteWorkspaceLoaded ? $documentsStore.data.filter((document: any) => document.workspaceId === workspaceId) : [])
     let aiChatThreads = $derived(isRouteWorkspaceLoaded ? Array.from($aiChatThreadsStore.data.values()).filter((thread: any) => thread.workspaceId === workspaceId) : [])

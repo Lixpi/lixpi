@@ -1,5 +1,5 @@
 // Branch-lineage tree layout — the workspace adapter between the canvas graph
-// and the pure tidy-tree algorithm in utils/layoutTree.ts.
+// and the pure tidy-tree algorithm in @lixpi/canvas-engine.
 //
 // A "branch tree" is a connected component of top-level generated-media nodes
 // (image/video carrying generatedBy.branchId, no parentId) and temporary
@@ -21,9 +21,8 @@ import type {
     BranchLineCanvasNode,
     WorkspaceEdge,
 } from '@lixpi/constants'
+import { layoutTree, resolveCollisions, type TreeLayoutNode } from '@lixpi/canvas-engine'
 
-import { layoutTree, type TreeLayoutNode } from '$src/infographics/utils/layoutTree.ts'
-import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { computeWorldPosition, buildNodesById } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import {
     getGeneratedMediaMidpointMarkerId,

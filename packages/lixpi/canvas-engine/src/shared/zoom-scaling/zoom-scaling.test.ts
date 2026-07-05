@@ -12,8 +12,11 @@ import {
 	scaleForZoom,
 	getEdgeScaledSizes,
 	getResizeHandleScaledSizes,
-} from '$src/infographics/utils/zoomScaling.ts'
-import { worldSizeToScreenSize } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
+} from './zoom-scaling.ts'
+
+function worldSizeToScreenSize(size: number, viewport: { zoom: number }): number {
+	return size * viewport.zoom
+}
 
 const boundedZoomScaling = { minZoom: 0.4 }
 const adaptiveBoundedLowZoomPower = 0.45

@@ -17,17 +17,21 @@ type Meta = {
     requiresSave: boolean
 }
 
-type WorkspaceData = Omit<Workspace, 'accessList'>
+type WorkspaceData = Omit<Workspace, 'accessList'> & {
+    error?: unknown
+}
 
 type WorkspaceStore = {
     meta: Meta
     data: WorkspaceData
 }
 
-const defaultCanvasState: CanvasState = {
-    viewport: { x: 0, y: 0, zoom: 1 },
-    nodes: [],
-    edges: []
+function createDefaultCanvasState(): CanvasState {
+    return {
+        viewport: { x: 0, y: 0, zoom: 1 },
+        nodes: [],
+        edges: [],
+    }
 }
 
 const workspace: ReadonlyDeep<WorkspaceStore> = deepFreeze({
@@ -41,8 +45,9 @@ const workspace: ReadonlyDeep<WorkspaceStore> = deepFreeze({
         name: '',
         accessType: 'private',
         files: [],
-        canvasState: defaultCanvasState,
+        canvasState: createDefaultCanvasState(),
         createdAt: 0,
+        canvasStateUpdatedAt: 0,
         updatedAt: 0,
     }
 })
@@ -86,6 +91,26 @@ export const workspaceStore = {
             ...state.data,
             ...values
         }
+    })),
+
+    beginWorkspaceLoad: (workspaceId: string): void => store.update(state => ({
+        ...state,
+        meta: {
+            ...state.meta,
+            loadingStatus: LoadingStatus.loading,
+            requiresSave: false,
+        },
+        data: {
+            ...state.data,
+            workspaceId,
+            name: '',
+            error: null,
+            files: [],
+            canvasState: createDefaultCanvasState(),
+            createdAt: 0,
+            canvasStateUpdatedAt: 0,
+            updatedAt: 0,
+        },
     })),
 
     updateCanvasState: (canvasState: CanvasState): void => store.update(state => ({
