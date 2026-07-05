@@ -114,14 +114,6 @@ export const aiInteractionSubjects = [
                 proseMirrorBaseVersion?: number
             } & AiInteractionChatSendMessagePayload
 
-            // organizationId keys metrics spend by org. It may be absent from the client
-            // payload (user store not yet hydrated), so fall back to the user's org record
-            // via the shared resolver. 1:1 user:org at launch → first entry.
-            const resolvedOrganizationId = (data.organizationId as string) || (await resolveUserOrganizationId(userId)) || ''
-            if (!resolvedOrganizationId) {
-                warn(`[metrics] no organizationId for user ${userId}; metrics events will be dropped until an organization is provisioned`)
-            }
-
             // The selection is an ordered model-id array; the legacy single-model
             // path below operates on the first model of each section.
             const aiModel = aiReasoningModels?.[0]
@@ -130,6 +122,11 @@ export const aiInteractionSubjects = [
 
             const natsService = await NATS_Service.getInstance()
             const organizationId = referencedFeatureIds?.length ? await resolveUserOrganizationId(userId) : undefined
+
+            // Org keys metrics spend. Prefer the org resolved for feature access;
+            // otherwise use the client-supplied one from the payload. Never resolve
+            // it unconditionally — that would add a lookup on every message.
+            const eventOrganizationId = organizationId ?? (data.organizationId as string | undefined)
 
             if (mediaGenerationRequest) {
                 infoStr([
@@ -147,12 +144,12 @@ export const aiInteractionSubjects = [
                             ...data,
                             workspaceId,
                             aiChatThreadId,
-                            organizationId: resolvedOrganizationId,
+                            organizationId: eventOrganizationId,
                             mediaGenerationRequest,
                             eventMeta: {
                                 userId,
                                 stripeCustomerId,
-                                organizationId: resolvedOrganizationId,
+                                organizationId: eventOrganizationId,
                                 workspaceId,
                                 aiChatThreadId,
                             },
@@ -259,7 +256,7 @@ export const aiInteractionSubjects = [
                             eventMeta: {
                                 userId,
                                 stripeCustomerId,
-                                organizationId: resolvedOrganizationId,
+                                organizationId: eventOrganizationId,
                                 workspaceId,
                                 aiChatThreadId,
                             },
