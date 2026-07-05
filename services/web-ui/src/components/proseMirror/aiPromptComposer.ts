@@ -18,7 +18,7 @@ import {
     createGenericVideoResolutionDropdown,
     createGenericVideoDurationDropdown,
 } from '$src/components/aiModelControls/index.ts'
-import { createShiftingGradientBackground } from '@lixpi/canvas-engine/frontend/rendering'
+import { createShiftingGradientBackground } from '@lixpi/canvas-engine'
 import { html } from '$src/utils/domTemplates.ts'
 import { settings } from '$src/settings.ts'
 

@@ -68,6 +68,26 @@ type ApiLineageCanvasNode = CanvasNode & {
     branchId?: string
 }
 
+type MediaReplacementMarker = {
+    replacedAt?: number
+    previousFileId?: string
+    previousPosterFileId?: string
+}
+
+type MediaReplacementCanvasNode = ApiLineageCanvasNode & {
+    mediaReplacement?: MediaReplacementMarker
+    fileId?: string
+    workspaceId?: string
+    src?: string
+    posterFileId?: string
+    posterSrc?: string
+    frameFileId?: string
+    aspectRatio?: number
+    durationSeconds?: number
+    hasAudio?: boolean
+    descriptor?: ContentDescriptor
+}
+
 const API_GENERATED_MEDIA_FULL_SAVE_PROTECTION_MS = 30 * 60 * 1000
 
 const addFileId = (fileIds: Set<string>, fileId: unknown): void => {
@@ -141,6 +161,36 @@ const addGeneratedLineageMarkerRefs = (node: ApiLineageCanvasNode, refs: Set<str
     addFileId(refs, generatedBy?.branchLineNodeId)
 }
 
+const shouldApplyIncomingMediaReplacement = (currentNode: ApiLineageCanvasNode, incomingNode: ApiLineageCanvasNode): boolean => {
+    if (currentNode.nodeId !== incomingNode.nodeId) return false
+    if ((currentNode.type !== 'image' && currentNode.type !== 'video') || currentNode.type !== incomingNode.type) return false
+
+    const currentMediaNode = currentNode as MediaReplacementCanvasNode
+    const incomingMediaNode = incomingNode as MediaReplacementCanvasNode
+    const replacement = incomingMediaNode.mediaReplacement
+    if (typeof replacement?.replacedAt !== 'number') return false
+    if (!incomingMediaNode.fileId || incomingMediaNode.fileId === currentMediaNode.fileId) return false
+    if (replacement.previousFileId && replacement.previousFileId !== currentMediaNode.fileId) return false
+
+    return true
+}
+
+const applyIncomingMediaReplacementFields = (merged: Record<string, unknown>, incomingNode: ApiLineageCanvasNode): void => {
+    const incomingMediaNode = incomingNode as MediaReplacementCanvasNode
+
+    for (const field of ['fileId', 'workspaceId', 'src', 'aspectRatio', 'descriptor'] as const) {
+        if (field in incomingMediaNode) merged[field] = incomingMediaNode[field]
+    }
+
+    if (incomingNode.type === 'video') {
+        for (const field of ['posterFileId', 'posterSrc', 'frameFileId', 'durationSeconds', 'hasAudio'] as const) {
+            if (field in incomingMediaNode) merged[field] = incomingMediaNode[field]
+        }
+    }
+
+    delete merged.mediaReplacement
+}
+
 const applyIncomingLayoutFields = (currentNode: ApiLineageCanvasNode, incomingNode: ApiLineageCanvasNode): CanvasNode => {
     const merged = { ...incomingNode, ...currentNode } as Record<string, unknown>
 
@@ -149,6 +199,11 @@ const applyIncomingLayoutFields = (currentNode: ApiLineageCanvasNode, incomingNo
     if ('parentId' in incomingNode) merged.parentId = incomingNode.parentId
     if ('extent' in incomingNode) merged.extent = incomingNode.extent
     if ('expandParent' in incomingNode) merged.expandParent = incomingNode.expandParent
+    if (shouldApplyIncomingMediaReplacement(currentNode, incomingNode)) {
+        applyIncomingMediaReplacementFields(merged, incomingNode)
+    } else {
+        delete merged.mediaReplacement
+    }
 
     return merged as CanvasNode
 }

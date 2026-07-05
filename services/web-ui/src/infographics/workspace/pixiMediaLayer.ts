@@ -35,15 +35,13 @@ import {
 import { createPixiEdgeRenderer, type PixiEdgeRenderer } from '$src/infographics/workspace/rendering/pixiEdgeRenderer.ts'
 import { createMediaNodeRegistry, type MediaNodeRegistry } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
 import {
-    PixiGlassBorderRenderer,
+    getAdaptiveBoundedZoomScalingOptions,
     getRoundedOutlinePerimeter,
+    PixiGlassBorderRenderer,
     PixiTravelingOutlineRenderer,
     type PixiGlassBorderDatum,
     type PixiTravelingOutlineDatum,
     type PixiTravelingOutlineDirection,
-} from '@lixpi/canvas-engine/frontend/rendering'
-import {
-    getAdaptiveBoundedZoomScalingOptions,
     scaleCanvasChromeWorldSizeForZoom,
 } from '@lixpi/canvas-engine'
 import { settings } from '$src/settings.ts'
