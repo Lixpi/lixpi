@@ -60,6 +60,9 @@ export type SidePanelAnimationConfig = {
 }
 
 export type SidePanelOverlayConfig = {
+    // Visual overlay surface. Outside click/tap close is controlled separately
+    // by `closeOnPointerDown` so hosts can keep the close behavior without
+    // drawing or mounting an overlay element.
     enabled: boolean
     className?: string
     fill?: string
@@ -206,7 +209,7 @@ type PanelDragState = {
     lastEvent: PointerEvent
 }
 
-type OverlayPointerStart = {
+type OutsidePointerStart = {
     clientX: number
     clientY: number
 }
@@ -227,7 +230,7 @@ class SidePanel implements SidePanelInstance {
     private finishSlideWait: (() => void) | null = null
     private isOpen = false
     private panelDragState: PanelDragState | null = null
-    private overlayPointerStart: OverlayPointerStart | null = null
+    private outsidePointerStart: OutsidePointerStart | null = null
     private closeFromCurrentTransforms = false
 
     constructor(private readonly config: SidePanelConfig) {
@@ -273,9 +276,9 @@ class SidePanel implements SidePanelInstance {
         this.applyAnimationSettings(this.backdropElement)
         if (this.overlayElement) this.applyOverlaySettings(this.overlayElement)
         if (this.toggleElement) this.applyAnimationSettings(this.toggleElement)
-        if (this.overlayElement) {
-            document.addEventListener('pointerdown', this.handleOverlayPointerDown, true)
-            document.addEventListener('click', this.handleOverlayClick, true)
+        if (this.isOutsideCloseEnabled()) {
+            document.addEventListener('pointerdown', this.handleOutsidePointerDown, true)
+            document.addEventListener('click', this.handleOutsideClick, true)
         }
         this.setOpen(false)
         if (this.toggleElement) {
@@ -362,6 +365,10 @@ class SidePanel implements SidePanelInstance {
             ? opacity
             : OVERLAY_DEFAULT_OPACITY
     }
+
+    private isOutsideCloseEnabled = (): boolean => Boolean(
+        this.config.overlay && this.config.overlay.closeOnPointerDown !== false
+    )
 
     // Resolve the width to start a drag from. Prefer the stored width; otherwise
     // measure the actual rendered panel, falling back to the resolved default.
@@ -477,31 +484,29 @@ class SidePanel implements SidePanelInstance {
         this.config.toggle?.onToggle()
     }
 
-    private handleOverlayPointerDown = (event: PointerEvent): void => {
-        this.overlayPointerStart = null
+    private handleOutsidePointerDown = (event: PointerEvent): void => {
+        this.outsidePointerStart = null
         if (!this.isOpen) return
-        if (this.config.overlay?.closeOnPointerDown === false) return
         if (event.button !== 0 || event.isPrimary === false) return
-        if (!this.isEventInsideOverlay(event)) return
-        if (this.shouldIgnoreOverlayCloseTarget(event.target)) return
-        this.overlayPointerStart = {
+        if (!this.isEventInsideOutsideCloseRegion(event)) return
+        if (this.shouldIgnoreOutsideCloseTarget(event.target)) return
+        this.outsidePointerStart = {
             clientX: event.clientX,
             clientY: event.clientY,
         }
     }
 
-    private handleOverlayClick = (event: MouseEvent): void => {
+    private handleOutsideClick = (event: MouseEvent): void => {
         if (!this.isOpen) return
-        if (this.config.overlay?.closeOnPointerDown === false) return
         if (event.button !== 0) return
-        if (!this.isEventInsideOverlay(event)) return
-        if (this.shouldIgnoreOverlayCloseTarget(event.target)) return
+        if (!this.isEventInsideOutsideCloseRegion(event)) return
+        if (this.shouldIgnoreOutsideCloseTarget(event.target)) return
 
         event.preventDefault()
         event.stopPropagation()
 
-        const start = this.overlayPointerStart
-        this.overlayPointerStart = null
+        const start = this.outsidePointerStart
+        this.outsidePointerStart = null
         if (start) {
             const distance = Math.hypot(event.clientX - start.clientX, event.clientY - start.clientY)
             if (distance > OVERLAY_CLICK_DISTANCE) return
@@ -510,9 +515,9 @@ class SidePanel implements SidePanelInstance {
         this.config.onOpenChange?.(false)
     }
 
-    private isEventInsideOverlay = (event: MouseEvent | PointerEvent): boolean => {
-        if (!this.overlayElement) return false
-        const rect = this.overlayElement.getBoundingClientRect()
+    private isEventInsideOutsideCloseRegion = (event: MouseEvent | PointerEvent): boolean => {
+        const rect = this.overlayElement?.getBoundingClientRect()
+            ?? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
         return (
             event.clientX >= rect.left &&
             event.clientX <= rect.right &&
@@ -521,7 +526,7 @@ class SidePanel implements SidePanelInstance {
         )
     }
 
-    private shouldIgnoreOverlayCloseTarget = (target: EventTarget | null): boolean => {
+    private shouldIgnoreOutsideCloseTarget = (target: EventTarget | null): boolean => {
         if (!(target instanceof Node)) return false
         const targetElement = target instanceof Element ? target : target.parentElement
         if (targetElement?.closest(SIDE_PANEL_INTERACTION_BLOCK_SELECTOR)) return true
@@ -877,9 +882,9 @@ class SidePanel implements SidePanelInstance {
         this.animatedPanel = null
         this.listeners.clear()
         this.element.removeEventListener('pointerdown', this.handleResizeStart)
-        if (this.overlayElement) {
-            document.removeEventListener('pointerdown', this.handleOverlayPointerDown, true)
-            document.removeEventListener('click', this.handleOverlayClick, true)
+        if (this.isOutsideCloseEnabled()) {
+            document.removeEventListener('pointerdown', this.handleOutsidePointerDown, true)
+            document.removeEventListener('click', this.handleOutsideClick, true)
         }
         this.toggleElement?.remove()
     }

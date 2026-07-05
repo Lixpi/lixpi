@@ -921,7 +921,9 @@ export const settings: Settings = {
             closeEasing: 'cubic-bezier(0.64, 0, 0.78, 0)',
         },
         overlay: {
-            // The workspace list should not dim or intercept the canvas behind it.
+            // The visual overlay is disabled so the workspace list does not dim
+            // the canvas. `closeOnPointerDown` still collapses the panel from
+            // document-level outside clicks.
             enabled: false,
             closeOnPointerDown: true,
             fill: 'rgba(15, 23, 42, 0.18)',

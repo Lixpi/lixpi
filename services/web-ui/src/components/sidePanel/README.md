@@ -16,9 +16,11 @@ The translucent glass backdrop is a feature of this component — its element an
 
 ## Background Overlay
 
-The background overlay is optional and controlled by `overlay.enabled`. It is separate from the glass backdrop: `overlayElement` visually covers the host container behind the side panel while `backdropElement` stays panel-width and glassy. The overlay uses a dark tint with a low-intensity distortion filter — `backdrop-filter: blur(4px) saturate(108%)`, WebKit fallback, and a reduced-transparency fallback. Overlay pointer hit-testing stays transparent so drag movement reaches the host pan surface; document-level capture requests close on click/tap when `overlay.closeOnPointerDown` is enabled and blocks that click from leaking through.
+The background overlay is an optional visual surface controlled by `overlay.enabled`. It is separate from the glass backdrop: `overlayElement` visually covers the host container behind the side panel while `backdropElement` stays panel-width and glassy. The overlay uses a dark tint with a low-intensity distortion filter: `backdrop-filter: blur(4px) saturate(108%)`, WebKit fallback, and a reduced-transparency fallback.
 
-Overlay close ignores the mounted panel, the toggle, the resize handle, and any target inside `[data-side-panel-no-drag]`. Body-mounted popovers and menus launched from the panel should use that attribute so their option clicks run instead of collapsing the drawer first.
+Outside click/tap close is controlled by `overlay.closeOnPointerDown`. It works whether or not the visual overlay element is enabled. When `overlayElement` exists, the close region is the overlay bounds; otherwise the close region is the viewport. Document-level capture handles the request and blocks the final click from leaking through, while pointer drag movement still reaches the host pan surface.
+
+Outside close ignores the mounted panel, the toggle, the resize handle, and any target inside `[data-side-panel-no-drag]`. Body-mounted popovers and menus launched from the panel should use that attribute so their option clicks run instead of collapsing the drawer first.
 
 ## Open / close animation
 
@@ -66,7 +68,7 @@ The component owns the panel width state, clamps it through the configured const
 - `styles`: optional `gradient` and `width` overrides for the resize-handle line.
 - `toggle`: optional component-owned open/collapse button config: SVG markup, ARIA labels, positioning offsets, travel distance, motion mode, class name, and `onToggle()`. `motion: 'slide'` is the default; `motion: 'fixed'` keeps the toggle anchored while panel surfaces open under it.
 - `animation`: optional slide `durationMs`, `openEasing`, `closeEasing`, and fallback `easing`.
-- `overlay`: optional background overlay config: `enabled`, `fill`, `fillOpaque`, `opacity`, `className`, and `closeOnPointerDown`.
+- `overlay`: optional overlay and outside-close config. `enabled` controls the visual overlay element; `fill`, `fillOpaque`, `opacity`, and `className` style that element; `closeOnPointerDown` controls outside click/tap close.
 - `drag`: optional swipe-to-close config: `enabled`, `closeThreshold`, `velocityThreshold`, `pointerSwipeStartThreshold`, and `touchSwipeStartThreshold`.
 - `minWidth`, `defaultWidth`: resize constraints. `defaultWidth` is the resolved width before the user has ever resized.
 - `getMaxWidth()`: dynamic upper bound (depends on available canvas/pane width).
@@ -112,4 +114,4 @@ Pass `className` to add panel-specific resize-handle overrides without touching 
 
 ## Cleanup
 
-`detachPanel()` removes panel-owned resize-handle/backdrop/overlay DOM and cancels any in-flight slide cleanup while leaving the toggle available for reopening. `destroy()` removes every mounted element and listener, including the global `pointermove` / `pointerup` / `pointercancel` listeners added during an active resize and the mounted-panel pointer listeners added for swipe-to-close. It leaves the host panel and any host-owned state untouched.
+`detachPanel()` removes panel-owned resize-handle/backdrop/overlay DOM and cancels any in-flight slide cleanup while leaving the toggle available for reopening. `destroy()` removes every mounted element and listener, including the global `pointermove` / `pointerup` / `pointercancel` listeners added during an active resize, the document-level outside-close listeners, and the mounted-panel pointer listeners added for swipe-to-close. It leaves the host panel and any host-owned state untouched.
