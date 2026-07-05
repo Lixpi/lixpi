@@ -68,7 +68,11 @@ function loadViewportBridge(): string {
 }
 
 function loadPixiTravelingOutlineRenderer(): string {
-	return readSourceFile('../../utils/animations/gradients/pixiTravelingOutlineRenderer.ts', 'utils/animations/gradients/pixiTravelingOutlineRenderer.ts')
+	return readSourceFile('../../../packages/lixpi/canvas-engine/src/frontend/rendering/progress/pixiTravelingOutlineRenderer.ts', 'packages/lixpi/canvas-engine/src/frontend/rendering/progress/pixiTravelingOutlineRenderer.ts')
+}
+
+function loadWorkspaceLoadingOutline(): string {
+	return readSourceFile('workspaceLoadingOutline.ts')
 }
 
 function loadWorkspaceCanvasSvelte(): string {
@@ -814,6 +818,10 @@ describe('Workspace canvas — video node interaction', () => {
 			expectSourceToContain(ts, "node.type === 'uploadPlaceholder'")
 			expectSourceToContain(ts, 'function createUploadPlaceholderNode(node: UploadPlaceholderCanvasNode): HTMLElement')
 			expectSourceToContain(scss, '.workspace-upload-placeholder-node')
+			expectSourceToContain(ts, 'workspace-upload-placeholder-loading-spinner ai-response-loading-spinner')
+			const loadingSpinnerBlock = extractBlock(scss, '.workspace-upload-placeholder-loading-spinner')
+			expectExcerptNotToContain(loadingSpinnerBlock, 'border:', '.workspace-upload-placeholder-loading-spinner')
+			expectExcerptNotToContain(loadingSpinnerBlock, 'animation: spin', '.workspace-upload-placeholder-loading-spinner')
 		})
 	})
 
@@ -1154,6 +1162,22 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 		expectSourceToContain(svelte, 'viewport,')
 		expectSourceToContain(svelte, 'workspaceStore.updateCanvasState(stateToPersist)')
 		expectSourceToContain(svelte, 'canvasState: stateToPersist')
+	})
+
+	it('does not expose route workspace canvas state until the workspace load succeeds', () => {
+		expectSourceToContain(svelte, 'LoadingStatus')
+		expectSourceToContain(svelte, 'let canvasState = $derived(isRouteWorkspaceLoaded && $workspaceStore.meta.loadingStatus === LoadingStatus.success ? $workspaceStore.data.canvasState : null)')
+	})
+
+	it('keeps workspace load feedback in the TypeScript canvas layer', () => {
+		const loadingOutlineTs = loadWorkspaceLoadingOutline()
+
+		expectSourceToContain(ts, 'workspaceLoadingOutline = createWorkspaceLoadingOutline({')
+		expectSourceToContain(ts, 'workspaceLoadingOutline?.setErrorMessage(getWorkspaceLoadErrorMessage(data.error))')
+		expectSourceToContain(loadingOutlineTs, 'class WorkspaceLoadingOutline implements WorkspaceLoadingOutlineInstance')
+		expectSourceToContain(loadingOutlineTs, 'setErrorMessage = (message: string | null): void')
+		expectSourceToContain(loadingOutlineTs, 'className="workspace-loading-error"')
+		expectSourceNotToContain(svelte, 'workspace-loading-error')
 	})
 
 	it('refuses to persist a debounced viewport after a newer viewport arrives', () => {
@@ -2232,13 +2256,13 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 describe('Workspace canvas — collision resolution ownership', () => {
 	const ts = loadTs()
 	const svelte = loadWorkspaceCanvasSvelte()
-	const collisionTs = readSourceFile('../utils/resolveCollisions.ts', 'utils/resolveCollisions.ts')
+	const collisionTs = readSourceFile('../../../packages/lixpi/canvas-engine/src/shared/collision/resolve-collisions.ts', 'packages/lixpi/canvas-engine/src/shared/collision/resolve-collisions.ts')
 
 	it('keeps toolbar insertion collision logic out of the Svelte wrapper', () => {
 		expectSourceToContain(svelte, 'renderer?.insertNodeAtViewportCenter(documentNode)')
 		expectSourceToContain(svelte, 'renderer?.insertNodeAtViewportCenter(imageNode)')
 		expectSourceNotToContain(svelte, ['context', 'RegionNode'].join(''))
-		expectSourceNotToContain(svelte, "from '$src/infographics/utils/resolveCollisions.ts'")
+		expectSourceNotToContain(svelte, 'resolveCollisions')
 		expectSourceNotToContain(svelte, 'resolveInsertionCollisions')
 		expectSourceNotToContain(svelte, 'computeViewportCenterInsertionPosition')
 		expectSourceNotToContain(svelte, ['context', 'RegionCl', 'oudsIntersect'].join(''))
@@ -2277,8 +2301,8 @@ describe('Workspace canvas — collision resolution ownership', () => {
 
 	it('uses the shared generic resolver rather than a workspace-specific duplicate', () => {
 		expectSourceToContain(collisionTs, 'export function resolveCollisions(')
-		expectSourceToContain(collisionTs, 'shouldResolvePair?: (a: NodeBox, b: NodeBox) => boolean')
-		expectSourceToContain(ts, "import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'")
+		expectSourceToContain(collisionTs, 'shouldResolvePair && !shouldResolvePair(originalA, originalB)')
+		expectSourceToContain(ts, "from '@lixpi/canvas-engine'")
 		expectSourceToContain(ts, 'resolveCollisions(collisionPlan.nodeBoxes')
 	})
 
@@ -2457,7 +2481,9 @@ describe('Image loading — PIXI ownership and URL resolution strategy', () => {
 
 	it('render() accepts optional newWorkspaceId parameter and updates workspaceId', () => {
 		expect(ts).toMatch(/render\(.*newWorkspaceId\?: string/)
-		expectSourceToContain(ts, 'if (newWorkspaceId) workspaceId = newWorkspaceId')
+		expectSourceToContain(ts, 'const transitionPlan = planWorkspaceRenderTransition({')
+		expectSourceToContain(ts, 'workspaceId = transitionPlan.routeWorkspaceId')
+		expectSourceToContain(ts, 'renderedWorkspaceId')
 	})
 })
 

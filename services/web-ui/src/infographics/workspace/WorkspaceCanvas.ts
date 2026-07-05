@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid'
 import {
     NATS_SUBJECTS,
     STREAM_STATUS,
+    LoadingStatus,
     type CanvasState,
     type CanvasNode,
     type DocumentCanvasNode,
@@ -75,6 +76,14 @@ import {
 import type { AiLineageProjectionScope } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import {
+    getAdaptiveBoundedZoomScalingOptions,
+    getCanvasChromeScreenLayout,
+    getResizeHandleScaledSizes,
+    resolveCollisions,
+    scaleCanvasChromeToScreenForZoom,
+    scaleCanvasChromeWorldSizeForZoom,
+} from '@lixpi/canvas-engine'
+import {
     mountReadOnlyAiChatThreadProjection,
     type ReadOnlyAiChatThreadRendererInstance,
 } from '$src/components/proseMirror/readOnlyAiChatThreadRenderer.ts'
@@ -89,10 +98,8 @@ import { createAudioNodeHandler, type AudioNodeHandlerControl } from '$src/infog
 import { createDocumentNodeHandler } from '$src/infographics/workspace/rendering/documentNodeHandler.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
-import { getAdaptiveBoundedZoomScalingOptions, getCanvasChromeScreenLayout, getResizeHandleScaledSizes, scaleCanvasChromeToScreenForZoom, scaleCanvasChromeWorldSizeForZoom } from '$src/infographics/utils/zoomScaling.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { createSidePanel, type SidePanelInstance } from '$src/components/sidePanel/index.ts'
-import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import {
     GeneratedMediaRebalancePipeline,
     reflowStackedBranchMarkers,
@@ -122,10 +129,11 @@ import {
     type PendingCanvasVisualCommit,
 } from '$src/infographics/workspace/workspaceRenderStatePlan.ts'
 import { shouldPreserveLiveViewportForViewportOnlyRender } from '$src/infographics/workspace/workspaceViewportStatePlan.ts'
+import { planWorkspaceRenderTransition } from '$src/infographics/workspace/workspaceRenderTransitionPlan.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
-import { createShiftingGradientBackground } from '$src/utils/animations/gradients/shiftingGradientRenderer.ts'
-import { CircularGlassMaterial } from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
+import { loadWorkspaceRouteData } from '$src/services/router-service.ts'
+import { CircularGlassMaterial, createShiftingGradientBackground } from '@lixpi/canvas-engine/frontend/rendering'
 import { tPatternSvgTexture } from '$src/svgIcons/svgTextures.ts'
 import { settings, type WorkspaceCollisionFlowSettings, type WorkspaceCollisionNodeTypeSettings } from '$src/settings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
@@ -150,6 +158,7 @@ import {
 } from '$src/services/ai-image-branching.ts'
 import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
+import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { extractContentFromProseMirror } from '$src/services/ai-chat-thread-service.ts'
 import {
     createGenericAiModelDropdown,
@@ -167,6 +176,7 @@ import {
     createAiModelMenuContent,
 } from '$src/components/aiModelControls/index.ts'
 import { createPixiMediaLayer, type GeneratingMediaOutlineTarget, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
+import { createWorkspaceLoadingOutline, type WorkspaceLoadingOutlineInstance } from '$src/infographics/workspace/workspaceLoadingOutline.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 import { createMediaLibraryPanel, type FeatureExtractionModelContext, type FeatureExtractionModelControlsInstance } from '$src/infographics/workspace/mediaLibraryPanel.ts'
 import { setPendingExtractionContext, getPendingExtractionContext, clearPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody, type ExtractionTabContext } from '$src/infographics/workspace/extractionTab.ts'
@@ -993,7 +1003,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     let connectionManager: WorkspaceConnectionManager | null = null
     let pixiMediaLayer: PixiMediaLayer | null = null
+    let workspaceLoadingOutline: WorkspaceLoadingOutlineInstance | null = null
     let viewportBridge: ViewportBridge | null = null
+    let lastWorkspaceLoadingStatus = workspaceStore.getMeta('loadingStatus') as LoadingStatus
+    let renderedWorkspaceId: string | null = currentCanvasState ? workspaceId : null
     let mediaChromeViewportEl: HTMLDivElement | null = null
     let generatedMediaChromeLayerEl: HTMLDivElement | null = null
     let pendingGeneratedMediaIconLayerEl: HTMLDivElement | null = null
@@ -1147,6 +1160,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         getWorkspaceId: () => workspaceId,
         selectionColors: pixiSelectionColors,
         onImageIntrinsicSize: handleImageIntrinsicSize,
+    })
+    workspaceLoadingOutline = createWorkspaceLoadingOutline({
+        paneEl,
+        onRetry: () => {
+            const targetWorkspaceId = workspaceId
+            if (!targetWorkspaceId) return
+            workspaceLoadingOutline?.setErrorMessage(null)
+            void loadWorkspaceRouteData(targetWorkspaceId)
+        },
     })
     // Register the VideoCanvasNode handler with the PIXI media layer's
     // mediaNodeRegistry. The handler owns the poster/placeholder sprite and the
@@ -12692,11 +12714,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ` as HTMLDivElement
         nodeEl.appendChild(content)
 
-        // Converting uploads show the app's shared dual-ring spinner (top-right).
         if (node.status === 'converting') {
-            const spinner = document.createElement('span')
-            spinner.className = 'workspace-upload-placeholder-spinner'
-            spinner.setAttribute('aria-label', 'Converting')
+            const spinner = html`<span className="workspace-upload-placeholder-loading-spinner ai-response-loading-spinner" aria-hidden="true"></span>` as HTMLSpanElement
             nodeEl.appendChild(spinner)
         }
 
@@ -13318,6 +13337,54 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return newNodeKey !== lastNodeStructureKey || newDocsKey !== lastDocumentsKey || newThreadsKey !== lastThreadsKey
     }
 
+    function clearWorkspaceVisualContent(newDocuments: Document[], newAiChatThreads: AiChatThread[]): void {
+        destroyGeneratedMediaInfoRenderers()
+        destroyBranchMarkerReasoningTooltips()
+        destroyVideoControlInstances()
+        viewportEl.innerHTML = ''
+        selectionRectEl = null
+        selectionGroupOverlayEl = null
+        selectedNodeIds = new Set()
+        selectedEdgeId = null
+        clearMarqueeInteractionState()
+        connectionManager?.syncNodes([])
+        connectionManager?.syncEdges([])
+        connectionManager?.render()
+        syncPixiMediaLayer(null)
+        lastNodeStructureKey = getNodeStructureKey(null)
+        lastVisualSyncKey = getCanvasVisualSyncKey(null)
+        lastDocumentsKey = getDocumentsKey(newDocuments)
+        lastThreadsKey = getAiChatThreadsKey(newAiChatThreads)
+
+        for (const [, { editor, aiService }] of documentEditors) {
+            if (editor?.destroy) editor.destroy()
+            if (aiService?.disconnect) aiService.disconnect()
+        }
+        documentEditors.clear()
+
+        for (const [threadId, { editor, aiService, gradientCleanup }] of threadEditors) {
+            if (editor?.destroy) editor.destroy()
+            if (aiService?.disconnect) aiService.disconnect()
+            if (gradientCleanup) gradientCleanup()
+            promptInputController.unregisterThreadEditor(threadId)
+        }
+        threadEditors.clear()
+    }
+
+    function getWorkspaceLoadErrorMessage(error: unknown): string {
+        const message = error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+                ? error
+                : ''
+        if (message.toLowerCase().includes('timeout')) {
+            return 'The connection timed out while loading this workspace. Check the network connection and retry.'
+        }
+        return message
+            ? `The workspace could not be loaded: ${message}`
+            : 'The workspace could not be loaded. Check the network connection and retry.'
+    }
+
     function refreshActiveAiChatPanelWhenContentLoads(): void {
         if (!activeAiChatThreadId) return
         if (!activeAiChatPanelEl || activeAiChatPanelThreadId !== activeAiChatThreadId) return
@@ -13555,6 +13622,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         scheduleGeneratedMediaChromeSync()
         syncBranchMarkerNodeContents()
     })
+    const unsubscribeWorkspaceStore = workspaceStore.subscribe(({ meta, data }) => {
+        lastWorkspaceLoadingStatus = meta.loadingStatus
+        if (meta.loadingStatus === LoadingStatus.error) {
+            workspaceLoadingOutline?.setVisible(false)
+            workspaceLoadingOutline?.setErrorMessage(getWorkspaceLoadErrorMessage(data.error))
+        } else if (meta.loadingStatus === LoadingStatus.loading) {
+            workspaceLoadingOutline?.setErrorMessage(null)
+        }
+    })
 
     function insertNodeAtViewportCenterInternal(node: WorkspaceCanvasNodeInsertion, statePatch: WorkspaceCanvasInsertionStatePatch = {}) {
         const baseCanvasState: CanvasState = currentCanvasState ?? {
@@ -13606,8 +13682,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return markUploadPlaceholderFailedInternal(placeholderNodeId, message)
         },
         render(newCanvasState: CanvasState | null, newDocuments: Document[], newAiChatThreads: AiChatThread[] = [], newWorkspaceId?: string) {
-            const workspaceChanged = Boolean(newWorkspaceId && newWorkspaceId !== workspaceId)
-            if (newWorkspaceId) workspaceId = newWorkspaceId
+            const transitionPlan = planWorkspaceRenderTransition({
+                currentRouteWorkspaceId: workspaceId,
+                nextRouteWorkspaceId: newWorkspaceId,
+                renderedWorkspaceId,
+                incomingCanvasState: newCanvasState,
+                loadingStatus: lastWorkspaceLoadingStatus,
+            })
+            const workspaceChanged = transitionPlan.shouldTreatAsWorkspaceChanged
+            workspaceId = transitionPlan.routeWorkspaceId
+            workspaceLoadingOutline?.setVisible(transitionPlan.shouldShowLoadingOutline)
             if (workspaceChanged) pendingLocalCanvasVisualCommit = null
 
             const renderStatePlan = mergeIncomingCanvasStateWithPendingVisualCommit({
@@ -13645,6 +13729,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 resizingNodeId = null
                 extractionSessionHistoryLoaded = false
                 liveAiChatThreadContentOverrides.clear()
+                partialImageTracker.clear()
+                videoGenerationTracker.clear()
+                generatingReferenceNodeIdsByThread.clear()
+                finalizingGeneratedImageRunKeysByNodeId.clear()
+                for (const timer of finalizingGeneratedImageOutlineTimersByNodeId.values()) window.clearTimeout(timer)
+                finalizingGeneratedImageOutlineTimersByNodeId.clear()
                 for (const pendingRunId of pendingFeatureExtractionRuns.keys()) clearPendingExtractionContext(pendingRunId)
                 pendingFeatureExtractionRuns.clear()
                 apiFeatureExtractionRuns.clear()
@@ -13688,7 +13778,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             syncActiveAiChatPanelFromState()
 
             // 1. Rebuild DOM first so image nodes exist when PIXI syncs DOM ownership.
-            if (needsRerender) {
+            if (transitionPlan.shouldClearVisualContent) {
+                clearWorkspaceVisualContent(newDocuments, newAiChatThreads)
+            } else if (needsRerender) {
                 renderNodes()
                 lastDocumentsKey = getDocumentsKey(newDocuments)
                 lastThreadsKey = getAiChatThreadsKey(newAiChatThreads)
@@ -13697,6 +13789,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (aiChatPanelState.isOpen && !activeAiChatPanelEl) renderActiveAiChatPanel()
                 if (!aiChatPanelState.isOpen && activeAiChatPanelEl && !activeClosingRightSidePanel) destroyActiveAiChatPanel(false)
             }
+            if (currentCanvasState) renderedWorkspaceId = workspaceId
             refreshBranchMarkerPreviewsForLoadedThreads(newAiChatThreads)
             reattachDetachedCanvasRunListenersForActiveMarkers()
 
@@ -13764,6 +13857,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             window.removeEventListener('lixpi:open-extraction-tab', onOpenExtractionPanel)
             window.removeEventListener('lixpi:open-media-library-features', onOpenMediaLibraryFeatures)
             unsubscribeAiModelsStore()
+            unsubscribeWorkspaceStore()
             paneEl.removeEventListener('pointerdown', handlePanePointerDown, true)
             paneEl.removeEventListener('mousemove', handlePaneMouseMove, true)
             paneEl.removeEventListener('mouseleave', handlePaneMouseLeave)
@@ -13814,6 +13908,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             expandedBranchLineInfoNodeIds.clear()
             pixiMediaLayer?.destroy()
             pixiMediaLayer = null
+            workspaceLoadingOutline?.destroy()
+            workspaceLoadingOutline = null
             if (panZoom) {
                 panZoom.destroy()
             }

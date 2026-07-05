@@ -8,15 +8,13 @@
 //
 // See documentation/canvas/VISUAL-EFFECTS.md for full technical details
 
-import { Easing } from '$src/utils/animations/easing.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import { Easing } from '../../animation/easing.ts'
 import {
     FreeformGradientRenderer,
     type FreeformGradientColor,
     type FreeformGradientHexColorSet,
     type FreeformGradientPoint,
-} from '$src/utils/animations/gradients/freeformGradient.ts'
-import { settings } from '$src/settings.ts'
+} from './freeformGradient.ts'
 
 export type ShiftingGradientColorSet = FreeformGradientHexColorSet
 
@@ -41,6 +39,14 @@ type SubscribedCanvas = {
 const BITMAP_WIDTH = FreeformGradientRenderer.bitmapSize.width
 const BITMAP_HEIGHT = FreeformGradientRenderer.bitmapSize.height
 const ANIMATION_DURATION_MS = 500
+export const DEFAULT_SHIFTING_GRADIENT_COLORS: ShiftingGradientColorSet = ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
+
+function createCanvasElement(width: number, height: number): HTMLCanvasElement {
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    return canvas
+}
 
 export class ShiftingGradientRenderer {
     private static instances: Map<string, ShiftingGradientRenderer> = new Map()
@@ -73,7 +79,7 @@ export class ShiftingGradientRenderer {
         this.renderGradient()
     }
 
-    static getInstance(colors: ShiftingGradientColorSet = settings.gradient.styles.shiftingColors): ShiftingGradientRenderer {
+    static getInstance(colors: ShiftingGradientColorSet = DEFAULT_SHIFTING_GRADIENT_COLORS): ShiftingGradientRenderer {
         const instanceKey = ShiftingGradientRenderer.getColorSetKey(colors)
         let renderer = ShiftingGradientRenderer.instances.get(instanceKey)
 
@@ -98,7 +104,7 @@ export class ShiftingGradientRenderer {
             return { canvas, ctx: canvas.getContext('2d')! }
         }
 
-        const canvas = html`<canvas width=${BITMAP_WIDTH} height=${BITMAP_HEIGHT}></canvas>` as HTMLCanvasElement
+        const canvas = createCanvasElement(BITMAP_WIDTH, BITMAP_HEIGHT)
         return { canvas, ctx: canvas.getContext('2d')! }
     }
 
@@ -235,7 +241,7 @@ export class ShiftingGradientRenderer {
         if (tileW > 0 && tileH > 0) {
             let tileSource: CanvasImageSource = image
             if (options.tintColor) {
-                const tintCanvas = html`<canvas width=${tileW} height=${tileH}></canvas>` as HTMLCanvasElement
+                const tintCanvas = createCanvasElement(tileW, tileH)
                 const tintCtx = tintCanvas.getContext('2d')
                 if (tintCtx) {
                     tintCtx.clearRect(0, 0, tileW, tileH)
@@ -304,17 +310,16 @@ export function createShiftingGradientBackground(container: HTMLElement, options
     destroy: () => void
     triggerAnimation: () => void
 } {
-    const canvasStyle = {
-        position: 'absolute',
-        top: '0',
-        left: '0',
-        width: '100%',
-        height: '100%',
-        zIndex: '0',
-        pointerEvents: 'none',
-        borderRadius: 'inherit',
-    }
-    const canvas = html`<canvas className="shifting-gradient-canvas" style=${canvasStyle}></canvas>` as HTMLCanvasElement
+    const canvas = document.createElement('canvas')
+    canvas.className = 'shifting-gradient-canvas'
+    canvas.style.position = 'absolute'
+    canvas.style.top = '0'
+    canvas.style.left = '0'
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
+    canvas.style.zIndex = '0'
+    canvas.style.pointerEvents = 'none'
+    canvas.style.borderRadius = 'inherit'
 
     const updateCanvasSize = () => {
         const rect = container.getBoundingClientRect()

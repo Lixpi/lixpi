@@ -100,7 +100,7 @@ The toggle switch uses explicit `width`/`height` when supplied. If `height` is o
 ## Animations
 
 ### Entrance Animation
-- Duration: Uses `ENTRANCE_ANIMATION_DURATION` constant
+- Duration: 50ms
 - Easing: `easeCubicIn`
 - Effect: Slides in from 30px left + fade in
 

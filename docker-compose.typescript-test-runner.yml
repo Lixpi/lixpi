@@ -91,6 +91,8 @@ services:
             - ./services/web-ui/pnpm-workspace.yaml:/usr/src/service/web-ui/pnpm-workspace.yaml:cached
             - ./services/web-ui/vitest.config.ts:/usr/src/service/web-ui/vitest.config.ts:cached
             - ./services/web-ui/src:/usr/src/service/web-ui/src:cached
+            - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/web-ui/packages/lixpi/canvas-engine/package.json:ro,cached
+            - ./packages/lixpi/canvas-engine/src:/usr/src/service/web-ui/packages/lixpi/canvas-engine/src:ro,cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/web-ui/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/web-ui/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
@@ -109,6 +111,7 @@ services:
             # --- web-ui domain: persisted node_modules (see the
             #     typescript-test-runner-node-modules-* comment above) ---
             - typescript-test-runner-node-modules-web-ui:/usr/src/service/web-ui/node_modules
+            - typescript-test-runner-node-modules-web-ui-canvas-engine:/usr/src/service/web-ui/packages/lixpi/canvas-engine/node_modules
             - typescript-test-runner-node-modules-web-ui-constants-ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/node_modules
             - typescript-test-runner-node-modules-web-ui-debug-tools-ts:/usr/src/service/web-ui/packages/lixpi/debug-tools/ts/node_modules
             - typescript-test-runner-node-modules-web-ui-nats-service-ts:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/node_modules
@@ -207,6 +210,7 @@ volumes:
     typescript-test-runner-node-modules-api-nats-auth-callout-service:
     typescript-test-runner-node-modules-api-prosemirror:
     typescript-test-runner-node-modules-web-ui:
+    typescript-test-runner-node-modules-web-ui-canvas-engine:
     typescript-test-runner-node-modules-web-ui-constants-ts:
     typescript-test-runner-node-modules-web-ui-debug-tools-ts:
     typescript-test-runner-node-modules-web-ui-nats-service-ts:

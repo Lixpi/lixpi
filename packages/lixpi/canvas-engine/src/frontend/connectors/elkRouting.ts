@@ -3,7 +3,7 @@
 
 // Use the bundled browser version (no web-worker dependency)
 import ELK from 'elkjs/lib/elk.bundled.js'
-import type { EdgeConfig, NodeConfig } from '$src/infographics/connectors/types.ts'
+import type { EdgeConfig, NodeConfig } from './types.ts'
 
 type ElkNode = {
     id: string

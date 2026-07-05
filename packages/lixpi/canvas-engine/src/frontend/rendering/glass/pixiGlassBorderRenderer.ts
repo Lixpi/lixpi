@@ -8,11 +8,11 @@ import {
     Sprite,
     Texture,
 } from 'pixi.js'
-import { ClosedGlassStripMaterial, type GlassMaterialStyle } from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
+import { ClosedGlassStripMaterial, type GlassMaterialStyle } from './pixiGlassMaterial.ts'
 import {
     getRoundedOutlineFrame,
     getRoundedOutlinePerimeter,
-} from '$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts'
+} from '../progress/pixiTravelingOutlineRenderer.ts'
 
 export type PixiGlassBorderStyle = {
     enabled: boolean

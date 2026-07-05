@@ -35,19 +35,17 @@ import {
 import { createPixiEdgeRenderer, type PixiEdgeRenderer } from '$src/infographics/workspace/rendering/pixiEdgeRenderer.ts'
 import { createMediaNodeRegistry, type MediaNodeRegistry } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
 import {
+    PixiGlassBorderRenderer,
     getRoundedOutlinePerimeter,
     PixiTravelingOutlineRenderer,
+    type PixiGlassBorderDatum,
     type PixiTravelingOutlineDatum,
     type PixiTravelingOutlineDirection,
-} from '$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts'
-import {
-    PixiGlassBorderRenderer,
-    type PixiGlassBorderDatum,
-} from '$src/utils/animations/gradients/pixiGlassBorderRenderer.ts'
+} from '@lixpi/canvas-engine/frontend/rendering'
 import {
     getAdaptiveBoundedZoomScalingOptions,
     scaleCanvasChromeWorldSizeForZoom,
-} from '$src/infographics/utils/zoomScaling.ts'
+} from '@lixpi/canvas-engine'
 import { settings } from '$src/settings.ts'
 
 type PixiImageEntry = {
@@ -807,9 +805,14 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function sync(canvasState: CanvasState | null): void {
         lastState = canvasState
-        if (!canvasState || health !== 'ready' || destroyed) {
+        if (!canvasState) {
+            clearPixiScene()
+            return
+        }
+
+        if (health !== 'ready' || destroyed) {
             debugLog('sync-skipped', {
-                hasCanvasState: Boolean(canvasState),
+                hasCanvasState: true,
                 health,
                 destroyed,
             })
@@ -889,6 +892,58 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             entriesAfter: verbose ? getDebugEntrySnapshots() : entries.size,
             registryDispatchedNodes: [...registryDispatchedNodes],
         }))
+    }
+
+    function clearPixiScene(): void {
+        if (destroyed) return
+        debugLog('sync-clear-start', {
+            health,
+            entries: entries.size,
+            registryDispatchedNodes: [...registryDispatchedNodes],
+            edgeCount: latestPixiEdges.length,
+            generatingOutlineCount: generatingImageNodeOutlines.size,
+        })
+
+        for (const [nodeId, entry] of entries) {
+            entry.requestId++
+            entry.requestedTier = null
+            entry.loadedTier = null
+            releaseTexture(entry.textureKey)
+            imageLayer.removeChild(entry.sprite)
+            imageLayer.removeChild(entry.spriteMask)
+            imageLayer.removeChild(entry.colorRect)
+            entry.sprite.mask = null
+            entry.sprite.renderable = false
+            entry.spriteMask.renderable = false
+            entry.colorRect.renderable = false
+            entry.sprite.destroy()
+            entry.spriteMask.destroy()
+            entry.colorRect.destroy()
+            entries.delete(nodeId)
+        }
+        spatialIndex.clear()
+
+        for (const nodeId of registryDispatchedNodes) {
+            mediaNodeRegistry.dispatchRemove(nodeId)
+        }
+        registryDispatchedNodes.clear()
+
+        generatingImageNodeOutlines.clear()
+        generatingBorderRenderer.sync([])
+        latestPixiEdges = []
+        edgeRenderer?.render(latestPixiEdges, currentViewport)
+        hideForegroundGraphics(marqueeGraphics)
+        hideForegroundGraphics(groupOverlayGraphics)
+
+        if (health === 'ready') {
+            scheduleRender()
+        }
+        debugLog('sync-clear-end', {
+            entries: entries.size,
+            registryDispatchedNodes: [...registryDispatchedNodes],
+            edgeCount: latestPixiEdges.length,
+            generatingOutlineCount: generatingImageNodeOutlines.size,
+        })
     }
 
     function dispatchNonImageMediaNodes(canvasState: CanvasState): void {

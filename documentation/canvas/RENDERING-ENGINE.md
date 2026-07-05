@@ -22,7 +22,7 @@ The renderers map to concrete modules:
 |----------|------|--------|
 | PIXI media layer | Image pixels, video posters/placeholders, generated-image progress outlines, connector pixels, image-node selection chrome, marquee/group overlays | [`pixiMediaLayer.ts`](../../services/web-ui/src/infographics/workspace/pixiMediaLayer.ts) |
 | DOM video chrome | Completed video playback and controls in the transformed chrome layer (browser-composited `<video>`) | See [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md) |
-| Reusable PIXI outline | Traveling progress outlines | [`utils/animations/gradients/pixiTravelingOutlineRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts) |
+| Reusable PIXI outline | Traveling progress outlines | [`pixiTravelingOutlineRenderer.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/progress/pixiTravelingOutlineRenderer.ts) |
 
 The current path is **renderer ownership by workload**: DOM owns text-rich controls and interaction structure; PIXI owns high-volume pixels, connector strokes, and canvas chrome.
 
@@ -45,23 +45,23 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `workspace/aiChatPanelState.ts` | Persisted AI Chat panel defaults and context-chip sanitization |
 | `workspace/mediaLibraryPanel.ts` | Framework-agnostic Media Library surface: Feature adapter, saved image/video browsing, scope filters, and insertion actions |
 | `workspace/media-library-panel.scss` | Right-side Media Library layout and full-content wrapping rules |
-| `utils/resolveCollisions.ts` | Shared geometry-agnostic rectangle collision resolver used by workspace insertion, generated image commit, and drag-release cleanup paths |
+| `packages/lixpi/canvas-engine/src/shared/collision/resolve-collisions.ts` | Shared geometry-agnostic rectangle collision resolver used by workspace insertion, generated image commit, and drag-release cleanup paths |
 | `workspace/pixiMediaLayer.ts` | PIXI v8 media layer for image pixels, video posters/placeholders, and generated-image outline synchronization — sprite registry, texture cache, LoD-tier loader, visibility scanner, prefetch scheduler |
 | `workspace/pixiMediaLayerLogic.ts` | Pure helpers: tier ranking, world-position math, src URL building, LoD-size param injection, world-rect math |
-| `utils/animations/gradients/pixiTravelingOutlineRenderer.ts` | Reusable PIXI traveling outline renderer — rounded-path math, track/segment painting, shared easing, active-only animation loop |
+| `packages/lixpi/canvas-engine/src/frontend/rendering/progress/pixiTravelingOutlineRenderer.ts` | Reusable PIXI traveling outline renderer — rounded-path math, track/segment painting, shared easing, active-only animation loop |
 | `workspace/pixiImageDecoder.ts` | Six-worker decode pool: round-robin dispatch with per-worker request tracking |
 | `workspace/pixiImageDecodeWorker.ts` | Worker body: `fetch` → `createImageBitmap` and post the bitmap back |
 | `workspace/rendering/pixiEdgeRenderer.ts` | PIXI edge renderer (diffed; reuses `Graphics`) |
 | `workspace/rendering/viewportBridge.ts` | Single call site that applies a viewport to DOM CSS and PIXI media |
 | `workspace/branchTreeLayout.ts` | Builds the generated-media branch forest, lays each lineage out as a balanced tidy tree, and feeds rigid per-tree boxes to the shared resolver (see [Collision Resolution](./COLLISION-RESOLUTION.md)) |
-| `utils/layoutTree.ts` | Pure, geometry-agnostic block-allocation tidy-tree layout reused by `branchTreeLayout.ts` |
+| `packages/lixpi/canvas-engine/src/shared/tree-layout/layout-tree.ts` | Pure, geometry-agnostic block-allocation tidy-tree layout reused by `branchTreeLayout.ts` |
 | `workspace/rendering/mediaNodeRegistry.ts` | Dispatches non-image media nodes to specialized handlers; video nodes are handled by `videoNodeHandler.ts` |
 | `workspace/rendering/videoNodeHandler.ts` | Video node renderer that owns PIXI poster/placeholder sprites and the authenticated `HTMLVideoElement` consumed by DOM video chrome |
 | `workspace/workspaceRenderStatePlan.ts` | Pure render-state reconciliation for pending local visual commits while store acknowledgements arrive |
 | `workspace/workspaceViewportStatePlan.ts` | Pure stale viewport-only render guard; keeps delayed store viewport updates from overriding the live transform |
 | `workspace/WorkspaceConnectionManager.ts` | Edge creation, proximity connect, candidate detection, and the data feed for `pixiEdgeRenderer` |
-| `connectors/index.ts` | Connector exports for path helpers and connection utilities |
-| `utils/zoomScaling.ts` | Shared bounded zoom-scaling helpers for connector chrome, canvas bubble menus, generated-media icon strips, and resize handles |
+| `packages/lixpi/canvas-engine/src/frontend/connectors/index.ts` | Frontend connector exports for path helpers and connection utilities |
+| `packages/lixpi/canvas-engine/src/shared/zoom-scaling/zoom-scaling.ts` | Shared bounded zoom-scaling helpers for connector chrome, canvas bubble menus, generated-media icon strips, and resize handles |
 
 Use the incremental canvas architecture documented here as the implementation recipe: preserve the existing `infographics/workspace` entrypoint, harden the PIXI media layer, and move one renderer responsibility at a time only after parity checks pass.
 
@@ -153,7 +153,7 @@ There is no separate provenance layer: a branch lineage's first generated image 
 
 ### Canvas Chrome Zoom Scaling
 
-Canvas chrome uses one shared scaling vocabulary from [`zoomScaling.ts`](../../services/web-ui/src/infographics/utils/zoomScaling.ts):
+Canvas chrome uses one shared scaling vocabulary from [`zoom-scaling.ts`](../../packages/lixpi/canvas-engine/src/shared/zoom-scaling/zoom-scaling.ts):
 
 - **World-size helpers** return CSS or geometry values in canvas/world units. Use them for elements that live inside a viewport-transformed DOM layer, for connector marker offsets, and for connector hit areas. The viewport transform multiplies those values by `zoom` after layout.
 - **Screen-size helpers** return final screen-pixel values. Use them for screen-space overlays and PIXI graphics that project world points manually into screen coordinates.

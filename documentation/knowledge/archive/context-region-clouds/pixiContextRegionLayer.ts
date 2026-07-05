@@ -9,9 +9,9 @@ import {
 
 import { settings } from '$src/settings.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { Easing } from '$src/utils/animations/easing.ts'
-import { FreeformGradientRenderer } from '$src/utils/animations/gradients/freeformGradient.ts'
-import { scaleCanvasChromeForZoom } from '$src/infographics/utils/zoomScaling.ts'
+import { Easing } from '@lixpi/canvas-engine/frontend/animation'
+import { FreeformGradientRenderer } from '@lixpi/canvas-engine/frontend/rendering'
+import { scaleCanvasChromeForZoom } from '@lixpi/canvas-engine'
 import { getVisibleWorldRect, type PixiRendererHealth, type WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import {
     getContextRegionCloudBleed,

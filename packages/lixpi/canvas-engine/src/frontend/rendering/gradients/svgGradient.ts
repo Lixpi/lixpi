@@ -1,4 +1,4 @@
-import { Easing } from '$src/utils/animations/easing.ts'
+import { Easing } from '../../animation/easing.ts'
 
 type SvgGradientSelection = any
 

@@ -18,7 +18,7 @@ only through the Dockerized test-runner:
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui
 
 # Run a specific test file
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/infographics/utils/zoomScaling.test.ts
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/infographics/workspace/workspace-canvas.test.ts
 ```
 
 ## Prohibited Verification

@@ -15,6 +15,7 @@ WORKDIR /usr/src/service
 
 # Copy the rest of app's source code
 COPY ./services/web-ui/ .
+COPY ./packages/lixpi/canvas-engine ./packages/lixpi/canvas-engine
 COPY ./packages/lixpi/constants ./packages/lixpi/constants
 COPY ./packages/lixpi/nats-service ./packages/lixpi/nats-service
 COPY ./packages/lixpi/debug-tools ./packages/lixpi/debug-tools

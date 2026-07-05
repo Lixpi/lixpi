@@ -2,7 +2,7 @@
 // Provides both XYFlow standard paths and custom path types
 
 import { getBezierPath, getStraightPath, getSmoothStepPath, Position } from '@xyflow/system'
-import type { PathType, ComputedPath, AnchorPosition, NodeConfig } from '$src/infographics/connectors/types.ts'
+import type { PathType, ComputedPath, AnchorPosition, NodeConfig } from './types.ts'
 
 // Simple node bounds type for path obstacle avoidance
 type NodeBounds = {

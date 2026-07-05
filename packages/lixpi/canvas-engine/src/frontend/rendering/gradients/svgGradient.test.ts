@@ -1,7 +1,7 @@
 'use strict'
 
 import { describe, expect, it, vi } from 'vitest'
-import { Easing } from '../easing.ts'
+import { Easing } from '../../animation/easing.ts'
 import { SvgGradientRenderer } from './svgGradient.ts'
 
 type StopRecord = {

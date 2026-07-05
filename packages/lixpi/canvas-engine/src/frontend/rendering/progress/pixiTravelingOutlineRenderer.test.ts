@@ -1,7 +1,7 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
-import { Easing } from '$src/utils/animations/easing.ts'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Easing } from '../../animation/easing.ts'
 import { Container } from 'pixi.js'
 import {
     PixiTravelingOutlineRenderer,
@@ -90,6 +90,18 @@ vi.mock('pixi.js', () => {
         Mesh: FakeMesh,
         MeshGeometry: FakeMeshGeometry,
         Texture: FakeTexture,
+    }
+})
+
+vi.mock('../glass/pixiGlassMaterial.ts', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../glass/pixiGlassMaterial.ts')>()
+    return {
+        ...actual,
+        TravelingSnakeGlassMaterial: class {
+            bake() {
+                return { destroy: vi.fn() }
+            }
+        },
     }
 })
 

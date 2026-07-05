@@ -1,7 +1,7 @@
 'use strict'
 
 import { describe, it, expect } from 'vitest'
-import { layoutTree, type TreeLayoutNode } from '$src/infographics/utils/layoutTree.ts'
+import { layoutTree, type TreeLayoutNode } from './layout-tree.ts'
 
 // =============================================================================
 // PURE TIDY-TREE LAYOUT

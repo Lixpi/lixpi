@@ -18,7 +18,7 @@ import {
     createGenericVideoResolutionDropdown,
     createGenericVideoDurationDropdown,
 } from '$src/components/aiModelControls/index.ts'
-import { createShiftingGradientBackground } from '$src/utils/animations/gradients/shiftingGradientRenderer.ts'
+import { createShiftingGradientBackground } from '@lixpi/canvas-engine/frontend/rendering'
 import { html } from '$src/utils/domTemplates.ts'
 import { settings } from '$src/settings.ts'
 
@@ -125,7 +125,9 @@ class AiPromptComposer implements AiPromptComposerInstance {
         this.element.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)
 
         if (config.useGradient ?? settings.aiPromptInput.useShiftingGradientBackground) {
-            this.gradient = createShiftingGradientBackground(this.element)
+            this.gradient = createShiftingGradientBackground(this.element, {
+                colors: settings.gradient.styles.shiftingColors,
+            })
         }
 
         this.editorContainer = html`<div className="floating-input-editor nopan"></div>` as HTMLDivElement

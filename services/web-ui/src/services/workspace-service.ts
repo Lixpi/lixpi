@@ -10,6 +10,7 @@ const { WORKSPACE_SUBJECTS } = NATS_SUBJECTS
 
 import AuthService from '$src/services/auth-service.ts'
 import RouterService from '$src/services/router-service.ts'
+import { WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS } from '$src/services/requestTimeouts.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { workspacesStore } from '$src/stores/workspacesStore.ts'
@@ -36,13 +37,14 @@ class WorkspaceService {
     constructor() {}
 
     public async getWorkspace({ workspaceId }: { workspaceId: string }): Promise<void> {
-        workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.loading })
+        if (RouterService.getRouteParams().workspaceId !== workspaceId) return
+        workspaceStore.beginWorkspaceLoad(workspaceId)
 
         try {
             const workspace: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.GET_WORKSPACE, {
                 token: await AuthService.getTokenSilently(),
                 workspaceId
-            })
+            }, WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS)
 
             if (RouterService.getRouteParams().workspaceId !== workspaceId) return
 
