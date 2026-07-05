@@ -750,6 +750,252 @@ describe('Workspace.updateCanvasState', () => {
             nodes: [expect.objectContaining({ fileId: 'uploaded-file' })],
         }))
     })
+
+    // =========================================================================
+    // MEDIA REPLACEMENT MARKER MERGE
+    // =========================================================================
+
+    const baseGeneratedBy = {
+        aiChatThreadId: 'thread-1',
+        responseId: 'response-1',
+        aiModel: 'Provider:reasoning',
+        revisedPrompt: 'prompt',
+        responseMessageId: '',
+        generationRequestId: 'request-1',
+        reasoningRunId: 'reasoning-1',
+        mediaRunId: 'run-1',
+        mediaModelId: 'Provider:image',
+        branchId: 'branch-1',
+        branchForkNodeId: 'fork-1',
+        createdAt: 999_000,
+    }
+
+    it('applies an incoming image media replacement when the previous fileId matches the canonical node', async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(1_000_000)
+        dynamo.getItem.mockResolvedValueOnce({
+            updatedAt: 10,
+            canvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [{
+                    nodeId: 'node-image-1',
+                    type: 'image',
+                    fileId: 'old-file',
+                    workspaceId: 'workspace-1',
+                    src: '/api/images/workspace-1/old-file',
+                    aspectRatio: 1,
+                    descriptor: { status: 'ready' },
+                    position: { x: 500, y: 100 },
+                    dimensions: { width: 800, height: 600 },
+                    generatedBy: baseGeneratedBy,
+                }],
+                edges: [],
+            },
+        })
+        dynamo.transactWrite.mockResolvedValue(undefined)
+
+        await Workspace.updateCanvasState({
+            userId: 'user-1',
+            workspaceId: 'workspace-1',
+            expectedCanvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [{
+                    nodeId: 'node-image-1',
+                    type: 'image',
+                    fileId: 'new-file',
+                    workspaceId: 'workspace-1',
+                    src: '/api/images/workspace-1/new-file',
+                    aspectRatio: 2,
+                    descriptor: { status: 'analyzing' },
+                    mediaReplacement: { replacedAt: 1_000_000, previousFileId: 'old-file' },
+                    generatedBy: baseGeneratedBy,
+                } as any],
+                edges: [],
+            },
+        })
+
+        const writtenState = dynamo.transactWrite.mock.calls[0]?.[0].operations[0].expressionAttributeValues[':canvasState']
+        expect(writtenState.nodes).toEqual([expect.objectContaining({
+            nodeId: 'node-image-1',
+            fileId: 'new-file',
+            workspaceId: 'workspace-1',
+            src: '/api/images/workspace-1/new-file',
+            aspectRatio: 2,
+            descriptor: { status: 'analyzing' },
+            position: { x: 500, y: 100 },
+            dimensions: { width: 800, height: 600 },
+        })])
+        expect(writtenState.nodes[0]).not.toHaveProperty('mediaReplacement')
+    })
+
+    it('applies an incoming video media replacement, including poster fields, when the previous fileId matches', async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(1_000_000)
+        dynamo.getItem.mockResolvedValueOnce({
+            updatedAt: 10,
+            canvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [{
+                    nodeId: 'node-video-1',
+                    type: 'video',
+                    fileId: 'old-video-file',
+                    posterFileId: 'old-poster-file',
+                    posterSrc: '/api/images/workspace-1/old-poster-file',
+                    frameFileId: 'old-frame-file',
+                    durationSeconds: 4,
+                    hasAudio: false,
+                    workspaceId: 'workspace-1',
+                    src: '/api/videos/workspace-1/old-video-file',
+                    aspectRatio: 1,
+                    position: { x: 500, y: 100 },
+                    dimensions: { width: 800, height: 600 },
+                    generatedBy: baseGeneratedBy,
+                }],
+                edges: [],
+            },
+        })
+        dynamo.transactWrite.mockResolvedValue(undefined)
+
+        await Workspace.updateCanvasState({
+            userId: 'user-1',
+            workspaceId: 'workspace-1',
+            expectedCanvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [{
+                    nodeId: 'node-video-1',
+                    type: 'video',
+                    fileId: 'new-video-file',
+                    posterFileId: 'new-poster-file',
+                    posterSrc: '/api/images/workspace-1/new-poster-file',
+                    frameFileId: 'new-frame-file',
+                    durationSeconds: 8,
+                    hasAudio: true,
+                    workspaceId: 'workspace-1',
+                    src: '/api/videos/workspace-1/new-video-file',
+                    aspectRatio: 2,
+                    mediaReplacement: { replacedAt: 1_000_000, previousFileId: 'old-video-file', previousPosterFileId: 'old-poster-file' },
+                    generatedBy: baseGeneratedBy,
+                } as any],
+                edges: [],
+            },
+        })
+
+        const writtenState = dynamo.transactWrite.mock.calls[0]?.[0].operations[0].expressionAttributeValues[':canvasState']
+        expect(writtenState.nodes).toEqual([expect.objectContaining({
+            nodeId: 'node-video-1',
+            fileId: 'new-video-file',
+            posterFileId: 'new-poster-file',
+            posterSrc: '/api/images/workspace-1/new-poster-file',
+            frameFileId: 'new-frame-file',
+            durationSeconds: 8,
+            hasAudio: true,
+            aspectRatio: 2,
+        })])
+        expect(writtenState.nodes[0]).not.toHaveProperty('mediaReplacement')
+    })
+
+    it('ignores a media replacement marker when previousFileId does not match the canonical fileId', async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(1_000_000)
+        dynamo.getItem.mockResolvedValueOnce({
+            updatedAt: 10,
+            canvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [{
+                    nodeId: 'node-image-1',
+                    type: 'image',
+                    fileId: 'canonical-file',
+                    workspaceId: 'workspace-1',
+                    src: '/api/images/workspace-1/canonical-file',
+                    aspectRatio: 1,
+                    position: { x: 500, y: 100 },
+                    dimensions: { width: 800, height: 600 },
+                    generatedBy: baseGeneratedBy,
+                }],
+                edges: [],
+            },
+        })
+        dynamo.transactWrite.mockResolvedValue(undefined)
+
+        await Workspace.updateCanvasState({
+            userId: 'user-1',
+            workspaceId: 'workspace-1',
+            expectedCanvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [{
+                    nodeId: 'node-image-1',
+                    type: 'image',
+                    fileId: 'unrelated-new-file',
+                    mediaReplacement: { replacedAt: 1_000_000, previousFileId: 'some-other-stale-file' },
+                    generatedBy: baseGeneratedBy,
+                } as any],
+                edges: [],
+            },
+        })
+
+        const writtenState = dynamo.transactWrite.mock.calls[0]?.[0].operations[0].expressionAttributeValues[':canvasState']
+        expect(writtenState.nodes).toEqual([expect.objectContaining({
+            nodeId: 'node-image-1',
+            fileId: 'canonical-file',
+            src: '/api/images/workspace-1/canonical-file',
+        })])
+        expect(writtenState.nodes[0]).not.toHaveProperty('mediaReplacement')
+    })
+
+    it('strips a stale mediaReplacement marker even when the fileId is unchanged', async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(1_000_000)
+        dynamo.getItem.mockResolvedValueOnce({
+            updatedAt: 10,
+            canvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [{
+                    nodeId: 'node-image-1',
+                    type: 'image',
+                    fileId: 'same-file',
+                    workspaceId: 'workspace-1',
+                    src: '/api/images/workspace-1/same-file',
+                    aspectRatio: 1,
+                    position: { x: 500, y: 100 },
+                    dimensions: { width: 800, height: 600 },
+                    generatedBy: baseGeneratedBy,
+                }],
+                edges: [],
+            },
+        })
+        dynamo.transactWrite.mockResolvedValue(undefined)
+
+        await Workspace.updateCanvasState({
+            userId: 'user-1',
+            workspaceId: 'workspace-1',
+            expectedCanvasStateUpdatedAt: 10,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [{
+                    nodeId: 'node-image-1',
+                    type: 'image',
+                    fileId: 'same-file',
+                    mediaReplacement: { replacedAt: 1_000_000, previousFileId: 'same-file' },
+                    generatedBy: baseGeneratedBy,
+                } as any],
+                edges: [],
+            },
+        })
+
+        const writtenState = dynamo.transactWrite.mock.calls[0]?.[0].operations[0].expressionAttributeValues[':canvasState']
+        expect(writtenState.nodes).toEqual([expect.objectContaining({
+            nodeId: 'node-image-1',
+            fileId: 'same-file',
+        })])
+        expect(writtenState.nodes[0]).not.toHaveProperty('mediaReplacement')
+    })
 })
 
 // =============================================================================
