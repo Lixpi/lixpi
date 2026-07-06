@@ -228,96 +228,102 @@ export class MediaGenerationMatrixOrchestrator {
             videoModelCount: normalized.videoModels.length,
         })
 
-        await Promise.all(normalized.reasoningModels.map((reasoningModel, reasoningIndex) => {
-            const reasoningRunId = this.runPlanner.buildReasoningRunId(normalized.generationRequestId, reasoningIndex)
-            const instanceKey = buildReasoningInstanceKey(normalized.requestGroupKey, reasoningIndex)
-            const lineageAssignment = this.getRunLineageAssignment(sharedPreflightState.mediaBranchLineagePlan, reasoningRunId)
-            const generationRun = this.runPlanner.buildMatrixReasoningRun({
-                generationRequestId: normalized.generationRequestId,
-                reasoningRunId,
-                reasoningModelId: reasoningModel.modelId,
-                reasoningIndex,
-                ...(lineageAssignment ? { lineageAssignment } : {}),
-            })
-            return this.registry.process(instanceKey, reasoningModel.provider, {
-                ...requestData,
-
-                // ── Shared-preflight → fanout propagation (CRITICAL INVARIANT) ──
-                // `runSharedPreflight()` resolves workspace context, `/use`
-                // features, the image branch (which ALSO selects the video
-                // first-frame / reference images), and media lineage EXACTLY ONCE,
-                // then every reasoning child is dispatched with
-                // `preflightResolved: true`. That flag makes each child's provider
-                // graph SKIP all resolver nodes (see `BaseProvider.buildWorkflow`),
-                // so a child can only ever observe resolution outputs that are
-                // forwarded right here — anything omitted is silently lost before
-                // the image/video routers run.
-                //
-                // Regression this prevents: the resolver correctly chose reference
-                // images into `videoReferenceImages` / `videoFirstFrameImage`, but
-                // an earlier hand-maintained field list here forwarded only a
-                // subset and never forwarded those two, so every Seedance/VEO call
-                // ran as pure text-to-video (zero references) and quality collapsed.
-                //
-                // Fix / future-proofing: spread the ENTIRE resolved patch returned
-                // by `runSharedPreflight()` rather than cherry-picking named fields.
-                // `sharedPreflightState` is precisely what the resolvers emitted
-                // (single source of truth), so reference inputs for images, video,
-                // and any media modality added later propagate automatically.
-                ...sharedPreflightState,
-
-                // Per-child identity + primary-model media options. These are
-                // model-specific and MUST win over anything above, so they are set
-                // last (the spreads above never contain these keys today, but
-                // ordering keeps that guarantee robust).
-                aiModelMetaInfo: reasoningModel.meta,
-                imageModelMetaInfo: primaryImageModel?.meta,
-                videoModelMetaInfo: primaryVideoModel?.meta,
-                imageSize: primaryImageOptions?.imageSize ?? normalized.imageSize,
-                videoAspectRatio: primaryVideoOptions?.aspectRatio,
-                videoResolution: primaryVideoOptions?.resolution,
-                videoDurationSeconds: primaryVideoOptions?.duration ? Number(primaryVideoOptions.duration) : undefined,
-                videoSourceForExtension: normalized.videoSourceForExtension,
-                preflightResolved: true,
-                mediaFanoutPlan: {
+        try {
+            const results = await Promise.allSettled(normalized.reasoningModels.map((reasoningModel, reasoningIndex) => {
+                const reasoningRunId = this.runPlanner.buildReasoningRunId(normalized.generationRequestId, reasoningIndex)
+                const instanceKey = buildReasoningInstanceKey(normalized.requestGroupKey, reasoningIndex)
+                const lineageAssignment = this.getRunLineageAssignment(sharedPreflightState.mediaBranchLineagePlan, reasoningRunId)
+                const generationRun = this.runPlanner.buildMatrixReasoningRun({
                     generationRequestId: normalized.generationRequestId,
-                    imageModels: normalized.imageModels.map((model) => model.meta),
-                    videoModels: normalized.videoModels.map((model) => model.meta),
-                    imageSize: normalized.imageSize,
-                    imageModelOptions: normalized.imageModelOptions,
-                    ...(normalized.videoAspectRatio ? { videoAspectRatio: normalized.videoAspectRatio } : {}),
-                    ...(normalized.videoResolution ? { videoResolution: normalized.videoResolution } : {}),
-                    ...(normalized.videoDuration ? { videoDuration: normalized.videoDuration } : {}),
-                    videoModelOptions: normalized.videoModelOptions,
-                    ...(normalized.videoSourceForExtension ? { videoSourceForExtension: normalized.videoSourceForExtension } : {}),
-                    imageConfigGroups: normalized.imageConfigGroups,
-                    videoConfigGroups: normalized.videoConfigGroups,
-                },
-                mediaGenerationRequest: {
-                    requestVersion: 'media-generation-matrix-v1',
-                    generationRequestId: normalized.generationRequestId,
-                    useMultipleReasoningModels: normalized.useMultipleReasoningModels,
-                    useMultipleImageModels: normalized.useMultipleImageModels,
-                    useMultipleVideoModels: normalized.useMultipleVideoModels,
-                    reasoningModelIds: normalized.reasoningModelIds,
-                    imageModelIds: normalized.imageModelIds,
-                    videoModelIds: normalized.videoModelIds,
-                    imageOptions: {
+                    reasoningRunId,
+                    reasoningModelId: reasoningModel.modelId,
+                    reasoningIndex,
+                    ...(lineageAssignment ? { lineageAssignment } : {}),
+                })
+                return this.registry.process(instanceKey, reasoningModel.provider, {
+                    ...requestData,
+
+                    // ── Shared-preflight → fanout propagation (CRITICAL INVARIANT) ──
+                    // `runSharedPreflight()` resolves workspace context, `/use`
+                    // features, the image branch (which ALSO selects the video
+                    // first-frame / reference images), and media lineage EXACTLY ONCE,
+                    // then every reasoning child is dispatched with
+                    // `preflightResolved: true`. That flag makes each child's provider
+                    // graph SKIP all resolver nodes (see `BaseProvider.buildWorkflow`),
+                    // so a child can only ever observe resolution outputs that are
+                    // forwarded right here — anything omitted is silently lost before
+                    // the image/video routers run.
+                    //
+                    // Regression this prevents: the resolver correctly chose reference
+                    // images into `videoReferenceImages` / `videoFirstFrameImage`, but
+                    // an earlier hand-maintained field list here forwarded only a
+                    // subset and never forwarded those two, so every Seedance/VEO call
+                    // ran as pure text-to-video (zero references) and quality collapsed.
+                    //
+                    // Fix / future-proofing: spread the ENTIRE resolved patch returned
+                    // by `runSharedPreflight()` rather than cherry-picking named fields.
+                    // `sharedPreflightState` is precisely what the resolvers emitted
+                    // (single source of truth), so reference inputs for images, video,
+                    // and any media modality added later propagate automatically.
+                    ...sharedPreflightState,
+
+                    // Per-child identity + primary-model media options. These are
+                    // model-specific and MUST win over anything above, so they are set
+                    // last (the spreads above never contain these keys today, but
+                    // ordering keeps that guarantee robust).
+                    aiModelMetaInfo: reasoningModel.meta,
+                    imageModelMetaInfo: primaryImageModel?.meta,
+                    videoModelMetaInfo: primaryVideoModel?.meta,
+                    imageSize: primaryImageOptions?.imageSize ?? normalized.imageSize,
+                    videoAspectRatio: primaryVideoOptions?.aspectRatio,
+                    videoResolution: primaryVideoOptions?.resolution,
+                    videoDurationSeconds: primaryVideoOptions?.duration ? Number(primaryVideoOptions.duration) : undefined,
+                    videoSourceForExtension: normalized.videoSourceForExtension,
+                    preflightResolved: true,
+                    mediaFanoutPlan: {
+                        generationRequestId: normalized.generationRequestId,
+                        imageModels: normalized.imageModels.map((model) => model.meta),
+                        videoModels: normalized.videoModels.map((model) => model.meta),
                         imageSize: normalized.imageSize,
-                        configGroups: normalized.imageConfigGroups,
+                        imageModelOptions: normalized.imageModelOptions,
+                        ...(normalized.videoAspectRatio ? { videoAspectRatio: normalized.videoAspectRatio } : {}),
+                        ...(normalized.videoResolution ? { videoResolution: normalized.videoResolution } : {}),
+                        ...(normalized.videoDuration ? { videoDuration: normalized.videoDuration } : {}),
+                        videoModelOptions: normalized.videoModelOptions,
+                        ...(normalized.videoSourceForExtension ? { videoSourceForExtension: normalized.videoSourceForExtension } : {}),
+                        imageConfigGroups: normalized.imageConfigGroups,
+                        videoConfigGroups: normalized.videoConfigGroups,
                     },
-                    videoOptions: {
-                        ...(normalized.videoAspectRatio ? { aspectRatio: normalized.videoAspectRatio } : {}),
-                        ...(normalized.videoResolution ? { resolution: normalized.videoResolution } : {}),
-                        ...(normalized.videoDuration ? { duration: String(normalized.videoDuration) } : {}),
-                        ...(normalized.videoSourceForExtension ? { sourceForExtension: normalized.videoSourceForExtension } : {}),
-                        configGroups: normalized.videoConfigGroups,
+                    mediaGenerationRequest: {
+                        requestVersion: 'media-generation-matrix-v1',
+                        generationRequestId: normalized.generationRequestId,
+                        useMultipleReasoningModels: normalized.useMultipleReasoningModels,
+                        useMultipleImageModels: normalized.useMultipleImageModels,
+                        useMultipleVideoModels: normalized.useMultipleVideoModels,
+                        reasoningModelIds: normalized.reasoningModelIds,
+                        imageModelIds: normalized.imageModelIds,
+                        videoModelIds: normalized.videoModelIds,
+                        imageOptions: {
+                            imageSize: normalized.imageSize,
+                            configGroups: normalized.imageConfigGroups,
+                        },
+                        videoOptions: {
+                            ...(normalized.videoAspectRatio ? { aspectRatio: normalized.videoAspectRatio } : {}),
+                            ...(normalized.videoResolution ? { resolution: normalized.videoResolution } : {}),
+                            ...(normalized.videoDuration ? { duration: String(normalized.videoDuration) } : {}),
+                            ...(normalized.videoSourceForExtension ? { sourceForExtension: normalized.videoSourceForExtension } : {}),
+                            configGroups: normalized.videoConfigGroups,
+                        },
                     },
-                },
-                generationRun,
-                eventMeta: this.runPlanner.buildEventMeta(requestData.eventMeta ?? {}, generationRun),
-            }, { requestGroupKey: normalized.requestGroupKey })
-        }))
+                    generationRun,
+                    eventMeta: this.runPlanner.buildEventMeta(requestData.eventMeta ?? {}, generationRun),
+                }, { requestGroupKey: normalized.requestGroupKey })
+            }))
+            const rejectedResult = results.find(result => result.status === 'rejected')
+            if (rejectedResult?.status === 'rejected') throw rejectedResult.reason
+        } finally {
+            await this.publishMediaGenerationRequestComplete(requestData, normalized)
+        }
     }
 
     async stop({ workspaceId, aiChatThreadId, generationRequestId }: StopMatrixRequestParams): Promise<void> {
@@ -327,6 +333,25 @@ export class MediaGenerationMatrixOrchestrator {
         }
 
         await this.registry.stopGroupsWithPrefix(buildMediaGenerationThreadGroupPrefix(workspaceId, aiChatThreadId))
+    }
+
+    private async publishMediaGenerationRequestComplete(
+        requestData: MatrixRequestData,
+        normalized: ResolvedMatrixRequest,
+    ): Promise<void> {
+        const reasoningModel = normalized.reasoningModels[0]
+        if (!reasoningModel) return
+
+        const publisher = new StreamPublisher(
+            this.natsService,
+            requestData.workspaceId,
+            requestData.aiChatThreadId,
+            reasoningModel.provider,
+            undefined,
+            { canvasVisibleArea: requestData.canvasVisibleArea },
+        )
+        publisher.mediaGenerationRequestComplete(normalized.generationRequestId)
+        await publisher.finishProseMirrorStream()
     }
 
     private normalizeRequest(requestData: MatrixRequestData): NormalizedMatrixRequest {
@@ -593,6 +618,7 @@ export class MediaGenerationMatrixOrchestrator {
             runAssignmentCount: mediaBranchLineagePlan.runAssignments.length,
         })
         applyResolved({ mediaBranchLineagePlan })
+        await publisher.drainPendingWrites()
 
         return resolved
     }

@@ -332,6 +332,36 @@ describe('Workspace.mutateCanvasState', () => {
             expect.objectContaining({ nodeId: 'projection-node' }),
         ])
     })
+
+    it('exhausts retries after repeated conditional-check failures and throws a deterministic error', async () => {
+        const conditionalFailure = transactionalConditionalFailure('continuous stale canvas write')
+
+        dynamo.getItem.mockResolvedValue({
+            updatedAt: 12,
+            canvasStateUpdatedAt: 12,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [],
+                edges: [],
+            },
+        })
+        dynamo.transactWrite.mockRejectedValue(conditionalFailure)
+
+        await expect(Workspace.mutateCanvasState({
+            workspaceId: 'workspace-1',
+            mutate: () => ({
+                changed: true,
+                canvasState: {
+                    viewport: { x: 0, y: 0, zoom: 1 },
+                    nodes: [{ nodeId: 'retry-node', type: 'image' } as any],
+                    edges: [],
+                },
+            }),
+        })).rejects.toThrow('Failed to mutate workspace canvas state after concurrent updates: workspace-1')
+
+        expect(dynamo.getItem).toHaveBeenCalledTimes(5)
+        expect(dynamo.transactWrite).toHaveBeenCalledTimes(5)
+    })
 })
 
 // =============================================================================

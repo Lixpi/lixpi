@@ -1,6 +1,9 @@
-import { mediaGenerationLayoutSettings } from '@lixpi/constants'
-
-import type { WorkspaceEdgePathType } from '@lixpi/constants'
+import {
+    mediaGenerationLayoutSettings,
+    workspacePersistenceSettings,
+    type WorkspaceEdgePathType,
+    type WorkspacePersistenceSettings,
+} from '@lixpi/constants'
 import type { CircularGlassMaterialStyle } from '@lixpi/canvas-engine'
 
 export const colorPalette = {
@@ -654,6 +657,8 @@ export type Settings = {
     mediaBranchLineage: MediaBranchLineageSettings
 
     mediaLibrary: MediaLibrarySettings
+
+    workspacePersistence: WorkspacePersistenceSettings
 
     contentDescriptor: ContentDescriptorSettings
 }
@@ -1902,10 +1907,15 @@ export const settings: Settings = {
         },
     },
 
+    // Shared workspace/document persistence timing, sourced from @lixpi/constants
+    // so browser fallback saves and API settled snapshots use the same delay.
+    workspacePersistence: workspacePersistenceSettings,
+
     // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).
     contentDescriptor: {
-        // Quiet period (ms) before a text node descriptor seed/refresh runs. Canvas document typing does not proactively call this path.
-        editDebounceMs: 5000,
+        // Quiet period (ms) before a text node descriptor seed/refresh runs.
+        // Kept aligned with workspace persistence so document-derived workspace metadata settles on the same cadence.
+        editDebounceMs: workspacePersistenceSettings.debounceMs,
         // Minimum trimmed plain-text length before a document/thread is worth describing. Below this we skip the model call (nothing meaningful to summarize).
         minTextLength: 16,
     },

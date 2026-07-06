@@ -119,7 +119,7 @@ describe('WorkspaceService canvas save queue', () => {
             expectedCanvasStateUpdatedAt: 5,
         }))
 
-        resolveFirstSave?.({ success: true, workspaceId: 'workspace-1', updatedAt: 11, canvasStateUpdatedAt: 6 })
+        resolveFirstSave?.({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 11, currentCanvasStateUpdatedAt: 6 })
 
         await vi.waitFor(() => {
             expect(mocks.request).toHaveBeenCalledTimes(2)
@@ -136,6 +136,46 @@ describe('WorkspaceService canvas save queue', () => {
         await vi.waitFor(() => {
             expect(mocks.setDataValues).toHaveBeenCalledWith({ canvasStateUpdatedAt: 7 })
         })
+    })
+
+    it('forwards persistViewport across stale retry and preserves it on queued follow-up saves', async () => {
+        let resolveFirstSave: ((value: unknown) => void) | null = null
+        mocks.request
+            .mockImplementationOnce(() => new Promise((resolve) => { resolveFirstSave = resolve }))
+            .mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 11, currentCanvasStateUpdatedAt: 6 })
+            .mockResolvedValueOnce({ success: true, workspaceId: 'workspace-1', updatedAt: 12, canvasStateUpdatedAt: 7 })
+
+        const service = new WorkspaceService()
+        const firstState = makeCanvasState('persisted-node')
+        const secondState = makeCanvasState('queued-node')
+
+        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: firstState, persistViewport: true })
+        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: secondState })
+
+        await vi.waitFor(() => {
+            expect(mocks.request).toHaveBeenCalledTimes(1)
+        })
+        expect(mocks.request.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+            canvasState: firstState,
+            persistViewport: true,
+            expectedCanvasStateUpdatedAt: 5,
+        }))
+
+        resolveFirstSave?.({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 11, currentCanvasStateUpdatedAt: 6 })
+
+        await vi.waitFor(() => {
+            expect(mocks.request).toHaveBeenCalledTimes(3)
+        })
+        expect(mocks.request.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+            canvasState: secondState,
+            persistViewport: true,
+            expectedCanvasStateUpdatedAt: 6,
+        }))
+        expect(mocks.request.mock.calls[2]?.[1]).toEqual(expect.objectContaining({
+            canvasState: secondState,
+            persistViewport: true,
+            expectedCanvasStateUpdatedAt: 6,
+        }))
     })
 
     it('does not use workspace updatedAt as the canvas save token after file upload changes metadata', async () => {

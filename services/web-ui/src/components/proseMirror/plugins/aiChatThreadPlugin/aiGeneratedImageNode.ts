@@ -66,6 +66,11 @@ export type AiGeneratedImageCallbacks = {
         generationRequestId: string
         generationRun?: MediaGenerationRunMeta
     }) => void
+    onMediaGenerationRequestCompleteToCanvas?: (data: {
+        threadId: string
+        generationRequestId: string
+        generationRun?: MediaGenerationRunMeta
+    }) => void
     onWorkspaceContextResolvedToCanvas?: (data: {
         threadId: string
         resolution: WorkspaceContextResolution

@@ -279,7 +279,9 @@ export abstract class BaseProvider {
                 err(`Workflow failed for ${this.instanceKey}: ${message}`)
             }
             this.streamPublisher.error(message)
+            this.streamPublisher.completeKnownMediaGenerationRequests()
             this.streamPublisher.end()
+            await this.streamPublisher.drainPendingWrites()
             await this.streamPublisher.finishProseMirrorStream()
             return {
                 ...initialState,
@@ -376,7 +378,9 @@ export abstract class BaseProvider {
             err(`Streaming error (${this.providerName}): ${message}`)
             try {
                 this.streamPublisher?.error(message)
+                this.streamPublisher?.completeKnownMediaGenerationRequests()
                 this.streamPublisher?.end()
+                await this.streamPublisher?.drainPendingWrites()
             } catch { }
             return {
                 ...update,
@@ -777,6 +781,8 @@ export abstract class BaseProvider {
     }
 
     protected async cleanup(_state: ProviderState): Promise<Partial<ProviderState>> {
+        this.streamPublisher?.completeKnownMediaGenerationRequests()
+        await this.streamPublisher?.drainPendingWrites()
         await this.streamPublisher?.finishProseMirrorStream()
         return {}
     }

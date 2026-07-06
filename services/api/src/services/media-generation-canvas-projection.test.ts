@@ -15,6 +15,7 @@ import {
     upsertGeneratedImageToCanvas,
     upsertGeneratedVideoToCanvas,
     upsertMediaLineagePlanToCanvas,
+    settleMediaGenerationRequestOnCanvas,
 } from './media-generation-canvas-projection.ts'
 
 const emptyCanvasState = (): CanvasState => ({
@@ -525,6 +526,67 @@ describe('media-generation-canvas-projection', () => {
                 }),
             }),
         ]))
+    })
+
+    it('settles pending media generation request markers by removing marker pendingState', async () => {
+        await settleMediaGenerationRequestOnCanvas({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'request-1',
+        })
+
+        const state = latestMutator()({
+            ...emptyCanvasState(),
+            nodes: [
+                {
+                    nodeId: 'origin-settle',
+                    type: 'branchOrigin',
+                    generationRequestId: 'request-1',
+                    branchId: 'branch-1',
+                    pendingState: { status: 'PENDING' },
+                    position: { x: 0, y: 0 },
+                    dimensions: { width: 10, height: 10 },
+                } as any,
+                {
+                    nodeId: 'lineage-other',
+                    type: 'branchOrigin',
+                    generationRequestId: 'request-2',
+                    branchId: 'branch-2',
+                    pendingState: { status: 'PENDING' },
+                    position: { x: 20, y: 20 },
+                    dimensions: { width: 10, height: 10 },
+                } as any,
+                {
+                    nodeId: 'image-keep',
+                    type: 'image',
+                    generationRequestId: 'request-1',
+                    pendingState: { status: 'PENDING' },
+                    position: { x: 40, y: 40 },
+                    dimensions: { width: 100, height: 100 },
+                } as any,
+            ],
+        })
+
+        expect(state.changed).toBe(true)
+        expect(state.canvasState.nodes).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                nodeId: 'origin-settle',
+                type: 'branchOrigin',
+                generationRequestId: 'request-1',
+            }),
+            expect.objectContaining({
+                nodeId: 'lineage-other',
+                type: 'branchOrigin',
+                generationRequestId: 'request-2',
+                pendingState: { status: 'PENDING' },
+            }),
+            expect.objectContaining({
+                nodeId: 'image-keep',
+                type: 'image',
+                generationRequestId: 'request-1',
+                pendingState: { status: 'PENDING' },
+            }),
+        ]))
+        expect(state.canvasState.nodes.find((node) => node.nodeId === 'origin-settle')).not.toHaveProperty('pendingState')
     })
 
     it('keeps a 3x4 reasoning/media matrix as three balanced branch trees with one correct fork edge per output', async () => {

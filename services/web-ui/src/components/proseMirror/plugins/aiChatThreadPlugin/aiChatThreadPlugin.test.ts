@@ -5,7 +5,8 @@ import { afterEach, beforeEach, beforeAll } from 'vitest'
 import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
 import { EditorState } from 'prosemirror-state'
 import { documentStore } from '$src/stores/documentStore.ts'
-import { STOP_AI_CHAT_META, USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
+import { AI_CHAT_THREAD_PLUGIN_KEY, STOP_AI_CHAT_META, USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
 import {
     doc,
@@ -644,6 +645,187 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         expect(nextThread?.attrs.threadContext).toBeUndefined()
 
         setMetaValuesSpy.mockRestore()
+    })
+
+    it('resolves ai model dropdown titles through aiModelsStore and updates thread attrs', () => {
+        const getDataSpy = vi.spyOn(aiModelsStore, 'getData').mockReturnValue([
+            { provider: 'OpenAI', model: 'o4-mini', title: 'OpenAI o4-mini' },
+        ] as any)
+        const setMetaValuesSpy = vi.spyOn(documentStore, 'setMetaValues').mockImplementation(() => {})
+
+        const plugin = createPlugin(vi.fn())
+
+        const state = EditorState.create({
+            doc: doc(makeThread({
+                threadId: 'thread-title-dropdown',
+                aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+            }, [makeUserMessage('model title dropdown')])),
+            schema,
+            plugins: [plugin],
+        })
+
+        const threadPos = findNodePosition(state.doc, 'aiChatThread')
+        expect(threadPos).not.toBeNull()
+
+        const transaction = state.tr.setMeta('dropdownOptionSelected', {
+            dropdownId: 'ai-model-dropdown-thread-title-dropdown',
+            nodePos: threadPos! + 1,
+            option: {
+                title: 'OpenAI o4-mini',
+            },
+        })
+
+        const { state: nextState } = state.applyTransaction(transaction)
+        const nextThread = nextState.doc.nodeAt(threadPos!)
+
+        expect(getDataSpy).toHaveBeenCalled()
+        expect(setMetaValuesSpy).toHaveBeenCalledWith({ requiresSave: true })
+        expect(nextThread?.attrs.aiReasoningModels).toBe(JSON.stringify(['OpenAI:o4-mini']))
+
+        getDataSpy.mockRestore()
+        setMetaValuesSpy.mockRestore()
+    })
+
+    it('does not write document metadata when AI model dropdown selection is unchanged', () => {
+        const setMetaValuesSpy = vi.spyOn(documentStore, 'setMetaValues').mockImplementation(() => {})
+        const plugin = createPlugin(vi.fn())
+
+        const state = EditorState.create({
+            doc: doc(makeThread({
+                threadId: 'thread-dropdown-no-change',
+                aiReasoningModels: JSON.stringify(['OpenAI:o4-mini']),
+            }, [makeUserMessage('dropdown unchanged')])),
+            schema,
+            plugins: [plugin],
+        })
+
+        const threadPos = findNodePosition(state.doc, 'aiChatThread')
+        expect(threadPos).not.toBeNull()
+
+        const transaction = state.tr.setMeta('dropdownOptionSelected', {
+            dropdownId: 'ai-model-dropdown-thread-dropdown-no-change',
+            nodePos: threadPos! + 1,
+            option: {
+                provider: 'OpenAI',
+                model: 'o4-mini',
+            },
+        })
+
+        const { state: nextState } = state.applyTransaction(transaction)
+        expect(setMetaValuesSpy).not.toHaveBeenCalled()
+        expect(AI_CHAT_THREAD_PLUGIN_KEY.getState(nextState)?.receivingThreadIds.size).toBe(0)
+
+        setMetaValuesSpy.mockRestore()
+    })
+
+    it('parses string-based boolean toggles for multi-model settings', async () => {
+        const sendAiRequestHandler = vi.fn()
+        const plugin = createPlugin(sendAiRequestHandler)
+
+        const state = EditorState.create({
+            doc: doc(
+                makeThread(
+                    {
+                        threadId: 'thread-string-flags',
+                        aiReasoningModels: JSON.stringify([
+                            'Anthropic:claude-sonnet-4-6',
+                        ]),
+                        useMultipleReasoningModels: 'true',
+                        useMultipleImageModels: 'true',
+                        useMultipleVideoModels: 'false',
+                        aiImageModels: JSON.stringify([
+                            'Google:gemini-2.5-flash-image',
+                            'OpenAI:o4-mini',
+                        ]),
+                        aiVideoModels: JSON.stringify([
+                            'Anthropic:claude-4',
+                            'OpenAI:o4-mini',
+                        ]),
+                    },
+                    [makeUserMessage('String flag parsing')]
+                )
+            ),
+            schema,
+            plugins: [plugin],
+        })
+
+        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
+            threadId: 'thread-string-flags',
+            nodePos: findNodePosition(state.doc, 'aiChatThread'),
+        })
+        state.applyTransaction(trigger)
+
+        await Promise.resolve()
+
+        const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
+        expect(payload.useMultipleReasoningModels).toBe(true)
+        expect(payload.useMultipleImageModels).toBe(true)
+        expect(payload.useMultipleVideoModels).toBe(false)
+        expect(payload.imageOptions).toMatchObject({
+            aiImageModels: ['Google:gemini-2.5-flash-image', 'OpenAI:o4-mini'],
+            imageGenerationSize: 'auto',
+        })
+        expect(payload.videoOptions?.aiVideoModels).toEqual(['Anthropic:claude-4'])
+    })
+
+    it('calls onReceivingStateChange only on actual receiving state transitions', () => {
+        const onReceivingStateChange = vi.fn()
+        const plugin = createAiChatThreadPlugin({
+            sendAiRequestHandler: vi.fn(),
+            stopAiRequestHandler: vi.fn(),
+            placeholders: {
+                titlePlaceholder: 'Title',
+                paragraphPlaceholder: 'Type here',
+            },
+            onReceivingStateChange,
+        })
+
+        const state = EditorState.create({
+            doc: doc(makeThread({
+                threadId: 'thread-receiving',
+            }, [makeUserMessage('receiving state')])),
+            schema,
+            plugins: [plugin],
+        })
+
+        const runOne = state.tr.setMeta('setReceiving', {
+            threadId: 'thread-receiving',
+            receiving: true,
+            runKey: 'run-1',
+        })
+        const { state: afterRunOne } = state.applyTransaction(runOne)
+        expect(onReceivingStateChange).toHaveBeenCalledTimes(1)
+        expect(onReceivingStateChange).toHaveBeenCalledWith('thread-receiving', true)
+        expect(AI_CHAT_THREAD_PLUGIN_KEY.getState(afterRunOne)?.receivingThreadIds.has('thread-receiving')).toBe(true)
+
+        const runTwo = afterRunOne.tr.setMeta('setReceiving', {
+            threadId: 'thread-receiving',
+            receiving: true,
+            runKey: 'run-2',
+        })
+        const { state: afterRunTwo } = afterRunOne.applyTransaction(runTwo)
+        expect(onReceivingStateChange).toHaveBeenCalledTimes(1)
+        expect(AI_CHAT_THREAD_PLUGIN_KEY.getState(afterRunTwo)?.receivingThreadIds.has('thread-receiving')).toBe(true)
+
+        const runTwoStop = afterRunTwo.tr.setMeta('setReceiving', {
+            threadId: 'thread-receiving',
+            receiving: false,
+            runKey: 'run-2',
+        })
+        const { state: afterRunTwoStop } = afterRunTwo.applyTransaction(runTwoStop)
+        expect(onReceivingStateChange).toHaveBeenCalledTimes(1)
+        expect(AI_CHAT_THREAD_PLUGIN_KEY.getState(afterRunTwoStop)?.receivingThreadIds.has('thread-receiving')).toBe(true)
+
+        const runOneStop = afterRunTwoStop.tr.setMeta('setReceiving', {
+            threadId: 'thread-receiving',
+            receiving: false,
+            runKey: 'run-1',
+        })
+        const { state: afterAllStop } = afterRunTwoStop.applyTransaction(runOneStop)
+
+        expect(onReceivingStateChange).toHaveBeenCalledTimes(2)
+        expect(onReceivingStateChange).toHaveBeenLastCalledWith('thread-receiving', false)
+        expect(AI_CHAT_THREAD_PLUGIN_KEY.getState(afterAllStop)?.receivingThreadIds.has('thread-receiving')).toBe(false)
     })
 
     it('blocks paste inside an aiChatThread and allows it outside', () => {

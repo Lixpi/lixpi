@@ -136,7 +136,8 @@ export const workspaceSubjects = [
                 workspaceId: data.workspaceId,
                 canvasState: data.canvasState,
                 expectedCanvasStateUpdatedAt: data.expectedCanvasStateUpdatedAt,
-                expectedUpdatedAt: data.expectedUpdatedAt
+                expectedUpdatedAt: data.expectedUpdatedAt,
+                persistViewport: data.persistViewport === true
             })
         }
     },

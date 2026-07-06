@@ -286,7 +286,7 @@ export class ProseMirrorAuthorityService {
 
     private shouldReceiveEvent(event: StepStreamEvent): boolean {
         if (event.kind === 'START') return this.localVersion <= event.baseVersion
-        if (event.kind === 'END') return this.localVersion < event.finalVersion
+        if (event.kind === 'END') return true
         if (event.kind === 'ERROR') return true
         return event.version > this.localVersion
     }

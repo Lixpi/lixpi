@@ -747,8 +747,59 @@ describe('BaseProvider streamTokens failure path', () => {
             aiRequestFinishedAt: expect.any(Number),
         })
         expect(streamError).toHaveBeenCalledWith('streamer exploded')
-        expect(streamEnd).toHaveBeenCalledTimes(1)
+        expect(streamEnd).toHaveBeenCalledTimes(0)
         expect(debugErrSpy).toHaveBeenCalledWith('Streaming error (Anthropic): streamer exploded')
+    })
+})
+
+describe('BaseProvider process failure path', () => {
+    it('calls media-request completion and drainage hooks when process-level graph execution fails', async () => {
+        const completeKnownMediaGenerationRequests = vi.spyOn(
+            StreamPublisher.prototype as any,
+            'completeKnownMediaGenerationRequests',
+        )
+        const end = vi.spyOn(StreamPublisher.prototype as any, 'end')
+        const drainPendingWrites = vi
+            .spyOn(StreamPublisher.prototype as any, 'drainPendingWrites')
+            .mockResolvedValue(undefined)
+        const finishProseMirrorStream = vi
+            .spyOn(StreamPublisher.prototype as any, 'finishProseMirrorStream')
+            .mockResolvedValue(undefined)
+        const error = vi.spyOn(StreamPublisher.prototype as any, 'error')
+
+        try {
+            const provider = new TestProvider('ws1:thread1', {
+                natsService: { publish: vi.fn() } as any,
+                storeWorkspaceImage: vi.fn(),
+                storeWorkspaceVideo: vi.fn(),
+                usageReporter: {} as any,
+                runImageRouter: vi.fn(),
+                runVideoRouter: vi.fn(),
+            } as BaseProviderDeps)
+
+            const result = await provider.process({
+                workspaceId: 'ws1',
+                aiChatThreadId: 'thread1',
+                aiModelMetaInfo: { provider: 'Anthropic', model: 'claude' },
+                messages: [{ role: 'user', content: 'make it fail' }],
+            } as any)
+
+            expect(completeKnownMediaGenerationRequests).toHaveBeenCalledOnce()
+            expect(end).toHaveBeenCalledOnce()
+            expect(drainPendingWrites).toHaveBeenCalledOnce()
+            expect(finishProseMirrorStream).toHaveBeenCalledTimes(2)
+            expect(error).toHaveBeenCalledWith('modelVersion is required')
+            expect(result).toMatchObject({
+                error: 'modelVersion is required',
+                streamActive: false,
+            })
+        } finally {
+            completeKnownMediaGenerationRequests.mockRestore()
+            end.mockRestore()
+            drainPendingWrites.mockRestore()
+            finishProseMirrorStream.mockRestore()
+            error.mockRestore()
+        }
     })
 })
 
@@ -846,11 +897,15 @@ describe('BaseProvider usage lifecycle', () => {
             runVideoRouter: vi.fn(),
         } as BaseProviderDeps)
         ;(provider as any).streamPublisher = {
+            completeKnownMediaGenerationRequests: vi.fn(),
+            drainPendingWrites: vi.fn().mockResolvedValue(undefined),
             finishProseMirrorStream,
         } as StreamPublisher
 
         const result = await (provider as any).cleanup({} as any)
 
+        expect((provider as any).streamPublisher.completeKnownMediaGenerationRequests).toHaveBeenCalledOnce()
+        expect((provider as any).streamPublisher.drainPendingWrites).toHaveBeenCalledOnce()
         expect(finishProseMirrorStream).toHaveBeenCalledOnce()
         expect(result).toEqual({})
     })

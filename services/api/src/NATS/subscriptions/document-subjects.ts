@@ -7,6 +7,7 @@ import NATS_Service from '@lixpi/nats-service'
 import Document from '../../models/document.ts'
 import AiChatThread from '../../models/ai-chat-thread.ts'
 import Workspace from '../../models/workspace.ts'
+import { settings } from '../../settings.ts'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 import {
@@ -25,7 +26,7 @@ import { ProseMirrorStepTransport } from '../../prosemirror/prosemirror-step-tra
 const { DOCUMENT_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 const { DOCUMENT_STEP_SUBJECTS } = NATS_SUBJECTS
 const DOCUMENT_STEP_STREAM_SUBJECT = `${DOCUMENT_STEP_SUBJECTS.DOC_STEPS}.>`
-const DOCUMENT_STEP_SNAPSHOT_SETTLE_MS = 5000
+const DOCUMENT_STEP_SNAPSHOT_SETTLE_MS = settings.workspacePersistence.debounceMs
 const DOCUMENT_STEP_WORKSPACE_ACCESS_CACHE_MS = 5000
 const documentStepSnapshotTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const documentStepWorkspaceAccessCache = new Map<string, { expiresAt: number }>()

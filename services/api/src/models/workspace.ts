@@ -14,7 +14,7 @@ import {
     type DocumentFile
 } from '@lixpi/constants'
 import { err } from '@lixpi/debug-tools'
-import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
+import { isTransactionConditionalCheckFailure, type TransactOperation } from '@lixpi/dynamodb-service'
 
 const {
     ORG_NAME,
@@ -47,12 +47,17 @@ type WorkspaceWithCanvasToken = Partial<Workspace> & {
 type CanvasEdge = CanvasState['edges'][number]
 
 type ApiLineageGeneratedBy = {
+    aiChatThreadId?: string
+    responseId?: string
+    responseMessageId?: string
     generationRequestId?: string
     reasoningRunId?: string
     mediaRunId?: string
     reasoningModelId?: string
     mediaModelId?: string
     mediaType?: 'image' | 'video'
+    mediaIndex?: number
+    variantIndex?: number
     branchId?: string
     parentMediaNodeId?: string
     parentImageNodeId?: string
@@ -88,6 +93,36 @@ type MediaReplacementCanvasNode = ApiLineageCanvasNode & {
     descriptor?: ContentDescriptor
 }
 
+type AppliedMediaReplacement = {
+    aiChatThreadId?: string
+    nodeId: string
+    type: 'image' | 'video'
+    previousFileId?: string
+    previousPosterFileId?: string
+    fileId?: string
+    workspaceId?: string
+    src?: string
+    posterFileId?: string
+    posterSrc?: string
+    aspectRatio?: number
+    durationSeconds?: number
+    hasAudio?: boolean
+    generationRequestId?: string
+    reasoningRunId?: string
+    mediaRunId?: string
+    responseId?: string
+    reasoningModelId?: string
+    mediaModelId?: string
+    mediaType?: 'image' | 'video'
+    variantIndex?: number
+}
+
+type AiChatThreadPatchResult = {
+    content: unknown
+    changed: boolean
+    patchedNodeCount: number
+}
+
 const API_GENERATED_MEDIA_FULL_SAVE_PROTECTION_MS = 30 * 60 * 1000
 
 const addFileId = (fileIds: Set<string>, fileId: unknown): void => {
@@ -113,11 +148,16 @@ const getCanvasStateWriteCondition = (hasExpectedCanvasStateUpdatedAt: boolean):
     return '(#canvasStateUpdatedAt = :expectedCanvasStateUpdatedAt OR (attribute_not_exists(#canvasStateUpdatedAt) AND #updatedAt = :expectedCanvasStateUpdatedAt))'
 }
 
-const normalizeCanvasState = (canvasState: CanvasState | undefined): CanvasState => ({
-    viewport: canvasState?.viewport ?? { x: 0, y: 0, zoom: 1 },
-    nodes: canvasState?.nodes ?? [],
-    edges: canvasState?.edges ?? []
-})
+const normalizeCanvasState = (canvasState: CanvasState | undefined): CanvasState => {
+    const normalizedCanvasState = canvasState ?? ({} as Partial<CanvasState>)
+
+    return {
+        ...normalizedCanvasState,
+        viewport: normalizedCanvasState.viewport ?? { x: 0, y: 0, zoom: 1 },
+        nodes: normalizedCanvasState.nodes ?? [],
+        edges: normalizedCanvasState.edges ?? []
+    } as CanvasState
+}
 
 const isBranchMarkerNode = (node: CanvasNode): boolean =>
     node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
@@ -175,6 +215,37 @@ const shouldApplyIncomingMediaReplacement = (currentNode: ApiLineageCanvasNode, 
     return true
 }
 
+const buildAppliedMediaReplacement = (currentNode: ApiLineageCanvasNode, incomingNode: ApiLineageCanvasNode): AppliedMediaReplacement => {
+    const currentMediaNode = currentNode as MediaReplacementCanvasNode
+    const incomingMediaNode = incomingNode as MediaReplacementCanvasNode
+    const replacement = incomingMediaNode.mediaReplacement
+    const generatedBy = currentNode.generatedBy ?? incomingNode.generatedBy ?? {}
+
+    return {
+        aiChatThreadId: generatedBy.aiChatThreadId,
+        nodeId: currentNode.nodeId,
+        type: currentNode.type as 'image' | 'video',
+        previousFileId: replacement?.previousFileId ?? currentMediaNode.fileId,
+        previousPosterFileId: replacement?.previousPosterFileId ?? currentMediaNode.posterFileId,
+        fileId: incomingMediaNode.fileId,
+        workspaceId: incomingMediaNode.workspaceId,
+        src: incomingMediaNode.src,
+        posterFileId: incomingMediaNode.posterFileId,
+        posterSrc: incomingMediaNode.posterSrc,
+        aspectRatio: incomingMediaNode.aspectRatio,
+        durationSeconds: incomingMediaNode.durationSeconds,
+        hasAudio: incomingMediaNode.hasAudio,
+        generationRequestId: generatedBy.generationRequestId,
+        reasoningRunId: generatedBy.reasoningRunId,
+        mediaRunId: generatedBy.mediaRunId,
+        responseId: generatedBy.responseId,
+        reasoningModelId: generatedBy.reasoningModelId,
+        mediaModelId: generatedBy.mediaModelId,
+        mediaType: generatedBy.mediaType,
+        variantIndex: generatedBy.variantIndex,
+    }
+}
+
 const applyIncomingMediaReplacementFields = (merged: Record<string, unknown>, incomingNode: ApiLineageCanvasNode): void => {
     const incomingMediaNode = incomingNode as MediaReplacementCanvasNode
 
@@ -191,7 +262,11 @@ const applyIncomingMediaReplacementFields = (merged: Record<string, unknown>, in
     delete merged.mediaReplacement
 }
 
-const applyIncomingLayoutFields = (currentNode: ApiLineageCanvasNode, incomingNode: ApiLineageCanvasNode): CanvasNode => {
+const applyIncomingLayoutFields = (
+    currentNode: ApiLineageCanvasNode,
+    incomingNode: ApiLineageCanvasNode,
+    appliedMediaReplacements: AppliedMediaReplacement[],
+): CanvasNode => {
     const merged = { ...incomingNode, ...currentNode } as Record<string, unknown>
 
     if ('position' in incomingNode) merged.position = incomingNode.position
@@ -200,6 +275,7 @@ const applyIncomingLayoutFields = (currentNode: ApiLineageCanvasNode, incomingNo
     if ('extent' in incomingNode) merged.extent = incomingNode.extent
     if ('expandParent' in incomingNode) merged.expandParent = incomingNode.expandParent
     if (shouldApplyIncomingMediaReplacement(currentNode, incomingNode)) {
+        appliedMediaReplacements.push(buildAppliedMediaReplacement(currentNode, incomingNode))
         applyIncomingMediaReplacementFields(merged, incomingNode)
     } else {
         delete merged.mediaReplacement
@@ -208,13 +284,184 @@ const applyIncomingLayoutFields = (currentNode: ApiLineageCanvasNode, incomingNo
     return merged as CanvasNode
 }
 
+const patchThreadGeneratedMediaAttrs = (
+    attrs: Record<string, unknown>,
+    nodeType: string,
+    replacement: AppliedMediaReplacement,
+): { attrs: Record<string, unknown>; changed: boolean } => {
+    const nextAttrs = { ...attrs }
+
+    if (nodeType === 'aiGeneratedImage') {
+        if (replacement.src) nextAttrs.imageData = replacement.src
+        if (replacement.fileId) nextAttrs.fileId = replacement.fileId
+        if (replacement.workspaceId) nextAttrs.workspaceId = replacement.workspaceId
+    }
+
+    if (nodeType === 'aiGeneratedVideo') {
+        if (replacement.src) nextAttrs.videoUrl = replacement.src
+        if (replacement.fileId) nextAttrs.fileId = replacement.fileId
+        if (replacement.workspaceId) nextAttrs.workspaceId = replacement.workspaceId
+        if (replacement.posterSrc !== undefined) nextAttrs.posterUrl = replacement.posterSrc
+        if (replacement.posterFileId !== undefined) nextAttrs.posterFileId = replacement.posterFileId
+        if (typeof replacement.durationSeconds === 'number') nextAttrs.durationSeconds = replacement.durationSeconds
+        if (typeof replacement.aspectRatio === 'number') nextAttrs.aspectRatio = replacement.aspectRatio
+        if (typeof replacement.hasAudio === 'boolean') nextAttrs.hasAudio = replacement.hasAudio
+    }
+
+    return {
+        attrs: nextAttrs,
+        changed: Object.keys(nextAttrs).some(key => nextAttrs[key] !== attrs[key]),
+    }
+}
+
+const attrsMatchReplacement = (
+    attrs: Record<string, unknown>,
+    nodeType: string,
+    replacement: AppliedMediaReplacement,
+): boolean => {
+    if (nodeType === 'aiGeneratedImage' && replacement.type !== 'image') return false
+    if (nodeType === 'aiGeneratedVideo' && replacement.type !== 'video') return false
+
+    if (replacement.mediaRunId && attrs.mediaRunId === replacement.mediaRunId) return true
+    if (replacement.responseId && attrs.responseId === replacement.responseId) return true
+
+    if (
+        replacement.generationRequestId
+        && replacement.reasoningRunId
+        && replacement.mediaModelId
+        && attrs.generationRequestId === replacement.generationRequestId
+        && attrs.reasoningRunId === replacement.reasoningRunId
+        && attrs.mediaModelId === replacement.mediaModelId
+        && (attrs.variantIndex == null || replacement.variantIndex == null || attrs.variantIndex === replacement.variantIndex)
+    ) {
+        return true
+    }
+
+    return Boolean(replacement.previousFileId && attrs.fileId === replacement.previousFileId)
+}
+
+const findReplacementForThreadGeneratedMediaNode = (
+    attrs: Record<string, unknown>,
+    nodeType: string,
+    replacements: AppliedMediaReplacement[],
+): AppliedMediaReplacement | undefined =>
+    replacements.find(replacement => attrsMatchReplacement(attrs, nodeType, replacement))
+
+const patchAiChatThreadMediaContentNode = (
+    node: unknown,
+    replacements: AppliedMediaReplacement[],
+): { node: unknown; changed: boolean; patchedNodeCount: number } => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) {
+        return { node, changed: false, patchedNodeCount: 0 }
+    }
+
+    const record = node as Record<string, unknown>
+    const nodeType = typeof record.type === 'string' ? record.type : ''
+    let nextRecord = record
+    let changed = false
+    let patchedNodeCount = 0
+
+    if (nodeType === 'aiGeneratedImage' || nodeType === 'aiGeneratedVideo') {
+        const attrs = record.attrs && typeof record.attrs === 'object' && !Array.isArray(record.attrs)
+            ? record.attrs as Record<string, unknown>
+            : {}
+        const replacement = findReplacementForThreadGeneratedMediaNode(attrs, nodeType, replacements)
+
+        if (replacement) {
+            const patch = patchThreadGeneratedMediaAttrs(attrs, nodeType, replacement)
+            if (patch.changed) {
+                nextRecord = { ...nextRecord, attrs: patch.attrs }
+                changed = true
+                patchedNodeCount += 1
+            }
+        }
+    }
+
+    if (Array.isArray(record.content)) {
+        const nextContent: unknown[] = []
+        let contentChanged = false
+
+        for (const child of record.content) {
+            const patch = patchAiChatThreadMediaContentNode(child, replacements)
+            nextContent.push(patch.node)
+            contentChanged = contentChanged || patch.changed
+            patchedNodeCount += patch.patchedNodeCount
+        }
+
+        if (contentChanged) {
+            nextRecord = { ...nextRecord, content: nextContent }
+            changed = true
+        }
+    }
+
+    return { node: nextRecord, changed, patchedNodeCount }
+}
+
+const patchAiChatThreadMediaContent = (content: unknown, replacements: AppliedMediaReplacement[]): AiChatThreadPatchResult => {
+    const patch = patchAiChatThreadMediaContentNode(content, replacements)
+
+    return {
+        content: patch.node,
+        changed: patch.changed,
+        patchedNodeCount: patch.patchedNodeCount,
+    }
+}
+
+const getThreadMediaReplacementOperations = async ({
+    workspaceId,
+    replacements,
+    currentDate,
+}: {
+    workspaceId: string
+    replacements: AppliedMediaReplacement[]
+    currentDate: number
+}): Promise<TransactOperation[]> => {
+    const replacementsByThreadId = new Map<string, AppliedMediaReplacement[]>()
+
+    for (const replacement of replacements) {
+        if (!replacement.aiChatThreadId) continue
+        replacementsByThreadId.set(replacement.aiChatThreadId, [
+            ...(replacementsByThreadId.get(replacement.aiChatThreadId) ?? []),
+            replacement,
+        ])
+    }
+
+    const operations: TransactOperation[] = []
+    const aiChatThreadTableName = getDynamoDbTableStageName('AI_CHAT_THREADS', ORG_NAME, STAGE)
+
+    for (const [threadId, threadReplacements] of replacementsByThreadId) {
+        const thread = await dynamoDBService.getItem({
+            tableName: aiChatThreadTableName,
+            key: { workspaceId, threadId },
+            origin: `updateWorkspaceCanvasState:mediaReplacementThread(${workspaceId}:${threadId})`
+        })
+
+        if (!thread || Object.keys(thread).length === 0) continue
+
+        const patch = patchAiChatThreadMediaContent(thread.content, threadReplacements)
+        if (!patch.changed) continue
+
+        operations.push({
+            type: 'update',
+            tableName: aiChatThreadTableName,
+            key: { workspaceId, threadId },
+            updates: {
+                content: patch.content as Record<string, unknown>,
+                updatedAt: currentDate,
+            },
+        })
+    }
+
+    return operations
+}
+
 function mergeApiLineageForFullCanvasSave(
     currentCanvasState: CanvasState,
     incomingCanvasState: CanvasState,
     currentDate: number
-): CanvasState {
+): { canvasState: CanvasState; appliedMediaReplacements: AppliedMediaReplacement[] } {
     const currentApiNodes = currentCanvasState.nodes.filter(isApiLineageNode)
-    if (currentApiNodes.length === 0) return incomingCanvasState
+    if (currentApiNodes.length === 0) return { canvasState: incomingCanvasState, appliedMediaReplacements: [] }
 
     const currentApiNodesById = new Map(currentApiNodes.map(node => [node.nodeId, node]))
     const currentApiNodesByStableKey = new Map(currentApiNodes.map(node => [getApiLineageNodeStableKey(node), node]))
@@ -222,6 +469,7 @@ function mergeApiLineageForFullCanvasSave(
     const protectedMarkerNodeIds = new Set<string>()
     const nextNodes: CanvasNode[] = []
     const includedNodeIds = new Set<string>()
+    const appliedMediaReplacements: AppliedMediaReplacement[] = []
 
     const includeNode = (node: CanvasNode): void => {
         if (includedNodeIds.has(node.nodeId)) {
@@ -249,7 +497,7 @@ function mergeApiLineageForFullCanvasSave(
         if (isApiGeneratedMediaNode(currentNode)) addGeneratedLineageMarkerRefs(currentNode, protectedMarkerNodeIds)
 
         const nodeToInclude = currentNode.nodeId === incomingNode.nodeId
-            ? applyIncomingLayoutFields(currentNode, incomingNode)
+            ? applyIncomingLayoutFields(currentNode, incomingNode, appliedMediaReplacements)
             : currentNode
         includeNode(nodeToInclude)
     }
@@ -293,9 +541,12 @@ function mergeApiLineageForFullCanvasSave(
     }
 
     return {
-        ...incomingCanvasState,
-        nodes: nextNodes,
-        edges: [...nextEdgesById.values()],
+        canvasState: {
+            ...incomingCanvasState,
+            nodes: nextNodes,
+            edges: [...nextEdgesById.values()],
+        },
+        appliedMediaReplacements,
     }
 }
 
@@ -527,13 +778,15 @@ export default {
         canvasState,
         userId,
         expectedCanvasStateUpdatedAt,
-        expectedUpdatedAt
+        expectedUpdatedAt,
+        persistViewport = false
     }: {
         workspaceId: string
         canvasState: CanvasState
         userId: string
         expectedCanvasStateUpdatedAt?: number
         expectedUpdatedAt?: number
+        persistViewport?: boolean
     }): Promise<UpdateCanvasStateResult> => {
         const currentDate = new Date().getTime()
         const canvasStateSaveToken = expectedCanvasStateUpdatedAt ?? expectedUpdatedAt
@@ -545,11 +798,25 @@ export default {
                 key: { workspaceId },
                 origin: 'updateWorkspaceCanvasState:get'
             })
-            const nextCanvasState = mergeApiLineageForFullCanvasSave(
-                normalizeCanvasState(currentWorkspace?.canvasState),
-                normalizeCanvasState(canvasState),
+            const currentCanvasState = normalizeCanvasState(currentWorkspace?.canvasState)
+            const incomingCanvasState = normalizeCanvasState(canvasState)
+            const incomingCanvasStateForSave = persistViewport
+                ? incomingCanvasState
+                : { ...incomingCanvasState, viewport: currentCanvasState.viewport }
+            const mergedCanvasStateResult = mergeApiLineageForFullCanvasSave(
+                currentCanvasState,
+                incomingCanvasStateForSave,
                 currentDate
             )
+            const mergedCanvasState = mergedCanvasStateResult.canvasState
+            const nextCanvasState = persistViewport
+                ? mergedCanvasState
+                : { ...mergedCanvasState, viewport: currentCanvasState.viewport }
+            const threadMediaReplacementOperations = await getThreadMediaReplacementOperations({
+                workspaceId,
+                replacements: mergedCanvasStateResult.appliedMediaReplacements,
+                currentDate,
+            })
 
             await dynamoDBService.transactWrite({
                 operations: [
@@ -578,7 +845,8 @@ export default {
                         updates: {
                             updatedAt: currentDate
                         }
-                    }
+                    },
+                    ...threadMediaReplacementOperations
                 ],
                 logConditionalCheckFailures: false,
                 origin: 'updateWorkspaceCanvasState'

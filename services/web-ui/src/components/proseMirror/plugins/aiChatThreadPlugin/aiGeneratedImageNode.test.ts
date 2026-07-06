@@ -146,6 +146,25 @@ describe('aiGeneratedImageNode callback registry', () => {
 
         expect(getAiGeneratedImageCallbacks()).toBe(callbacks)
     })
+
+    it('replaces the entire callback registry when set again', () => {
+        const firstCallbacks = {
+            onImageErrorToCanvas: vi.fn(),
+            onImagePartialToCanvas: vi.fn(),
+        } as any
+        const secondCallbacks = {
+            onImageCompleteToCanvas: vi.fn(),
+        } as any
+
+        setAiGeneratedImageCallbacks(firstCallbacks)
+        setAiGeneratedImageCallbacks(secondCallbacks)
+        const registeredCallbacks = getAiGeneratedImageCallbacks()
+
+        expect(registeredCallbacks).toBe(secondCallbacks)
+        expect(registeredCallbacks).not.toHaveProperty('onImageErrorToCanvas')
+        expect(registeredCallbacks).toHaveProperty('onImageCompleteToCanvas')
+        expect(registeredCallbacks).not.toHaveProperty('onImagePartialToCanvas')
+    })
 })
 
 // =============================================================================

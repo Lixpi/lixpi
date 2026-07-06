@@ -869,6 +869,32 @@ export async function upsertMediaLineagePlanToCanvas(params: {
     })
 }
 
+export async function settleMediaGenerationRequestOnCanvas(params: {
+    workspaceId: string
+    generationRequestId: string
+}): Promise<void> {
+    await Workspace.mutateCanvasState({
+        workspaceId: params.workspaceId,
+        origin: 'settleMediaGenerationRequestOnCanvas',
+        mutate: (canvasState) => {
+            let changed = false
+            const nodes = canvasState.nodes.map((node: CanvasNode): CanvasNode => {
+                if (!isMarkerNode(node) || node.generationRequestId !== params.generationRequestId || !node.pendingState) {
+                    return node
+                }
+                const settledNode = { ...node }
+                delete settledNode.pendingState
+                changed = true
+                return settledNode
+            })
+            return {
+                canvasState: changed ? { ...canvasState, nodes } : canvasState,
+                changed,
+            }
+        },
+    })
+}
+
 export async function upsertGeneratedImageToCanvas(params: UpsertImageInput): Promise<void> {
     const assignment = params.generationRun?.lineageAssignment
     if (!assignment) return

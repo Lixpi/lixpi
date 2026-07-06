@@ -848,7 +848,7 @@ describe('Workspace canvas — content descriptors (documents & threads)', () =>
 	it('debounces descriptor regeneration and skips too-thin content via settings (no magic numbers)', () => {
 		expectSourceToContain(ts, 'function scheduleTextNodeDescriptor(nodeId: string, content: unknown, title?: string)')
 		expectSourceToContain(ts, 'text.trim().length < settings.contentDescriptor.minTextLength')
-		expectSourceToContain(ts, 'settings.contentDescriptor.editDebounceMs')
+		expectSourceToContain(ts, 'settings.workspacePersistence.debounceMs')
 	})
 
 	it('seeds descriptors on node creation without analyzing every document edit', () => {
@@ -1159,7 +1159,7 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 	it('persists every Svelte-side canvas save with the current live viewport', () => {
 		expectSourceToContain(svelte, 'const stateToPersist = {')
 		expectSourceToContain(svelte, '...newCanvasState,')
-		expectSourceToContain(svelte, 'viewport,')
+		expectSourceToContain(svelte, 'viewport: stateViewport,')
 		expectSourceToContain(svelte, 'workspaceStore.updateCanvasState(stateToPersist)')
 		expectSourceToContain(svelte, 'canvasState: stateToPersist')
 	})
@@ -1181,20 +1181,20 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 	})
 
 	it('refuses to persist a debounced viewport after a newer viewport arrives', () => {
-		expectSourceToContain(svelte, 'const scheduledViewport = newViewport')
+		expectSourceToContain(svelte, 'const scheduledViewport = nextViewport')
 		expectSourceToContain(svelte, 'viewport.x !== scheduledViewport.x')
 		expectSourceToContain(svelte, 'viewport.y !== scheduledViewport.y')
 		expectSourceToContain(svelte, 'viewport.zoom !== scheduledViewport.zoom')
-		expectSourceToContain(svelte, 'viewport: scheduledViewport')
+		expectSourceToContain(svelte, 'if (persistViewportState(scheduledViewport)) pendingViewportSave = null')
 	})
 
 	it('debounces fallback document saves in the Svelte canvas host', () => {
-		expectSourceToContain(svelte, 'const DOCUMENT_SAVE_DEBOUNCE_MS = 5000')
+		expectSourceToContain(svelte, 'settings.workspacePersistence.debounceMs')
 		expectSourceToContain(svelte, 'const documentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()')
 		expectSourceToContain(svelte, 'const pendingDocumentUpdates = new Map<string, PendingDocumentUpdate>()')
 		expectSourceToContain(svelte, 'function scheduleDocumentUpdate(update: PendingDocumentUpdate): void')
 		expectSourceToContain(svelte, 'if (existingTimer) clearTimeout(existingTimer)')
-		expectSourceToContain(svelte, '}, DOCUMENT_SAVE_DEBOUNCE_MS)')
+		expectSourceToContain(svelte, '}, settings.workspacePersistence.debounceMs)')
 		expectSourceToContain(svelte, 'documentService.updateDocument(pending)')
 		expectSourceToContain(svelte, 'for (const timer of documentSaveTimers.values()) clearTimeout(timer)')
 	})
@@ -1508,11 +1508,13 @@ describe('Right side panel — TS infrastructure', () => {
 	it('opens the panel without requiring an existing thread and creates standalone history on submit', () => {
 		expectSourceToContain(ts, 'function openAiChatPanel(): void')
 		expectSourceToContain(ts, 'aiChatPanelState = { ...aiChatPanelState, isOpen: true }')
-		expectSourceToContain(ts, 'addContextChips(selectedNodeIds)')
 		expectSourceToContain(ts, 'async function submitCanvasGenerationRun(data: AiPromptComposerSubmitData): Promise<void>')
 		expectSourceToContain(ts, 'void loadExtractionSessionHistory()')
 		expectSourceToContain(ts, 'extractionSessionHistoryLoaded = false')
 		expectSourceToContain(ts, "owner: { type: 'standalone' }")
+		const openAiChatPanelMatch = ts.match(/function openAiChatPanel\(\): void \{[\s\S]*?^    \}/m)
+		expect(openAiChatPanelMatch).not.toBeNull()
+		expectExcerptNotToContain(openAiChatPanelMatch![0], 'addContextChips')
 		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-title')
 		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-close')
 	})
@@ -1646,8 +1648,8 @@ describe('Right side panel — TS infrastructure', () => {
 
 		expectSourceToContain(ts, 'function rememberStandaloneGeneratedImagePlacement(')
 		expectSourceToContain(ts, 'const referenceNodeIds = getStandaloneGeneratedMediaReferenceNodeIds()')
-		expectSourceToContain(ts, '...aiChatPanelState.contextChips,')
-		expectSourceToContain(ts, '...Array.from(selectedNodeIds),')
+		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(threadId, candidateNodeIds)')
+		expectSourceNotToContain(ts, '...Array.from(selectedNodeIds),')
 		expectSourceToContain(ts, 'const placementAnchorNodeId = referenceNodeIds[0] ?? activeTargetNodeId ?? candidateNodeIds[0]')
 		expectSourceToContain(ts, '...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),')
 		expectSourceToContain(ts, 'referenceNodeIds: candidateNodeIds,')
@@ -1690,6 +1692,20 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceNotToContain(ts, 'referencePosition.x - getRootBranchMarkerOutputGap() - markerDimensions.width')
 		expectSourceNotToContain(ts, 'referencePosition.x - getBranchOriginOutputGap() - dimensions.width')
 		expectSourceNotToContain(ts, 'if (!sourceThread) return\n            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)')
+	})
+
+	it('returns live viewport-aware canvas state from the canvas API', () => {
+		expectSourceToContain(ts, 'return currentCanvasState')
+		expectSourceToContain(ts, 'viewport: getLiveViewport()')
+		expectSourceToContain(ts, 'return null')
+		expectSourceToContain(ts, 'getViewport() {')
+		expectSourceToContain(ts, 'return getLiveViewport()')
+	})
+
+	it('maps media generation request completion callbacks back into generation-settling', () => {
+		expectSourceToContain(ts, 'onMediaGenerationRequestCompleteToCanvas: ({ threadId, generationRequestId, generationRun }) => {')
+		expectSourceToContain(ts, 'if (!shouldAcceptGeneratedMediaEvent(threadId)) return')
+		expectSourceToContain(ts, 'settleMediaGenerationRequest(threadId, generationRequestId, generationRun)')
 	})
 
 	it('routes workspace context relevance events around markdown parsing', () => {

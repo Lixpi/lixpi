@@ -277,6 +277,59 @@ describe('Document step submissions', () => {
         expect(result).toEqual(transportResult)
     })
 
+    it('schedules a debounced snapshot job when DOC_SUBMIT_STEPS is accepted', async () => {
+        vi.useFakeTimers()
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
+
+        try {
+            const payload = {
+                ...baseDocumentData,
+                docType: 'document',
+                docId: 'document-1',
+                baseVersion: 1,
+                expectedVersion: 1,
+                steps: [{ step: { type: 'replace' }, msgId: 'msg-1', clientId: 'client-1' }],
+                user: { userId: 'user-1' },
+            }
+            mocks.transport.submitSteps.mockResolvedValueOnce({ status: 'ACCEPTED', version: 2 })
+
+            const result = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEPS)(payload)
+
+            expect(result).toEqual({ status: 'ACCEPTED', version: 2 })
+            expect(setTimeoutSpy).toHaveBeenCalledTimes(1)
+            expect(setTimeoutSpy.mock.calls[0]?.[0]).toBeInstanceOf(Function)
+        } finally {
+            setTimeoutSpy.mockRestore()
+            vi.useRealTimers()
+        }
+    })
+
+    it('does not schedule snapshot persistence when DOC_SUBMIT_STEPS is not accepted', async () => {
+        vi.useFakeTimers()
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
+
+        try {
+            const payload = {
+                ...baseDocumentData,
+                docType: 'document',
+                docId: 'document-1',
+                baseVersion: 1,
+                expectedVersion: 1,
+                steps: [{ step: { type: 'replace' }, msgId: 'msg-1', clientId: 'client-1' }],
+                user: { userId: 'user-1' },
+            }
+            mocks.transport.submitSteps.mockResolvedValueOnce({ status: 'REJECTED', version: 2 })
+
+            const result = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEPS)(payload)
+
+            expect(result).toEqual({ status: 'REJECTED', version: 2 })
+            expect(setTimeoutSpy).not.toHaveBeenCalled()
+        } finally {
+            setTimeoutSpy.mockRestore()
+            vi.useRealTimers()
+        }
+    })
+
     it('submits document step batches to the prosemirror transport with one workspace access check', async () => {
         const payload = {
             ...baseDocumentData,

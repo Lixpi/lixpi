@@ -343,6 +343,22 @@ describe('AiInteractionService', () => {
                         },
                     },
                     {
+                        eventId: 'replay-3',
+                        streamSequence: 11,
+                        payload: {
+                            pipelineEventId: 'replay-3',
+                            pipelineStreamSeq: 11,
+                            content: {
+                                status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
+                                generationRequestId: 'request-complete-resume',
+                                generationRun: {
+                                    generationRequestId: 'request-complete-resume',
+                                    reasoningRunId: 'run-image',
+                                },
+                            },
+                        },
+                    },
+                    {
                         eventId: 'replay-2',
                         streamSequence: 9,
                         payload: {
@@ -373,10 +389,14 @@ describe('AiInteractionService', () => {
             error: 'frame dropped',
         }))
         expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'media_generation_request_complete',
+            generationRequestId: 'request-complete-resume',
+        }))
+        expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
             type: 'media_generation_skipped',
             generationRequestId: 'media-req',
         }))
-        expect(service.pipelineLocalStreamSeq).toBe(9)
+        expect(service.pipelineLocalStreamSeq).toBe(11)
     })
 
     it('ignores text-only streaming status payloads', () => {

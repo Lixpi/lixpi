@@ -18,8 +18,13 @@ import { workspaceStore } from '$src/stores/workspaceStore.ts'
 
 type CanvasSaveQueue = {
     inFlight: boolean
-    pendingCanvasState: CanvasState | null
+    pendingRequest: CanvasStateSaveRequest | null
     staleRetryCount: number
+}
+
+type CanvasStateSaveRequest = {
+    canvasState: CanvasState
+    persistViewport: boolean
 }
 
 type CanvasStateUpdateResponse = {
@@ -158,9 +163,20 @@ class WorkspaceService {
         }
     }
 
-    public updateCanvasState({ workspaceId, canvasState }: { workspaceId: string; canvasState: CanvasState }): void {
+    public updateCanvasState({
+        workspaceId,
+        canvasState,
+        persistViewport = false,
+    }: {
+        workspaceId: string
+        canvasState: CanvasState
+        persistViewport?: boolean
+    }): void {
         const queue = this.getCanvasSaveQueue(workspaceId)
-        queue.pendingCanvasState = canvasState
+        queue.pendingRequest = {
+            canvasState,
+            persistViewport: persistViewport || queue.pendingRequest?.persistViewport === true,
+        }
         queue.staleRetryCount = 0
 
         if (!queue.inFlight) {
@@ -172,7 +188,7 @@ class WorkspaceService {
         const existing = this.canvasSaveQueues.get(workspaceId)
         if (existing) return existing
 
-        const queue = { inFlight: false, pendingCanvasState: null, staleRetryCount: 0 }
+        const queue = { inFlight: false, pendingRequest: null, staleRetryCount: 0 }
         this.canvasSaveQueues.set(workspaceId, queue)
         return queue
     }
@@ -181,9 +197,9 @@ class WorkspaceService {
         queue.inFlight = true
 
         try {
-            while (queue.pendingCanvasState) {
-                const canvasState = queue.pendingCanvasState
-                queue.pendingCanvasState = null
+            while (queue.pendingRequest) {
+                const request = queue.pendingRequest
+                queue.pendingRequest = null
                 const storedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
                 const expectedCanvasStateUpdatedAt = Number.isFinite(storedCanvasStateUpdatedAt)
                     ? storedCanvasStateUpdatedAt
@@ -192,7 +208,8 @@ class WorkspaceService {
                 const result: CanvasStateUpdateResponse = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE, {
                     token: await AuthService.getTokenSilently(),
                     workspaceId,
-                    canvasState,
+                    canvasState: request.canvasState,
+                    ...(request.persistViewport ? { persistViewport: true } : {}),
                     ...(Number.isFinite(expectedCanvasStateUpdatedAt) ? { expectedCanvasStateUpdatedAt } : {}),
                 })
 
@@ -206,19 +223,24 @@ class WorkspaceService {
                             workspacesStore.updateWorkspace(workspaceId, { updatedAt: result.currentUpdatedAt })
                         }
                         workspaceStore.setDataValues({ canvasStateUpdatedAt: result.currentCanvasStateUpdatedAt })
-                        if (!queue.pendingCanvasState) {
-                            queue.pendingCanvasState = canvasState
+                        if (queue.pendingRequest) {
+                            queue.pendingRequest = {
+                                ...queue.pendingRequest,
+                                persistViewport: queue.pendingRequest.persistViewport || request.persistViewport,
+                            }
+                        } else {
+                            queue.pendingRequest = request
                         }
                         continue
                     }
 
-                    queue.pendingCanvasState = null
+                    queue.pendingRequest = null
                     queue.staleRetryCount = 0
                     workspaceStore.setMetaValues({ requiresSave: false })
                     if (routeStillOwnsWorkspace) {
                         await this.getWorkspace({ workspaceId })
                     }
-                    queue.pendingCanvasState = null
+                    queue.pendingRequest = null
                     return
                 }
 
@@ -237,7 +259,7 @@ class WorkspaceService {
                 }
 
                 queue.staleRetryCount = 0
-                if (!queue.pendingCanvasState) {
+                if (!queue.pendingRequest) {
                     workspaceStore.setMetaValues({ requiresSave: false })
                 }
             }
@@ -246,7 +268,7 @@ class WorkspaceService {
             workspaceStore.setMetaValues({ requiresSave: true })
         } finally {
             queue.inFlight = false
-            if (queue.pendingCanvasState) {
+            if (queue.pendingRequest) {
                 void this.flushCanvasStateSaveQueue(workspaceId, queue)
             } else {
                 this.canvasSaveQueues.delete(workspaceId)

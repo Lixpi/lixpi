@@ -341,6 +341,64 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         expect(childState.videoModelMetaInfo?.model).toBe('veo-3.1-generate-preview')
     })
 
+    it('keeps existing media-field values when preflight resolvers return undefined for those fields', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
+
+        getAiModel.mockImplementation(async ({ model }: { provider: string; model: string }) => {
+            if (model === 'claude-sonnet-4-6') {
+                return {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet-4-6',
+                    modelVersion: 'claude-sonnet-4-6',
+                    modalities: [{ modality: 'text' }],
+                } as any
+            }
+            if (model === 'gemini-2.5-flash-image') {
+                return {
+                    provider: 'Google',
+                    model: 'gemini-2.5-flash-image',
+                    modelVersion: 'gemini-2.5-flash-image',
+                    modalities: [{ modality: 'image_generation' }],
+                } as any
+            }
+            return {
+                provider: 'Google',
+                model: 'veo-3.1-generate-preview',
+                modelVersion: 'veo-3.1-generate-preview',
+                modalities: [{ modality: 'video_generation' }],
+                videoAspectRatios: [{ value: '16:9' }],
+                videoResolutions: [{ value: '720p' }],
+                videoDurations: [{ value: '8' }],
+            } as any
+        })
+
+        vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext').mockResolvedValue({})
+        vi.spyOn(featureResolver, 'resolveFeatures').mockResolvedValue({
+            featureReferenceImages: undefined,
+            featureUsagePrompt: undefined,
+        } as any)
+        vi.spyOn(imageBranchResolver, 'resolveImageBranch').mockResolvedValue({
+            imageBranchResolution: { mode: 'fresh-branch' },
+            videoReferenceImages: undefined as any,
+            __futureMediaConditioning: undefined as any,
+        } as any)
+
+        await orchestrator.process(createRequest({
+            ...createRequest(),
+            videoReferenceImages: ['request-video-reference'],
+            featureReferenceImages: ['request-feature-reference'],
+        } as any))
+
+        expect(registry.process).toHaveBeenCalledOnce()
+        const childState = registry.process.mock.calls[0]?.[2] as any
+        expect(childState.videoReferenceImages).toEqual(['request-video-reference'])
+        expect(childState.featureReferenceImages).toEqual(['request-feature-reference'])
+        // Undefined from shared-resolvers must stay absent from the resolved patch.
+        expect((childState as Record<string, any>).__futureMediaConditioning).toBeUndefined()
+    })
+
     it('rejects matrix requests when shared preflight fails and does not dispatch child processes', async () => {
         const registry = createRegistry()
         const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)

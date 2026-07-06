@@ -299,6 +299,7 @@ services:
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
@@ -383,6 +384,7 @@ services:
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
@@ -504,6 +506,7 @@ services:
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached

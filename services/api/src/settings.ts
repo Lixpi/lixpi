@@ -1,8 +1,12 @@
 'use strict'
 
-import { mediaGenerationLayoutSettings } from '@lixpi/constants'
-
-import type { AiModelId, MediaGenerationLayoutSettings } from '@lixpi/constants'
+import {
+    mediaGenerationLayoutSettings,
+    workspacePersistenceSettings,
+    type AiModelId,
+    type MediaGenerationLayoutSettings,
+    type WorkspacePersistenceSettings,
+} from '@lixpi/constants'
 
 export type ApiSettings = {
     // API-owned media descriptor settings for image and video summaries shown on the canvas.
@@ -20,6 +24,8 @@ export type ApiSettings = {
     // Sourced from the shared mediaGenerationLayoutSettings in @lixpi/constants
     // so the API and the WebUI place nodes with identical dimensions and gaps.
     mediaGenerationCanvasProjection: MediaGenerationLayoutSettings
+    // Universal debounce for settled workspace persistence authored by the API.
+    workspacePersistence: WorkspacePersistenceSettings
 }
 
 export const settings: ApiSettings = {
@@ -33,4 +39,5 @@ export const settings: ApiSettings = {
         defaultVlmMaxTokens: 8192,
     },
     mediaGenerationCanvasProjection: mediaGenerationLayoutSettings,
+    workspacePersistence: workspacePersistenceSettings,
 }
