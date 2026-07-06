@@ -1,7 +1,7 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
+import { STREAM_STATUS, type CanvasGeometryUpdate, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
 
 import {
     logCanvasProjectionError,
@@ -143,8 +143,9 @@ export class VideoPublisher {
         const poster = await storeFrameImage(posterBuffer, 'generated-video-poster.png')
         const frame = await storeFrameImage(frameBuffer, 'generated-video-frame.png')
 
+        let canvasGeometry: CanvasGeometryUpdate | null = null
         try {
-            await upsertGeneratedVideoToCanvas({
+            canvasGeometry = await upsertGeneratedVideoToCanvas({
                 workspaceId: this.workspaceId,
                 aiChatThreadId: this.aiChatThreadId,
                 videoUrl: videoResult.url,
@@ -184,6 +185,7 @@ export class VideoPublisher {
             aiProvider: this.provider,
             videoModelProvider: this.provider,
             videoModelId,
+            ...(canvasGeometry ? { canvasGeometry } : {}),
             ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }

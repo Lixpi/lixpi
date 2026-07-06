@@ -1209,10 +1209,10 @@ export const settings: Settings = {
 
         // Provenance/descriptor icon strip below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; the expandable info panel is rendered separately and does not inherit this transform.
         generatedMediaChrome: {
-            // Base screen-pixel icon/button size at 100% and higher zoom.
-            iconSize: 28,
-            // Base screen-pixel gap at 100% and higher zoom between the media node's bottom edge and the chrome strip.
-            topGap: 8,
+            // Base screen-pixel icon/button size at 100% and higher zoom. Shared with the API collision boxes via @lixpi/constants.
+            iconSize: mediaGenerationLayoutSettings.generatedMediaChrome.iconSize,
+            // Base screen-pixel gap at 100% and higher zoom between the media node's bottom edge and the chrome strip. Shared with the API collision boxes via @lixpi/constants.
+            topGap: mediaGenerationLayoutSettings.generatedMediaChrome.topGap,
             // Scale applied to generated-media badges rendered inside AI chat history cards.
             chatScale: 0.72,
             // Separator between the provider brand and model title in the model badge, e.g. "OpenAI : GPT Image 2". Includes its own surrounding spacing so it can be tuned freely (" : ", " — ", " / ", …).
@@ -1402,8 +1402,8 @@ export const settings: Settings = {
 
     // Shared SVG video player controls used by canvas video nodes and in-chat generated videos.
     videoControls: {
-        // Screen-pixel height of the control bar and host.
-        height: 40,
+        // Screen-pixel height of the control bar and host. Shared with the API collision boxes via @lixpi/constants.
+        height: mediaGenerationLayoutSettings.generatedMediaChrome.videoControlsHeight,
         // Canvas video-node mount geometry.
         canvas: {
             // Horizontal inset for normal-width video nodes.
@@ -1412,8 +1412,8 @@ export const settings: Settings = {
             compactHorizontalInset: 0,
             // Node width below which the compact horizontal inset is used.
             compactWidthThreshold: 260,
-            // Vertical gap between the video node edge and the external controls strip.
-            bottomInset: 8,
+            // Vertical gap between the video node edge and the external controls strip. Shared with the API collision boxes via @lixpi/constants.
+            bottomInset: mediaGenerationLayoutSettings.generatedMediaChrome.videoControlsBottomInset,
             // Bounded zoom scaling for the canvas control strip.
             zoomScaling: { minZoom: 1.2 },
         },
@@ -1536,8 +1536,8 @@ export const settings: Settings = {
         pendingMarkerMoveDurationMs: 420,
         // Temporary root marker used when a fresh multi-model branch has no real source node.
         branchOrigin: {
-            // Canvas-unit base size for branch lineage markers; final width and height are derived in WorkspaceCanvas.
-            size: 96,
+            // Canvas-unit base size for branch lineage markers; final width and height derive from the shared marker sizing in @lixpi/constants.
+            size: mediaGenerationLayoutSettings.marker.baseSize,
             // Canvas-unit base size for the branch icon inside marker labels.
             iconSize: 52,
             styles: {
@@ -1887,23 +1887,21 @@ export const settings: Settings = {
                 backgroundSizePercent: 142,
             },
         },
-        // Width sizing for the branch marker pill that hugs a user message.
+        // Width sizing for the branch marker pill that hugs a user message. The
+        // sizing metrics come from the shared mediaGenerationLayoutSettings.marker
+        // so the API layout estimates marker dimensions with identical values —
+        // tune them in @lixpi/constants only.
         marker: {
             // Multiplier on branchOrigin.size for the marker's comfortable minimum width (the pill never shrinks below this).
-            minWidthMultiplier: 2.6,
+            minWidthMultiplier: mediaGenerationLayoutSettings.marker.minWidthMultiplier,
             // Multiplier on the minimum width capping how wide an on-canvas (already-placed) marker may grow before its preview wraps to a second line and truncates. Lower it to keep long placed messages more compact.
-            maxWidthGrowth: 1.5,
+            maxWidthGrowth: mediaGenerationLayoutSettings.marker.maxWidthGrowth,
             // Multiplier on the minimum width capping the screen-fixed preflight pose. Kept wider than maxWidthGrowth so long prompts stay on one line while still being assessed; once the marker lands on the canvas it tightens to maxWidthGrowth.
-            screenFixedMaxWidthGrowth: 6,
+            screenFixedMaxWidthGrowth: mediaGenerationLayoutSettings.marker.screenFixedMaxWidthGrowth,
             // Hard cap on the screen-fixed preflight pose's on-screen width as a fraction of the prompt input field width. The pill hugs its content but never grows past this share of the input; longer messages truncate with an ellipsis.
             screenFixedMaxWidthFraction: 0.8,
             // Text sizing for the marker's preview lines. Matches the floating detail panel's body text (1rem / 16px) so a marker reads at the same size as the thread it represents.
-            text: {
-                messageFontSize: 16,
-                messageLineHeight: 1.14,
-                responseFontSize: 11.5,
-                responseLineHeight: 1.15,
-            },
+            text: mediaGenerationLayoutSettings.marker.text,
         },
     },
 

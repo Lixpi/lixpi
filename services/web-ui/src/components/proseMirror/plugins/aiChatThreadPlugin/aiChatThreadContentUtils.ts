@@ -5,12 +5,19 @@ import {
     type AiLineageProjectionScope,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 
-export type ProseMirrorJsonNode = {
-    type?: string
-    text?: string
-    attrs?: Record<string, any>
-    content?: ProseMirrorJsonNode[]
-}
+// Doc-math primitives live in the shared package (also used by the API);
+// re-exported here so existing plugin-local imports keep working.
+export {
+    parseProseMirrorJsonContent,
+    collectProseMirrorText,
+    findAiChatThreadContentNode,
+    type ProseMirrorJsonNode,
+} from '@lixpi/prosemirror'
+import {
+    parseProseMirrorJsonContent,
+    collectProseMirrorText,
+    type ProseMirrorJsonNode,
+} from '@lixpi/prosemirror'
 
 // One turn's generated-media context, read back from the thread doc to populate
 // the canvas info panel. Carries whichever generation trace the response holds —
@@ -57,35 +64,7 @@ type GeneratedMediaTurnMatch = {
     threadAttrs?: Record<string, any>
 }
 
-type CollectTextOptions = {
-    excludedNodeTypes?: string[]
-}
-
 type ProjectionNodeFilter = (node: ProseMirrorJsonNode) => boolean
-
-export function parseProseMirrorJsonContent(content: unknown): ProseMirrorJsonNode | null {
-    if (!content) return null
-    if (typeof content === 'string') {
-        try {
-            return JSON.parse(content) as ProseMirrorJsonNode
-        } catch {
-            return null
-        }
-    }
-    if (typeof content === 'object') return content as ProseMirrorJsonNode
-    return null
-}
-
-export function collectProseMirrorText(node: ProseMirrorJsonNode | undefined, options: CollectTextOptions = {}): string {
-    if (!node) return ''
-    if (options.excludedNodeTypes?.includes(node.type ?? '')) return ''
-    if (node.type === 'text') return node.text ?? ''
-    if (node.type === 'hard_break') return '\n'
-    if (node.type === 'aiGeneratedImage') {
-        return typeof node.attrs?.revisedPrompt === 'string' ? node.attrs.revisedPrompt : ''
-    }
-    return node.content?.map((child) => collectProseMirrorText(child, options)).join('') ?? ''
-}
 
 export function collectResponseTextById(root: ProseMirrorJsonNode): Record<string, string> {
     const responseTextById: Record<string, string> = {}

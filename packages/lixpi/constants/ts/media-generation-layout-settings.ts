@@ -7,6 +7,52 @@
 // make the persisted API geometry fight the client-side rebalance, so nodes
 // jump or overlap mid-run. Tune spacing here and nowhere else.
 
+export type MediaGenerationMarkerTextSettings = {
+    // Pixel font size of the user-message preview line (the bold prompt text).
+    messageFontSize: number
+    // Unitless line-height multiplier applied to the user-message preview.
+    messageLineHeight: number
+    // Pixel font size of the AI-response preview line below the separator.
+    responseFontSize: number
+    // Unitless line-height multiplier applied to the AI-response preview.
+    responseLineHeight: number
+}
+
+export type MediaGenerationMarkerSettings = {
+    // Canvas-unit base size for branch lineage markers; width/height derive from it.
+    baseSize: number
+    // Multiplier on baseSize for the marker's comfortable minimum width.
+    minWidthMultiplier: number
+    // Multiplier on the minimum width capping how wide an on-canvas marker may grow.
+    maxWidthGrowth: number
+    // Multiplier on the minimum width capping the screen-fixed preflight pose.
+    screenFixedMaxWidthGrowth: number
+    // Naive per-character width used for width sizing.
+    approxCharWidth: number
+    // Wider per-character width used when predicting line wrapping.
+    lineWrapCharWidth: number
+    horizontalPadding: number
+    screenFixedHorizontalPadding: number
+    promptPreviewMaxChars: number
+    responsePreviewMaxChars: number
+    verticalPadding: number
+    screenFixedVerticalPadding: number
+    separatorHeight: number
+    screenFixedSeparatorHeight: number
+    text: MediaGenerationMarkerTextSettings
+}
+
+export type GeneratedMediaChromeLayoutSettings = {
+    // Screen-pixel gap between a media node's bottom edge and its chrome strip.
+    topGap: number
+    // Screen-pixel icon/button size of the chrome strip.
+    iconSize: number
+    // Screen-pixel height of the shared video controls bar.
+    videoControlsHeight: number
+    // Screen-pixel gap between a video node edge and the external controls strip.
+    videoControlsBottomInset: number
+}
+
 export type MediaGenerationLayoutSettings = {
     markerWidth: number
     markerHeight: number
@@ -18,6 +64,8 @@ export type MediaGenerationLayoutSettings = {
     branchOriginToFirstMediaGap: number
     branchFanoutExtraGap: number
     serverFallbackPaneHeight: number
+    marker: MediaGenerationMarkerSettings
+    generatedMediaChrome: GeneratedMediaChromeLayoutSettings
 }
 
 export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
@@ -41,4 +89,37 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
     branchFanoutExtraGap: 200,
     // Canvas-unit pane height the API assumes when the client did not report its visible area.
     serverFallbackPaneHeight: 900,
+    // Text-driven branch-marker pill sizing. The API estimates marker dimensions
+    // from the SAME metrics the WebUI uses to render, so server-resolved layout
+    // reserves exactly the space the client paints.
+    marker: {
+        baseSize: 96,
+        minWidthMultiplier: 2.6,
+        maxWidthGrowth: 1.5,
+        screenFixedMaxWidthGrowth: 6,
+        approxCharWidth: 8,
+        lineWrapCharWidth: 10,
+        horizontalPadding: 60,
+        screenFixedHorizontalPadding: 34,
+        promptPreviewMaxChars: 120,
+        responsePreviewMaxChars: 50,
+        verticalPadding: 30,
+        screenFixedVerticalPadding: 18,
+        separatorHeight: 16,
+        screenFixedSeparatorHeight: 10,
+        text: {
+            messageFontSize: 16,
+            messageLineHeight: 1.14,
+            responseFontSize: 11.5,
+            responseLineHeight: 1.15,
+        },
+    },
+    // Chrome (model badge strip / video controls) reserved below generated media
+    // in collision boxes, on both the API and the WebUI.
+    generatedMediaChrome: {
+        topGap: 8,
+        iconSize: 28,
+        videoControlsHeight: 40,
+        videoControlsBottomInset: 8,
+    },
 }

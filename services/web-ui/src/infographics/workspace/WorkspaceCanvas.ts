@@ -73,13 +73,25 @@ import {
     type GeneratedMediaTurnLocator,
     type ProseMirrorJsonNode,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
+import {
+    findAiChatThreadContentNode,
+    getBranchMarkerTurnMessages,
+    getLatestThreadTurnMessages,
+    type BranchMarkerTurnDescriptor,
+} from '@lixpi/prosemirror'
 import type { AiLineageProjectionScope } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import {
     CircularGlassMaterial,
     createShiftingGradientBackground,
+    estimateBranchMarkerDimensions,
+    fitDimensionsToAspectRatio,
     getAdaptiveBoundedZoomScalingOptions,
+    getBranchMarkerPromptPreview,
+    getBranchMarkerResponsePreview,
+    getBranchMarkerScreenFixedMinWidth,
     getCanvasChromeScreenLayout,
+    getGeneratedMediaChromeCollisionHeight as getSharedGeneratedMediaChromeCollisionHeight,
     getResizeHandleScaledSizes,
     resolveCollisions,
     scaleCanvasChromeToScreenForZoom,
@@ -287,43 +299,9 @@ type PendingBranchMarkerRecord = {
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
-// The marker is a pill that hugs the user message by default. Its width grows
-// with the message length from a comfortable minimum up to a ceiling, after which
-// the preview text wraps to a second line and truncates. Width-sizing multipliers
-// (min width, on-canvas ceiling, docked-pose ceiling) are configurable in
-// settings.ts under `mediaBranchLineage.marker`.
-const BRANCH_MARKER_APPROX_CHAR_WIDTH = 8
-// Wrapping kicks in before the naive char-width estimate predicts (real glyphs
-// average wider than the width-sizing approximation). Use a larger per-char width
-// when deciding line count so a prompt that visually wraps to two lines is sized
-// for two lines instead of being crammed into a one-line pill.
-const BRANCH_MARKER_LINE_WRAP_CHAR_WIDTH = 10
-const BRANCH_MARKER_HORIZONTAL_PADDING = 60
-const BRANCH_MARKER_SCREEN_FIXED_HORIZONTAL_PADDING = 34
-const BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS = 120
-const BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS = 50
-const BRANCH_MARKER_VERTICAL_PADDING = 30
-const BRANCH_MARKER_SCREEN_FIXED_VERTICAL_PADDING = 18
-const BRANCH_MARKER_SEPARATOR_HEIGHT = 16
-const BRANCH_MARKER_SCREEN_FIXED_SEPARATOR_HEIGHT = 10
-// Rendered pixel line heights are derived from the configurable text sizing in
-// settings.ts so the height the layout reserves stays in sync with the CSS that
-// actually paints the marker's preview lines.
-function getBranchMarkerMessageLineHeight(): number {
-    const { messageFontSize, messageLineHeight } = settings.mediaBranchLineage.marker.text
-    return Math.ceil(messageFontSize * messageLineHeight)
-}
-function getBranchMarkerResponseLineHeight(): number {
-    const { responseFontSize, responseLineHeight } = settings.mediaBranchLineage.marker.text
-    return Math.ceil(responseFontSize * responseLineHeight)
-}
-// Match the natural single-line height (vertical padding + one message line) so a
-// one-line marker isn't inflated relative to a wrapped two-line one — otherwise
-// `justify-content: center` pads the single-line case more than the multi-line case.
-function getBranchMarkerMinHeight(): number {
-    return BRANCH_MARKER_VERTICAL_PADDING + getBranchMarkerMessageLineHeight()
-}
-
+// Branch-marker pill sizing is the shared estimateBranchMarkerDimensions in
+// @lixpi/canvas-engine — the API layout reserves marker space with the exact
+// same text metrics (single source: mediaGenerationLayoutSettings.marker).
 function getPendingBranchMarkerInputGap(): number {
     const gap = Number(settings.mediaBranchLineage.pendingMarkerInputGap)
     return Number.isFinite(gap) ? Math.max(0, gap) : 0
@@ -344,69 +322,18 @@ const MEDIA_DESCRIPTOR_ANALYSIS_RETRY_DELAYS_MS = [1000, 3000, 8000] as const
 const GENERATED_IMAGE_COMPLETION_OUTLINE_FALLBACK_MS = 5000
 const branchMarkerMediaModelCircleGlassCssImageByColor = new Map<string, string>()
 const branchMarkerMediaModelCircleTextureCssImageByColor = new Map<string, string>()
-function getBranchMarkerMinWidth(): number {
-    return Math.round(settings.mediaBranchLineage.branchOrigin.size * settings.mediaBranchLineage.marker.minWidthMultiplier)
-}
-
-function getBranchMarkerScreenFixedMinWidth(): number {
-    return Math.round(settings.mediaBranchLineage.branchOrigin.size * 1.1)
-}
-
-function getBranchMarkerWidthForText(promptText: string): number {
-    const minWidth = getBranchMarkerMinWidth()
-    const maxWidth = minWidth * settings.mediaBranchLineage.marker.maxWidthGrowth
-    const promptPreview = getBranchMarkerPromptPreview(promptText)
-    // Target a single line; longer messages keep growing until they hit the
-    // ceiling, then wrap to (and truncate at) two lines.
-    const desiredWidth = BRANCH_MARKER_HORIZONTAL_PADDING + promptPreview.length * BRANCH_MARKER_APPROX_CHAR_WIDTH
-    return Math.round(Math.max(minWidth, Math.min(maxWidth, desiredWidth)))
-}
-
-function getBranchMarkerPromptLineCount(promptText: string, width: number): number {
-    const promptPreview = getBranchMarkerPromptPreview(promptText)
-    const charsPerLine = Math.max(1, Math.floor((width - BRANCH_MARKER_HORIZONTAL_PADDING) / BRANCH_MARKER_LINE_WRAP_CHAR_WIDTH))
-    return promptPreview.length > charsPerLine ? 2 : 1
-}
-
 type BranchMarkerDimensionOptions = {
     responseLine?: boolean
 }
 
 function getBranchMarkerContentDimensions(promptText: string, options: BranchMarkerDimensionOptions = {}): { width: number; height: number } {
-    const width = getBranchMarkerWidthForText(promptText)
-    const promptLineCount = getBranchMarkerPromptLineCount(promptText, width)
-    const responseHeight = options.responseLine
-        ? BRANCH_MARKER_SEPARATOR_HEIGHT + getBranchMarkerResponseLineHeight()
-        : 0
-    return {
-        width,
-        height: Math.max(
-            getBranchMarkerMinHeight(),
-            Math.ceil(
-                BRANCH_MARKER_VERTICAL_PADDING
-                + promptLineCount * getBranchMarkerMessageLineHeight()
-                + responseHeight
-            )
-        ),
-    }
+    return estimateBranchMarkerDimensions(promptText, { responseLine: options.responseLine })
 }
 
-// Sizing for the screen-fixed preflight pose: the prompt stays on one line up to
-// a wider ceiling (then truncates), while the response row adds height only once
-// streamed text is visible. Shorter and wider than the on-canvas pill so the
-// marker visibly grows once it lands.
+// Screen-fixed preflight pose: shorter and wider than the on-canvas pill so the
+// marker visibly grows once it lands. Same shared estimator, screenFixed flag.
 function getBranchMarkerScreenFixedDimensions(promptText: string, options: BranchMarkerDimensionOptions = {}): { width: number; height: number } {
-    const minWidth = getBranchMarkerScreenFixedMinWidth()
-    const maxWidth = getBranchMarkerMinWidth() * settings.mediaBranchLineage.marker.screenFixedMaxWidthGrowth
-    const promptPreview = getBranchMarkerPromptPreview(promptText)
-    const desiredWidth = BRANCH_MARKER_SCREEN_FIXED_HORIZONTAL_PADDING + promptPreview.length * BRANCH_MARKER_APPROX_CHAR_WIDTH
-    const responseHeight = options.responseLine
-        ? BRANCH_MARKER_SCREEN_FIXED_SEPARATOR_HEIGHT + getBranchMarkerResponseLineHeight()
-        : 0
-    return {
-        width: Math.round(Math.max(minWidth, Math.min(maxWidth, desiredWidth))),
-        height: BRANCH_MARKER_SCREEN_FIXED_VERTICAL_PADDING + getBranchMarkerMessageLineHeight() + responseHeight,
-    }
+    return estimateBranchMarkerDimensions(promptText, { responseLine: options.responseLine, screenFixed: true })
 }
 
 function getBranchMarkerNodeDimensions(
@@ -512,24 +439,8 @@ function getBranchMarkerPromptText(node: BranchMarkerNode): string {
     return (node.provenance?.promptText ?? node.pendingState?.promptText ?? '').trim().replace(/\s+/g, ' ')
 }
 
-function getBranchMarkerPromptPreview(promptText: string): string {
-    if (!promptText) return ''
-
-    if (promptText.length <= BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS) return promptText
-
-    return `${promptText.slice(0, BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS)}...`
-}
 
 // Streaming reasoning text scrolls past the marker as a tail while receiving.
-// Completed markers settle on the start of the response so the lineage marker
-// previews the answer's topic instead of its trailing fragment.
-function getBranchMarkerResponsePreview(responseText: string, options: { isReceiving?: boolean } = {}): string {
-    const normalized = responseText.replace(/\s+/g, ' ').trim()
-    if (normalized.length <= BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS) return normalized
-    if (options.isReceiving) return `…${normalized.slice(-BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS)}`
-    return `${normalized.slice(0, BRANCH_MARKER_RESPONSE_PREVIEW_MAX_CHARS)}...`
-}
-
 function normalizeBranchMarkerModelValue(value: string | null | undefined): string {
     return String(value ?? '').trim().toLowerCase()
 }
@@ -3312,11 +3223,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         dimensions: { width: number; height: number },
         aspectRatio: number
     ): { width: number; height: number } {
-        const widthFromHeight = dimensions.height * aspectRatio
-        if (widthFromHeight <= dimensions.width) {
-            return { width: widthFromHeight, height: dimensions.height }
-        }
-        return { width: dimensions.width, height: dimensions.width / aspectRatio }
+        return fitDimensionsToAspectRatio(dimensions, aspectRatio)
     }
 
     // Mirror of handleImageIntrinsicSize, fired when the attached <video>
@@ -3494,12 +3401,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    // Shared with the API layout (chrome metrics live in
+    // mediaGenerationLayoutSettings.generatedMediaChrome): pending nodes reserve
+    // chrome too, so the model label appearing at settle time causes no reflow.
     function getGeneratedMediaChromeCollisionHeight(node: CanvasNode): number {
-        if (!isGeneratedMediaNode(node) || isPendingGeneratedMediaBeforeFirstFrame(node.nodeId)) return 0
-        const generatedMediaChromeHeight = settings.mediaNode.generatedMediaChrome.topGap
-            + settings.mediaNode.generatedMediaChrome.iconSize
-        if (node.type !== 'video') return generatedMediaChromeHeight
-        return VIDEO_CONTROLS_BOTTOM_INSET + VIDEO_CONTROLS_HEIGHT + generatedMediaChromeHeight
+        if (!isGeneratedMediaNode(node)) return 0
+        return getSharedGeneratedMediaChromeCollisionHeight(node.type)
     }
 
     function getCanvasNodeCollisionRect(
@@ -3630,9 +3537,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             branchOriginMarkerStackGap: getBranchMarkerStackGap(),
             collisionIterations: getWorkspaceCollisionFlowIterations(collisionSettings),
             collisionMargin: 0,
-            getPendingGeneratedMediaLayoutGeometry: (node: ImageCanvasNode | VideoCanvasNode) =>
-                getPendingGeneratedMediaBeforeFrameCircleGeometry(node.nodeId, node.position, node.dimensions),
-            getPendingGeneratedMediaCircleInset: getPendingGeneratedMediaBeforeFrameCircleInset,
             getNodeWorldPosition,
             getNodeWorldRect,
             getNodeCollisionRect: getCanvasNodeCollisionRect,
@@ -3678,30 +3582,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             x: (dimensions.width - size) / 2,
             y: (dimensions.height - size) / 2,
             size,
-        }
-    }
-
-    function getPendingGeneratedMediaBeforeFrameInsertionPosition(
-        nodeId: string,
-        finalPosition: { x: number; y: number },
-        dimensions: { width: number; height: number },
-    ): { x: number; y: number } {
-        if (!isPendingGeneratedMediaBeforeFirstFrame(nodeId)) return finalPosition
-        const inset = getPendingGeneratedMediaBeforeFrameCircleInset(dimensions)
-        return {
-            x: finalPosition.x - inset.x,
-            y: finalPosition.y,
-        }
-    }
-
-    function getFullFramePositionFromPendingGeneratedMediaPosition(
-        pendingPosition: { x: number; y: number },
-        dimensions: { width: number; height: number },
-    ): { x: number; y: number } {
-        const inset = getPendingGeneratedMediaBeforeFrameCircleInset(dimensions)
-        return {
-            x: pendingPosition.x + inset.x,
-            y: pendingPosition.y,
         }
     }
 
@@ -3819,17 +3699,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             mediaDimensions.height,
             mediaGap,
         )
-        const futureCircleInset = getPendingGeneratedMediaBeforeFrameCircleInset(mediaDimensions)
-        const futureCircleLeft = futureMediaPosition.x
-        const futureCircleStep = futureCircleInset.size + settings.mediaBranchLineage.branchRowGap
-        const futureCircleStackHeight = futureCircleInset.size * siblingCount
+        // Anchor to the FULL future-media stack, not the pre-frame circle: the
+        // rendered placeholders and the final layout both occupy full media rows,
+        // so preflight markers must sit at the same midpoints from the start.
+        const futureMediaLeft = futureMediaPosition.x
+        const futureMediaStep = mediaDimensions.height + settings.mediaBranchLineage.branchRowGap
+        const futureMediaStackHeight = mediaDimensions.height * siblingCount
             + settings.mediaBranchLineage.branchRowGap * Math.max(0, siblingCount - 1)
-        const firstCircleCenterY = parentRect.y + parentRect.height / 2
-            - futureCircleStackHeight / 2
-            + futureCircleInset.size / 2
-        const futureCircleCenterY = siblingSlot
-            ? firstCircleCenterY + futureCircleStep * siblingSlot.index
-            : futureMediaPosition.y + futureCircleInset.y + futureCircleInset.size / 2
+        const firstMediaCenterY = parentRect.y + parentRect.height / 2
+            - futureMediaStackHeight / 2
+            + mediaDimensions.height / 2
+        const futureMediaCenterY = siblingSlot
+            ? firstMediaCenterY + futureMediaStep * siblingSlot.index
+            : futureMediaPosition.y + mediaDimensions.height / 2
         const parentAnchorX = parentRect.x + parentRect.width
         const parentAnchorY = parentRect.y + parentRect.height / 2
 
@@ -3837,7 +3719,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const stackIndex = siblingSlot?.index ?? 0
             const stackGap = getBranchMarkerStackGap()
             return {
-                x: (parentAnchorX + futureCircleLeft) / 2 - markerDimensions.width / 2,
+                x: (parentAnchorX + futureMediaLeft) / 2 - markerDimensions.width / 2,
                 y: parentRect.y + parentRect.height
                     + stackGap
                     + stackIndex * (markerDimensions.height + stackGap),
@@ -3845,8 +3727,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         return {
-            x: (parentAnchorX + futureCircleLeft) / 2 - markerDimensions.width / 2,
-            y: (parentAnchorY + futureCircleCenterY) / 2 - markerDimensions.height / 2,
+            x: (parentAnchorX + futureMediaLeft) / 2 - markerDimensions.width / 2,
+            y: (parentAnchorY + futureMediaCenterY) / 2 - markerDimensions.height / 2,
         }
     }
 
@@ -9304,15 +9186,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return Boolean(node.content?.some(hasStreamingCollapsibleBlock))
     }
 
-    function findAiChatThreadContentNode(root: ProseMirrorJsonNode, threadId: string): ProseMirrorJsonNode | null {
-        if (root.type === 'aiChatThread' && root.attrs?.threadId === threadId) return root
-        for (const child of root.content ?? []) {
-            const result = findAiChatThreadContentNode(child, threadId)
-            if (result) return result
-        }
-        return null
-    }
-
     function inferBranchMarkerPreviewPhase(
         responseNode: ProseMirrorJsonNode,
         responseContainer: ProseMirrorJsonNode,
@@ -9377,6 +9250,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return false
     }
 
+    function getBranchMarkerTurnDescriptor(node: BranchMarkerNode): BranchMarkerTurnDescriptor {
+        const reasoningRunId = node.type === 'branchOrigin'
+            ? ''
+            : (node as BranchForkCanvasNode | BranchLineCanvasNode).reasoningRunId ?? ''
+        const markerNodeAttr = node.type === 'branchOrigin'
+            ? 'branchOriginNodeId' as const
+            : node.type === 'branchFork'
+                ? 'branchForkNodeId' as const
+                : 'branchLineNodeId' as const
+        // 'canvas-' ids are synthetic client placeholders, never present in the doc.
+        const generationRequestId = node.generationRequestId && !node.generationRequestId.startsWith('canvas-')
+            ? node.generationRequestId
+            : undefined
+
+        return {
+            ...(generationRequestId ? { generationRequestId } : {}),
+            ...(reasoningRunId ? { reasoningRunId } : {}),
+            ...(getBranchMarkerReasoningModelId(node) ? { reasoningModelId: getBranchMarkerReasoningModelId(node) } : {}),
+            reasoningIndex: getBranchMarkerReasoningIndex(node),
+            markerNodeId: node.nodeId,
+            markerNodeAttr,
+        }
+    }
+
     function getBranchMarkerConversationPreview(node: BranchMarkerNode): BranchMarkerConversationPreview | null {
         const threadId = getBranchMarkerThreadId(node)
         if (!threadId) return null
@@ -9387,22 +9284,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const threadNode = findAiChatThreadContentNode(root, threadId)
         if (!threadNode) return null
 
-        let latestUserMessage: ProseMirrorJsonNode | null = null
-        let responseMessage: ProseMirrorJsonNode | null = null
+        // Each marker is paired with ITS OWN turn so a new in-flight turn can
+        // never resize or restyle previously-resolved markers in the thread.
+        // Only when the marker's turn is not in the doc yet (preflight) does it
+        // track the latest turn, so the live marker keeps updating.
+        const ownTurn = getBranchMarkerTurnMessages(threadNode, getBranchMarkerTurnDescriptor(node))
+        const { userMessage, responseMessage } = ownTurn ?? getLatestThreadTurnMessages(threadNode)
 
-        for (const child of threadNode.content ?? []) {
-            if (child.type === 'aiUserMessage') {
-                latestUserMessage = child
-                continue
-            }
-
-            if (child.type === 'aiResponseMessage') {
-                responseMessage = child
-            }
-        }
-
-        if (!latestUserMessage) return null
-        const userText = collectProseMirrorText(latestUserMessage).trim()
+        if (!userMessage) return null
+        const userText = collectProseMirrorText(userMessage).trim()
         if (!responseMessage) {
             return {
                 userText,
@@ -10011,12 +9901,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             fileId: fileId || '',
         })
 
-        const finalPosition = getNextGeneratedMediaPosition(edgeSourceNode, imageHeight)
-        const position = getPendingGeneratedMediaBeforeFrameInsertionPosition(
-            nodeId,
-            finalPosition,
-            { width: imageWidth, height: imageHeight },
-        )
+        // The node sits at its final position from insertion; the pre-frame
+        // circle is a render-only treatment inside the full placeholder rect, so
+        // no position swap happens when the first frame arrives.
+        const position = getNextGeneratedMediaPosition(edgeSourceNode, imageHeight)
 
         const imageNode: ImageCanvasNode = {
             nodeId,
@@ -11075,9 +10963,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const updatedNodes = currentCanvasState.nodes.map((node: CanvasNode) => {
                         if (node.nodeId !== existing.nodeId) return node
                         const imageNode = node as ImageCanvasNode
-                        const position = receivedFirstFrame
-                            ? getFullFramePositionFromPendingGeneratedMediaPosition(imageNode.position, imageNode.dimensions)
-                            : imageNode.position
+                        const position = imageNode.position
                         const generatedBy = imageNode.generatedBy && generationRun?.mediaModelId
                             ? { ...imageNode.generatedBy, mediaModelId: generationRun.mediaModelId as any }
                             : imageNode.generatedBy
@@ -11185,9 +11071,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const nodes = (currentCanvasState?.nodes || []).map((n: CanvasNode) => {
                     if (n.nodeId !== partial.nodeId) return n
                     const imgNode = n as ImageCanvasNode
-                    const position = receivedFirstFrame
-                        ? getFullFramePositionFromPendingGeneratedMediaPosition(imgNode.position, imgNode.dimensions)
-                        : imgNode.position
+                    const position = imgNode.position
                     const imageSrc = buildGeneratedImageFrameSrc({
                         imageUrl,
                         workspaceId: imgWorkspaceId || imgNode.workspaceId,
@@ -11426,12 +11310,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 sourceNodeId: edgeSourceNode.nodeId,
             })
 
-            const finalPosition = getNextGeneratedMediaPosition(edgeSourceNode, placeholderHeight)
-            const position = getPendingGeneratedMediaBeforeFrameInsertionPosition(
-                nodeId,
-                finalPosition,
-                { width: placeholderWidth, height: placeholderHeight },
-            )
+            // Final position from insertion — the pre-frame circle renders inside
+            // the full placeholder rect, so first-frame arrival never moves the node.
+            const position = getNextGeneratedMediaPosition(edgeSourceNode, placeholderHeight)
 
             const videoNode: VideoCanvasNode = {
                 nodeId,
@@ -11583,9 +11464,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const nodes = currentCanvasState.nodes.map((n: CanvasNode) => {
                 if (n.nodeId !== existing.nodeId || n.type !== 'video') return n
                 const videoNode = n as VideoCanvasNode
-                const position = receivedFirstFrame
-                    ? getFullFramePositionFromPendingGeneratedMediaPosition(videoNode.position, videoNode.dimensions)
-                    : videoNode.position
+                const position = videoNode.position
                 const fittedAspect = Number.isFinite(aspectRatio) && aspectRatio > 0
                     ? aspectRatio
                     : videoNode.aspectRatio

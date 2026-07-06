@@ -170,7 +170,8 @@ describe('Workspace.mutateCanvasState', () => {
             }),
         })
 
-        expect(changed).toBe(true)
+        expect(changed.changed).toBe(true)
+        expect(changed.canvasStateUpdatedAt).toBeGreaterThan(0)
         expect(dynamo.transactWrite).toHaveBeenCalledTimes(1)
         const { operations, origin } = dynamo.transactWrite.mock.calls[0][0]
         expect(origin).toBe('testCanvasMutation')
@@ -219,7 +220,7 @@ describe('Workspace.mutateCanvasState', () => {
             mutate: (canvasState) => ({ changed: false, canvasState }),
         })
 
-        expect(changed).toBe(false)
+        expect(changed.changed).toBe(false)
         expect(dynamo.transactWrite).not.toHaveBeenCalled()
     })
 
@@ -322,7 +323,8 @@ describe('Workspace.mutateCanvasState', () => {
             }),
         })
 
-        expect(changed).toBe(true)
+        expect(changed.changed).toBe(true)
+        expect(changed.canvasStateUpdatedAt).toBeGreaterThan(0)
         expect(dynamo.getItem).toHaveBeenCalledTimes(2)
         expect(dynamo.transactWrite).toHaveBeenCalledTimes(2)
         expect(dynamo.transactWrite.mock.calls[0][0].operations[0].expressionAttributeValues[':expectedCanvasStateUpdatedAt']).toBe(5)

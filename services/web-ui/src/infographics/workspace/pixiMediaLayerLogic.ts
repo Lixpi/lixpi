@@ -42,33 +42,10 @@ export function worldSizeToScreenSize(size: number, viewport: Pick<CanvasViewpor
     return size * getSafeViewportZoom(viewport)
 }
 
-// Walks a node's parent chain and returns its absolute world position.
-// Context-region children store `position` relative to their parent; PIXI
-// renders sprites in world coordinates, so it must accumulate parent offsets
-// the same way the DOM rendering does (via `getNodeWorldPosition`).
-export function computeWorldPosition(
-    node: CanvasNode,
-    nodesById: Map<string, CanvasNode>
-): WorldPosition {
-    let x = 0
-    let y = 0
-    const visited = new Set<string>()
-    let current: CanvasNode | undefined = node
-    while (current) {
-        if (visited.has(current.nodeId)) break
-        visited.add(current.nodeId)
-        x += current.position.x
-        y += current.position.y
-        const parentId = current.parentId
-        if (!parentId) break
-        current = nodesById.get(parentId)
-    }
-    return { x, y }
-}
-
-export function buildNodesById(nodes: ReadonlyArray<CanvasNode>): Map<string, CanvasNode> {
-    return new Map(nodes.map((node: CanvasNode) => [node.nodeId, node]))
-}
+// World-position accumulation and node indexing live in @lixpi/canvas-engine
+// shared (the API layout walks parent chains identically). Re-exported here so
+// PIXI-layer call sites keep their local import path.
+export { buildNodesById, computeWorldPosition } from '@lixpi/canvas-engine'
 
 export type LodTier = 'color' | 'thumb-256' | 'thumb-1024' | 'full'
 

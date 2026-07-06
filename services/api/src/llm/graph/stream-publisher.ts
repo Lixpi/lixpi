@@ -5,6 +5,7 @@ import type NatsService from '@lixpi/nats-service'
 import { err } from '@lixpi/debug-tools'
 import {
     STREAM_STATUS,
+    type CanvasGeometryUpdate,
     type MediaBranchVlmResolution,
     type ImageGenerationTrace,
     type MediaBranchLineagePlan,
@@ -465,15 +466,31 @@ export class StreamPublisher {
         })
     }
 
+    // Broadcasts the API-resolved geometry once an async canvas projection has
+    // persisted it, so every connected client applies authoritative positions
+    // instead of computing its own layout.
+    canvasGeometryResolved(canvasGeometry: CanvasGeometryUpdate | null, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+        if (!canvasGeometry || canvasGeometry.nodes.length === 0) return
+        this.publishChatContent({
+            status: STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED,
+            aiProvider: this.provider,
+            canvasGeometry,
+            ...(generationRun ? { generationRun } : {}),
+        })
+    }
+
     mediaLineagePlanned(lineagePlan: MediaBranchLineagePlan, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
         this.mediaGenerationRequestIds.add(lineagePlan.generationRequestId)
         this.enqueueCanvasProjection(
-            () => upsertMediaLineagePlanToCanvas({
-                workspaceId: this.workspaceId,
-                aiChatThreadId: this.aiChatThreadId,
-                lineagePlan,
-                ...(this.options.canvasVisibleArea ? { canvasVisibleArea: this.options.canvasVisibleArea } : {}),
-            }),
+            async () => {
+                const canvasGeometry = await upsertMediaLineagePlanToCanvas({
+                    workspaceId: this.workspaceId,
+                    aiChatThreadId: this.aiChatThreadId,
+                    lineagePlan,
+                    ...(this.options.canvasVisibleArea ? { canvasVisibleArea: this.options.canvasVisibleArea } : {}),
+                })
+                this.canvasGeometryResolved(canvasGeometry, generationRun)
+            },
             'failed to persist media lineage plan to canvas',
         )
 
@@ -503,10 +520,13 @@ export class StreamPublisher {
         this.mediaGenerationRequestIds.add(generationRequestId)
         this.completedMediaGenerationRequestIds.add(generationRequestId)
         this.enqueueCanvasProjection(
-            () => settleMediaGenerationRequestOnCanvas({
-                workspaceId: this.workspaceId,
-                generationRequestId,
-            }),
+            async () => {
+                const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
+                    workspaceId: this.workspaceId,
+                    generationRequestId,
+                })
+                this.canvasGeometryResolved(canvasGeometry)
+            },
             'failed to settle media generation request on canvas',
         )
         this.publishChatContent({

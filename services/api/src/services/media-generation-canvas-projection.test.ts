@@ -263,6 +263,7 @@ let consoleInfoSpy: ReturnType<typeof vi.spyOn> | null = null
 describe('media-generation-canvas-projection', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        workspaceMutateCanvasState.mockResolvedValue({ changed: true, canvasState: null, canvasStateUpdatedAt: 1000 })
         consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     })
 

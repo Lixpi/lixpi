@@ -156,7 +156,6 @@ The docs build can validate heading IDs and anchor fragments when a human explic
 
 ## Moving or Renaming Pages
 
-Do not delete documentation files silently. If cleanup, reverting agent edits, moving content, or replacing docs would delete files, ask the user to confirm the exact file path(s) first. If the user does not confirm, keep the files and report them as cleanup candidates.
 
 When reorganizing documentation:
 

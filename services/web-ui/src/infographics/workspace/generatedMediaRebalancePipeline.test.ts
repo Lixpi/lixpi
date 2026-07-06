@@ -144,12 +144,6 @@ function config(overrides: Partial<GeneratedMediaRebalancePipelineConfig> = {}):
         branchOriginMarkerStackGap: 8,
         collisionIterations: 0,
         collisionMargin: 0,
-        getPendingGeneratedMediaLayoutGeometry: () => null,
-        getPendingGeneratedMediaCircleInset: (dimensions: { width: number; height: number }) => ({
-            x: 40,
-            y: 40,
-            size: Math.max(1, dimensions.width - 80),
-        }),
         getNodeWorldPosition: (node: CanvasNode) => worldPosition(node),
         getNodeWorldRect: (node: CanvasNode) => worldRect(node),
         getNodeCollisionRect: (node: CanvasNode, position: Point) => ({
@@ -169,7 +163,7 @@ function config(overrides: Partial<GeneratedMediaRebalancePipelineConfig> = {}):
 // =============================================================================
 
 describe('GeneratedMediaRebalancePipeline', () => {
-    it('lays out pending media by visible pre-frame geometry and restores persisted dimensions', () => {
+    it('lays out pending media with their full rendered footprint (no pre-frame shrink)', () => {
         const root = image({
             nodeId: 'root',
             position: { x: 0, y: 0 },
@@ -185,18 +179,7 @@ describe('GeneratedMediaRebalancePipeline', () => {
                 createdAt: 2,
             },
         })
-        const pipeline = new GeneratedMediaRebalancePipeline(config({
-            getPendingGeneratedMediaLayoutGeometry: (node: CanvasNode) =>
-                node.nodeId === 'pending'
-                    ? {
-                        position: {
-                            x: node.position.x + 40,
-                            y: node.position.y + 40,
-                        },
-                        dimensions: { width: 20, height: 20 },
-                    }
-                    : null,
-        }))
+        const pipeline = new GeneratedMediaRebalancePipeline(config())
 
         const result = pipeline.rebalance([root, pending], [])
         const out = nodesById(result.nodes)
@@ -204,15 +187,11 @@ describe('GeneratedMediaRebalancePipeline', () => {
 
         expect(out.get('root')!.position).toEqual({ x: 0, y: 0 })
         expect(resolvedPending.dimensions).toEqual({ width: 100, height: 100 })
-        expect(resolvedPending.position).toEqual({ x: 110, y: 0 })
-        expect({
-            x: resolvedPending.position.x + 40,
-            y: resolvedPending.position.y + 40,
-        }).toEqual({ x: 150, y: 40 })
+        expect(resolvedPending.position).toEqual({ x: 150, y: 0 })
         expect(result.startedMarkerNodeIds).toEqual(new Set<string>())
     })
 
-    it('keeps a single pending branch-line continuation straight through the visible circle', () => {
+    it('keeps a single pending branch-line continuation straight through the full media box', () => {
         const parent = image({
             nodeId: 'parent',
             position: { x: 0, y: 0 },
@@ -235,18 +214,7 @@ describe('GeneratedMediaRebalancePipeline', () => {
                 createdAt: 2,
             },
         })
-        const pipeline = new GeneratedMediaRebalancePipeline(config({
-            getPendingGeneratedMediaLayoutGeometry: (node: CanvasNode) =>
-                node.nodeId === 'pending'
-                    ? {
-                        position: {
-                            x: node.position.x + 40,
-                            y: node.position.y + 40,
-                        },
-                        dimensions: { width: 20, height: 20 },
-                    }
-                    : null,
-        }))
+        const pipeline = new GeneratedMediaRebalancePipeline(config())
 
         const result = pipeline.rebalance([parent, marker, pending], [])
         const out = nodesById(result.nodes)
@@ -255,10 +223,10 @@ describe('GeneratedMediaRebalancePipeline', () => {
         const resolvedPending = out.get('pending')!
         const parentCenterY = resolvedParent.position.y + resolvedParent.dimensions.height / 2
         const markerCenterY = resolvedMarker.position.y + resolvedMarker.dimensions.height / 2
-        const visibleCircleCenterY = resolvedPending.position.y + 40 + 10
+        const pendingCenterY = resolvedPending.position.y + resolvedPending.dimensions.height / 2
 
         expect(markerCenterY).toBe(parentCenterY)
-        expect(visibleCircleCenterY).toBe(parentCenterY)
+        expect(pendingCenterY).toBe(parentCenterY)
         expect(result.startedMarkerNodeIds).toEqual(new Set(['line']))
     })
 
@@ -295,7 +263,6 @@ describe('GeneratedMediaRebalancePipeline', () => {
         })
         const pipeline = new GeneratedMediaRebalancePipeline(config({
             branchOriginMarkerStackGap: 8,
-            getPendingGeneratedMediaCircleInset: () => ({ x: 20, y: 20, size: 60 }),
         }))
 
         const result = pipeline.rebalance([origin, startedMarker, plannedMarker, startedMedia], [])

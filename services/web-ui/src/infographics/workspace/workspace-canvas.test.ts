@@ -555,7 +555,12 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'branchFanoutExtraGap: settings.mediaBranchLineage.branchFanoutExtraGap,')
 		expectSourceToContain(ts, 'branchOriginMarkerStackGap: getBranchMarkerStackGap(),')
 		expectSourceToContain(ts, 'getNodeCollisionMargin: (node: CanvasNode) => getCanvasNodeCollisionSettings(node, collisionSettings).margin,')
-		expectSourceToContain(ts, 'getPendingGeneratedMediaLayoutGeometry: (node: ImageCanvasNode | VideoCanvasNode) =>')
+		// Layout boxes equal rendered boxes: pending media are never shrunk to the
+		// pre-frame circle for collision purposes, and no position swap happens
+		// when the first frame arrives.
+		expectSourceNotToContain(ts, 'getPendingGeneratedMediaLayoutGeometry')
+		expectSourceNotToContain(ts, 'getPendingGeneratedMediaBeforeFrameInsertionPosition')
+		expectSourceNotToContain(ts, 'getFullFramePositionFromPendingGeneratedMediaPosition')
 		expectSourceNotToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
 		// Wired into every generated-media add path (image partial + complete, video).
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithImage, newEdges)')

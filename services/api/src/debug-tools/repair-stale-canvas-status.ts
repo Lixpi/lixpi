@@ -228,7 +228,7 @@ async function main(): Promise<void> {
         mode: 'apply',
         workspaceId: args.workspaceId,
         generationRequestId: args.generationRequestId,
-        applied,
+        applied: applied.changed,
         removedPendingStateCount: dryRunRepair.removedMarkers.length,
         removedMarkers: dryRunRepair.removedMarkers,
         before: beforeSummary,
