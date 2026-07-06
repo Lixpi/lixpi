@@ -5,7 +5,7 @@ import type NatsService from '@lixpi/nats-service'
 import { err } from '@lixpi/debug-tools'
 import {
     STREAM_STATUS,
-    type ImageBranchVlmResolution,
+    type MediaBranchVlmResolution,
     type ImageGenerationTrace,
     type MediaBranchLineagePlan,
     type MediaGenerationRunMeta,
@@ -52,7 +52,7 @@ export type ChunkPayload = {
         imageModelId?: string
         videoModelProvider?: string
         videoModelId?: string
-        resolution?: ImageBranchVlmResolution
+        resolution?: MediaBranchVlmResolution
         workspaceContextResolution?: WorkspaceContextResolution
         imageGenerationTrace?: ImageGenerationTrace
         lineagePlan?: MediaBranchLineagePlan
@@ -456,9 +456,9 @@ export class StreamPublisher {
         })
     }
 
-    imageBranchResolved(resolution: ImageBranchVlmResolution, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+    mediaBranchResolved(resolution: MediaBranchVlmResolution, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
         this.publishChatContent({
-            status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
+            status: STREAM_STATUS.MEDIA_BRANCH_RESOLVED,
             aiProvider: this.provider,
             resolution,
             ...(generationRun ? { generationRun } : {}),
@@ -570,9 +570,9 @@ export class StreamPublisher {
         this.publishChatContent(content)
     }
 
-    imageBranchResolutionError(message: string): void {
+    mediaBranchResolutionError(message: string): void {
         this.publishChatContent({
-            status: STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR,
+            status: STREAM_STATUS.MEDIA_BRANCH_RESOLUTION_ERROR,
             aiProvider: this.provider,
             error: message,
             ...(this.generationRun ? { generationRun: this.generationRun } : {}),

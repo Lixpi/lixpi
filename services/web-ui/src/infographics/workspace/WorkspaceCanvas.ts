@@ -39,8 +39,8 @@ import {
     type FeatureMeta,
     type MediaLibraryImageMeta,
     type MediaLibraryVideoMeta,
-    type ImageBranchCandidateSnapshot,
-    type ImageBranchVlmResolution,
+    type MediaBranchCandidateSnapshot,
+    type MediaBranchVlmResolution,
     type MediaBranchLineagePlan,
     type MediaRunLineageAssignment,
     type MediaDescriptor,
@@ -151,7 +151,7 @@ import MediaLibraryService from '$src/services/media-library-service.ts'
 import { describeMedia, describeText } from '$src/services/media-descriptor-service.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
-    buildImageBranchCandidateSnapshot,
+    buildMediaBranchCandidateSnapshot,
     buildCanvasWideCandidateSnapshot,
     buildWorkspaceContextSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
@@ -6081,7 +6081,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             || videoOptions?.aiVideoModels?.length
                         )
                         const imagePlacement = rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)
-                        const imageBranchCandidateSnapshot = imagePlacement.imageBranchCandidateSnapshot
+                        const mediaBranchCandidateSnapshot = imagePlacement.mediaBranchCandidateSnapshot
 
                         // Whole-workspace, descriptors-only index for the API relevance stage.
                         // Built every turn (text-only included); chips + the rooted thread's
@@ -6128,7 +6128,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             videoConfigGroups: videoOptions?.configGroups,
                             videoSourceForExtension,
                             referencedFeatureIds,
-                            imageBranchCandidateSnapshot,
+                            mediaBranchCandidateSnapshot,
                             workspaceContextSnapshot,
                             canvasVisibleArea: getCanvasVisibleAreaForApiProjection(),
                             proseMirrorInitialDoc,
@@ -6441,7 +6441,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         || videoOptions?.aiVideoModels?.length
                     )
 
-                    const imageBranchCandidateSnapshot = hasMediaModel
+                    const mediaBranchCandidateSnapshot = hasMediaModel
                         ? buildCanvasWideCandidateSnapshot({
                             generationRunId: threadId,
                             nodes,
@@ -6462,14 +6462,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         })
                         : undefined
 
-                    if (imageBranchCandidateSnapshot) {
+                    if (mediaBranchCandidateSnapshot) {
                         const candidateNodeIds = explicitMediaReferenceNodeIds.length > 0
                             ? explicitMediaReferenceNodeIds
-                            : imageBranchCandidateSnapshot.candidates.map((candidate) => candidate.nodeId)
+                            : mediaBranchCandidateSnapshot.candidates.map((candidate) => candidate.nodeId)
                         pendingGeneratedImagePlacements.set(threadId, {
                             referenceNodeIds: candidateNodeIds,
                             promptText,
-                            imageBranchCandidateSnapshot,
+                            mediaBranchCandidateSnapshot,
                             createdAt: Date.now(),
                         })
                         setGeneratingReferenceNodeIds(threadId, candidateNodeIds)
@@ -6509,7 +6509,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         videoConfigGroups: videoOptions?.configGroups,
                         videoSourceForExtension,
                         referencedFeatureIds,
-                        imageBranchCandidateSnapshot,
+                        mediaBranchCandidateSnapshot,
                         workspaceContextSnapshot,
                         canvasVisibleArea: getCanvasVisibleAreaForApiProjection(),
                         proseMirrorInitialDoc,
@@ -6733,8 +6733,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         referenceNodeIds?: string[]
         lineagePlan?: MediaBranchLineagePlan
         promptText: string
-        imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
-        imageBranchResolution?: ImageBranchVlmResolution
+        mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
+        mediaBranchResolution?: MediaBranchVlmResolution
         activeRunKeys?: Set<string>
         createdAt: number
     }
@@ -9710,7 +9710,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         threadId: string,
         messages: any[],
         hasImageModel: boolean,
-    ): { promptText: string; imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot } {
+    ): { promptText: string; mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot } {
         if (!hasImageModel) {
             clearPendingGeneratedMediaPlacementsForThread(threadId)
             return { promptText: '' }
@@ -9719,7 +9719,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const promptText = getPromptTextFromMessages(messages)
         const referenceNodeIds = getStandaloneGeneratedMediaReferenceNodeIds()
         const activeTargetNodeId = referenceNodeIds.length === 1 ? referenceNodeIds[0] : undefined
-        const imageBranchCandidateSnapshot = buildImageBranchCandidateSnapshot({
+        const mediaBranchCandidateSnapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: `standalone:${threadId}`,
             threadId,
             activeTargetNodeId,
@@ -9729,41 +9729,41 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             contextMediaNodeIds: referenceNodeIds,
             generatedImageTextByNodeId: getGeneratedImageTextByNodeIdForThread(threadId),
         })
-        const candidateNodeIds = imageBranchCandidateSnapshot.candidates.map((candidate: ImageBranchCandidateSnapshot['candidates'][number]) => candidate.nodeId)
+        const candidateNodeIds = mediaBranchCandidateSnapshot.candidates.map((candidate: MediaBranchCandidateSnapshot['candidates'][number]) => candidate.nodeId)
         if (candidateNodeIds.length === 0) {
             pendingGeneratedImagePlacements.set(threadId, {
                 referenceNodeIds,
                 promptText,
-                imageBranchCandidateSnapshot,
+                mediaBranchCandidateSnapshot,
                 createdAt: Date.now(),
             })
             setGeneratingReferenceNodeIds(threadId, referenceNodeIds)
             console.info('[CANVAS] standalone image branch candidate snapshot', {
                 threadId,
                 candidateCount: 0,
-                promptFingerprint: imageBranchCandidateSnapshot.promptFingerprint,
-                activeTargetNodeId: imageBranchCandidateSnapshot.activeTargetNodeId,
+                promptFingerprint: mediaBranchCandidateSnapshot.promptFingerprint,
+                activeTargetNodeId: mediaBranchCandidateSnapshot.activeTargetNodeId,
                 candidateNodeIds,
             })
-            return { promptText, imageBranchCandidateSnapshot }
+            return { promptText, mediaBranchCandidateSnapshot }
         }
         const placementAnchorNodeId = referenceNodeIds[0] ?? activeTargetNodeId ?? candidateNodeIds[0]
         pendingGeneratedImagePlacements.set(threadId, {
             ...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),
             referenceNodeIds: candidateNodeIds,
             promptText,
-            imageBranchCandidateSnapshot,
+            mediaBranchCandidateSnapshot,
             createdAt: Date.now(),
         })
         setGeneratingReferenceNodeIds(threadId, candidateNodeIds)
         console.info('[CANVAS] standalone image branch candidate snapshot', {
             threadId,
-            candidateCount: imageBranchCandidateSnapshot.candidates.length,
-            promptFingerprint: imageBranchCandidateSnapshot.promptFingerprint,
-            activeTargetNodeId: imageBranchCandidateSnapshot.activeTargetNodeId,
+            candidateCount: mediaBranchCandidateSnapshot.candidates.length,
+            promptFingerprint: mediaBranchCandidateSnapshot.promptFingerprint,
+            activeTargetNodeId: mediaBranchCandidateSnapshot.activeTargetNodeId,
             candidateNodeIds,
         })
-        return { promptText, imageBranchCandidateSnapshot }
+        return { promptText, mediaBranchCandidateSnapshot }
     }
 
     function getPendingGeneratedImageLineage(
@@ -9774,7 +9774,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const lineageAssignment = getApiMediaRunLineageAssignment(generationRun)
         if (!lineageAssignment) return {}
 
-        const resolution = placement?.imageBranchResolution
+        const resolution = placement?.mediaBranchResolution
 
         return {
             generationRequestId: lineageAssignment.generationRequestId,
@@ -9808,7 +9808,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             resolverModelId: resolution?.resolverModelId,
             resolverRationale: resolution?.rationale,
             resolverConfidence: resolution?.confidence,
-            resolverVersion: resolution?.resolverVersion ?? placement?.imageBranchCandidateSnapshot?.resolverVersion,
+            resolverVersion: resolution?.resolverVersion ?? placement?.mediaBranchCandidateSnapshot?.resolverVersion,
             createdAt: lineageAssignment.createdAt,
         }
     }
@@ -10914,7 +10914,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             queueCanvasMediaAnalysis(imageNode.nodeId, fileId)
         },
 
-        onImageBranchResolvedToCanvas: ({ threadId, resolution, generationRun }) => {
+        onMediaBranchResolvedToCanvas: ({ threadId, resolution, generationRun }) => {
             if (!shouldAcceptGeneratedMediaEvent(threadId)) return
 
             const placement = ensurePendingGeneratedMediaPlacementForApiRun(threadId, generationRun)
@@ -10926,7 +10926,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ...placement,
                 placementAnchorNodeId,
                 referenceNodeIds,
-                imageBranchResolution: resolution,
+                mediaBranchResolution: resolution,
             })
             setGeneratingReferenceNodeIds(getGeneratedMediaPlacementKey(threadId, generationRun), referenceNodeIds)
 
@@ -10970,7 +10970,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             settleMediaGenerationRequest(threadId, generationRequestId, generationRun)
         },
 
-        onImageBranchResolutionErrorToCanvas: ({ threadId, generationRun }) => {
+        onMediaBranchResolutionErrorToCanvas: ({ threadId, generationRun }) => {
             if (!shouldAcceptGeneratedMediaEvent(threadId)) return
 
             removePendingBranchMarkerForRun(threadId, generationRun)
@@ -11364,7 +11364,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // schema registers aiGeneratedVideo but does not yet auto-insert it; the
     // canvas-side placeholder is the user-visible representation in Phase 5 v1).
     // The pendingGeneratedImagePlacements Map is shared with images because the
-    // resolveImageBranch snapshot serves both media types.
+    // resolveMediaBranch snapshot serves both media types.
     setAiGeneratedVideoCallbacks({
         onVideoPendingToCanvas: (data) => {
             const { threadId, generationRun } = data

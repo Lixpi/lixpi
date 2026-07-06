@@ -20,7 +20,7 @@ engine itself — the concepts, the resolver behavior, and the data contracts. T
 shared workflow node that runs it (`resolveWorkspaceContext`) is documented in
 the [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md); the pixel
 role authority for media that reaches an image/video model is
-[`resolveImageBranch`](../media-generation/BRANCH-LINEAGE.md). This feature
+[`resolveMediaBranch`](../media-generation/BRANCH-LINEAGE.md). This feature
 replaces the live context-region system; historical cloud rendering samples live
 only in the
 [context-region archive](../knowledge/archive/context-region-clouds/README.md).
@@ -74,14 +74,14 @@ even when another canvas item was obviously relevant.
 Sending the whole canvas as pixels does not scale either. The image/video branch
 resolver is intentionally pixel-grounded and expensive per candidate. Workspace
 relevance does the cheap narrowing first using descriptors, then lets
-[`resolveImageBranch`](../media-generation/BRANCH-LINEAGE.md) remain the visual
+[`resolveMediaBranch`](../media-generation/BRANCH-LINEAGE.md) remain the visual
 authority for media that actually reaches the image/video model.
 
 The design keeps three boundaries clear:
 
 - Explicit chips and edge-connected nodes are always included.
 - Automatic relevance can add context, but it cannot remove forced context.
-- Pixel role assignment stays in `resolveImageBranch`; workspace relevance only
+- Pixel role assignment stays in `resolveMediaBranch`; workspace relevance only
   narrows candidates and assembles selected content.
 
 ## Product Principles
@@ -126,7 +126,7 @@ flowchart TB
     subgraph API["API Service LangGraph"]
         Relevance[resolveWorkspaceContext<br/>rank + self-heal + assemble]
         Features[resolveFeatures]
-        Branch[resolveImageBranch<br/>structured VLM media roles]
+        Branch[resolveMediaBranch<br/>structured VLM media roles]
         Stream[StreamPublisher<br/>context + branch events]
         Describe[describeMediaStill<br/>text descriptor generation]
     end
@@ -147,7 +147,7 @@ flowchart TB
     AIS --> Panel
     Relevance --> Features
     Features --> Branch
-    Branch -->|IMAGE_BRANCH_RESOLVED| Stream
+    Branch -->|MEDIA_BRANCH_RESOLVED| Stream
     Branch --> Canvas
     Canvas --> DDB
 ```
@@ -158,7 +158,7 @@ flowchart TB
 | `AiInteractionService` | Sends the snapshot with the chat turn and applies streamed resolution back to the panel |
 | `resolveWorkspaceContext` | Ranks descriptors, self-heals once, force-includes, assembles selected content |
 | `describeMediaStill` | Generates text descriptors during self-heal |
-| `resolveImageBranch` | Structured VLM media-role authority over the narrowed media set |
+| `resolveMediaBranch` | Structured VLM media-role authority over the narrowed media set |
 | `StreamPublisher` | Emits `CONTEXT_RELEVANCE_RESOLVED` and branch events |
 
 ## Relevance Resolver Behavior
@@ -246,7 +246,7 @@ sequenceDiagram
 5. **Assemble.** Full content for selected nodes is inserted into
    `state.messages`. Documents and threads resolve from stored ProseMirror
    content. Media resolves through Object Store URLs and stills. The narrowed
-   media set feeds `imageBranchCandidateSnapshot`.
+   media set feeds `mediaBranchCandidateSnapshot`.
 
 The stage can improve recall on text-only turns as well as media turns. For
 "summarize my canvas," it can select salient docs, threads, images, and videos
@@ -396,7 +396,7 @@ There is no live context-region feature page.
 - [Chat Panel and Sessions](./CHAT-PANEL-AND-SESSIONS.md) — the panel that owns composer context previews
 - [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md) — the `resolveWorkspaceContext` workflow node, routing, and usage
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — `CONTEXT_RELEVANCE_RESOLVED` and the full event catalog
-- [Branch Lineage](../media-generation/BRANCH-LINEAGE.md) — `resolveImageBranch`, structured VLM media-role assignment, placement anchors
+- [Branch Lineage](../media-generation/BRANCH-LINEAGE.md) — `resolveMediaBranch`, structured VLM media-role assignment, placement anchors
 - [Image Generation](../media-generation/IMAGE-GENERATION.md) — image tool routing and streaming
 - [Video Generation](../media-generation/VIDEO-GENERATION.md) — video generation and VEO references
 - [Workspace Model](../canvas/WORKSPACE-MODEL.md) — canvas data model and node chrome

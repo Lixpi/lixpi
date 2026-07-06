@@ -1,8 +1,8 @@
 'use strict'
 
 import type {
-    ImageBranchCandidateSnapshot,
-    ImageBranchVlmResolution,
+    MediaBranchCandidateSnapshot,
+    MediaBranchVlmResolution,
     MediaBranchLineagePlan,
     MediaGenerationConfigSelectionGroup,
     MediaGenerationRunMeta,
@@ -79,7 +79,7 @@ export type MediaFanoutPlan = {
 // Reference-image cap for the selected video model. VEO accepts 3, Seedance 9.
 // Reads from the video model's metadata and falls back to the VEO baseline when
 // the field is absent, so existing video models stay capped at 3. Single source
-// of truth shared by the VideoRouter and the image-branch resolver (the two
+// of truth shared by the VideoRouter and the media-branch resolver (the two
 // places the cap is applied) so the value is never duplicated.
 export const DEFAULT_VIDEO_MAX_REFERENCE_IMAGES = 3
 
@@ -138,8 +138,8 @@ export type ProviderState = {
     generatedImages?: string[] | undefined
     workspaceContextSnapshot?: WorkspaceContextSnapshot | undefined
     workspaceContextResolution?: WorkspaceContextResolution | undefined
-    imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot | undefined
-    imageBranchResolution?: ImageBranchVlmResolution | undefined
+    mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot | undefined
+    mediaBranchResolution?: MediaBranchVlmResolution | undefined
     mediaBranchLineagePlan?: MediaBranchLineagePlan | undefined
     canvasVisibleArea?: { width: number; height: number } | undefined
 
@@ -211,8 +211,8 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     generatedImages: { reducer: keep },
     workspaceContextSnapshot: { reducer: keep },
     workspaceContextResolution: { reducer: keep },
-    imageBranchCandidateSnapshot: { reducer: keep },
-    imageBranchResolution: { reducer: keep },
+    mediaBranchCandidateSnapshot: { reducer: keep },
+    mediaBranchResolution: { reducer: keep },
     mediaBranchLineagePlan: { reducer: keep },
     canvasVisibleArea: { reducer: keep },
     enableVideoGeneration: { reducer: keep, default: () => false },

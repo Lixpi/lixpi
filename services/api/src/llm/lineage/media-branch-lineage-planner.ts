@@ -5,9 +5,9 @@ import type {
     BranchForkLineagePlan,
     BranchLineLineagePlan,
     BranchOriginLineagePlan,
-    ImageBranchCandidateImage,
-    ImageBranchCandidateSnapshot,
-    ImageBranchVlmResolution,
+    MediaBranchCandidateImage,
+    MediaBranchCandidateSnapshot,
+    MediaBranchVlmResolution,
     MediaBranchLineagePlan,
     MediaRunLineageAssignment,
     WorkspaceContextSnapshot,
@@ -22,8 +22,8 @@ export type MediaBranchLineagePlannerInput = {
     // reasoningCount * (imageModelIds.length + videoModelIds.length).
     imageModelIds?: AiModelId[]
     videoModelIds?: AiModelId[]
-    imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
-    imageBranchResolution?: ImageBranchVlmResolution
+    mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
+    mediaBranchResolution?: MediaBranchVlmResolution
     workspaceContextSnapshot?: WorkspaceContextSnapshot
     createdAt?: number
 }
@@ -77,8 +77,8 @@ export class MediaBranchLineagePlanner {
     // Builds one immutable lineage plan for a media request before reasoning or
     // media-provider fanout emits partial/complete events.
     buildPlan(input: MediaBranchLineagePlannerInput): MediaBranchLineagePlan {
-        const resolution = input.imageBranchResolution
-        const snapshot = input.imageBranchCandidateSnapshot
+        const resolution = input.mediaBranchResolution
+        const snapshot = input.mediaBranchCandidateSnapshot
         const branchId = resolution?.branchId ?? `branch-${input.generationRequestId}`
         const promptText = snapshot?.promptText ?? input.workspaceContextSnapshot?.promptText ?? ''
         const promptFingerprint = snapshot?.promptFingerprint
@@ -202,8 +202,8 @@ export class MediaBranchLineagePlanner {
     }
 
     private getReferenceNodeIds(
-        resolution: ImageBranchVlmResolution | undefined,
-        snapshot: ImageBranchCandidateSnapshot | undefined,
+        resolution: MediaBranchVlmResolution | undefined,
+        snapshot: MediaBranchCandidateSnapshot | undefined,
     ): string[] {
         const nodeIds = resolution?.referenceImageNodeIds ?? snapshot?.candidates.map(candidate => candidate.nodeId) ?? []
         return Array.from(new Set(nodeIds.filter(Boolean)))
@@ -218,8 +218,8 @@ export class MediaBranchLineagePlanner {
     }
 
     private getSourceDecision(
-        resolution: ImageBranchVlmResolution | undefined,
-        snapshot: ImageBranchCandidateSnapshot | undefined,
+        resolution: MediaBranchVlmResolution | undefined,
+        snapshot: MediaBranchCandidateSnapshot | undefined,
         referenceNodeIds: string[],
     ): SourceDecision {
         const sourceNodeId = resolution ? this.getLineageSourceNodeId(resolution, snapshot) : undefined
@@ -247,10 +247,10 @@ export class MediaBranchLineagePlanner {
     }
 
     private getLineageSourceNodeId(
-        resolution: ImageBranchVlmResolution,
-        snapshot: ImageBranchCandidateSnapshot | undefined,
+        resolution: MediaBranchVlmResolution,
+        snapshot: MediaBranchCandidateSnapshot | undefined,
     ): string | undefined {
-        const candidateByNodeId = new Map<string, ImageBranchCandidateImage>(
+        const candidateByNodeId = new Map<string, MediaBranchCandidateImage>(
             snapshot?.candidates.map(candidate => [candidate.nodeId, candidate]) ?? [],
         )
         for (const nodeId of [resolution.targetImageNodeId, resolution.parentImageNodeId]) {
@@ -265,7 +265,7 @@ export class MediaBranchLineagePlanner {
         return undefined
     }
 
-    private isGeneratedLineageCandidate(candidate: ImageBranchCandidateImage | undefined): boolean {
+    private isGeneratedLineageCandidate(candidate: MediaBranchCandidateImage | undefined): boolean {
         if (!candidate) return false
         return candidate.roleHints.includes('generated-variant')
             || candidate.roleHints.includes('branch-leaf')
@@ -418,8 +418,8 @@ export class MediaBranchLineagePlanner {
                 ...(lineageParentNodeId ? { lineageParentNodeId } : {}),
                 referenceNodeIds: args.referenceNodeIds,
                 sourceContextNodeIds: args.sourceContextNodeIds,
-                ...(args.input.imageBranchResolution?.operationKind
-                    ? { operationKind: args.input.imageBranchResolution.operationKind }
+                ...(args.input.mediaBranchResolution?.operationKind
+                    ? { operationKind: args.input.mediaBranchResolution.operationKind }
                     : {}),
                 promptText: args.promptText,
                 ...(args.promptFingerprint ? { promptFingerprint: args.promptFingerprint } : {}),

@@ -312,9 +312,9 @@ export type AiModelsCatalogResponse = {
 
 export type ImageGenerationOperationKind = 'new_image' | 'edit_existing' | 'style_transfer' | 'compare_branches' | 'fresh_branch'
 
-export type ImageBranchSelectionMode = 'context-only' | 'edit-active-branch' | 'all-branches' | 'fresh-branch' | 'ambiguous'
+export type MediaBranchSelectionMode = 'context-only' | 'edit-active-branch' | 'all-branches' | 'fresh-branch' | 'ambiguous'
 
-export type ImageBranchCandidateRoleHint =
+export type MediaBranchCandidateRoleHint =
     | 'base-context'
     | 'generated-variant'
     | 'branch-leaf'
@@ -322,7 +322,7 @@ export type ImageBranchCandidateRoleHint =
     | 'embedded-thread-image'
     | 'active-target'
 
-export type ImageBranchCandidateImage = {
+export type MediaBranchCandidateImage = {
     nodeId: string
     fileId?: string
     workspaceId?: string
@@ -332,7 +332,7 @@ export type ImageBranchCandidateImage = {
     // so the resolver pays the same per-candidate cost regardless of media type.
     // Defaults to 'image' when absent so existing image candidates are unchanged.
     mediaKind?: 'image' | 'video'
-    roleHints: ImageBranchCandidateRoleHint[]
+    roleHints: MediaBranchCandidateRoleHint[]
     branchId?: string
     parentMediaNodeId?: string
     parentImageNodeId?: string
@@ -347,14 +347,19 @@ export type ImageBranchCandidateImage = {
     createdAt?: number
 }
 
-export type ImageBranchCandidateSnapshot = {
+export type MediaBranchCandidateSnapshot = {
     resolverVersion: string
     threadId: string
     regionNodeId: string
     activeTargetNodeId?: string
+    // Media node ids the user explicitly attached as context (chips / reference
+    // selections). When present, the API resolvers must treat these as the
+    // exclusive context — no other candidates may be evaluated or selected.
+    // The candidate list itself stays unfiltered; the API is the source of truth.
+    explicitReferenceNodeIds?: string[]
     promptText: string
     promptFingerprint: string
-    candidates: ImageBranchCandidateImage[]
+    candidates: MediaBranchCandidateImage[]
     transcriptContext: string
 }
 
@@ -403,25 +408,25 @@ export type WorkspaceContextResolution = {
     narrowedMediaNodeIds: string[]
 }
 
-export type ImageBranchReferenceRole =
+export type MediaBranchReferenceRole =
     | 'target'
     | 'base-context'
     | 'style-reference'
     | 'comparison-target'
     | 'excluded'
 
-export type ImageBranchVlmReferenceDecision = {
+export type MediaBranchVlmReferenceDecision = {
     nodeId: string
-    role: ImageBranchReferenceRole
+    role: MediaBranchReferenceRole
     reason: string
 }
 
-export type ImageBranchVlmResolution = {
+export type MediaBranchVlmResolution = {
     resolverKind: 'structured-vlm'
     resolverVersion: string
     resolverModelProvider: string
     resolverModelId: string
-    mode: ImageBranchSelectionMode
+    mode: MediaBranchSelectionMode
     operationKind: ImageGenerationOperationKind
     targetImageNodeId: string | null
     parentImageNodeId?: string
@@ -437,7 +442,7 @@ export type ImageBranchVlmResolution = {
     styleTags: string[]
     confidence: number
     rationale: string
-    decisions: ImageBranchVlmReferenceDecision[]
+    decisions: MediaBranchVlmReferenceDecision[]
 }
 
 export type BranchOriginProvenance = {
@@ -566,11 +571,11 @@ export type MediaBranchLineagePlan = {
     createdAt: number
 }
 
-export type ImageBranchResolvedStreamPayload = {
-    status: 'IMAGE_BRANCH_RESOLVED'
+export type MediaBranchResolvedStreamPayload = {
+    status: 'MEDIA_BRANCH_RESOLVED'
     aiProvider: string
     generationRun?: MediaGenerationRunMeta
-    resolution: ImageBranchVlmResolution
+    resolution: MediaBranchVlmResolution
 }
 
 export type MediaLineagePlannedStreamPayload = {
@@ -591,8 +596,8 @@ export type MediaGenerationSkippedStreamPayload = {
     generationRequestId: string
 }
 
-export type ImageBranchResolutionErrorStreamPayload = {
-    status: 'IMAGE_BRANCH_RESOLUTION_ERROR'
+export type MediaBranchResolutionErrorStreamPayload = {
+    status: 'MEDIA_BRANCH_RESOLUTION_ERROR'
     aiProvider: string
     generationRun?: MediaGenerationRunMeta
     error: string
@@ -629,7 +634,7 @@ export type ContextRelevanceErrorStreamPayload = {
     error: string
 }
 
-export type ImageGenerationTraceReferenceRole = ImageBranchReferenceRole | 'feature-reference' | 'message-reference'
+export type ImageGenerationTraceReferenceRole = MediaBranchReferenceRole | 'feature-reference' | 'message-reference'
 
 export type ImageGenerationTraceReference = {
     id: string
@@ -672,7 +677,7 @@ export type ImageGenerationTrace = {
         resolverVersion: string
         resolverModelProvider: string
         resolverModelId: string
-        mode: ImageBranchSelectionMode
+        mode: MediaBranchSelectionMode
         operationKind: ImageGenerationOperationKind
         confidence: number
         rationale: string
@@ -719,7 +724,7 @@ export type VideoGenerationTrace = {
         resolverVersion: string
         resolverModelProvider: string
         resolverModelId: string
-        mode: ImageBranchSelectionMode
+        mode: MediaBranchSelectionMode
         operationKind: ImageGenerationOperationKind
         confidence: number
         rationale: string
@@ -1676,7 +1681,7 @@ export type AiInteractionChatSendMessagePayload = {
     aiReasoningModels: AiModelId[]
     threadId: string
     referencedFeatureIds?: string[]
-    imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
+    mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
     mediaGenerationRequest?: AiInteractionMediaGenerationRequest
     // Whole-workspace, descriptors-only index sent each turn; consumed by the
     // API `resolveWorkspaceContext` relevance stage (later phase).

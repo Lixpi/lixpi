@@ -6,26 +6,27 @@ import { randomUUID } from 'crypto'
 import type NatsService from '@lixpi/nats-service'
 import { info } from '@lixpi/debug-tools'
 import type {
-    ImageBranchCandidateImage,
-    ImageBranchVlmReferenceDecision,
-    ImageBranchVlmResolution,
+    MediaBranchCandidateImage,
+    MediaBranchVlmReferenceDecision,
+    MediaBranchVlmResolution,
     ImageGenerationOperationKind,
     ProviderName,
 } from '@lixpi/constants'
 
 import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from '../extraction/vlm-client.ts'
 import { resolveImageUrls } from '../utils/attachments.ts'
+import { restrictSnapshotToExplicitRefs } from './media-branch-snapshot.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
 import type { StreamPublisher } from './stream-publisher.ts'
 
-type ResolveImageBranchDeps = {
+type ResolveMediaBranchDeps = {
     natsService: NatsService
     publisher: StreamPublisher
     abortSignal?: AbortSignal
-    callVlm?: (args: VlmCallArgs) => Promise<VlmCallResult<ImageBranchVlmRawResolution>>
+    callVlm?: (args: VlmCallArgs) => Promise<VlmCallResult<MediaBranchVlmRawResolution>>
 }
 
-type ImageBranchVlmRawResolution = {
+type MediaBranchVlmRawResolution = {
     mode: string
     operationKind: string
     targetImageNodeId: string
@@ -42,13 +43,13 @@ type ImageBranchVlmRawResolution = {
     styleTags: string[]
     confidence: number
     rationale: string
-    decisions: ImageBranchVlmReferenceDecision[]
+    decisions: MediaBranchVlmReferenceDecision[]
 }
 
 const SUPPORTED_RESOLVER_PROVIDERS = new Set<ProviderName>(['Anthropic', 'OpenAI', 'Google'])
 const RESOLVER_KIND = 'structured-vlm' as const
 
-const VALID_MODES = new Set<ImageBranchVlmResolution['mode']>([
+const VALID_MODES = new Set<MediaBranchVlmResolution['mode']>([
     'context-only',
     'edit-active-branch',
     'all-branches',
@@ -194,8 +195,8 @@ const SYSTEM_PROMPT = [
 ].join('\n')
 
 const getResolverModel = (state: ProviderState): { provider: ProviderName; modelVersion: string } => {
-    const configuredProvider = process.env.IMAGE_BRANCH_RESOLVER_PROVIDER as ProviderName | undefined
-    const configuredModel = process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
+    const configuredProvider = process.env.MEDIA_BRANCH_RESOLVER_PROVIDER as ProviderName | undefined
+    const configuredModel = process.env.MEDIA_BRANCH_RESOLVER_MODEL_VERSION
     const provider = configuredProvider ?? state.provider
     const modelVersion = configuredModel ?? (provider === state.provider ? state.modelVersion : undefined)
 
@@ -210,7 +211,7 @@ const getResolverModel = (state: ProviderState): { provider: ProviderName; model
 }
 
 const compactCandidateForPrompt = (
-    candidate: ImageBranchCandidateImage,
+    candidate: MediaBranchCandidateImage,
     candidateNodeIds: Set<string>,
 ): Record<string, unknown> => ({
     nodeId: candidate.nodeId,
@@ -228,9 +229,9 @@ const compactCandidateForPrompt = (
 })
 
 const resolveCandidateImageUrls = async (
-    candidates: ImageBranchCandidateImage[],
+    candidates: MediaBranchCandidateImage[],
     natsService: NatsService,
-): Promise<ImageBranchCandidateImage[]> => {
+): Promise<MediaBranchCandidateImage[]> => {
     return Promise.all(candidates.map(async (candidate) => {
         const resolved = await resolveImageUrls([{
             type: 'input_image',
@@ -246,7 +247,7 @@ const resolveCandidateImageUrls = async (
 }
 
 const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
-    const snapshot = state.imageBranchCandidateSnapshot
+    const snapshot = state.mediaBranchCandidateSnapshot
     if (!snapshot) throw new Error('Image branch candidate snapshot is required')
     const candidateNodeIds = new Set(snapshot.candidates.map((candidate) => candidate.nodeId))
 
@@ -291,7 +292,7 @@ const normalizeStringArray = (value: unknown): string[] => {
     return Array.from(new Set(value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim())))
 }
 
-const assertKnownNodeIds = (label: string, nodeIds: string[], candidateByNodeId: Map<string, ImageBranchCandidateImage>): void => {
+const assertKnownNodeIds = (label: string, nodeIds: string[], candidateByNodeId: Map<string, MediaBranchCandidateImage>): void => {
     const unknown = nodeIds.filter((nodeId) => !candidateByNodeId.has(nodeId))
     if (unknown.length > 0) {
         throw new Error(`Image branch resolver returned unknown ${label}: ${unknown.join(', ')}`)
@@ -303,10 +304,10 @@ const appendRationale = (rationale: string, guardMessage: string): string =>
 
 const sanitizeDecisions = (
     decisions: unknown,
-    candidateByNodeId: Map<string, ImageBranchCandidateImage>
-): ImageBranchVlmReferenceDecision[] => {
+    candidateByNodeId: Map<string, MediaBranchCandidateImage>
+): MediaBranchVlmReferenceDecision[] => {
     if (!Array.isArray(decisions)) return []
-    const out: ImageBranchVlmReferenceDecision[] = []
+    const out: MediaBranchVlmReferenceDecision[] = []
     for (const decision of decisions) {
         if (typeof decision !== 'object' || decision === null) continue
         const nodeId = normalizeOptionalNodeId((decision as any).nodeId)
@@ -330,20 +331,20 @@ const sanitizeDecisions = (
     return out
 }
 
-const isGeneratedCandidate = (candidate: ImageBranchCandidateImage): boolean =>
+const isGeneratedCandidate = (candidate: MediaBranchCandidateImage): boolean =>
     candidate.roleHints.includes('generated-variant')
 
 const findGeneratedTargetReference = (args: {
-    candidateByNodeId: Map<string, ImageBranchCandidateImage>
+    candidateByNodeId: Map<string, MediaBranchCandidateImage>
     referenceImageNodeIds: string[]
     styleReferenceNodeIds: string[]
-    decisions: ImageBranchVlmReferenceDecision[]
-}): ImageBranchCandidateImage | undefined => {
+    decisions: MediaBranchVlmReferenceDecision[]
+}): MediaBranchCandidateImage | undefined => {
     const styleReferenceNodeIds = new Set(args.styleReferenceNodeIds)
     const decisionByNodeId = new Map(args.decisions.map((decision) => [decision.nodeId, decision]))
     const generatedReferences = args.referenceImageNodeIds
         .map((nodeId) => args.candidateByNodeId.get(nodeId))
-        .filter((candidate): candidate is ImageBranchCandidateImage => Boolean(candidate && isGeneratedCandidate(candidate)))
+        .filter((candidate): candidate is MediaBranchCandidateImage => Boolean(candidate && isGeneratedCandidate(candidate)))
         .filter((candidate) => !styleReferenceNodeIds.has(candidate.nodeId))
         .filter((candidate) => decisionByNodeId.get(candidate.nodeId)?.role !== 'style-reference')
 
@@ -362,16 +363,16 @@ const findGeneratedTargetReference = (args: {
 }
 
 const sanitizeResolution = (args: {
-    parsed: ImageBranchVlmRawResolution
+    parsed: MediaBranchVlmRawResolution
     state: ProviderState
     resolverProvider: ProviderName
     resolverModelId: string
-}): ImageBranchVlmResolution => {
-    const snapshot = args.state.imageBranchCandidateSnapshot
+}): MediaBranchVlmResolution => {
+    const snapshot = args.state.mediaBranchCandidateSnapshot
     if (!snapshot) throw new Error('Image branch candidate snapshot is required')
 
-    const candidateByNodeId: Map<string, ImageBranchCandidateImage> = new Map(snapshot.candidates.map((candidate: ImageBranchCandidateImage) => [candidate.nodeId, candidate]))
-    let mode = args.parsed.mode as ImageBranchVlmResolution['mode']
+    const candidateByNodeId: Map<string, MediaBranchCandidateImage> = new Map(snapshot.candidates.map((candidate: MediaBranchCandidateImage) => [candidate.nodeId, candidate]))
+    let mode = args.parsed.mode as MediaBranchVlmResolution['mode']
     let operationKind = args.parsed.operationKind as ImageGenerationOperationKind
     if (!VALID_MODES.has(mode)) throw new Error(`Image branch resolver returned invalid mode: ${args.parsed.mode}`)
     if (!VALID_OPERATION_KINDS.has(operationKind)) throw new Error(`Image branch resolver returned invalid operationKind: ${args.parsed.operationKind}`)
@@ -515,8 +516,8 @@ const stripCandidateImageBlocks = (messages: ChatMessage[], candidateImageUrls: 
 }
 
 const buildResolvedBranchMessage = (
-    resolution: ImageBranchVlmResolution,
-    candidates: ImageBranchCandidateImage[]
+    resolution: MediaBranchVlmResolution,
+    candidates: MediaBranchCandidateImage[]
 ): ChatMessage => {
     const candidateByNodeId = new Map(candidates.map((candidate) => [candidate.nodeId, candidate]))
     const blocks: Array<Record<string, any>> = [{
@@ -551,8 +552,8 @@ const buildResolvedBranchMessage = (
     return { role: 'user', content: blocks }
 }
 
-const buildFreshBranchResolution = (state: ProviderState): ImageBranchVlmResolution => {
-    const snapshot = state.imageBranchCandidateSnapshot
+const buildFreshBranchResolution = (state: ProviderState): MediaBranchVlmResolution => {
+    const snapshot = state.mediaBranchCandidateSnapshot
     if (!snapshot) throw new Error('Image branch candidate snapshot is required')
     return {
         resolverKind: RESOLVER_KIND,
@@ -576,44 +577,44 @@ const buildFreshBranchResolution = (state: ProviderState): ImageBranchVlmResolut
     }
 }
 
-export const resolveImageBranch = async (state: ProviderState, deps: ResolveImageBranchDeps): Promise<Partial<ProviderState>> => {
+export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMediaBranchDeps): Promise<Partial<ProviderState>> => {
     // The resolver runs for both image AND video generation: VEO image-to-video
     // and reference-conditioned video both need the same VLM grounding that
     // image generation uses.
     if (!state.imageModelVersion && !state.videoModelVersion) return {}
-    const snapshot = state.imageBranchCandidateSnapshot
+    const snapshot = restrictSnapshotToExplicitRefs(state.mediaBranchCandidateSnapshot)
     if (!snapshot) {
         const message = state.videoModelVersion
             ? 'Image branch candidate snapshot is required for video generation.'
             : 'Image branch candidate snapshot is required for image generation.'
-        deps.publisher.imageBranchResolutionError(message)
+        deps.publisher.mediaBranchResolutionError(message)
         throw new Error(message)
     }
     if (snapshot.candidates.length === 0) {
         const resolution = buildFreshBranchResolution(state)
-        deps.publisher.imageBranchResolved(resolution)
-        info(`[ImageBranchResolver] resolved fresh branch ${JSON.stringify({
+        deps.publisher.mediaBranchResolved(resolution)
+        info(`[MediaBranchResolver] resolved fresh branch ${JSON.stringify({
             workspaceId: state.workspaceId,
             aiChatThreadId: state.aiChatThreadId,
             branchId: resolution.branchId,
             rationale: resolution.rationale,
         }, null, 0)}`)
-        return { imageBranchResolution: resolution }
+        return { mediaBranchResolution: resolution }
     }
 
     const { provider, modelVersion } = getResolverModel(state)
-    const callVlm = deps.callVlm ?? ((args: VlmCallArgs) => callStructuredVlm<ImageBranchVlmRawResolution>(args))
+    const callVlm = deps.callVlm ?? ((args: VlmCallArgs) => callStructuredVlm<MediaBranchVlmRawResolution>(args))
 
     try {
         const resolvedCandidates = await resolveCandidateImageUrls(snapshot.candidates, deps.natsService)
         const resolverState: ProviderState = {
             ...state,
-            imageBranchCandidateSnapshot: {
+            mediaBranchCandidateSnapshot: {
                 ...snapshot,
                 candidates: resolvedCandidates,
             },
         }
-        const result: VlmCallResult<ImageBranchVlmRawResolution> = await callVlm({
+        const result: VlmCallResult<MediaBranchVlmRawResolution> = await callVlm({
             provider,
             modelVersion,
             systemPrompt: SYSTEM_PROMPT,
@@ -627,17 +628,19 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
 
         const resolution = sanitizeResolution({
             parsed: result.parsed,
-            state,
+            // Validate VLM selections against the explicit-restricted snapshot so
+            // non-explicit node ids can never survive sanitization.
+            state: resolverState,
             resolverProvider: provider,
             resolverModelId: result.modelName || modelVersion,
         })
-        const candidateImageUrls: Set<string> = new Set(snapshot.candidates.map((candidate: ImageBranchCandidateImage) => candidate.imageUrl))
+        const candidateImageUrls: Set<string> = new Set(snapshot.candidates.map((candidate: MediaBranchCandidateImage) => candidate.imageUrl))
         const cleanedMessages = stripCandidateImageBlocks(state.messages, candidateImageUrls)
         const resolvedBranchMessage = buildResolvedBranchMessage(resolution, resolvedCandidates)
         const messages = [resolvedBranchMessage, ...cleanedMessages]
 
-        deps.publisher.imageBranchResolved(resolution)
-        info(`[ImageBranchResolver] resolved ${JSON.stringify({
+        deps.publisher.mediaBranchResolved(resolution)
+        info(`[MediaBranchResolver] resolved ${JSON.stringify({
             workspaceId: state.workspaceId,
             aiChatThreadId: state.aiChatThreadId,
             provider,
@@ -680,14 +683,14 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
         }
 
         return {
-            imageBranchResolution: resolution,
+            mediaBranchResolution: resolution,
             messages,
             videoFirstFrameImage,
             videoReferenceImages,
         }
     } catch (error: any) {
         const message = error?.message ?? String(error)
-        deps.publisher.imageBranchResolutionError(message)
+        deps.publisher.mediaBranchResolutionError(message)
         throw error
     }
 }

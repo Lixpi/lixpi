@@ -179,7 +179,7 @@ flowchart TB
     Relevance[resolveWorkspaceContext<br/>rank + force include + self-heal]
     Auto[CONTEXT_RELEVANCE_RESOLVED<br/>turn selections + improved descriptors]
     Features[resolveFeatures]
-    Branch[resolveImageBranch<br/>media role authority]
+    Branch[resolveMediaBranch<br/>media role authority]
     Stream[Stream Tokens or Media Generation]
 
     Submit --> Chips
@@ -193,7 +193,7 @@ flowchart TB
 ```
 
 `resolveWorkspaceContext` runs on every chat turn, including text-only turns.
-`resolveImageBranch` remains the authority for visual media roles when an image
+`resolveMediaBranch` remains the authority for visual media roles when an image
 or video model is selected. The shared LangGraph workflow, routing, and usage
 accounting are documented in the
 [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md); streaming

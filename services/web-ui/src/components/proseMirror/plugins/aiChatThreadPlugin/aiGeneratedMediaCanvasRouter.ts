@@ -70,10 +70,10 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
             return
 
         case 'image_branch_resolved':
-            if (event.imageBranchResolution) {
-                imageCallbacks.onImageBranchResolvedToCanvas?.({
+            if (event.mediaBranchResolution) {
+                imageCallbacks.onMediaBranchResolvedToCanvas?.({
                     threadId,
-                    resolution: event.imageBranchResolution,
+                    resolution: event.mediaBranchResolution,
                     generationRun,
                 })
             }
@@ -116,7 +116,7 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
             return
 
         case 'image_branch_resolution_error':
-            imageCallbacks.onImageBranchResolutionErrorToCanvas?.({
+            imageCallbacks.onMediaBranchResolutionErrorToCanvas?.({
                 threadId,
                 error: event.error || 'Image branch resolution failed',
                 generationRun,

@@ -210,7 +210,7 @@ describe('AiInteractionService', () => {
 
         service.onChatMessageResponse({
             content: {
-                status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
+                status: STREAM_STATUS.MEDIA_BRANCH_RESOLVED,
                 resolution: { target: 'node-1' },
             },
         })
@@ -237,7 +237,7 @@ describe('AiInteractionService', () => {
         expect(receiveSegmentMock).toHaveBeenCalledWith(
             expect.objectContaining({
                 type: 'image_branch_resolved',
-                imageBranchResolution: expect.objectContaining({ target: 'node-1' }),
+                mediaBranchResolution: expect.objectContaining({ target: 'node-1' }),
             }),
         )
         expect(receiveSegmentMock).toHaveBeenCalledWith(
@@ -466,7 +466,7 @@ describe('AiInteractionService', () => {
             useMultipleVideoModels: true,
             videoConfigGroups: [{ id: 'quality', configs: [] }],
             referencedFeatureIds: ['feat-1'],
-            imageBranchCandidateSnapshot: {
+            mediaBranchCandidateSnapshot: {
                 resolverVersion: 'image-branch-v1',
                 threadId: aiChatThreadId,
                 regionNodeId: 'node-1',
@@ -493,7 +493,7 @@ describe('AiInteractionService', () => {
             aiImageModels: ['image-a', 'image-b'],
             aiVideoModels: ['video-a', 'video-b'],
             imageSize: '768x768',
-            imageBranchCandidateSnapshot: { resolverVersion: 'image-branch-v1', threadId: aiChatThreadId },
+            mediaBranchCandidateSnapshot: { resolverVersion: 'image-branch-v1', threadId: aiChatThreadId },
             workspaceContextSnapshot: {
                 workspaceId,
                 nodes: [],

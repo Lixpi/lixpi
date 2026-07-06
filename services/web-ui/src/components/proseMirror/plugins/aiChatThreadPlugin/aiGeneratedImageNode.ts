@@ -6,7 +6,7 @@ import { settings } from '$src/settings.ts'
 import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type { ImageBranchVlmResolution, MediaBranchLineagePlan, MediaGenerationRunMeta, WorkspaceContextResolution } from '@lixpi/constants'
+import type { MediaBranchVlmResolution, MediaBranchLineagePlan, MediaGenerationRunMeta, WorkspaceContextResolution } from '@lixpi/constants'
 import {
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeType,
@@ -51,9 +51,9 @@ export type AiGeneratedImageCallbacks = {
         threadId: string
         generationRun?: MediaGenerationRunMeta
     }) => void
-    onImageBranchResolvedToCanvas?: (data: {
+    onMediaBranchResolvedToCanvas?: (data: {
         threadId: string
-        resolution: ImageBranchVlmResolution
+        resolution: MediaBranchVlmResolution
         generationRun?: MediaGenerationRunMeta
     }) => void
     onMediaLineagePlannedToCanvas?: (data: {
@@ -76,7 +76,7 @@ export type AiGeneratedImageCallbacks = {
         resolution: WorkspaceContextResolution
         generationRun?: MediaGenerationRunMeta
     }) => void
-    onImageBranchResolutionErrorToCanvas?: (data: {
+    onMediaBranchResolutionErrorToCanvas?: (data: {
         threadId: string
         error: string
         generationRun?: MediaGenerationRunMeta

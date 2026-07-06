@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
 
-import { resolveImageBranch } from './image-branch-resolver.ts'
+import { resolveMediaBranch } from './media-branch-resolver.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
 import type { VlmCallArgs, VlmCallResult } from '../extraction/vlm-client.ts'
 
@@ -47,7 +47,7 @@ function getImageUrls(messages: ChatMessage[]): string[] {
     })
 }
 
-const baseCandidates: NonNullable<ProviderState['imageBranchCandidateSnapshot']>['candidates'] = [
+const baseCandidates: NonNullable<ProviderState['mediaBranchCandidateSnapshot']>['candidates'] = [
     {
         nodeId: 'portrait-source',
         fileId: 'portrait-file',
@@ -86,7 +86,7 @@ const baseCandidates: NonNullable<ProviderState['imageBranchCandidateSnapshot']>
     },
 ]
 
-const goatCandidate: NonNullable<ProviderState['imageBranchCandidateSnapshot']>['candidates'][number] = {
+const goatCandidate: NonNullable<ProviderState['mediaBranchCandidateSnapshot']>['candidates'][number] = {
     nodeId: 'goat-generated',
     fileId: 'goat-file',
     workspaceId: 'workspace-1',
@@ -101,7 +101,7 @@ const goatCandidate: NonNullable<ProviderState['imageBranchCandidateSnapshot']>[
 
 // Five plain base-context references for exercising the provider-aware video
 // reference cap (which replaced the old hardcoded .slice(0, 3)).
-function buildCapReferenceCandidates(): NonNullable<ProviderState['imageBranchCandidateSnapshot']>['candidates'] {
+function buildCapReferenceCandidates(): NonNullable<ProviderState['mediaBranchCandidateSnapshot']>['candidates'] {
     return Array.from({ length: 5 }, (_, i) => ({
         nodeId: `cap-src-${i}`,
         fileId: `cap-file-${i}`,
@@ -118,7 +118,7 @@ function buildCapReferenceCandidates(): NonNullable<ProviderState['imageBranchCa
 function createState(overrides: {
     promptText?: string
     activeTargetNodeId?: string
-    candidates?: NonNullable<ProviderState['imageBranchCandidateSnapshot']>['candidates']
+    candidates?: NonNullable<ProviderState['mediaBranchCandidateSnapshot']>['candidates']
 } = {}): ProviderState {
     const promptText = overrides.promptText ?? 'draw a goat in the style of that landscape painting'
     const candidates = overrides.candidates ?? baseCandidates
@@ -166,7 +166,7 @@ function createState(overrides: {
         imageModelVersion: 'gpt-image-1',
         imageProviderName: 'OpenAI',
         imagePromptRetryCount: 0,
-        imageBranchCandidateSnapshot: {
+        mediaBranchCandidateSnapshot: {
             resolverVersion: 'image-branch-vlm-v1',
             threadId: 'thread-1',
             regionNodeId: 'region-1',
@@ -219,8 +219,8 @@ function createDeps(parsed: Record<string, unknown>) {
         getObject: vi.fn(async () => tinyPngBytes),
     }
     const publisher = {
-        imageBranchResolved: vi.fn(),
-        imageBranchResolutionError: vi.fn(),
+        mediaBranchResolved: vi.fn(),
+        mediaBranchResolutionError: vi.fn(),
     }
     const callVlm = vi.fn(async (_args: VlmCallArgs): Promise<VlmCallResult<any>> => ({
         parsed,
@@ -242,7 +242,7 @@ function createDeps(parsed: Record<string, unknown>) {
     }
 }
 
-describe('resolveImageBranch', () => {
+describe('resolveMediaBranch', () => {
     it('preserves feature images and removes unselected candidate images from provider messages', async () => {
         const { deps, publisher, callVlm } = createDeps({
             mode: 'context-only',
@@ -267,14 +267,14 @@ describe('resolveImageBranch', () => {
             ],
         })
 
-        const update = await resolveImageBranch(createState(), deps)
+        const update = await resolveMediaBranch(createState(), deps)
         const messages = update.messages ?? []
         const imageUrls = getImageUrls(messages)
 
         expect(callVlm).toHaveBeenCalledOnce()
-        expect(publisher.imageBranchResolved).toHaveBeenCalledOnce()
-        expect(update.imageBranchResolution?.resolverKind).toBe('structured-vlm')
-        expect(update.imageBranchResolution?.referenceImageNodeIds).toEqual(['portrait-source', 'landscape-source'])
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
+        expect(update.mediaBranchResolution?.resolverKind).toBe('structured-vlm')
+        expect(update.mediaBranchResolution?.referenceImageNodeIds).toEqual(['portrait-source', 'landscape-source'])
         expect(getImageUrls(callVlm.mock.calls[0]?.[0].userMessages ?? [])).toEqual([
             resolvedTinyPngUrl,
             resolvedTinyPngUrl,
@@ -311,14 +311,14 @@ describe('resolveImageBranch', () => {
             ],
         }))
 
-        const update = await resolveImageBranch(createState({
+        const update = await resolveMediaBranch(createState({
             promptText: 'make that guy that used landscape as a source orange monochromatic',
             activeTargetNodeId: 'goat-generated',
             candidates: [...baseCandidates, goatCandidate],
         }), deps)
-        const resolution = update.imageBranchResolution
+        const resolution = update.mediaBranchResolution
 
-        expect(publisher.imageBranchResolved).toHaveBeenCalledOnce()
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
         expect(resolution).toMatchObject({
             mode: 'edit-active-branch',
             operationKind: 'style_transfer',
@@ -351,11 +351,11 @@ describe('resolveImageBranch', () => {
             ],
         }))
 
-        const update = await resolveImageBranch(createState({
+        const update = await resolveMediaBranch(createState({
             promptText: 'draw a new ceramic horse in the style of this painted portrait',
         }), deps)
 
-        expect(update.imageBranchResolution).toMatchObject({
+        expect(update.mediaBranchResolution).toMatchObject({
             mode: 'fresh-branch',
             operationKind: 'new_image',
             targetImageNodeId: null,
@@ -380,12 +380,12 @@ describe('resolveImageBranch', () => {
             ],
         }))
 
-        const update = await resolveImageBranch(createState({
+        const update = await resolveMediaBranch(createState({
             promptText: 'make it very artistic',
             activeTargetNodeId: 'person-generated',
         }), deps)
 
-        expect(update.imageBranchResolution).toMatchObject({
+        expect(update.mediaBranchResolution).toMatchObject({
             mode: 'edit-active-branch',
             targetImageNodeId: 'person-generated',
             parentImageNodeId: 'person-generated',
@@ -412,12 +412,12 @@ describe('resolveImageBranch', () => {
             ],
         }))
 
-        const update = await resolveImageBranch(createState({
+        const update = await resolveMediaBranch(createState({
             promptText: 'draw a goat in the style of that landscape painting',
             activeTargetNodeId: 'person-generated',
         }), deps)
 
-        expect(update.imageBranchResolution).toMatchObject({
+        expect(update.mediaBranchResolution).toMatchObject({
             mode: 'fresh-branch',
             operationKind: 'new_image',
             targetImageNodeId: null,
@@ -440,9 +440,9 @@ describe('resolveImageBranch', () => {
             ],
         }))
 
-        await expect(resolveImageBranch(createState(), deps)).rejects.toThrow('excluded its own targetImageNodeId')
-        expect(publisher.imageBranchResolutionError).toHaveBeenCalledOnce()
-        expect(publisher.imageBranchResolved).not.toHaveBeenCalled()
+        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('excluded its own targetImageNodeId')
+        expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
+        expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
     })
 
     it('fails when the VLM target is not included in referenceImageNodeIds', async () => {
@@ -457,9 +457,9 @@ describe('resolveImageBranch', () => {
             ],
         }))
 
-        await expect(resolveImageBranch(createState(), deps)).rejects.toThrow('targetImageNodeId is not in referenceImageNodeIds')
-        expect(publisher.imageBranchResolutionError).toHaveBeenCalledOnce()
-        expect(publisher.imageBranchResolved).not.toHaveBeenCalled()
+        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('targetImageNodeId is not in referenceImageNodeIds')
+        expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
+        expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
     })
 
     it('fails visibly when the VLM returns an ambiguous resolution', async () => {
@@ -483,9 +483,9 @@ describe('resolveImageBranch', () => {
             decisions: [],
         })
 
-        await expect(resolveImageBranch(createState(), deps)).rejects.toThrow('could not disambiguate')
-        expect(publisher.imageBranchResolutionError).toHaveBeenCalledOnce()
-        expect(publisher.imageBranchResolved).not.toHaveBeenCalled()
+        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('could not disambiguate')
+        expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
+        expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
     })
 
     // Temporary skip: API integration behavior changed; re-enable after stabilization.
@@ -502,15 +502,15 @@ describe('resolveImageBranch', () => {
             ],
         }))
 
-        const update = await resolveImageBranch(createVideoState({
+        const update = await resolveMediaBranch(createVideoState({
             promptText: 'animate that portrait, slow zoom in with ambient sound',
             activeTargetNodeId: 'person-generated',
         }), deps)
 
         // The resolver must run off videoModelVersion alone (no image model selected)
         // and feed the chosen target identity into VEO as the first frame.
-        expect(publisher.imageBranchResolved).toHaveBeenCalledOnce()
-        expect(update.imageBranchResolution?.targetImageNodeId).toBe('person-generated')
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
+        expect(update.mediaBranchResolution?.targetImageNodeId).toBe('person-generated')
         expect(update.videoFirstFrameImage).toBe(resolvedTinyPngUrl)
         expect(update.videoReferenceImages).toBeUndefined()
     })
@@ -528,12 +528,12 @@ describe('resolveImageBranch', () => {
             ],
         }))
 
-        const update = await resolveImageBranch(createVideoState({
+        const update = await resolveMediaBranch(createVideoState({
             promptText: 'a fox trotting through falling snow in this painting style',
         }), deps)
 
-        expect(publisher.imageBranchResolved).toHaveBeenCalledOnce()
-        expect(update.imageBranchResolution?.targetImageNodeId).toBeNull()
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
+        expect(update.mediaBranchResolution?.targetImageNodeId).toBeNull()
         expect(update.videoReferenceImages).toEqual([resolvedTinyPngUrl])
         expect(update.videoFirstFrameImage).toBeUndefined()
     })
@@ -551,7 +551,7 @@ describe('resolveImageBranch', () => {
             decisions: refNodeIds.map((nodeId) => ({ nodeId, role: 'style-reference', reason: 'cap test reference' })),
         }))
 
-        const update = await resolveImageBranch(createVideoState({ candidates: capCandidates }), deps)
+        const update = await resolveMediaBranch(createVideoState({ candidates: capCandidates }), deps)
 
         // No videoModelMetaInfo on state => default cap of 3 (VEO baseline preserved).
         expect(update.videoFirstFrameImage).toBeUndefined()
@@ -575,7 +575,7 @@ describe('resolveImageBranch', () => {
             ...createVideoState({ candidates: capCandidates }),
             videoModelMetaInfo: { provider: 'Google', model: 'Seedance', modelVersion: 'dreamina-seedance-2-0-260128', videoMaxReferenceImages: 9 },
         }
-        const update = await resolveImageBranch(state, deps)
+        const update = await resolveMediaBranch(state, deps)
 
         // 5 references all pass because the cap is raised to 9 (was 3).
         expect(update.videoFirstFrameImage).toBeUndefined()
@@ -585,7 +585,7 @@ describe('resolveImageBranch', () => {
     it('returns an empty patch when neither image nor video generation is configured', async () => {
         const { deps, publisher, callVlm } = createDeps(createParsedResolution({}))
 
-        const update = await resolveImageBranch({
+        const update = await resolveMediaBranch({
             ...createState(),
             imageModelVersion: undefined,
             videoModelVersion: undefined,
@@ -595,43 +595,43 @@ describe('resolveImageBranch', () => {
 
         expect(update).toEqual({})
         expect(callVlm).not.toHaveBeenCalled()
-        expect(publisher.imageBranchResolved).not.toHaveBeenCalled()
-        expect(publisher.imageBranchResolutionError).not.toHaveBeenCalled()
+        expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
+        expect(publisher.mediaBranchResolutionError).not.toHaveBeenCalled()
     })
 
     it('errors for missing snapshot on a video-only request', async () => {
         const { deps, publisher } = createDeps(createParsedResolution({}))
 
-        await expect(resolveImageBranch({
+        await expect(resolveMediaBranch({
             ...createVideoState(),
-            imageBranchCandidateSnapshot: undefined,
+            mediaBranchCandidateSnapshot: undefined,
         }, deps)).rejects.toThrow('Image branch candidate snapshot is required for video generation.')
 
-        expect(publisher.imageBranchResolutionError).toHaveBeenCalledOnce()
+        expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
     })
 
     it('honors resolver env override only when model is provided', async () => {
-        const previousProvider = process.env.IMAGE_BRANCH_RESOLVER_PROVIDER
-        const previousModel = process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
-        process.env.IMAGE_BRANCH_RESOLVER_PROVIDER = 'Google'
-        delete process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
+        const previousProvider = process.env.MEDIA_BRANCH_RESOLVER_PROVIDER
+        const previousModel = process.env.MEDIA_BRANCH_RESOLVER_MODEL_VERSION
+        process.env.MEDIA_BRANCH_RESOLVER_PROVIDER = 'Google'
+        delete process.env.MEDIA_BRANCH_RESOLVER_MODEL_VERSION
 
         try {
             const { deps } = createDeps(createParsedResolution({}))
 
-            await expect(resolveImageBranch(createState(), deps)).rejects.toThrow(
+            await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow(
                 'Image branch resolver model is not configured for provider Google',
             )
         } finally {
             if (previousProvider === undefined) {
-                delete process.env.IMAGE_BRANCH_RESOLVER_PROVIDER
+                delete process.env.MEDIA_BRANCH_RESOLVER_PROVIDER
             } else {
-                process.env.IMAGE_BRANCH_RESOLVER_PROVIDER = previousProvider
+                process.env.MEDIA_BRANCH_RESOLVER_PROVIDER = previousProvider
             }
             if (previousModel === undefined) {
-                delete process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
+                delete process.env.MEDIA_BRANCH_RESOLVER_MODEL_VERSION
             } else {
-                process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION = previousModel
+                process.env.MEDIA_BRANCH_RESOLVER_MODEL_VERSION = previousModel
             }
         }
     })
@@ -644,19 +644,19 @@ describe('resolveImageBranch', () => {
             ],
         })
 
-        await expect(resolveImageBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps))
+        await expect(resolveMediaBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps))
             .rejects
             .toThrow('Image branch resolver returned invalid decision role for person-generated: invalid-role')
-        expect(publisher.imageBranchResolutionError).toHaveBeenCalledOnce()
-        expect(publisher.imageBranchResolved).not.toHaveBeenCalled()
+        expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
+        expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
     })
 
     it('rejects low-confidence resolutions even when references are present', async () => {
         const { deps, publisher } = createDeps(createParsedResolution({ confidence: 0.1 }))
 
-        await expect(resolveImageBranch(createState(), deps)).rejects.toThrow('confidence too low (0.1): Resolved from visible candidates.')
-        expect(publisher.imageBranchResolutionError).toHaveBeenCalledOnce()
-        expect(publisher.imageBranchResolved).not.toHaveBeenCalled()
+        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('confidence too low (0.1): Resolved from visible candidates.')
+        expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
+        expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
     })
 
     it('continues a targetless mode with a single generated non-style reference even without decision hints', async () => {
@@ -668,10 +668,10 @@ describe('resolveImageBranch', () => {
             decisions: [],
         }))
 
-        const update = await resolveImageBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
+        const update = await resolveMediaBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
 
-        expect(publisher.imageBranchResolved).toHaveBeenCalledOnce()
-        expect(update.imageBranchResolution).toMatchObject({
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
+        expect(update.mediaBranchResolution).toMatchObject({
             mode: 'edit-active-branch',
             operationKind: 'style_transfer',
             targetImageNodeId: 'person-generated',
@@ -690,9 +690,9 @@ describe('resolveImageBranch', () => {
             decisions: [],
         }))
 
-        const update = await resolveImageBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
+        const update = await resolveMediaBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
 
-        expect(update.imageBranchResolution).toMatchObject({
+        expect(update.mediaBranchResolution).toMatchObject({
             mode: 'fresh-branch',
             targetImageNodeId: null,
             operationKind: 'new_image',
@@ -713,7 +713,7 @@ describe('resolveImageBranch', () => {
             ],
         }))
 
-        const update = await resolveImageBranch(createVideoState(), deps)
+        const update = await resolveMediaBranch(createVideoState(), deps)
 
         expect(update.videoFirstFrameImage).toBe(resolvedTinyPngUrl)
         expect(update.videoReferenceImages).toBeUndefined()
@@ -730,10 +730,10 @@ describe('resolveImageBranch', () => {
             }),
         })
 
-        const update = await resolveImageBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
+        const update = await resolveMediaBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
 
-        expect(publisher.imageBranchResolved).toHaveBeenCalledOnce()
-        expect(update.imageBranchResolution).toMatchObject({
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
+        expect(update.mediaBranchResolution).toMatchObject({
             referenceImageNodeIds: ['portrait-source', 'landscape-source'],
             sourceContextNodeIds: ['landscape-source'],
             styleReferenceNodeIds: ['person-generated'],
@@ -756,14 +756,53 @@ describe('resolveImageBranch', () => {
             ],
         }))
 
-        const update = await resolveImageBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
+        const update = await resolveMediaBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
 
-        expect(update.imageBranchResolution?.decisions).toEqual([
+        expect(update.mediaBranchResolution?.decisions).toEqual([
             {
                 nodeId: 'portrait-source',
                 role: 'base-context',
                 reason: 'portrait is the intended source',
             },
         ])
+    })
+
+    it('restricts candidates to explicitReferenceNodeIds so the VLM never sees non-explicit media', async () => {
+        const { deps, callVlm } = createDeps(createParsedResolution({
+            referenceImageNodeIds: ['landscape-source'],
+            sourceContextNodeIds: ['landscape-source'],
+        }))
+
+        const state = createState()
+        state.mediaBranchCandidateSnapshot = {
+            ...state.mediaBranchCandidateSnapshot!,
+            explicitReferenceNodeIds: ['landscape-source'],
+        }
+        const update = await resolveMediaBranch(state, deps)
+
+        expect(callVlm).toHaveBeenCalledOnce()
+        const vlmContent = callVlm.mock.calls[0]?.[0].userMessages[0]?.content as Array<Record<string, any>>
+        const candidateBlocks = vlmContent.filter((block) => block.type === 'input_image')
+        expect(candidateBlocks).toHaveLength(1)
+        const metadataText = String(vlmContent[0]?.text)
+        expect(metadataText).toContain('landscape-source')
+        expect(metadataText).not.toContain('portrait-source')
+        expect(metadataText).not.toContain('person-generated')
+        expect(update.mediaBranchResolution?.referenceImageNodeIds).toEqual(['landscape-source'])
+    })
+
+    it('resolves a fresh branch when explicitReferenceNodeIds exclude every candidate', async () => {
+        const { deps, callVlm, publisher } = createDeps(createParsedResolution())
+
+        const state = createState()
+        state.mediaBranchCandidateSnapshot = {
+            ...state.mediaBranchCandidateSnapshot!,
+            explicitReferenceNodeIds: ['not-a-candidate'],
+        }
+        const update = await resolveMediaBranch(state, deps)
+
+        expect(callVlm).not.toHaveBeenCalled()
+        expect(update.mediaBranchResolution?.mode).toBe('fresh-branch')
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
     })
 })

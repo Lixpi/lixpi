@@ -28,7 +28,7 @@ The allowed responses are: wait for the API event that carries the contract, fai
 The browser sends useful context:
 
 - `WorkspaceContextSnapshot` for descriptor-first relevance.
-- `ImageBranchCandidateSnapshot` for media candidates, labels, existing branch hints, and prompt fingerprinting.
+- `MediaBranchCandidateSnapshot` for media candidates, labels, existing branch hints, and prompt fingerprinting.
 - Explicit context chips, selected canvas media, and edge-connected context.
 
 These inputs are non-authoritative. They exist so the API can make a grounded decision with the current request state. The browser may use them for pending outlines and placement hints, but it must not turn them into branch/fork decisions.
@@ -38,7 +38,7 @@ Uploaded media, media-library media, first-frame images, style references, and w
 The API owns the decisions:
 
 - `resolveWorkspaceContext` narrows the workspace context.
-- `resolveImageBranch` uses the structured VLM resolver to select target/reference/excluded media when candidates exist, and synthesizes a fresh-branch resolution in the API when the candidate list is empty.
+- `resolveMediaBranch` uses the structured VLM resolver to select target/reference/excluded media when candidates exist, and synthesizes a fresh-branch resolution in the API when the candidate list is empty.
 - `MediaBranchLineagePlanner` converts the resolver result into a `MediaBranchLineagePlan`.
 - `StreamPublisher.mediaLineagePlanned()` emits `MEDIA_LINEAGE_PLANNED` before media partials or completions.
 - `services/api/src/services/media-generation-canvas-projection.ts` persists the planned markers and final generated image/video nodes into `Workspace.canvasState` independently of any browser subscriber.

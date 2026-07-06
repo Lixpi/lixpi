@@ -4,7 +4,7 @@ import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type { ImageBranchVlmResolution, MediaGenerationRunMeta } from '@lixpi/constants'
+import type { MediaBranchVlmResolution, MediaGenerationRunMeta } from '@lixpi/constants'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
 import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
@@ -82,7 +82,7 @@ export type AiGeneratedVideoCallbacks = {
     // image callback surface rather than duplicated here.
     onVideoBranchResolvedToCanvas?: (data: {
         threadId: string
-        resolution: ImageBranchVlmResolution
+        resolution: MediaBranchVlmResolution
         generationRun?: MediaGenerationRunMeta
     }) => void
 }
