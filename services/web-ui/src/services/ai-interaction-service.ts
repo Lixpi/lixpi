@@ -257,11 +257,11 @@ export default class AiInteractionService {
                 return
             }
 
-            if (content.status === STREAM_STATUS.IMAGE_BRANCH_RESOLVED) {
-                console.log('[AI_INTERACTION] IMAGE_BRANCH_RESOLVED received:', content)
+            if (content.status === STREAM_STATUS.MEDIA_BRANCH_RESOLVED) {
+                console.log('[AI_INTERACTION] MEDIA_BRANCH_RESOLVED received:', content)
                 this.segmentsReceiver.receiveSegment({
                     type: 'image_branch_resolved',
-                    imageBranchResolution: content.resolution,
+                    mediaBranchResolution: content.resolution,
                     ...segmentBase,
                 })
                 return
@@ -306,8 +306,8 @@ export default class AiInteractionService {
                 return
             }
 
-            if (content.status === STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR) {
-                console.log('[AI_INTERACTION] IMAGE_BRANCH_RESOLUTION_ERROR received:', content)
+            if (content.status === STREAM_STATUS.MEDIA_BRANCH_RESOLUTION_ERROR) {
+                console.log('[AI_INTERACTION] MEDIA_BRANCH_RESOLUTION_ERROR received:', content)
                 this.segmentsReceiver.receiveSegment({
                     type: 'image_branch_resolution_error',
                     error: content.error || 'Image branch resolution failed',
@@ -444,7 +444,7 @@ export default class AiInteractionService {
         videoConfigGroups,
         videoSourceForExtension,
         referencedFeatureIds,
-        imageBranchCandidateSnapshot,
+        mediaBranchCandidateSnapshot,
         workspaceContextSnapshot,
         canvasVisibleArea,
         proseMirrorInitialDoc,
@@ -478,8 +478,8 @@ export default class AiInteractionService {
             payload.referencedFeatureIds = referencedFeatureIds
         }
 
-        if (imageBranchCandidateSnapshot) {
-            payload.imageBranchCandidateSnapshot = imageBranchCandidateSnapshot
+        if (mediaBranchCandidateSnapshot) {
+            payload.mediaBranchCandidateSnapshot = mediaBranchCandidateSnapshot
         }
 
         // Whole-workspace descriptors index for the API relevance stage. Sent on
@@ -508,7 +508,7 @@ export default class AiInteractionService {
 
         // Add video model routing options if a video model is selected. The
         // text model decides between generate_image vs generate_video at runtime
-        // when both are present — see ImageBranchResolver + LangGraph routing.
+        // when both are present — see MediaBranchResolver + LangGraph routing.
         if (videoModelIds.length > 0) {
             payload.aiVideoModels = videoModelIds
             if (videoAspectRatio) payload.videoAspectRatio = videoAspectRatio
@@ -556,7 +556,7 @@ export default class AiInteractionService {
             hasImageModel: imageModelIds.length > 0,
             hasVideoModel: videoModelIds.length > 0,
             referencedFeatureCount: referencedFeatureIds?.length ?? 0,
-            imageBranchCandidateCount: imageBranchCandidateSnapshot?.candidates.length ?? 0,
+            mediaBranchCandidateCount: mediaBranchCandidateSnapshot?.candidates.length ?? 0,
             workspaceContextNodeCount: workspaceContextSnapshot?.nodes.length ?? 0,
         })
 

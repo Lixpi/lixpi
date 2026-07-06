@@ -9,12 +9,13 @@ import {
     type AiChatThread,
     type ContentDescriptor,
     type Document,
-    type ImageBranchCandidateImage,
-    type ImageBranchCandidateSnapshot,
+    type MediaBranchCandidateImage,
+    type MediaBranchCandidateSnapshot,
     type ProviderName,
     type WorkspaceContextNode,
     type WorkspaceContextResolution,
     type WorkspaceContextSelection,
+    type WorkspaceContextSnapshot,
 } from '@lixpi/constants'
 
 import WorkspaceModel from '../../models/workspace.ts'
@@ -27,6 +28,7 @@ import {
 } from '../media-descriptor.ts'
 import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from '../extraction/vlm-client.ts'
 import { resolveImageUrls } from '../utils/attachments.ts'
+import { buildCandidateTranscriptContext, restrictSnapshotToExplicitRefs } from './media-branch-snapshot.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
 import type { StreamPublisher } from './stream-publisher.ts'
 
@@ -105,7 +107,7 @@ const RESOLUTION_SCHEMA: VlmJsonSchema = {
 const SYSTEM_PROMPT = [
     'You are Lixpi\'s workspace context relevance resolver.',
     'Rank workspace nodes for the next AI chat turn using compact text descriptors only. Never assume pixels or full document content beyond the metadata provided.',
-    'Explicit chips and edge-forced nodes are sacred force-includes. You may include them in your selections when relevant, but the system will force-include them regardless.',
+    'Edge-forced nodes are sacred force-includes. You may include them in your selections when relevant, but the system will force-include them regardless.',
     'Generated media whose isCurrentThreadGenerated flag is true belongs to this chat turn\'s active thread. For deictic follow-ups like "it", "this", "that", "now make it", or "make this", prefer current-thread generated media over generated media from other threads unless the prompt explicitly names the other content or the node is a forced chip/edge.',
     'Select only nodes that materially help answer or generate the user request. Exclude unrelated distractors aggressively.',
     'Mark needsBetterDescriptor=true when a promising node has a missing, failed, analyzing, one-word, or ambiguous descriptor.',
@@ -113,8 +115,8 @@ const SYSTEM_PROMPT = [
 ].join('\n')
 
 const getResolverModel = (state: ProviderState): { provider: ProviderName; modelVersion: string } => {
-    const configuredProvider = process.env.IMAGE_BRANCH_RESOLVER_PROVIDER as ProviderName | undefined
-    const configuredModel = process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
+    const configuredProvider = process.env.MEDIA_BRANCH_RESOLVER_PROVIDER as ProviderName | undefined
+    const configuredModel = process.env.MEDIA_BRANCH_RESOLVER_MODEL_VERSION
     const provider = configuredProvider && configuredModel ? configuredProvider : state.provider
     const modelVersion = configuredProvider && configuredModel ? configuredModel : state.modelVersion
 
@@ -218,15 +220,20 @@ const buildResolution = (
         })
     }
 
+    // Explicit chips make the context exclusive: when the user attached chips,
+    // nothing else — edge-forced or LLM-picked — may enter the selection.
+    const hasExplicitChips = snapshot.nodes.some((node) => node.isExplicitChip)
     for (const node of snapshot.nodes) {
         if (node.isExplicitChip) addSelection(node)
     }
-    for (const node of snapshot.nodes) {
-        if (node.isEdgeForced) addSelection(node)
-    }
-    for (const rawSelection of rawSelections) {
-        const node = nodeById.get(rawSelection.nodeId)
-        if (node) addSelection(node)
+    if (!hasExplicitChips) {
+        for (const node of snapshot.nodes) {
+            if (node.isEdgeForced) addSelection(node)
+        }
+        for (const rawSelection of rawSelections) {
+            const node = nodeById.get(rawSelection.nodeId)
+            if (node) addSelection(node)
+        }
     }
 
     const narrowedMediaNodeIds = selections
@@ -567,7 +574,7 @@ const filterAutoMediaOutsideExistingBranchSnapshot = (
     resolution: WorkspaceContextResolution,
 ): WorkspaceContextResolution => {
     const snapshot = state.workspaceContextSnapshot
-    const branchSnapshot = state.imageBranchCandidateSnapshot
+    const branchSnapshot = restrictSnapshotToExplicitRefs(state.mediaBranchCandidateSnapshot)
     if (!snapshot || !branchSnapshot) return resolution
 
     const branchCandidateNodeIds = new Set(branchSnapshot.candidates.map((candidate) => candidate.nodeId))
@@ -595,10 +602,10 @@ const filterAutoMediaOutsideExistingBranchSnapshot = (
 const buildCandidateFromWorkspaceNode = (
     node: WorkspaceContextNode,
     workspaceId: string,
-): ImageBranchCandidateImage | undefined => {
+): MediaBranchCandidateImage | undefined => {
     if (node.type !== 'image' && node.type !== 'video') return undefined
     if (!node.imageUrl) return undefined
-    const roleHints: ImageBranchCandidateImage['roleHints'] = node.branchId
+    const roleHints: MediaBranchCandidateImage['roleHints'] = node.branchId
         ? ['base-context', 'generated-variant', 'branch-leaf']
         : ['base-context']
 
@@ -619,48 +626,20 @@ const buildCandidateFromWorkspaceNode = (
     }
 }
 
-// Rebuild the branch-resolver transcript after workspace relevance has narrowed
-// the media set. The browser snapshot's original transcriptContext can mention
-// candidates that were just filtered out, and those stale nodeIds make the VLM
-// produce decisions for images it can no longer see. This keeps the textual
-// labels and attached candidate images aligned.
-const buildNarrowedTranscriptContext = (
-    candidates: ImageBranchCandidateImage[],
-    promptText: string,
-    activeTargetNodeId: string | undefined,
-): string => {
-    const candidateLines = candidates.map((candidate) => [
-        `nodeId=${candidate.nodeId}`,
-        `kind=${candidate.mediaKind ?? 'image'}`,
-        `roles=${candidate.roleHints.join(',')}`,
-        candidate.branchId ? `branchId=${candidate.branchId}` : undefined,
-        candidate.visualEntitySummary ? `visualEntity=${candidate.visualEntitySummary}` : undefined,
-        candidate.visualStyleSummary ? `visualStyle=${candidate.visualStyleSummary}` : undefined,
-        candidate.promptText ? `promptText=${candidate.promptText.slice(0, 800)}` : undefined,
-    ].filter(Boolean).join(' | '))
-
-    return [
-        `Current user prompt: ${promptText}`,
-        activeTargetNodeId ? `Active target nodeId: ${activeTargetNodeId}` : undefined,
-        'Candidate media labels:',
-        ...candidateLines,
-    ].filter((line): line is string => typeof line === 'string').join('\n')
-}
-
-const buildNarrowedImageBranchSnapshot = (
+const buildNarrowedMediaBranchSnapshot = (
     state: ProviderState,
     resolution: WorkspaceContextResolution,
-): ImageBranchCandidateSnapshot | undefined => {
+): MediaBranchCandidateSnapshot | undefined => {
     const snapshot = state.workspaceContextSnapshot
-    if (!snapshot) return state.imageBranchCandidateSnapshot
+    const existingSnapshot = restrictSnapshotToExplicitRefs(state.mediaBranchCandidateSnapshot)
+    if (!snapshot) return existingSnapshot
 
     const nodeById = new Map(snapshot.nodes.map((node) => [node.nodeId, node]))
-    const existingSnapshot = state.imageBranchCandidateSnapshot
     const existingByNodeId = new Map((existingSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]))
     const selectedMediaSelections = resolution.selections.filter((selection) => isMediaWorkspaceNode(nodeById.get(selection.nodeId)))
     if (!existingSnapshot && selectedMediaSelections.length === 0) return undefined
 
-    const candidates: ImageBranchCandidateImage[] = []
+    const candidates: MediaBranchCandidateImage[] = []
 
     for (const selection of selectedMediaSelections) {
         const existing = existingByNodeId.get(selection.nodeId)
@@ -679,7 +658,11 @@ const buildNarrowedImageBranchSnapshot = (
         if (candidate) candidates.push(candidate)
     }
 
-    if (existingSnapshot && candidates.length === 0) return existingSnapshot
+    // With explicit chips the context is exclusive: never fall back to the full
+    // browser snapshot — an empty candidate list means the generation proceeds
+    // with no media context (fresh branch) rather than leaking non-explicit media.
+    const hasExplicitChips = snapshot.nodes.some((node) => node.isExplicitChip)
+    if (existingSnapshot && candidates.length === 0 && !hasExplicitChips) return existingSnapshot
 
     const activeTargetNodeId = existingSnapshot?.activeTargetNodeId && candidates.some((candidate) => candidate.nodeId === existingSnapshot.activeTargetNodeId)
         ? existingSnapshot.activeTargetNodeId
@@ -694,7 +677,23 @@ const buildNarrowedImageBranchSnapshot = (
         promptText,
         promptFingerprint: existingSnapshot?.promptFingerprint ?? `workspace-context:${snapshot.threadId}:${snapshot.promptText}:${selectedMediaSelections.map((selection) => selection.nodeId).join(',')}`,
         candidates,
-        transcriptContext: buildNarrowedTranscriptContext(candidates, promptText, activeTargetNodeId),
+        transcriptContext: buildCandidateTranscriptContext(candidates, promptText, activeTargetNodeId),
+    }
+}
+
+// Explicit chips are the exclusive context: selections are exactly the chip
+// nodes and nothing else is evaluated — no edge-forced nodes, no LLM ranking.
+const buildChipsOnlyResolution = (snapshot: WorkspaceContextSnapshot): WorkspaceContextResolution => {
+    const chipNodes = snapshot.nodes.filter((node) => node.isExplicitChip)
+    const selections: WorkspaceContextSelection[] = chipNodes.map((node) => ({
+        nodeId: node.nodeId,
+        role: 'forced-chip',
+    }))
+
+    return {
+        resolverVersion: snapshot.resolverVersion || RESOLVER_VERSION,
+        selections,
+        narrowedMediaNodeIds: chipNodes.filter(isMediaWorkspaceNode).map((node) => node.nodeId),
     }
 }
 
@@ -706,6 +705,30 @@ export const resolveWorkspaceContext = async (
     if (!snapshot) return {}
 
     try {
+        // Explicit chips make the context exclusive and fully deterministic:
+        // skip the relevance LLM call, descriptor self-healing, and auto-media
+        // filtering entirely. The API remains the single source of truth — the
+        // browser snapshots arrive unfiltered and are narrowed only here.
+        if (snapshot.nodes.some((node) => node.isExplicitChip)) {
+            const resolution = buildChipsOnlyResolution(snapshot)
+            const contextMessage = await buildSelectedContextMessage(state, deps, resolution)
+            const mediaBranchCandidateSnapshot = buildNarrowedMediaBranchSnapshot(state, resolution)
+
+            deps.publisher.contextRelevanceResolved(resolution)
+            info(`[WorkspaceContextResolver] resolved (explicit chips, no LLM) ${JSON.stringify({
+                workspaceId: state.workspaceId,
+                aiChatThreadId: state.aiChatThreadId,
+                selectedNodeIds: resolution.selections.map((selection) => selection.nodeId),
+                narrowedMediaNodeIds: resolution.narrowedMediaNodeIds,
+            }, null, 0)}`)
+
+            return {
+                workspaceContextResolution: resolution,
+                ...(contextMessage ? { messages: [contextMessage, ...state.messages] } : {}),
+                ...(mediaBranchCandidateSnapshot ? { mediaBranchCandidateSnapshot } : {}),
+            }
+        }
+
         const { provider, modelVersion } = getResolverModel(state)
         const callLlm = deps.callLlm ?? ((args: VlmCallArgs) => callStructuredVlm<WorkspaceContextRawResolution>(args))
         const rank = async (rankState: ProviderState): Promise<{
@@ -754,7 +777,7 @@ export const resolveWorkspaceContext = async (
 
         resolution = filterAutoMediaOutsideExistingBranchSnapshot(effectiveState, resolution)
         const contextMessage = await buildSelectedContextMessage(effectiveState, deps, resolution)
-        const imageBranchCandidateSnapshot = buildNarrowedImageBranchSnapshot(effectiveState, resolution)
+        const mediaBranchCandidateSnapshot = buildNarrowedMediaBranchSnapshot(effectiveState, resolution)
 
         deps.publisher.contextRelevanceResolved(resolution)
         info(`[WorkspaceContextResolver] resolved ${JSON.stringify({
@@ -771,7 +794,7 @@ export const resolveWorkspaceContext = async (
             workspaceContextResolution: resolution,
             ...(effectiveState.workspaceContextSnapshot !== state.workspaceContextSnapshot ? { workspaceContextSnapshot: effectiveState.workspaceContextSnapshot } : {}),
             ...(contextMessage ? { messages: [contextMessage, ...state.messages] } : {}),
-            ...(imageBranchCandidateSnapshot ? { imageBranchCandidateSnapshot } : {}),
+            ...(mediaBranchCandidateSnapshot ? { mediaBranchCandidateSnapshot } : {}),
         }
     } catch (error: any) {
         const message = error?.message ?? String(error)

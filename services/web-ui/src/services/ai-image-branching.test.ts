@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
     getPromptTextFromMessages,
-    buildImageBranchCandidateSnapshot,
+    buildMediaBranchCandidateSnapshot,
     buildCanvasWideCandidateSnapshot,
     buildWorkspaceContextSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
@@ -213,7 +213,7 @@ const threadContextNode = {
 } satisfies CanvasNode
 
 function buildSnapshot(prompt: string, generatedNodes: CanvasNode[] = [personGeneratedNode]) {
-    return buildImageBranchCandidateSnapshot({
+    return buildMediaBranchCandidateSnapshot({
         regionNodeId: 'thread-node-1',
         threadId: 'thread-1',
         nodes: [rootNode, portraitSourceNode, landscapeSourceNode, ...generatedNodes],
@@ -226,7 +226,7 @@ function buildSnapshot(prompt: string, generatedNodes: CanvasNode[] = [personGen
     })
 }
 
-describe('buildImageBranchCandidateSnapshot', () => {
+describe('buildMediaBranchCandidateSnapshot', () => {
     it('collects base context and generated branches without selecting a target', () => {
         const snapshot = buildSnapshot('draw a goat in the style of that landscape painting')
 
@@ -263,7 +263,7 @@ describe('buildImageBranchCandidateSnapshot', () => {
     })
 
     it('adds an active-target hint without moving that candidate ahead of other candidates', () => {
-        const snapshot = buildImageBranchCandidateSnapshot({
+        const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
             activeTargetNodeId: 'goat-generated',
@@ -286,7 +286,7 @@ describe('buildImageBranchCandidateSnapshot', () => {
     })
 
     it('marks generated ancestors and leaves so the API can preserve branch lineage', () => {
-        const snapshot = buildImageBranchCandidateSnapshot({
+        const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
             nodes: [rootNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
@@ -332,7 +332,7 @@ describe('buildImageBranchCandidateSnapshot', () => {
             },
         } satisfies CanvasNode
 
-        const snapshot = buildImageBranchCandidateSnapshot({
+        const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
             nodes: [rootNode, portraitSourceNode, parentImage, childImage],
@@ -356,7 +356,7 @@ describe('buildImageBranchCandidateSnapshot', () => {
             'person-generated': 'a response message with extra constraints',
         }
 
-        const snapshot = buildImageBranchCandidateSnapshot({
+        const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
             nodes: [rootNode, portraitSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
@@ -386,7 +386,7 @@ describe('buildImageBranchCandidateSnapshot', () => {
     })
 
     it('does not crash when a generated branch is connected through a non-media branch origin', () => {
-        const snapshot = buildImageBranchCandidateSnapshot({
+        const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
             nodes: [rootNode, branchOriginNode, personGeneratedNode],
@@ -424,7 +424,7 @@ describe('buildImageBranchCandidateSnapshot', () => {
             [personGeneratedNode, refinedPersonGeneratedNode],
             'thread-1'
         )
-        const snapshot = buildImageBranchCandidateSnapshot({
+        const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
             nodes: [rootNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
@@ -456,7 +456,7 @@ describe('buildImageBranchCandidateSnapshot', () => {
             dimensions: { width: 100, height: 100 },
         } satisfies CanvasNode
 
-        const snapshot = buildImageBranchCandidateSnapshot({
+        const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
             nodes: [rootNode, portraitSourceNode, disconnectedContextNode],
@@ -469,6 +469,7 @@ describe('buildImageBranchCandidateSnapshot', () => {
         expect(candidateIds).toEqual(['disconnected-source', 'portrait-source'])
         expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'disconnected-source')?.roleHints).toEqual(['base-context'])
         expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'portrait-source')?.roleHints).toEqual(['base-context'])
+        expect(snapshot.explicitReferenceNodeIds).toEqual(['disconnected-source'])
     })
 })
 
@@ -623,13 +624,39 @@ describe('buildCanvasWideCandidateSnapshot', () => {
         expect(snapshot.activeTargetNodeId).toBeUndefined()
         expect(snapshot.candidates.some((candidate) => candidate.roleHints.includes('active-target'))).toBe(false)
     })
+
+    it('keeps the candidate list unfiltered but carries explicit refs for API-side exclusivity', () => {
+        const snapshot = buildCanvasWideCandidateSnapshot({
+            generationRunId: 'run-wide-4',
+            nodes: [portraitSourceNode, landscapeSourceNode, personGeneratedNode],
+            prompt: 'compose globally',
+            referenceNodeIds: ['portrait-source'],
+        })
+
+        expect(snapshot.candidates.map((candidate) => candidate.nodeId).sort()).toEqual([
+            'landscape-source',
+            'person-generated',
+            'portrait-source',
+        ])
+        expect(snapshot.explicitReferenceNodeIds).toEqual(['portrait-source'])
+    })
+
+    it('omits explicitReferenceNodeIds when no references are supplied', () => {
+        const snapshot = buildCanvasWideCandidateSnapshot({
+            generationRunId: 'run-wide-5',
+            nodes: [portraitSourceNode],
+            prompt: 'compose globally',
+        })
+
+        expect(snapshot.explicitReferenceNodeIds).toBeUndefined()
+    })
 })
 
 // =============================================================================
 // VIDEO MEDIA CANDIDATES
 // =============================================================================
 
-describe('buildImageBranchCandidateSnapshot — video media', () => {
+describe('buildMediaBranchCandidateSnapshot — video media', () => {
     it('grounds a generated video by its representative frame, never the MP4', () => {
         const snapshot = buildSnapshot('extend that seaside clip', [videoGeneratedNode])
         const videoCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'video-generated')
@@ -650,7 +677,7 @@ describe('buildImageBranchCandidateSnapshot — video media', () => {
     })
 
     it('falls back to the poster frame and uses the descriptor for uploaded video', () => {
-        const snapshot = buildImageBranchCandidateSnapshot({
+        const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
             nodes: [rootNode, uploadedVideoNode],

@@ -95,9 +95,9 @@ Every live pipeline message carries a `status` from `STREAM_STATUS` inside `cont
 | `ERROR` | `{ error }` | Surface the error; end receiving state | Stream-level failure (including pre-stream errors). |
 | `CONTEXT_RELEVANCE_RESOLVED` | `{ workspaceContextResolution }` | Panel/canvas: keep selections scoped to the submitted turn, patch improved descriptors, narrow media candidates | Result of `resolveWorkspaceContext`. Bypasses the markdown parser. |
 | `CONTEXT_RELEVANCE_ERROR` | `{ error }` | Surface relevance failure; the graph error path closes the stream | Relevance resolution failed. |
-| `IMAGE_BRANCH_RESOLVED` | `{ resolution }` | Canvas/media: store VLM-selected references | Result of `resolveImageBranch` (image and video). Forwarded as an `image_branch_resolved` segment. |
+| `MEDIA_BRANCH_RESOLVED` | `{ resolution }` | Canvas/media: store VLM-selected references | Result of `resolveMediaBranch` (image and video). Forwarded as an `image_branch_resolved` segment. |
 | `MEDIA_LINEAGE_PLANNED` | `{ lineagePlan, generationRun }` | Canvas: apply API-declared branch origin/fork IDs, lineage parent, marker provenance, and run assignments | API-owned media lineage topology for media-enabled requests. Forwarded as a `media_lineage_planned` segment. |
-| `IMAGE_BRANCH_RESOLUTION_ERROR` | `{ error }` | Surface branch failure; clear pending placement | Branch resolution failed (e.g. missing candidate snapshot). |
+| `MEDIA_BRANCH_RESOLUTION_ERROR` | `{ error }` | Surface branch failure; clear pending placement | Branch resolution failed (e.g. missing candidate snapshot). |
 | `IMAGE_GENERATION_TRACE` | `{ imageGenerationTrace }` | `image_generation_trace` segment | Audit trace: image tool prompt + selected/excluded references, published before the transient image provider runs. |
 | `IMAGE_PARTIAL` | `{ imageUrl, fileId, partialIndex }` | Canvas media layer (bypasses markdown) | Empty `imageUrl`/`fileId` triggers the PIXI animated-border placeholder; non-empty partials have already been stored in the workspace Object Store and replace the same preview sprite in place. |
 | `IMAGE_COMPLETE` | `{ imageUrl, fileId, responseId, revisedPrompt, imageModelId, imageModelProvider }` | Canvas media layer | The finished image; PIXI renders it from the stored URL and clears the traveling outline. |

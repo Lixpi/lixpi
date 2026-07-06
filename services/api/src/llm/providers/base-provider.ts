@@ -20,7 +20,7 @@ import { buildImageGenerationTrace } from '../tools/image-generation-trace.ts'
 import { buildVideoGenerationTrace } from '../tools/video-generation-trace.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
-import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
+import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 
@@ -73,7 +73,7 @@ const normalizeModelOption = (
 // chat stream owns it.
 //
 // Topology:
-//   START → resolveWorkspaceContext → resolveFeatures → resolveImageBranch → planMediaBranchLineage → validateRequest → streamTokens → [conditional]
+//   START → resolveWorkspaceContext → resolveFeatures → resolveMediaBranch → planMediaBranchLineage → validateRequest → streamTokens → [conditional]
 //     generate_image: validateImagePrompt → [conditional]
 //       generate_image: executeImageGeneration → calculateUsage → cleanup → END
 //       skip:                                    calculateUsage → cleanup → END
@@ -119,7 +119,7 @@ export abstract class BaseProvider {
                 abortSignal: this.signal,
             }))
             .addNode('resolveFeatures', async (s: ProviderState) => s.preflightResolved ? {} : resolveFeatures(s))
-            .addNode('resolveImageBranch', async (s: ProviderState) => s.preflightResolved ? {} : resolveImageBranch(s, {
+            .addNode('resolveMediaBranch', async (s: ProviderState) => s.preflightResolved ? {} : resolveMediaBranch(s, {
                 natsService: this.nats,
                 publisher: this.publisher,
                 abortSignal: this.signal,
@@ -135,8 +135,8 @@ export abstract class BaseProvider {
 
         graph.addEdge(START, 'resolveWorkspaceContext' as any)
         graph.addEdge('resolveWorkspaceContext' as any, 'resolveFeatures' as any)
-        graph.addEdge('resolveFeatures' as any, 'resolveImageBranch' as any)
-        graph.addEdge('resolveImageBranch' as any, 'planMediaBranchLineage' as any)
+        graph.addEdge('resolveFeatures' as any, 'resolveMediaBranch' as any)
+        graph.addEdge('resolveMediaBranch' as any, 'planMediaBranchLineage' as any)
         graph.addEdge('planMediaBranchLineage' as any, 'validateRequest' as any)
         graph.addEdge('validateRequest' as any, 'streamTokens' as any)
         graph.addConditionalEdges(
@@ -235,8 +235,8 @@ export abstract class BaseProvider {
             imagePromptRetryCount: 0,
             workspaceContextSnapshot: requestData.workspaceContextSnapshot,
             workspaceContextResolution: requestData.workspaceContextResolution,
-            imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
-            imageBranchResolution: requestData.imageBranchResolution,
+            mediaBranchCandidateSnapshot: requestData.mediaBranchCandidateSnapshot,
+            mediaBranchResolution: requestData.mediaBranchResolution,
             mediaBranchLineagePlan: requestData.mediaBranchLineagePlan,
             canvasVisibleArea: requestData.canvasVisibleArea,
             referencedFeatureIds: requestData.referencedFeatureIds,
@@ -323,8 +323,8 @@ export abstract class BaseProvider {
             reasoningModelIds: [generationRun.reasoningModelId],
             ...(imageModelId ? { imageModelIds: [imageModelId] } : {}),
             ...(videoModelId ? { videoModelIds: [videoModelId] } : {}),
-            imageBranchCandidateSnapshot: state.imageBranchCandidateSnapshot,
-            imageBranchResolution: state.imageBranchResolution,
+            mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
+            mediaBranchResolution: state.mediaBranchResolution,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
             createdAt: Date.now(),
         })

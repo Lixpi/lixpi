@@ -16,7 +16,7 @@ import type {
 
 import AiModelModel from '../../models/ai-model.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
-import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
+import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
 import type { ProviderState } from '../graph/state.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
@@ -543,7 +543,7 @@ export class MediaGenerationMatrixOrchestrator {
             imageProviderName: primaryImageModel?.provider,
             imagePromptRetryCount: 0,
             workspaceContextSnapshot: requestData.workspaceContextSnapshot,
-            imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
+            mediaBranchCandidateSnapshot: requestData.mediaBranchCandidateSnapshot,
             canvasVisibleArea: requestData.canvasVisibleArea,
             referencedFeatureIds: requestData.referencedFeatureIds,
             enableVideoGeneration: requestData.enableVideoGeneration ?? false,
@@ -558,7 +558,7 @@ export class MediaGenerationMatrixOrchestrator {
         }
 
         // Each resolver runs against the accumulating `state` because later
-        // resolvers depend on earlier outputs (e.g. the image-branch resolver
+        // resolvers depend on earlier outputs (e.g. the media-branch resolver
         // reads the `messages` rewritten by `/use` feature resolution). Separately
         // we capture the RAW resolver patches into `resolved`: this is the exact,
         // complete set of fields the shared preflight produced and is the single
@@ -590,7 +590,7 @@ export class MediaGenerationMatrixOrchestrator {
             abortSignal: abortController.signal,
         }))
         applyResolved(await resolveFeatures(state))
-        applyResolved(await resolveImageBranch(state, {
+        applyResolved(await resolveMediaBranch(state, {
             natsService: this.natsService,
             publisher,
             abortSignal: abortController.signal,
@@ -600,8 +600,8 @@ export class MediaGenerationMatrixOrchestrator {
             reasoningModelIds: normalized.reasoningModelIds,
             imageModelIds: normalized.imageModelIds,
             videoModelIds: normalized.videoModelIds,
-            imageBranchCandidateSnapshot: state.imageBranchCandidateSnapshot,
-            imageBranchResolution: state.imageBranchResolution,
+            mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
+            mediaBranchResolution: state.mediaBranchResolution,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
             createdAt: Date.now(),
         })

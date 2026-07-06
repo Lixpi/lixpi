@@ -11,10 +11,10 @@ const createImageCallbacks = () => ({
     onImageCompleteToCanvas: vi.fn(),
     onMediaGenerationRequestCompleteToCanvas: vi.fn(),
     onMediaGenerationSkippedToCanvas: vi.fn(),
-    onImageBranchResolvedToCanvas: vi.fn(),
+    onMediaBranchResolvedToCanvas: vi.fn(),
     onMediaLineagePlannedToCanvas: vi.fn(),
     onWorkspaceContextResolvedToCanvas: vi.fn(),
-    onImageBranchResolutionErrorToCanvas: vi.fn(),
+    onMediaBranchResolutionErrorToCanvas: vi.fn(),
     onImageErrorToCanvas: vi.fn(),
 })
 
@@ -141,7 +141,7 @@ describe('routeSegmentEventToCanvas', () => {
         routeSegmentEventToCanvas({
             threadId: 'thread-1',
             type: 'image_branch_resolved',
-            imageBranchResolution: { score: 0.9 } as any,
+            mediaBranchResolution: { score: 0.9 } as any,
         } as any)
 
         expect(imageCallbacks.onMediaLineagePlannedToCanvas).toHaveBeenCalledWith({
@@ -157,7 +157,7 @@ describe('routeSegmentEventToCanvas', () => {
             },
             generationRun: undefined,
         })
-        expect(imageCallbacks.onImageBranchResolvedToCanvas).toHaveBeenCalledWith({
+        expect(imageCallbacks.onMediaBranchResolvedToCanvas).toHaveBeenCalledWith({
             threadId: 'thread-1',
             resolution: { score: 0.9 },
             generationRun: undefined,
@@ -171,7 +171,7 @@ describe('routeSegmentEventToCanvas', () => {
             error: 'resolution failed',
         } as any)
 
-        expect(imageCallbacks.onImageBranchResolutionErrorToCanvas).toHaveBeenCalledWith({
+        expect(imageCallbacks.onMediaBranchResolutionErrorToCanvas).toHaveBeenCalledWith({
             threadId: 'thread-1',
             error: 'resolution failed',
             generationRun: undefined,
@@ -316,7 +316,7 @@ describe('routeSegmentEventToCanvas', () => {
         } as any)
 
         expect(imageCallbacks.onImageCompleteToCanvas).not.toHaveBeenCalled()
-        expect(imageCallbacks.onImageBranchResolvedToCanvas).not.toHaveBeenCalled()
+        expect(imageCallbacks.onMediaBranchResolvedToCanvas).not.toHaveBeenCalled()
         expect(imageCallbacks.onMediaLineagePlannedToCanvas).not.toHaveBeenCalled()
         expect(imageCallbacks.onWorkspaceContextResolvedToCanvas).not.toHaveBeenCalled()
     })

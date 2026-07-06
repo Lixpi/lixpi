@@ -40,7 +40,7 @@ import type {
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
     AiModelId,
-    ImageBranchVlmResolution,
+    MediaBranchVlmResolution,
     ImageGenerationTrace,
     ImageGenerationSize,
     MediaBranchLineagePlan,
@@ -118,7 +118,7 @@ export type SegmentEvent = {
     partialIndex?: number
     responseId?: string
     revisedPrompt?: string
-    imageBranchResolution?: ImageBranchVlmResolution
+    mediaBranchResolution?: MediaBranchVlmResolution
     mediaBranchLineagePlan?: MediaBranchLineagePlan
     generationRequestId?: string
     workspaceContextResolution?: WorkspaceContextResolution

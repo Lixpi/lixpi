@@ -581,7 +581,7 @@ describe('StreamPublisher trace payloads', () => {
             'Anthropic',
             generationRun,
         )
-        publisher.imageBranchResolved({ resolved: true } as any)
+        publisher.mediaBranchResolved({ resolved: true } as any)
         publisher.mediaLineagePlanned({ lineage: 'plan' } as any, {
             ...generationRun,
             mediaRunId: 'reasoning-1:image:override',
@@ -590,7 +590,7 @@ describe('StreamPublisher trace payloads', () => {
 
         expect(nats.published).toHaveLength(2)
         expect(nats.published[0]?.payload.content).toMatchObject({
-            status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
+            status: STREAM_STATUS.MEDIA_BRANCH_RESOLVED,
             resolution: { resolved: true },
             generationRun,
         })

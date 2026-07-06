@@ -1,8 +1,8 @@
 'use strict'
 
 import type {
-    ImageBranchCandidateImage,
-    ImageBranchVlmReferenceDecision,
+    MediaBranchCandidateImage,
+    MediaBranchVlmReferenceDecision,
     ImageGenerationTrace,
     ImageGenerationTraceExcludedReference,
     ImageGenerationTraceReference,
@@ -52,7 +52,7 @@ const shortText = (value: string | undefined, fallback: string): string => {
     return trimmed.length > 80 ? `${trimmed.slice(0, 77).trim()}...` : trimmed
 }
 
-const getCandidateLabel = (candidate: ImageBranchCandidateImage | undefined, fallback: string): string => {
+const getCandidateLabel = (candidate: MediaBranchCandidateImage | undefined, fallback: string): string => {
     if (!candidate) return fallback
     return shortText(
         candidate.visualEntitySummary
@@ -63,12 +63,12 @@ const getCandidateLabel = (candidate: ImageBranchCandidateImage | undefined, fal
 }
 
 const getDecisionByNodeId = (
-    decisions: ImageBranchVlmReferenceDecision[] | undefined,
-): Map<string, ImageBranchVlmReferenceDecision> => {
+    decisions: MediaBranchVlmReferenceDecision[] | undefined,
+): Map<string, MediaBranchVlmReferenceDecision> => {
     return new Map((decisions ?? []).map((decision) => [decision.nodeId, decision]))
 }
 
-const getTraceSafeImageUrl = (imageUrl: string, candidate?: ImageBranchCandidateImage): string => {
+const getTraceSafeImageUrl = (imageUrl: string, candidate?: MediaBranchCandidateImage): string => {
     if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
         if (candidate?.workspaceId && candidate.fileId) {
             return `nats-obj://workspace-${candidate.workspaceId}-files/${candidate.fileId}`
@@ -82,8 +82,8 @@ const buildBranchReference = (args: {
     imageUrl: string
     index: number
     nodeId: string
-    candidate: ImageBranchCandidateImage | undefined
-    decision: ImageBranchVlmReferenceDecision | undefined
+    candidate: MediaBranchCandidateImage | undefined
+    decision: MediaBranchVlmReferenceDecision | undefined
 }): ImageGenerationTraceReference => {
     const fallback = `Reference image ${args.index + 1}`
     return {
@@ -136,11 +136,11 @@ const extractTraceImageUrlsFromMessages = (messages: ProviderState['messages']):
 }
 
 const buildBranchReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
-    const resolution = state.imageBranchResolution
+    const resolution = state.mediaBranchResolution
     if (!resolution) return []
 
     const candidatesByNodeId = new Map(
-        (state.imageBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]),
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]),
     )
     const decisionsByNodeId = getDecisionByNodeId(resolution?.decisions)
 
@@ -182,11 +182,11 @@ const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReferenc
 }
 
 const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedReference[] => {
-    const resolution = state.imageBranchResolution
+    const resolution = state.mediaBranchResolution
     if (!resolution) return []
 
     const candidatesByNodeId = new Map(
-        (state.imageBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]),
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]),
     )
     const decisionsByNodeId = getDecisionByNodeId(resolution.decisions)
 
@@ -213,7 +213,7 @@ export const buildImageGenerationTrace = (state: ProviderState): ImageGeneration
 
     const imageSize = normalizeImageSize(imageProvider, state.imageSize)
     const finalPrompt = buildImageModelPrompt(state)
-    const resolution = state.imageBranchResolution
+    const resolution = state.mediaBranchResolution
 
     return {
         traceVersion: 'image-generation-trace-v1',

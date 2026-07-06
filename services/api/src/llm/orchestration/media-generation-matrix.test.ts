@@ -6,7 +6,7 @@ import * as debugTools from '@lixpi/debug-tools'
 
 import * as AiModelModelModule from '../../models/ai-model.ts'
 import * as featureResolver from '../graph/feature-resolver.ts'
-import * as imageBranchResolver from '../graph/image-branch-resolver.ts'
+import * as mediaBranchResolver from '../graph/media-branch-resolver.ts'
 import * as workspaceContextResolver from '../graph/workspace-context-resolver.ts'
 import { buildMediaGenerationRequestGroupKey, buildMediaGenerationThreadGroupPrefix, MediaGenerationMatrixOrchestrator, type MatrixRequestData } from './media-generation-matrix.ts'
 
@@ -117,11 +117,11 @@ describe('MediaGenerationMatrixOrchestrator', () => {
 
         const workspaceContextSpy = vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext')
         const resolveFeaturesSpy = vi.spyOn(featureResolver, 'resolveFeatures')
-        const resolveImageBranchSpy = vi.spyOn(imageBranchResolver, 'resolveImageBranch')
+        const resolveMediaBranchSpy = vi.spyOn(mediaBranchResolver, 'resolveMediaBranch')
 
         workspaceContextSpy.mockResolvedValue({})
         resolveFeaturesSpy.mockResolvedValue({})
-        resolveImageBranchSpy.mockResolvedValue({})
+        resolveMediaBranchSpy.mockResolvedValue({})
 
         await orchestrator.process(createRequest({
             aiReasoningModels: undefined,
@@ -245,11 +245,11 @@ describe('MediaGenerationMatrixOrchestrator', () => {
 
         const workspaceContextSpy = vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext')
         const resolveFeaturesSpy = vi.spyOn(featureResolver, 'resolveFeatures')
-        const resolveImageBranchSpy = vi.spyOn(imageBranchResolver, 'resolveImageBranch')
+        const resolveMediaBranchSpy = vi.spyOn(mediaBranchResolver, 'resolveMediaBranch')
 
         workspaceContextSpy.mockResolvedValue({})
         resolveFeaturesSpy.mockResolvedValue({})
-        resolveImageBranchSpy.mockResolvedValue({})
+        resolveMediaBranchSpy.mockResolvedValue({})
 
         await orchestrator.process(createRequest())
 
@@ -318,8 +318,8 @@ describe('MediaGenerationMatrixOrchestrator', () => {
             referenceImages: ['data:image/png;base64,IMG-REF'],
             featureReferenceImages: ['data:image/png;base64,FEATURE-REF'],
         } as any)
-        vi.spyOn(imageBranchResolver, 'resolveImageBranch').mockResolvedValue({
-            imageBranchResolution: { mode: 'fresh-branch', referenceImageNodeIds: ['node-a', 'node-b'] },
+        vi.spyOn(mediaBranchResolver, 'resolveMediaBranch').mockResolvedValue({
+            mediaBranchResolution: { mode: 'fresh-branch', referenceImageNodeIds: ['node-a', 'node-b'] },
             videoReferenceImages: ['data:image/png;base64,VIDEO-REF-1', 'data:image/png;base64,VIDEO-REF-2'],
         } as any)
 
@@ -335,7 +335,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         // Image-side + feature resolution ride along too (covers all media types).
         expect(childState.referenceImages).toEqual(['data:image/png;base64,IMG-REF'])
         expect(childState.featureReferenceImages).toEqual(['data:image/png;base64,FEATURE-REF'])
-        expect(childState.imageBranchResolution?.referenceImageNodeIds).toEqual(['node-a', 'node-b'])
+        expect(childState.mediaBranchResolution?.referenceImageNodeIds).toEqual(['node-a', 'node-b'])
         // Per-child identity still wins over the spread; preflight stays marked done.
         expect(childState.preflightResolved).toBe(true)
         expect(childState.videoModelMetaInfo?.model).toBe('veo-3.1-generate-preview')
@@ -379,8 +379,8 @@ describe('MediaGenerationMatrixOrchestrator', () => {
             featureReferenceImages: undefined,
             featureUsagePrompt: undefined,
         } as any)
-        vi.spyOn(imageBranchResolver, 'resolveImageBranch').mockResolvedValue({
-            imageBranchResolution: { mode: 'fresh-branch' },
+        vi.spyOn(mediaBranchResolver, 'resolveMediaBranch').mockResolvedValue({
+            mediaBranchResolution: { mode: 'fresh-branch' },
             videoReferenceImages: undefined as any,
             __futureMediaConditioning: undefined as any,
         } as any)
@@ -405,7 +405,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
         const workspaceContextSpy = vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext')
         const resolveFeaturesSpy = vi.spyOn(featureResolver, 'resolveFeatures')
-        const resolveImageBranchSpy = vi.spyOn(imageBranchResolver, 'resolveImageBranch')
+        const resolveMediaBranchSpy = vi.spyOn(mediaBranchResolver, 'resolveMediaBranch')
 
         getAiModel.mockImplementation(async ({ model }: { provider: string; model: string }) => {
             if (model === 'claude-sonnet-4-6') {
@@ -437,7 +437,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
 
         workspaceContextSpy.mockRejectedValue(new Error('workspace context resolver failed'))
         resolveFeaturesSpy.mockResolvedValue({})
-        resolveImageBranchSpy.mockResolvedValue({})
+        resolveMediaBranchSpy.mockResolvedValue({})
 
         await expect(
             orchestrator.process(createRequest()),
@@ -445,7 +445,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
 
         expect(workspaceContextSpy).toHaveBeenCalledOnce()
         expect(resolveFeaturesSpy).not.toHaveBeenCalled()
-        expect(resolveImageBranchSpy).not.toHaveBeenCalled()
+        expect(resolveMediaBranchSpy).not.toHaveBeenCalled()
         expect(registry.process).not.toHaveBeenCalled()
     })
 
@@ -479,8 +479,8 @@ describe('MediaGenerationMatrixOrchestrator', () => {
             featureUsagePrompt: 'USE THIS FEATURE',
             referenceImages: ['data:image/png;base64,FEATURE'],
         } as any)
-        vi.spyOn(imageBranchResolver, 'resolveImageBranch').mockResolvedValue({
-            imageBranchResolution: { mode: 'fresh-branch' },
+        vi.spyOn(mediaBranchResolver, 'resolveMediaBranch').mockResolvedValue({
+            mediaBranchResolution: { mode: 'fresh-branch' },
             videoReferenceImages: ['data:image/png;base64,VID-1', 'data:image/png;base64,VID-2'],
             __futureMediaConditioning: ['data:image/png;base64,FUTURE'],
         } as any)
@@ -507,7 +507,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
             expect(childState.referenceImages).toEqual(['data:image/png;base64,FEATURE'])
             expect(childState.featureReferenceImages).toEqual(['data:image/png;base64,FEATURE'])
             expect(childState.featureUsagePrompt).toBe('USE THIS FEATURE')
-            expect(childState.imageBranchResolution).toEqual({ mode: 'fresh-branch' })
+            expect(childState.mediaBranchResolution).toEqual({ mode: 'fresh-branch' })
             expect(childState.workspaceContextResolution).toEqual({ rationale: 'ctx' })
             // A modality with no bespoke handling anywhere still rides along — future-proofing.
             expect(childState.__futureMediaConditioning).toEqual(['data:image/png;base64,FUTURE'])
@@ -549,7 +549,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
 
         vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext').mockResolvedValue({})
         vi.spyOn(featureResolver, 'resolveFeatures').mockResolvedValue({})
-        vi.spyOn(imageBranchResolver, 'resolveImageBranch').mockResolvedValue({})
+        vi.spyOn(mediaBranchResolver, 'resolveMediaBranch').mockResolvedValue({})
 
         await orchestrator.process(createRequest({
             aiReasoningModels: undefined,
@@ -624,7 +624,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
 
         vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext').mockResolvedValue({})
         vi.spyOn(featureResolver, 'resolveFeatures').mockResolvedValue({})
-        vi.spyOn(imageBranchResolver, 'resolveImageBranch').mockResolvedValue({})
+        vi.spyOn(mediaBranchResolver, 'resolveMediaBranch').mockResolvedValue({})
 
         await orchestrator.process(createRequest({
             aiReasoningModels: undefined,
