@@ -40,6 +40,11 @@
         content?: any
     }
 
+    type PersistCanvasStateOptions = {
+        persistViewport?: boolean
+        viewportOverride?: Viewport
+    }
+
     let paneEl: HTMLDivElement
     let viewportEl: HTMLDivElement
     let renderer: ReturnType<typeof createWorkspaceCanvas> | null = null
@@ -63,9 +68,10 @@
     let imageWrapperEl: HTMLDivElement
     let fileInputEl: HTMLInputElement
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
+    let pendingViewportSave: Viewport | null = null
+    let lastPersistedViewport: Viewport | null = null
     const documentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
     const pendingDocumentUpdates = new Map<string, PendingDocumentUpdate>()
-    const DOCUMENT_SAVE_DEBOUNCE_MS = 5000
     const documentService = new DocumentService()
     const aiChatThreadService = new AiChatThreadService()
     const DEFAULT_DOCUMENT_NODE_DIMENSIONS = { width: 400, height: 350 }
@@ -86,30 +92,91 @@
         return { width, height: width / safeAspectRatio }
     }
 
-    function persistCanvasState(newCanvasState: CanvasState) {
+    function cloneViewport(viewportValue: Viewport | null | undefined): Viewport | null {
+        if (!viewportValue) return null
+        if (!Number.isFinite(viewportValue.x) || !Number.isFinite(viewportValue.y) || !Number.isFinite(viewportValue.zoom)) return null
+        return {
+            x: viewportValue.x,
+            y: viewportValue.y,
+            zoom: viewportValue.zoom
+        }
+    }
+
+    function viewportsMatch(a: Viewport | null | undefined, b: Viewport | null | undefined): boolean {
+        if (!a || !b) return false
+        return Math.abs(a.x - b.x) < 0.001 &&
+            Math.abs(a.y - b.y) < 0.001 &&
+            Math.abs(a.zoom - b.zoom) < 0.0001
+    }
+
+    function getCanvasStateViewport(newCanvasState: CanvasState, options: PersistCanvasStateOptions): Viewport {
+        return cloneViewport(options.viewportOverride)
+            ?? cloneViewport(renderer?.getViewport?.())
+            ?? cloneViewport(newCanvasState.viewport)
+            ?? cloneViewport(viewport)
+            ?? { x: 0, y: 0, zoom: 1 }
+    }
+
+    function getCanvasStateForViewportSave(savedViewport: Viewport): CanvasState | null {
+        const liveCanvasState = renderer?.getCanvasState?.() ?? canvasState
+        if (!liveCanvasState) return null
+
+        return {
+            ...liveCanvasState,
+            viewport: savedViewport
+        }
+    }
+
+    function persistCanvasState(newCanvasState: CanvasState, options: PersistCanvasStateOptions = {}) {
         if (!workspaceId || loadedWorkspaceId !== workspaceId) return
 
+        const stateViewport = getCanvasStateViewport(newCanvasState, options)
         const stateToPersist = {
             ...newCanvasState,
-            viewport,
+            viewport: stateViewport,
         }
 
         workspaceStore.updateCanvasState(stateToPersist)
         if (workspaceId) {
             servicesStore.getData('workspaceService').updateCanvasState({
                 workspaceId,
-                canvasState: stateToPersist
+                canvasState: stateToPersist,
+                persistViewport: options.persistViewport === true
             })
         }
     }
 
-    function handleViewportChange(newViewport: Viewport) {
-        viewport = newViewport
+    function persistViewportState(savedViewport: Viewport): boolean {
+        const viewportToPersist = cloneViewport(savedViewport)
+        if (!viewportToPersist) return false
+        if (viewportsMatch(viewportToPersist, lastPersistedViewport)) return true
 
+        const stateToPersist = getCanvasStateForViewportSave(viewportToPersist)
+        if (!stateToPersist) return false
+
+        persistCanvasState(stateToPersist, {
+            persistViewport: true,
+            viewportOverride: viewportToPersist
+        })
+        lastPersistedViewport = viewportToPersist
+        return true
+    }
+
+    function handleViewportChange(newViewport: Viewport) {
+        const nextViewport = cloneViewport(newViewport)
+        if (!nextViewport) return
+
+        viewport = nextViewport
+        pendingViewportSave = nextViewport
+
+        const shouldPersistLeading = saveDebounceTimer === null
         if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
-        const scheduledViewport = newViewport
+        if (shouldPersistLeading) persistViewportState(nextViewport)
+
+        const scheduledViewport = nextViewport
         const scheduledWorkspaceId = workspaceId
         saveDebounceTimer = setTimeout(() => {
+            saveDebounceTimer = null
             if (
                 viewport.x !== scheduledViewport.x ||
                 viewport.y !== scheduledViewport.y ||
@@ -117,11 +184,7 @@
             ) return
 
             if (scheduledWorkspaceId && loadedWorkspaceId === scheduledWorkspaceId && workspaceId === scheduledWorkspaceId && canvasState) {
-                const newCanvasState: CanvasState = {
-                    ...canvasState,
-                    viewport: scheduledViewport
-                }
-                persistCanvasState(newCanvasState)
+                if (persistViewportState(scheduledViewport)) pendingViewportSave = null
             }
         }, 1000)
     }
@@ -147,7 +210,7 @@
             if (!pending) return
             if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
             documentService.updateDocument(pending)
-        }, DOCUMENT_SAVE_DEBOUNCE_MS)
+        }, settings.workspacePersistence.debounceMs)
         documentSaveTimers.set(documentId, timer)
     }
 
@@ -522,6 +585,12 @@
     onMount(() => {
         if (!paneEl || !viewportEl) return
 
+        const loadedViewport = cloneViewport(canvasState?.viewport)
+        if (loadedViewport) {
+            viewport = loadedViewport
+            lastPersistedViewport = loadedViewport
+        }
+
         renderer = createWorkspaceCanvas({
             paneEl,
             viewportEl,
@@ -557,9 +626,6 @@
             }
         })
 
-        if (canvasState?.viewport) {
-            viewport = canvasState.viewport
-        }
     })
 
     $effect(() => {
@@ -580,11 +646,29 @@
     $effect(() => {
         if (renderer) {
             renderer.render(canvasState, documents, aiChatThreads, workspaceId)
+            const liveViewport = renderer.getViewport()
+            viewport = liveViewport
+            if (!pendingViewportSave && viewportsMatch(liveViewport, canvasState?.viewport)) {
+                lastPersistedViewport = liveViewport
+            }
+        } else if (canvasState?.viewport) {
+            const loadedViewport = cloneViewport(canvasState.viewport)
+            if (loadedViewport) {
+                viewport = loadedViewport
+                if (!pendingViewportSave) lastPersistedViewport = loadedViewport
+            }
         }
     })
 
     onDestroy(() => {
-        if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
+        if (saveDebounceTimer) {
+            clearTimeout(saveDebounceTimer)
+            saveDebounceTimer = null
+        }
+        if (pendingViewportSave && !viewportsMatch(pendingViewportSave, lastPersistedViewport)) {
+            persistViewportState(pendingViewportSave)
+        }
+        pendingViewportSave = null
         for (const timer of documentSaveTimers.values()) clearTimeout(timer)
         documentSaveTimers.clear()
         pendingDocumentUpdates.clear()

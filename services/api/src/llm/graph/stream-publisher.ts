@@ -19,6 +19,7 @@ import {
 import { AiChatProseMirrorStreamAssembler } from '../../prosemirror/ai-chat-stream-assembler.ts'
 import {
     logCanvasProjectionError,
+    settleMediaGenerationRequestOnCanvas,
     upsertMediaLineagePlanToCanvas,
 } from '../../services/media-generation-canvas-projection.ts'
 import { PipelineEventLog } from './pipeline-event-log.ts'
@@ -57,6 +58,7 @@ export type ChunkPayload = {
         lineagePlan?: MediaBranchLineagePlan
         videoGenerationTrace?: VideoGenerationTrace
         error?: string
+        generationRequestId?: string
         extractionStatus?: string
         extractionDetail?: string
         stageTraceEvent?: StageTraceEvent
@@ -244,6 +246,8 @@ export class StreamPublisher {
     private proseMirrorFinishPromise: Promise<void> | null = null
     private responsePublishChain: Promise<void> = Promise.resolve()
     private canvasProjectionChain: Promise<void> = Promise.resolve()
+    private readonly mediaGenerationRequestIds = new Set<string>()
+    private readonly completedMediaGenerationRequestIds = new Set<string>()
 
     constructor(
         private readonly nats: NatsService,
@@ -369,6 +373,11 @@ export class StreamPublisher {
         return this.proseMirrorFinishPromise
     }
 
+    async drainPendingWrites(): Promise<void> {
+        await this.drainResponsePublishes()
+        await this.drainCanvasProjectionWrites()
+    }
+
     private async finishPipelineStream(): Promise<void> {
         await this.drainResponsePublishes()
         await this.drainCanvasProjectionWrites()
@@ -457,6 +466,7 @@ export class StreamPublisher {
     }
 
     mediaLineagePlanned(lineagePlan: MediaBranchLineagePlan, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+        this.mediaGenerationRequestIds.add(lineagePlan.generationRequestId)
         this.enqueueCanvasProjection(
             () => upsertMediaLineagePlanToCanvas({
                 workspaceId: this.workspaceId,
@@ -478,12 +488,39 @@ export class StreamPublisher {
     // The reasoning model finished without emitting a media tool call after a
     // lineage plan was already published; the planned runs will never start.
     mediaGenerationSkipped(generationRequestId: string, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+        this.mediaGenerationRequestIds.add(generationRequestId)
         this.publishChatContent({
             status: STREAM_STATUS.MEDIA_GENERATION_SKIPPED,
             aiProvider: this.provider,
             generationRequestId,
             ...(generationRun ? { generationRun } : {}),
         })
+    }
+
+    mediaGenerationRequestComplete(generationRequestId: string): void {
+        if (!generationRequestId || this.completedMediaGenerationRequestIds.has(generationRequestId)) return
+
+        this.mediaGenerationRequestIds.add(generationRequestId)
+        this.completedMediaGenerationRequestIds.add(generationRequestId)
+        this.enqueueCanvasProjection(
+            () => settleMediaGenerationRequestOnCanvas({
+                workspaceId: this.workspaceId,
+                generationRequestId,
+            }),
+            'failed to settle media generation request on canvas',
+        )
+        this.publishChatContent({
+            status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
+            aiProvider: this.provider,
+            generationRequestId,
+            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+        })
+    }
+
+    completeKnownMediaGenerationRequests(): void {
+        for (const generationRequestId of Array.from(this.mediaGenerationRequestIds)) {
+            this.mediaGenerationRequestComplete(generationRequestId)
+        }
     }
 
     contextRelevanceResolved(workspaceContextResolution: WorkspaceContextResolution, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {

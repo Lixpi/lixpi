@@ -12,6 +12,7 @@ packages/lixpi/constants/
 ├── ai-interaction-constants.json
 ├── python/                   # Python package
 └── ts/                       # TypeScript/JavaScript package
+    └── workspace-persistence-settings.ts  # Shared workspace persistence debounce
 ```
 
 ## Usage

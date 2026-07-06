@@ -1388,6 +1388,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         return n
                     })
                     commitCanvasState({ ...currentCanvasState, nodes: updatedNodes })
+                    const generatedThreadId = node.generatedBy?.aiChatThreadId
+                    if (generatedThreadId) {
+                        schedulePersistedAiChatThreadRefreshForBranchMarkers(generatedThreadId)
+                    }
                     if (node.type === 'image') {
                         queueCanvasMediaAnalysis(nodeId, data.fileId)
                     } else if (node.type === 'video') {
@@ -4208,12 +4212,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         } else if (activeAiChatPanelProjectionRenderer) {
             refreshActiveAiChatPanelProjectionTarget(activeAiChatPanelThreadId ?? undefined)
         }
-        // Selecting canvas nodes force-includes them as explicit composer previews.
-        // Only newly-selected ids are added so a removed preview whose node stays
-        // selected isn't immediately re-added.
-        if (currentCanvasState) {
-            addContextChips(Array.from(selectedNodeIds).filter((nodeId) => !prevSelectedNodeIds.has(nodeId)))
-        }
     }
 
     function toggleNodeSelection(nodeId: string): void {
@@ -5549,9 +5547,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function openAiChatPanel(): void {
         syncActiveAiChatPanelFromState()
         aiChatPanelState = { ...aiChatPanelState, isOpen: true }
-        // Seed chips from whatever is selected when the panel opens, mirroring the
-        // old follow-selection behavior — now as persistent, removable chips.
-        addContextChips(selectedNodeIds)
         persistAiChatSidebarState()
         renderActiveAiChatPanel()
         void loadExtractionSessionHistory()
@@ -8582,6 +8577,85 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         scheduleDetachedCanvasRunTeardown(threadId)
     }
 
+    function settleBranchMarkersForGenerationRequest(generationRequestId: string): void {
+        if (!generationRequestId || !currentCanvasState) return
+
+        let changed = false
+        const markersToSync: BranchMarkerNode[] = []
+        const nodes = currentCanvasState.nodes.map((node: CanvasNode): CanvasNode => {
+            if (!isBranchMarkerNode(node) || node.generationRequestId !== generationRequestId) return node
+
+            const hadTrackedUiPhase = branchMarkerUiPhaseByNodeId.has(node.nodeId)
+            branchMarkerUiPhaseByNodeId.delete(node.nodeId)
+            deletePendingBranchMarkerAliasesForNodeId(node.nodeId)
+            if (!node.pendingState) {
+                if (hadTrackedUiPhase) markersToSync.push(node)
+                return node
+            }
+
+            const liveNode = applyBranchMarkerLiveGeometry(node)
+            const resizedNode = resizeBranchMarkerNodeFromProseMirror(stripPendingBranchMarkerState(liveNode) as BranchMarkerNode)
+            const settledNode = manuallyPositionedBranchMarkerNodeIds.has(node.nodeId)
+                ? { ...resizedNode, position: liveNode.position }
+                : resizedNode
+            markersToSync.push(settledNode)
+            changed = true
+            return settledNode
+        })
+
+        if (changed) {
+            commitCanvasStatePreservingEditors({
+                ...currentCanvasState,
+                nodes,
+            })
+        }
+        for (const marker of markersToSync) {
+            syncBranchMarkerNodeContent(marker)
+        }
+    }
+
+    function settleMediaGenerationRequest(
+        threadId: string,
+        generationRequestId: string,
+        generationRun?: MediaGenerationRunMeta,
+    ): void {
+        const requestPlacementKey = generationRequestId ? `${threadId}:${generationRequestId}` : ''
+        const runPlacementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
+        const placementKey = requestPlacementKey || runPlacementKey
+        const placement = pendingGeneratedImagePlacements.get(placementKey)
+            ?? pendingGeneratedImagePlacements.get(runPlacementKey)
+            ?? pendingGeneratedImagePlacements.get(threadId)
+        const lineagePlan = placement?.lineagePlan
+        const plannedRuns: Array<MediaGenerationRunMeta | undefined> = lineagePlan
+            ? getUniqueLineageAssignmentsForMarkers(lineagePlan)
+                .map(assignment => buildGenerationRunFromLineageAssignment(lineagePlan, assignment, generationRun))
+            : []
+        if (plannedRuns.length === 0) plannedRuns.push(generationRun)
+
+        for (const plannedRun of plannedRuns) {
+            const targetRun = plannedRun ?? generationRun
+            clearPendingBranchMarkerStateForRun(threadId, targetRun)
+            clearBranchMarkerUiPhasesForRun(threadId, targetRun)
+            forgetPendingBranchMarkerRecordForRun(threadId, targetRun)
+        }
+        clearPendingBranchMarkerStateForRun(threadId, generationRun)
+        clearBranchMarkerUiPhasesForRun(threadId, generationRun)
+        forgetPendingBranchMarkerRecordForRun(threadId, generationRun)
+        schedulePersistedAiChatThreadRefreshForBranchMarkers(threadId)
+        if (requestPlacementKey) {
+            pendingGeneratedImagePlacements.delete(requestPlacementKey)
+            clearGeneratingReferenceNodeIds(requestPlacementKey)
+            deletePendingBranchMarkerAliasesForPlacement(requestPlacementKey)
+        }
+        pendingGeneratedImagePlacements.delete(runPlacementKey)
+        pendingGeneratedImagePlacements.delete(threadId)
+        clearGeneratingReferenceNodeIds(runPlacementKey)
+        clearGeneratingReferenceNodeIds(threadId)
+        settleBranchMarkersForGenerationRequest(generationRequestId)
+        settleDetachedCanvasRun(threadId)
+        scheduleDetachedCanvasRunTeardown(threadId)
+    }
+
     function clearPendingGeneratedMediaPlacementsForThread(threadId: string): void {
         for (const placementKey of pendingGeneratedImagePlacements.keys()) {
             if (placementKey !== threadId && !placementKey.startsWith(`${threadId}:`)) continue
@@ -8664,10 +8738,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function getStandaloneGeneratedMediaReferenceNodeIds(): string[] {
-        return getExistingMediaNodeIds([
-            ...aiChatPanelState.contextChips,
-            ...Array.from(selectedNodeIds),
-        ])
+        return getExistingMediaNodeIds(aiChatPanelState.contextChips)
     }
 
     function findPendingLineageNode(
@@ -10242,7 +10313,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const timer = setTimeout(() => {
             textDescriptorTimers.delete(nodeId)
             void analyzeTextNode(nodeId, text, title)
-        }, settings.contentDescriptor.editDebounceMs)
+        }, settings.workspacePersistence.debounceMs)
         textDescriptorTimers.set(nodeId, timer)
     }
 
@@ -10887,34 +10958,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // the planned runs will start. Settle every pending marker (spinner off,
         // marker kept — the text response still belongs to it) and release the
         // run bookkeeping that would otherwise wait forever.
-        onMediaGenerationSkippedToCanvas: ({ threadId, generationRun }) => {
+        onMediaGenerationSkippedToCanvas: ({ threadId, generationRequestId, generationRun }) => {
             if (!shouldAcceptGeneratedMediaEvent(threadId)) return
 
-            const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
-            const placement = pendingGeneratedImagePlacements.get(placementKey)
-                ?? pendingGeneratedImagePlacements.get(threadId)
-            const lineagePlan = placement?.lineagePlan
-            const plannedRuns: Array<MediaGenerationRunMeta | undefined> = lineagePlan
-                ? getUniqueLineageAssignmentsForMarkers(lineagePlan)
-                    .map(assignment => buildGenerationRunFromLineageAssignment(lineagePlan, assignment, generationRun))
-                : []
-            if (plannedRuns.length === 0) plannedRuns.push(generationRun)
+            settleMediaGenerationRequest(threadId, generationRequestId, generationRun)
+        },
 
-            for (const plannedRun of plannedRuns) {
-                clearPendingBranchMarkerStateForRun(threadId, plannedRun ?? generationRun)
-                clearBranchMarkerUiPhasesForRun(threadId, plannedRun ?? generationRun)
-                forgetPendingBranchMarkerRecordForRun(threadId, plannedRun ?? generationRun)
-            }
-            clearPendingBranchMarkerStateForRun(threadId, generationRun)
-            clearBranchMarkerUiPhasesForRun(threadId, generationRun)
-            forgetPendingBranchMarkerRecordForRun(threadId, generationRun)
-            schedulePersistedAiChatThreadRefreshForBranchMarkers(threadId)
-            pendingGeneratedImagePlacements.delete(placementKey)
-            pendingGeneratedImagePlacements.delete(threadId)
-            clearGeneratingReferenceNodeIds(placementKey)
-            clearGeneratingReferenceNodeIds(threadId)
-            settleDetachedCanvasRun(threadId)
-            scheduleDetachedCanvasRunTeardown(threadId)
+        onMediaGenerationRequestCompleteToCanvas: ({ threadId, generationRequestId, generationRun }) => {
+            if (!shouldAcceptGeneratedMediaEvent(threadId)) return
+
+            settleMediaGenerationRequest(threadId, generationRequestId, generationRun)
         },
 
         onImageBranchResolutionErrorToCanvas: ({ threadId, generationRun }) => {
@@ -13202,10 +13255,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             document.removeEventListener('mousemove', handleMouseMove)
             document.removeEventListener('mouseup', handleMouseUp)
 
+            const completedMarqueeSelection = Boolean(marqueeSelection?.moved)
             marqueeSelection = null
             hideSelectionRectElement()
             connectionManager?.cancelTransientConnection()
             updateSelectionGroupOverlayElement()
+            if (completedMarqueeSelection && selectionIsFromMarquee) addContextChips(selectedNodeIds)
 
             if (panZoom) {
                 panZoom.update(panZoomConfig)
@@ -13704,6 +13759,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     return {
+        getCanvasState() {
+            return currentCanvasState
+                ? { ...currentCanvasState, viewport: getLiveViewport() }
+                : null
+        },
+        getViewport() {
+            return getLiveViewport()
+        },
         insertNodeAtViewportCenter(node: WorkspaceCanvasNodeInsertion, statePatch: WorkspaceCanvasInsertionStatePatch = {}) {
             return insertNodeAtViewportCenterInternal(node, statePatch)
         },

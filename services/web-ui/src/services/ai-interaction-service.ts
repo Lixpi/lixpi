@@ -294,6 +294,18 @@ export default class AiInteractionService {
                 return
             }
 
+            if (content.status === STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE) {
+                console.log('[AI_INTERACTION] MEDIA_GENERATION_REQUEST_COMPLETE received:', {
+                    generationRequestId: content.generationRequestId,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'media_generation_request_complete',
+                    generationRequestId: content.generationRequestId || generationRun?.generationRequestId || '',
+                    ...segmentBase,
+                })
+                return
+            }
+
             if (content.status === STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR) {
                 console.log('[AI_INTERACTION] IMAGE_BRANCH_RESOLUTION_ERROR received:', content)
                 this.segmentsReceiver.receiveSegment({

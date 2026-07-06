@@ -100,7 +100,7 @@ type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_error' | 'im
 type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' | 'video_error' | 'video_generation_trace'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'
-type MediaLineageSegmentType = 'media_lineage_planned' | 'media_generation_skipped'
+type MediaLineageSegmentType = 'media_lineage_planned' | 'media_generation_skipped' | 'media_generation_request_complete'
 export type SegmentEvent = {
     status?: StreamStatus
     type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType | MediaLineageSegmentType
@@ -1665,6 +1665,11 @@ class AiChatThreadPluginClass {
             }
 
             if (type === 'media_generation_skipped') {
+                routeSegmentEventToCanvas(event)
+                return
+            }
+
+            if (type === 'media_generation_request_complete') {
                 routeSegmentEventToCanvas(event)
                 return
             }

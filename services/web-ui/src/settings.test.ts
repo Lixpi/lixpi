@@ -90,6 +90,7 @@ describe('settings - grouped configuration', () => {
 			'mediaBranchLineage',
 			'mediaLibrary',
 			'contentDescriptor',
+			'workspacePersistence',
 		]
 
 		expectOwnKeys(settings, topLevelSettingsSections, 'settings')
@@ -183,12 +184,17 @@ describe('settings - grouped configuration', () => {
 		expectFiniteNumber(settings.mediaBranchLineage.branchOrigin.iconSize, 'settings.mediaBranchLineage.branchOrigin.iconSize')
 		expectFiniteNumber(settings.mediaLibrary.panelWidthFraction, 'settings.mediaLibrary.panelWidthFraction')
 		expectFiniteNumber(settings.contentDescriptor.editDebounceMs, 'settings.contentDescriptor.editDebounceMs')
+		expectFiniteNumber(settings.workspacePersistence.debounceMs, 'settings.workspacePersistence.debounceMs')
 		expectFiniteNumber(settings.contentDescriptor.minTextLength, 'settings.contentDescriptor.minTextLength')
 		expectFiniteNumber(settings.aiChatThread.panelTabs.transitionDurationMs, 'settings.aiChatThread.panelTabs.transitionDurationMs')
 		expectFiniteNumber(
 			settings.aiChatThread.panelTabs.transitionMinDurationMs,
 			'settings.aiChatThread.panelTabs.transitionMinDurationMs',
 		)
+	})
+
+	it('keeps content descriptor debounce aligned to workspace persistence debounce', () => {
+		expect(settings.contentDescriptor.editDebounceMs).toBe(settings.workspacePersistence.debounceMs)
 	})
 
 	it('keeps all feature flags as booleans', () => {

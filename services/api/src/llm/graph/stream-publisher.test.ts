@@ -5,6 +5,7 @@ import { STREAM_STATUS } from '@lixpi/constants'
 
 const canvasProjectionMocks = vi.hoisted(() => ({
     upsertMediaLineagePlanToCanvas: vi.fn(async () => undefined),
+    settleMediaGenerationRequestOnCanvas: vi.fn(async () => undefined),
     logCanvasProjectionError: vi.fn(),
 }))
 
@@ -296,6 +297,37 @@ describe('StreamPublisher extraction progress', () => {
         }))
     })
 
+    it('publishes workflow errors to both the dedicated error channel and streaming channel', async () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+
+        publisher.error('fatal failure', 'ERR_500', 'RuntimeError')
+        await flushPipelinePublishes()
+
+        expect(nats.published).toEqual(expect.arrayContaining([
+            {
+                subject: 'ai.interaction.chat.error.ws1:thread1',
+                payload: {
+                    error: 'fatal failure',
+                    instanceKey: 'ws1:thread1',
+                    errorCode: 'ERR_500',
+                    errorType: 'RuntimeError',
+                },
+            },
+            expect.objectContaining({
+                subject: 'ai.interaction.chat.receiveMessage.ws1.thread1',
+                payload: expect.objectContaining({
+                    content: expect.objectContaining({
+                        status: STREAM_STATUS.ERROR,
+                        text: 'fatal failure',
+                        aiProvider: 'Anthropic',
+                    }),
+                }),
+            }),
+        ]))
+        expect(nats.published).toHaveLength(2)
+    })
+
     it('persists pipeline content before live publishing with replay metadata', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
@@ -389,6 +421,69 @@ describe('StreamPublisher extraction progress', () => {
             error: 'no inline image data',
             generationRun,
         })
+    })
+
+    it('deduplicates media request completion calls and avoids duplicate settle writes', async () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+
+        publisher.mediaLineagePlanned({ generationRequestId: 'request-1' } as any)
+        publisher.completeKnownMediaGenerationRequests()
+        publisher.completeKnownMediaGenerationRequests()
+        await flushPipelinePublishes()
+
+        expect(canvasProjectionMocks.settleMediaGenerationRequestOnCanvas).toHaveBeenCalledTimes(1)
+        expect(canvasProjectionMocks.settleMediaGenerationRequestOnCanvas).toHaveBeenCalledWith({
+            workspaceId: 'ws1',
+            generationRequestId: 'request-1',
+        })
+        const completionWrites = nats.published.filter(
+            (entry) => entry.payload?.content?.status === STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
+        )
+        expect(completionWrites).toHaveLength(1)
+        expect(nats.published).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                subject: 'ai.interaction.chat.receiveMessage.ws1.thread1',
+                payload: {
+                    aiChatThreadId: 'thread1',
+                    content: expect.objectContaining({
+                        status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
+                        generationRequestId: 'request-1',
+                    }),
+                    pipelineEventId: expect.any(String),
+                    pipelineStreamSeq: expect.any(Number),
+                },
+            }),
+        ]))
+    })
+
+    it('drains response writes after settling canvas projections when both are queued', async () => {
+        const nats = makeFakeNats()
+        const callOrder: string[] = []
+
+        nats.fake.publishJetStream = vi.fn(async () => {
+            callOrder.push('response-write-start')
+            await new Promise(resolve => setTimeout(resolve, 0))
+            callOrder.push('response-write-end')
+            return { seq: 1 }
+        })
+        canvasProjectionMocks.upsertMediaLineagePlanToCanvas.mockResolvedValue(undefined)
+        canvasProjectionMocks.settleMediaGenerationRequestOnCanvas.mockImplementation(async () => {
+            callOrder.push('canvas-settle-start')
+            await new Promise(resolve => setTimeout(resolve, 0))
+            callOrder.push('canvas-settle-end')
+        })
+
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+        publisher.mediaGenerationRequestComplete('request-2')
+        await publisher.drainPendingWrites()
+
+        expect(callOrder).toEqual([
+            'canvas-settle-start',
+            'response-write-start',
+            'canvas-settle-end',
+            'response-write-end',
+        ])
     })
 })
 
