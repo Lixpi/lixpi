@@ -295,6 +295,14 @@ export class AiChatProseMirrorStreamAssembler {
         })
     }
 
+    async flushPendingWork(): Promise<void> {
+        await this.enqueue(async () => {})
+    }
+
+    snapshotForProjection(): object {
+        return this.sanitizeSnapshotForPersistence(this.engine.snapshot()) as object
+    }
+
     private initializeParser(): void {
         this.destroyParser()
         this.parserInstanceId = [
@@ -925,7 +933,7 @@ export class AiChatProseMirrorStreamAssembler {
         if (this.coordinate.docType !== DOCUMENT_TYPE.AI_CHAT_THREAD) return true
 
         try {
-            const snapshot = this.sanitizeSnapshotForPersistence(this.engine.snapshot()) as object
+            const snapshot = this.snapshotForProjection()
             await AiChatThread.update({
                 workspaceId: this.coordinate.workspaceId,
                 threadId: this.coordinate.docId,

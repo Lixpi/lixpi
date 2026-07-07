@@ -9,6 +9,7 @@ import { mediaGenerationLayoutSettings } from '@lixpi/constants'
 
 export type BranchMarkerDimensionOptions = {
     responseLine?: boolean
+    responseText?: string
     screenFixed?: boolean
 }
 
@@ -50,13 +51,15 @@ function getMarkerMinHeight(): number {
     return marker.verticalPadding + getMessageLineHeight()
 }
 
-function getMarkerWidthForText(promptText: string): number {
+function getMarkerWidthForText(promptText: string, responseText = ''): number {
     const minWidth = getBranchMarkerMinWidth()
     const maxWidth = minWidth * marker.maxWidthGrowth
     const promptPreview = getBranchMarkerPromptPreview(promptText)
+    const responsePreview = getBranchMarkerResponsePreview(responseText)
+    const previewCharCount = Math.max(promptPreview.length, responsePreview.length)
     // Target a single line; longer messages keep growing until they hit the
     // ceiling, then wrap to (and truncate at) two lines.
-    const desiredWidth = marker.horizontalPadding + promptPreview.length * marker.approxCharWidth
+    const desiredWidth = marker.horizontalPadding + previewCharCount * marker.approxCharWidth
     return Math.round(Math.max(minWidth, Math.min(maxWidth, desiredWidth)))
 }
 
@@ -69,11 +72,13 @@ function getMarkerPromptLineCount(promptText: string, width: number): number {
 // Sizing for the screen-fixed preflight pose: the prompt stays on one line up to
 // a wider ceiling (then truncates), while the response row adds height only once
 // streamed text is visible. Shorter and wider than the on-canvas pill.
-function getScreenFixedDimensions(promptText: string, responseLine: boolean): { width: number; height: number } {
+function getScreenFixedDimensions(promptText: string, responseLine: boolean, responseText = ''): { width: number; height: number } {
     const minWidth = getBranchMarkerScreenFixedMinWidth()
     const maxWidth = getBranchMarkerMinWidth() * marker.screenFixedMaxWidthGrowth
     const promptPreview = getBranchMarkerPromptPreview(promptText)
-    const desiredWidth = marker.screenFixedHorizontalPadding + promptPreview.length * marker.approxCharWidth
+    const responsePreview = getBranchMarkerResponsePreview(responseText)
+    const previewCharCount = Math.max(promptPreview.length, responsePreview.length)
+    const desiredWidth = marker.screenFixedHorizontalPadding + previewCharCount * marker.approxCharWidth
     const responseHeight = responseLine
         ? marker.screenFixedSeparatorHeight + getResponseLineHeight()
         : 0
@@ -89,9 +94,9 @@ export function estimateBranchMarkerDimensions(
     promptText: string,
     options: BranchMarkerDimensionOptions = {},
 ): { width: number; height: number } {
-    if (options.screenFixed) return getScreenFixedDimensions(promptText, Boolean(options.responseLine))
+    if (options.screenFixed) return getScreenFixedDimensions(promptText, Boolean(options.responseLine), options.responseText)
 
-    const width = getMarkerWidthForText(promptText)
+    const width = getMarkerWidthForText(promptText, options.responseText)
     const promptLineCount = getMarkerPromptLineCount(promptText, width)
     const responseHeight = options.responseLine
         ? marker.separatorHeight + getResponseLineHeight()

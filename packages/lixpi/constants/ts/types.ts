@@ -800,6 +800,7 @@ export type GeneratedMediaVariantMetadata = {
     branchOriginNodeId?: string
     branchForkNodeId?: string
     branchLineNodeId?: string
+    lineageParentNodeId?: string
 }
 
 export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {

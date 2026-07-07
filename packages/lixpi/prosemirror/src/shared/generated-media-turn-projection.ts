@@ -3,21 +3,12 @@ import {
     getAiLineageEventsForProjection,
     type AiLineageEventDescriptor,
     type AiLineageProjectionScope,
-} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
-
-// Doc-math primitives live in the shared package (also used by the API);
-// re-exported here so existing plugin-local imports keep working.
-export {
-    parseProseMirrorJsonContent,
-    collectProseMirrorText,
-    findAiChatThreadContentNode,
-    type ProseMirrorJsonNode,
-} from '@lixpi/prosemirror'
+} from './lineage-events.ts'
 import {
     parseProseMirrorJsonContent,
     collectProseMirrorText,
     type ProseMirrorJsonNode,
-} from '@lixpi/prosemirror'
+} from './thread-doc.ts'
 
 // One turn's generated-media context, read back from the thread doc to populate
 // the canvas info panel. Carries whichever generation trace the response holds —

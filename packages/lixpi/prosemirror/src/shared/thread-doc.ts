@@ -66,6 +66,16 @@ export type BranchMarkerTurnMessages = {
     responseMessage: ProseMirrorJsonNode
 }
 
+export type BranchMarkerPreviewPhase = 'preamble' | 'enhancement' | 'done'
+
+export type BranchMarkerConversationPreview = {
+    userText: string
+    responseText: string
+    phase: BranchMarkerPreviewPhase
+    isReceiving: boolean
+    streamIsReceiving: boolean
+}
+
 function parseReasoningIndex(value: unknown): number | null {
     if (value === null || value === undefined || value === '') return null
     const parsed = Number(value)
@@ -117,6 +127,57 @@ export function findBranchMarkerResponseSection(
     }
 
     return null
+}
+
+function findBranchMarkerFallbackResponseSection(
+    sections: ProseMirrorJsonNode[],
+    descriptor: BranchMarkerTurnDescriptor,
+): ProseMirrorJsonNode | null {
+    if (sections.length !== 1) return null
+
+    const section = sections[0]
+    if (!section) return null
+    const markerGenerationRequestId = descriptor.generationRequestId
+    const sectionGenerationRequestId = section.attrs?.generationRequestId
+    if (!markerGenerationRequestId
+        || !sectionGenerationRequestId
+        || markerGenerationRequestId === sectionGenerationRequestId) {
+        return section
+    }
+
+    return null
+}
+
+export function getBranchMarkerResponseContainer(
+    responseMessage: ProseMirrorJsonNode,
+    descriptor: BranchMarkerTurnDescriptor,
+): ProseMirrorJsonNode | null {
+    const sections = (responseMessage.content ?? []).filter((child) => child.type === 'aiReasoningSection')
+    if (sections.length === 0) return responseMessage
+
+    return findBranchMarkerResponseSection(responseMessage, descriptor)
+        ?? findBranchMarkerFallbackResponseSection(sections, descriptor)
+}
+
+function hasStreamingCollapsibleBlock(node: ProseMirrorJsonNode): boolean {
+    if (node.type === 'aiCollapsibleBlock' && node.attrs?.isStreaming) return true
+    return Boolean(node.content?.some(hasStreamingCollapsibleBlock))
+}
+
+export function inferBranchMarkerPreviewPhase(
+    responseMessage: ProseMirrorJsonNode,
+    responseContainer: ProseMirrorJsonNode,
+): { phase: BranchMarkerPreviewPhase; isReceiving: boolean } {
+    const responseReceiving = Boolean(responseMessage.attrs?.isReceivingAnimation)
+    const sectionReceiving = Boolean(responseContainer.attrs?.isReceivingAnimation)
+    if (hasStreamingCollapsibleBlock(responseContainer)) {
+        return { phase: 'enhancement', isReceiving: true }
+    }
+    const isReceiving = responseReceiving || sectionReceiving
+    return {
+        phase: isReceiving ? 'preamble' : 'done',
+        isReceiving,
+    }
 }
 
 function responseMessageMatchesTurn(responseMessage: ProseMirrorJsonNode, descriptor: BranchMarkerTurnDescriptor): boolean {
@@ -178,4 +239,60 @@ export function getLatestThreadTurnMessages(threadNode: ProseMirrorJsonNode): {
     }
 
     return { userMessage, responseMessage }
+}
+
+export function getBranchMarkerConversationPreviewFromThreadContent(
+    content: unknown,
+    threadId: string,
+    descriptor: BranchMarkerTurnDescriptor,
+    options: { generationActive?: boolean } = {},
+): BranchMarkerConversationPreview | null {
+    const root = parseProseMirrorJsonContent(content)
+    if (!root) return null
+
+    const threadNode = findAiChatThreadContentNode(root, threadId)
+    if (!threadNode) return null
+
+    const ownTurn = getBranchMarkerTurnMessages(threadNode, descriptor)
+    const { userMessage, responseMessage } = ownTurn ?? getLatestThreadTurnMessages(threadNode)
+
+    if (!userMessage) return null
+    const userText = collectProseMirrorText(userMessage).trim()
+    if (!responseMessage) {
+        return {
+            userText,
+            responseText: '',
+            phase: 'preamble',
+            isReceiving: Boolean(options.generationActive),
+            streamIsReceiving: false,
+        }
+    }
+
+    const responseContainer = getBranchMarkerResponseContainer(responseMessage, descriptor)
+    if (!responseContainer) {
+        return {
+            userText,
+            responseText: '',
+            phase: 'preamble',
+            isReceiving: Boolean(options.generationActive),
+            streamIsReceiving: false,
+        }
+    }
+
+    const { phase, isReceiving: streamIsReceiving } = inferBranchMarkerPreviewPhase(responseMessage, responseContainer)
+    return {
+        userText,
+        responseText: collectProseMirrorText(responseContainer, {
+            excludedNodeTypes: ['aiGeneratedImage', 'aiGeneratedVideo', 'aiLineageEvent', 'aiCollapsibleBlock'],
+        }).trim(),
+        phase,
+        isReceiving: streamIsReceiving || Boolean(options.generationActive),
+        streamIsReceiving,
+    }
+}
+
+export function shouldShowBranchMarkerConversationResponseLine(
+    preview: BranchMarkerConversationPreview | null | undefined,
+): boolean {
+    return Boolean(preview?.responseText)
 }

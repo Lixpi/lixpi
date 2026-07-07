@@ -13,10 +13,12 @@ import type {
     WorkspaceEdge,
 } from '@lixpi/constants'
 import {
-    collectProseMirrorText,
     collectResponseTextById,
+} from '@lixpi/prosemirror/shared/generated-media-turn-projection'
+import {
+    collectProseMirrorText,
     parseProseMirrorJsonContent,
-} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
+} from '@lixpi/prosemirror/shared/thread-doc'
 
 const RESOLVER_VERSION = 'image-branch-vlm-v1'
 

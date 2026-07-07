@@ -720,4 +720,46 @@ describe('media-generation-canvas-projection', () => {
             expect.objectContaining({ sourceNodeId: 'line-1', targetNodeId: 'node-video-1' }),
         ]))
     })
+
+    it('returns authoritative canvasGeometry with the persisted layoutRevision', async () => {
+        // The mock runs the real mutator so the geometry diff is captured.
+        workspaceMutateCanvasState.mockImplementation(async ({ mutate }: { mutate: (state: CanvasState) => { canvasState: CanvasState; changed: boolean } }) => {
+            const result = mutate(emptyCanvasState())
+            return { changed: result.changed, canvasState: result.canvasState, canvasStateUpdatedAt: 4242 }
+        })
+
+        const geometry = await upsertGeneratedImageToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/workspace-1/file-1',
+            fileId: 'file-1',
+            responseId: 'response-1',
+            revisedPrompt: 'a brighter image',
+            aiProvider: 'Google',
+            imageModelProvider: 'Google',
+            imageModelId: 'gemini-2.5-flash-image',
+            aspectRatio: 16 / 9,
+            generationRun: generationRun(),
+        })
+
+        expect(geometry).not.toBeNull()
+        expect(geometry!.layoutRevision).toBe(4242)
+        const imageGeometry = geometry!.nodes.find(node => node.nodeId === 'node-file-1')
+        expect(imageGeometry).toBeDefined()
+        // Final fitted dimensions are persisted so clients never re-fit on load.
+        expect(imageGeometry!.dimensions.width / imageGeometry!.dimensions.height).toBeCloseTo(16 / 9, 3)
+        // Markers are text-sized with the shared estimator, not the legacy fixed box.
+        const forkGeometry = geometry!.nodes.find(node => node.nodeId === 'fork-1')
+        expect(forkGeometry).toBeDefined()
+    })
+
+    it('returns null geometry when the mutation changed nothing', async () => {
+        workspaceMutateCanvasState.mockResolvedValue({ changed: false, canvasState: emptyCanvasState(), canvasStateUpdatedAt: 1 })
+
+        const geometry = await settleMediaGenerationRequestOnCanvas({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'request-missing',
+        })
+        expect(geometry).toBeNull()
+    })
 })

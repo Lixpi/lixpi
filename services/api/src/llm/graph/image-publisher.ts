@@ -7,7 +7,7 @@ import {
     logCanvasProjectionError,
     upsertGeneratedImageToCanvas,
 } from '../../services/media-generation-canvas-projection.ts'
-import type { ChunkPayload, ProseMirrorContentHandler } from './stream-publisher.ts'
+import type { ChunkPayload, ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from './stream-publisher.ts'
 
 // Store-function contract for the generation pipeline. The concrete
 // implementation injected at the composition root is a storeWorkspaceFile
@@ -87,6 +87,7 @@ export class ImagePublisher {
         private readonly onProseMirrorContent?: ProseMirrorContentHandler,
         private readonly onPipelineContent?: ProseMirrorContentHandler,
         private readonly canvasVisibleArea?: { width: number; height: number },
+        private readonly getProseMirrorSnapshot?: ProseMirrorSnapshotProvider,
     ) {}
 
     private publish(content: ChunkPayload['content']): void {
@@ -176,6 +177,7 @@ export class ImagePublisher {
         const intrinsicSize = readImageIntrinsicSize(buffer)
         let canvasGeometry: CanvasGeometryUpdate | null = null
         try {
+            const proseMirrorThreadContent = await this.getProseMirrorSnapshot?.()
             canvasGeometry = await upsertGeneratedImageToCanvas({
                 workspaceId: this.workspaceId,
                 aiChatThreadId: this.aiChatThreadId,
@@ -188,6 +190,7 @@ export class ImagePublisher {
                 imageModelId,
                 ...(intrinsicSize ? { aspectRatio: intrinsicSize.width / intrinsicSize.height } : {}),
                 generationRun: this.generationRun,
+                ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
                 ...(this.canvasVisibleArea ? { canvasVisibleArea: this.canvasVisibleArea } : {}),
             })
         } catch (error) {

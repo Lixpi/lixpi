@@ -7,10 +7,10 @@
 // A "branch tree" is a connected component of top-level generated-media nodes
 // (image/video carrying generatedBy.branchId, no parentId) and temporary
 // branch-origin / branch-fork / branch-line markers linked by lineage. A
-// generated member's in-tree parent is its generatedBy.parentMediaNodeId, then
-// its generatedBy.branchOriginNodeId, then its API-assigned branchFork/branchLine
-// marker when that marker is the only visible lineage parent; otherwise the
-// member is a tree root. A parentless branchFork is also a tree root.
+// generated member's in-tree parent is the API-assigned run marker
+// (branchForkNodeId / branchLineNodeId) when present, then its parent media, then
+// its branch origin; otherwise the member is a tree root. A parentless
+// branchFork is also a tree root.
 //
 // This module is pure: it reads node positions/sizes + API-assigned lineage
 // fields and returns new node arrays. It never touches PIXI, the DOM, or canvas
@@ -110,23 +110,21 @@ function isBranchTreeMember(node: CanvasNode): node is BranchTreeMemberNode {
     return isGeneratedMediaBranchMember(node) || isBranchOriginMember(node) || isBranchForkMember(node) || isBranchLineMember(node)
 }
 
-// A branchFork (split) and a branchLine (continuation) are normally
-// mid-connector markers: the child keeps the original parent media / branch
-// origin as its in-tree parent so it stays one normal gap away, and the marker is
-// positioned at the midpoint of that single connector (see positionLineageMarkers).
-// If the API marker is the only visible branch-tree parent, the marker becomes
-// the layout root for those generated media nodes so the tree still moves as one
-// API-declared lineage group.
+// A branchFork (split) and a branchLine (continuation) are API-owned run nodes.
+// Current lineage data treats them as structural tree members so generated media
+// rows fan out from the same prompt/continuation node on every client. The
+// midpoint fallback below only covers older canvas states where a marker exists
+// as an edge annotation but was not part of the tidy-tree layout.
 function isMidpointMarker(node: CanvasNode | undefined): node is BranchForkCanvasNode | BranchLineCanvasNode {
     return Boolean(node) && (node!.type === 'branchFork' || node!.type === 'branchLine')
 }
 
 function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<string | undefined> {
     return [
-        node.generatedBy?.parentMediaNodeId,
-        node.generatedBy?.branchOriginNodeId,
         node.generatedBy?.branchForkNodeId,
         node.generatedBy?.branchLineNodeId,
+        node.generatedBy?.parentMediaNodeId,
+        node.generatedBy?.branchOriginNodeId,
     ]
 }
 
@@ -186,11 +184,7 @@ export function buildBranchTrees(nodes: CanvasNode[], _edges: WorkspaceEdge[]): 
         const tree = ensureTree(rootOf(node.nodeId))
         tree.memberIds.push(node.nodeId)
         const parentId = inTreeParentById.get(node.nodeId) ?? null
-        // Fork/line markers belong to the tree (so they move rigidly and survive
-        // pruning) but are never a tidy-layout child — they don't add a depth
-        // column or fan their parent; positionLineageMarkers places them at the
-        // connector midpoint instead.
-        if (parentId !== null && !isMidpointMarker(node)) {
+        if (parentId !== null) {
             const siblings = tree.childrenByParentId.get(parentId) ?? []
             siblings.push(node.nodeId)
             tree.childrenByParentId.set(parentId, siblings)
@@ -209,7 +203,7 @@ export function buildBranchTrees(nodes: CanvasNode[], _edges: WorkspaceEdge[]): 
     for (const node of members) {
         variantIndexById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.variantIndex : undefined)
         mediaIndexById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.mediaIndex : undefined)
-        reasoningIndexById.set(node.nodeId, isBranchForkMember(node)
+        reasoningIndexById.set(node.nodeId, isBranchForkMember(node) || isBranchLineMember(node)
             ? node.reasoningIndex
             : isGeneratedMediaBranchMember(node) ? node.generatedBy?.reasoningIndex : undefined)
         createdAtById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.createdAt ?? 0 : 0)
@@ -488,11 +482,7 @@ export function applyBranchTreeLayout(
         if (tree.memberIds.length <= 1) continue // single node: root stays put
 
         const parentByChild = parentByChildOf(tree)
-        const layoutMemberIds = new Set(tree.memberIds
-            .filter((id: string) => {
-                const node = nodesById.get(id)
-                return !isMidpointMarker(node) || tree.childrenByParentId.has(id)
-            }))
+        const layoutMemberIds = new Set(tree.memberIds)
         // layoutTree preserves input order for siblings, so members must be fed
         // in the sorted childrenByParentId order (DFS from the root), never in
         // canvas-state insertion order — parallel runs complete out of order.
@@ -505,8 +495,6 @@ export function applyBranchTreeLayout(
             for (const childId of tree.childrenByParentId.get(id) ?? []) visitInSiblingOrder(childId)
         }
         visitInSiblingOrder(tree.rootId)
-        // Midpoint markers that own children are layout members but are never
-        // anyone's tidy child, so a root DFS can miss their subtrees.
         for (const id of tree.memberIds) visitInSiblingOrder(id)
         const layoutNodes: TreeLayoutNode[] = orderedLayoutMemberIds
             .map((id: string) => {
@@ -559,12 +547,9 @@ export function applyBranchTreeLayout(
     })
 }
 
-// Fork (split) and line (continuation) markers are one regular connector broken
-// in half: the parent media / branch origin and each generated media node is laid out
-// one normal gap apart, and the marker sits at the midpoint of the connector
-// between the parent's right edge and the child's left edge — on the parent's
-// center line for a continuation, on the diagonal for a split. This keeps splits
-// as compact as continuations instead of adding a wide second depth column.
+// Legacy fallback for old states where fork/line markers were edge annotations
+// instead of tidy-tree members. Current API-owned geometry lays these markers
+// out structurally, so this never overwrites a marker that layoutTree positioned.
 function positionLineageMarkers(
     nodes: CanvasNode[],
     nodesById: Map<string, CanvasNode>,
@@ -589,6 +574,7 @@ function positionLineageMarkers(
 
     for (const node of nodes) {
         if (!isMidpointMarker(node)) continue
+        if (nextPositionById.has(node.nodeId)) continue
         const parentId = node.parentBranchNodeId
         const children = childrenByMarkerId.get(node.nodeId)
         if (!children?.length) continue

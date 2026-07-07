@@ -30,6 +30,11 @@ import {
     type WorkspaceEdge,
 } from '@lixpi/constants'
 import { err } from '@lixpi/debug-tools'
+import {
+    getBranchMarkerConversationPreviewFromThreadContent,
+    shouldShowBranchMarkerConversationResponseLine,
+    type BranchMarkerTurnDescriptor,
+} from '@lixpi/prosemirror/shared/thread-doc'
 
 import Workspace from '../models/workspace.ts'
 import { settings } from '../settings.ts'
@@ -66,6 +71,7 @@ type UpsertImageInput = {
     aspectRatio?: number
     canvasVisibleArea?: CanvasVisibleArea
     generationRun?: MediaGenerationRunMeta
+    proseMirrorThreadContent?: unknown
 }
 
 type UpsertVideoInput = {
@@ -87,6 +93,7 @@ type UpsertVideoInput = {
     videoModelId: string
     canvasVisibleArea?: CanvasVisibleArea
     generationRun?: MediaGenerationRunMeta
+    proseMirrorThreadContent?: unknown
 }
 
 type MarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
@@ -95,6 +102,9 @@ type GeneratedByLineageMetadata = Partial<ImageGeneratedByMetadata & VideoGenera
 type BranchMarkerSiblingSlot = {
     index: number
     count: number
+}
+type LineageForestContext = {
+    proseMirrorThreadContent?: unknown
 }
 
 function markerDimensions(): { width: number; height: number } {
@@ -107,9 +117,15 @@ function markerDimensions(): { width: number; height: number } {
 // Markers are sized from their prompt text with the SAME shared estimator the
 // WebUI renders with, so the authoritative layout reserves exactly the painted
 // pill. Falls back to the legacy fixed projection size without prompt text.
-function lineageMarkerDimensions(promptText: string | undefined, responseLine = false): { width: number; height: number } {
+function lineageMarkerDimensions(
+    promptText: string | undefined,
+    options: { responseLine?: boolean; responseText?: string } = {},
+): { width: number; height: number } {
     if (!promptText) return markerDimensions()
-    return estimateBranchMarkerDimensions(promptText, { responseLine })
+    return estimateBranchMarkerDimensions(promptText, {
+        responseLine: options.responseLine,
+        responseText: options.responseText,
+    })
 }
 
 function mediaDimensions(aspectRatio = 1): { width: number; height: number } {
@@ -118,6 +134,58 @@ function mediaDimensions(aspectRatio = 1): { width: number; height: number } {
         width: canvasProjectionSettings.generatedMediaSize,
         height: canvasProjectionSettings.generatedMediaSize / safeAspectRatio,
     }
+}
+
+function parseReasoningIndex(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+}
+
+function getMarkerPromptText(node: MarkerNode): string {
+    return node.provenance?.promptText ?? node.pendingState?.promptText ?? ''
+}
+
+function getMarkerTurnDescriptor(node: MarkerNode): BranchMarkerTurnDescriptor {
+    const markerNodeAttr = node.type === 'branchOrigin'
+        ? 'branchOriginNodeId' as const
+        : node.type === 'branchFork'
+            ? 'branchForkNodeId' as const
+            : 'branchLineNodeId' as const
+    const reasoningRunId = node.type === 'branchOrigin' ? '' : node.reasoningRunId ?? ''
+    const reasoningModelId = node.type === 'branchOrigin' ? '' : node.reasoningModelId ?? ''
+    const reasoningIndex = node.type === 'branchOrigin' ? null : parseReasoningIndex(node.reasoningIndex)
+
+    return {
+        ...(node.generationRequestId ? { generationRequestId: node.generationRequestId } : {}),
+        ...(reasoningRunId ? { reasoningRunId } : {}),
+        ...(reasoningModelId ? { reasoningModelId } : {}),
+        reasoningIndex,
+        markerNodeId: node.nodeId,
+        markerNodeAttr,
+    }
+}
+
+function getMarkerThreadPreview(node: MarkerNode, context: LineageForestContext = {}) {
+    if (!node.aiChatThreadId || !context.proseMirrorThreadContent) return null
+    return getBranchMarkerConversationPreviewFromThreadContent(
+        context.proseMirrorThreadContent,
+        node.aiChatThreadId,
+        getMarkerTurnDescriptor(node),
+    )
+}
+
+function getLineageMarkerDimensionsForNode(
+    node: MarkerNode,
+    context: LineageForestContext = {},
+    options: { fallbackResponseLine?: boolean } = {},
+): { width: number; height: number } {
+    const preview = getMarkerThreadPreview(node, context)
+    const promptText = preview?.userText || getMarkerPromptText(node)
+    return lineageMarkerDimensions(promptText, {
+        responseLine: shouldShowBranchMarkerConversationResponseLine(preview) || Boolean(options.fallbackResponseLine),
+        responseText: preview?.responseText ?? '',
+    })
 }
 
 function parseAspectRatio(value: string): number {
@@ -279,15 +347,17 @@ function getLineageCollisionOverlapThreshold(node: CanvasNode): number {
 // text (response row once the marker's turn has produced media), then run the
 // SAME shared tidy-tree + rigid collision resolution the WebUI uses for local
 // drag/delete rebalances. Persisted geometry is final — clients apply it.
-function rebalanceLineageForest(state: CanvasState, context: string): { state: CanvasState; changed: boolean } {
+function rebalanceLineageForest(
+    state: CanvasState,
+    context: string,
+    lineageContext: LineageForestContext = {},
+): { state: CanvasState; changed: boolean } {
     const { markerIdsWithGeneratedChildren } = getStartedLineageMarkerState(state.nodes)
     let markerDimensionsChanged = false
     const nodes = state.nodes.map((node): CanvasNode => {
         if (!isMarkerNode(node)) return node
-        const promptText = node.provenance?.promptText
-        if (!promptText) return node
-        const dimensions = estimateBranchMarkerDimensions(promptText, {
-            responseLine: markerIdsWithGeneratedChildren.has(node.nodeId),
+        const dimensions = getLineageMarkerDimensionsForNode(node, lineageContext, {
+            fallbackResponseLine: markerIdsWithGeneratedChildren.has(node.nodeId),
         })
         if (node.dimensions.width === dimensions.width && node.dimensions.height === dimensions.height) return node
         markerDimensionsChanged = true
@@ -579,6 +649,14 @@ function markerNodesFromAssignment(
             branchId: assignment.branchId,
             generationRequestId: assignment.generationRequestId,
             aiChatThreadId,
+            provenance: {
+                kind: 'branch-root-fork-decision',
+                promptText: assignment.promptText,
+                referenceNodeIds: assignment.referenceNodeIds,
+                sourceContextNodeIds: assignment.sourceContextNodeIds,
+                forked: Boolean(assignment.branchForkNodeId),
+                forkCount: assignment.branchForkNodeId ? 1 : 0,
+            },
             position: fallbackPosition(state, markers.length, lineageMarkerDimensions(assignment.promptText), canvasVisibleArea),
             dimensions: lineageMarkerDimensions(assignment.promptText),
             temporary: true,
@@ -597,6 +675,15 @@ function markerNodesFromAssignment(
             ...(assignment.reasoningModelId ? { reasoningModelId: assignment.reasoningModelId } : {}),
             reasoningIndex: assignment.reasoningIndex ?? 0,
             ...(parentBranchNodeId ? { parentBranchNodeId } : {}),
+            provenance: {
+                kind: 'reasoning-run',
+                promptText: assignment.promptText,
+                referenceNodeIds: assignment.referenceNodeIds,
+                sourceContextNodeIds: assignment.sourceContextNodeIds,
+                reasoningRunId: assignment.reasoningRunId ?? '',
+                reasoningModelId: (assignment.reasoningModelId ?? '') as AiModelId,
+                reasoningIndex: assignment.reasoningIndex ?? 0,
+            },
             position: parentBranchNodeId
                 ? positionBranchMarkerBeforeGeneratedMedia(parentNode, lineageMarkerDimensions(assignment.promptText), markers.length, state, canvasVisibleArea)
                 : positionRightOf(parentNode, lineageMarkerDimensions(assignment.promptText), markers.length, state, canvasVisibleArea),
@@ -620,6 +707,18 @@ function markerNodesFromAssignment(
             ...(assignment.mediaModelId ? { mediaModelId: assignment.mediaModelId } : {}),
             ...(assignment.mediaType ? { mediaType: assignment.mediaType } : {}),
             ...(parentBranchNodeId ? { parentBranchNodeId } : {}),
+            provenance: {
+                kind: 'branch-continuation',
+                promptText: assignment.promptText,
+                referenceNodeIds: assignment.referenceNodeIds,
+                sourceContextNodeIds: assignment.sourceContextNodeIds,
+                reasoningRunId: assignment.reasoningRunId ?? '',
+                reasoningModelId: (assignment.reasoningModelId ?? '') as AiModelId,
+                reasoningIndex: assignment.reasoningIndex ?? 0,
+                ...(assignment.mediaRunId ? { mediaRunId: assignment.mediaRunId } : {}),
+                ...(assignment.mediaModelId ? { mediaModelId: assignment.mediaModelId } : {}),
+                ...(assignment.mediaType ? { mediaType: assignment.mediaType } : {}),
+            },
             position: parentBranchNodeId
                 ? positionBranchMarkerBeforeGeneratedMedia(parentNode, lineageMarkerDimensions(assignment.promptText), markers.length, state, canvasVisibleArea)
                 : positionRightOf(parentNode, lineageMarkerDimensions(assignment.promptText), markers.length, state, canvasVisibleArea),
@@ -648,9 +747,10 @@ function ensureMarkers(state: CanvasState, markers: MarkerNode[]): { state: Canv
 }
 
 function getLineageParentNodeId(assignment: MediaRunLineageAssignment): string | undefined {
-    return assignment.lineageParentNodeId
-        ?? assignment.branchForkNodeId
+    return assignment.branchForkNodeId
         ?? assignment.branchLineNodeId
+        ?? assignment.lineageParentNodeId
+        ?? assignment.parentMediaNodeId
         ?? assignment.branchOriginNodeId
 }
 
@@ -671,6 +771,7 @@ function generatedByLineage(assignment: MediaRunLineageAssignment | undefined): 
         ...(assignment.branchOriginNodeId ? { branchOriginNodeId: assignment.branchOriginNodeId } : {}),
         ...(assignment.branchForkNodeId ? { branchForkNodeId: assignment.branchForkNodeId } : {}),
         ...(assignment.branchLineNodeId ? { branchLineNodeId: assignment.branchLineNodeId } : {}),
+        ...(assignment.lineageParentNodeId ? { lineageParentNodeId: assignment.lineageParentNodeId } : {}),
         referenceImageNodeIds: assignment.referenceNodeIds,
         sourceContextNodeIds: assignment.sourceContextNodeIds,
         ...(assignment.operationKind ? { operationKind: assignment.operationKind } : {}),
@@ -716,6 +817,7 @@ export async function upsertMediaLineagePlanToCanvas(params: {
     aiChatThreadId: string
     lineagePlan: MediaBranchLineagePlan
     canvasVisibleArea?: CanvasVisibleArea
+    proseMirrorThreadContent?: unknown
 }): Promise<CanvasGeometryUpdate | null> {
     let geometryNodes: CanvasNodeGeometry[] = []
     const result = await Workspace.mutateCanvasState({
@@ -724,7 +826,9 @@ export async function upsertMediaLineagePlanToCanvas(params: {
         mutate: (canvasState) => {
             const markers = markerNodesFromLineagePlan(params.lineagePlan, params.aiChatThreadId, canvasState, params.canvasVisibleArea)
             const markerResult = ensureMarkers(canvasState, markers)
-            const rebalanceResult = rebalanceLineageForest(markerResult.state, 'upsertMediaLineagePlanToCanvas')
+            const rebalanceResult = rebalanceLineageForest(markerResult.state, 'upsertMediaLineagePlanToCanvas', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
             geometryNodes = diffCanvasGeometry(canvasState, rebalanceResult.state)
             return {
                 canvasState: rebalanceResult.state,
@@ -739,6 +843,8 @@ export async function upsertMediaLineagePlanToCanvas(params: {
 export async function settleMediaGenerationRequestOnCanvas(params: {
     workspaceId: string
     generationRequestId: string
+    aiChatThreadId?: string
+    proseMirrorThreadContent?: unknown
 }): Promise<CanvasGeometryUpdate | null> {
     let geometryNodes: CanvasNodeGeometry[] = []
     const result = await Workspace.mutateCanvasState({
@@ -757,11 +863,48 @@ export async function settleMediaGenerationRequestOnCanvas(params: {
             })
             // The settle pass is the final authoritative layout for the request:
             // clients load these persisted positions with no post-load movement.
-            const rebalanceResult = rebalanceLineageForest({ ...canvasState, nodes }, 'settleMediaGenerationRequestOnCanvas')
+            const rebalanceResult = rebalanceLineageForest({ ...canvasState, nodes }, 'settleMediaGenerationRequestOnCanvas', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
             geometryNodes = diffCanvasGeometry(canvasState, rebalanceResult.state)
             return {
                 canvasState: rebalanceResult.state,
                 changed: changed || rebalanceResult.changed,
+            }
+        },
+    })
+    if (!result.changed || result.canvasStateUpdatedAt === null || geometryNodes.length === 0) return null
+    return { layoutRevision: result.canvasStateUpdatedAt, nodes: geometryNodes }
+}
+
+export async function refreshMediaGenerationRequestCanvasGeometry(params: {
+    workspaceId: string
+    generationRequestId: string
+    aiChatThreadId?: string
+    proseMirrorThreadContent?: unknown
+}): Promise<CanvasGeometryUpdate | null> {
+    let geometryNodes: CanvasNodeGeometry[] = []
+    const result = await Workspace.mutateCanvasState({
+        workspaceId: params.workspaceId,
+        origin: 'refreshMediaGenerationRequestCanvasGeometry',
+        mutate: (canvasState) => {
+            const hasRequestMarker = canvasState.nodes.some((node: CanvasNode) =>
+                isMarkerNode(node) && node.generationRequestId === params.generationRequestId
+            )
+            if (!hasRequestMarker) {
+                return {
+                    canvasState,
+                    changed: false,
+                }
+            }
+
+            const rebalanceResult = rebalanceLineageForest(canvasState, 'refreshMediaGenerationRequestCanvasGeometry', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
+            geometryNodes = diffCanvasGeometry(canvasState, rebalanceResult.state)
+            return {
+                canvasState: rebalanceResult.state,
+                changed: rebalanceResult.changed,
             }
         },
     })
@@ -818,7 +961,9 @@ export async function upsertGeneratedImageToCanvas(params: UpsertImageInput): Pr
             nextState = { ...nextState, nodes: nodeResult.nodes }
             const edgeResult = addGeneratedMediaEdge(nextState, lineageParentNodeId, nodeId)
             nextState = edgeResult.state
-            const forestResult = rebalanceLineageForest(nextState, 'upsertGeneratedImageToCanvas')
+            const forestResult = rebalanceLineageForest(nextState, 'upsertGeneratedImageToCanvas', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
             geometryNodes = diffCanvasGeometry(canvasState, forestResult.state)
             return {
                 canvasState: forestResult.state,
@@ -880,7 +1025,9 @@ export async function upsertGeneratedVideoToCanvas(params: UpsertVideoInput): Pr
             nextState = { ...nextState, nodes: nodeResult.nodes }
             const edgeResult = addGeneratedMediaEdge(nextState, lineageParentNodeId, nodeId)
             nextState = edgeResult.state
-            const forestResult = rebalanceLineageForest(nextState, 'upsertGeneratedVideoToCanvas')
+            const forestResult = rebalanceLineageForest(nextState, 'upsertGeneratedVideoToCanvas', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
             geometryNodes = diffCanvasGeometry(canvasState, forestResult.state)
             return {
                 canvasState: forestResult.state,

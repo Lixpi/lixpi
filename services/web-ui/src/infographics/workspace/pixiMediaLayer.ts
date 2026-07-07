@@ -1674,6 +1674,15 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             isPreFrameCircle,
             entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
         }))
+        if (isPreFrameCircle) {
+            entry.sprite.visible = false
+            entry.colorRect.visible = false
+            debugLog('ensure-texture-skip-pre-frame-circle', (verbose) => ({
+                nodeId: entry.nodeRef.nodeId,
+                entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
+            }))
+            return
+        }
         if (desiredTier === 'color') {
             // Extreme zoom-out: tinted rectangle suffices. Keep any existing
             // texture cached on the sprite for when the user zooms back in.

@@ -8,7 +8,7 @@ import type { MediaGenerationRunMeta, ProviderName } from '@lixpi/constants'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
-import { StreamPublisher, type ProseMirrorContentHandler } from '../graph/stream-publisher.ts'
+import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import { ImagePublisher, type StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
 import { VideoPublisher, type StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
@@ -43,6 +43,7 @@ type FanoutRouterResult = Pick<ProviderState,
 
 type MediaRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
+    getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
 }
 
 const catalogModelIdFor = (model: AiModelMetaInfo): string =>
@@ -176,6 +177,9 @@ export abstract class BaseProvider {
         const onPipelineContent: ProseMirrorContentHandler = typeof requestData.proseMirrorContentHandler === 'function'
             ? requestData.proseMirrorContentHandler as ProseMirrorContentHandler
             : (content: Parameters<ProseMirrorContentHandler>[0]) => this.streamPublisher?.publishChatContent(content)
+        const getProseMirrorSnapshot: ProseMirrorSnapshotProvider | undefined = typeof requestData.proseMirrorSnapshotProvider === 'function'
+            ? requestData.proseMirrorSnapshotProvider as ProseMirrorSnapshotProvider
+            : () => this.streamPublisher?.getProseMirrorSnapshot() ?? null
         this.streamPublisher = new StreamPublisher(
             this.deps.natsService,
             requestData.workspaceId,
@@ -200,6 +204,7 @@ export abstract class BaseProvider {
             undefined,
             onPipelineContent,
             requestData.canvasVisibleArea,
+            getProseMirrorSnapshot,
         )
         this.videoPublisher = new VideoPublisher(
             this.deps.natsService,
@@ -212,6 +217,7 @@ export abstract class BaseProvider {
             undefined,
             onPipelineContent,
             requestData.canvasVisibleArea,
+            getProseMirrorSnapshot,
         )
 
         const initialState: ProviderState = {
@@ -485,6 +491,7 @@ export abstract class BaseProvider {
 
         const imageResult = await this.deps.runImageRouter(state, {
             onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+            getProseMirrorSnapshot: () => this.streamPublisher?.getProseMirrorSnapshot() ?? null,
         })
         if (imageResult.error) {
             this.streamPublisher?.imageGenerationError(imageResult.error, state.generationRun)
@@ -515,6 +522,7 @@ export abstract class BaseProvider {
 
         const videoResult = await this.deps.runVideoRouter(state, {
             onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+            getProseMirrorSnapshot: () => this.streamPublisher?.getProseMirrorSnapshot() ?? null,
         })
         if (videoResult.error) {
             this.streamPublisher?.error(videoResult.error, videoResult.errorCode, videoResult.errorType)
@@ -607,6 +615,7 @@ export abstract class BaseProvider {
 
             const imageResult = await this.deps.runImageRouter(fanoutState, {
                 onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+                getProseMirrorSnapshot: () => this.streamPublisher?.getProseMirrorSnapshot() ?? null,
             })
             if (imageResult.error) {
                 this.streamPublisher?.imageGenerationError(imageResult.error, generationRun)
@@ -712,6 +721,7 @@ export abstract class BaseProvider {
 
             const videoResult = await this.deps.runVideoRouter(fanoutState, {
                 onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+                getProseMirrorSnapshot: () => this.streamPublisher?.getProseMirrorSnapshot() ?? null,
             })
             return {
                 error: videoResult.error,

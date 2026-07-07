@@ -4,7 +4,7 @@ import { info, warn, err } from '@lixpi/debug-tools'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
-import type { ProseMirrorContentHandler } from '../graph/stream-publisher.ts'
+import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import { getVideoMaxReferenceImages } from '../graph/state.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import { buildVideoModelPrompt } from './video-generation-trace.ts'
@@ -32,6 +32,7 @@ const addUniqueReferenceImages = (target: string[], source: string[], max: numbe
 
 type VideoRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
+    getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
 }
 
 const buildRoutedVideoReferenceImages = (state: ProviderState): string[] | undefined => {
@@ -135,6 +136,7 @@ export class VideoRouter {
                 generationRun,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
                 proseMirrorContentHandler: options.onProseMirrorContent,
+                proseMirrorSnapshotProvider: options.getProseMirrorSnapshot,
             }
 
             const finalState = await provider.process(requestData)

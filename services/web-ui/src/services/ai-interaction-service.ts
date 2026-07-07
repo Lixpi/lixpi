@@ -316,6 +316,19 @@ export default class AiInteractionService {
                 return
             }
 
+            if (content.status === STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED) {
+                console.log('[AI_INTERACTION] CANVAS_GEOMETRY_RESOLVED received:', {
+                    layoutRevision: content.canvasGeometry?.layoutRevision,
+                    nodeCount: content.canvasGeometry?.nodes?.length ?? 0,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'canvas_geometry_resolved',
+                    canvasGeometry: content.canvasGeometry,
+                    ...segmentBase,
+                })
+                return
+            }
+
             if (content.status === STREAM_STATUS.IMAGE_COMPLETE) {
                 console.log('[AI_INTERACTION] IMAGE_COMPLETE received:', content)
 
@@ -330,6 +343,7 @@ export default class AiInteractionService {
                     usesServerProseMirror: true,
                     imageModelProvider: content.imageModelProvider || content.aiProvider || '',
                     imageModelId: content.imageModelId || '',
+                    ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...(generationRun ? { generationRun } : {}),
                     aiChatThreadId: this.aiChatThreadId
                 })
@@ -400,6 +414,7 @@ export default class AiInteractionService {
                     revisedPrompt: content.revisedPrompt,
                     videoModel: content.videoModelId,
                     videoModelProvider: content.videoModelProvider || content.aiProvider || '',
+                    ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...segmentBase,
                 })
                 return

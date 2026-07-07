@@ -573,6 +573,17 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceNotToContain(ts, ['stripLegacy', 'Branch', 'Origin', 'Nodes'].join(''))
 	})
 
+	it('applies API-resolved authoritative canvas geometry instead of recomputing generation layout', () => {
+		// The API runs the shared branch-tree layout and broadcasts resolved
+		// geometry over the chat stream; the client applies it transiently (no
+		// re-persist, the API already wrote it) with a monotonic revision guard.
+		expectSourceToContain(ts, 'function applyApiCanvasGeometry(canvasGeometry: CanvasGeometryUpdate): void')
+		expectSourceToContain(ts, 'if (canvasGeometry.layoutRevision <= lastAppliedApiLayoutRevision) return')
+		expectSourceToContain(ts, 'onCanvasGeometryResolvedToCanvas: ({ canvasGeometry }) => {')
+		// Complete handlers let the API geometry win over the local fallback rebalance.
+		expectSourceToContain(ts, 'if (data.canvasGeometry) applyApiCanvasGeometry(data.canvasGeometry)')
+	})
+
 })
 
 describe('Workspace canvas — generated video canvas state', () => {
