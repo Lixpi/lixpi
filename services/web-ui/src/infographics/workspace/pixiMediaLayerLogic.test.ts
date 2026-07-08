@@ -15,6 +15,7 @@ import {
     resolveStoredImagePath,
     getPixiLodTier,
     addPixiLodSizeParam,
+    isGeneratedImageNodeWaitingForFrame,
     makeIndexedImage,
     getVisibleWorldRect,
 } from './pixiMediaLayerLogic.ts'
@@ -134,6 +135,32 @@ describe('pixiMediaLayerLogic', () => {
             }
 
             expect(resolveStoredImagePath(node, 'workspace-override')).toBe('https://cdn.test/images/preview.png')
+        })
+
+        it('classifies sourceless generated images as waiting for their first frame', () => {
+            const pendingGenerated: ImageCanvasNode = {
+                nodeId: 'pending-image-1',
+                type: 'image',
+                fileId: '',
+                workspaceId: 'workspace-1',
+                src: '',
+                aspectRatio: 1,
+                dimensions: { width: 1, height: 1 },
+                position: { x: 0, y: 0 },
+                generatedBy: {
+                    aiChatThreadId: 'thread-1',
+                    responseId: '',
+                    aiModel: 'Anthropic:claude-sonnet-4-6',
+                    revisedPrompt: 'make a mountain',
+                    generationRequestId: 'request-1',
+                },
+            }
+            const finalGenerated = { ...pendingGenerated, fileId: 'file-1', src: '/api/files/workspace-1/file-1' }
+            const uploaded = { ...pendingGenerated, generatedBy: undefined }
+
+            expect(isGeneratedImageNodeWaitingForFrame(pendingGenerated)).toBe(true)
+            expect(isGeneratedImageNodeWaitingForFrame(finalGenerated)).toBe(false)
+            expect(isGeneratedImageNodeWaitingForFrame(uploaded)).toBe(false)
         })
 
         it('maps viewport zoom to expected source LoD tiers', () => {

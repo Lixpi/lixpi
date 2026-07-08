@@ -83,6 +83,11 @@ export function resolveStoredImagePath(node: ImageCanvasNode, workspaceId: strin
         : resolveMediaUrl(strippedSrc)
 }
 
+export function isGeneratedImageNodeWaitingForFrame(node: ImageCanvasNode): boolean {
+    if (!node.generatedBy) return false
+    return !node.fileId?.trim() && !node.src?.trim()
+}
+
 export function getPixiLodTier(zoom: number): LodTier {
     if (zoom < 0.1) return 'color'
     if (zoom < 0.4) return 'thumb-256'

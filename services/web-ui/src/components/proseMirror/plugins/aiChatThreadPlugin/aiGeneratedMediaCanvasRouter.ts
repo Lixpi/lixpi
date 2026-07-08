@@ -45,10 +45,10 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
             return
 
         case 'image_complete':
-            if (!event.imageUrl) return
+            if (!event.imageUrl && !event.fileId && !event.canvasGeometry) return
             imageCallbacks.onImageCompleteToCanvas?.({
                 threadId,
-                imageUrl: event.imageUrl,
+                imageUrl: event.imageUrl || '',
                 fileId: event.fileId || '',
                 workspaceId: event.workspaceId || '',
                 responseId: event.responseId || '',

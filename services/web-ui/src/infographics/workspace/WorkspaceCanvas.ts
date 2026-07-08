@@ -3036,6 +3036,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 shape: pending.hasReceivedFrame ? 'node' : 'preFrameCircle',
             })
         }
+        for (const node of canvasState?.nodes ?? []) {
+            if (generatingIds.has(node.nodeId) || !isGeneratedMediaCanvasNodeWaitingForFrame(node)) continue
+            generatingIds.set(node.nodeId, {
+                direction: 'clockwise',
+                shape: 'preFrameCircle',
+            })
+        }
         for (const referenceNodeIds of generatingReferenceNodeIdsByThread.values()) {
             for (const nodeId of referenceNodeIds) {
                 if (!generatingIds.has(nodeId)) generatingIds.set(nodeId, { direction: 'counterclockwise' })
@@ -3113,7 +3120,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         for (const pending of videoGenerationTracker.values()) {
             if (!pending.hasReceivedFrame) nodeIds.add(pending.nodeId)
         }
+        for (const node of currentCanvasState?.nodes ?? []) {
+            if (isGeneratedMediaCanvasNodeWaitingForFrame(node)) nodeIds.add(node.nodeId)
+        }
         return nodeIds
+    }
+
+    function isGeneratedMediaCanvasNodeWaitingForFrame(node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode {
+        if (node.type === 'image') {
+            return Boolean(node.generatedBy) && !node.fileId?.trim() && !node.src?.trim()
+        }
+        if (node.type === 'video') {
+            return Boolean(node.generatedBy)
+                && !node.fileId?.trim()
+                && !node.posterFileId?.trim()
+                && !node.frameFileId?.trim()
+                && !node.src?.trim()
+                && !node.posterSrc?.trim()
+        }
+        return false
     }
 
     function isPendingGeneratedMediaBeforeFirstFrame(nodeId: string): boolean {
@@ -3123,6 +3148,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         for (const pending of videoGenerationTracker.values()) {
             if (pending.nodeId === nodeId) return !pending.hasReceivedFrame
         }
+        const canvasNode = currentCanvasState?.nodes.find((node: CanvasNode) => node.nodeId === nodeId)
+        if (canvasNode) return isGeneratedMediaCanvasNodeWaitingForFrame(canvasNode)
         return false
     }
 

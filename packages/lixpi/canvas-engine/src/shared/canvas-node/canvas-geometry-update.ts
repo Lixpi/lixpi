@@ -20,6 +20,47 @@ function edgeTouchesAnyNode(edge: WorkspaceEdge, nodeIds: Set<string>): boolean 
     return nodeIds.has(edge.sourceNodeId) || nodeIds.has(edge.targetNodeId)
 }
 
+type GeneratedMediaCanvasNode = Extract<CanvasNode, { type: 'image' | 'video' }>
+
+function isGeneratedMediaNode(node: CanvasNode): node is GeneratedMediaCanvasNode {
+    return (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy)
+}
+
+function isPendingGeneratedMediaNode(node: CanvasNode): boolean {
+    if (!isGeneratedMediaNode(node)) return false
+    if (node.type === 'image') return !node.fileId && !node.src
+    return !node.fileId && !node.posterFileId && !node.src && !node.posterSrc
+}
+
+function getGeneratedMediaRunIdentity(node: CanvasNode): string {
+    if (!isGeneratedMediaNode(node)) return ''
+    const generatedBy = node.generatedBy
+    if (!generatedBy) return ''
+    if (generatedBy.mediaRunId) return `${node.type}:media-run:${generatedBy.mediaRunId}`
+    const requestId = generatedBy.generationRequestId
+    if (!requestId) return ''
+    return [
+        node.type,
+        requestId,
+        generatedBy.reasoningRunId ?? '',
+        generatedBy.mediaModelId ?? '',
+        generatedBy.mediaIndex ?? '',
+        generatedBy.variantIndex ?? '',
+        generatedBy.branchForkNodeId ?? '',
+        generatedBy.branchLineNodeId ?? '',
+    ].join(':')
+}
+
+function buildCompletedGeneratedMediaRunIdentities(nodes: CanvasNode[]): Set<string> {
+    const identities = new Set<string>()
+    for (const node of nodes) {
+        if (!isGeneratedMediaNode(node) || isPendingGeneratedMediaNode(node)) continue
+        const identity = getGeneratedMediaRunIdentity(node)
+        if (identity) identities.add(identity)
+    }
+    return identities
+}
+
 function workspaceEdgesMatch(left: WorkspaceEdge, right: WorkspaceEdge): boolean {
     return left.edgeId === right.edgeId
         && left.sourceNodeId === right.sourceNodeId
@@ -56,6 +97,16 @@ export function applyCanvasGeometryUpdateToState(
     const geometryByNodeId = new Map(update.nodes.map((geometry) => [geometry.nodeId, geometry]))
     const requestedRemovedNodeIds = new Set(update.removedNodeIds ?? [])
     const requestedRemovedEdgeIds = new Set(update.removedEdgeIds ?? [])
+    const completedGeneratedMediaRunIdentities = buildCompletedGeneratedMediaRunIdentities(state.nodes)
+    const stalePendingSnapshotNodeIds = new Set(
+        (update.nodeSnapshots ?? [])
+            .filter((snapshot) => {
+                if (!isPendingGeneratedMediaNode(snapshot)) return false
+                const identity = getGeneratedMediaRunIdentity(snapshot)
+                return Boolean(identity && completedGeneratedMediaRunIdentities.has(identity))
+            })
+            .map((snapshot) => snapshot.nodeId)
+    )
     const initialNodeIds = new Set(state.nodes.map((node) => node.nodeId))
     const initialMatchedGeometryNodeCount = update.nodes.filter((geometry) => initialNodeIds.has(geometry.nodeId)).length
 
@@ -87,7 +138,7 @@ export function applyCanvasGeometryUpdateToState(
     const upsertedNodeIds: string[] = []
     const snapshotNodes = update.nodeSnapshots ?? []
     for (const snapshot of snapshotNodes) {
-        if (requestedRemovedNodeIds.has(snapshot.nodeId) || nodeIds.has(snapshot.nodeId)) continue
+        if (requestedRemovedNodeIds.has(snapshot.nodeId) || stalePendingSnapshotNodeIds.has(snapshot.nodeId) || nodeIds.has(snapshot.nodeId)) continue
         nodes = [...nodes, snapshot]
         nodeIds.add(snapshot.nodeId)
         upsertedNodeIds.push(snapshot.nodeId)
@@ -116,6 +167,7 @@ export function applyCanvasGeometryUpdateToState(
         if (
             requestedRemovedEdgeIds.has(snapshot.edgeId)
             || edgeTouchesAnyNode(snapshot, requestedRemovedNodeIds)
+            || edgeTouchesAnyNode(snapshot, stalePendingSnapshotNodeIds)
             || !resolvedNodeIds.has(snapshot.sourceNodeId)
             || !resolvedNodeIds.has(snapshot.targetNodeId)
         ) {

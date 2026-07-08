@@ -117,7 +117,7 @@ function markerDimensions(): { width: number; height: number } {
 
 // Markers are sized from their prompt text with the SAME shared estimator the
 // WebUI renders with, so the authoritative layout reserves exactly the painted
-// pill. Falls back to the legacy fixed projection size without prompt text.
+// pill. Without prompt text, they use the shared default projection size.
 function lineageMarkerDimensions(
     promptText: string | undefined,
     options: { responseLine?: boolean; responseText?: string } = {},
@@ -422,6 +422,28 @@ function diffCanvasGeometry(before: CanvasState, after: CanvasState): CanvasNode
     return changedGeometries
 }
 
+function canvasNodeToGeometry(node: CanvasNode): CanvasNodeGeometry {
+    return {
+        nodeId: node.nodeId,
+        position: { x: node.position.x, y: node.position.y },
+        dimensions: { width: node.dimensions.width, height: node.dimensions.height },
+        ...(node.parentId ? { parentNodeId: node.parentId } : {}),
+    }
+}
+
+function mergeProjectionGeometryNodes(
+    changedGeometryNodes: CanvasNodeGeometry[],
+    nodeSnapshots: CanvasNode[],
+): CanvasNodeGeometry[] {
+    const geometryByNodeId = new Map(changedGeometryNodes.map(node => [node.nodeId, node]))
+    for (const snapshot of nodeSnapshots) {
+        if (!geometryByNodeId.has(snapshot.nodeId)) {
+            geometryByNodeId.set(snapshot.nodeId, canvasNodeToGeometry(snapshot))
+        }
+    }
+    return [...geometryByNodeId.values()]
+}
+
 function getGeneratedMediaGenerationRequestId(node: CanvasNode): string | undefined {
     if (node.type !== 'image' && node.type !== 'video') return undefined
     return node.generatedBy?.generationRequestId
@@ -513,9 +535,10 @@ function buildCanvasGeometryUpdate(params: {
         geometryNodes: params.geometryNodes,
         removedNodeIds,
     })
+    const authoritativeGeometryNodes = mergeProjectionGeometryNodes(params.geometryNodes, nodeSnapshots)
     const edgeSnapshots = getProjectionEdgeSnapshots({
         state: params.state,
-        geometryNodes: params.geometryNodes,
+        geometryNodes: authoritativeGeometryNodes,
         nodeSnapshots,
         removedNodeIds,
     })
@@ -523,8 +546,10 @@ function buildCanvasGeometryUpdate(params: {
         context: params.context,
         generationRequestId: params.generationRequestId,
         layoutRevision: params.layoutRevision,
-        geometryNodeCount: params.geometryNodes.length,
-        geometryNodeIds: params.geometryNodes.map(node => node.nodeId),
+        changedGeometryNodeCount: params.geometryNodes.length,
+        changedGeometryNodeIds: params.geometryNodes.map(node => node.nodeId),
+        geometryNodeCount: authoritativeGeometryNodes.length,
+        geometryNodeIds: authoritativeGeometryNodes.map(node => node.nodeId),
         nodeSnapshotCount: nodeSnapshots.length,
         nodeSnapshotIds: nodeSnapshots.map(node => node.nodeId),
         edgeSnapshotCount: edgeSnapshots.length,
@@ -534,7 +559,7 @@ function buildCanvasGeometryUpdate(params: {
     })
     return {
         layoutRevision: params.layoutRevision,
-        nodes: params.geometryNodes,
+        nodes: authoritativeGeometryNodes,
         ...(nodeSnapshots.length > 0 ? { nodeSnapshots } : {}),
         ...(edgeSnapshots.length > 0 ? { edgeSnapshots } : {}),
         ...(removedNodeIds.length > 0 ? { removedNodeIds } : {}),

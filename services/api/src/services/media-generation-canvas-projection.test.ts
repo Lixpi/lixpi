@@ -1074,6 +1074,15 @@ describe('media-generation-canvas-projection', () => {
             getPendingGeneratedMediaNodeId(firstAssignment),
             getPendingGeneratedMediaNodeId(secondAssignment),
         ]))
+        expect(canvasGeometry?.nodes.map(node => node.nodeId)).toEqual(expect.arrayContaining([
+            plan.branchForks[0].nodeId,
+            'node-file-final-0',
+            'node-file-final-1',
+        ]))
+        expect(canvasGeometry?.nodes.map(node => node.nodeId)).not.toEqual(expect.arrayContaining([
+            getPendingGeneratedMediaNodeId(firstAssignment),
+            getPendingGeneratedMediaNodeId(secondAssignment),
+        ]))
         expect(canvasGeometry?.edgeSnapshots).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 sourceNodeId: plan.branchForks[0].nodeId,
@@ -1173,7 +1182,7 @@ describe('media-generation-canvas-projection', () => {
         expect(imageGeometry).toBeDefined()
         // Final fitted dimensions are persisted so clients never re-fit on load.
         expect(imageGeometry!.dimensions.width / imageGeometry!.dimensions.height).toBeCloseTo(16 / 9, 3)
-        // Markers are text-sized with the shared estimator, not the legacy fixed box.
+        // Markers are text-sized with the shared estimator, not a hardcoded box.
         const forkGeometry = geometry!.nodes.find(node => node.nodeId === 'fork-1')
         expect(forkGeometry).toBeDefined()
     })

@@ -20,7 +20,7 @@ function makeForkNode(nodeId: string): CanvasNode {
     }
 }
 
-function makeImageNode(nodeId: string, src = ''): CanvasNode {
+function makeImageNode(nodeId: string, src = '', overrides: Partial<Extract<CanvasNode, { type: 'image' }>> = {}): CanvasNode {
     return {
         nodeId,
         type: 'image',
@@ -45,6 +45,7 @@ function makeImageNode(nodeId: string, src = ''): CanvasNode {
             lineageParentNodeId: 'fork-1',
             promptText: 'make a mountain',
         },
+        ...overrides,
     }
 }
 
@@ -188,6 +189,47 @@ describe('applyCanvasGeometryUpdateToState', () => {
         expect(result.state.nodes.map(node => node.nodeId)).toEqual(['fork-1', 'node-file-1'])
         expect(result.state.edges).toEqual([
             { edgeId: 'edge-fork-final', sourceNodeId: 'fork-1', targetNodeId: 'node-file-1' },
+        ])
+    })
+
+    it('does not resurrect stale pending snapshots after their final media run already exists', () => {
+        const fork = makeForkNode('fork-1')
+        const pending = makeImageNode('pending-image-0', '', {
+            generatedBy: {
+                ...(makeImageNode('pending-image-0') as Extract<CanvasNode, { type: 'image' }>).generatedBy!,
+                mediaRunId: 'request-1:reasoning:0:image:0',
+                mediaModelId: 'Stability:stable-image-ultra',
+            },
+        })
+        const final = makeImageNode('node-file-1', '/api/files/workspace-1/file-1', {
+            fileId: 'file-1',
+            generatedBy: {
+                ...(makeImageNode('node-file-1') as Extract<CanvasNode, { type: 'image' }>).generatedBy!,
+                mediaRunId: 'request-1:reasoning:0:image:0',
+                mediaModelId: 'Stability:stable-image-ultra',
+            },
+        })
+
+        const result = applyCanvasGeometryUpdateToState(canvasState([fork, final], [
+            makeEdge('edge-fork-final', 'fork-1', 'node-file-1'),
+        ]), {
+            layoutRevision: 204,
+            nodes: [
+                { nodeId: 'fork-1', position: { x: 100, y: 300 }, dimensions: { width: 298, height: 64 } },
+                { nodeId: 'pending-image-0', position: { x: 650, y: -700 }, dimensions: { width: 800, height: 800 } },
+            ],
+            nodeSnapshots: [pending],
+            edgeSnapshots: [
+                makeEdge('edge-fork-pending', 'fork-1', 'pending-image-0'),
+            ],
+        })
+
+        expect(result.upsertedNodeIds).toEqual([])
+        expect(result.upsertedEdgeIds).toEqual([])
+        expect(result.missingGeometryNodeIds).toEqual(['pending-image-0'])
+        expect(result.state.nodes.map(node => node.nodeId)).toEqual(['fork-1', 'node-file-1'])
+        expect(result.state.edges).toEqual([
+            makeEdge('edge-fork-final', 'fork-1', 'node-file-1'),
         ])
     })
 

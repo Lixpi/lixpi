@@ -122,6 +122,34 @@ describe('routeSegmentEventToCanvas', () => {
         })
     })
 
+    it('routes API geometry image completion even when imageUrl is absent', () => {
+        const canvasGeometry = {
+            layoutRevision: 123,
+            nodes: [],
+            nodeSnapshots: [],
+            edgeSnapshots: [],
+            removedNodeIds: [],
+        }
+
+        routeSegmentEventToCanvas({
+            threadId: 'thread-1',
+            type: 'image_complete',
+            fileId: 'image-final',
+            workspaceId: 'workspace-2',
+            canvasGeometry,
+            generationRun: { generationRequestId: 'gen-2' } as any,
+        } as any)
+
+        expect(imageCallbacks.onImageCompleteToCanvas).toHaveBeenCalledWith(expect.objectContaining({
+            threadId: 'thread-1',
+            imageUrl: '',
+            fileId: 'image-final',
+            workspaceId: 'workspace-2',
+            canvasGeometry,
+            generationRun: { generationRequestId: 'gen-2' },
+        }))
+    })
+
     it('maps image lineage and context resolution events to dedicated callbacks', () => {
         routeSegmentEventToCanvas({
             threadId: 'thread-1',

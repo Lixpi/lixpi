@@ -23,6 +23,7 @@ import {
     computeWorldPosition,
     getPixiLodTier,
     getVisibleWorldRect,
+    isGeneratedImageNodeWaitingForFrame,
     makeIndexedImage,
     resolveStoredImagePath,
     tierRank,
@@ -1538,7 +1539,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 entry.textureKey = null
                 bindTextureToEntrySprite(entry, Texture.EMPTY)
                 entry.sprite.visible = false
-                entry.colorRect.visible = entry.isVisible && !isPreFrameCircleGeneratingNode(node.nodeId)
+                entry.colorRect.visible = entry.isVisible && !shouldTreatImageEntryAsFramePending(entry)
                 if (oldKey) releaseTexture(oldKey)
             }
         }
@@ -1657,6 +1658,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         return generatingImageNodeOutlines.get(nodeId)?.shape === 'preFrameCircle'
     }
 
+    function shouldTreatImageEntryAsFramePending(entry: PixiImageEntry): boolean {
+        return isPreFrameCircleGeneratingNode(entry.nodeRef.nodeId) || isGeneratedImageNodeWaitingForFrame(entry.nodeRef)
+    }
+
     // Idempotent texture-quality guarantor. Ensures the entry has at least
     // `desiredTier`-quality pixels loaded. Three cardinal rules:
     //   1) If a higher-or-equal tier is already on the sprite, do NOTHING —
@@ -1667,17 +1672,17 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     //      progressively load `thumb-256` first for instant visual feedback,
     //      then schedule a background upgrade to the desired tier in idle time.
     function ensureTextureForEntry(entry: PixiImageEntry, desiredTier: LodTier): void {
-        const isPreFrameCircle = isPreFrameCircleGeneratingNode(entry.nodeRef.nodeId)
+        const isPreFramePending = shouldTreatImageEntryAsFramePending(entry)
         debugLog('ensure-texture-start', (verbose) => ({
             nodeId: entry.nodeRef.nodeId,
             desiredTier,
-            isPreFrameCircle,
+            isPreFramePending,
             entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
         }))
-        if (isPreFrameCircle) {
+        if (isPreFramePending) {
             entry.sprite.visible = false
             entry.colorRect.visible = false
-            debugLog('ensure-texture-skip-pre-frame-circle', (verbose) => ({
+            debugLog('ensure-texture-skip-frame-pending', (verbose) => ({
                 nodeId: entry.nodeRef.nodeId,
                 entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
             }))
@@ -1687,7 +1692,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             // Extreme zoom-out: tinted rectangle suffices. Keep any existing
             // texture cached on the sprite for when the user zooms back in.
             entry.sprite.visible = entry.loadedTier !== null
-            entry.colorRect.visible = entry.loadedTier === null && !isPreFrameCircle
+            entry.colorRect.visible = entry.loadedTier === null && !isPreFramePending
             debugLog('ensure-texture-color-tier', (verbose) => ({
                 nodeId: entry.nodeRef.nodeId,
                 entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
@@ -1751,7 +1756,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         const hasTexture = entry.textureKey !== null
         if (!hasTexture) {
             entry.sprite.visible = false
-            entry.colorRect.visible = !isPreFrameCircle
+            entry.colorRect.visible = !isPreFramePending
         }
 
         const node = entry.nodeRef
@@ -1841,6 +1846,20 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     scheduleProgressiveUpgrade(entry, desiredTier)
                 }
             } catch (error) {
+                const staleRequest = destroyed || entry.requestId !== requestId || entries.get(node.nodeId) !== entry
+                if (staleRequest) {
+                    debugLog('texture-request-error-stale', (verbose) => ({
+                        nodeId: node.nodeId,
+                        requestId,
+                        currentRequestId: entry.requestId,
+                        destroyed,
+                        acquiredKey: cleanDebugUrl(acquiredKey),
+                        message: error instanceof Error ? error.message : String(error),
+                        entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
+                    }))
+                    if (acquiredKey) releaseTexture(acquiredKey)
+                    return
+                }
                 console.error('[PixiMediaLayer] Failed to load image texture.', error)
                 debugLog('texture-request-error', (verbose) => ({
                     nodeId: node.nodeId,
@@ -1857,7 +1876,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     entry.requestedTier = null
                     if (!hasTexture) {
                         entry.sprite.visible = false
-                        entry.colorRect.visible = !isPreFrameCircle
+                        entry.colorRect.visible = !shouldTreatImageEntryAsFramePending(entry)
                     }
                     scheduleRender()
                 }
@@ -2135,7 +2154,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 textureKey: entry.textureKey,
             }
             const isVisible = visibleNodeIds.has(nodeId)
-            const shouldRenderColorRect = isVisible && !isPreFrameCircleGeneratingNode(nodeId)
+            const shouldRenderColorRect = isVisible && !shouldTreatImageEntryAsFramePending(entry)
             if (isVisible !== entry.isVisible) {
                 entry.sprite.renderable = isVisible
                 generatingBorderRenderer.setVisible(nodeId, isVisible)
