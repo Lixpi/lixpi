@@ -2524,7 +2524,8 @@ class AiChatThreadPluginClass {
 
         // The media-generation matrix is needed only when some section carries
         // more than one model; a single model per section runs the plain path.
-        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, videoModelIds.length]
+        const matrixVideoModelIds = videoModelsEnabled || Boolean(sourceVideoNodeId) ? videoModelIds : []
+        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, matrixVideoModelIds.length]
         const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
         const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
         const usesMediaGenerationMatrix = totalSelectedModelCount > sectionsWithSelection

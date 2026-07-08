@@ -631,12 +631,18 @@ export type CanvasNodeGeometry = {
 
 // Authoritative canvas geometry resolved by the API after a lineage mutation
 // (plan upsert, media upsert, settle). Carries every node the layout moved or
-// resized — collision resolution can shift unrelated siblings — plus a
-// monotonic revision (the persisted canvasStateUpdatedAt) so clients discard
-// stale events that arrive out of order.
+// resized — collision resolution can shift unrelated siblings — plus API-owned
+// node/edge snapshots and removals for clients that have not locally seen
+// projected pending nodes yet. layoutRevision is the persisted
+// canvasStateUpdatedAt, so clients discard stale events that arrive out of
+// order.
 export type CanvasGeometryUpdate = {
     layoutRevision: number
     nodes: CanvasNodeGeometry[]
+    nodeSnapshots?: CanvasNode[]
+    removedNodeIds?: string[]
+    edgeSnapshots?: WorkspaceEdge[]
+    removedEdgeIds?: string[]
 }
 
 // Broadcast on the chat stream after an async canvas projection (lineage plan

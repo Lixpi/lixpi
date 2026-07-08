@@ -127,6 +127,32 @@ describe('workspace render state plan', () => {
         expect(result.state?.nodes.map((node) => node.nodeId)).toEqual(['thread-node-active', 'new-image'])
     })
 
+    it('preserves API-applied connector edges while the incoming store canvas is stale', () => {
+        const fork = makeAiChatThread({ nodeId: 'fork-node', referenceId: 'thread-lineage', position: { x: 0, y: 0 } })
+        const generated = makeImage({ nodeId: 'pending-image-1', position: { x: 500, y: 0 } })
+        const edge = makeEdge('fork-node', 'pending-image-1')
+        const apiAppliedState = makeCanvasState({
+            nodes: [fork, generated],
+            edges: [edge],
+        })
+        const staleStoreState = makeCanvasState({
+            nodes: [fork],
+            edges: [],
+            activeAiChatSidebarTabId: 'chat:thread-lineage',
+        })
+
+        const result = mergeIncomingCanvasStateWithPendingVisualCommit({
+            incomingState: staleStoreState,
+            pendingVisualCommit: createPendingCanvasVisualCommit(apiAppliedState),
+        })
+
+        expect(result.usedPendingVisualState).toBe(true)
+        expect(result.pendingVisualCommit).not.toBeNull()
+        expect(result.state?.activeAiChatSidebarTabId).toBe('chat:thread-lineage')
+        expect(result.state?.nodes.map((node) => node.nodeId)).toEqual(['fork-node', 'pending-image-1'])
+        expect(result.state?.edges).toEqual([edge])
+    })
+
     it('updates a pending visual commit viewport without changing its visual acknowledgement key', () => {
         const thread = makeAiChatThread({ nodeId: 'thread-node-active', position: { x: 360, y: 140 } })
         const committed = makeCanvasState({

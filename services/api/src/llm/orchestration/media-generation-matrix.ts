@@ -17,7 +17,7 @@ import type {
 import AiModelModel from '../../models/ai-model.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
-import { StreamPublisher } from '../graph/stream-publisher.ts'
+import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import type { ProviderState } from '../graph/state.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
@@ -44,6 +44,11 @@ type ParsedAiModelId = {
     modelId: AiModelId
     provider: ProviderName
     model: string
+}
+
+type SharedPreflightResult = {
+    state: Partial<ProviderState>
+    publisher: StreamPublisher
 }
 
 type ResolvedAiModel = ParsedAiModelId & {
@@ -211,7 +216,7 @@ export class MediaGenerationMatrixOrchestrator {
         const primaryVideoModel = normalized.videoModels[0]
         const primaryImageOptions = primaryImageModel ? normalized.imageModelOptions[primaryImageModel.modelId] : undefined
         const primaryVideoOptions = primaryVideoModel ? normalized.videoModelOptions[primaryVideoModel.modelId] : undefined
-        const sharedPreflightState = await this.runSharedPreflight({
+        const sharedPreflight = await this.runSharedPreflight({
             requestData,
             normalized,
             primaryImageModel,
@@ -219,6 +224,7 @@ export class MediaGenerationMatrixOrchestrator {
             primaryImageOptions,
             primaryVideoOptions,
         })
+        const sharedPreflightState = sharedPreflight.state
 
         info('[MEDIA_MATRIX] Starting media generation matrix request', {
             generationRequestId: normalized.generationRequestId,
@@ -322,7 +328,8 @@ export class MediaGenerationMatrixOrchestrator {
             const rejectedResult = results.find(result => result.status === 'rejected')
             if (rejectedResult?.status === 'rejected') throw rejectedResult.reason
         } finally {
-            await this.publishMediaGenerationRequestComplete(requestData, normalized)
+            sharedPreflight.publisher.mediaGenerationRequestComplete(normalized.generationRequestId)
+            await sharedPreflight.publisher.finishProseMirrorStream()
         }
     }
 
@@ -335,34 +342,21 @@ export class MediaGenerationMatrixOrchestrator {
         await this.registry.stopGroupsWithPrefix(buildMediaGenerationThreadGroupPrefix(workspaceId, aiChatThreadId))
     }
 
-    private async publishMediaGenerationRequestComplete(
-        requestData: MatrixRequestData,
-        normalized: ResolvedMatrixRequest,
-    ): Promise<void> {
-        const reasoningModel = normalized.reasoningModels[0]
-        if (!reasoningModel) return
-
-        const publisher = new StreamPublisher(
-            this.natsService,
-            requestData.workspaceId,
-            requestData.aiChatThreadId,
-            reasoningModel.provider,
-            undefined,
-            { canvasVisibleArea: requestData.canvasVisibleArea },
-        )
-        publisher.mediaGenerationRequestComplete(normalized.generationRequestId)
-        await publisher.finishProseMirrorStream()
-    }
-
     private normalizeRequest(requestData: MatrixRequestData): NormalizedMatrixRequest {
         const request = requestData.mediaGenerationRequest
         const generationRequestId = request?.generationRequestId || uuid()
         const useMultipleReasoningModels = request?.useMultipleReasoningModels ?? ((request?.reasoningModelIds?.length ?? 0) > 1)
         const useMultipleImageModels = request?.useMultipleImageModels ?? ((request?.imageModelIds?.length ?? 0) > 1)
+        const hasExplicitVideoSource = Boolean(request?.videoOptions?.sourceForExtension ?? requestData.videoSourceForExtension)
         const useMultipleVideoModels = request?.useMultipleVideoModels ?? ((request?.videoModelIds?.length ?? 0) > 1)
+        const includeVideoModels = request
+            ? useMultipleVideoModels || hasExplicitVideoSource
+            : (requestData.aiVideoModels?.length ?? 0) > 0
         const reasoningModelIds = normalizeModelIdsForMode(useMultipleReasoningModels, request?.reasoningModelIds, requestData.aiReasoningModels?.[0])
         const imageModelIds = normalizeModelIdsForMode(useMultipleImageModels, request?.imageModelIds, requestData.aiImageModels?.[0])
-        const videoModelIds = normalizeModelIdsForMode(useMultipleVideoModels, request?.videoModelIds, requestData.aiVideoModels?.[0])
+        const videoModelIds = includeVideoModels
+            ? normalizeModelIdsForMode(useMultipleVideoModels, request?.videoModelIds, requestData.aiVideoModels?.[0])
+            : []
 
         if (reasoningModelIds.length === 0) {
             throw new Error('mediaGenerationRequest requires at least one reasoning model')
@@ -506,7 +500,7 @@ export class MediaGenerationMatrixOrchestrator {
         primaryVideoModel?: ResolvedAiModel
         primaryImageOptions?: { imageSize?: string }
         primaryVideoOptions?: { aspectRatio?: string; resolution?: string; duration?: string | number }
-    }): Promise<Partial<ProviderState>> {
+    }): Promise<SharedPreflightResult> {
         const reasoningModel = normalized.reasoningModels[0]
         const abortController = new AbortController()
         const generationRun = this.runPlanner.buildMatrixReasoningRun({
@@ -521,7 +515,13 @@ export class MediaGenerationMatrixOrchestrator {
             requestData.aiChatThreadId,
             reasoningModel.provider,
             generationRun,
-            { canvasVisibleArea: requestData.canvasVisibleArea },
+            {
+                enableProseMirrorStream: Boolean(requestData.proseMirrorInitialDoc),
+                proseMirrorBaseVersion: requestData.proseMirrorBaseVersion,
+                proseMirrorInitialDoc: requestData.proseMirrorInitialDoc,
+                deferProseMirrorEnd: true,
+                canvasVisibleArea: requestData.canvasVisibleArea,
+            },
         )
         let state: ProviderState = {
             messages: requestData.messages ?? [],
@@ -618,9 +618,13 @@ export class MediaGenerationMatrixOrchestrator {
             runAssignmentCount: mediaBranchLineagePlan.runAssignments.length,
         })
         applyResolved({ mediaBranchLineagePlan })
+        const matrixProseMirrorContentHandler: ProseMirrorContentHandler = (content) => publisher.publishProseMirrorContent(content)
+        const matrixProseMirrorSnapshotProvider: ProseMirrorSnapshotProvider = () => publisher.getProseMirrorSnapshot()
+        resolvedRecord.proseMirrorContentHandler = matrixProseMirrorContentHandler
+        resolvedRecord.proseMirrorSnapshotProvider = matrixProseMirrorSnapshotProvider
         await publisher.drainPendingWrites()
 
-        return resolved
+        return { state: resolved, publisher }
     }
 
     private getRunLineageAssignment(

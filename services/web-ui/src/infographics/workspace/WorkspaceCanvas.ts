@@ -68,13 +68,13 @@ import {
 import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import { setAiGeneratedImageCallbacks, setAiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
 import {
+    buildBranchMarkerTurnProjectionFromThreadContent,
     buildGeneratedMediaTurnProjectionFromThreadContent,
     type GeneratedMediaTurnLocator,
 } from '@lixpi/prosemirror/shared/generated-media-turn-projection'
 import {
     collectProseMirrorText,
     findAiChatThreadContentNode,
-    getBranchMarkerResponseContainer,
     getBranchMarkerConversationPreviewFromThreadContent,
     parseProseMirrorJsonContent,
     shouldShowBranchMarkerConversationResponseLine,
@@ -85,6 +85,7 @@ import {
 import type { AiLineageProjectionScope } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import {
+    applyCanvasGeometryUpdateToState,
     CircularGlassMaterial,
     createShiftingGradientBackground,
     estimateBranchMarkerDimensions,
@@ -95,6 +96,7 @@ import {
     getBranchMarkerScreenFixedMinWidth,
     getCanvasChromeScreenLayout,
     getGeneratedMediaChromeCollisionHeight as getSharedGeneratedMediaChromeCollisionHeight,
+    getPendingGeneratedMediaNodeId,
     getResizeHandleScaledSizes,
     resolveCollisions,
     scaleCanvasChromeToScreenForZoom,
@@ -2148,72 +2150,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function cloneBranchMarkerProjectionNode(
-        node: ProseMirrorJsonNode,
-        forceGenerationDetailsOpen: boolean,
-    ): ProseMirrorJsonNode {
-        const cloned: ProseMirrorJsonNode = {
-            ...node,
-            attrs: node.attrs ? structuredClone(node.attrs) : undefined,
-            content: node.content?.map((child) => cloneBranchMarkerProjectionNode(child, forceGenerationDetailsOpen)),
-        }
-        if (forceGenerationDetailsOpen && cloned.type === 'aiCollapsibleBlock') {
-            cloned.attrs = {
-                ...(cloned.attrs ?? {}),
-                isOpen: true,
-            }
-        }
-        return cloned
-    }
-
-    function createBranchMarkerProjectionDocument(
-        threadId: string,
-        threadAttrs: Record<string, any> | undefined,
-        messages: ProseMirrorJsonNode[],
-    ): ProseMirrorJsonNode {
-        return {
-            type: 'doc',
-            content: [
-                {
-                    type: 'documentTitle',
-                    content: [{ type: 'text', text: 'Generated media provenance' }],
-                },
-                {
-                    type: 'aiChatThread',
-                    attrs: {
-                        ...(threadAttrs ?? {}),
-                        threadId,
-                    },
-                    content: messages,
-                },
-            ],
-        }
-    }
-
-    function cloneBranchMarkerResponseForProjection(
-        responseMessage: ProseMirrorJsonNode,
-        marker: BranchMarkerNode,
-        lineageProjectionScope: AiLineageProjectionScope,
-    ): ProseMirrorJsonNode {
-        const responseContainer = getBranchMarkerResponseContainer(responseMessage, getBranchMarkerTurnDescriptor(marker)) ?? responseMessage
-        if (responseContainer === responseMessage) {
-            return cloneBranchMarkerProjectionNode(responseMessage, true)
-        }
-
-        const clonedSection = cloneBranchMarkerProjectionNode(responseContainer, true)
-        if (clonedSection.type === 'aiReasoningSection') {
-            clonedSection.attrs = {
-                ...(clonedSection.attrs ?? {}),
-                lineageProjectionScope,
-            }
-        }
-
-        return {
-            ...cloneBranchMarkerProjectionNode(responseMessage, true),
-            content: [clonedSection],
-        }
-    }
-
     function buildBranchMarkerTurnProjectionContent(
         marker: BranchMarkerNode,
         lineageProjectionScope: AiLineageProjectionScope,
@@ -2221,38 +2157,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const threadId = getBranchMarkerThreadId(marker)
         if (!threadId) return null
 
-        const root = parseProseMirrorJsonContent(getAiChatThreadContentForBranchMarker(threadId))
-        if (!root) return null
-
-        const threadNode = findAiChatThreadContentNode(root, threadId)
-        if (!threadNode) return null
-
-        let latestUserMessage: ProseMirrorJsonNode | null = null
-        let responseMessage: ProseMirrorJsonNode | null = null
-
-        for (const child of threadNode.content ?? []) {
-            if (child.type === 'aiUserMessage') {
-                latestUserMessage = child
-                continue
-            }
-
-            if (child.type === 'aiResponseMessage') {
-                responseMessage = child
-            }
-        }
-
-        if (!latestUserMessage) return null
-
-        const messages = [
-            cloneBranchMarkerProjectionNode(latestUserMessage, true),
-            responseMessage
-                ? cloneBranchMarkerResponseForProjection(responseMessage, marker, lineageProjectionScope)
-                : null,
-        ].filter((message): message is ProseMirrorJsonNode => Boolean(message))
+        const projection = buildBranchMarkerTurnProjectionFromThreadContent(
+            getAiChatThreadContentForBranchMarker(threadId),
+            getBranchMarkerTurnDescriptor(marker),
+            {
+                threadId,
+                forceGenerationDetailsOpen: true,
+                lineageProjectionScope,
+                allowLatestTurnFallback: isBranchMarkerGenerationActive(marker) || Boolean(marker.pendingState),
+            },
+        )
+        if (!projection) return null
 
         return {
-            threadId,
-            content: createBranchMarkerProjectionDocument(threadId, threadNode.attrs, messages),
+            threadId: projection.threadId,
+            content: projection.content,
         }
     }
 
@@ -8635,9 +8554,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         pendingNodes: Array<BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode | undefined> = [],
     ): CanvasNode | undefined {
         const lineageAssignment = getApiMediaRunLineageAssignment(generationRun)
-        const lineageParentNodeId = lineageAssignment?.branchForkNodeId
+        const lineageParentNodeId = lineageAssignment?.lineageParentNodeId
             ?? lineageAssignment?.branchLineNodeId
-            ?? lineageAssignment?.lineageParentNodeId
+            ?? lineageAssignment?.branchForkNodeId
             ?? lineageAssignment?.parentMediaNodeId
             ?? lineageAssignment?.branchOriginNodeId
         if (!lineageParentNodeId) return undefined
@@ -9627,7 +9546,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         clearPendingBranchMarkerStateForRun(threadId, generationRun)
         const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
-        const nodeId = `node-${fileId || uuidv4()}`
+        const nodeId = fileId ? `node-${fileId}` : getPendingGeneratedMediaNodeId(lineageAssignment)
         partialImageTracker.set(runKey, {
             nodeId,
             fileId: fileId || '',
@@ -10507,45 +10426,57 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let highestObservedApiLayoutRevision = 0
 
     // Applies API-resolved authoritative node geometry. The API already
-    // persisted it, so this is a transient commit — no client-side save, no
-    // local re-layout. All connected clients converge on the same positions.
+    // persisted it, so this is a transient commit — no client-side save. Missing
+    // API-owned projected nodes arrive as snapshots in the same revision.
     function applyApiCanvasGeometry(canvasGeometry: CanvasGeometryUpdate): void {
         if (!currentCanvasState) return
         if (canvasGeometry.layoutRevision <= lastAppliedApiLayoutRevision) return
         if (canvasGeometry.layoutRevision < highestObservedApiLayoutRevision) return
 
-        const geometryByNodeId = new Map(canvasGeometry.nodes.map((geometry) => [geometry.nodeId, geometry]))
-        const currentNodeIds = new Set(currentCanvasState.nodes.map((node: CanvasNode) => node.nodeId))
-        let matchedNodeCount = 0
-        let missingNodeCount = 0
-        for (const geometry of canvasGeometry.nodes) {
-            if (currentNodeIds.has(geometry.nodeId)) {
-                matchedNodeCount += 1
-            } else {
-                missingNodeCount += 1
-            }
-        }
+        const result = applyCanvasGeometryUpdateToState(currentCanvasState, canvasGeometry)
         highestObservedApiLayoutRevision = Math.max(highestObservedApiLayoutRevision, canvasGeometry.layoutRevision)
-        if (matchedNodeCount === 0) return
-
-        let changed = false
-        const nodes = currentCanvasState.nodes.map((node: CanvasNode) => {
-            const geometry = geometryByNodeId.get(node.nodeId)
-            if (!geometry) return node
-            if (node.position.x === geometry.position.x
-                && node.position.y === geometry.position.y
-                && node.dimensions.width === geometry.dimensions.width
-                && node.dimensions.height === geometry.dimensions.height) return node
-            changed = true
-            return {
-                ...node,
-                position: { x: geometry.position.x, y: geometry.position.y },
-                dimensions: { width: geometry.dimensions.width, height: geometry.dimensions.height },
-            } as CanvasNode
+        console.info('[CANVAS][api-geometry]', 'received', {
+            layoutRevision: canvasGeometry.layoutRevision,
+            geometryNodeCount: canvasGeometry.nodes.length,
+            nodeSnapshotCount: canvasGeometry.nodeSnapshots?.length ?? 0,
+            edgeSnapshotCount: canvasGeometry.edgeSnapshots?.length ?? 0,
+            removedNodeCount: canvasGeometry.removedNodeIds?.length ?? 0,
+            removedEdgeCount: canvasGeometry.removedEdgeIds?.length ?? 0,
+            initialMatchedGeometryNodeCount: result.initialMatchedGeometryNodeCount,
+            matchedGeometryNodeCount: result.matchedGeometryNodeCount,
+            missingGeometryNodeCount: result.missingGeometryNodeIds.length,
+            geometryNodeIds: canvasGeometry.nodes.map(node => node.nodeId),
+            nodeSnapshotIds: canvasGeometry.nodeSnapshots?.map(node => node.nodeId) ?? [],
+            edgeSnapshotIds: canvasGeometry.edgeSnapshots?.map(edge => edge.edgeId) ?? [],
+            removedNodeIds: canvasGeometry.removedNodeIds ?? [],
+            removedEdgeIds: canvasGeometry.removedEdgeIds ?? [],
+            upsertedNodeIds: result.upsertedNodeIds,
+            upsertedEdgeIds: result.upsertedEdgeIds,
+            missingGeometryNodeIds: result.missingGeometryNodeIds,
         })
-        if (missingNodeCount === 0) lastAppliedApiLayoutRevision = canvasGeometry.layoutRevision
-        if (!changed) return
-        commitTransientCanvasStatePreservingEditors({ ...currentCanvasState, nodes })
+        if (result.fullyApplied) lastAppliedApiLayoutRevision = canvasGeometry.layoutRevision
+        console.info('[CANVAS][api-geometry]', 'applied', {
+            layoutRevision: canvasGeometry.layoutRevision,
+            changed: result.changed,
+            fullyApplied: result.fullyApplied,
+            appliedGeometryNodeIds: result.appliedGeometryNodeIds,
+            upsertedNodeIds: result.upsertedNodeIds,
+            upsertedEdgeIds: result.upsertedEdgeIds,
+            removedNodeIds: result.removedNodeIds,
+            removedEdgeIds: result.removedEdgeIds,
+            missingGeometryNodeIds: result.missingGeometryNodeIds,
+        })
+        if (!result.changed) return
+        commitTransientCanvasStatePreservingEditors(result.state)
+        if (currentCanvasState) {
+            pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(currentCanvasState)
+            console.info('[CANVAS][api-geometry]', 'preserve-until-store-ack', {
+                layoutRevision: canvasGeometry.layoutRevision,
+                visualSyncKey: getCanvasVisualSyncKey(currentCanvasState),
+                nodeCount: currentCanvasState.nodes.length,
+                edgeCount: currentCanvasState.edges.length,
+            })
+        }
     }
 
     function shouldAcceptGeneratedMediaEvent(threadId: string, eventWorkspaceId?: string): boolean {
@@ -10980,7 +10911,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
 
                 clearPendingBranchMarkerStateForRun(threadId, generationRun)
-                const nodeId = `node-${fileId || uuidv4()}`
+                const nodeId = fileId ? `node-${fileId}` : getPendingGeneratedMediaNodeId(lineageAssignment)
                 const imageSrc = buildGeneratedImageFrameSrc({
                     imageUrl,
                     workspaceId: imgWorkspaceId || workspaceId,
@@ -11109,7 +11040,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
 
             clearPendingBranchMarkerStateForRun(threadId, generationRun)
-            const nodeId = `node-${uuidv4()}`
+            const nodeId = getPendingGeneratedMediaNodeId(lineageAssignment)
             setGeneratedMediaTracker(videoGenerationTracker, runKey, {
                 nodeId,
                 fileId: '',

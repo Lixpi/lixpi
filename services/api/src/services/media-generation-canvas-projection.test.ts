@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CanvasState, MediaBranchLineagePlan, MediaGenerationRunMeta } from '@lixpi/constants'
+import { getPendingGeneratedMediaNodeId } from '@lixpi/canvas-engine'
 
 const workspaceMutateCanvasState = vi.hoisted(() => vi.fn())
 
@@ -28,6 +29,17 @@ const latestMutator = (): ((canvasState: CanvasState) => { canvasState: CanvasSt
     const call = workspaceMutateCanvasState.mock.calls.at(-1)
     expect(call).toBeDefined()
     return call![0].mutate
+}
+
+const mockWorkspaceMutationFromState = (state: CanvasState, canvasStateUpdatedAt = 2000): void => {
+    workspaceMutateCanvasState.mockImplementationOnce(async ({ mutate }) => {
+        const result = mutate(state)
+        return {
+            changed: result.changed,
+            canvasState: result.canvasState,
+            canvasStateUpdatedAt,
+        }
+    })
 }
 
 const nodeRect = (node: CanvasState['nodes'][number]): { x: number; y: number; width: number; height: number } => ({
@@ -241,6 +253,102 @@ const matrixLineagePlan = (): MediaBranchLineagePlan => {
     }
 }
 
+const mixedImageVideoLineagePlan = (): MediaBranchLineagePlan => {
+    const generationRequestId = 'mixed-request-1'
+    const branchId = 'branch-mixed-1'
+    const reasoningRunId = `${generationRequestId}:reasoning:0`
+    const fork = {
+        nodeId: `branch-fork-${generationRequestId}-reasoning-0`,
+        generationRequestId,
+        branchId,
+        reasoningRunId,
+        reasoningModelId: 'Anthropic:claude-haiku-4.5',
+        reasoningIndex: 0,
+        provenance: {
+            kind: 'reasoning-run',
+            promptText: 'make a photo of a mountain goat',
+            referenceNodeIds: [],
+            sourceContextNodeIds: [],
+            reasoningRunId,
+            reasoningModelId: 'Anthropic:claude-haiku-4.5',
+            reasoningIndex: 0,
+        },
+    } satisfies MediaBranchLineagePlan['branchForks'][number]
+    const runAssignments: MediaBranchLineagePlan['runAssignments'] = [
+        {
+            generationRequestId,
+            reasoningRunId,
+            mediaRunId: `${reasoningRunId}:image:0`,
+            reasoningModelId: fork.reasoningModelId,
+            reasoningIndex: 0,
+            mediaModelId: 'Stability:sd-3.5-large',
+            mediaType: 'image',
+            mediaIndex: 0,
+            branchId,
+            branchForkNodeId: fork.nodeId,
+            lineageParentNodeId: fork.nodeId,
+            referenceNodeIds: [],
+            sourceContextNodeIds: [],
+            operationKind: 'fresh_branch',
+            promptText: 'make a photo of a mountain goat',
+            promptFingerprint: 'mountain-goat',
+            createdAt: 10_000,
+        },
+        {
+            generationRequestId,
+            reasoningRunId,
+            mediaRunId: `${reasoningRunId}:image:1`,
+            reasoningModelId: fork.reasoningModelId,
+            reasoningIndex: 0,
+            mediaModelId: 'Stability:stable-image-ultra',
+            mediaType: 'image',
+            mediaIndex: 1,
+            branchId,
+            branchForkNodeId: fork.nodeId,
+            lineageParentNodeId: fork.nodeId,
+            referenceNodeIds: [],
+            sourceContextNodeIds: [],
+            operationKind: 'fresh_branch',
+            promptText: 'make a photo of a mountain goat',
+            promptFingerprint: 'mountain-goat',
+            createdAt: 10_001,
+        },
+        {
+            generationRequestId,
+            reasoningRunId,
+            mediaRunId: `${reasoningRunId}:video:0`,
+            reasoningModelId: fork.reasoningModelId,
+            reasoningIndex: 0,
+            mediaModelId: 'Google:veo-3',
+            mediaType: 'video',
+            mediaIndex: 0,
+            branchId,
+            branchForkNodeId: fork.nodeId,
+            lineageParentNodeId: fork.nodeId,
+            referenceNodeIds: [],
+            sourceContextNodeIds: [],
+            operationKind: 'fresh_branch',
+            promptText: 'make a photo of a mountain goat',
+            promptFingerprint: 'mountain-goat',
+            createdAt: 10_002,
+        },
+    ]
+
+    return {
+        planVersion: 'media-branch-lineage-v1',
+        generationRequestId,
+        branchId,
+        promptText: 'make a photo of a mountain goat',
+        promptFingerprint: 'mountain-goat',
+        referenceNodeIds: [],
+        sourceContextNodeIds: [],
+        branchForks: [fork],
+        branchLines: [],
+        runAssignments,
+        createdAt: 10_000,
+    }
+}
+
 const generationRunFromAssignment = (
     assignment: MediaBranchLineagePlan['runAssignments'][number],
     variantIndex: number,
@@ -302,6 +410,50 @@ describe('media-generation-canvas-projection', () => {
         expect(second.changed).toBe(false)
     })
 
+    it('returns API-owned pending media snapshots with plan-time geometry for all mixed media assignments', async () => {
+        const plan = mixedImageVideoLineagePlan()
+        mockWorkspaceMutationFromState(emptyCanvasState(), 2001)
+
+        const canvasGeometry = await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            lineagePlan: plan,
+        })
+
+        const expectedPendingNodeIds = plan.runAssignments.map(assignment => getPendingGeneratedMediaNodeId(assignment))
+        expect(canvasGeometry).toMatchObject({
+            layoutRevision: 2001,
+        })
+        expect(canvasGeometry?.nodes.map(node => node.nodeId)).toEqual(expect.arrayContaining([
+            plan.branchForks[0].nodeId,
+            ...expectedPendingNodeIds,
+        ]))
+        expect(canvasGeometry?.nodeSnapshots?.map(node => node.nodeId)).toEqual(expect.arrayContaining([
+            plan.branchForks[0].nodeId,
+            ...expectedPendingNodeIds,
+        ]))
+        expect(canvasGeometry?.nodeSnapshots).toEqual(expect.arrayContaining([
+            expect.objectContaining({ nodeId: expectedPendingNodeIds[0], type: 'image' }),
+            expect.objectContaining({ nodeId: expectedPendingNodeIds[1], type: 'image' }),
+            expect.objectContaining({ nodeId: expectedPendingNodeIds[2], type: 'video' }),
+        ]))
+        for (const pendingNodeId of expectedPendingNodeIds) {
+            expect(canvasGeometry?.edgeSnapshots).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    sourceNodeId: plan.branchForks[0].nodeId,
+                    targetNodeId: pendingNodeId,
+                }),
+            ]))
+        }
+
+        const pendingGeometries = expectedPendingNodeIds
+            .map(nodeId => canvasGeometry!.nodes.find(node => node.nodeId === nodeId)!)
+            .sort((a, b) => a.position.y - b.position.y)
+        expect(pendingGeometries).toHaveLength(3)
+        expect(pendingGeometries[0].position.y + pendingGeometries[0].dimensions.height).toBeLessThanOrEqual(pendingGeometries[1].position.y)
+        expect(pendingGeometries[1].position.y + pendingGeometries[1].dimensions.height).toBeLessThanOrEqual(pendingGeometries[2].position.y)
+    })
+
     it('persists final generated images with API lineage metadata and connector edges', async () => {
         const run = generationRun()
 
@@ -349,6 +501,92 @@ describe('media-generation-canvas-projection', () => {
 
         const second = latestMutator()(first.canvasState)
         expect(second.changed).toBe(false)
+    })
+
+    it('returns a live canvas update when only a missing generated-media edge is repaired', async () => {
+        const run = generationRun()
+        const imageInput = {
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/workspace-1/file-1',
+            fileId: 'file-1',
+            responseId: 'response-1',
+            revisedPrompt: 'a brighter image',
+            aiProvider: 'Google',
+            imageModelProvider: 'Google',
+            imageModelId: 'gemini-2.5-flash-image',
+            generationRun: run,
+        } as const
+
+        await upsertGeneratedImageToCanvas(imageInput)
+        const projectedState = latestMutator()(emptyCanvasState()).canvasState
+        const stateMissingGeneratedEdge: CanvasState = {
+            ...projectedState,
+            edges: projectedState.edges.filter(edge => !(edge.sourceNodeId === 'fork-1' && edge.targetNodeId === 'node-file-1')),
+        }
+        mockWorkspaceMutationFromState(stateMissingGeneratedEdge, 2601)
+
+        const canvasGeometry = await upsertGeneratedImageToCanvas(imageInput)
+
+        expect(canvasGeometry).toMatchObject({
+            layoutRevision: 2601,
+        })
+        expect(canvasGeometry?.edgeSnapshots).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                edgeId: 'edge-fork-1-node-file-1',
+                sourceNodeId: 'fork-1',
+                targetNodeId: 'node-file-1',
+            }),
+        ]))
+    })
+
+    it('replaces a pending video node with final 16:9 geometry instead of keeping the pending square', async () => {
+        const plan = mixedImageVideoLineagePlan()
+        await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            lineagePlan: plan,
+        })
+        const plannedState = latestMutator()(emptyCanvasState()).canvasState
+        const videoAssignment = plan.runAssignments.find(assignment => assignment.mediaType === 'video')!
+        const pendingNodeId = getPendingGeneratedMediaNodeId(videoAssignment)
+        mockWorkspaceMutationFromState(plannedState, 3001)
+
+        const canvasGeometry = await upsertGeneratedVideoToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            videoUrl: '/api/videos/workspace-1/video-file-1',
+            fileId: 'video-file-1',
+            posterUrl: '/api/images/workspace-1/poster-file-1',
+            posterFileId: 'poster-file-1',
+            frameUrl: '/api/images/workspace-1/frame-file-1',
+            frameFileId: 'frame-file-1',
+            durationSeconds: 8,
+            aspectRatio: '16:9',
+            hasAudio: true,
+            responseId: 'response-video-1',
+            revisedPrompt: 'mountain goat video',
+            aiProvider: 'Google',
+            videoModelProvider: 'Google',
+            videoModelId: 'veo-3',
+            generationRun: generationRunFromAssignment(videoAssignment, 0),
+        })
+
+        const finalVideo = canvasGeometry?.nodeSnapshots?.find(node => node.nodeId === 'node-video-file-1')
+        expect(canvasGeometry?.removedNodeIds).toEqual([pendingNodeId])
+        expect(canvasGeometry?.edgeSnapshots).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                sourceNodeId: videoAssignment.branchForkNodeId,
+                targetNodeId: 'node-video-file-1',
+            }),
+        ]))
+        expect(finalVideo).toMatchObject({
+            nodeId: 'node-video-file-1',
+            type: 'video',
+            fileId: 'video-file-1',
+            aspectRatio: 16 / 9,
+            dimensions: { width: 800, height: 450 },
+        })
     })
 
     it('removes stale marker edges targeting a generated image before adding the assignment edge', async () => {
@@ -659,6 +897,109 @@ describe('media-generation-canvas-projection', () => {
         })
 
         expectNoOverlappingRects(branchGroupRects)
+    })
+
+    it('projects pending generated media leaves from the lineage plan before any media completes', async () => {
+        const plan = matrixLineagePlan()
+
+        await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            lineagePlan: plan,
+        })
+
+        const result = latestMutator()(emptyCanvasState())
+        const generatedNodes = result.canvasState.nodes
+            .filter(node => node.type === 'image' && Boolean(node.generatedBy?.mediaRunId))
+        const expectedNodeIds = plan.runAssignments.map(getPendingGeneratedMediaNodeId)
+        const nodeIds = new Set(result.canvasState.nodes.map(node => node.nodeId))
+
+        expect(result.changed).toBe(true)
+        expect(generatedNodes).toHaveLength(plan.runAssignments.length)
+        expect(generatedNodes.map(node => node.nodeId).sort()).toEqual([...expectedNodeIds].sort())
+        expect(generatedNodes.every(node => node.fileId === '' && node.src === '')).toBe(true)
+        expect(result.canvasState.edges.every(edge => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId))).toBe(true)
+
+        for (const assignment of plan.runAssignments) {
+            const nodeId = getPendingGeneratedMediaNodeId(assignment)
+            const pendingNode = generatedNodes.find(node => node.nodeId === nodeId)
+            expect(pendingNode?.generatedBy).toEqual(expect.objectContaining({
+                generationRequestId: assignment.generationRequestId,
+                reasoningRunId: assignment.reasoningRunId,
+                mediaRunId: assignment.mediaRunId,
+                mediaModelId: assignment.mediaModelId,
+                mediaIndex: assignment.mediaIndex,
+                branchForkNodeId: assignment.branchForkNodeId,
+            }))
+            expect(result.canvasState.edges).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    sourceNodeId: assignment.branchForkNodeId,
+                    targetNodeId: nodeId,
+                }),
+            ]))
+        }
+
+        const forkNodes = result.canvasState.nodes.filter(node => node.type === 'branchFork')
+        const branchGroupRects = forkNodes.map((fork) => {
+            const branchChildren = generatedNodes.filter(node => node.generatedBy?.branchForkNodeId === fork.nodeId)
+            expect(branchChildren).toHaveLength(4)
+            expectNoOverlappingRects(branchChildren.map(node => ({ id: node.nodeId, rect: nodeRect(node) })))
+            return {
+                id: fork.nodeId,
+                rect: groupRect([fork, ...branchChildren]),
+            }
+        })
+        expectNoOverlappingRects(branchGroupRects)
+    })
+
+    it('replaces the deterministic pending media node when a final image arrives', async () => {
+        const plan = matrixLineagePlan()
+        const assignment = plan.runAssignments[0]
+        const pendingNodeId = getPendingGeneratedMediaNodeId(assignment)
+
+        await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            lineagePlan: plan,
+        })
+        const pendingState = latestMutator()(emptyCanvasState()).canvasState
+
+        await upsertGeneratedImageToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/workspace-1/file-final-1',
+            fileId: 'file-final-1',
+            responseId: 'response-final-1',
+            revisedPrompt: 'matrix result',
+            aiProvider: 'Anthropic',
+            imageModelProvider: assignment.mediaModelId!.split(':')[0],
+            imageModelId: assignment.mediaModelId!.split(':').slice(1).join(':'),
+            generationRun: generationRunFromAssignment(assignment, 0),
+        })
+
+        const finalState = latestMutator()(pendingState).canvasState
+
+        expect(finalState.nodes.some(node => node.nodeId === pendingNodeId)).toBe(false)
+        expect(finalState.nodes).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                nodeId: 'node-file-final-1',
+                type: 'image',
+                fileId: 'file-final-1',
+                generatedBy: expect.objectContaining({
+                    mediaRunId: assignment.mediaRunId,
+                    branchForkNodeId: assignment.branchForkNodeId,
+                }),
+            }),
+        ]))
+        expect(finalState.edges).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                sourceNodeId: assignment.branchForkNodeId,
+                targetNodeId: 'node-file-final-1',
+            }),
+        ]))
+        expect(finalState.edges).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ targetNodeId: pendingNodeId }),
+        ]))
     })
 
     it('persists final generated videos with poster metadata and parsed dimensions', async () => {

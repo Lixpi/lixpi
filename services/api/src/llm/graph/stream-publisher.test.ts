@@ -5,6 +5,7 @@ import { STREAM_STATUS } from '@lixpi/constants'
 
 const canvasProjectionMocks = vi.hoisted(() => ({
     upsertMediaLineagePlanToCanvas: vi.fn(async () => undefined),
+    refreshMediaGenerationRequestCanvasGeometry: vi.fn(async () => undefined),
     settleMediaGenerationRequestOnCanvas: vi.fn(async () => undefined),
     logCanvasProjectionError: vi.fn(),
 }))
@@ -69,6 +70,16 @@ const generationRun = {
     mediaIndex: 0,
     variantIndex: 0,
 } as const
+
+let consoleInfoSpy: ReturnType<typeof vi.spyOn> | null = null
+
+beforeEach(() => {
+    vi.clearAllMocks()
+    consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    canvasProjectionMocks.upsertMediaLineagePlanToCanvas.mockResolvedValue(undefined)
+    canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry.mockResolvedValue(undefined)
+    canvasProjectionMocks.settleMediaGenerationRequestOnCanvas.mockResolvedValue(undefined)
+})
 
 describe('TagAwareStream', () => {
     let tagAware: ReturnType<typeof makeTagAwareStream>
@@ -205,6 +216,8 @@ describe('TagAwareStream', () => {
 
 afterEach(async () => {
     await flushPipelinePublishes()
+    consoleInfoSpy?.mockRestore()
+    consoleInfoSpy = null
 })
 
 describe('StreamPublisher extraction progress', () => {
@@ -436,6 +449,7 @@ describe('StreamPublisher extraction progress', () => {
         expect(canvasProjectionMocks.settleMediaGenerationRequestOnCanvas).toHaveBeenCalledWith({
             workspaceId: 'ws1',
             generationRequestId: 'request-1',
+            aiChatThreadId: 'thread1',
         })
         const completionWrites = nats.published.filter(
             (entry) => entry.payload?.content?.status === STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
@@ -608,9 +622,99 @@ describe('StreamPublisher trace payloads', () => {
             lineagePlan: { lineage: 'plan' },
         })
     })
+
+    it('refreshes API canvas geometry while planned lineage reasoning text streams', async () => {
+        const nats = makeFakeNats()
+        canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry.mockResolvedValue({
+            layoutRevision: 77,
+            nodes: [{
+                nodeId: 'fork-1',
+                position: { x: 10, y: 20 },
+                dimensions: { width: 320, height: 80 },
+            }],
+        })
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', generationRun)
+        ;(publisher as any).options.enableProseMirrorStream = true
+        ;(publisher as any).proseMirrorAssembler = {
+            handleContent: vi.fn(),
+            flushPendingWork: vi.fn(async () => undefined),
+            snapshotForProjection: vi.fn(() => ({ type: 'doc', content: [] })),
+        }
+
+        publisher.mediaLineagePlanned({ generationRequestId: 'request-1' } as any, generationRun)
+        publisher.publishChatContent({
+            status: STREAM_STATUS.STREAMING,
+            aiProvider: 'Anthropic',
+            text: 'live reasoning that changes marker dimensions',
+            generationRun,
+        })
+        await publisher.drainPendingWrites()
+        await flushPipelinePublishes()
+
+        expect(canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry).toHaveBeenCalledWith({
+            workspaceId: 'ws1',
+            aiChatThreadId: 'thread1',
+            generationRequestId: 'request-1',
+            proseMirrorThreadContent: { type: 'doc', content: [] },
+        })
+        expect(nats.published).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                payload: expect.objectContaining({
+                    content: expect.objectContaining({
+                        status: STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED,
+                        canvasGeometry: {
+                            layoutRevision: 77,
+                            nodes: [{
+                                nodeId: 'fork-1',
+                                position: { x: 10, y: 20 },
+                                dimensions: { width: 320, height: 80 },
+                            }],
+                        },
+                    }),
+                }),
+            }),
+        ]))
+    })
 })
 
 describe('StreamPublisher ProseMirror integration options', () => {
+    it('mirrors child stream content to a shared ProseMirror handler without duplicating live events or ending the shared stream', async () => {
+        const nats = makeFakeNats()
+        const sharedHandler = vi.fn()
+        const publisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+            generationRun,
+            { proseMirrorContentMirror: sharedHandler },
+        )
+
+        publisher.start()
+        publisher.chunk('matrix reasoning text')
+        publisher.end()
+        await flushPipelinePublishes()
+
+        expect(nats.published.map(event => event.payload.content.status).filter((status, index, statuses) =>
+            status !== STREAM_STATUS.STREAMING || statuses[index - 1] !== STREAM_STATUS.STREAMING
+        )).toEqual([
+            STREAM_STATUS.START_STREAM,
+            STREAM_STATUS.STREAMING,
+            STREAM_STATUS.END_STREAM,
+        ])
+        expect(sharedHandler.mock.calls.map(call => call[0].status).includes(STREAM_STATUS.START_STREAM)).toBe(true)
+        expect(sharedHandler).not.toHaveBeenCalledWith(expect.objectContaining({
+            status: STREAM_STATUS.END_STREAM,
+        }))
+        const mirroredText = sharedHandler.mock.calls
+            .map(call => call[0])
+            .filter(content => content.status === STREAM_STATUS.STREAMING)
+            .map(content => content.text)
+            .join('')
+        expect(mirroredText).toBe('matrix reasoning text')
+        expect(sharedHandler.mock.calls.every(call => call[0].generationRun === generationRun)).toBe(true)
+    })
+
     it('forwards publishProseMirrorContent payloads to the active assembler', () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')

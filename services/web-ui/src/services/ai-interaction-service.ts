@@ -534,7 +534,8 @@ export default class AiInteractionService {
 
         // The media-generation matrix is needed only when some section carries
         // more than one model; a single model per section runs the plain path.
-        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, videoModelIds.length]
+        const matrixVideoModelIds = videoModelsEnabled || Boolean(videoSourceForExtension) ? videoModelIds : []
+        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, matrixVideoModelIds.length]
         const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
         const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
         if (totalSelectedModelCount > sectionsWithSelection) {
@@ -546,18 +547,18 @@ export default class AiInteractionService {
                 useMultipleVideoModels: videoModelsEnabled,
                 reasoningModelIds,
                 imageModelIds,
-                videoModelIds,
+                videoModelIds: matrixVideoModelIds,
                 imageOptions: {
                     imageSize: imageSize || 'auto',
                     ...(imageModelsEnabled && imageConfigGroups?.length ? { configGroups: imageConfigGroups } : {}),
                 },
-                videoOptions: {
+                ...(matrixVideoModelIds.length > 0 ? { videoOptions: {
                     ...(videoAspectRatio ? { aspectRatio: videoAspectRatio } : {}),
                     ...(videoResolution ? { resolution: videoResolution } : {}),
                     ...(videoDuration ? { duration: videoDuration } : {}),
                     ...(videoSourceForExtension ? { sourceForExtension: videoSourceForExtension } : {}),
                     ...(videoModelsEnabled && videoConfigGroups?.length ? { configGroups: videoConfigGroups } : {}),
-                },
+                } } : {}),
             }
         }
 

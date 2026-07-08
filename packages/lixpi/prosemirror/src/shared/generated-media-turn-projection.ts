@@ -7,6 +7,11 @@ import {
 import {
     parseProseMirrorJsonContent,
     collectProseMirrorText,
+    findAiChatThreadContentNode,
+    getBranchMarkerResponseContainer,
+    getBranchMarkerTurnMessages,
+    getLatestThreadTurnMessages,
+    type BranchMarkerTurnDescriptor,
     type ProseMirrorJsonNode,
 } from './thread-doc.ts'
 
@@ -42,11 +47,25 @@ export type GeneratedMediaTurnProjection = {
     source: GeneratedMediaTurnProjectionSource
 }
 
+export type BranchMarkerTurnProjection = {
+    threadId: string
+    descriptor: BranchMarkerTurnDescriptor
+    content: ProseMirrorJsonNode
+    source: GeneratedMediaTurnProjectionSource
+}
+
 type BuildGeneratedMediaTurnProjectionOptions = {
     threadId?: string
     forceGenerationDetailsOpen?: boolean
     limitToLocatorMedia?: boolean
     lineageProjectionScope?: AiLineageProjectionScope
+}
+
+type BuildBranchMarkerTurnProjectionOptions = {
+    threadId: string
+    forceGenerationDetailsOpen?: boolean
+    lineageProjectionScope?: AiLineageProjectionScope
+    allowLatestTurnFallback?: boolean
 }
 
 type GeneratedMediaTurnMatch = {
@@ -454,6 +473,83 @@ function cloneResponseForProjection(
         content: selectedSection.type === 'aiReasoningSection'
             ? [clonedSection]
             : [],
+    }
+}
+
+function cloneBranchMarkerResponseForProjection(
+    responseNode: ProseMirrorJsonNode,
+    descriptor: BranchMarkerTurnDescriptor,
+    forceGenerationDetailsOpen: boolean,
+    lineageProjectionScope: AiLineageProjectionScope,
+    allowFullResponseFallback: boolean,
+): ProseMirrorJsonNode | null {
+    const responseContainer = getBranchMarkerResponseContainer(responseNode, descriptor)
+        ?? (allowFullResponseFallback ? responseNode : null)
+    if (!responseContainer) return null
+
+    if (responseContainer === responseNode) {
+        const cloned = cloneProjectionNode(responseNode, forceGenerationDetailsOpen)
+        relocateLineageEventsToResolverAudit(cloned)
+        return cloned
+    }
+
+    const clonedSection = cloneProjectionNode(responseContainer, forceGenerationDetailsOpen)
+    if (clonedSection.type === 'aiReasoningSection') {
+        clonedSection.attrs = {
+            ...(clonedSection.attrs ?? {}),
+            lineageProjectionScope,
+        }
+        materializeReasoningSectionLineageEventsForProjection(clonedSection, lineageProjectionScope)
+    }
+    relocateLineageEventsToResolverAudit(clonedSection)
+
+    return {
+        ...cloneProseMirrorJsonNode(responseNode),
+        content: [clonedSection],
+    }
+}
+
+export function buildBranchMarkerTurnProjectionFromThreadContent(
+    threadContent: unknown,
+    descriptor: BranchMarkerTurnDescriptor,
+    options: BuildBranchMarkerTurnProjectionOptions,
+): BranchMarkerTurnProjection | null {
+    const root = parseProseMirrorJsonContent(threadContent)
+    if (!root) return null
+
+    const threadNode = findAiChatThreadContentNode(root, options.threadId)
+    if (!threadNode) return null
+
+    const ownTurn = getBranchMarkerTurnMessages(threadNode, descriptor)
+    const allowLatestTurnFallback = options.allowLatestTurnFallback ?? true
+    const latestTurn = ownTurn || !allowLatestTurnFallback
+        ? { userMessage: null, responseMessage: null }
+        : getLatestThreadTurnMessages(threadNode)
+    const userMessage = ownTurn?.userMessage ?? latestTurn.userMessage
+    const responseMessage = ownTurn?.responseMessage ?? latestTurn.responseMessage
+
+    if (!userMessage) return null
+
+    const responseProjection = responseMessage
+        ? cloneBranchMarkerResponseForProjection(
+            responseMessage,
+            descriptor,
+            options.forceGenerationDetailsOpen ?? false,
+            options.lineageProjectionScope ?? 'branch-fork',
+            !ownTurn && allowLatestTurnFallback,
+        )
+        : null
+
+    const messages = [
+        cloneProjectionNode(userMessage, options.forceGenerationDetailsOpen ?? false),
+        responseProjection,
+    ].filter((message): message is ProseMirrorJsonNode => Boolean(message))
+
+    return {
+        threadId: options.threadId,
+        descriptor,
+        content: createProjectionDocument(options.threadId, threadNode.attrs, messages),
+        source: 'thread-content',
     }
 }
 

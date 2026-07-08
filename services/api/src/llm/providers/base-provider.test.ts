@@ -43,11 +43,13 @@ const makeImageModel = (model: string): AiModelMetaInfo => ({
 let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
 let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
 let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
+let consoleInfoSpy: ReturnType<typeof vi.spyOn> | null = null
 
 beforeEach(() => {
     debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
     debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
     debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+    consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
 })
 
 afterEach(() => {
@@ -57,6 +59,8 @@ afterEach(() => {
     debugWarnSpy = null
     debugErrSpy?.mockRestore()
     debugErrSpy = null
+    consoleInfoSpy?.mockRestore()
+    consoleInfoSpy = null
 })
 
 const createFanoutState = (overrides: Partial<ProviderState> = {}): ProviderState => ({

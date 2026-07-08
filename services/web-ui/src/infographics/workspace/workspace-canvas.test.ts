@@ -544,8 +544,9 @@ describe('Workspace canvas — generated image preview rendering', () => {
 	it('routes generated-media add/remove through the centralized tree rebalance', () => {
 		// WorkspaceCanvas supplies canvas-specific geometry, but the generated-media
 		// rebalance sequence lives in the extracted deterministic pipeline.
+		const rebalancePipeline = readSourceFile('generatedMediaRebalancePipeline.ts')
 		expectSourceToContain(ts, "from '$src/infographics/workspace/generatedMediaRebalancePipeline.ts'")
-		expectSourceToContain(ts, "import { getStartedLineageMarkerState } from '$src/infographics/workspace/branchLineageState.ts'")
+		expectSourceToContain(rebalancePipeline, "import { getStartedLineageMarkerState } from '$src/infographics/workspace/branchLineageState.ts'")
 		expectSourceToContain(ts, 'function createGeneratedMediaRebalancePipeline(): GeneratedMediaRebalancePipeline')
 		expectSourceToContain(ts, 'function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[]')
 		expectSourceToContain(ts, 'const result = createGeneratedMediaRebalancePipeline().rebalance(nodes, edges)')
@@ -577,11 +578,30 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		// The API runs the shared branch-tree layout and broadcasts resolved
 		// geometry over the chat stream; the client applies it transiently (no
 		// re-persist, the API already wrote it) with a monotonic revision guard.
+		expectSourceToContain(ts, 'applyCanvasGeometryUpdateToState')
 		expectSourceToContain(ts, 'function applyApiCanvasGeometry(canvasGeometry: CanvasGeometryUpdate): void')
 		expectSourceToContain(ts, 'if (canvasGeometry.layoutRevision <= lastAppliedApiLayoutRevision) return')
+		expectSourceToContain(ts, 'const result = applyCanvasGeometryUpdateToState(currentCanvasState, canvasGeometry)')
+		expectSourceToContain(ts, 'nodeSnapshotCount: canvasGeometry.nodeSnapshots?.length ?? 0')
+		expectSourceToContain(ts, 'edgeSnapshotCount: canvasGeometry.edgeSnapshots?.length ?? 0')
+		expectSourceToContain(ts, 'removedNodeIds: canvasGeometry.removedNodeIds ?? []')
+		expectSourceToContain(ts, 'upsertedEdgeIds: result.upsertedEdgeIds')
+		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(currentCanvasState)')
+		expectSourceToContain(ts, 'commitTransientCanvasStatePreservingEditors(result.state)')
 		expectSourceToContain(ts, 'onCanvasGeometryResolvedToCanvas: ({ canvasGeometry }) => {')
 		// Complete handlers let the API geometry win over the local fallback rebalance.
 		expectSourceToContain(ts, 'if (data.canvasGeometry) applyApiCanvasGeometry(data.canvasGeometry)')
+	})
+
+	it('keeps in-progress generated media aligned with API-owned lineage identity', () => {
+		expectSourceToContain(ts, 'buildBranchMarkerTurnProjectionFromThreadContent')
+		expectSourceToContain(ts, 'getPendingGeneratedMediaNodeId')
+		expectSourceToContain(ts, 'allowLatestTurnFallback: isBranchMarkerGenerationActive(marker) || Boolean(marker.pendingState)')
+		expectSourceToContain(ts, 'const nodeId = fileId ? `node-${fileId}` : getPendingGeneratedMediaNodeId(lineageAssignment)')
+		expectSourceToContain(ts, 'const nodeId = getPendingGeneratedMediaNodeId(lineageAssignment)')
+		expectSourceToContain(ts, 'const lineageParentNodeId = lineageAssignment?.lineageParentNodeId')
+		expectSourceNotToContain(ts, 'const nodeId = `node-${fileId || uuidv4()}`')
+		expectSourceNotToContain(ts, 'const nodeId = `node-${uuidv4()}`')
 	})
 
 })
