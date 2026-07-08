@@ -166,7 +166,6 @@ describe('applyCanvasGeometryUpdateToState', () => {
             ...canvasState([makeForkNode('fork-1'), pending]),
             edges: [
                 { edgeId: 'edge-fork-pending', sourceNodeId: 'fork-1', targetNodeId: 'pending-image-0' },
-                { edgeId: 'edge-fork-final', sourceNodeId: 'fork-1', targetNodeId: 'node-file-1' },
             ],
         }
 
@@ -174,6 +173,9 @@ describe('applyCanvasGeometryUpdateToState', () => {
             layoutRevision: 202,
             removedNodeIds: ['pending-image-0'],
             nodeSnapshots: [final],
+            edgeSnapshots: [
+                { edgeId: 'edge-fork-final', sourceNodeId: 'fork-1', targetNodeId: 'node-file-1' },
+            ],
             nodes: [
                 { nodeId: 'node-file-1', position: { x: 500, y: 600 }, dimensions: { width: 800, height: 800 } },
             ],
@@ -182,6 +184,7 @@ describe('applyCanvasGeometryUpdateToState', () => {
         expect(result.removedNodeIds).toEqual(['pending-image-0'])
         expect(result.removedEdgeIds).toEqual(['edge-fork-pending'])
         expect(result.upsertedNodeIds).toEqual(['node-file-1'])
+        expect(result.upsertedEdgeIds).toEqual(['edge-fork-final'])
         expect(result.state.nodes.map(node => node.nodeId)).toEqual(['fork-1', 'node-file-1'])
         expect(result.state.edges).toEqual([
             { edgeId: 'edge-fork-final', sourceNodeId: 'fork-1', targetNodeId: 'node-file-1' },

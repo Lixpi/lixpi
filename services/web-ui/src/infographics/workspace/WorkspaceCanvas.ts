@@ -10143,77 +10143,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return tracker
     }
 
-    function getGeneratedMediaDuplicateNodeIds(
-        nodes: CanvasNode[],
-        mediaType: 'image' | 'video',
-        threadId: string,
-        generationRun: MediaGenerationRunMeta | undefined,
-        keepNodeId: string,
-    ): Set<string> {
-        return new Set(
-            nodes
-                .filter((node: CanvasNode) =>
-                    node.nodeId !== keepNodeId
-                    && generatedMediaNodeMatchesGenerationRun(node, mediaType, threadId, generationRun)
-                )
-                .map((node: CanvasNode) => node.nodeId)
-        )
-    }
-
-    function removeGeneratedMediaDuplicateDom(nodeIds: Set<string>): void {
-        for (const nodeId of nodeIds) {
-            selectedNodeIds.delete(nodeId)
-            partialImageTracker.forEach((tracker, runKey) => {
-                if (tracker.nodeId === nodeId) partialImageTracker.delete(runKey)
-            })
-            videoGenerationTracker.forEach((tracker, runKey) => {
-                if (tracker.nodeId === nodeId) videoGenerationTracker.delete(runKey)
-            })
-            viewportEl?.querySelector(`[data-node-id="${nodeId}"]`)?.remove()
-        }
-    }
-
-    function withoutGeneratedMediaDuplicateNodes(
-        state: CanvasState,
-        mediaType: 'image' | 'video',
-        threadId: string,
-        generationRun: MediaGenerationRunMeta | undefined,
-        keepNodeId: string,
-    ): { state: CanvasState; duplicateNodeIds: Set<string> } {
-        const duplicateNodeIds = getGeneratedMediaDuplicateNodeIds(state.nodes, mediaType, threadId, generationRun, keepNodeId)
-        if (duplicateNodeIds.size === 0) return { state, duplicateNodeIds }
-
-        return {
-            state: {
-                ...state,
-                nodes: state.nodes.filter((node: CanvasNode) => !duplicateNodeIds.has(node.nodeId)),
-                edges: state.edges.filter((edge: WorkspaceEdge) =>
-                    !duplicateNodeIds.has(edge.sourceNodeId) && !duplicateNodeIds.has(edge.targetNodeId)
-                ),
-            },
-            duplicateNodeIds,
-        }
-    }
-
-    function commitGeneratedMediaDuplicateCleanup(
-        mediaType: 'image' | 'video',
-        threadId: string,
-        generationRun: MediaGenerationRunMeta | undefined,
-        keepNodeId: string,
-    ): void {
-        if (!currentCanvasState) return
-        const { state, duplicateNodeIds } = withoutGeneratedMediaDuplicateNodes(currentCanvasState, mediaType, threadId, generationRun, keepNodeId)
-        if (duplicateNodeIds.size === 0) return
-
-        const resolvedTreeState = resolveGeneratedMediaTreeState(state.nodes, state.edges)
-        commitCanvasStatePreservingEditors({
-            ...state,
-            nodes: resolvedTreeState.nodes,
-            edges: resolvedTreeState.edges,
-        })
-        removeGeneratedMediaDuplicateDom(duplicateNodeIds)
-    }
-
     // Append an image node to the DOM directly without a full renderNodes() cycle.
     // This preserves active editors and their streaming state.
     function syncConnectionManagerForCurrentCanvasState(options: { flushPixi?: boolean } = {}): void {
@@ -10723,260 +10652,50 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         },
 
         onImageCompleteToCanvas: (data) => {
-            const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId, responseId, revisedPrompt, aiModel, imageModelProvider, imageModelId, responseMessageId, generationRun } = data
+            const { threadId, fileId, workspaceId: imgWorkspaceId, generationRun } = data
             if (!shouldAcceptGeneratedMediaEvent(threadId, imgWorkspaceId)) return
 
             const runKey = getGeneratedMediaRunKey(threadId, generationRun)
             registerGeneratedMediaRun(threadId, generationRun)
-            const completionMediaModelId = generationRun?.mediaModelId ?? buildAiModelId(imageModelProvider, imageModelId ?? '')
-
-            let partial = partialImageTracker.get(runKey)
-            if (partial && !getCurrentCanvasMediaNode(partial.nodeId)) {
-                debugGeneratedMediaLifecycle('drop-stale-image-tracker-before-complete', {
+            const pendingNodeId = partialImageTracker.get(runKey)?.nodeId
+            if (!data.canvasGeometry) {
+                console.error('[CANVAS][api-geometry] missing image completion geometry; refusing local canvas topology mutation', {
                     runKey,
                     threadId,
-                    nodeId: partial.nodeId,
-                    fileId: partial.fileId,
                     completionFileId: fileId,
+                    generationRequestId: generationRun?.generationRequestId,
+                    mediaRunId: generationRun?.mediaRunId,
                 })
-                partialImageTracker.delete(runKey)
-                syncPixiGeneratingImageNodes()
-                partial = undefined
-            }
-            if (!partial) {
-                const existingImageNode = findGeneratedMediaNodeForRun('image', threadId, generationRun)
-                if (existingImageNode?.type === 'image') {
-                    partial = rememberPartialImageTrackerForNode(threadId, generationRun, existingImageNode)
-                }
+                return
             }
 
-            if (partial) {
-                const receivedFirstFrame = !partial.hasReceivedFrame
-                const completedNodeId = fileId ? `node-${fileId}` : partial.nodeId
-                if (!getApiMediaRunLineageAssignment(generationRun)) {
-                    console.error('[CANVAS] Missing API media lineage assignment for image completion', { threadId, generationRun })
-                    finishGeneratedMediaRun(threadId, generationRun)
-                    return
-                }
-                if (!currentCanvasState) {
-                    finishGeneratedMediaRun(threadId, generationRun)
-                    return
-                }
-                const existingImageNode = getCurrentCanvasMediaNode(partial.nodeId)
-                if (existingImageNode?.type === 'image' && fileId && existingImageNode.fileId === fileId) {
-                    commitGeneratedMediaDuplicateCleanup('image', threadId, generationRun, existingImageNode.nodeId)
-                    partialImageTracker.delete(runKey)
-                    syncPixiGeneratingImageNodes()
-                    finishGeneratedMediaRun(threadId, generationRun)
-                    return
-                }
-                const authoritativeImageNode = completedNodeId !== partial.nodeId
-                    ? currentCanvasState.nodes.find((node: CanvasNode): node is ImageCanvasNode =>
-                        node.type === 'image' && node.nodeId === completedNodeId
-                    )
-                    : undefined
-                if (authoritativeImageNode) {
-                    const remainingNodes = currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== partial.nodeId)
-                    const remainingEdges = currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
-                        edge.sourceNodeId !== partial.nodeId && edge.targetNodeId !== partial.nodeId
-                    )
-                    const resolvedNodes = rebalanceGeneratedMediaTrees(remainingNodes, remainingEdges)
-                    const completedImageNode = resolvedNodes.find((node: CanvasNode): node is ImageCanvasNode =>
-                        node.type === 'image' && node.nodeId === completedNodeId
-                    )
-                    if (completedImageNode) {
-                        keepGeneratedImageCompletionOutlineUntilTextureReady(runKey, partial, completedImageNode)
-                    } else {
-                        partialImageTracker.delete(runKey)
-                        syncPixiGeneratingImageNodes()
-                    }
-                    commitCanvasStatePreservingEditors({
-                        ...currentCanvasState,
-                        nodes: resolvedNodes,
-                        edges: remainingEdges,
-                    })
-                    if (completedImageNode) appendImageNodeToDOM(completedImageNode)
-                    viewportEl.querySelector(`[data-node-id="${partial.nodeId}"]`)?.remove()
-                    finishGeneratedMediaRun(threadId, generationRun)
-                    queueCanvasMediaAnalysis(completedNodeId, getMediaDescriptorStillFileId(authoritativeImageNode))
-                    return
-                }
-                const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
-                // Upgrade existing partial canvas node to complete
-                const nodes = (currentCanvasState?.nodes || []).map((n: CanvasNode) => {
-                    if (n.nodeId !== partial.nodeId) return n
-                    const imgNode = n as ImageCanvasNode
-                    const position = imgNode.position
-                    const imageSrc = buildGeneratedImageFrameSrc({
-                        imageUrl,
-                        workspaceId: imgWorkspaceId || imgNode.workspaceId,
-                        fileId: fileId || imgNode.fileId,
-                        fallbackSrc: imgNode.src,
-                    })
-                    const generatedBy: ImageCanvasNode['generatedBy'] = {
-                        aiChatThreadId: threadId,
-                        responseId,
-                        aiModel: (generationRun?.reasoningModelId ?? aiModel) as any,
-                        imageModelProvider: imageModelProvider || '',
-                        revisedPrompt: revisedPrompt || imgNode.generatedBy?.revisedPrompt || promptText,
-                        responseMessageId: responseMessageId || '',
-                        ...getPendingGeneratedImageLineage(threadId, generationRun),
-                        ...(completionMediaModelId ? { mediaModelId: completionMediaModelId as any } : {}),
-                    }
-                    return {
-                        ...imgNode,
-                        nodeId: completedNodeId,
-                        fileId: fileId || imgNode.fileId,
-                        workspaceId: imgWorkspaceId || imgNode.workspaceId,
-                        src: imageSrc,
-                        position,
-                        generatedBy,
-                        descriptor: buildAnalyzingDescriptor(),
-                    } satisfies ImageCanvasNode
-                })
-
-                const edges = (currentCanvasState?.edges || []).map((e: WorkspaceEdge) => {
-                    if (e.targetNodeId !== partial.nodeId) return e
-                    const { sourceMessageId: _sourceMessageId, ...edgeWithoutSourceMessageId } = e
-                    return { ...edgeWithoutSourceMessageId, targetNodeId: completedNodeId, edgeId: `edge-${e.sourceNodeId}-${completedNodeId}` }
-                })
-
-                // Re-tidy the lineage tree the finalized node belongs to and
-                // rigid-separate it from neighbors via the unchanged resolver.
-                const deduped = withoutGeneratedMediaDuplicateNodes({
-                    ...currentCanvasState,
-                    nodes,
-                    edges,
-                }, 'image', threadId, generationRun, completedNodeId)
-                const resolvedNodes = rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)
-                const completedImageNode = (resolvedNodes.find((node: CanvasNode) => node.nodeId === completedNodeId) as ImageCanvasNode | undefined)
-                if (completedImageNode) {
-                    keepGeneratedImageCompletionOutlineUntilTextureReady(runKey, partial, completedImageNode)
-                } else {
-                    partialImageTracker.delete(runKey)
-                    syncPixiGeneratingImageNodes()
-                }
-
-                commitCanvasState({
-                    ...deduped.state,
-                    nodes: resolvedNodes,
-                    edges: deduped.state.edges,
-                })
-                if (completedNodeId !== partial.nodeId) {
-                    viewportEl.querySelector(`[data-node-id="${partial.nodeId}"]`)?.remove()
-                    if (completedImageNode) appendImageNodeToDOM(completedImageNode)
-                }
-                removeGeneratedMediaDuplicateDom(deduped.duplicateNodeIds)
-                finishGeneratedMediaRun(threadId, generationRun)
-                // API-resolved geometry wins over the local fallback rebalance.
-                if (data.canvasGeometry) applyApiCanvasGeometry(data.canvasGeometry)
-                const currentCompletedImageNode = getCurrentCanvasMediaNode(completedNodeId)
-                queueCanvasMediaAnalysis(
+            console.info('[CANVAS][api-geometry]', 'image-complete-apply', {
+                runKey,
+                layoutRevision: data.canvasGeometry.layoutRevision,
+                removedNodeIds: data.canvasGeometry.removedNodeIds ?? [],
+                edgeSnapshotIds: data.canvasGeometry.edgeSnapshots?.map(edge => edge.edgeId) ?? [],
+            })
+            applyApiCanvasGeometry(data.canvasGeometry)
+            const completedNodeId = fileId ? `node-${fileId}` : ''
+            const completedImageNode = completedNodeId ? getCurrentCanvasMediaNode(completedNodeId) : undefined
+            if (completedImageNode?.type !== 'image') {
+                console.error('[CANVAS][api-geometry] image completion geometry did not materialize final node', {
+                    runKey,
+                    threadId,
                     completedNodeId,
-                    currentCompletedImageNode ? getMediaDescriptorStillFileId(currentCompletedImageNode) : fileId || partial.fileId,
-                )
-
-            } else {
-                // No partial existed — IMAGE_COMPLETE without prior IMAGE_PARTIAL.
-                // Guard against duplicates: skip if this fileId is already on canvas
-                if (fileId && currentCanvasState?.nodes.some((n: CanvasNode) => n.type === 'image' && (n as ImageCanvasNode).fileId === fileId)) {
-                    removePendingBranchMarkerForRun(threadId, generationRun)
-                    finishGeneratedMediaRun(threadId, generationRun)
-                    return
-                }
-
-                const imageWidth = getGeneratedMediaInsertionSize()
-                const imageHeight = imageWidth
-                const lineageAssignment = getApiMediaRunLineageAssignment(generationRun)
-                if (!lineageAssignment) {
-                    console.error('[CANVAS] Missing API media lineage assignment for image completion', { threadId, generationRun })
-                    removePendingBranchMarkerForRun(threadId, generationRun)
-                    finishGeneratedMediaRun(threadId, generationRun)
-                    return
-                }
-                resolvePendingBranchMarkerWithLineagePlan(threadId, generationRun)
-                const branchOriginNode = ensureBranchOriginForGeneratedMedia(threadId, generationRun, imageHeight)
-                const { branchForkNode, branchLineNode, markerNode } = ensureBranchMarkerForGeneratedMedia(threadId, generationRun, branchOriginNode)
-                const edgeSourceNode = getGeneratedMediaEdgeSourceNode(generationRun, [branchOriginNode, branchForkNode, branchLineNode])
-                if (!edgeSourceNode) {
-                    console.error('[CANVAS] Missing API media lineage parent for image completion', {
-                        threadId,
-                        lineageParentNodeId: lineageAssignment.lineageParentNodeId,
-                        generationRun,
-                    })
-                    removePendingBranchMarkerForRun(threadId, generationRun)
-                    finishGeneratedMediaRun(threadId, generationRun)
-                    return
-                }
-                const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
-
-                clearPendingBranchMarkerStateForRun(threadId, generationRun)
-                const nodeId = fileId ? `node-${fileId}` : getPendingGeneratedMediaNodeId(lineageAssignment)
-                const imageSrc = buildGeneratedImageFrameSrc({
-                    imageUrl,
-                    workspaceId: imgWorkspaceId || workspaceId,
-                    fileId: fileId || '',
+                    generationRequestId: generationRun?.generationRequestId,
+                    mediaRunId: generationRun?.mediaRunId,
                 })
-
-                const position = getNextGeneratedMediaPosition(edgeSourceNode, imageHeight)
-
-                const generatedBy: ImageCanvasNode['generatedBy'] = {
-                    aiChatThreadId: threadId,
-                    responseId,
-                    aiModel: (generationRun?.reasoningModelId ?? aiModel) as any,
-                    imageModelProvider: imageModelProvider || '',
-                    revisedPrompt: revisedPrompt || promptText,
-                    responseMessageId: responseMessageId || '',
-                    ...getPendingGeneratedImageLineage(threadId, generationRun),
-                    ...(completionMediaModelId ? { mediaModelId: completionMediaModelId as any } : {}),
-                }
-                const imageNode: ImageCanvasNode = {
-                    nodeId,
-                    type: 'image',
-                    fileId: fileId || '',
-                    workspaceId: imgWorkspaceId || workspaceId,
-                    src: imageSrc,
-                    aspectRatio: 1,
-                    position,
-                    dimensions: { width: imageWidth, height: imageHeight },
-                    generatedBy,
-                    descriptor: buildAnalyzingDescriptor(),
-                }
-
-                const existingNodes = addBranchLineageMarkerNodesIfMissing(currentCanvasState?.nodes || [], branchOriginNode, branchForkNode, branchLineNode)
-                const existingEdges = addBranchMarkerEdgeIfMissing(currentCanvasState?.edges || [], markerNode)
-
-                const newEdges = [
-                    ...existingEdges,
-                    createGeneratedImageEdge(edgeSourceNode, nodeId, responseMessageId || undefined),
-                ]
-
-                const allNodes: CanvasNode[] = [...existingNodes, imageNode]
-
-                const resolvedNodes = rebalanceGeneratedMediaTrees(allNodes, newEdges)
-                const resolvedImageNode = (resolvedNodes.find((node: CanvasNode) => node.nodeId === nodeId) as ImageCanvasNode | undefined) ?? imageNode
-
-                currentCanvasState = {
-                    ...(currentCanvasState ?? {}),
-                    viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                    nodes: resolvedNodes,
-                    edges: newEdges,
-                }
-                if (branchOriginNode) {
-                    const placedBranchOriginNode =
-                        (resolvedNodes.find((node: CanvasNode) => node.nodeId === branchOriginNode.nodeId) as BranchOriginCanvasNode | undefined)
-                        ?? branchOriginNode
-                    appendBranchOriginNodeToDOM(placedBranchOriginNode)
-                }
-                appendBranchMarkerNodeToDOM(resolvedNodes, markerNode)
-                appendImageNodeToDOM(resolvedImageNode)
-
-                commitCanvasStatePreservingEditors(currentCanvasState)
-                finishGeneratedMediaRun(threadId, generationRun)
-                // API-resolved geometry wins over the local fallback rebalance.
-                if (data.canvasGeometry) applyApiCanvasGeometry(data.canvasGeometry)
-                queueCanvasMediaAnalysis(nodeId, fileId)
+                return
             }
+            partialImageTracker.delete(runKey)
+            syncPixiGeneratingImageNodes()
+            if (pendingNodeId && pendingNodeId !== completedNodeId) {
+                viewportEl.querySelector(`[data-node-id="${pendingNodeId}"]`)?.remove()
+            }
+            appendImageNodeToDOM(completedImageNode)
+            finishGeneratedMediaRun(threadId, generationRun)
+            queueCanvasMediaAnalysis(completedNodeId, getMediaDescriptorStillFileId(completedImageNode))
         },
 
     })
@@ -11122,164 +10841,53 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         onVideoCompleteToCanvas: (data) => {
             const {
                 threadId,
-                videoUrl,
                 fileId,
                 workspaceId: videoWorkspaceId,
-                posterUrl,
-                posterFileId,
-                frameFileId,
-                durationSeconds,
-                aspectRatio,
-                hasAudio,
-                responseId,
-                revisedPrompt,
-                videoModel,
-                videoModelProvider,
-                responseMessageId,
                 generationRun,
             } = data
             if (!shouldAcceptGeneratedMediaEvent(threadId, videoWorkspaceId)) return
 
             const runKey = getGeneratedMediaRunKey(threadId, generationRun)
             registerGeneratedMediaRun(threadId, generationRun)
-
-            let existing = videoGenerationTracker.get(runKey)
-            if (!existing) {
-                const existingVideoNode = findGeneratedMediaNodeForRun('video', threadId, generationRun)
-                if (existingVideoNode?.type === 'video') {
-                    existing = rememberVideoGenerationTrackerForNode(threadId, generationRun, existingVideoNode)
-                }
-            }
-            if (!existing || !currentCanvasState) {
-                finishGeneratedMediaRun(threadId, generationRun)
-                return
-            }
-            const receivedFirstFrame = !existing.hasReceivedFrame
-            const completedNodeId = fileId ? `node-${fileId}` : existing.nodeId
-            const existingVideoNode = getCurrentCanvasMediaNode(existing.nodeId)
-            if (existingVideoNode?.type === 'video' && fileId && existingVideoNode.fileId === fileId) {
-                commitGeneratedMediaDuplicateCleanup('video', threadId, generationRun, existingVideoNode.nodeId)
-                videoGenerationTracker.delete(runKey)
-                syncPixiGeneratingImageNodes()
-                finishGeneratedMediaRun(threadId, generationRun)
-                return
-            }
-            const authoritativeVideoNode = completedNodeId !== existing.nodeId
-                ? currentCanvasState.nodes.find((node: CanvasNode): node is VideoCanvasNode =>
-                    node.type === 'video' && node.nodeId === completedNodeId
-                )
-                : undefined
-            if (authoritativeVideoNode) {
-                const remainingNodes = currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== existing.nodeId)
-                const remainingEdges = currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
-                    edge.sourceNodeId !== existing.nodeId && edge.targetNodeId !== existing.nodeId
-                )
-                const resolvedNodes = rebalanceGeneratedMediaTrees(remainingNodes, remainingEdges)
-                videoGenerationTracker.delete(runKey)
-                syncPixiGeneratingImageNodes()
-                commitTransientCanvasStatePreservingEditors({
-                    ...currentCanvasState,
-                    nodes: resolvedNodes,
-                    edges: remainingEdges,
+            const pendingNodeId = videoGenerationTracker.get(runKey)?.nodeId
+            if (!data.canvasGeometry) {
+                console.error('[CANVAS][api-geometry] missing video completion geometry; refusing local canvas topology mutation', {
+                    runKey,
+                    threadId,
+                    completionFileId: fileId,
+                    generationRequestId: generationRun?.generationRequestId,
+                    mediaRunId: generationRun?.mediaRunId,
                 })
-                const completedVideoNode = resolvedNodes.find((node: CanvasNode): node is VideoCanvasNode =>
-                    node.type === 'video' && node.nodeId === completedNodeId
-                )
-                if (completedVideoNode) appendVideoNodeToDOM(completedVideoNode)
-                viewportEl.querySelector(`[data-node-id="${existing.nodeId}"]`)?.remove()
-                finishGeneratedMediaRun(threadId, generationRun)
-                queueCanvasMediaAnalysis(completedNodeId, getMediaDescriptorStillFileId(authoritativeVideoNode))
                 return
             }
 
-            const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
-            if (!getApiMediaRunLineageAssignment(generationRun)) {
-                console.error('[CANVAS] Missing API media lineage assignment for video completion', { threadId, generationRun })
-                finishGeneratedMediaRun(threadId, generationRun)
+            console.info('[CANVAS][api-geometry]', 'video-complete-apply', {
+                runKey,
+                layoutRevision: data.canvasGeometry.layoutRevision,
+                removedNodeIds: data.canvasGeometry.removedNodeIds ?? [],
+                edgeSnapshotIds: data.canvasGeometry.edgeSnapshots?.map(edge => edge.edgeId) ?? [],
+            })
+            applyApiCanvasGeometry(data.canvasGeometry)
+            const completedNodeId = fileId ? `node-${fileId}` : ''
+            const completedVideoNode = getCurrentCanvasMediaNode(completedNodeId)
+            if (completedVideoNode?.type !== 'video') {
+                console.error('[CANVAS][api-geometry] video completion geometry did not materialize final node', {
+                    runKey,
+                    threadId,
+                    completedNodeId,
+                    generationRequestId: generationRun?.generationRequestId,
+                    mediaRunId: generationRun?.mediaRunId,
+                })
                 return
             }
-            const lineage = getPendingGeneratedImageLineage(threadId, generationRun)
-
-            const nodes = currentCanvasState.nodes.map((n: CanvasNode) => {
-                if (n.nodeId !== existing.nodeId || n.type !== 'video') return n
-                const videoNode = n as VideoCanvasNode
-                const position = videoNode.position
-                const fittedAspect = Number.isFinite(aspectRatio) && aspectRatio > 0
-                    ? aspectRatio
-                    : videoNode.aspectRatio
-                const generatedBy: VideoCanvasNode['generatedBy'] = {
-                    aiChatThreadId: threadId,
-                    responseId,
-                    videoModel: (generationRun?.mediaModelId ?? videoModel) as any,
-                    videoModelProvider: videoModelProvider || '',
-                    revisedPrompt: revisedPrompt || videoNode.generatedBy?.revisedPrompt || promptText,
-                    responseMessageId: responseMessageId || '',
-                    durationSeconds: durationSeconds || 0,
-                    hasAudio: hasAudio ?? true,
-                    ...lineage,
-                }
-                return {
-                    ...videoNode,
-                    nodeId: completedNodeId,
-                    fileId: fileId || videoNode.fileId,
-                    posterFileId: posterFileId || videoNode.posterFileId,
-                    frameFileId: frameFileId || videoNode.frameFileId,
-                    workspaceId: videoWorkspaceId || videoNode.workspaceId,
-                    src: videoUrl || videoNode.src,
-                    posterSrc: posterUrl || videoNode.posterSrc,
-                    position,
-                    aspectRatio: fittedAspect,
-                    durationSeconds: durationSeconds || videoNode.durationSeconds,
-                    hasAudio: hasAudio ?? videoNode.hasAudio,
-                    generatedBy,
-                    descriptor: buildAnalyzingDescriptor(),
-                } satisfies VideoCanvasNode
-            })
-            const edges = currentCanvasState.edges.map((edge: WorkspaceEdge) => {
-                if (edge.targetNodeId !== existing.nodeId) return edge
-                const { sourceMessageId: _sourceMessageId, ...edgeWithoutSourceMessageId } = edge
-                return {
-                    ...edgeWithoutSourceMessageId,
-                    targetNodeId: completedNodeId,
-                    edgeId: `edge-${edge.sourceNodeId}-${completedNodeId}`,
-                }
-            })
-
-            // Clearing the tracker removes the PIXI traveling outline (the
-            // outline lifecycle is tracker-driven, same mechanism as images).
             videoGenerationTracker.delete(runKey)
             syncPixiGeneratingImageNodes()
-
-            // Backstop against overlap, mirroring onImageCompleteToCanvas. Re-tidy
-            // the lineage tree and rigid-separate it from neighbors; the initial
-            // placement already accounts for prior media, so this is a no-op in the
-            // common case and only nudges genuinely colliding nodes/trees.
-            const deduped = withoutGeneratedMediaDuplicateNodes({
-                ...currentCanvasState,
-                nodes,
-                edges,
-            }, 'video', threadId, generationRun, completedNodeId)
-            const resolvedNodes = rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)
-
-            commitCanvasState({
-                ...deduped.state,
-                nodes: resolvedNodes,
-                edges: deduped.state.edges,
-            })
-            if (completedNodeId !== existing.nodeId) {
-                viewportEl.querySelector(`[data-node-id="${existing.nodeId}"]`)?.remove()
-                const completedVideoNode = (resolvedNodes.find((node: CanvasNode) => node.nodeId === completedNodeId) as VideoCanvasNode | undefined)
-                if (completedVideoNode) appendVideoNodeToDOM(completedVideoNode)
+            if (pendingNodeId && pendingNodeId !== completedNodeId) {
+                viewportEl.querySelector(`[data-node-id="${pendingNodeId}"]`)?.remove()
             }
-            removeGeneratedMediaDuplicateDom(deduped.duplicateNodeIds)
+            appendVideoNodeToDOM(completedVideoNode)
             finishGeneratedMediaRun(threadId, generationRun)
-            // API-resolved geometry wins over the local fallback rebalance.
-            if (data.canvasGeometry) applyApiCanvasGeometry(data.canvasGeometry)
-            const completedVideoNode = getCurrentCanvasMediaNode(completedNodeId)
-            queueCanvasMediaAnalysis(
-                completedNodeId,
-                completedVideoNode ? getMediaDescriptorStillFileId(completedVideoNode) : frameFileId || posterFileId,
-            )
+            queueCanvasMediaAnalysis(completedNodeId, getMediaDescriptorStillFileId(completedVideoNode))
         },
 
         onVideoErrorToCanvas: (data) => {

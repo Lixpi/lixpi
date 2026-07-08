@@ -492,22 +492,25 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectExcerptToContain(partialHandler, 'if (existing && !getCurrentCanvasMediaNode(existing.nodeId)) {', 'partial image handler')
 		expectExcerptToContain(partialHandler, 'partialImageTracker.delete(runKey)', 'partial image handler')
 		expectExcerptToContain(completeHandler, 'partialImageTracker.delete(runKey)')
-		expectExcerptToContain(completeHandler, 'commitCanvasState({')
+		expectExcerptToContain(completeHandler, "'image-complete-apply'")
+		expectExcerptNotToContain(completeHandler, 'commitCanvasState({', 'complete image handler')
 	})
 
-	it('finalizes the same PIXI-backed image node without updating a legacy DOM image', () => {
+	it('finalizes generated images only from API-resolved geometry', () => {
 		const completeStart = ts.indexOf('onImageCompleteToCanvas:')
 		const callbackEnd = ts.indexOf('onVideoPendingToCanvas:', completeStart)
 		expect(completeStart).toBeGreaterThan(-1)
 		expect(callbackEnd).toBeGreaterThan(completeStart)
 
 		const completeHandler = ts.slice(completeStart, callbackEnd)
-		expectExcerptToContain(completeHandler, "const imageSrc = buildGeneratedImageFrameSrc({")
-		expectExcerptToContain(completeHandler, "fallbackSrc: imgNode.src,")
-		expectExcerptToContain(completeHandler, 'commitCanvasState({')
-		expect([...completeHandler.matchAll(/\.\.\.\(currentCanvasState \?\? \{\}\)/g)]).toHaveLength(1)
-		expectExcerptToContain(completeHandler, 'const deduped = withoutGeneratedMediaDuplicateNodes({', 'complete image handler')
-		expectExcerptToContain(completeHandler, 'const resolvedNodes = rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)', 'complete image handler')
+		expectExcerptToContain(completeHandler, 'missing image completion geometry; refusing local canvas topology mutation', 'complete image handler')
+		expectExcerptToContain(completeHandler, "'image-complete-apply'", 'complete image handler')
+		expectExcerptToContain(completeHandler, 'applyApiCanvasGeometry(data.canvasGeometry)', 'complete image handler')
+		expectExcerptToContain(completeHandler, 'appendImageNodeToDOM(completedImageNode)', 'complete image handler')
+		expectExcerptNotToContain(completeHandler, "const imageSrc = buildGeneratedImageFrameSrc({", 'complete image handler')
+		expectExcerptNotToContain(completeHandler, 'commitCanvasState({', 'complete image handler')
+		expectExcerptNotToContain(completeHandler, 'const deduped = withoutGeneratedMediaDuplicateNodes({', 'complete image handler')
+		expectExcerptNotToContain(completeHandler, 'rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)', 'complete image handler')
 		expectExcerptNotToContain(completeHandler, 'imgEl.src', 'complete image handler')
 	})
 
@@ -522,7 +525,8 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		const errorHandler = ts.slice(errorStart, partialStart)
 
 		expectExcerptToContain(partialHandler, '...currentCanvasState,', 'partial image handler')
-		expectExcerptToContain(completeHandler, 'currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 }', 'complete image handler')
+		expectExcerptToContain(completeHandler, 'applyApiCanvasGeometry(data.canvasGeometry)', 'complete image handler')
+		expectExcerptNotToContain(completeHandler, 'currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 }', 'complete image handler')
 		expectExcerptToContain(errorHandler, 'const existing = partialImageTracker.get(runKey)', 'error image handler')
 		expectExcerptToContain(errorHandler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'error image handler')
 		expectExcerptToContain(errorHandler, 'finishFailedGeneratedMediaRun(threadId, generationRun)', 'error image handler')
@@ -563,10 +567,9 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceNotToContain(ts, 'getPendingGeneratedMediaBeforeFrameInsertionPosition')
 		expectSourceNotToContain(ts, 'getFullFramePositionFromPendingGeneratedMediaPosition')
 		expectSourceNotToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
-		// Wired into every generated-media add path (image partial + complete, video).
+		// Wired into in-progress generated-media placeholder paths. Completion
+		// topology is API-owned and arrives through CanvasGeometryUpdate.
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithImage, newEdges)')
-		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)')
-		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(allNodes, newEdges)')
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithVideo, newEdges)')
 		// Re-tidies on delete only when the removed node was a lineage member.
 		expectSourceToContain(ts, 'deletedNode && isBranchTreeCanvasNode(deletedNode)')
@@ -589,8 +592,14 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(currentCanvasState)')
 		expectSourceToContain(ts, 'commitTransientCanvasStatePreservingEditors(result.state)')
 		expectSourceToContain(ts, 'onCanvasGeometryResolvedToCanvas: ({ canvasGeometry }) => {')
-		// Complete handlers let the API geometry win over the local fallback rebalance.
-		expectSourceToContain(ts, 'if (data.canvasGeometry) applyApiCanvasGeometry(data.canvasGeometry)')
+		// Complete handlers only apply API geometry and refuse local topology mutation.
+		expectSourceToContain(ts, "'image-complete-apply'")
+		expectSourceToContain(ts, "'video-complete-apply'")
+		expectSourceToContain(ts, 'missing image completion geometry; refusing local canvas topology mutation')
+		expectSourceToContain(ts, 'missing video completion geometry; refusing local canvas topology mutation')
+		expectSourceToContain(ts, 'appendImageNodeToDOM(completedImageNode)')
+		expectSourceToContain(ts, 'appendVideoNodeToDOM(completedVideoNode)')
+		expectSourceToContain(ts, 'applyApiCanvasGeometry(data.canvasGeometry)')
 	})
 
 	it('keeps in-progress generated media aligned with API-owned lineage identity', () => {
@@ -609,7 +618,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 describe('Workspace canvas — generated video canvas state', () => {
 	const ts = loadTs()
 
-	it('preserves workspace panel metadata when video workflows write canvas state', () => {
+	it('preserves workspace panel metadata when video workflows use API geometry', () => {
 		// Regression: the video callbacks used to build a fresh { viewport, nodes,
 		// edges } object, dropping aiChatPanel / sidebar tabs and collapsing the
 		// chat panel. Every video write must spread the existing canvas state.
@@ -629,7 +638,8 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const errorHandler = ts.slice(errorStart, errorEnd)
 
 		expectExcerptToContain(pendingHandler, '...(currentCanvasState ?? {})', 'video pending handler')
-		expectExcerptToContain(completeHandler, 'commitCanvasState({', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'applyApiCanvasGeometry(data.canvasGeometry)', 'video complete handler')
+		expectExcerptNotToContain(completeHandler, 'commitCanvasState({', 'video complete handler')
 		expectExcerptToContain(errorHandler, 'const errorNodeId = existing.nodeId', 'video error handler')
 	})
 
@@ -669,24 +679,24 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, "if ((node.type !== 'image' && node.type !== 'video') || node.parentId) return false")
 	})
 
-	it('rebalances branch-lineage trees when a video completes, mirroring images', () => {
+	it('uses only API geometry when a video completes', () => {
 		const completeStart = ts.indexOf('onVideoCompleteToCanvas:')
 		const errorStart = ts.indexOf('onVideoErrorToCanvas:', completeStart)
 		const completeHandler = ts.slice(completeStart, errorStart)
 
-		expectExcerptToContain(completeHandler, 'rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)', 'video complete handler')
-		expectExcerptToContain(completeHandler, 'nodes: resolvedNodes,', 'video complete handler')
-		// Completed videos are renamed to the API-assigned node id (node-<fileId>),
-		// so lineage edges are retargeted from the placeholder id before commit.
-		expectExcerptToContain(completeHandler, 'const edges = currentCanvasState.edges.map((edge: WorkspaceEdge) => {', 'video complete handler')
-		expectExcerptToContain(completeHandler, 'targetNodeId: completedNodeId,', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'missing video completion geometry; refusing local canvas topology mutation', 'video complete handler')
+		expectExcerptToContain(completeHandler, "'video-complete-apply'", 'video complete handler')
+		expectExcerptToContain(completeHandler, 'applyApiCanvasGeometry(data.canvasGeometry)', 'video complete handler')
+		expectExcerptNotToContain(completeHandler, 'const edges = currentCanvasState.edges.map((edge: WorkspaceEdge) => {', 'video complete handler')
+		expectExcerptNotToContain(completeHandler, 'rebalanceGeneratedMediaTrees(deduped.state.nodes, deduped.state.edges)', 'video complete handler')
 	})
 
-	it('threads the representative mid-frame fileId onto the completed video node', () => {
+	it('queues completed video analysis from the API-materialized node', () => {
 		const completeStart = ts.indexOf('onVideoCompleteToCanvas:')
 		const errorStart = ts.indexOf('onVideoErrorToCanvas:', completeStart)
 		const completeHandler = ts.slice(completeStart, errorStart)
-		expectExcerptToContain(completeHandler, 'frameFileId: frameFileId || videoNode.frameFileId,', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'const completedVideoNode = getCurrentCanvasMediaNode(completedNodeId)', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'queueCanvasMediaAnalysis(completedNodeId, getMediaDescriptorStillFileId(completedVideoNode))', 'video complete handler')
 	})
 
 	it('keeps the bounded icon strip to badge + info button only, with the panel decoupled', () => {

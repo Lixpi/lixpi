@@ -1002,6 +1002,90 @@ describe('media-generation-canvas-projection', () => {
         ]))
     })
 
+    it('settle geometry removes stale deterministic pending nodes when final media already replaced them', async () => {
+        const plan = mixedImageVideoLineagePlan()
+        const imageAssignments = plan.runAssignments.filter(assignment => assignment.mediaType === 'image')
+        const firstAssignment = imageAssignments[0]
+        const secondAssignment = imageAssignments[1]
+        if (!firstAssignment || !secondAssignment) throw new Error('expected two image assignments')
+
+        await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            lineagePlan: plan,
+        })
+        const pendingState = latestMutator()(emptyCanvasState()).canvasState
+
+        await upsertGeneratedImageToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/workspace-1/file-final-0',
+            fileId: 'file-final-0',
+            responseId: 'response-final-0',
+            revisedPrompt: 'matrix result 0',
+            aiProvider: 'Anthropic',
+            imageModelProvider: firstAssignment.mediaModelId!.split(':')[0],
+            imageModelId: firstAssignment.mediaModelId!.split(':').slice(1).join(':'),
+            generationRun: generationRunFromAssignment(firstAssignment, 0),
+        })
+        const afterFirstComplete = latestMutator()(pendingState).canvasState
+
+        await upsertGeneratedImageToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/workspace-1/file-final-1',
+            fileId: 'file-final-1',
+            responseId: 'response-final-1',
+            revisedPrompt: 'matrix result 1',
+            aiProvider: 'Anthropic',
+            imageModelProvider: secondAssignment.mediaModelId!.split(':')[0],
+            imageModelId: secondAssignment.mediaModelId!.split(':').slice(1).join(':'),
+            generationRun: generationRunFromAssignment(secondAssignment, 0),
+        })
+        const completedState = latestMutator()(afterFirstComplete).canvasState
+        const stateWithPendingMarker: CanvasState = {
+            ...completedState,
+            nodes: completedState.nodes.map((node) => node.nodeId === plan.branchForks[0].nodeId
+                ? {
+                    ...node,
+                    pendingState: {
+                        phase: 'planned',
+                        promptText: plan.promptText,
+                        reasoningModelIds: [plan.branchForks[0].reasoningModelId],
+                        imageModelIds: imageAssignments.map(assignment => assignment.mediaModelId!),
+                        videoModelIds: [],
+                    },
+                } as CanvasState['nodes'][number]
+                : node),
+        }
+        mockWorkspaceMutationFromState(stateWithPendingMarker, 3901)
+
+        const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
+            workspaceId: 'workspace-1',
+            generationRequestId: plan.generationRequestId,
+            aiChatThreadId: 'thread-1',
+        })
+
+        expect(canvasGeometry?.removedNodeIds).toEqual(expect.arrayContaining([
+            getPendingGeneratedMediaNodeId(firstAssignment),
+            getPendingGeneratedMediaNodeId(secondAssignment),
+        ]))
+        expect(canvasGeometry?.nodeSnapshots?.map(node => node.nodeId)).not.toEqual(expect.arrayContaining([
+            getPendingGeneratedMediaNodeId(firstAssignment),
+            getPendingGeneratedMediaNodeId(secondAssignment),
+        ]))
+        expect(canvasGeometry?.edgeSnapshots).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                sourceNodeId: plan.branchForks[0].nodeId,
+                targetNodeId: 'node-file-final-0',
+            }),
+            expect.objectContaining({
+                sourceNodeId: plan.branchForks[0].nodeId,
+                targetNodeId: 'node-file-final-1',
+            }),
+        ]))
+    })
+
     it('persists final generated videos with poster metadata and parsed dimensions', async () => {
         const run: MediaGenerationRunMeta = {
             ...generationRun(),

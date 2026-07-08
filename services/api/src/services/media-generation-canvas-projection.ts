@@ -470,6 +470,32 @@ function getProjectionEdgeSnapshots(params: {
     )
 }
 
+function getCompletedGeneratedMediaPendingNodeId(node: CanvasNode): string | undefined {
+    if ((node.type !== 'image' && node.type !== 'video') || !node.fileId || !node.generatedBy?.generationRequestId) {
+        return undefined
+    }
+    const pendingNodeId = getPendingGeneratedMediaNodeId({
+        generationRequestId: node.generatedBy.generationRequestId,
+        ...(node.generatedBy.reasoningRunId ? { reasoningRunId: node.generatedBy.reasoningRunId } : {}),
+        ...(node.generatedBy.mediaRunId ? { mediaRunId: node.generatedBy.mediaRunId } : {}),
+        ...(node.generatedBy.mediaModelId ? { mediaModelId: node.generatedBy.mediaModelId } : {}),
+        mediaType: node.generatedBy.mediaType ?? node.type,
+        ...(node.generatedBy.mediaIndex !== undefined ? { mediaIndex: node.generatedBy.mediaIndex } : {}),
+        ...(node.generatedBy.reasoningIndex !== undefined ? { reasoningIndex: node.generatedBy.reasoningIndex } : {}),
+    })
+    return pendingNodeId === node.nodeId ? undefined : pendingNodeId
+}
+
+function getObsoletePendingGeneratedMediaNodeIds(state: CanvasState, generationRequestId: string): string[] {
+    const pendingNodeIds = new Set<string>()
+    for (const node of state.nodes) {
+        if ((node.type !== 'image' && node.type !== 'video') || node.generatedBy?.generationRequestId !== generationRequestId) continue
+        const pendingNodeId = getCompletedGeneratedMediaPendingNodeId(node)
+        if (pendingNodeId) pendingNodeIds.add(pendingNodeId)
+    }
+    return [...pendingNodeIds].sort()
+}
+
 function buildCanvasGeometryUpdate(params: {
     context: string
     layoutRevision: number
@@ -478,7 +504,9 @@ function buildCanvasGeometryUpdate(params: {
     geometryNodes: CanvasNodeGeometry[]
     removedNodeIds?: string[]
 }): CanvasGeometryUpdate {
-    const removedNodeIds = params.removedNodeIds?.filter(Boolean) ?? []
+    const requestedRemovedNodeIds = params.removedNodeIds?.filter(Boolean) ?? []
+    const derivedRemovedPendingNodeIds = getObsoletePendingGeneratedMediaNodeIds(params.state, params.generationRequestId)
+    const removedNodeIds = [...new Set([...requestedRemovedNodeIds, ...derivedRemovedPendingNodeIds])]
     const nodeSnapshots = getProjectionNodeSnapshots({
         state: params.state,
         generationRequestId: params.generationRequestId,
@@ -501,6 +529,7 @@ function buildCanvasGeometryUpdate(params: {
         nodeSnapshotIds: nodeSnapshots.map(node => node.nodeId),
         edgeSnapshotCount: edgeSnapshots.length,
         edgeSnapshotIds: edgeSnapshots.map(edge => edge.edgeId),
+        derivedRemovedPendingNodeIds,
         removedNodeIds,
     })
     return {
