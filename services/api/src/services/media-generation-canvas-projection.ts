@@ -75,6 +75,19 @@ type UpsertImageInput = {
     proseMirrorThreadContent?: unknown
 }
 
+type UpsertPartialImageInput = {
+    workspaceId: string
+    aiChatThreadId: string
+    imageUrl: string
+    fileId: string
+    aiProvider: string
+    partialIndex: number
+    aspectRatio?: number
+    canvasVisibleArea?: CanvasVisibleArea
+    generationRun?: MediaGenerationRunMeta
+    proseMirrorThreadContent?: unknown
+}
+
 type UpsertVideoInput = {
     workspaceId: string
     aiChatThreadId: string
@@ -134,6 +147,30 @@ function mediaDimensions(aspectRatio = 1): { width: number; height: number } {
     return {
         width: canvasProjectionSettings.generatedMediaSize,
         height: canvasProjectionSettings.generatedMediaSize / safeAspectRatio,
+    }
+}
+
+function getPositiveAspectRatio(value: unknown): number | undefined {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function fitGeneratedMediaLayout(
+    existing: GeneratedMediaNode | undefined,
+    fallbackDimensions: { width: number; height: number },
+    aspectRatio?: number,
+): { dimensions: { width: number; height: number }; position?: { x: number; y: number } } {
+    const dimensions = aspectRatio
+        ? fitDimensionsToAspectRatio(existing?.dimensions ?? fallbackDimensions, aspectRatio)
+        : existing?.dimensions ?? fallbackDimensions
+    if (!existing) return { dimensions }
+
+    return {
+        dimensions,
+        position: {
+            x: existing.position.x + (existing.dimensions.width - dimensions.width) / 2,
+            y: existing.position.y + (existing.dimensions.height - dimensions.height) / 2,
+        },
     }
 }
 
@@ -633,6 +670,23 @@ function upsertNode(nodes: CanvasNode[], nextNode: CanvasNode): { nodes: CanvasN
         ...nextNode,
         position: existing.position,
         dimensions: existing.dimensions,
+    } as CanvasNode
+    return {
+        nodes: nodes.map((node, nodeIndex) => nodeIndex === index ? mergedNode : node),
+        changed: JSON.stringify(existing) !== JSON.stringify(mergedNode),
+    }
+}
+
+function upsertNodeWithIncomingGeometry(nodes: CanvasNode[], nextNode: CanvasNode): { nodes: CanvasNode[]; changed: boolean } {
+    const index = nodes.findIndex(node => node.nodeId === nextNode.nodeId)
+    if (index < 0) return { nodes: [...nodes, nextNode], changed: true }
+
+    const existing = nodes[index]
+    const mergedNode = {
+        ...existing,
+        ...nextNode,
+        position: nextNode.position,
+        dimensions: nextNode.dimensions,
     } as CanvasNode
     return {
         nodes: nodes.map((node, nodeIndex) => nodeIndex === index ? mergedNode : node),
@@ -1315,6 +1369,100 @@ export async function refreshMediaGenerationRequestCanvasGeometry(params: {
     })
 }
 
+export async function upsertPartialGeneratedImageToCanvas(params: UpsertPartialImageInput): Promise<CanvasGeometryUpdate | null> {
+    const assignment = params.generationRun?.lineageAssignment
+    if (!assignment) return null
+
+    let geometryNodes: CanvasNodeGeometry[] = []
+    const result = await Workspace.mutateCanvasState({
+        workspaceId: params.workspaceId,
+        origin: 'upsertPartialGeneratedImageToCanvas',
+        mutate: (canvasState) => {
+            const pendingNodeId = getPendingGeneratedMediaNodeId(assignment)
+            const existingBeforeMarkers = findGeneratedMediaNodeForRun(canvasState.nodes, 'image', params.fileId, params.generationRun)
+            if (isImageNode(existingBeforeMarkers) && existingBeforeMarkers.nodeId !== pendingNodeId && hasCompletedGeneratedMediaForAssignment(canvasState.nodes, assignment)) {
+                console.info('[media-generation-canvas-projection] skip stale partial after completed image', {
+                    generationRequestId: assignment.generationRequestId,
+                    mediaRunId: assignment.mediaRunId,
+                    partialIndex: params.partialIndex,
+                    existingNodeId: existingBeforeMarkers.nodeId,
+                    pendingNodeId,
+                    partialFileId: params.fileId,
+                })
+                return {
+                    canvasState,
+                    changed: false,
+                }
+            }
+
+            const markerResult = ensureMarkers(canvasState, markerNodesFromAssignment(assignment, params.aiChatThreadId, canvasState, params.canvasVisibleArea))
+            let nextState = markerResult.state
+            const existing = findGeneratedMediaNodeForRun(nextState.nodes, 'image', params.fileId, params.generationRun)
+            const intrinsicAspectRatio = getPositiveAspectRatio(params.aspectRatio)
+            const layout = fitGeneratedMediaLayout(
+                isImageNode(existing) ? existing : undefined,
+                mediaDimensions(intrinsicAspectRatio ?? (isImageNode(existing) ? existing.aspectRatio : 1)),
+                intrinsicAspectRatio,
+            )
+            const lineageParentNodeId = getLineageParentNodeId(assignment)
+            const sourceNode = findNode(nextState.nodes, lineageParentNodeId)
+            const mediaModelId = (params.generationRun?.mediaModelId ?? assignment.mediaModelId ?? '') as AiModelId
+            const imageNode: ImageCanvasNode = {
+                nodeId: pendingNodeId,
+                type: 'image',
+                fileId: params.fileId || (isImageNode(existing) ? existing.fileId : ''),
+                workspaceId: params.workspaceId,
+                src: params.imageUrl || (isImageNode(existing) ? existing.src : ''),
+                aspectRatio: intrinsicAspectRatio ?? (isImageNode(existing) ? existing.aspectRatio : 1),
+                position: layout.position ?? getGeneratedMediaPosition(sourceNode, nextState.nodes, layout.dimensions, nextState.nodes.length, nextState, params.canvasVisibleArea),
+                dimensions: layout.dimensions,
+                generatedBy: {
+                    aiChatThreadId: params.aiChatThreadId,
+                    responseId: isImageNode(existing) ? existing.generatedBy?.responseId ?? '' : '',
+                    aiModel: (params.generationRun?.reasoningModelId ?? params.aiProvider) as AiModelId,
+                    imageModelProvider: params.aiProvider,
+                    revisedPrompt: assignment.promptText,
+                    responseMessageId: isImageNode(existing) ? existing.generatedBy?.responseMessageId ?? '' : '',
+                    ...generatedByLineage(assignment),
+                    ...(params.generationRun?.variantIndex !== undefined ? { variantIndex: params.generationRun.variantIndex } : {}),
+                    mediaModelId,
+                },
+            }
+            const nodeResult = upsertNodeWithIncomingGeometry(nextState.nodes, imageNode)
+            nextState = { ...nextState, nodes: nodeResult.nodes }
+            const edgeResult = addGeneratedMediaEdge(nextState, lineageParentNodeId, pendingNodeId)
+            nextState = edgeResult.state
+            const forestResult = rebalanceLineageForest(nextState, 'upsertPartialGeneratedImageToCanvas', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
+            geometryNodes = diffCanvasGeometry(canvasState, forestResult.state)
+            console.info('[media-generation-canvas-projection] upsert partial image geometry diff', {
+                generationRequestId: assignment.generationRequestId,
+                mediaRunId: assignment.mediaRunId,
+                partialIndex: params.partialIndex,
+                pendingNodeId,
+                fileId: params.fileId,
+                imageUrlPresent: Boolean(params.imageUrl),
+                intrinsicAspectRatio,
+                geometryNodeCount: geometryNodes.length,
+                geometryNodeIds: geometryNodes.map(node => node.nodeId),
+            })
+            return {
+                canvasState: forestResult.state,
+                changed: markerResult.changed || nodeResult.changed || edgeResult.changed || forestResult.changed,
+            }
+        },
+    })
+    if (!result.changed || result.canvasStateUpdatedAt === null || !result.canvasState) return null
+    return buildCanvasGeometryUpdate({
+        context: 'upsertPartialGeneratedImageToCanvas',
+        layoutRevision: result.canvasStateUpdatedAt,
+        state: result.canvasState,
+        generationRequestId: assignment.generationRequestId,
+        geometryNodes,
+    })
+}
+
 export async function upsertGeneratedImageToCanvas(params: UpsertImageInput): Promise<CanvasGeometryUpdate | null> {
     const assignment = params.generationRun?.lineageAssignment
     if (!assignment) return null
@@ -1332,14 +1480,14 @@ export async function upsertGeneratedImageToCanvas(params: UpsertImageInput): Pr
             const replacementResult = replaceExistingPendingGeneratedMediaNode(nextState, existing, nodeId)
             removedNodeIds = replacementResult.changed && existing ? [existing.nodeId] : []
             nextState = replacementResult.state
-            const intrinsicAspectRatio = Number.isFinite(params.aspectRatio) && Number(params.aspectRatio) > 0
-                ? Number(params.aspectRatio)
-                : undefined
+            const intrinsicAspectRatio = getPositiveAspectRatio(params.aspectRatio)
             // Final fitted dimensions are persisted here so the client's
             // intrinsic-size handler is a no-op on load — no post-load movement.
-            const dimensions = intrinsicAspectRatio
-                ? fitDimensionsToAspectRatio(existing?.dimensions ?? mediaDimensions(), intrinsicAspectRatio)
-                : existing?.dimensions ?? mediaDimensions()
+            const layout = fitGeneratedMediaLayout(
+                isImageNode(existing) ? existing : undefined,
+                mediaDimensions(intrinsicAspectRatio ?? (isImageNode(existing) ? existing.aspectRatio : 1)),
+                intrinsicAspectRatio,
+            )
             const lineageParentNodeId = getLineageParentNodeId(assignment)
             const sourceNode = findNode(nextState.nodes, lineageParentNodeId)
             const mediaModelId = (params.generationRun?.mediaModelId ?? `${params.imageModelProvider}:${params.imageModelId}`) as AiModelId
@@ -1350,8 +1498,8 @@ export async function upsertGeneratedImageToCanvas(params: UpsertImageInput): Pr
                 workspaceId: params.workspaceId,
                 src: params.imageUrl,
                 aspectRatio: intrinsicAspectRatio ?? (isImageNode(existing) ? existing.aspectRatio : 1),
-                position: existing?.position ?? getGeneratedMediaPosition(sourceNode, nextState.nodes, dimensions, nextState.nodes.length, nextState, params.canvasVisibleArea),
-                dimensions,
+                position: layout.position ?? getGeneratedMediaPosition(sourceNode, nextState.nodes, layout.dimensions, nextState.nodes.length, nextState, params.canvasVisibleArea),
+                dimensions: layout.dimensions,
                 generatedBy: {
                     aiChatThreadId: params.aiChatThreadId,
                     responseId: params.responseId,
@@ -1417,7 +1565,11 @@ export async function upsertGeneratedVideoToCanvas(params: UpsertVideoInput): Pr
             removedNodeIds = replacementResult.changed && existing ? [existing.nodeId] : []
             nextState = replacementResult.state
             const aspectRatio = parseAspectRatio(params.aspectRatio)
-            const dimensions = fitDimensionsToAspectRatio(existing?.dimensions ?? mediaDimensions(aspectRatio), aspectRatio)
+            const layout = fitGeneratedMediaLayout(
+                isVideoNode(existing) ? existing : undefined,
+                mediaDimensions(aspectRatio),
+                aspectRatio,
+            )
             const lineageParentNodeId = getLineageParentNodeId(assignment)
             const sourceNode = findNode(nextState.nodes, lineageParentNodeId)
             const videoNode: VideoCanvasNode = {
@@ -1432,8 +1584,8 @@ export async function upsertGeneratedVideoToCanvas(params: UpsertVideoInput): Pr
                 aspectRatio,
                 durationSeconds: params.durationSeconds,
                 hasAudio: params.hasAudio,
-                position: existing?.position ?? getGeneratedMediaPosition(sourceNode, nextState.nodes, dimensions, nextState.nodes.length, nextState, params.canvasVisibleArea),
-                dimensions,
+                position: layout.position ?? getGeneratedMediaPosition(sourceNode, nextState.nodes, layout.dimensions, nextState.nodes.length, nextState, params.canvasVisibleArea),
+                dimensions: layout.dimensions,
                 generatedBy: {
                     aiChatThreadId: params.aiChatThreadId,
                     responseId: params.responseId,

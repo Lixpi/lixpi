@@ -9835,7 +9835,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         clearPendingBranchMarkerStateForRun(threadId, generationRun)
         const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
-        const nodeId = fileId ? `node-${fileId}` : getPendingGeneratedMediaNodeId(lineageAssignment)
+        const nodeId = getPendingGeneratedMediaNodeId(lineageAssignment)
         partialImageTracker.set(runKey, {
             nodeId,
             fileId: fileId || '',
@@ -10643,12 +10643,31 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let lastAppliedApiLayoutRevision = 0
     let highestObservedApiLayoutRevision = 0
 
+    function syncApiCanvasSnapshotNodesToDOM(nodeIds: Iterable<string>): void {
+        if (!currentCanvasState) return
+        const nodeIdSet = new Set(nodeIds)
+        if (nodeIdSet.size === 0) return
+
+        for (const node of currentCanvasState.nodes) {
+            if (!nodeIdSet.has(node.nodeId)) continue
+            if (node.type === 'branchOrigin') {
+                appendBranchOriginNodeToDOM(node)
+            } else if (node.type === 'branchFork') {
+                appendBranchForkNodeToDOM(node)
+            } else if (node.type === 'branchLine') {
+                appendBranchLineNodeToDOM(node)
+            } else if (node.type === 'image' || node.type === 'video' || node.type === 'mediaDocument' || node.type === 'audio') {
+                appendCanvasNodeToDOM(node)
+            }
+        }
+    }
+
     // Applies API-resolved authoritative node geometry. The API already
     // persisted it, so this is a transient commit — no client-side save. Missing
     // API-owned projected nodes arrive as snapshots in the same revision.
     function applyApiCanvasGeometry(canvasGeometry: CanvasGeometryUpdate): void {
         if (!currentCanvasState) return
-        if (canvasGeometry.layoutRevision <= lastAppliedApiLayoutRevision) return
+        if (canvasGeometry.layoutRevision < lastAppliedApiLayoutRevision) return
         if (canvasGeometry.layoutRevision < highestObservedApiLayoutRevision) return
 
         const result = applyCanvasGeometryUpdateToState(currentCanvasState, canvasGeometry)
@@ -10669,6 +10688,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             removedNodeIds: canvasGeometry.removedNodeIds ?? [],
             removedEdgeIds: canvasGeometry.removedEdgeIds ?? [],
             upsertedNodeIds: result.upsertedNodeIds,
+            updatedNodeIds: result.updatedNodeIds,
             upsertedEdgeIds: result.upsertedEdgeIds,
             missingGeometryNodeIds: result.missingGeometryNodeIds,
         })
@@ -10679,6 +10699,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             fullyApplied: result.fullyApplied,
             appliedGeometryNodeIds: result.appliedGeometryNodeIds,
             upsertedNodeIds: result.upsertedNodeIds,
+            updatedNodeIds: result.updatedNodeIds,
             upsertedEdgeIds: result.upsertedEdgeIds,
             removedNodeIds: result.removedNodeIds,
             removedEdgeIds: result.removedEdgeIds,
@@ -10686,6 +10707,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
         if (!result.changed) return
         commitTransientCanvasStatePreservingEditors(result.state)
+        syncApiCanvasSnapshotNodesToDOM([...result.upsertedNodeIds, ...result.updatedNodeIds])
         if (currentCanvasState) {
             pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(currentCanvasState)
             console.info('[CANVAS][api-geometry]', 'preserve-until-store-ack', {
@@ -10826,6 +10848,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (!shouldAcceptGeneratedMediaEvent(threadId)) return
 
             registerGeneratedMediaRun(threadId, generationRun)
+            if (getApiMediaRunLineageAssignment(generationRun)) {
+                const existingImageNode = findGeneratedMediaNodeForRun('image', threadId, generationRun)
+                if (existingImageNode?.type === 'image') {
+                    rememberPartialImageTrackerForNode(threadId, generationRun, existingImageNode)
+                    clearPendingBranchMarkerStateForRun(threadId, generationRun)
+                    syncPixiGeneratingImageNodes()
+                } else {
+                    debugGeneratedMediaLifecycle('image-generation-trace-waiting-for-api-geometry', {
+                        runKey: getGeneratedMediaRunKey(threadId, generationRun),
+                        threadId,
+                        generationRequestId: generationRun?.generationRequestId ?? '',
+                        mediaRunId: generationRun?.mediaRunId ?? '',
+                    })
+                }
+                clearGeneratingReferencesAfterPromptHandoff(threadId, generationRun)
+                return
+            }
             ensureImageGenerationPlaceholderForRun({ threadId, generationRun })
             clearGeneratingReferencesAfterPromptHandoff(threadId, generationRun)
         },
@@ -10850,11 +10889,114 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         },
 
         onImagePartialToCanvas: (data) => {
-            const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId, generationRun } = data
+            const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId, generationRun, canvasGeometry } = data
             if (!shouldAcceptGeneratedMediaEvent(threadId, imgWorkspaceId)) return
 
             const runKey = getGeneratedMediaRunKey(threadId, generationRun)
             registerGeneratedMediaRun(threadId, generationRun)
+            const lineageAssignment = getApiMediaRunLineageAssignment(generationRun)
+
+            if (canvasGeometry) {
+                console.info('[CANVAS][api-geometry]', 'image-partial-apply', {
+                    runKey,
+                    layoutRevision: canvasGeometry.layoutRevision,
+                    partialIndex: data.partialIndex,
+                    generationRequestId: generationRun?.generationRequestId,
+                    mediaRunId: generationRun?.mediaRunId,
+                    mediaModelId: generationRun?.mediaModelId,
+                    geometryNodeIds: canvasGeometry.nodes.map(node => node.nodeId),
+                    nodeSnapshotIds: canvasGeometry.nodeSnapshots?.map(node => node.nodeId) ?? [],
+                    edgeSnapshotIds: canvasGeometry.edgeSnapshots?.map(edge => edge.edgeId) ?? [],
+                })
+                const previousTracker = partialImageTracker.get(runKey)
+                applyApiCanvasGeometry(canvasGeometry)
+                const expectedNodeId = lineageAssignment ? getPendingGeneratedMediaNodeId(lineageAssignment) : ''
+                const imageNode = (expectedNodeId ? getCurrentCanvasMediaNode(expectedNodeId) : undefined)
+                    ?? findGeneratedMediaNodeForRun('image', threadId, generationRun)
+                if (imageNode?.type !== 'image') {
+                    console.error('[CANVAS][api-geometry] image partial geometry did not materialize image node', {
+                        runKey,
+                        threadId,
+                        expectedNodeId,
+                        generationRequestId: generationRun?.generationRequestId,
+                        mediaRunId: generationRun?.mediaRunId,
+                    })
+                    syncPixiGeneratingImageNodes()
+                    return
+                }
+
+                const tracker = rememberPartialImageTrackerForNode(threadId, generationRun, imageNode)
+                const hasFrame = hasGeneratedImageFrame(imageNode) || Boolean(imageUrl || fileId)
+                setGeneratedMediaTracker(partialImageTracker, runKey, {
+                    ...tracker,
+                    fileId: fileId || tracker.fileId,
+                    hasReceivedFrame: hasFrame,
+                })
+                const receivedFirstFrame = !previousTracker?.hasReceivedFrame && hasFrame
+                debugGeneratedMediaLifecycle('image-partial-api-geometry-update', {
+                    runKey,
+                    threadId,
+                    nodeId: imageNode.nodeId,
+                    fileId: fileId || imageNode.fileId,
+                    receivedFirstFrame,
+                    hasReceivedFrame: hasFrame,
+                    imageUrlPresent: Boolean(imageUrl),
+                    layoutRevision: canvasGeometry.layoutRevision,
+                })
+                clearPendingBranchMarkerStateForRun(threadId, generationRun)
+                if (hasFrame) clearGeneratingReferencesOnFirstPixels(threadId, generationRun)
+                syncPixiGeneratingImageNodes()
+                return
+            }
+
+            if (lineageAssignment && (imageUrl || fileId)) {
+                const existingTracker = partialImageTracker.get(runKey)
+                const expectedNodeId = getPendingGeneratedMediaNodeId(lineageAssignment)
+                const existingImageNode = (existingTracker ? getCurrentCanvasMediaNode(existingTracker.nodeId) : undefined)
+                    ?? getCurrentCanvasMediaNode(expectedNodeId)
+                    ?? findGeneratedMediaNodeForRun('image', threadId, generationRun)
+                if (
+                    existingImageNode?.type === 'image'
+                    && hasGeneratedImageFrame(existingImageNode)
+                    && (!fileId || existingImageNode.fileId === fileId)
+                ) {
+                    debugGeneratedMediaLifecycle('image-partial-duplicate-without-geometry', {
+                        runKey,
+                        threadId,
+                        nodeId: existingImageNode.nodeId,
+                        fileId: existingImageNode.fileId,
+                        partialIndex: data.partialIndex,
+                        generationRequestId: generationRun?.generationRequestId ?? '',
+                        mediaRunId: generationRun?.mediaRunId ?? '',
+                    })
+                    syncPixiGeneratingImageNodes()
+                    return
+                }
+                console.error('[CANVAS][api-geometry] missing image partial geometry; refusing local canvas topology mutation', {
+                    runKey,
+                    threadId,
+                    partialIndex: data.partialIndex,
+                    partialFileId: fileId,
+                    generationRequestId: generationRun?.generationRequestId,
+                    mediaRunId: generationRun?.mediaRunId,
+                })
+                syncPixiGeneratingImageNodes()
+                return
+            }
+
+            if (lineageAssignment) {
+                const existing = partialImageTracker.get(runKey)
+                debugGeneratedMediaLifecycle('empty-image-partial-api-heartbeat', {
+                    runKey,
+                    threadId,
+                    nodeId: existing?.nodeId ?? '',
+                    hasReceivedFrame: existing?.hasReceivedFrame ?? false,
+                    generationRequestId: generationRun?.generationRequestId ?? '',
+                    mediaRunId: generationRun?.mediaRunId ?? '',
+                })
+                syncPixiGeneratingImageNodes()
+                return
+            }
 
             let existing = partialImageTracker.get(runKey)
             if (existing && !getCurrentCanvasMediaNode(existing.nodeId)) {
@@ -10948,6 +11090,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             registerGeneratedMediaRun(threadId, generationRun)
             const pendingNodeId = partialImageTracker.get(runKey)?.nodeId
             if (!data.canvasGeometry) {
+                const completedNodeId = fileId ? `node-${fileId}` : ''
+                const existingCompletedImageNode = completedNodeId ? getCurrentCanvasMediaNode(completedNodeId) : undefined
+                if (existingCompletedImageNode?.type === 'image') {
+                    console.info('[CANVAS][api-geometry]', 'image-complete-existing-final-without-geometry', {
+                        runKey,
+                        threadId,
+                        completedNodeId,
+                        generationRequestId: generationRun?.generationRequestId,
+                        mediaRunId: generationRun?.mediaRunId,
+                    })
+                    partialImageTracker.delete(runKey)
+                    syncPixiGeneratingImageNodes()
+                    if (pendingNodeId && pendingNodeId !== completedNodeId) {
+                        viewportEl.querySelector(`[data-node-id="${pendingNodeId}"]`)?.remove()
+                    }
+                    appendImageNodeToDOM(existingCompletedImageNode)
+                    finishGeneratedMediaRun(threadId, generationRun)
+                    queueCanvasMediaAnalysis(completedNodeId, getMediaDescriptorStillFileId(existingCompletedImageNode))
+                    return
+                }
                 console.error('[CANVAS][api-geometry] missing image completion geometry; refusing local canvas topology mutation', {
                     runKey,
                     threadId,

@@ -32,6 +32,7 @@ export type AiGeneratedImageCallbacks = {
         workspaceId: string
         partialIndex: number
         aiProvider: string
+        canvasGeometry?: CanvasGeometryUpdate
         generationRun?: MediaGenerationRunMeta
     }) => void
     onImageCompleteToCanvas?: (data: {

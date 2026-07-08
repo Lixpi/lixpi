@@ -1289,7 +1289,7 @@ export const settings: Settings = {
             // Empty screen-pixel gap between the media node edge and the inside edge of the snake at 100% zoom.
             gap: 3,
             // Diameter of the pre-first-frame generation circle as a fraction of the pending media node's shortest side.
-            preFrameCircleScale: 1 / 3,
+            preFrameCircleScale: mediaGenerationLayoutSettings.preFrameCircleScale,
             // Screen-pixel width of the snake head at 100% zoom. The body tapers from this value toward the tail.
             snakeWidth: 9,
             // Tail width as a fraction of `snakeWidth`; lower values make the tail taper to a finer point.
@@ -1531,9 +1531,9 @@ export const settings: Settings = {
         // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
         branchFanoutExtraGap: mediaGenerationLayoutSettings.branchFanoutExtraGap,
         // Vertical gap between stacked screen-fixed pending branch markers.
-        pendingMarkerInputGap: 8,
+        pendingMarkerInputGap: mediaGenerationLayoutSettings.pendingMarkerInputGap,
         // Milliseconds for moving and scaling a pending branch marker from its screen-fixed preflight position to its API-planned canvas position.
-        pendingMarkerMoveDurationMs: 420,
+        pendingMarkerMoveDurationMs: mediaGenerationLayoutSettings.pendingMarkerMoveDurationMs,
         // Temporary root marker used when a fresh multi-model branch has no real source node.
         branchOrigin: {
             // Canvas-unit base size for branch lineage markers; final width and height derive from the shared marker sizing in @lixpi/constants.
@@ -1899,7 +1899,7 @@ export const settings: Settings = {
             // Multiplier on the minimum width capping the screen-fixed preflight pose. Kept wider than maxWidthGrowth so long prompts stay on one line while still being assessed; once the marker lands on the canvas it tightens to maxWidthGrowth.
             screenFixedMaxWidthGrowth: mediaGenerationLayoutSettings.marker.screenFixedMaxWidthGrowth,
             // Hard cap on the screen-fixed preflight pose's on-screen width as a fraction of the prompt input field width. The pill hugs its content but never grows past this share of the input; longer messages truncate with an ellipsis.
-            screenFixedMaxWidthFraction: 0.8,
+            screenFixedMaxWidthFraction: mediaGenerationLayoutSettings.marker.screenFixedMaxWidthFraction,
             // Text sizing for the marker's preview lines. Matches the floating detail panel's body text (1rem / 16px) so a marker reads at the same size as the thread it represents.
             text: mediaGenerationLayoutSettings.marker.text,
         },

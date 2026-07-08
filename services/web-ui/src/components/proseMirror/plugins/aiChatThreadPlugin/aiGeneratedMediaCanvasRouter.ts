@@ -40,6 +40,7 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
                 workspaceId: event.workspaceId || '',
                 partialIndex: event.partialIndex || 0,
                 aiProvider: event.aiProvider || '',
+                ...(event.canvasGeometry ? { canvasGeometry: event.canvasGeometry } : {}),
                 generationRun,
             })
             return

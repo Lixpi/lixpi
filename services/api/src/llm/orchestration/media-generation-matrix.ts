@@ -216,6 +216,23 @@ export class MediaGenerationMatrixOrchestrator {
         const primaryVideoModel = normalized.videoModels[0]
         const primaryImageOptions = primaryImageModel ? normalized.imageModelOptions[primaryImageModel.modelId] : undefined
         const primaryVideoOptions = primaryVideoModel ? normalized.videoModelOptions[primaryVideoModel.modelId] : undefined
+        info('[MEDIA_MATRIX] Normalized media generation request', {
+            generationRequestId: normalized.generationRequestId,
+            aiChatThreadId: requestData.aiChatThreadId,
+            useMultipleReasoningModels: normalized.useMultipleReasoningModels,
+            useMultipleImageModels: normalized.useMultipleImageModels,
+            useMultipleVideoModels: normalized.useMultipleVideoModels,
+            requestedReasoningModelIds: requestData.mediaGenerationRequest?.reasoningModelIds ?? requestData.aiReasoningModels ?? [],
+            requestedImageModelIds: requestData.mediaGenerationRequest?.imageModelIds ?? requestData.aiImageModels ?? [],
+            requestedVideoModelIds: requestData.mediaGenerationRequest?.videoModelIds ?? requestData.aiVideoModels ?? [],
+            normalizedReasoningModelIds: normalized.reasoningModelIds,
+            normalizedImageModelIds: normalized.imageModelIds,
+            normalizedVideoModelIds: normalized.videoModelIds,
+            imageConfigGroups: normalized.imageConfigGroups,
+            videoConfigGroups: normalized.videoConfigGroups,
+            imageModelOptions: normalized.imageModelOptions,
+            videoModelOptions: normalized.videoModelOptions,
+        })
         const sharedPreflight = await this.runSharedPreflight({
             requestData,
             normalized,

@@ -252,6 +252,7 @@ export default class AiInteractionService {
                     fileId: content.fileId,
                     workspaceId: this.workspaceId,
                     partialIndex: content.partialIndex,
+                    ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...segmentBase,
                 })
                 return

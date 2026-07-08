@@ -4,6 +4,7 @@ import type { CanvasGeometryUpdate, CanvasNode, CanvasNodeGeometry, CanvasState,
 import {
     getGeneratedMediaRunIdentity,
     isCompletedGeneratedMediaCanvasNode,
+    isGeneratedMediaCanvasNode,
     isPendingGeneratedMediaCanvasNode,
 } from './generated-media-node.ts'
 
@@ -14,6 +15,7 @@ export type ApplyCanvasGeometryUpdateResult = {
     matchedGeometryNodeCount: number
     missingGeometryNodeIds: string[]
     upsertedNodeIds: string[]
+    updatedNodeIds: string[]
     removedNodeIds: string[]
     upsertedEdgeIds: string[]
     removedEdgeIds: string[]
@@ -45,6 +47,22 @@ function workspaceEdgesMatch(left: WorkspaceEdge, right: WorkspaceEdge): boolean
         && left.targetT === right.targetT
         && left.sourceMessageId === right.sourceMessageId
         && left.pathType === right.pathType
+}
+
+function canvasNodesMatch(left: CanvasNode, right: CanvasNode): boolean {
+    return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function isApiOwnedCanvasSnapshotNode(node: CanvasNode): boolean {
+    return isGeneratedMediaCanvasNode(node)
+        || node.type === 'branchOrigin'
+        || node.type === 'branchFork'
+        || node.type === 'branchLine'
+}
+
+function isEmptyGeneratedMediaSnapshotStaleForExistingFrame(existing: CanvasNode, snapshot: CanvasNode): boolean {
+    if (!isGeneratedMediaCanvasNode(existing) || !isPendingGeneratedMediaCanvasNode(snapshot)) return false
+    return isCompletedGeneratedMediaCanvasNode(existing)
 }
 
 function applyGeometryToNode(node: CanvasNode, geometry: CanvasNodeGeometry): { node: CanvasNode; changed: boolean } {
@@ -108,9 +126,29 @@ export function applyCanvasGeometryUpdateToState(
         changed = changed || removedEdgeIds.length > 0
     }
 
-    const nodeIds = new Set(nodes.map((node) => node.nodeId))
     const upsertedNodeIds: string[] = []
+    const updatedNodeIds: string[] = []
     const snapshotNodes = update.nodeSnapshots ?? []
+    const snapshotNodesById = new Map(snapshotNodes.map(snapshot => [snapshot.nodeId, snapshot]))
+    if (snapshotNodesById.size > 0) {
+        nodes = nodes.map((node) => {
+            const snapshot = snapshotNodesById.get(node.nodeId)
+            if (
+                !snapshot
+                || requestedRemovedNodeIds.has(snapshot.nodeId)
+                || stalePendingSnapshotNodeIds.has(snapshot.nodeId)
+                || !isApiOwnedCanvasSnapshotNode(snapshot)
+                || isEmptyGeneratedMediaSnapshotStaleForExistingFrame(node, snapshot)
+            ) {
+                return node
+            }
+            if (canvasNodesMatch(node, snapshot)) return node
+            updatedNodeIds.push(snapshot.nodeId)
+            changed = true
+            return snapshot
+        })
+    }
+    const nodeIds = new Set(nodes.map((node) => node.nodeId))
     for (const snapshot of snapshotNodes) {
         if (requestedRemovedNodeIds.has(snapshot.nodeId) || stalePendingSnapshotNodeIds.has(snapshot.nodeId) || nodeIds.has(snapshot.nodeId)) continue
         nodes = [...nodes, snapshot]
@@ -166,6 +204,7 @@ export function applyCanvasGeometryUpdateToState(
         matchedGeometryNodeCount: update.nodes.length - missingGeometryNodeIds.length,
         missingGeometryNodeIds,
         upsertedNodeIds,
+        updatedNodeIds,
         removedNodeIds,
         upsertedEdgeIds,
         removedEdgeIds,

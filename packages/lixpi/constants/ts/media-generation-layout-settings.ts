@@ -27,6 +27,8 @@ export type MediaGenerationMarkerSettings = {
     maxWidthGrowth: number
     // Multiplier on the minimum width capping the screen-fixed preflight pose.
     screenFixedMaxWidthGrowth: number
+    // Hard cap on the screen-fixed preflight pose as a fraction of the prompt input width.
+    screenFixedMaxWidthFraction: number
     // Naive per-character width used for width sizing.
     approxCharWidth: number
     // Wider per-character width used when predicting line wrapping.
@@ -63,6 +65,9 @@ export type MediaGenerationLayoutSettings = {
     mediaToMediaGap: number
     branchOriginToFirstMediaGap: number
     branchFanoutExtraGap: number
+    pendingMarkerInputGap: number
+    pendingMarkerMoveDurationMs: number
+    preFrameCircleScale: number
     serverFallbackPaneHeight: number
     marker: MediaGenerationMarkerSettings
     generatedMediaChrome: GeneratedMediaChromeLayoutSettings
@@ -87,6 +92,12 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
     branchOriginToFirstMediaGap: 312,
     // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
     branchFanoutExtraGap: 200,
+    // Screen-pixel vertical gap between stacked screen-fixed pending branch markers.
+    pendingMarkerInputGap: 8,
+    // Milliseconds for moving a pending branch marker from screen-fixed preflight into API-planned canvas position.
+    pendingMarkerMoveDurationMs: 420,
+    // Diameter of the pre-first-frame generation circle as a fraction of the pending media node's shortest side.
+    preFrameCircleScale: 1 / 3,
     // Canvas-unit pane height the API assumes when the client did not report its visible area.
     serverFallbackPaneHeight: 900,
     // Text-driven branch-marker pill sizing. The API estimates marker dimensions
@@ -97,6 +108,7 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
         minWidthMultiplier: 2.6,
         maxWidthGrowth: 1.5,
         screenFixedMaxWidthGrowth: 6,
+        screenFixedMaxWidthFraction: 0.8,
         approxCharWidth: 8,
         lineWrapCharWidth: 10,
         horizontalPadding: 60,

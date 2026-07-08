@@ -6,6 +6,7 @@ import { STREAM_STATUS, type CanvasGeometryUpdate, type MediaGenerationRunMeta, 
 import {
     logCanvasProjectionError,
     upsertGeneratedImageToCanvas,
+    upsertPartialGeneratedImageToCanvas,
 } from '../../services/media-generation-canvas-projection.ts'
 import type { ChunkPayload, ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from './stream-publisher.ts'
 
@@ -128,12 +129,48 @@ export class ImagePublisher {
                 useContentHash: true,
             })
 
+            const intrinsicSize = readImageIntrinsicSize(buffer)
+            let canvasGeometry: CanvasGeometryUpdate | null = null
+            try {
+                const proseMirrorThreadContent = await this.getProseMirrorSnapshot?.()
+                canvasGeometry = await upsertPartialGeneratedImageToCanvas({
+                    workspaceId: this.workspaceId,
+                    aiChatThreadId: this.aiChatThreadId,
+                    imageUrl: result.url,
+                    fileId: result.fileId,
+                    aiProvider: this.provider,
+                    partialIndex,
+                    ...(intrinsicSize ? { aspectRatio: intrinsicSize.width / intrinsicSize.height } : {}),
+                    generationRun: this.generationRun,
+                    ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
+                    ...(this.canvasVisibleArea ? { canvasVisibleArea: this.canvasVisibleArea } : {}),
+                })
+            } catch (error) {
+                logCanvasProjectionError('failed to persist partial generated image to canvas', error)
+            }
+
+            console.info('[ImagePublisher] IMAGE_PARTIAL prepared', {
+                workspaceId: this.workspaceId,
+                aiChatThreadId: this.aiChatThreadId,
+                generationRequestId: this.generationRun?.generationRequestId ?? '',
+                mediaRunId: this.generationRun?.mediaRunId ?? '',
+                mediaModelId: this.generationRun?.mediaModelId ?? '',
+                partialIndex,
+                fileId: result.fileId,
+                hasCanvasGeometry: Boolean(canvasGeometry),
+                layoutRevision: canvasGeometry?.layoutRevision ?? null,
+                geometryNodeCount: canvasGeometry?.nodes.length ?? 0,
+                nodeSnapshotCount: canvasGeometry?.nodeSnapshots?.length ?? 0,
+                edgeSnapshotCount: canvasGeometry?.edgeSnapshots?.length ?? 0,
+            })
+
             this.publish({
                 status: STREAM_STATUS.IMAGE_PARTIAL,
                 imageUrl: result.url,
                 fileId: result.fileId,
                 partialIndex,
                 aiProvider: this.provider,
+                ...(canvasGeometry ? { canvasGeometry } : {}),
                 ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             })
         } catch {
@@ -196,6 +233,21 @@ export class ImagePublisher {
         } catch (error) {
             logCanvasProjectionError('failed to persist generated image to canvas', error)
         }
+
+        console.info('[ImagePublisher] IMAGE_COMPLETE prepared', {
+            workspaceId: this.workspaceId,
+            aiChatThreadId: this.aiChatThreadId,
+            generationRequestId: this.generationRun?.generationRequestId ?? '',
+            mediaRunId: this.generationRun?.mediaRunId ?? '',
+            mediaModelId: this.generationRun?.mediaModelId ?? '',
+            responseId,
+            fileId: result.fileId,
+            hasCanvasGeometry: Boolean(canvasGeometry),
+            layoutRevision: canvasGeometry?.layoutRevision ?? null,
+            geometryNodeCount: canvasGeometry?.nodes.length ?? 0,
+            nodeSnapshotCount: canvasGeometry?.nodeSnapshots?.length ?? 0,
+            edgeSnapshotCount: canvasGeometry?.edgeSnapshots?.length ?? 0,
+        })
 
         this.publish({
             status: STREAM_STATUS.IMAGE_COMPLETE,

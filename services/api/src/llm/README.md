@@ -59,7 +59,7 @@ src/llm/
         state.ts                 # ProviderState type + channel reducers (partial-overlay semantics)
         stream-publisher.ts      # START_STREAM, STREAMING, END_STREAM + image/video trace/error events; single-writer streams also mirror ProseMirror steps
         pipeline-event-log.ts    # Workspace JetStream replay log for chat/media/extraction pipeline events
-        image-publisher.ts       # IMAGE_PARTIAL, IMAGE_COMPLETE + content-hash deduped storage
+        image-publisher.ts       # IMAGE_PARTIAL, IMAGE_COMPLETE + content-hash deduped storage and API canvas projection
         video-publisher.ts       # VIDEO_PENDING, VIDEO_GENERATING, VIDEO_COMPLETE, VIDEO_ERROR
         workspace-context-resolver.ts # Descriptor-first workspace relevance resolver
         image-branch-resolver.ts # Structured VLM target/reference resolver for image and video generation
@@ -137,6 +137,8 @@ Top-level chat requests publish `START_STREAM` before graph invocation. This kee
 For media-enabled requests, `MediaBranchLineagePlanner` runs immediately after branch resolution. It publishes `MEDIA_LINEAGE_PLANNED` with branch origin/fork marker IDs, marker provenance, lineage parent IDs, and run assignments. Branch forks are reasoning-run markers: multiple reasoning models produce separate forks, while multiple image/video models under the same reasoning run share that reasoning fork and fan out from it. When no lineage source exists, that reasoning fork is the visible root marker rather than being wrapped in a separate neutral origin. Those assignments are copied into `generationRun.lineageAssignment` before reasoning and media fanout, so image/video events carry API-owned topology. Matrix requests run the planner once in shared preflight and pass the plan to every reasoning child; single media requests run it as the graph's `planMediaBranchLineage` node.
 
 Lineage planning is an API-only contract. Provider routers, media routers, and browser code must not synthesize missing lineage assignments, recover marker IDs from model counts, or fall back to older reasoning-level metadata when a concrete media run is missing its exact assignment. Missing lineage is a planner/stream-ordering/data issue to fix in the API path.
+
+Generated-media canvas projection is also API-owned. Partial image frames and final image/video outputs persist their generated-media node snapshots, fitted dimensions, connector edges, and branch-marker geometry before their stream events carry `canvasGeometry` to clients. Browsers apply those snapshots and render them; they must not create alternate media node IDs or locally rebalance partial/final outputs for API lineage runs.
 
 `MediaBranchLineagePlanner` treats uploaded/source/reference media as context only. A media node becomes `parentMediaNodeId` only when it is already a generated branch member selected by the API as a continuation target. Reference-only video/image requests are rooted through a planned `branchOrigin` or chat/thread source, never by drawing a lineage edge from the uploaded source media itself.
 
