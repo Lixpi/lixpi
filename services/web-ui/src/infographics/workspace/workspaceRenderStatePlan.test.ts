@@ -153,6 +153,81 @@ describe('workspace render state plan', () => {
         expect(result.state?.edges).toEqual([edge])
     })
 
+    it('preserves API-completed generated media when the incoming store still has pending placeholders', () => {
+        const fork = makeAiChatThread({ nodeId: 'fork-node', referenceId: 'thread-lineage', position: { x: 0, y: 0 } })
+        const generatedByBase = {
+            aiChatThreadId: 'thread-lineage',
+            responseId: 'response-1',
+            aiModel: 'anthropic:claude-haiku-4.5' as any,
+            revisedPrompt: 'prompt',
+            responseMessageId: 'message-1',
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-0',
+            branchForkNodeId: 'fork-node',
+            branchLineNodeId: 'branch-line-1',
+        }
+        const pendingImage0 = makeImage({
+            nodeId: 'pending-image-request-1-reasoning-0-image-0',
+            fileId: '',
+            src: '',
+            position: { x: 500, y: -140 },
+            generatedBy: {
+                ...generatedByBase,
+                mediaRunId: 'request-1:reasoning:0:image:0',
+                mediaIndex: 0,
+            },
+        })
+        const pendingImage1 = makeImage({
+            nodeId: 'pending-image-request-1-reasoning-0-image-1',
+            fileId: '',
+            src: '',
+            position: { x: 500, y: 140 },
+            generatedBy: {
+                ...generatedByBase,
+                mediaRunId: 'request-1:reasoning:0:image:1',
+                mediaIndex: 1,
+            },
+        })
+        const finalImage0 = makeImage({
+            nodeId: 'node-hash-final-0',
+            fileId: 'hash-final-0',
+            src: '/api/files/workspace-1/hash-final-0',
+            position: { x: 500, y: -140 },
+            generatedBy: pendingImage0.generatedBy,
+        })
+        const finalImage1 = makeImage({
+            nodeId: 'node-hash-final-1',
+            fileId: 'hash-final-1',
+            src: '/api/files/workspace-1/hash-final-1',
+            position: { x: 500, y: 140 },
+            generatedBy: pendingImage1.generatedBy,
+        })
+        const apiCompletedState = makeCanvasState({
+            nodes: [fork, finalImage0, finalImage1],
+            edges: [
+                makeEdge('fork-node', 'node-hash-final-0'),
+                makeEdge('fork-node', 'node-hash-final-1'),
+            ],
+        })
+        const stalePendingStoreState = makeCanvasState({
+            nodes: [fork, pendingImage0, pendingImage1],
+            edges: [
+                makeEdge('fork-node', 'pending-image-request-1-reasoning-0-image-0'),
+                makeEdge('fork-node', 'pending-image-request-1-reasoning-0-image-1'),
+            ],
+        })
+
+        const result = mergeIncomingCanvasStateWithPendingVisualCommit({
+            incomingState: stalePendingStoreState,
+            pendingVisualCommit: createPendingCanvasVisualCommit(apiCompletedState),
+        })
+
+        expect(result.usedPendingVisualState).toBe(true)
+        expect(result.pendingVisualCommit).not.toBeNull()
+        expect(result.state?.nodes.map((node) => node.nodeId)).toEqual(['fork-node', 'node-hash-final-0', 'node-hash-final-1'])
+        expect(result.state?.edges.map((edge) => edge.targetNodeId)).toEqual(['node-hash-final-0', 'node-hash-final-1'])
+    })
+
     it('updates a pending visual commit viewport without changing its visual acknowledgement key', () => {
         const thread = makeAiChatThread({ nodeId: 'thread-node-active', position: { x: 360, y: 140 } })
         const committed = makeCanvasState({

@@ -1,6 +1,11 @@
 'use strict'
 
 import type { CanvasGeometryUpdate, CanvasNode, CanvasNodeGeometry, CanvasState, WorkspaceEdge } from '@lixpi/constants'
+import {
+    getGeneratedMediaRunIdentity,
+    isCompletedGeneratedMediaCanvasNode,
+    isPendingGeneratedMediaCanvasNode,
+} from './generated-media-node.ts'
 
 export type ApplyCanvasGeometryUpdateResult = {
     state: CanvasState
@@ -20,41 +25,10 @@ function edgeTouchesAnyNode(edge: WorkspaceEdge, nodeIds: Set<string>): boolean 
     return nodeIds.has(edge.sourceNodeId) || nodeIds.has(edge.targetNodeId)
 }
 
-type GeneratedMediaCanvasNode = Extract<CanvasNode, { type: 'image' | 'video' }>
-
-function isGeneratedMediaNode(node: CanvasNode): node is GeneratedMediaCanvasNode {
-    return (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy)
-}
-
-function isPendingGeneratedMediaNode(node: CanvasNode): boolean {
-    if (!isGeneratedMediaNode(node)) return false
-    if (node.type === 'image') return !node.fileId && !node.src
-    return !node.fileId && !node.posterFileId && !node.src && !node.posterSrc
-}
-
-function getGeneratedMediaRunIdentity(node: CanvasNode): string {
-    if (!isGeneratedMediaNode(node)) return ''
-    const generatedBy = node.generatedBy
-    if (!generatedBy) return ''
-    if (generatedBy.mediaRunId) return `${node.type}:media-run:${generatedBy.mediaRunId}`
-    const requestId = generatedBy.generationRequestId
-    if (!requestId) return ''
-    return [
-        node.type,
-        requestId,
-        generatedBy.reasoningRunId ?? '',
-        generatedBy.mediaModelId ?? '',
-        generatedBy.mediaIndex ?? '',
-        generatedBy.variantIndex ?? '',
-        generatedBy.branchForkNodeId ?? '',
-        generatedBy.branchLineNodeId ?? '',
-    ].join(':')
-}
-
 function buildCompletedGeneratedMediaRunIdentities(nodes: CanvasNode[]): Set<string> {
     const identities = new Set<string>()
     for (const node of nodes) {
-        if (!isGeneratedMediaNode(node) || isPendingGeneratedMediaNode(node)) continue
+        if (!isCompletedGeneratedMediaCanvasNode(node)) continue
         const identity = getGeneratedMediaRunIdentity(node)
         if (identity) identities.add(identity)
     }
@@ -101,7 +75,7 @@ export function applyCanvasGeometryUpdateToState(
     const stalePendingSnapshotNodeIds = new Set(
         (update.nodeSnapshots ?? [])
             .filter((snapshot) => {
-                if (!isPendingGeneratedMediaNode(snapshot)) return false
+                if (!isPendingGeneratedMediaCanvasNode(snapshot)) return false
                 const identity = getGeneratedMediaRunIdentity(snapshot)
                 return Boolean(identity && completedGeneratedMediaRunIdentities.has(identity))
             })

@@ -1,4 +1,9 @@
 import type { CanvasNode, CanvasState, WorkspaceEdge } from '@lixpi/constants'
+import {
+    getGeneratedMediaRunIdentity,
+    isCompletedGeneratedMediaCanvasNode,
+    isPendingGeneratedMediaCanvasNode,
+} from '@lixpi/canvas-engine/shared'
 import type { ViewportSnapshot } from '$src/infographics/workspace/workspaceViewportStatePlan.ts'
 
 type CanvasStateVisualFields = {
@@ -46,19 +51,75 @@ function getEdgeStructureSignature(edge: WorkspaceEdge): string {
     ].join(':')
 }
 
+function buildCompletedGeneratedMediaNodeIdsByIdentity(nodes: CanvasNode[]): Map<string, string[]> {
+    const nodeIdsByIdentity = new Map<string, string[]>()
+    for (const node of nodes) {
+        if (!isCompletedGeneratedMediaCanvasNode(node)) continue
+        const identity = getGeneratedMediaRunIdentity(node)
+        if (!identity) continue
+        const nodeIds = nodeIdsByIdentity.get(identity) ?? []
+        nodeIds.push(node.nodeId)
+        nodeIdsByIdentity.set(identity, nodeIds)
+    }
+    return nodeIdsByIdentity
+}
+
+function buildStalePendingGeneratedMediaNodeReplacements(
+    incomingNodes: CanvasNode[],
+    pendingNodes: CanvasNode[],
+): Map<string, string[]> {
+    const completedNodeIdsByIdentity = buildCompletedGeneratedMediaNodeIdsByIdentity(pendingNodes)
+    const replacements = new Map<string, string[]>()
+    for (const node of incomingNodes) {
+        if (!isPendingGeneratedMediaCanvasNode(node)) continue
+        const identity = getGeneratedMediaRunIdentity(node)
+        if (!identity) continue
+        const replacementNodeIds = completedNodeIdsByIdentity.get(identity)
+        if (replacementNodeIds?.length) replacements.set(node.nodeId, replacementNodeIds)
+    }
+    return replacements
+}
+
+function getReplacementNodeIds(nodeId: string, replacements: Map<string, string[]>): string[] {
+    return replacements.get(nodeId) ?? [nodeId]
+}
+
+function edgeEndpointsMatchWithGeneratedMediaReplacement(
+    incomingEdge: WorkspaceEdge,
+    pendingEdge: WorkspaceEdge,
+    replacements: Map<string, string[]>,
+): boolean {
+    const sourceNodeIds = getReplacementNodeIds(incomingEdge.sourceNodeId, replacements)
+    const targetNodeIds = getReplacementNodeIds(incomingEdge.targetNodeId, replacements)
+    return sourceNodeIds.includes(pendingEdge.sourceNodeId)
+        && targetNodeIds.includes(pendingEdge.targetNodeId)
+        && (incomingEdge.sourceHandle ?? '') === (pendingEdge.sourceHandle ?? '')
+        && (incomingEdge.targetHandle ?? '') === (pendingEdge.targetHandle ?? '')
+}
+
 function isIncomingVisualStructureCoveredByPendingCommit(incomingState: CanvasState, pendingState: CanvasState): boolean {
     const pendingNodeStructures = new Map(
         pendingState.nodes.map((node: CanvasNode) => [node.nodeId, getNodeStructureSignature(node)]),
     )
+    const stalePendingGeneratedMediaReplacements = buildStalePendingGeneratedMediaNodeReplacements(
+        incomingState.nodes,
+        pendingState.nodes,
+    )
     for (const node of incomingState.nodes) {
-        if (pendingNodeStructures.get(node.nodeId) !== getNodeStructureSignature(node)) return false
+        if (pendingNodeStructures.get(node.nodeId) === getNodeStructureSignature(node)) continue
+        if (stalePendingGeneratedMediaReplacements.has(node.nodeId)) continue
+        return false
     }
 
     const pendingEdgeStructures = new Map(
         pendingState.edges.map((edge: WorkspaceEdge) => [edge.edgeId, getEdgeStructureSignature(edge)]),
     )
     for (const edge of incomingState.edges) {
-        if (pendingEdgeStructures.get(edge.edgeId) !== getEdgeStructureSignature(edge)) return false
+        if (pendingEdgeStructures.get(edge.edgeId) === getEdgeStructureSignature(edge)) continue
+        const replacedEdgeIsCovered = pendingState.edges.some((pendingEdge) =>
+            edgeEndpointsMatchWithGeneratedMediaReplacement(edge, pendingEdge, stalePendingGeneratedMediaReplacements)
+        )
+        if (!replacedEdgeIsCovered) return false
     }
 
     return true

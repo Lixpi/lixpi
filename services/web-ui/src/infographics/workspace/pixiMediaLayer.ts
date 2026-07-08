@@ -500,6 +500,14 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
     }
 
+    function isFinalGeneratedImageNode(node: ImageCanvasNode): boolean {
+        return Boolean(node.generatedBy && node.fileId)
+    }
+
+    function logFinalGeneratedImageLifecycle(event: string, details: Record<string, unknown>): void {
+        console.info('[CANVAS][pixi-media]', event, details)
+    }
+
     // Snapshot all live image entries at the moment of the dump. The dump avoids
     // retaining entry references so pasted output cannot mutate after capture.
     function getDebugEntrySnapshots(): PixiMediaDebugImageSnapshot[] {
@@ -1478,6 +1486,16 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 worldPosition,
                 dimensions: node.dimensions,
             })
+            if (isFinalGeneratedImageNode(node)) {
+                logFinalGeneratedImageLifecycle('final-generated-entry-create-start', {
+                    nodeId: node.nodeId,
+                    fileId: node.fileId,
+                    src: cleanDebugUrl(node.src),
+                    sourceKey: cleanDebugUrl(newSourceKey),
+                    worldPosition,
+                    dimensions: node.dimensions,
+                })
+            }
             const sprite = createImageSprite(node.nodeId)
             const spriteMask = createImageSpriteMask(node.nodeId)
             sprite.mask = spriteMask
@@ -1512,6 +1530,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             debugLog('entry-create-end', (verbose) => ({
                 entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
             }))
+            if (isFinalGeneratedImageNode(node)) {
+                logFinalGeneratedImageLifecycle('final-generated-entry-create-end', {
+                    entry: getDebugEntrySummary(entry),
+                })
+            }
         } else if (entry.sourceKey !== newSourceKey) {
             // Source image replaced. Most replacements keep the current texture
             // visible while the next source loads; generated placeholder -> final
@@ -1770,6 +1793,18 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             hasTexture,
             entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
         }))
+        if (isFinalGeneratedImageNode(node)) {
+            logFinalGeneratedImageLifecycle('final-generated-texture-request-start', {
+                nodeId: node.nodeId,
+                fileId: node.fileId,
+                src: cleanDebugUrl(node.src),
+                desiredTier,
+                fetchTier,
+                requestId,
+                hasTexture,
+                entry: getDebugEntrySummary(entry),
+            })
+        }
 
         void (async () => {
             let acquiredKey: string | null = null
@@ -1837,6 +1872,19 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     textureHeight: texture.height,
                     entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
                 }))
+                if (isFinalGeneratedImageNode(node)) {
+                    logFinalGeneratedImageLifecycle('final-generated-texture-request-loaded', {
+                        nodeId: node.nodeId,
+                        fileId: node.fileId,
+                        requestId,
+                        fetchTier,
+                        desiredTier,
+                        resolved: cleanDebugUrl(resolved),
+                        textureWidth: texture.width,
+                        textureHeight: texture.height,
+                        entry: getDebugEntrySummary(entry),
+                    })
+                }
 
                 // If the user actually wants a higher tier than we just loaded,
                 // schedule a background upgrade in an idle slot. The user sees
@@ -1861,6 +1909,18 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     return
                 }
                 console.error('[PixiMediaLayer] Failed to load image texture.', error)
+                if (isFinalGeneratedImageNode(node)) {
+                    logFinalGeneratedImageLifecycle('final-generated-texture-request-error', {
+                        nodeId: node.nodeId,
+                        fileId: node.fileId,
+                        requestId,
+                        fetchTier,
+                        desiredTier,
+                        acquiredKey: cleanDebugUrl(acquiredKey),
+                        message: error instanceof Error ? error.message : String(error),
+                        entry: getDebugEntrySummary(entry),
+                    })
+                }
                 debugLog('texture-request-error', (verbose) => ({
                     nodeId: node.nodeId,
                     requestId,
@@ -2219,6 +2279,22 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             blankVisibleCandidateCount,
             ...(verbose ? { changed, blankVisibleCandidates, entries: getDebugEntrySnapshots() } : {}),
         }))
+        if (blankVisibleCandidateCount > 0) {
+            console.warn('[CANVAS][pixi-media]', 'blank-visible-candidates', {
+                blankVisibleCandidateCount,
+                entries: Array.from(entries.values())
+                    .filter((entry) =>
+                        entry.isVisible
+                        && entry.sprite.renderable
+                        && !entry.sprite.visible
+                        && entry.colorRect.renderable
+                        && !entry.colorRect.visible
+                        && entry.textureKey === null
+                        && entry.requestedTier === null
+                    )
+                    .map((entry) => getDebugEntrySummary(entry)),
+            })
+        }
     }
 
     // Idle-time prefetch — cache `thumb-256` for the entire workspace,

@@ -734,6 +734,32 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, "(node.type === 'image' || node.type === 'video')")
 	})
 
+	it('does not remount generated media chrome when content identity is unchanged', () => {
+		const syncChrome = extractFunctionBody(ts, 'syncGeneratedMediaChrome')
+		const skipIndex = syncChrome.indexOf('if (nextChromeSyncKey === generatedMediaChromeSyncKey)')
+		const skipReturnIndex = syncChrome.indexOf('return', skipIndex)
+		const destroyIndex = syncChrome.indexOf('destroyGeneratedMediaInfoRenderers()', skipReturnIndex)
+		const generatedChromeReplaceIndex = syncChrome.indexOf('generatedMediaChromeLayerEl.replaceChildren(', skipReturnIndex)
+		const mediaChromeReplaceIndex = syncChrome.indexOf('mediaChromeViewportEl.replaceChildren(', skipReturnIndex)
+
+		expectSourceToContain(ts, "const RESET_GENERATED_MEDIA_CHROME_SYNC_KEY = '\\u0000reset-generated-media-chrome'")
+		expectSourceToContain(ts, 'generatedMediaChromeSyncKey = RESET_GENERATED_MEDIA_CHROME_SYNC_KEY')
+		expectExcerptToContain(syncChrome, 'const nextChromeSyncKey = getGeneratedMediaChromeSyncKey({', 'generated media chrome sync')
+		expectExcerptToContain(syncChrome, 'updateGeneratedMediaChromeLayout()', 'generated media chrome sync')
+		expectExcerptToContain(syncChrome, "console.info('[CANVAS][generated-media-chrome]', 'sync-skip-same-key'", 'generated media chrome sync')
+		expectExcerptToContain(syncChrome, "console.info('[CANVAS][generated-media-chrome]', 'sync-rebuild'", 'generated media chrome sync')
+		expectSourceToContain(ts, 'function getPlayableVideoChromeKey(node: VideoCanvasNode): string')
+		expectSourceToContain(ts, "videoEl ? 'video-element-ready' : 'video-element-missing'")
+		expectSourceToContain(ts, 'function getBranchMarkerPanelChromeKey(')
+		expectSourceToContain(ts, "'generated-media-panel',")
+		expectSourceToContain(ts, "'branch-marker-panel',")
+		expect(skipIndex, 'generated media chrome sync should compare the stable chrome key').toBeGreaterThan(-1)
+		expect(skipReturnIndex, 'same-key branch should return before any remount').toBeGreaterThan(skipIndex)
+		expect(destroyIndex, 'renderer teardown should happen only after the same-key skip branch').toBeGreaterThan(skipReturnIndex)
+		expect(generatedChromeReplaceIndex, 'generated media chrome DOM replacement should happen only after the same-key skip branch').toBeGreaterThan(skipReturnIndex)
+		expect(mediaChromeReplaceIndex, 'media chrome DOM replacement should happen only after the same-key skip branch').toBeGreaterThan(skipReturnIndex)
+	})
+
 	it('renders the info panel in a viewport-transformed decoupled layer', () => {
 		// The info panel is separate from the screen-space icon strip but still
 		// belongs to the viewport overlay, so its content scales naturally with
@@ -1136,6 +1162,31 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptNotToContain(resolveBody, 'commitTransientCanvasStatePreservingEditors', 'pending marker promotion')
 		expectExcerptToContain(clearBody, 'commitCanvasStatePreservingEditors({', 'pending marker clearing')
 		expectExcerptNotToContain(clearBody, 'commitTransientCanvasStatePreservingEditors', 'pending marker clearing')
+	})
+
+	it('allows branch marker details once generated media has taken over stale pending state', () => {
+		const phaseBody = extractFunctionBody(ts, 'getBranchMarkerUiPhase')
+		const activeBody = extractFunctionBody(ts, 'isBranchMarkerGenerationActive')
+		const pendingBody = extractFunctionBody(ts, 'isCurrentBranchMarkerPending')
+		const clickBody = extractFunctionBody(ts, 'handleBranchMarkerInfoClick')
+		const branchOriginBody = extractFunctionBody(ts, 'createBranchOriginNode')
+		const branchForkBody = extractFunctionBody(ts, 'createBranchForkNode')
+		const branchLineBody = extractFunctionBody(ts, 'createBranchLineNode')
+
+		expectExcerptToContain(phaseBody, "if (hasStartedGeneratedMediaForBranchMarkerNode(node.nodeId)) return 'media-placeholder'", 'branch marker UI phase')
+		expectExcerptToContain(activeBody, 'if (hasStartedGeneratedMediaForBranchMarkerNode(node.nodeId)) return false', 'branch marker active check')
+		expectExcerptToContain(pendingBody, '&& !hasStartedGeneratedMediaForBranchMarkerNode(node.nodeId)', 'branch marker pending click guard')
+		expectExcerptToContain(clickBody, "console.info('[CANVAS][branch-marker-info]', 'info-click'", 'branch marker info click')
+		expectExcerptToContain(clickBody, 'wouldHaveBeenBlockedByPendingState', 'branch marker info click')
+		expectExcerptToContain(clickBody, "if (node.type === 'branchOrigin')", 'branch marker info click')
+		expectExcerptNotToContain(clickBody, 'if (blocked) return', 'branch marker info click')
+		expectExcerptNotToContain(clickBody, 'if (wouldHaveBeenBlockedByPendingState) return', 'branch marker info click')
+		expectExcerptToContain(branchOriginBody, 'handleBranchMarkerInfoClick(node.nodeId)', 'branch origin node')
+		expectExcerptToContain(branchForkBody, 'handleBranchMarkerInfoClick(node.nodeId)', 'branch fork node')
+		expectExcerptToContain(branchLineBody, 'handleBranchMarkerInfoClick(node.nodeId)', 'branch line node')
+		expectExcerptNotToContain(branchOriginBody, 'if (!isCurrentBranchMarkerPending(node.nodeId)) toggleBranchOriginGeneratedMediaInfo(node.nodeId)', 'branch origin node')
+		expectExcerptNotToContain(branchForkBody, 'if (!isCurrentBranchMarkerPending(node.nodeId)) toggleBranchForkGeneratedMediaInfo(node.nodeId)', 'branch fork node')
+		expectExcerptNotToContain(branchLineBody, 'if (!isCurrentBranchMarkerPending(node.nodeId)) toggleBranchLineGeneratedMediaInfo(node.nodeId)', 'branch line node')
 	})
 
 	it('clears pending marker state and refreshes persisted thread content when a media run finishes', () => {
