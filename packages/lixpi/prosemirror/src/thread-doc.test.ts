@@ -10,7 +10,7 @@ import {
     getLatestThreadTurnMessages,
     parseProseMirrorJsonContent,
     type ProseMirrorJsonNode,
-} from './thread-doc.ts'
+} from './shared/thread-doc.ts'
 
 function text(value: string): ProseMirrorJsonNode {
     return { type: 'paragraph', content: [{ type: 'text', text: value }] }

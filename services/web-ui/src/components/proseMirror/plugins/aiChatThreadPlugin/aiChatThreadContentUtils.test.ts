@@ -5,10 +5,12 @@ import { describe, expect, it } from 'vitest'
 import {
     parseProseMirrorJsonContent,
     collectProseMirrorText,
+} from '@lixpi/prosemirror/shared/thread-doc'
+import {
     collectResponseTextById,
     buildGeneratedMediaTurnProjectionFromThreadContent,
     getGeneratedImageTurnInfoFromThreadContent,
-} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
+} from '@lixpi/prosemirror/shared/generated-media-turn-projection'
 import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
 
 function createTrace(): ImageGenerationTrace {

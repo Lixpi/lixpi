@@ -555,6 +555,23 @@ function getObsoletePendingGeneratedMediaNodeIds(state: CanvasState, generationR
     return [...pendingNodeIds].sort()
 }
 
+function isUnresolvedPendingGeneratedMediaNode(node: CanvasNode, generationRequestId: string): node is GeneratedMediaNode {
+    if ((node.type !== 'image' && node.type !== 'video') || node.generatedBy?.generationRequestId !== generationRequestId) return false
+    if (node.fileId?.trim()) return false
+    if (node.type === 'image') return !node.src?.trim()
+    return !node.src?.trim()
+        && !node.posterSrc?.trim()
+        && !node.posterFileId?.trim()
+        && !node.frameFileId?.trim()
+}
+
+function getUnresolvedPendingGeneratedMediaNodeIds(state: CanvasState, generationRequestId: string): string[] {
+    return state.nodes
+        .filter(node => isUnresolvedPendingGeneratedMediaNode(node, generationRequestId))
+        .map(node => node.nodeId)
+        .sort()
+}
+
 function buildCanvasGeometryUpdate(params: {
     context: string
     layoutRevision: number
@@ -1142,13 +1159,20 @@ function upsertPendingGeneratedMediaNodes(
         lineagePlan: MediaBranchLineagePlan
         canvasVisibleArea?: CanvasVisibleArea
     },
-): { state: CanvasState; changed: boolean; projectedCount: number; skippedCompletedCount: number } {
+): { state: CanvasState; changed: boolean; projectedCount: number; skippedCompletedCount: number; skippedPlanVideoCount: number } {
     let nextState = state
     let changed = false
     let projectedCount = 0
     let skippedCompletedCount = 0
+    let skippedPlanVideoCount = 0
+    const skippedPlanVideoAssignmentIds: string[] = []
 
     for (const assignment of params.lineagePlan.runAssignments) {
+        if (getMediaTypeForAssignment(assignment) === 'video') {
+            skippedPlanVideoCount += 1
+            skippedPlanVideoAssignmentIds.push(assignment.mediaRunId ?? getPendingGeneratedMediaNodeId(assignment))
+            continue
+        }
         if (hasCompletedGeneratedMediaForAssignment(nextState.nodes, assignment)) {
             skippedCompletedCount += 1
             continue
@@ -1172,16 +1196,18 @@ function upsertPendingGeneratedMediaNodes(
         changed = changed || edgeResult.changed
     }
 
-    if (projectedCount > 0 || skippedCompletedCount > 0) {
+    if (projectedCount > 0 || skippedCompletedCount > 0 || skippedPlanVideoCount > 0) {
         console.info('[media-generation-canvas-projection] projected pending generated media from lineage plan', {
             generationRequestId: params.lineagePlan.generationRequestId,
             assignmentCount: params.lineagePlan.runAssignments.length,
             projectedCount,
             skippedCompletedCount,
+            skippedPlanVideoCount,
+            skippedPlanVideoAssignmentIds,
         })
     }
 
-    return { state: nextState, changed, projectedCount, skippedCompletedCount }
+    return { state: nextState, changed, projectedCount, skippedCompletedCount, skippedPlanVideoCount }
 }
 
 function replaceExistingPendingGeneratedMediaNode(
@@ -1260,7 +1286,9 @@ export async function upsertMediaLineagePlanToCanvas(params: {
             console.info('[media-generation-canvas-projection] lineage plan geometry diff', {
                 generationRequestId: params.lineagePlan.generationRequestId,
                 markerCount: markers.length,
+                runAssignmentCount: params.lineagePlan.runAssignments.length,
                 pendingMediaProjectedCount: pendingMediaResult.projectedCount,
+                pendingVideoSkippedAtPlanCount: pendingMediaResult.skippedPlanVideoCount,
                 geometryNodeCount: geometryNodes.length,
                 geometryNodeIds: geometryNodes.map(node => node.nodeId),
             })
@@ -1287,6 +1315,7 @@ export async function settleMediaGenerationRequestOnCanvas(params: {
     proseMirrorThreadContent?: unknown
 }): Promise<CanvasGeometryUpdate | null> {
     let geometryNodes: CanvasNodeGeometry[] = []
+    let removedNodeIds: string[] = []
     const result = await Workspace.mutateCanvasState({
         workspaceId: params.workspaceId,
         origin: 'settleMediaGenerationRequestOnCanvas',
@@ -1301,15 +1330,33 @@ export async function settleMediaGenerationRequestOnCanvas(params: {
                 changed = true
                 return settledNode
             })
+            removedNodeIds = getUnresolvedPendingGeneratedMediaNodeIds({ ...canvasState, nodes }, params.generationRequestId)
+            const removedNodeIdSet = new Set(removedNodeIds)
+            const settledState = removedNodeIds.length > 0
+                ? {
+                    ...canvasState,
+                    nodes: nodes.filter(node => !removedNodeIdSet.has(node.nodeId)),
+                    edges: (canvasState.edges ?? []).filter(edge =>
+                        !removedNodeIdSet.has(edge.sourceNodeId) && !removedNodeIdSet.has(edge.targetNodeId)
+                    ),
+                }
+                : { ...canvasState, nodes }
             // The settle pass is the final authoritative layout for the request:
             // clients load these persisted positions with no post-load movement.
-            const rebalanceResult = rebalanceLineageForest({ ...canvasState, nodes }, 'settleMediaGenerationRequestOnCanvas', {
+            const rebalanceResult = rebalanceLineageForest(settledState, 'settleMediaGenerationRequestOnCanvas', {
                 proseMirrorThreadContent: params.proseMirrorThreadContent,
             })
             geometryNodes = diffCanvasGeometry(canvasState, rebalanceResult.state)
+            console.info('[media-generation-canvas-projection] settle request geometry diff', {
+                generationRequestId: params.generationRequestId,
+                removedUnresolvedPendingNodeCount: removedNodeIds.length,
+                removedUnresolvedPendingNodeIds: removedNodeIds,
+                geometryNodeCount: geometryNodes.length,
+                geometryNodeIds: geometryNodes.map(node => node.nodeId),
+            })
             return {
                 canvasState: rebalanceResult.state,
-                changed: changed || rebalanceResult.changed,
+                changed: changed || removedNodeIds.length > 0 || rebalanceResult.changed,
             }
         },
     })
@@ -1320,6 +1367,7 @@ export async function settleMediaGenerationRequestOnCanvas(params: {
         state: result.canvasState,
         generationRequestId: params.generationRequestId,
         geometryNodes,
+        removedNodeIds,
     })
 }
 

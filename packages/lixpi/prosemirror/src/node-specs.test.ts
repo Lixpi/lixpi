@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { createProseMirrorSchema, DOCUMENT_TYPE } from './schema-builder.ts'
-import { normalizeReferenceNodeIds, aiPromptInputNodeType, aiPromptInputNodeSpec, aiUserMessageNodeSpec, aiGeneratedImageNodeSpec, aiGeneratedVideoNodeSpec, aiLineageEventNodeSpec, aiResponseMessageNodeSpec } from './node-specs.ts'
+import { createProseMirrorSchema, DOCUMENT_TYPE } from './shared/schema-builder.ts'
+import { normalizeReferenceNodeIds, aiPromptInputNodeType, aiPromptInputNodeSpec, aiUserMessageNodeSpec, aiGeneratedImageNodeSpec, aiGeneratedVideoNodeSpec, aiLineageEventNodeSpec, aiResponseMessageNodeSpec } from './shared/node-specs.ts'
 
 function fakeDom(attrs: Record<string, string | null>, querySelector?: (selector: string) => Record<string, any> | null): HTMLElement {
     return {

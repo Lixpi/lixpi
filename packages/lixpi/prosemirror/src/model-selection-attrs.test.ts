@@ -8,7 +8,7 @@ import {
     parseMediaGenerationConfigSelectionAttr,
     serializeAiModelSelectionAttr,
     serializeMediaGenerationConfigSelectionAttr,
-} from './model-selection-attrs.ts'
+} from './shared/model-selection-attrs.ts'
 
 describe('parseAiModelSelectionAttr', () => {
     it('dedupes via serialization, not parsing', () => {

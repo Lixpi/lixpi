@@ -10662,6 +10662,38 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function removeApiCanvasRemovedNodesFromDOM(nodeIds: Iterable<string>): void {
+        const nodeIdSet = new Set(nodeIds)
+        if (nodeIdSet.size === 0) return
+
+        for (const nodeId of nodeIdSet) {
+            const removedEls = [
+                ...(pendingBranchMarkerOverlayEl?.querySelectorAll(`[data-node-id="${nodeId}"]`) ?? []),
+                ...viewportEl.querySelectorAll(`[data-node-id="${nodeId}"]`),
+            ] as HTMLElement[]
+            for (const nodeEl of removedEls) nodeEl.remove()
+        }
+
+        console.info('[CANVAS][api-geometry]', 'removed-dom-nodes', {
+            removedNodeIds: [...nodeIdSet],
+        })
+    }
+
+    function pruneApiCanvasRemovedGeneratedMediaTrackers(nodeIds: Iterable<string>): void {
+        const nodeIdSet = new Set(nodeIds)
+        if (nodeIdSet.size === 0) return
+
+        for (const [runKey, tracker] of [...partialImageTracker.entries()]) {
+            if (nodeIdSet.has(tracker.nodeId)) partialImageTracker.delete(runKey)
+        }
+        for (const [runKey, tracker] of [...videoGenerationTracker.entries()]) {
+            if (nodeIdSet.has(tracker.nodeId)) videoGenerationTracker.delete(runKey)
+        }
+        for (const nodeId of nodeIdSet) {
+            clearFinalizingGeneratedImageOutline(nodeId)
+        }
+    }
+
     // Applies API-resolved authoritative node geometry. The API already
     // persisted it, so this is a transient commit — no client-side save. Missing
     // API-owned projected nodes arrive as snapshots in the same revision.
@@ -10707,6 +10739,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
         if (!result.changed) return
         commitTransientCanvasStatePreservingEditors(result.state)
+        removeApiCanvasRemovedNodesFromDOM(result.removedNodeIds)
+        pruneApiCanvasRemovedGeneratedMediaTrackers(result.removedNodeIds)
+        syncPixiGeneratingImageNodes()
         syncApiCanvasSnapshotNodesToDOM([...result.upsertedNodeIds, ...result.updatedNodeIds])
         if (currentCanvasState) {
             pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(currentCanvasState)

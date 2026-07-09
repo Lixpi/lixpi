@@ -366,6 +366,42 @@ const generationRunFromAssignment = (
     lineageAssignment: assignment,
 })
 
+const pendingVideoNodeFromAssignment = (
+    assignment: MediaBranchLineagePlan['runAssignments'][number],
+): CanvasState['nodes'][number] => ({
+    nodeId: getPendingGeneratedMediaNodeId(assignment),
+    type: 'video',
+    fileId: '',
+    posterFileId: '',
+    frameFileId: '',
+    workspaceId: 'workspace-1',
+    src: '',
+    posterSrc: '',
+    aspectRatio: 1,
+    durationSeconds: 0,
+    hasAudio: false,
+    position: { x: 400, y: 400 },
+    dimensions: { width: 800, height: 800 },
+    generatedBy: {
+        aiChatThreadId: 'thread-1',
+        responseId: '',
+        videoModel: assignment.mediaModelId!,
+        revisedPrompt: assignment.promptText,
+        responseMessageId: '',
+        generationRequestId: assignment.generationRequestId,
+        reasoningRunId: assignment.reasoningRunId,
+        mediaRunId: assignment.mediaRunId,
+        reasoningModelId: assignment.reasoningModelId,
+        reasoningIndex: assignment.reasoningIndex,
+        mediaModelId: assignment.mediaModelId,
+        mediaType: 'video',
+        mediaIndex: assignment.mediaIndex,
+        branchId: assignment.branchId,
+        branchForkNodeId: assignment.branchForkNodeId,
+        lineageParentNodeId: assignment.lineageParentNodeId,
+    },
+} as CanvasState['nodes'][number])
+
 let consoleInfoSpy: ReturnType<typeof vi.spyOn> | null = null
 
 describe('media-generation-canvas-projection', () => {
@@ -410,7 +446,7 @@ describe('media-generation-canvas-projection', () => {
         expect(second.changed).toBe(false)
     })
 
-    it('returns API-owned pending media snapshots with plan-time geometry for all mixed media assignments', async () => {
+    it('returns plan-time pending snapshots only for image assignments in a mixed image/video plan', async () => {
         const plan = mixedImageVideoLineagePlan()
         mockWorkspaceMutationFromState(emptyCanvasState(), 2001)
 
@@ -420,24 +456,26 @@ describe('media-generation-canvas-projection', () => {
             lineagePlan: plan,
         })
 
-        const expectedPendingNodeIds = plan.runAssignments.map(assignment => getPendingGeneratedMediaNodeId(assignment))
+        const imageAssignments = plan.runAssignments.filter(assignment => assignment.mediaType === 'image')
+        const videoAssignments = plan.runAssignments.filter(assignment => assignment.mediaType === 'video')
+        const expectedImagePendingNodeIds = imageAssignments.map(assignment => getPendingGeneratedMediaNodeId(assignment))
+        const skippedVideoPendingNodeIds = videoAssignments.map(assignment => getPendingGeneratedMediaNodeId(assignment))
         expect(canvasGeometry).toMatchObject({
             layoutRevision: 2001,
         })
         expect(canvasGeometry?.nodes.map(node => node.nodeId)).toEqual(expect.arrayContaining([
             plan.branchForks[0].nodeId,
-            ...expectedPendingNodeIds,
+            ...expectedImagePendingNodeIds,
         ]))
         expect(canvasGeometry?.nodeSnapshots?.map(node => node.nodeId)).toEqual(expect.arrayContaining([
             plan.branchForks[0].nodeId,
-            ...expectedPendingNodeIds,
+            ...expectedImagePendingNodeIds,
         ]))
         expect(canvasGeometry?.nodeSnapshots).toEqual(expect.arrayContaining([
-            expect.objectContaining({ nodeId: expectedPendingNodeIds[0], type: 'image' }),
-            expect.objectContaining({ nodeId: expectedPendingNodeIds[1], type: 'image' }),
-            expect.objectContaining({ nodeId: expectedPendingNodeIds[2], type: 'video' }),
+            expect.objectContaining({ nodeId: expectedImagePendingNodeIds[0], type: 'image' }),
+            expect.objectContaining({ nodeId: expectedImagePendingNodeIds[1], type: 'image' }),
         ]))
-        for (const pendingNodeId of expectedPendingNodeIds) {
+        for (const pendingNodeId of expectedImagePendingNodeIds) {
             expect(canvasGeometry?.edgeSnapshots).toEqual(expect.arrayContaining([
                 expect.objectContaining({
                     sourceNodeId: plan.branchForks[0].nodeId,
@@ -445,13 +483,15 @@ describe('media-generation-canvas-projection', () => {
                 }),
             ]))
         }
+        expect(canvasGeometry?.nodes.map(node => node.nodeId)).not.toEqual(expect.arrayContaining(skippedVideoPendingNodeIds))
+        expect(canvasGeometry?.nodeSnapshots?.map(node => node.nodeId)).not.toEqual(expect.arrayContaining(skippedVideoPendingNodeIds))
+        expect(canvasGeometry?.edgeSnapshots?.map(edge => edge.targetNodeId)).not.toEqual(expect.arrayContaining(skippedVideoPendingNodeIds))
 
-        const pendingGeometries = expectedPendingNodeIds
+        const pendingGeometries = expectedImagePendingNodeIds
             .map(nodeId => canvasGeometry!.nodes.find(node => node.nodeId === nodeId)!)
             .sort((a, b) => a.position.y - b.position.y)
-        expect(pendingGeometries).toHaveLength(3)
+        expect(pendingGeometries).toHaveLength(2)
         expect(pendingGeometries[0].position.y + pendingGeometries[0].dimensions.height).toBeLessThanOrEqual(pendingGeometries[1].position.y)
-        expect(pendingGeometries[1].position.y + pendingGeometries[1].dimensions.height).toBeLessThanOrEqual(pendingGeometries[2].position.y)
     })
 
     it('persists final generated images with API lineage metadata and connector edges', async () => {
@@ -540,7 +580,7 @@ describe('media-generation-canvas-projection', () => {
         ]))
     })
 
-    it('replaces a pending video node with final 16:9 geometry instead of keeping the pending square', async () => {
+    it('persists final video geometry even when lineage planning skipped the video placeholder', async () => {
         const plan = mixedImageVideoLineagePlan()
         await upsertMediaLineagePlanToCanvas({
             workspaceId: 'workspace-1',
@@ -550,6 +590,7 @@ describe('media-generation-canvas-projection', () => {
         const plannedState = latestMutator()(emptyCanvasState()).canvasState
         const videoAssignment = plan.runAssignments.find(assignment => assignment.mediaType === 'video')!
         const pendingNodeId = getPendingGeneratedMediaNodeId(videoAssignment)
+        expect(plannedState.nodes.map(node => node.nodeId)).not.toContain(pendingNodeId)
         mockWorkspaceMutationFromState(plannedState, 3001)
 
         const canvasGeometry = await upsertGeneratedVideoToCanvas({
@@ -573,6 +614,9 @@ describe('media-generation-canvas-projection', () => {
         })
 
         const finalVideo = canvasGeometry?.nodeSnapshots?.find(node => node.nodeId === 'node-video-file-1')
+        // The API may include the deterministic pending id in removedNodeIds
+        // even when the node was never present. That makes removals idempotent
+        // across clients that did or did not see a local pending video event.
         expect(canvasGeometry?.removedNodeIds).toEqual([pendingNodeId])
         expect(canvasGeometry?.edgeSnapshots).toEqual(expect.arrayContaining([
             expect.objectContaining({
@@ -587,6 +631,63 @@ describe('media-generation-canvas-projection', () => {
             aspectRatio: 16 / 9,
             dimensions: { width: 800, height: 450 },
         })
+    })
+
+    it('replaces an existing unresolved video placeholder when final video arrives', async () => {
+        const plan = mixedImageVideoLineagePlan()
+        await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            lineagePlan: plan,
+        })
+        const plannedState = latestMutator()(emptyCanvasState()).canvasState
+        const videoAssignment = plan.runAssignments.find(assignment => assignment.mediaType === 'video')!
+        const pendingNodeId = getPendingGeneratedMediaNodeId(videoAssignment)
+        const stateWithActualVideoPending: CanvasState = {
+            ...plannedState,
+            nodes: [...plannedState.nodes, pendingVideoNodeFromAssignment(videoAssignment)],
+            edges: [
+                ...plannedState.edges,
+                {
+                    edgeId: `edge-${videoAssignment.branchForkNodeId}-${pendingNodeId}`,
+                    sourceNodeId: videoAssignment.branchForkNodeId!,
+                    targetNodeId: pendingNodeId,
+                    sourceHandle: 'right',
+                    targetHandle: 'left',
+                },
+            ],
+        }
+        mockWorkspaceMutationFromState(stateWithActualVideoPending, 3002)
+
+        const canvasGeometry = await upsertGeneratedVideoToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            videoUrl: '/api/videos/workspace-1/video-file-2',
+            fileId: 'video-file-2',
+            posterUrl: '/api/images/workspace-1/poster-file-2',
+            posterFileId: 'poster-file-2',
+            frameUrl: '/api/images/workspace-1/frame-file-2',
+            frameFileId: 'frame-file-2',
+            durationSeconds: 8,
+            aspectRatio: '16:9',
+            hasAudio: true,
+            responseId: 'response-video-2',
+            revisedPrompt: 'mountain goat video',
+            aiProvider: 'Google',
+            videoModelProvider: 'Google',
+            videoModelId: 'veo-3',
+            generationRun: generationRunFromAssignment(videoAssignment, 0),
+        })
+
+        expect(canvasGeometry?.removedNodeIds).toEqual([pendingNodeId])
+        expect(canvasGeometry?.nodeSnapshots?.map(node => node.nodeId)).toEqual(expect.arrayContaining(['node-video-file-2']))
+        expect(canvasGeometry?.nodeSnapshots?.map(node => node.nodeId)).not.toEqual(expect.arrayContaining([pendingNodeId]))
+        expect(canvasGeometry?.edgeSnapshots).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                sourceNodeId: videoAssignment.branchForkNodeId,
+                targetNodeId: 'node-video-file-2',
+            }),
+        ]))
     })
 
     it('removes stale marker edges targeting a generated image before adding the assignment edge', async () => {
@@ -826,6 +927,69 @@ describe('media-generation-canvas-projection', () => {
             }),
         ]))
         expect(state.canvasState.nodes.find((node) => node.nodeId === 'origin-settle')).not.toHaveProperty('pendingState')
+    })
+
+    it('settle removes only unresolved pending generated media for the completed request', async () => {
+        const plan = mixedImageVideoLineagePlan()
+        await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            lineagePlan: plan,
+        })
+        const plannedState = latestMutator()(emptyCanvasState()).canvasState
+        const imageAssignment = plan.runAssignments.find(assignment => assignment.mediaType === 'image')!
+        const videoAssignment = plan.runAssignments.find(assignment => assignment.mediaType === 'video')!
+        const imagePendingNodeId = getPendingGeneratedMediaNodeId(imageAssignment)
+        const videoPendingNodeId = getPendingGeneratedMediaNodeId(videoAssignment)
+        const stateWithPartialImageAndStuckVideo: CanvasState = {
+            ...plannedState,
+            nodes: plannedState.nodes.map((node) => node.nodeId === imagePendingNodeId
+                ? {
+                    ...node,
+                    fileId: 'partial-image-file',
+                    src: '/api/images/workspace-1/partial-image-file',
+                } as CanvasState['nodes'][number]
+                : node).concat(pendingVideoNodeFromAssignment(videoAssignment)),
+            edges: [
+                ...plannedState.edges,
+                {
+                    edgeId: `edge-${videoAssignment.branchForkNodeId}-${videoPendingNodeId}`,
+                    sourceNodeId: videoAssignment.branchForkNodeId!,
+                    targetNodeId: videoPendingNodeId,
+                    sourceHandle: 'right',
+                    targetHandle: 'left',
+                },
+            ],
+        }
+        mockWorkspaceMutationFromState(stateWithPartialImageAndStuckVideo, 2801)
+
+        const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
+            workspaceId: 'workspace-1',
+            generationRequestId: plan.generationRequestId,
+            aiChatThreadId: 'thread-1',
+        })
+
+        const unresolvedImagePendingNodeId = getPendingGeneratedMediaNodeId(plan.runAssignments[1])
+        expect(canvasGeometry?.removedNodeIds).toEqual([
+            unresolvedImagePendingNodeId,
+            videoPendingNodeId,
+        ])
+        expect(canvasGeometry?.nodeSnapshots?.map(node => node.nodeId)).toEqual(expect.arrayContaining([imagePendingNodeId]))
+        expect(canvasGeometry?.nodeSnapshots?.map(node => node.nodeId)).not.toEqual(expect.arrayContaining([
+            unresolvedImagePendingNodeId,
+            videoPendingNodeId,
+        ]))
+        expect(canvasGeometry?.edgeSnapshots?.map(edge => edge.targetNodeId)).not.toEqual(expect.arrayContaining([
+            unresolvedImagePendingNodeId,
+            videoPendingNodeId,
+        ]))
+
+        const result = latestMutator()(stateWithPartialImageAndStuckVideo)
+        expect(result.canvasState.nodes.map(node => node.nodeId)).toEqual(expect.arrayContaining([imagePendingNodeId]))
+        expect(result.canvasState.nodes.map(node => node.nodeId)).not.toContain(unresolvedImagePendingNodeId)
+        expect(result.canvasState.nodes.map(node => node.nodeId)).not.toContain(videoPendingNodeId)
+        expect(result.canvasState.edges.map(edge => edge.targetNodeId)).not.toContain(unresolvedImagePendingNodeId)
+        expect(result.canvasState.edges.map(edge => edge.targetNodeId)).not.toContain(videoPendingNodeId)
     })
 
     it('keeps a 3x4 reasoning/media matrix as three balanced branch trees with one correct fork edge per output', async () => {
