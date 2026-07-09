@@ -5,6 +5,7 @@ import type NatsService from '@lixpi/nats-service'
 import { err } from '@lixpi/debug-tools'
 import {
     STREAM_STATUS,
+    type CanvasGeometryUpdate,
     type MediaBranchVlmResolution,
     type ImageGenerationTrace,
     type MediaBranchLineagePlan,
@@ -19,6 +20,7 @@ import {
 import { AiChatProseMirrorStreamAssembler } from '../../prosemirror/ai-chat-stream-assembler.ts'
 import {
     logCanvasProjectionError,
+    refreshMediaGenerationRequestCanvasGeometry,
     settleMediaGenerationRequestOnCanvas,
     upsertMediaLineagePlanToCanvas,
 } from '../../services/media-generation-canvas-projection.ts'
@@ -28,6 +30,18 @@ const subject = (workspaceId: string, aiChatThreadId: string): string =>
     `ai.interaction.chat.receiveMessage.${workspaceId}.${aiChatThreadId}`
 
 const COMPLETED_PIPELINE_EVENT_RETENTION_MS = 10 * 60 * 1000
+
+const MEDIA_RESPONSE_PUBLISH_STATUSES: ReadonlySet<StreamStatus> = new Set([
+    STREAM_STATUS.IMAGE_GENERATION_TRACE,
+    STREAM_STATUS.IMAGE_PARTIAL,
+    STREAM_STATUS.IMAGE_COMPLETE,
+    STREAM_STATUS.IMAGE_ERROR,
+    STREAM_STATUS.VIDEO_GENERATION_TRACE,
+    STREAM_STATUS.VIDEO_PENDING,
+    STREAM_STATUS.VIDEO_GENERATING,
+    STREAM_STATUS.VIDEO_COMPLETE,
+    STREAM_STATUS.VIDEO_ERROR,
+])
 
 export type ChunkPayload = {
     content: {
@@ -56,6 +70,7 @@ export type ChunkPayload = {
         workspaceContextResolution?: WorkspaceContextResolution
         imageGenerationTrace?: ImageGenerationTrace
         lineagePlan?: MediaBranchLineagePlan
+        canvasGeometry?: CanvasGeometryUpdate
         videoGenerationTrace?: VideoGenerationTrace
         error?: string
         generationRequestId?: string
@@ -79,9 +94,11 @@ export type StreamPublisherOptions = {
     proseMirrorInitialDoc?: object
     deferProseMirrorEnd?: boolean
     canvasVisibleArea?: { width: number; height: number }
+    proseMirrorContentMirror?: ProseMirrorContentHandler
 }
 
 export type ProseMirrorContentHandler = (content: ChunkPayload['content']) => void
+export type ProseMirrorSnapshotProvider = () => object | null | Promise<object | null>
 
 type PublishChatContentOptions = {
     mirrorProseMirror?: boolean
@@ -116,9 +133,13 @@ export class TagAwareStream {
 
     constructor(
         private readonly provider: ProviderName,
-        private readonly generationRun?: MediaGenerationRunMeta,
+        private generationRun?: MediaGenerationRunMeta,
         private readonly onContent?: (content: ChunkPayload['content']) => void,
     ) {}
+
+    setGenerationRun(generationRun: MediaGenerationRunMeta | undefined): void {
+        this.generationRun = generationRun
+    }
 
     private publish(content: ChunkPayload['content']): void {
         const publishedContent = {
@@ -241,11 +262,14 @@ export class StreamPublisher {
     private tagBuffer: TagAwareStream
     private readonly proseMirrorAssembler: AiChatProseMirrorStreamAssembler | null
     private readonly pipelineEventLog: PipelineEventLog
+    private currentGenerationRun: MediaGenerationRunMeta | undefined
     private hasStarted = false
     private hasEnded = false
     private proseMirrorFinishPromise: Promise<void> | null = null
     private responsePublishChain: Promise<void> = Promise.resolve()
+    private readonly mediaResponsePublishChains = new Map<string, Promise<void>>()
     private canvasProjectionChain: Promise<void> = Promise.resolve()
+    private streamCanvasGeometryRefreshScheduled = false
     private readonly mediaGenerationRequestIds = new Set<string>()
     private readonly completedMediaGenerationRequestIds = new Set<string>()
 
@@ -254,9 +278,10 @@ export class StreamPublisher {
         private readonly workspaceId: string,
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
-        private readonly generationRun?: MediaGenerationRunMeta,
+        generationRun?: MediaGenerationRunMeta,
         private readonly options: StreamPublisherOptions = {},
     ) {
+        this.currentGenerationRun = generationRun
         this.pipelineEventLog = new PipelineEventLog(nats)
         this.proseMirrorAssembler = options.enableProseMirrorStream
             ? new AiChatProseMirrorStreamAssembler({
@@ -275,15 +300,106 @@ export class StreamPublisher {
         )
     }
 
+    setGenerationRun(generationRun: MediaGenerationRunMeta | undefined): void {
+        if (!generationRun) return
+        this.currentGenerationRun = generationRun
+        this.tagBuffer.setGenerationRun(generationRun)
+    }
+
+    async getProseMirrorSnapshot(): Promise<object | null> {
+        if (!this.proseMirrorAssembler) return null
+        await this.proseMirrorAssembler.flushPendingWork()
+        return this.proseMirrorAssembler.snapshotForProjection()
+    }
+
     publishChatContent(content: ChunkPayload['content'], options: PublishChatContentOptions = {}): void {
         if (options.mirrorProseMirror !== false) {
             this.proseMirrorAssembler?.handleContent(content)
+            if (this.options.proseMirrorContentMirror && content.status !== STREAM_STATUS.END_STREAM) {
+                console.info('[StreamPublisher][prosemirror-mirror] forwarding', {
+                    workspaceId: this.workspaceId,
+                    aiChatThreadId: this.aiChatThreadId,
+                    status: content.status,
+                    textLength: content.text?.length ?? 0,
+                    generationRequestId: content.generationRun?.generationRequestId ?? this.currentGenerationRun?.generationRequestId ?? '',
+                    reasoningRunId: content.generationRun?.reasoningRunId ?? this.currentGenerationRun?.reasoningRunId ?? '',
+                    hasLocalAssembler: Boolean(this.proseMirrorAssembler),
+                })
+                this.options.proseMirrorContentMirror(content)
+            } else if (this.options.proseMirrorContentMirror) {
+                console.info('[StreamPublisher][prosemirror-mirror] skip', {
+                    workspaceId: this.workspaceId,
+                    aiChatThreadId: this.aiChatThreadId,
+                    status: content.status,
+                    reason: 'shared-matrix-publisher-owns-stream-end',
+                    generationRequestId: content.generationRun?.generationRequestId ?? this.currentGenerationRun?.generationRequestId ?? '',
+                    reasoningRunId: content.generationRun?.reasoningRunId ?? this.currentGenerationRun?.reasoningRunId ?? '',
+                })
+            }
+            this.requestStreamCanvasGeometryRefresh(content)
         }
 
-        this.responsePublishChain = this.publishResponseAfterCurrent(this.responsePublishChain, {
+        this.enqueueResponsePublish({
             content,
             aiChatThreadId: this.aiChatThreadId,
         })
+    }
+
+    private enqueueResponsePublish(payload: ChunkPayload): void {
+        const queueKey = this.getResponsePublishQueueKey(payload.content)
+        if (!queueKey) {
+            this.responsePublishChain = this.publishResponseAfterCurrent(this.responsePublishChain, payload)
+            this.logResponsePublishQueued('main', payload)
+            return
+        }
+
+        const previous = this.mediaResponsePublishChains.get(queueKey) ?? Promise.resolve()
+        const next = this.publishResponseAfterCurrent(previous, payload)
+        this.mediaResponsePublishChains.set(queueKey, next)
+        this.logResponsePublishQueued(queueKey, payload)
+        void this.forgetSettledMediaResponsePublishChain(queueKey, next)
+    }
+
+    private getResponsePublishQueueKey(content: ChunkPayload['content']): string | null {
+        const mediaRunId = content.generationRun?.mediaRunId
+        if (!mediaRunId || !MEDIA_RESPONSE_PUBLISH_STATUSES.has(content.status)) return null
+        return `media:${mediaRunId}`
+    }
+
+    private logResponsePublishQueued(queueKey: string, payload: ChunkPayload): void {
+        const content = payload.content
+        const hasGenerationDebugContext = Boolean(
+            content.generationRequestId
+            || content.generationRun?.generationRequestId
+            || this.currentGenerationRun?.generationRequestId
+            || content.canvasGeometry,
+        )
+        if (queueKey === 'main' && !hasGenerationDebugContext) return
+        console.info('[StreamPublisher][pipeline-publish] queued', {
+            workspaceId: this.workspaceId,
+            aiChatThreadId: this.aiChatThreadId,
+            queueKey,
+            status: content.status,
+            textLength: content.text?.length ?? 0,
+            generationRequestId: content.generationRun?.generationRequestId ?? this.currentGenerationRun?.generationRequestId ?? '',
+            reasoningRunId: content.generationRun?.reasoningRunId ?? this.currentGenerationRun?.reasoningRunId ?? '',
+            mediaRunId: content.generationRun?.mediaRunId ?? '',
+            mediaModelId: content.generationRun?.mediaModelId ?? '',
+            partialIndex: content.partialIndex ?? null,
+            hasCanvasGeometry: Boolean(content.canvasGeometry),
+            mediaQueueCount: this.mediaResponsePublishChains.size,
+        })
+    }
+
+    private async forgetSettledMediaResponsePublishChain(queueKey: string, promise: Promise<void>): Promise<void> {
+        try {
+            await promise
+        } catch {
+            // publishResponseNow already logs and falls back to live publish.
+        }
+        if (this.mediaResponsePublishChains.get(queueKey) === promise) {
+            this.mediaResponsePublishChains.delete(queueKey)
+        }
     }
 
     private async publishResponseAfterCurrent(previous: Promise<void>, payload: ChunkPayload): Promise<void> {
@@ -320,8 +436,25 @@ export class StreamPublisher {
     }
 
     private async drainResponsePublishes(): Promise<void> {
+        while (true) {
+            const chains = [
+                this.responsePublishChain,
+                ...this.mediaResponsePublishChains.values(),
+            ]
+            await Promise.all(chains.map(chain => this.ignorePublishChainFailure(chain)))
+            const nextChains = [
+                this.responsePublishChain,
+                ...this.mediaResponsePublishChains.values(),
+            ]
+            if (nextChains.length === chains.length && nextChains.every((chain, index) => chain === chains[index])) {
+                return
+            }
+        }
+    }
+
+    private async ignorePublishChainFailure(chain: Promise<void>): Promise<void> {
         try {
-            await this.responsePublishChain
+            await chain
         } catch {
             // publishResponseNow already logs and falls back to live publish.
         }
@@ -337,6 +470,101 @@ export class StreamPublisher {
                     logCanvasProjectionError(errorContext, error)
                 }
             })
+    }
+
+    private requestStreamCanvasGeometryRefresh(content: ChunkPayload['content']): void {
+        const generationRun = content.generationRun ?? this.currentGenerationRun
+        const generationRequestId = generationRun?.generationRequestId
+        const debugBase = {
+            workspaceId: this.workspaceId,
+            aiChatThreadId: this.aiChatThreadId,
+            status: content.status,
+            textLength: content.text?.length ?? 0,
+            generationRequestId: generationRequestId ?? '',
+            trackedGenerationRequestIds: Array.from(this.mediaGenerationRequestIds),
+            completedGenerationRequestIds: Array.from(this.completedMediaGenerationRequestIds),
+            scheduled: this.streamCanvasGeometryRefreshScheduled,
+            enableProseMirrorStream: Boolean(this.options.enableProseMirrorStream),
+        }
+        if (content.status !== STREAM_STATUS.STREAMING || !content.text) {
+            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
+                ...debugBase,
+                reason: 'not-streaming-text',
+            })
+            return
+        }
+        if (!this.options.enableProseMirrorStream) {
+            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
+                ...debugBase,
+                reason: 'prosemirror-stream-disabled',
+            })
+            return
+        }
+        if (!generationRequestId) {
+            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
+                ...debugBase,
+                reason: 'missing-generation-request-id',
+            })
+            return
+        }
+        if (!this.mediaGenerationRequestIds.has(generationRequestId)) {
+            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
+                ...debugBase,
+                reason: 'generation-request-not-tracked',
+            })
+            return
+        }
+        if (this.completedMediaGenerationRequestIds.has(generationRequestId)) {
+            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
+                ...debugBase,
+                reason: 'generation-request-completed',
+            })
+            return
+        }
+        if (this.streamCanvasGeometryRefreshScheduled) {
+            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
+                ...debugBase,
+                reason: 'refresh-already-scheduled',
+            })
+            return
+        }
+
+        this.streamCanvasGeometryRefreshScheduled = true
+        console.info('[StreamPublisher][canvas-geometry-refresh] scheduled', debugBase)
+        this.enqueueCanvasProjection(
+            async () => {
+                this.streamCanvasGeometryRefreshScheduled = false
+                const proseMirrorThreadContent = await this.getProseMirrorSnapshot()
+                if (!proseMirrorThreadContent) {
+                    console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
+                        ...debugBase,
+                        reason: 'missing-prosemirror-snapshot',
+                    })
+                    return
+                }
+                console.info('[StreamPublisher][canvas-geometry-refresh] executing', {
+                    ...debugBase,
+                    proseMirrorSnapshotPresent: true,
+                })
+                const canvasGeometry = await refreshMediaGenerationRequestCanvasGeometry({
+                    workspaceId: this.workspaceId,
+                    generationRequestId,
+                    aiChatThreadId: this.aiChatThreadId,
+                    proseMirrorThreadContent,
+                })
+                console.info('[StreamPublisher][canvas-geometry-refresh] resolved', {
+                    ...debugBase,
+                    hasCanvasGeometry: Boolean(canvasGeometry),
+                    geometryNodeCount: canvasGeometry?.nodes.length ?? 0,
+                    nodeSnapshotCount: canvasGeometry?.nodeSnapshots?.length ?? 0,
+                    edgeSnapshotCount: canvasGeometry?.edgeSnapshots?.length ?? 0,
+                    removedNodeCount: canvasGeometry?.removedNodeIds?.length ?? 0,
+                    removedEdgeCount: canvasGeometry?.removedEdgeIds?.length ?? 0,
+                })
+                this.canvasGeometryResolved(canvasGeometry, generationRun)
+            },
+            'failed to refresh media generation canvas geometry from stream content',
+        )
     }
 
     private async drainCanvasProjectionWrites(): Promise<void> {
@@ -357,13 +585,23 @@ export class StreamPublisher {
         const content: ChunkPayload['content'] = {
             status: STREAM_STATUS.START_STREAM,
             aiProvider: this.provider,
-            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         }
         this.publishChatContent(content)
     }
 
     publishProseMirrorContent(content: ChunkPayload['content']): void {
+        console.info('[StreamPublisher][prosemirror-mirror] received-shared-content', {
+            workspaceId: this.workspaceId,
+            aiChatThreadId: this.aiChatThreadId,
+            status: content.status,
+            textLength: content.text?.length ?? 0,
+            generationRequestId: content.generationRun?.generationRequestId ?? this.currentGenerationRun?.generationRequestId ?? '',
+            reasoningRunId: content.generationRun?.reasoningRunId ?? this.currentGenerationRun?.reasoningRunId ?? '',
+            hasAssembler: Boolean(this.proseMirrorAssembler),
+        })
         this.proseMirrorAssembler?.handleContent(content)
+        this.requestStreamCanvasGeometryRefresh(content)
     }
 
     finishProseMirrorStream(): Promise<void> {
@@ -416,7 +654,7 @@ export class StreamPublisher {
             text: '',
             status: STREAM_STATUS.END_STREAM,
             aiProvider: this.provider,
-            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         }
         this.publishChatContent(content, { mirrorProseMirror: !this.options.deferProseMirrorEnd })
         if (this.options.deferProseMirrorEnd) {
@@ -432,7 +670,7 @@ export class StreamPublisher {
             aiProvider: this.provider,
             extractionStatus: status,
             extractionDetail: detail,
-            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         })
     }
 
@@ -441,7 +679,7 @@ export class StreamPublisher {
             status: STREAM_STATUS.STREAMING,
             aiProvider: this.provider,
             stageTraceEvent: event,
-            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         })
     }
 
@@ -452,11 +690,11 @@ export class StreamPublisher {
             status: STREAM_STATUS.STREAMING,
             aiProvider: this.provider,
             featureCard: payload,
-            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         })
     }
 
-    mediaBranchResolved(resolution: MediaBranchVlmResolution, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+    mediaBranchResolved(resolution: MediaBranchVlmResolution, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
         this.publishChatContent({
             status: STREAM_STATUS.MEDIA_BRANCH_RESOLVED,
             aiProvider: this.provider,
@@ -465,15 +703,45 @@ export class StreamPublisher {
         })
     }
 
-    mediaLineagePlanned(lineagePlan: MediaBranchLineagePlan, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
-        this.mediaGenerationRequestIds.add(lineagePlan.generationRequestId)
+    // Broadcasts the API-resolved geometry once an async canvas projection has
+    // persisted it, so every connected client applies authoritative positions
+    // instead of computing its own layout.
+    canvasGeometryResolved(canvasGeometry: CanvasGeometryUpdate | null, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
+        if (
+            !canvasGeometry
+            || (
+                canvasGeometry.nodes.length === 0
+                && (canvasGeometry.nodeSnapshots?.length ?? 0) === 0
+                && (canvasGeometry.edgeSnapshots?.length ?? 0) === 0
+                && (canvasGeometry.removedNodeIds?.length ?? 0) === 0
+                && (canvasGeometry.removedEdgeIds?.length ?? 0) === 0
+            )
+        ) return
+        this.publishChatContent({
+            status: STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED,
+            aiProvider: this.provider,
+            canvasGeometry,
+            ...(generationRun ? { generationRun } : {}),
+        })
+    }
+
+    mediaLineagePlanned(lineagePlan: MediaBranchLineagePlan, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
+        this.setGenerationRun(generationRun)
+        if (lineagePlan.generationRequestId) {
+            this.mediaGenerationRequestIds.add(lineagePlan.generationRequestId)
+        }
         this.enqueueCanvasProjection(
-            () => upsertMediaLineagePlanToCanvas({
-                workspaceId: this.workspaceId,
-                aiChatThreadId: this.aiChatThreadId,
-                lineagePlan,
-                ...(this.options.canvasVisibleArea ? { canvasVisibleArea: this.options.canvasVisibleArea } : {}),
-            }),
+            async () => {
+                const proseMirrorThreadContent = await this.getProseMirrorSnapshot()
+                const canvasGeometry = await upsertMediaLineagePlanToCanvas({
+                    workspaceId: this.workspaceId,
+                    aiChatThreadId: this.aiChatThreadId,
+                    lineagePlan,
+                    ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
+                    ...(this.options.canvasVisibleArea ? { canvasVisibleArea: this.options.canvasVisibleArea } : {}),
+                })
+                this.canvasGeometryResolved(canvasGeometry, generationRun)
+            },
             'failed to persist media lineage plan to canvas',
         )
 
@@ -487,7 +755,7 @@ export class StreamPublisher {
 
     // The reasoning model finished without emitting a media tool call after a
     // lineage plan was already published; the planned runs will never start.
-    mediaGenerationSkipped(generationRequestId: string, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+    mediaGenerationSkipped(generationRequestId: string, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
         this.mediaGenerationRequestIds.add(generationRequestId)
         this.publishChatContent({
             status: STREAM_STATUS.MEDIA_GENERATION_SKIPPED,
@@ -503,17 +771,23 @@ export class StreamPublisher {
         this.mediaGenerationRequestIds.add(generationRequestId)
         this.completedMediaGenerationRequestIds.add(generationRequestId)
         this.enqueueCanvasProjection(
-            () => settleMediaGenerationRequestOnCanvas({
-                workspaceId: this.workspaceId,
-                generationRequestId,
-            }),
+            async () => {
+                const proseMirrorThreadContent = await this.getProseMirrorSnapshot()
+                const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
+                    workspaceId: this.workspaceId,
+                    generationRequestId,
+                    aiChatThreadId: this.aiChatThreadId,
+                    ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
+                })
+                this.canvasGeometryResolved(canvasGeometry)
+            },
             'failed to settle media generation request on canvas',
         )
         this.publishChatContent({
             status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
             aiProvider: this.provider,
             generationRequestId,
-            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         })
     }
 
@@ -523,7 +797,7 @@ export class StreamPublisher {
         }
     }
 
-    contextRelevanceResolved(workspaceContextResolution: WorkspaceContextResolution, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+    contextRelevanceResolved(workspaceContextResolution: WorkspaceContextResolution, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
         this.publishChatContent({
             status: STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED,
             aiProvider: this.provider,
@@ -537,11 +811,11 @@ export class StreamPublisher {
             status: STREAM_STATUS.CONTEXT_RELEVANCE_ERROR,
             aiProvider: this.provider,
             error: message,
-            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         })
     }
 
-    imageGenerationTrace(trace: ImageGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.generationRun): void {
+    imageGenerationTrace(trace: ImageGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.currentGenerationRun): void {
         const content: ChunkPayload['content'] = {
             status: STREAM_STATUS.IMAGE_GENERATION_TRACE,
             aiProvider: this.provider,
@@ -551,7 +825,7 @@ export class StreamPublisher {
         this.publishChatContent(content)
     }
 
-    imageGenerationError(message: string, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+    imageGenerationError(message: string, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
         this.publishChatContent({
             status: STREAM_STATUS.IMAGE_ERROR,
             aiProvider: this.provider,
@@ -560,7 +834,7 @@ export class StreamPublisher {
         })
     }
 
-    videoGenerationTrace(trace: VideoGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.generationRun): void {
+    videoGenerationTrace(trace: VideoGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.currentGenerationRun): void {
         const content: ChunkPayload['content'] = {
             status: STREAM_STATUS.VIDEO_GENERATION_TRACE,
             aiProvider: this.provider,
@@ -575,7 +849,7 @@ export class StreamPublisher {
             status: STREAM_STATUS.MEDIA_BRANCH_RESOLUTION_ERROR,
             aiProvider: this.provider,
             error: message,
-            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         })
     }
 
@@ -592,7 +866,7 @@ export class StreamPublisher {
             text: message,
             status: STREAM_STATUS.ERROR,
             aiProvider: this.provider,
-            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         }
         this.publishChatContent(content)
     }

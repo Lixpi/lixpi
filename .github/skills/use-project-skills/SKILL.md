@@ -1,6 +1,6 @@
 ---
 name: use-project-skills
-description: 'Maintain or audit Lixpi agent-skill discovery and pointer aliases, including the repository file-deletion safety rule. Use when adding, migrating, synchronizing, or troubleshooting skills for Copilot, Claude Code, or Cursor.'
+description: 'Maintain or audit Lixpi agent-skill discovery and pointer aliases. Use when adding, migrating, synchronizing, or troubleshooting skills for Copilot, Claude Code, or Cursor.'
 ---
 
 # Project Skill Discovery

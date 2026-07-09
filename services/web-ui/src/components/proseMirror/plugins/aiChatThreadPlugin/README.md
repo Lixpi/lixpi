@@ -292,7 +292,7 @@ Generated-image rendering is handled by `imageSelectionPlugin`.
 
 ## Read-Only Provenance Projections
 
-`readOnlyAiChatThreadRenderer.ts` mounts a `ProseMirrorEditor` with `documentType: 'aiChatThread'`, `readOnly: true`, and an optional trace-details render context. `aiChatThreadContentUtils.ts` builds a scoped `doc` JSON projection for generated image/video provenance by cloning the producing `aiUserMessage` and `aiResponseMessage` from `AiChatThread.content`. It returns no projection when the stored thread content or a matching response cannot be found. Matrix media responses keep only the matching `aiReasoningSection`, selected by `responseMessageId`, `reasoningRunId`, generated-media `mediaRunId` / `fileId`, or `reasoningModelId`. Per-image/per-video provenance can additionally prune generated-media atom nodes to the exact `mediaRunId`, `fileId`, and `variantIndex`; branch-fork provenance leaves sibling media visible.
+`readOnlyAiChatThreadRenderer.ts` mounts a `ProseMirrorEditor` with `documentType: 'aiChatThread'`, `readOnly: true`, and an optional trace-details render context. `@lixpi/prosemirror/shared/generated-media-turn-projection` builds a scoped `doc` JSON projection for generated image/video provenance by cloning the producing `aiUserMessage` and `aiResponseMessage` from `AiChatThread.content`. It returns no projection when the stored thread content or a matching response cannot be found. Matrix media responses keep only the matching `aiReasoningSection`, selected by `responseMessageId`, `reasoningRunId`, generated-media `mediaRunId` / `fileId`, or `reasoningModelId`. Per-image/per-video provenance can additionally prune generated-media atom nodes to the exact `mediaRunId`, `fileId`, and `variantIndex`; branch-fork provenance leaves sibling media visible.
 
 Lineage rendering is projection-scoped instead of panel-specific. `conversation` preserves the full live-thread view. `branch-origin`, `branch-fork`, and `media-run` projections materialize scope-local branch decisions as standalone `aiLineageEvent` nodes, then relocate them directly after the generation trace block that renders resolver audit details so they stay with the branch decision context instead of at the top of the reasoning section. Projection cloning filters materialized lineage-event siblings through the selected generated media's lineage ids and deduplicates repeated event ids, so a scoped panel renders one matching workflow marker instead of every sibling marker in the response. This keeps branch-root, branch-fork, and branch-line workflow nodes independently reconstructable from the same stored message pieces without copying ancestor events into child projections.
 
@@ -313,7 +313,7 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 - `aiCollapsibleBlockNode.ts`: trace disclosure schema and NodeView.
 - `imageGenerationTraceDetails.ts`: shared trace detail renderer.
 - `aiChatMessageShells.ts`: shared user/assistant message shells.
-- `aiChatThreadContentUtils.ts`: helpers for generated-media provenance.
+- `@lixpi/prosemirror/shared/generated-media-turn-projection`: helpers for generated-media provenance.
 - `aiChatThreadPluginConstants.ts`: shared `PluginKey` and transaction meta constants.
 - `ai-chat-thread.scss`: thread-log, message, media, and compatibility styles.
 

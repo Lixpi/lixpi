@@ -6,7 +6,7 @@ import { settings } from '$src/settings.ts'
 import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type { MediaBranchVlmResolution, MediaBranchLineagePlan, MediaGenerationRunMeta, WorkspaceContextResolution } from '@lixpi/constants'
+import type { CanvasGeometryUpdate, MediaBranchVlmResolution, MediaBranchLineagePlan, MediaGenerationRunMeta, WorkspaceContextResolution } from '@lixpi/constants'
 import {
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeType,
@@ -32,6 +32,7 @@ export type AiGeneratedImageCallbacks = {
         workspaceId: string
         partialIndex: number
         aiProvider: string
+        canvasGeometry?: CanvasGeometryUpdate
         generationRun?: MediaGenerationRunMeta
     }) => void
     onImageCompleteToCanvas?: (data: {
@@ -45,6 +46,7 @@ export type AiGeneratedImageCallbacks = {
         imageModelProvider: string
         imageModelId?: string
         responseMessageId: string
+        canvasGeometry?: CanvasGeometryUpdate
         generationRun?: MediaGenerationRunMeta
     }) => void
     onImageGenerationTraceToCanvas?: (data: {
@@ -69,6 +71,13 @@ export type AiGeneratedImageCallbacks = {
     onMediaGenerationRequestCompleteToCanvas?: (data: {
         threadId: string
         generationRequestId: string
+        generationRun?: MediaGenerationRunMeta
+    }) => void
+    // Applies API-resolved authoritative node geometry (positions/dimensions)
+    // pushed over the chat stream — the client never recomputes this layout.
+    onCanvasGeometryResolvedToCanvas?: (data: {
+        threadId: string
+        canvasGeometry: CanvasGeometryUpdate
         generationRun?: MediaGenerationRunMeta
     }) => void
     onWorkspaceContextResolvedToCanvas?: (data: {

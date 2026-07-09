@@ -8,8 +8,8 @@ import {
     buildStreamingSegmentSteps,
     buildStreamingSegmentTransaction,
     createStreamingMarks,
-} from './stream-assembly.ts'
-import { createProseMirrorSchema, DOCUMENT_TYPE } from './schema-builder.ts'
+} from './shared/stream-assembly.ts'
+import { createProseMirrorSchema, DOCUMENT_TYPE } from './shared/schema-builder.ts'
 
 type SegmentTargetInfo = {
     endOfNodePos: number

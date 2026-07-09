@@ -52,7 +52,7 @@ The API owns the decisions:
 - `branchOrigin.nodeId` and neutral root provenance when a separate root marker is required
 - `branchForks[].nodeId` and optional `branchForks[].parentBranchNodeId`, assigned per reasoning run rather than per media model
 - per-run `MediaRunLineageAssignment`
-- generated-media lineage fields: `parentMediaNodeId`, schema alias `parentImageNodeId`, `branchOriginNodeId`, `branchForkNodeId`, references, source context, operation kind, prompt text, prompt fingerprint, and creation ordering
+- generated-media lineage fields: `branchForkNodeId`, `branchLineNodeId`, `lineageParentNodeId`, `parentMediaNodeId`, schema alias `parentImageNodeId`, `branchOriginNodeId`, references, source context, operation kind, prompt text, prompt fingerprint, and creation ordering
 
 Matrix requests run the planner once in shared preflight, then pass the plan to every reasoning child. Single media requests run the same planner as the `planMediaBranchLineage` graph node. `MediaGenerationRunPlanner` is the shared media-agnostic run layer used by single requests, matrix reasoning runs, image routers, and video routers to assign stable reasoning/media run IDs and attach exact lineage assignments. No image/video provider-specific code should decide lineage parentage, synthesize marker topology, or fall back to a reasoning-level assignment when a concrete media-run assignment is missing.
 

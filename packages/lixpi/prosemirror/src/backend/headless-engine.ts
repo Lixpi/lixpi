@@ -4,7 +4,7 @@ import { Step } from 'prosemirror-transform'
 import {
     createProseMirrorSchema,
     type ProseMirrorDocumentType,
-} from './schema-builder.ts'
+} from '../shared/schema-builder.ts'
 
 export type HeadlessProseMirrorEngineConfig = {
     documentType: ProseMirrorDocumentType | string

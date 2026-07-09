@@ -5,6 +5,7 @@ import { STREAM_STATUS } from '@lixpi/constants'
 
 const canvasProjectionMocks = vi.hoisted(() => ({
     upsertMediaLineagePlanToCanvas: vi.fn(async () => undefined),
+    refreshMediaGenerationRequestCanvasGeometry: vi.fn(async () => undefined),
     settleMediaGenerationRequestOnCanvas: vi.fn(async () => undefined),
     logCanvasProjectionError: vi.fn(),
 }))
@@ -50,6 +51,16 @@ const flushPipelinePublishes = async (): Promise<void> => {
     await new Promise(resolve => setTimeout(resolve, 0))
 }
 
+const createDeferred = <T>() => {
+    let resolve!: (value: T) => void
+    let reject!: (reason?: unknown) => void
+    const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise
+        reject = rejectPromise
+    })
+    return { promise, resolve, reject }
+}
+
 const flatTexts = (published: Published[]): string =>
     published
         .filter(p => p.payload.content.status === STREAM_STATUS.STREAMING)
@@ -69,6 +80,16 @@ const generationRun = {
     mediaIndex: 0,
     variantIndex: 0,
 } as const
+
+let consoleInfoSpy: ReturnType<typeof vi.spyOn> | null = null
+
+beforeEach(() => {
+    vi.clearAllMocks()
+    consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    canvasProjectionMocks.upsertMediaLineagePlanToCanvas.mockResolvedValue(undefined)
+    canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry.mockResolvedValue(undefined)
+    canvasProjectionMocks.settleMediaGenerationRequestOnCanvas.mockResolvedValue(undefined)
+})
 
 describe('TagAwareStream', () => {
     let tagAware: ReturnType<typeof makeTagAwareStream>
@@ -205,6 +226,8 @@ describe('TagAwareStream', () => {
 
 afterEach(async () => {
     await flushPipelinePublishes()
+    consoleInfoSpy?.mockRestore()
+    consoleInfoSpy = null
 })
 
 describe('StreamPublisher extraction progress', () => {
@@ -361,6 +384,122 @@ describe('StreamPublisher extraction progress', () => {
         })
     })
 
+    it('does not let one media run block live publishing for another media run', async () => {
+        const nats = makeFakeNats()
+        const blockedAck = createDeferred<{ seq: number }>()
+        nats.fake.publishJetStream = vi.fn(async (_subject: string, payload: any) => {
+            const mediaRunId = payload.payload.content.generationRun?.mediaRunId
+            if (mediaRunId === 'reasoning-1:image:0') return blockedAck.promise
+            return { seq: 2 }
+        })
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+
+        publisher.publishChatContent({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            aiProvider: 'Anthropic',
+            imageUrl: 'partial-a.png',
+            fileId: 'partial-a',
+            partialIndex: 0,
+            generationRun: {
+                ...generationRun,
+                mediaRunId: 'reasoning-1:image:0',
+                mediaModelId: 'Google:gemini-2.5-flash-image',
+                mediaType: 'image',
+                mediaIndex: 0,
+            },
+        })
+        publisher.publishChatContent({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            aiProvider: 'Anthropic',
+            imageUrl: 'partial-b.png',
+            fileId: 'partial-b',
+            partialIndex: 0,
+            generationRun: {
+                ...generationRun,
+                mediaRunId: 'reasoning-1:image:1',
+                mediaModelId: 'OpenAI:gpt-image-2',
+                mediaType: 'image',
+                mediaIndex: 1,
+                variantIndex: 1,
+            },
+        })
+        await flushPipelinePublishes()
+
+        expect(nats.fake.publishJetStream).toHaveBeenCalledTimes(2)
+        expect(nats.published).toHaveLength(1)
+        expect(nats.published[0]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            imageUrl: 'partial-b.png',
+            generationRun: {
+                mediaRunId: 'reasoning-1:image:1',
+            },
+        })
+
+        blockedAck.resolve({ seq: 1 })
+        await publisher.drainPendingWrites()
+
+        expect(nats.published).toHaveLength(2)
+        expect(nats.published[1]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            imageUrl: 'partial-a.png',
+            generationRun: {
+                mediaRunId: 'reasoning-1:image:0',
+            },
+        })
+    })
+
+    it('keeps ordering within a single media run while using independent media queues', async () => {
+        const nats = makeFakeNats()
+        const blockedAck = createDeferred<{ seq: number }>()
+        let publishedCount = 0
+        nats.fake.publishJetStream = vi.fn(async (_subject: string, payload: any) => {
+            if (payload.payload.content.status === STREAM_STATUS.IMAGE_PARTIAL) {
+                return blockedAck.promise
+            }
+            publishedCount += 1
+            return { seq: publishedCount + 1 }
+        })
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+        const mediaRun = {
+            ...generationRun,
+            mediaRunId: 'reasoning-1:image:0',
+            mediaModelId: 'OpenAI:gpt-image-2',
+            mediaType: 'image' as const,
+            mediaIndex: 0,
+        }
+
+        publisher.publishChatContent({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            aiProvider: 'Anthropic',
+            imageUrl: 'partial.png',
+            fileId: 'partial-file',
+            partialIndex: 0,
+            generationRun: mediaRun,
+        })
+        publisher.publishChatContent({
+            status: STREAM_STATUS.IMAGE_COMPLETE,
+            aiProvider: 'Anthropic',
+            imageUrl: 'final.png',
+            fileId: 'final-file',
+            responseId: 'response-1',
+            revisedPrompt: 'final prompt',
+            generationRun: mediaRun,
+        })
+        await flushPipelinePublishes()
+
+        expect(nats.fake.publishJetStream).toHaveBeenCalledTimes(1)
+        expect(nats.published).toHaveLength(0)
+
+        blockedAck.resolve({ seq: 1 })
+        await publisher.drainPendingWrites()
+
+        expect(nats.fake.publishJetStream).toHaveBeenCalledTimes(2)
+        expect(nats.published.map(entry => entry.payload.content.status)).toEqual([
+            STREAM_STATUS.IMAGE_PARTIAL,
+            STREAM_STATUS.IMAGE_COMPLETE,
+        ])
+    })
+
     it('publishes workspace context relevance resolution on the chat stream', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'OpenAI')
@@ -436,6 +575,7 @@ describe('StreamPublisher extraction progress', () => {
         expect(canvasProjectionMocks.settleMediaGenerationRequestOnCanvas).toHaveBeenCalledWith({
             workspaceId: 'ws1',
             generationRequestId: 'request-1',
+            aiChatThreadId: 'thread1',
         })
         const completionWrites = nats.published.filter(
             (entry) => entry.payload?.content?.status === STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
@@ -608,9 +748,99 @@ describe('StreamPublisher trace payloads', () => {
             lineagePlan: { lineage: 'plan' },
         })
     })
+
+    it('refreshes API canvas geometry while planned lineage reasoning text streams', async () => {
+        const nats = makeFakeNats()
+        canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry.mockResolvedValue({
+            layoutRevision: 77,
+            nodes: [{
+                nodeId: 'fork-1',
+                position: { x: 10, y: 20 },
+                dimensions: { width: 320, height: 80 },
+            }],
+        })
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', generationRun)
+        ;(publisher as any).options.enableProseMirrorStream = true
+        ;(publisher as any).proseMirrorAssembler = {
+            handleContent: vi.fn(),
+            flushPendingWork: vi.fn(async () => undefined),
+            snapshotForProjection: vi.fn(() => ({ type: 'doc', content: [] })),
+        }
+
+        publisher.mediaLineagePlanned({ generationRequestId: 'request-1' } as any, generationRun)
+        publisher.publishChatContent({
+            status: STREAM_STATUS.STREAMING,
+            aiProvider: 'Anthropic',
+            text: 'live reasoning that changes marker dimensions',
+            generationRun,
+        })
+        await publisher.drainPendingWrites()
+        await flushPipelinePublishes()
+
+        expect(canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry).toHaveBeenCalledWith({
+            workspaceId: 'ws1',
+            aiChatThreadId: 'thread1',
+            generationRequestId: 'request-1',
+            proseMirrorThreadContent: { type: 'doc', content: [] },
+        })
+        expect(nats.published).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                payload: expect.objectContaining({
+                    content: expect.objectContaining({
+                        status: STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED,
+                        canvasGeometry: {
+                            layoutRevision: 77,
+                            nodes: [{
+                                nodeId: 'fork-1',
+                                position: { x: 10, y: 20 },
+                                dimensions: { width: 320, height: 80 },
+                            }],
+                        },
+                    }),
+                }),
+            }),
+        ]))
+    })
 })
 
 describe('StreamPublisher ProseMirror integration options', () => {
+    it('mirrors child stream content to a shared ProseMirror handler without duplicating live events or ending the shared stream', async () => {
+        const nats = makeFakeNats()
+        const sharedHandler = vi.fn()
+        const publisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+            generationRun,
+            { proseMirrorContentMirror: sharedHandler },
+        )
+
+        publisher.start()
+        publisher.chunk('matrix reasoning text')
+        publisher.end()
+        await flushPipelinePublishes()
+
+        expect(nats.published.map(event => event.payload.content.status).filter((status, index, statuses) =>
+            status !== STREAM_STATUS.STREAMING || statuses[index - 1] !== STREAM_STATUS.STREAMING
+        )).toEqual([
+            STREAM_STATUS.START_STREAM,
+            STREAM_STATUS.STREAMING,
+            STREAM_STATUS.END_STREAM,
+        ])
+        expect(sharedHandler.mock.calls.map(call => call[0].status).includes(STREAM_STATUS.START_STREAM)).toBe(true)
+        expect(sharedHandler).not.toHaveBeenCalledWith(expect.objectContaining({
+            status: STREAM_STATUS.END_STREAM,
+        }))
+        const mirroredText = sharedHandler.mock.calls
+            .map(call => call[0])
+            .filter(content => content.status === STREAM_STATUS.STREAMING)
+            .map(content => content.text)
+            .join('')
+        expect(mirroredText).toBe('matrix reasoning text')
+        expect(sharedHandler.mock.calls.every(call => call[0].generationRun === generationRun)).toBe(true)
+    })
+
     it('forwards publishProseMirrorContent payloads to the active assembler', () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')

@@ -23,14 +23,6 @@ Agents must not run project setup, package scripts, build scripts, docs builds, 
 
 If the Dockerized command is not documented or the required container is unavailable, agents stop and ask instead of falling back to a host command.
 
-## File Deletion Permission Rule
-
-Agents must not delete repository files silently.
-
-If cleanup, reverting accidental edits, restoring a diff, replacing a file, moving a file, renaming a file, or "undoing my changes" would delete repository files, agents stop and ask the user to confirm deletion of the exact file path(s) before applying that change. This includes delete-file patches, shell commands that remove files, and any edit that would make `git status` show deleted files.
-
-After the user confirms, agents delete only the confirmed path(s). If the user does not confirm, agents keep the files and report them as cleanup candidates. A direct user request to delete exact path(s) in the current thread counts as confirmation for those path(s). When undoing agent-created changes, agents restore previous file contents instead of deleting files unless the user confirms deletion.
-
 ## Why Aliases, Not Copied Instructions
 
 - A single documentation source prevents policy drift.

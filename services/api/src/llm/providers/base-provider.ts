@@ -4,11 +4,11 @@ import { StateGraph, END, START } from '@langchain/langgraph'
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn, err } from '@lixpi/debug-tools'
-import type { MediaGenerationRunMeta, ProviderName } from '@lixpi/constants'
+import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName, type StreamStatus } from '@lixpi/constants'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
-import { StreamPublisher, type ProseMirrorContentHandler } from '../graph/stream-publisher.ts'
+import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import { ImagePublisher, type StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
 import { VideoPublisher, type StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
@@ -43,7 +43,18 @@ type FanoutRouterResult = Pick<ProviderState,
 
 type MediaRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
+    getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
 }
+
+const LIVE_MIRRORED_MEDIA_STATUSES: ReadonlySet<StreamStatus> = new Set([
+    STREAM_STATUS.IMAGE_PARTIAL,
+    STREAM_STATUS.IMAGE_COMPLETE,
+    STREAM_STATUS.IMAGE_ERROR,
+    STREAM_STATUS.VIDEO_PENDING,
+    STREAM_STATUS.VIDEO_GENERATING,
+    STREAM_STATUS.VIDEO_COMPLETE,
+    STREAM_STATUS.VIDEO_ERROR,
+])
 
 const catalogModelIdFor = (model: AiModelMetaInfo): string =>
     `${model.provider}:${model.model}`
@@ -91,6 +102,8 @@ export abstract class BaseProvider {
     public readonly instanceKey: string
     private readonly mediaBranchLineagePlanner = new MediaBranchLineagePlanner()
     private readonly mediaGenerationRunPlanner = new MediaGenerationRunPlanner()
+    private pipelineProseMirrorContentHandler: ProseMirrorContentHandler | undefined
+    private pipelineProseMirrorSnapshotProvider: ProseMirrorSnapshotProvider | undefined
 
     constructor(
         protected readonly _instanceKey: string,
@@ -98,6 +111,32 @@ export abstract class BaseProvider {
     ) {
         this.instanceKey = _instanceKey
         this.app = this.buildWorkflow().compile()
+    }
+
+    private publishPipelineProseMirrorContent(content: Parameters<ProseMirrorContentHandler>[0]): void {
+        if (this.pipelineProseMirrorContentHandler) {
+            this.pipelineProseMirrorContentHandler(content)
+            if (LIVE_MIRRORED_MEDIA_STATUSES.has(content.status)) {
+                info('[BaseProvider][pipeline-content] live-publish-mirrored-media', {
+                    instanceKey: this.instanceKey,
+                    status: content.status,
+                    generationRequestId: content.generationRun?.generationRequestId ?? '',
+                    reasoningRunId: content.generationRun?.reasoningRunId ?? '',
+                    mediaRunId: content.generationRun?.mediaRunId ?? '',
+                    mediaModelId: content.generationRun?.mediaModelId ?? '',
+                    partialIndex: content.partialIndex ?? null,
+                    hasCanvasGeometry: Boolean(content.canvasGeometry),
+                })
+                this.streamPublisher?.publishChatContent(content, { mirrorProseMirror: false })
+            }
+            return
+        }
+        this.streamPublisher?.publishChatContent(content)
+    }
+
+    private getPipelineProseMirrorSnapshot(): ReturnType<ProseMirrorSnapshotProvider> {
+        if (this.pipelineProseMirrorSnapshotProvider) return this.pipelineProseMirrorSnapshotProvider()
+        return this.streamPublisher?.getProseMirrorSnapshot() ?? null
     }
 
     private buildWorkflow() {
@@ -173,9 +212,14 @@ export abstract class BaseProvider {
             || requestData.imageModelMetaInfo
             || requestData.videoModelMetaInfo,
         )
-        const onPipelineContent: ProseMirrorContentHandler = typeof requestData.proseMirrorContentHandler === 'function'
+        this.pipelineProseMirrorContentHandler = typeof requestData.proseMirrorContentHandler === 'function'
             ? requestData.proseMirrorContentHandler as ProseMirrorContentHandler
-            : (content: Parameters<ProseMirrorContentHandler>[0]) => this.streamPublisher?.publishChatContent(content)
+            : undefined
+        this.pipelineProseMirrorSnapshotProvider = typeof requestData.proseMirrorSnapshotProvider === 'function'
+            ? requestData.proseMirrorSnapshotProvider as ProseMirrorSnapshotProvider
+            : undefined
+        const onPipelineContent: ProseMirrorContentHandler = content => this.publishPipelineProseMirrorContent(content)
+        const getProseMirrorSnapshot: ProseMirrorSnapshotProvider = () => this.getPipelineProseMirrorSnapshot()
         this.streamPublisher = new StreamPublisher(
             this.deps.natsService,
             requestData.workspaceId,
@@ -188,6 +232,7 @@ export abstract class BaseProvider {
                 proseMirrorInitialDoc: requestData.proseMirrorInitialDoc,
                 deferProseMirrorEnd,
                 canvasVisibleArea: requestData.canvasVisibleArea,
+                proseMirrorContentMirror: this.pipelineProseMirrorContentHandler,
             },
         )
         this.imagePublisher = new ImagePublisher(
@@ -200,6 +245,7 @@ export abstract class BaseProvider {
             undefined,
             onPipelineContent,
             requestData.canvasVisibleArea,
+            getProseMirrorSnapshot,
         )
         this.videoPublisher = new VideoPublisher(
             this.deps.natsService,
@@ -212,6 +258,7 @@ export abstract class BaseProvider {
             undefined,
             onPipelineContent,
             requestData.canvasVisibleArea,
+            getProseMirrorSnapshot,
         )
 
         const initialState: ProviderState = {
@@ -484,7 +531,8 @@ export abstract class BaseProvider {
         }
 
         const imageResult = await this.deps.runImageRouter(state, {
-            onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+            onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
+            getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
         })
         if (imageResult.error) {
             this.streamPublisher?.imageGenerationError(imageResult.error, state.generationRun)
@@ -514,7 +562,8 @@ export abstract class BaseProvider {
         }
 
         const videoResult = await this.deps.runVideoRouter(state, {
-            onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+            onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
+            getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
         })
         if (videoResult.error) {
             this.streamPublisher?.error(videoResult.error, videoResult.errorCode, videoResult.errorType)
@@ -606,7 +655,8 @@ export abstract class BaseProvider {
             }
 
             const imageResult = await this.deps.runImageRouter(fanoutState, {
-                onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+                onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
+                getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
             })
             if (imageResult.error) {
                 this.streamPublisher?.imageGenerationError(imageResult.error, generationRun)
@@ -711,7 +761,8 @@ export abstract class BaseProvider {
             }
 
             const videoResult = await this.deps.runVideoRouter(fanoutState, {
-                onProseMirrorContent: content => this.streamPublisher?.publishChatContent(content),
+                onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
+                getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
             })
             return {
                 error: videoResult.error,

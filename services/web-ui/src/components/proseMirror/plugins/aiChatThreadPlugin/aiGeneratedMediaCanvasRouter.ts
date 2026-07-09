@@ -40,15 +40,16 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
                 workspaceId: event.workspaceId || '',
                 partialIndex: event.partialIndex || 0,
                 aiProvider: event.aiProvider || '',
+                ...(event.canvasGeometry ? { canvasGeometry: event.canvasGeometry } : {}),
                 generationRun,
             })
             return
 
         case 'image_complete':
-            if (!event.imageUrl) return
+            if (!event.imageUrl && !event.fileId && !event.canvasGeometry) return
             imageCallbacks.onImageCompleteToCanvas?.({
                 threadId,
-                imageUrl: event.imageUrl,
+                imageUrl: event.imageUrl || '',
                 fileId: event.fileId || '',
                 workspaceId: event.workspaceId || '',
                 responseId: event.responseId || '',
@@ -57,6 +58,7 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
                 imageModelProvider: event.imageModelProvider || '',
                 imageModelId: event.imageModelId || '',
                 responseMessageId,
+                ...(event.canvasGeometry ? { canvasGeometry: event.canvasGeometry } : {}),
                 generationRun,
             })
             return
@@ -103,6 +105,16 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
                 generationRequestId: event.generationRequestId || '',
                 generationRun,
             })
+            return
+
+        case 'canvas_geometry_resolved':
+            if (event.canvasGeometry) {
+                imageCallbacks.onCanvasGeometryResolvedToCanvas?.({
+                    threadId,
+                    canvasGeometry: event.canvasGeometry,
+                    generationRun,
+                })
+            }
             return
 
         case 'context_relevance_resolved':
@@ -155,6 +167,7 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
                 videoModel: event.videoModel || '',
                 videoModelProvider: event.videoModelProvider || '',
                 responseMessageId,
+                ...(event.canvasGeometry ? { canvasGeometry: event.canvasGeometry } : {}),
                 generationRun,
             })
             return

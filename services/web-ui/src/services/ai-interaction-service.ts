@@ -252,6 +252,7 @@ export default class AiInteractionService {
                     fileId: content.fileId,
                     workspaceId: this.workspaceId,
                     partialIndex: content.partialIndex,
+                    ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...segmentBase,
                 })
                 return
@@ -316,6 +317,19 @@ export default class AiInteractionService {
                 return
             }
 
+            if (content.status === STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED) {
+                console.log('[AI_INTERACTION] CANVAS_GEOMETRY_RESOLVED received:', {
+                    layoutRevision: content.canvasGeometry?.layoutRevision,
+                    nodeCount: content.canvasGeometry?.nodes?.length ?? 0,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'canvas_geometry_resolved',
+                    canvasGeometry: content.canvasGeometry,
+                    ...segmentBase,
+                })
+                return
+            }
+
             if (content.status === STREAM_STATUS.IMAGE_COMPLETE) {
                 console.log('[AI_INTERACTION] IMAGE_COMPLETE received:', content)
 
@@ -330,6 +344,7 @@ export default class AiInteractionService {
                     usesServerProseMirror: true,
                     imageModelProvider: content.imageModelProvider || content.aiProvider || '',
                     imageModelId: content.imageModelId || '',
+                    ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...(generationRun ? { generationRun } : {}),
                     aiChatThreadId: this.aiChatThreadId
                 })
@@ -400,6 +415,7 @@ export default class AiInteractionService {
                     revisedPrompt: content.revisedPrompt,
                     videoModel: content.videoModelId,
                     videoModelProvider: content.videoModelProvider || content.aiProvider || '',
+                    ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...segmentBase,
                 })
                 return
@@ -519,7 +535,8 @@ export default class AiInteractionService {
 
         // The media-generation matrix is needed only when some section carries
         // more than one model; a single model per section runs the plain path.
-        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, videoModelIds.length]
+        const matrixVideoModelIds = videoModelsEnabled || Boolean(videoSourceForExtension) ? videoModelIds : []
+        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, matrixVideoModelIds.length]
         const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
         const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
         if (totalSelectedModelCount > sectionsWithSelection) {
@@ -531,18 +548,18 @@ export default class AiInteractionService {
                 useMultipleVideoModels: videoModelsEnabled,
                 reasoningModelIds,
                 imageModelIds,
-                videoModelIds,
+                videoModelIds: matrixVideoModelIds,
                 imageOptions: {
                     imageSize: imageSize || 'auto',
                     ...(imageModelsEnabled && imageConfigGroups?.length ? { configGroups: imageConfigGroups } : {}),
                 },
-                videoOptions: {
+                ...(matrixVideoModelIds.length > 0 ? { videoOptions: {
                     ...(videoAspectRatio ? { aspectRatio: videoAspectRatio } : {}),
                     ...(videoResolution ? { resolution: videoResolution } : {}),
                     ...(videoDuration ? { duration: videoDuration } : {}),
                     ...(videoSourceForExtension ? { sourceForExtension: videoSourceForExtension } : {}),
                     ...(videoModelsEnabled && videoConfigGroups?.length ? { configGroups: videoConfigGroups } : {}),
-                },
+                } } : {}),
             }
         }
 

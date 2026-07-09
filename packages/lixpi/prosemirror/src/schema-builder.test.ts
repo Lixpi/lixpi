@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Schema } from 'prosemirror-model'
 
-import { DOCUMENT_TYPE, createProseMirrorSchema, getSupportedNodes, nodesBuilder } from './schema-builder.ts'
-import { documentTitleNodeType } from './node-specs.ts'
+import { DOCUMENT_TYPE, createProseMirrorSchema, getSupportedNodes, nodesBuilder } from './shared/schema-builder.ts'
+import { documentTitleNodeType } from './shared/node-specs.ts'
 
 describe('createProseMirrorSchema', () => {
     it('builds the default document schema with title and block fallback', () => {

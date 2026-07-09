@@ -620,6 +620,41 @@ export type MediaGenerationRequestCompletePayload = {
     generationRequestId: string
 }
 
+// One node's API-resolved canvas geometry. Positions are world-absolute for
+// top-level nodes; parentNodeId is present for parent-relative positions.
+export type CanvasNodeGeometry = {
+    nodeId: string
+    position: { x: number; y: number }
+    dimensions: { width: number; height: number }
+    parentNodeId?: string
+}
+
+// Authoritative canvas geometry resolved by the API after a lineage mutation
+// (plan upsert, media upsert, settle). Carries every node the layout moved or
+// resized — collision resolution can shift unrelated siblings — plus API-owned
+// node/edge snapshots and removals for clients that have not locally seen
+// projected pending nodes yet. layoutRevision is the persisted
+// canvasStateUpdatedAt, so clients discard stale events that arrive out of
+// order.
+export type CanvasGeometryUpdate = {
+    layoutRevision: number
+    nodes: CanvasNodeGeometry[]
+    nodeSnapshots?: CanvasNode[]
+    removedNodeIds?: string[]
+    edgeSnapshots?: WorkspaceEdge[]
+    removedEdgeIds?: string[]
+}
+
+// Broadcast on the chat stream after an async canvas projection (lineage plan
+// upsert / request settle) resolves, so every connected client applies the
+// API-resolved geometry instead of computing its own layout.
+export type CanvasGeometryResolvedStreamPayload = {
+    status: 'CANVAS_GEOMETRY_RESOLVED'
+    aiProvider: string
+    generationRun?: MediaGenerationRunMeta
+    canvasGeometry: CanvasGeometryUpdate
+}
+
 export type ContextRelevanceResolvedStreamPayload = {
     status: 'CONTEXT_RELEVANCE_RESOLVED'
     aiProvider: string
@@ -771,6 +806,7 @@ export type GeneratedMediaVariantMetadata = {
     branchOriginNodeId?: string
     branchForkNodeId?: string
     branchLineNodeId?: string
+    lineageParentNodeId?: string
 }
 
 export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {

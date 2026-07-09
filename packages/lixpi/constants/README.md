@@ -12,7 +12,8 @@ packages/lixpi/constants/
 ├── ai-interaction-constants.json
 ├── python/                   # Python package
 └── ts/                       # TypeScript/JavaScript package
-    └── workspace-persistence-settings.ts  # Shared workspace persistence debounce
+    ├── media-generation-layout-settings.ts # Shared API/WebUI generated-media placement geometry
+    └── workspace-persistence-settings.ts   # Shared workspace persistence debounce
 ```
 
 ## Usage

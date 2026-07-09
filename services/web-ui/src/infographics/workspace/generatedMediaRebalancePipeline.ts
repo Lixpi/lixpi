@@ -7,11 +7,7 @@ import type {
     WorkspaceEdge,
 } from '@lixpi/constants'
 
-import {
-    getStartedLineageMarkerState,
-    isGeneratedMediaNode,
-    type GeneratedMediaNode,
-} from '$src/infographics/workspace/branchLineageState.ts'
+import { getStartedLineageMarkerState } from '$src/infographics/workspace/branchLineageState.ts'
 import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'
 import { computeLineageContinuationPositionToRightOfRect } from '$src/infographics/workspace/imagePositioning.ts'
 
@@ -22,6 +18,7 @@ export type CanvasGeometry = { position: Point; dimensions: { width: number; hei
 export type GeneratedMediaRebalancePipelineConfig = {
     workspaceId: string
     mediaSize: number
+    pendingMediaPreFrameScale: number
     depthGap: number
     branchOriginDepthGap: number
     rootMarkerDepthGap: number
@@ -30,23 +27,19 @@ export type GeneratedMediaRebalancePipelineConfig = {
     branchOriginMarkerStackGap: number
     collisionIterations: number
     collisionMargin: number
-    getPendingGeneratedMediaLayoutGeometry: (node: GeneratedMediaNode) => CanvasGeometry | null
-    getPendingGeneratedMediaCircleInset: (dimensions: { width: number; height: number }) => { x: number; y: number; size: number }
     getNodeWorldPosition: (node: CanvasNode, nodesById: Map<string, CanvasNode>) => Point
     getNodeWorldRect: (node: CanvasNode, nodesById: Map<string, CanvasNode>) => Rect
     getNodeCollisionRect: (node: CanvasNode, worldPosition: Point) => Rect
+    getNodeConnectorAnchorRect: (node: CanvasNode, worldPosition: Point) => Rect
     getNodeCollisionMargin: (node: CanvasNode) => number
     getNodeCollisionOverlapThreshold: (node: CanvasNode) => number
+    isPendingGeneratedMediaBeforeFrame: (node: CanvasNode) => boolean
 }
 export type GeneratedMediaRebalanceResult = {
     nodes: CanvasNode[]
     startedMarkerNodeIds: Set<string>
 }
 
-type PendingMediaGeometryProxy = {
-    offset: Point
-    dimensions: { width: number; height: number }
-}
 type PlannedMarkerMediaProxy = {
     markerNodeId: string
     proxyNodeId: string
@@ -54,7 +47,6 @@ type PlannedMarkerMediaProxy = {
 }
 type RebalanceLayoutProxyPlan = {
     nodes: CanvasNode[]
-    pendingMediaProxiesByNodeId: Map<string, PendingMediaGeometryProxy>
     plannedMarkerProxiesByMarkerId: Map<string, PlannedMarkerMediaProxy>
 }
 
@@ -281,10 +273,15 @@ export class GeneratedMediaRebalancePipeline {
             rootMarkerDepthGap: this.config.rootMarkerDepthGap,
             siblingGap: this.config.siblingGap,
             branchFanoutExtraGap: this.config.branchFanoutExtraGap,
+            getBranchFanoutExtraGap: (_parentNode, childNodes) =>
+                childNodes.length > 0 && childNodes.every(node => this.isPendingPreFrameLayoutNode(node))
+                    ? 0
+                    : this.config.branchFanoutExtraGap,
             branchOriginMarkerStackGap: this.config.branchOriginMarkerStackGap,
             collisionIterations: this.config.collisionIterations,
             collisionMargin: this.config.collisionMargin,
             getNodeCollisionRect: this.config.getNodeCollisionRect,
+            getNodeConnectorAnchorRect: this.config.getNodeConnectorAnchorRect,
             getNodeCollisionMargin: this.config.getNodeCollisionMargin,
             getNodeCollisionOverlapThreshold: this.config.getNodeCollisionOverlapThreshold,
         })
@@ -295,30 +292,18 @@ export class GeneratedMediaRebalancePipeline {
         }
     }
 
-    // Layout should use what the user can see. Pending media before the first
-    // frame is rendered as a small circle, so this stage swaps in circle geometry
-    // and adds temporary future-media proxies for planned sibling markers.
-    private prepareLayoutProxyPlan(nodes: CanvasNode[]): RebalanceLayoutProxyPlan {
-        const pendingMediaProxiesByNodeId = new Map<string, PendingMediaGeometryProxy>()
-        const plannedMarkerProxiesByMarkerId = new Map<string, PlannedMarkerMediaProxy>()
-        const proxyNodes = nodes.map((node: CanvasNode) => {
-            if (!isGeneratedMediaNode(node)) return node
-            const proxyGeometry = this.config.getPendingGeneratedMediaLayoutGeometry(node)
-            if (!proxyGeometry) return node
+    private isPendingPreFrameLayoutNode(node: CanvasNode): boolean {
+        if (this.config.isPendingGeneratedMediaBeforeFrame(node)) return true
+        return node.type === 'image' && node.nodeId.includes(PLANNED_MEDIA_LAYOUT_PROXY_NODE_ID_SUFFIX)
+    }
 
-            pendingMediaProxiesByNodeId.set(node.nodeId, {
-                offset: {
-                    x: proxyGeometry.position.x - node.position.x,
-                    y: proxyGeometry.position.y - node.position.y,
-                },
-                dimensions: node.dimensions,
-            })
-            return {
-                ...node,
-                position: proxyGeometry.position,
-                dimensions: proxyGeometry.dimensions,
-            }
-        })
+    // Layout boxes must equal rendered boxes. Pending media use the compact
+    // pre-frame circle footprint, not the eventual full frame, so streaming
+    // spacing matches what the user sees. This stage only adds temporary
+    // future-media proxies for planned sibling markers.
+    private prepareLayoutProxyPlan(nodes: CanvasNode[]): RebalanceLayoutProxyPlan {
+        const plannedMarkerProxiesByMarkerId = new Map<string, PlannedMarkerMediaProxy>()
+        const proxyNodes = nodes
         const nodesById = getNodesById(proxyNodes)
         const { markerIdsWithGeneratedChildren, parentIdsWithStartedMarkerChildren } = getStartedLineageMarkerState(proxyNodes)
         const plannedProxyNodes: ImageCanvasNode[] = []
@@ -345,7 +330,6 @@ export class GeneratedMediaRebalancePipeline {
 
         return {
             nodes: plannedProxyNodes.length > 0 ? [...proxyNodes, ...plannedProxyNodes] : proxyNodes,
-            pendingMediaProxiesByNodeId,
             plannedMarkerProxiesByMarkerId,
         }
     }
@@ -358,8 +342,12 @@ export class GeneratedMediaRebalancePipeline {
         nodesById: Map<string, CanvasNode>,
         proxyNodeId: string,
     ): ImageCanvasNode {
-        const mediaDimensions = { width: this.config.mediaSize, height: this.config.mediaSize }
-        const circleInset = this.config.getPendingGeneratedMediaCircleInset(mediaDimensions)
+        const configuredScale = Number(this.config.pendingMediaPreFrameScale)
+        const scale = Number.isFinite(configuredScale) && configuredScale > 0
+            ? Math.min(1, configuredScale)
+            : 1 / 3
+        const proxySize = Math.max(1, this.config.mediaSize * scale)
+        const mediaDimensions = { width: proxySize, height: proxySize }
         const parentRect = this.config.getNodeWorldRect(parentNode, nodesById)
         const mediaGap = parentNode.type === 'branchOrigin'
             ? this.config.branchOriginDepthGap
@@ -385,9 +373,9 @@ export class GeneratedMediaRebalancePipeline {
             aspectRatio: 1,
             position: {
                 x: futureMediaPosition.x,
-                y: futureMediaPosition.y + circleInset.y,
+                y: futureMediaPosition.y,
             },
-            dimensions: { width: circleInset.size, height: circleInset.size },
+            dimensions: mediaDimensions,
             generatedBy: {
                 aiChatThreadId: markerNode.aiChatThreadId ?? '',
                 responseId: '',
@@ -407,14 +395,14 @@ export class GeneratedMediaRebalancePipeline {
         }
     }
 
-    // The branch-tree resolver may move proxy geometry. This stage removes
-    // temporary nodes and maps pending media back to persisted full-node geometry
-    // while preserving the visual circle position that layout just resolved.
+    // The branch-tree resolver may move proxy geometry. This stage removes the
+    // temporary planned-media proxy nodes and derives each planned marker's
+    // midpoint position from where its proxy landed.
     private restorePersistedGeometry(
         nodes: CanvasNode[],
         proxyPlan: RebalanceLayoutProxyPlan,
     ): CanvasNode[] {
-        if (proxyPlan.pendingMediaProxiesByNodeId.size === 0 && proxyPlan.plannedMarkerProxiesByMarkerId.size === 0) return nodes
+        if (proxyPlan.plannedMarkerProxiesByMarkerId.size === 0) return nodes
 
         const nodesById = getNodesById(nodes)
         const plannedProxyNodeIds = new Set<string>()
@@ -468,23 +456,12 @@ export class GeneratedMediaRebalancePipeline {
 
         return nodes.flatMap((node: CanvasNode) => {
             if (plannedProxyNodeIds.has(node.nodeId)) return []
-            const proxy = proxyPlan.pendingMediaProxiesByNodeId.get(node.nodeId)
             const markerPosition = plannedMarkerPositionsById.get(node.nodeId)
-            let restoredNode = proxy ? {
+            if (!markerPosition) return [node]
+            return [{
                 ...node,
-                position: {
-                    x: node.position.x - proxy.offset.x,
-                    y: node.position.y - proxy.offset.y,
-                },
-                dimensions: proxy.dimensions,
-            } : node
-            if (markerPosition) {
-                restoredNode = {
-                    ...restoredNode,
-                    position: markerPosition,
-                }
-            }
-            return [restoredNode]
+                position: markerPosition,
+            }]
         })
     }
 }

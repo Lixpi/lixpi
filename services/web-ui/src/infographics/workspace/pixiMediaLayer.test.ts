@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createPixiMediaLayer } from '$src/infographics/workspace/pixiMediaLayer.ts'
 
-function makeImageNode(nodeId: string): Record<string, any> {
+function makeImageNode(nodeId: string, overrides: Record<string, any> = {}): Record<string, any> {
     return {
         nodeId,
         type: 'image',
@@ -13,6 +13,7 @@ function makeImageNode(nodeId: string): Record<string, any> {
         dimensions: { width: 100, height: 70 },
         position: { x: 10, y: 20 },
         referenceId: `${nodeId}-ref`,
+        ...overrides,
     }
 }
 
@@ -217,6 +218,8 @@ vi.mock('$src/infographics/workspace/pixiMediaLayerLogic.ts', () => ({
     computeWorldPosition: (node: any) => node.position,
     getPixiLodTier: (zoom: number) => (zoom >= 1 ? 'full' : 'thumb-256') as const,
     getVisibleWorldRect: () => ({ minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 }),
+    isGeneratedImageNodeWaitingForFrame: (node: { generatedBy?: unknown; fileId?: string; src?: string }) =>
+        Boolean(node.generatedBy) && !node.fileId && !node.src,
     makeIndexedImage: (node: { nodeId: string; dimensions: { width: number; height: number }; position: { x: number; y: number } }) => ({
         nodeId: node.nodeId,
         minX: node.position.x,
@@ -691,6 +694,32 @@ describe('createPixiMediaLayer runtime behavior', () => {
                 renderable: true,
             }),
         })
+    })
+
+    it('does not decode sourceless generated pending image nodes before tracker setup', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+        const decoder = await import('$src/infographics/workspace/pixiImageDecoder.ts')
+        vi.mocked(decoder.decodeImageInWorker).mockClear()
+
+        layer.sync(makeCanvasState({
+            nodes: [
+                makeImageNode('pending-image-api', {
+                    fileId: '',
+                    src: '',
+                    generatedBy: {
+                        aiChatThreadId: 'thread-1',
+                        responseId: '',
+                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        revisedPrompt: 'make a mountain',
+                        generationRequestId: 'request-1',
+                    },
+                }),
+            ],
+        }))
+
+        expect(decoder.decodeImageInWorker).not.toHaveBeenCalled()
+        expect(findLatestDebugEvent('ensure-texture-skip-frame-pending').details.nodeId).toBe('pending-image-api')
     })
 
     it('records verbose debug payloads only when the reproduction flag is enabled', async () => {

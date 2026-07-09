@@ -47,11 +47,13 @@ const createRequest = (overrides: Partial<MatrixRequestData> = {}): MatrixReques
 let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
 let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
 let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
+let consoleInfoSpy: ReturnType<typeof vi.spyOn> | null = null
 
 beforeEach(() => {
     debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
     debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
     debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+    consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
 })
 
 afterEach(() => {
@@ -61,6 +63,8 @@ afterEach(() => {
     debugWarnSpy = null
     debugErrSpy?.mockRestore()
     debugErrSpy = null
+    consoleInfoSpy?.mockRestore()
+    consoleInfoSpy = null
     vi.restoreAllMocks()
 })
 
@@ -155,6 +159,138 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         expect(state0.generationRun.lineageAssignment?.reasoningRunId).toBe('request-2:reasoning:0')
         expect(state1.generationRun.lineageAssignment?.reasoningRunId).toBe('request-2:reasoning:1')
         expect(state0.generationRun.lineageAssignment?.branchForkNodeId).toBe('branch-fork-request-2-reasoning-0')
+    })
+
+    it('does not create video fanout assignments from stale scalar video defaults in structured image matrices', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
+
+        getAiModel.mockImplementation(async ({ model }: { provider: string; model: string }) => {
+            if (model === 'claude-sonnet-4-6') {
+                return {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet-4-6',
+                    modelVersion: 'claude-sonnet-4-6',
+                    modalities: [{ modality: 'text' }],
+                } as any
+            }
+            return {
+                provider: 'Google',
+                model,
+                modelVersion: model,
+                modalities: [{ modality: 'image_generation' }],
+            } as any
+        })
+
+        vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext').mockResolvedValue({})
+        vi.spyOn(featureResolver, 'resolveFeatures').mockResolvedValue({})
+        vi.spyOn(mediaBranchResolver, 'resolveMediaBranch').mockResolvedValue({})
+
+        await orchestrator.process(createRequest({
+            aiReasoningModels: undefined,
+            aiImageModels: undefined,
+            aiVideoModels: ['Google:veo-3.1-generate-preview'],
+            mediaGenerationRequest: {
+                requestVersion: 'media-generation-matrix-v1',
+                generationRequestId: 'request-image-only',
+                reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+                imageModelIds: ['Google:image-a', 'Google:image-b'],
+                videoModelIds: ['Google:veo-3.1-generate-preview'],
+                useMultipleImageModels: true,
+                useMultipleVideoModels: false,
+                imageOptions: { imageSize: '1024x1024' },
+            },
+        }))
+
+        expect(registry.process).toHaveBeenCalledOnce()
+        const state = registry.process.mock.calls[0]?.[2] as any
+        expect(state.mediaFanoutPlan.imageModels).toHaveLength(2)
+        expect(state.mediaFanoutPlan.videoModels).toHaveLength(0)
+        expect(state.mediaBranchLineagePlan.runAssignments).toHaveLength(2)
+        expect(state.mediaBranchLineagePlan.runAssignments.every((assignment: any) => assignment.mediaType === 'image')).toBe(true)
+    })
+
+    it('uses the latest structured image model selection when multiple-image mode stays enabled', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
+
+        getAiModel.mockImplementation(async ({ model }: { provider: string; model: string }) => {
+            if (model === 'claude-sonnet-4-6') {
+                return {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet-4-6',
+                    modelVersion: 'claude-sonnet-4-6',
+                    modalities: [{ modality: 'text' }],
+                } as any
+            }
+            return {
+                provider: 'Google',
+                model,
+                modelVersion: model,
+                modalities: [{ modality: 'image_generation' }],
+                imageSizes: [{ value: '1024x1024' }, { value: '512x512' }],
+            } as any
+        })
+
+        vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext').mockResolvedValue({})
+        vi.spyOn(featureResolver, 'resolveFeatures').mockResolvedValue({})
+        vi.spyOn(mediaBranchResolver, 'resolveMediaBranch').mockResolvedValue({})
+
+        await orchestrator.process(createRequest({
+            aiReasoningModels: undefined,
+            // Deliberately stale outer fallback: the latest structured matrix has
+            // already unselected image-a, so this must never produce a second fork.
+            aiImageModels: ['Google:image-a', 'Google:image-b'],
+            aiVideoModels: undefined,
+            mediaGenerationRequest: {
+                requestVersion: 'media-generation-matrix-v1',
+                generationRequestId: 'request-current-image-selection',
+                reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+                imageModelIds: ['Google:image-b'],
+                videoModelIds: [],
+                useMultipleImageModels: true,
+                useMultipleVideoModels: false,
+                imageOptions: {
+                    imageSize: '1024x1024',
+                    configGroups: [
+                        {
+                            groupId: 'stale-image-a',
+                            modelIds: ['Google:image-a'],
+                            values: { imageSize: '512x512' },
+                        },
+                        {
+                            groupId: 'current-image-b',
+                            modelIds: ['Google:image-b'],
+                            values: { imageSize: '1024x1024' },
+                        },
+                    ],
+                },
+                videoOptions: {},
+            },
+        }))
+
+        const lookedUpModels = getAiModel.mock.calls.map((call) => call?.[0]?.model)
+        expect(lookedUpModels).toEqual(['claude-sonnet-4-6', 'image-b'])
+        expect(lookedUpModels).not.toContain('image-a')
+        expect(registry.process).toHaveBeenCalledOnce()
+
+        const state = registry.process.mock.calls[0]?.[2] as any
+        expect(state.mediaFanoutPlan.imageModels.map((model: any) => `${model.provider}:${model.model}`)).toEqual(['Google:image-b'])
+        expect(state.mediaFanoutPlan.imageConfigGroups).toEqual([
+            {
+                groupId: 'current-image-b',
+                modelIds: ['Google:image-b'],
+                values: { imageSize: '1024x1024' },
+            },
+        ])
+        expect(state.mediaBranchLineagePlan.runAssignments).toHaveLength(1)
+        expect(state.mediaBranchLineagePlan.runAssignments[0]).toMatchObject({
+            mediaType: 'image',
+            mediaModelId: 'Google:image-b',
+            mediaIndex: 0,
+        })
     })
 
     it('rejects requests that resolve to neither image nor video generation models', async () => {

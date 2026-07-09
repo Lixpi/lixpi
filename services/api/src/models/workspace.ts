@@ -875,11 +875,17 @@ export default {
         }
     },
 
+    // Returns the persisted canvas state and its canvasStateUpdatedAt revision so
+    // callers can broadcast API-resolved geometry with a monotonic revision.
     mutateCanvasState: async ({
         workspaceId,
         mutate,
         origin = 'mutateWorkspaceCanvasState'
-    }: { workspaceId: string; mutate: CanvasStateMutator; origin?: string }): Promise<boolean> => {
+    }: { workspaceId: string; mutate: CanvasStateMutator; origin?: string }): Promise<{
+        changed: boolean
+        canvasState: CanvasState | null
+        canvasStateUpdatedAt: number | null
+    }> => {
         const maxAttempts = 5
 
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -890,12 +896,12 @@ export default {
             })
 
             if (!workspace || Object.keys(workspace).length === 0) {
-                return false
+                return { changed: false, canvasState: null, canvasStateUpdatedAt: null }
             }
 
             const currentCanvasState = normalizeCanvasState(workspace.canvasState)
             const result = mutate(currentCanvasState)
-            if (!result.changed) return false
+            if (!result.changed) return { changed: false, canvasState: currentCanvasState, canvasStateUpdatedAt: getCanvasStateUpdatedAt(workspace) ?? null }
 
             const currentDate = new Date().getTime()
             try {
@@ -934,7 +940,7 @@ export default {
                     logConditionalCheckFailures: false,
                     origin
                 })
-                return true
+                return { changed: true, canvasState: result.canvasState, canvasStateUpdatedAt: currentDate }
             } catch (error: any) {
                 if (isTransactionConditionalCheckFailure(error)) continue
                 err('Failed to mutate workspace canvas state:', error)

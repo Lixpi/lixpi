@@ -420,7 +420,7 @@ Style-transfer continuations can still continue a branch through these same sign
 
 For images, an empty `IMAGE_PARTIAL` creates a transparent placeholder canvas node; non-empty partials update that same node in place. (Video drops its placeholder on `VIDEO_PENDING` and upgrades it on `VIDEO_COMPLETE` — there are no partial frames.) In both cases:
 
-1. The placeholder edge uses the API-assigned `lineageParentNodeId`. If the API plan references a neutral `branchOrigin`, the canvas renders that origin marker. Reasoning-fanout requests render the planned `branchFork` marker for the active reasoning run; generated media for every selected media model under that reasoning run edges from the same fork.
+1. The placeholder edge uses the API-assigned run marker first (`branchForkNodeId` / `branchLineNodeId`), then `lineageParentNodeId`, `parentMediaNodeId`, and `branchOriginNodeId` as fallbacks. If the API plan references a neutral `branchOrigin`, the canvas renders that origin marker. Reasoning-fanout requests render the planned `branchFork` marker for the active reasoning run; generated media for every selected media model under that reasoning run edges from the same fork.
 2. The node's `generatedBy` metadata includes the API `MediaRunLineageAssignment` plus resolver metadata.
 3. **Placement geometry:**
    - If placement continues from a generated media node, the placeholder is **vertically centered** on that preceding artifact.
@@ -491,7 +491,7 @@ A branch tree is a connected component of **top-level generated media** plus tem
 - temporary origins: `type: 'branchOrigin'`, with `branchId`, `temporary: true`, and no `parentId`
 - temporary forks: `type: 'branchFork'`, with `branchId`, `temporary: true`, optional reasoning-run metadata, and no `parentId`
 
-A generated node's in-tree parent is resolved from API-assigned `generatedBy.parentMediaNodeId`, then `generatedBy.branchOriginNodeId`, then `generatedBy.branchForkNodeId` / `generatedBy.branchLineNodeId` when an API marker is the only visible lineage parent. A `branchFork` or `branchLine` parent is resolved from its API-assigned `parentBranchNodeId`; a parentless `branchFork` is a root marker. If no lineage parent exists, the generated node is a root. This lets one tree mix images and videos, lets a single reasoning branch fan out into multiple media-model children, and gives explicit roots only when the API plan declares them.
+A generated node's in-tree parent is resolved from API-assigned `generatedBy.branchForkNodeId` / `generatedBy.branchLineNodeId`, then `generatedBy.parentMediaNodeId`, then `generatedBy.branchOriginNodeId`. A `branchFork` or `branchLine` parent is resolved from its API-assigned `parentBranchNodeId`; a parentless `branchFork` is a root marker. If no lineage parent exists, the generated node is a root. This lets one tree mix images and videos, lets a single reasoning branch fan out into multiple media-model children, and gives explicit roots only when the API plan declares them.
 
 Reference/style media and workspace-relevance selections can anchor placement and become model references, but they are not tree members unless they are themselves generated media in the lineage. Parented nodes are also excluded from tree layout, matching the canvas rule that containment is handled separately from top-level branch placement.
 

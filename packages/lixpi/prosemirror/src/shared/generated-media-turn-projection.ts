@@ -3,14 +3,17 @@ import {
     getAiLineageEventsForProjection,
     type AiLineageEventDescriptor,
     type AiLineageProjectionScope,
-} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
-
-export type ProseMirrorJsonNode = {
-    type?: string
-    text?: string
-    attrs?: Record<string, any>
-    content?: ProseMirrorJsonNode[]
-}
+} from './lineage-events.ts'
+import {
+    parseProseMirrorJsonContent,
+    collectProseMirrorText,
+    findAiChatThreadContentNode,
+    getBranchMarkerResponseContainer,
+    getBranchMarkerTurnMessages,
+    getLatestThreadTurnMessages,
+    type BranchMarkerTurnDescriptor,
+    type ProseMirrorJsonNode,
+} from './thread-doc.ts'
 
 // One turn's generated-media context, read back from the thread doc to populate
 // the canvas info panel. Carries whichever generation trace the response holds —
@@ -44,11 +47,25 @@ export type GeneratedMediaTurnProjection = {
     source: GeneratedMediaTurnProjectionSource
 }
 
+export type BranchMarkerTurnProjection = {
+    threadId: string
+    descriptor: BranchMarkerTurnDescriptor
+    content: ProseMirrorJsonNode
+    source: GeneratedMediaTurnProjectionSource
+}
+
 type BuildGeneratedMediaTurnProjectionOptions = {
     threadId?: string
     forceGenerationDetailsOpen?: boolean
     limitToLocatorMedia?: boolean
     lineageProjectionScope?: AiLineageProjectionScope
+}
+
+type BuildBranchMarkerTurnProjectionOptions = {
+    threadId: string
+    forceGenerationDetailsOpen?: boolean
+    lineageProjectionScope?: AiLineageProjectionScope
+    allowLatestTurnFallback?: boolean
 }
 
 type GeneratedMediaTurnMatch = {
@@ -57,35 +74,7 @@ type GeneratedMediaTurnMatch = {
     threadAttrs?: Record<string, any>
 }
 
-type CollectTextOptions = {
-    excludedNodeTypes?: string[]
-}
-
 type ProjectionNodeFilter = (node: ProseMirrorJsonNode) => boolean
-
-export function parseProseMirrorJsonContent(content: unknown): ProseMirrorJsonNode | null {
-    if (!content) return null
-    if (typeof content === 'string') {
-        try {
-            return JSON.parse(content) as ProseMirrorJsonNode
-        } catch {
-            return null
-        }
-    }
-    if (typeof content === 'object') return content as ProseMirrorJsonNode
-    return null
-}
-
-export function collectProseMirrorText(node: ProseMirrorJsonNode | undefined, options: CollectTextOptions = {}): string {
-    if (!node) return ''
-    if (options.excludedNodeTypes?.includes(node.type ?? '')) return ''
-    if (node.type === 'text') return node.text ?? ''
-    if (node.type === 'hard_break') return '\n'
-    if (node.type === 'aiGeneratedImage') {
-        return typeof node.attrs?.revisedPrompt === 'string' ? node.attrs.revisedPrompt : ''
-    }
-    return node.content?.map((child) => collectProseMirrorText(child, options)).join('') ?? ''
-}
 
 export function collectResponseTextById(root: ProseMirrorJsonNode): Record<string, string> {
     const responseTextById: Record<string, string> = {}
@@ -484,6 +473,83 @@ function cloneResponseForProjection(
         content: selectedSection.type === 'aiReasoningSection'
             ? [clonedSection]
             : [],
+    }
+}
+
+function cloneBranchMarkerResponseForProjection(
+    responseNode: ProseMirrorJsonNode,
+    descriptor: BranchMarkerTurnDescriptor,
+    forceGenerationDetailsOpen: boolean,
+    lineageProjectionScope: AiLineageProjectionScope,
+    allowFullResponseFallback: boolean,
+): ProseMirrorJsonNode | null {
+    const responseContainer = getBranchMarkerResponseContainer(responseNode, descriptor)
+        ?? (allowFullResponseFallback ? responseNode : null)
+    if (!responseContainer) return null
+
+    if (responseContainer === responseNode) {
+        const cloned = cloneProjectionNode(responseNode, forceGenerationDetailsOpen)
+        relocateLineageEventsToResolverAudit(cloned)
+        return cloned
+    }
+
+    const clonedSection = cloneProjectionNode(responseContainer, forceGenerationDetailsOpen)
+    if (clonedSection.type === 'aiReasoningSection') {
+        clonedSection.attrs = {
+            ...(clonedSection.attrs ?? {}),
+            lineageProjectionScope,
+        }
+        materializeReasoningSectionLineageEventsForProjection(clonedSection, lineageProjectionScope)
+    }
+    relocateLineageEventsToResolverAudit(clonedSection)
+
+    return {
+        ...cloneProseMirrorJsonNode(responseNode),
+        content: [clonedSection],
+    }
+}
+
+export function buildBranchMarkerTurnProjectionFromThreadContent(
+    threadContent: unknown,
+    descriptor: BranchMarkerTurnDescriptor,
+    options: BuildBranchMarkerTurnProjectionOptions,
+): BranchMarkerTurnProjection | null {
+    const root = parseProseMirrorJsonContent(threadContent)
+    if (!root) return null
+
+    const threadNode = findAiChatThreadContentNode(root, options.threadId)
+    if (!threadNode) return null
+
+    const ownTurn = getBranchMarkerTurnMessages(threadNode, descriptor)
+    const allowLatestTurnFallback = options.allowLatestTurnFallback ?? true
+    const latestTurn = ownTurn || !allowLatestTurnFallback
+        ? { userMessage: null, responseMessage: null }
+        : getLatestThreadTurnMessages(threadNode)
+    const userMessage = ownTurn?.userMessage ?? latestTurn.userMessage
+    const responseMessage = ownTurn?.responseMessage ?? latestTurn.responseMessage
+
+    if (!userMessage) return null
+
+    const responseProjection = responseMessage
+        ? cloneBranchMarkerResponseForProjection(
+            responseMessage,
+            descriptor,
+            options.forceGenerationDetailsOpen ?? false,
+            options.lineageProjectionScope ?? 'branch-fork',
+            !ownTurn && allowLatestTurnFallback,
+        )
+        : null
+
+    const messages = [
+        cloneProjectionNode(userMessage, options.forceGenerationDetailsOpen ?? false),
+        responseProjection,
+    ].filter((message): message is ProseMirrorJsonNode => Boolean(message))
+
+    return {
+        threadId: options.threadId,
+        descriptor,
+        content: createProjectionDocument(options.threadId, threadNode.attrs, messages),
+        source: 'thread-content',
     }
 }
 
