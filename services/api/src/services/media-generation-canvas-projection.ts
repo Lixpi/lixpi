@@ -28,6 +28,8 @@ import {
     type MediaRunLineageAssignment,
     type VideoGeneratedByMetadata,
     type VideoCanvasNode,
+    type WorkspaceCollisionFlowSettings,
+    type WorkspaceCollisionNodeTypeSettings,
     type WorkspaceEdge,
 } from '@lixpi/constants'
 import { err } from '@lixpi/debug-tools'
@@ -41,6 +43,7 @@ import Workspace from '../models/workspace.ts'
 import { settings } from '../settings.ts'
 
 const canvasProjectionSettings = settings.mediaGenerationCanvasProjection
+const workspaceCollisionSettings = settings.workspaceCollision
 
 type CanvasViewport = {
     x: number
@@ -317,30 +320,32 @@ function positionBranchMarkerBeforeGeneratedMedia(
         + canvasProjectionSettings.branchFanoutExtraGap * Math.max(0, siblingCount - 1)
     const mediaBox = mediaDimensions()
     const futureMediaPosition = positionRightOf(parentNode, mediaBox, fallbackIndex, state, canvasVisibleArea, mediaGap)
+    const futureCircleInset = getPendingGeneratedMediaBeforeFrameCircleInset(mediaBox)
+    const futureCircleLeft = futureMediaPosition.x + futureCircleInset.x
     const parentAnchorX = parentNode.position.x + parentNode.dimensions.width
     const parentAnchorY = parentNode.position.y + parentNode.dimensions.height / 2
 
     if (parentNode.type === 'branchOrigin') {
         const stackIndex = siblingSlot?.index ?? 0
         return {
-            x: (parentAnchorX + futureMediaPosition.x) / 2 - dimensions.width / 2,
+            x: (parentAnchorX + futureCircleLeft) / 2 - dimensions.width / 2,
             y: parentNode.position.y + parentNode.dimensions.height
                 + canvasProjectionSettings.nodeGap
                 + stackIndex * (dimensions.height + canvasProjectionSettings.nodeGap),
         }
     }
 
-    const mediaStep = mediaBox.height + canvasProjectionSettings.branchRowGap
-    const mediaStackHeight = mediaBox.height * siblingCount
+    const circleStep = futureCircleInset.size + canvasProjectionSettings.branchRowGap
+    const circleStackHeight = futureCircleInset.size * siblingCount
         + canvasProjectionSettings.branchRowGap * Math.max(0, siblingCount - 1)
-    const firstMediaCenterY = parentAnchorY - mediaStackHeight / 2 + mediaBox.height / 2
-    const futureMediaCenterY = siblingSlot
-        ? firstMediaCenterY + mediaStep * siblingSlot.index
-        : futureMediaPosition.y + mediaBox.height / 2
+    const firstCircleCenterY = parentAnchorY - circleStackHeight / 2 + futureCircleInset.size / 2
+    const futureCircleCenterY = siblingSlot
+        ? firstCircleCenterY + circleStep * siblingSlot.index
+        : futureMediaPosition.y + futureCircleInset.y + futureCircleInset.size / 2
 
     return {
-        x: (parentAnchorX + futureMediaPosition.x) / 2 - dimensions.width / 2,
-        y: (parentAnchorY + futureMediaCenterY) / 2 - dimensions.height / 2,
+        x: (parentAnchorX + futureCircleLeft) / 2 - dimensions.width / 2,
+        y: (parentAnchorY + futureCircleCenterY) / 2 - dimensions.height / 2,
     }
 }
 
@@ -356,9 +361,49 @@ function isMarkerNode(node: CanvasNode): node is MarkerNode {
     return node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
 }
 
+function isGeneratedMediaNodeWaitingForFrame(node: CanvasNode): node is GeneratedMediaNode {
+    if ((node.type !== 'image' && node.type !== 'video') || !node.generatedBy?.generationRequestId) return false
+    if (node.fileId?.trim()) return false
+    if (node.type === 'image') return !node.src?.trim()
+    return !node.src?.trim()
+        && !node.posterSrc?.trim()
+        && !node.posterFileId?.trim()
+        && !node.frameFileId?.trim()
+}
+
+function getPendingGeneratedMediaBeforeFrameCircleInset(dimensions: { width: number; height: number }): { x: number; y: number; size: number } {
+    const configuredScale = Number(canvasProjectionSettings.preFrameCircleScale)
+    const scale = Number.isFinite(configuredScale) && configuredScale > 0
+        ? Math.min(1, configuredScale)
+        : 1 / 3
+    const size = Math.max(1, Math.min(dimensions.width, dimensions.height) * scale)
+    return {
+        x: (dimensions.width - size) / 2,
+        y: (dimensions.height - size) / 2,
+        size,
+    }
+}
+
+function getPendingGeneratedMediaBeforeFrameCircleRect(
+    node: GeneratedMediaNode,
+    worldPosition: { x: number; y: number },
+): CanvasEngineRect {
+    const inset = getPendingGeneratedMediaBeforeFrameCircleInset(node.dimensions)
+    return {
+        x: worldPosition.x + inset.x,
+        y: worldPosition.y + inset.y,
+        width: inset.size,
+        height: inset.size,
+    }
+}
+
 // Collision rect matches the WebUI exactly: node box plus the chrome strip
 // reserved under generated media (shared metric settings).
 function getLineageCollisionRect(node: CanvasNode, worldPosition: { x: number; y: number }): CanvasEngineRect {
+    if (isGeneratedMediaNodeWaitingForFrame(node)) {
+        return getPendingGeneratedMediaBeforeFrameCircleRect(node, worldPosition)
+    }
+
     const chromeHeight = node.type === 'image' || node.type === 'video'
         ? getGeneratedMediaChromeCollisionHeight(node.type)
         : 0
@@ -370,15 +415,51 @@ function getLineageCollisionRect(node: CanvasNode, worldPosition: { x: number; y
     }
 }
 
-// Mirrors the WebUI workspaceCollision.branchTree node-type settings: media and
-// documents get a 20px margin / 0.5 overlap threshold, markers reserve the
-// branch-lineage nodeGap with a 0 threshold.
-function getLineageCollisionMargin(node: CanvasNode): number {
-    return isMarkerNode(node) ? canvasProjectionSettings.nodeGap : 20
+function getLineageConnectorAnchorRect(node: CanvasNode, worldPosition: { x: number; y: number }): CanvasEngineRect {
+    if (isGeneratedMediaNodeWaitingForFrame(node)) {
+        return getPendingGeneratedMediaBeforeFrameCircleRect(node, worldPosition)
+    }
+
+    return {
+        x: worldPosition.x,
+        y: worldPosition.y,
+        width: node.dimensions.width,
+        height: node.dimensions.height,
+    }
 }
 
-function getLineageCollisionOverlapThreshold(node: CanvasNode): number {
-    return isMarkerNode(node) ? 0 : 0.5
+function getBranchLineageCollisionSettings(
+    nodeSettings: WorkspaceCollisionNodeTypeSettings,
+): WorkspaceCollisionNodeTypeSettings {
+    return { ...nodeSettings, margin: canvasProjectionSettings.nodeGap }
+}
+
+function getLineageCollisionSettings(
+    node: CanvasNode,
+    collisionSettings: WorkspaceCollisionFlowSettings,
+): WorkspaceCollisionNodeTypeSettings {
+    switch (node.type) {
+        case 'image':
+            return collisionSettings.nodeTypes.image
+        case 'video':
+            return collisionSettings.nodeTypes.video
+        case 'branchOrigin':
+            return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchOrigin)
+        case 'branchFork':
+            return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchFork)
+        case 'branchLine':
+            return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchLine)
+        case 'document':
+        default:
+            return collisionSettings.nodeTypes.document
+    }
+}
+
+function getWorkspaceCollisionFlowIterations(collisionSettings: WorkspaceCollisionFlowSettings): number {
+    return Math.max(
+        ...Object.values(collisionSettings.nodeTypes)
+            .map((nodeSettings: WorkspaceCollisionNodeTypeSettings) => nodeSettings.iterations),
+    )
 }
 
 // The authoritative layout pass: refresh marker dimensions from their prompt
@@ -402,18 +483,25 @@ function rebalanceLineageForest(
         return { ...node, dimensions } as CanvasNode
     })
 
+    const collisionSettings = workspaceCollisionSettings.branchTree
     const resolvedNodes = rebalanceBranchTreesAndResolve(nodes, state.edges ?? [], {
         depthGap: canvasProjectionSettings.mediaToMediaGap,
         branchOriginDepthGap: canvasProjectionSettings.branchOriginToFirstMediaGap,
         rootMarkerDepthGap: canvasProjectionSettings.rootToFirstMediaGap,
         siblingGap: canvasProjectionSettings.branchRowGap,
         branchFanoutExtraGap: canvasProjectionSettings.branchFanoutExtraGap,
+        getBranchFanoutExtraGap: (_parentNode, childNodes) =>
+            childNodes.length > 0 && childNodes.every(isGeneratedMediaNodeWaitingForFrame)
+                ? 0
+                : canvasProjectionSettings.branchFanoutExtraGap,
         branchOriginMarkerStackGap: canvasProjectionSettings.nodeGap,
-        collisionIterations: 50,
+        collisionIterations: getWorkspaceCollisionFlowIterations(collisionSettings),
         collisionMargin: 0,
         getNodeCollisionRect: getLineageCollisionRect,
-        getNodeCollisionMargin: getLineageCollisionMargin,
-        getNodeCollisionOverlapThreshold: getLineageCollisionOverlapThreshold,
+        getNodeConnectorAnchorRect: getLineageConnectorAnchorRect,
+        getNodeCollisionMargin: (node: CanvasNode) => getLineageCollisionSettings(node, collisionSettings).margin,
+        getNodeCollisionOverlapThreshold: (node: CanvasNode) =>
+            getLineageCollisionSettings(node, collisionSettings).overlapThreshold,
     })
 
     const beforeById = buildNodesById(state.nodes)
@@ -570,6 +658,14 @@ function getUnresolvedPendingGeneratedMediaNodeIds(state: CanvasState, generatio
         .filter(node => isUnresolvedPendingGeneratedMediaNode(node, generationRequestId))
         .map(node => node.nodeId)
         .sort()
+}
+
+function hasResolvedGeneratedMediaForRequest(state: CanvasState, generationRequestId: string): boolean {
+    return state.nodes.some(node =>
+        (node.type === 'image' || node.type === 'video')
+        && node.generatedBy?.generationRequestId === generationRequestId
+        && !isUnresolvedPendingGeneratedMediaNode(node, generationRequestId)
+    )
 }
 
 function buildCanvasGeometryUpdate(params: {
@@ -1330,7 +1426,11 @@ export async function settleMediaGenerationRequestOnCanvas(params: {
                 changed = true
                 return settledNode
             })
-            removedNodeIds = getUnresolvedPendingGeneratedMediaNodeIds({ ...canvasState, nodes }, params.generationRequestId)
+            const stateWithSettledMarkers = { ...canvasState, nodes }
+            const shouldRemoveUnresolvedPendingNodes = hasResolvedGeneratedMediaForRequest(stateWithSettledMarkers, params.generationRequestId)
+            removedNodeIds = shouldRemoveUnresolvedPendingNodes
+                ? getUnresolvedPendingGeneratedMediaNodeIds(stateWithSettledMarkers, params.generationRequestId)
+                : []
             const removedNodeIdSet = new Set(removedNodeIds)
             const settledState = removedNodeIds.length > 0
                 ? {
@@ -1349,6 +1449,7 @@ export async function settleMediaGenerationRequestOnCanvas(params: {
             geometryNodes = diffCanvasGeometry(canvasState, rebalanceResult.state)
             console.info('[media-generation-canvas-projection] settle request geometry diff', {
                 generationRequestId: params.generationRequestId,
+                shouldRemoveUnresolvedPendingNodes,
                 removedUnresolvedPendingNodeCount: removedNodeIds.length,
                 removedUnresolvedPendingNodeIds: removedNodeIds,
                 geometryNodeCount: geometryNodes.length,

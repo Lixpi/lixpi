@@ -555,15 +555,17 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[]')
 		expectSourceToContain(ts, 'const result = createGeneratedMediaRebalancePipeline().rebalance(nodes, edges)')
 		expectSourceToContain(ts, 'clearStartedBranchMarkerProjectionOverrides(result.startedMarkerNodeIds)')
+		expectSourceToContain(ts, 'pendingMediaPreFrameScale: settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale,')
 		expectSourceToContain(ts, 'depthGap: settings.mediaBranchLineage.mediaToMediaGap,')
 		expectSourceToContain(ts, 'siblingGap: settings.mediaBranchLineage.branchRowGap,')
 		expectSourceToContain(ts, 'branchFanoutExtraGap: settings.mediaBranchLineage.branchFanoutExtraGap,')
 		expectSourceToContain(ts, 'branchOriginMarkerStackGap: getBranchMarkerStackGap(),')
+		expectSourceToContain(ts, 'getNodeConnectorAnchorRect: getCanvasNodeConnectorAnchorRect,')
 		expectSourceToContain(ts, 'getNodeCollisionMargin: (node: CanvasNode) => getCanvasNodeCollisionSettings(node, collisionSettings).margin,')
-		// Layout boxes equal rendered boxes: pending media are never shrunk to the
-		// pre-frame circle for collision purposes, and no position swap happens
-		// when the first frame arrives.
-		expectSourceNotToContain(ts, 'getPendingGeneratedMediaLayoutGeometry')
+		expectSourceToContain(ts, 'isPendingGeneratedMediaBeforeFrame: (node: CanvasNode) => isPendingGeneratedMediaBeforeFirstFrame(node.nodeId),')
+		// Layout boxes equal rendered boxes: pending media use the compact
+		// pre-frame circle for collision/layout purposes until a frame exists.
+		expectSourceToContain(ts, 'getPendingGeneratedMediaBeforeFrameCircleGeometry(')
 		expectSourceNotToContain(ts, 'getPendingGeneratedMediaBeforeFrameInsertionPosition')
 		expectSourceNotToContain(ts, 'getFullFramePositionFromPendingGeneratedMediaPosition')
 		expectSourceNotToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
@@ -1788,7 +1790,7 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(ts, 'settings.mediaBranchLineage.rootToFirstMediaGap')
 		expectSourceToContain(settingsTs, 'nodeGap: number')
 		expectSourceToContain(settingsTs, 'nodeGap: mediaGenerationLayoutSettings.nodeGap')
-		expectSourceToContain(settingsTs, 'mediaBranchLineage.nodeGap')
+		expectSourceToContain(settingsTs, 'workspaceCollision: workspaceCollisionSettings')
 		expectSourceToContain(ts, 'const referenceRootPosition = getReferenceBranchRootMarkerPositionForGeneratedMedia(')
 		expectSourceNotToContain(ts, 'referencePosition.x - getRootBranchMarkerOutputGap() - markerDimensions.width')
 		expectSourceNotToContain(ts, 'referencePosition.x - getBranchOriginOutputGap() - dimensions.width')

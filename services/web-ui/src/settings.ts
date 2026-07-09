@@ -1,7 +1,11 @@
 import {
     mediaGenerationLayoutSettings,
+    workspaceCollisionSettings,
     workspacePersistenceSettings,
     type WorkspaceEdgePathType,
+    type WorkspaceCollisionFlowSettings,
+    type WorkspaceCollisionNodeTypeSettings,
+    type WorkspaceCollisionSettings,
     type WorkspacePersistenceSettings,
 } from '@lixpi/constants'
 import type { CircularGlassMaterialStyle } from '@lixpi/canvas-engine'
@@ -544,29 +548,6 @@ export type MediaBranchLineageMediaModelCircleSettings = {
         opacity: number
         backgroundSizePercent: number
     }
-}
-
-export type WorkspaceCollisionNodeTypeSettings = {
-    iterations: number
-    margin: number
-    overlapThreshold: number
-}
-
-export type WorkspaceCollisionFlowSettings = {
-    nodeTypes: {
-        document: WorkspaceCollisionNodeTypeSettings
-        image: WorkspaceCollisionNodeTypeSettings
-        video: WorkspaceCollisionNodeTypeSettings
-        branchOrigin: WorkspaceCollisionNodeTypeSettings
-        branchFork: WorkspaceCollisionNodeTypeSettings
-        branchLine: WorkspaceCollisionNodeTypeSettings
-    }
-}
-
-export type WorkspaceCollisionSettings = {
-    insertion: WorkspaceCollisionFlowSettings
-    dragRelease: WorkspaceCollisionFlowSettings
-    branchTree: WorkspaceCollisionFlowSettings
 }
 
 export type MediaBranchLineageSettings = {
@@ -1152,47 +1133,8 @@ export const settings: Settings = {
         },
     },
 
-    // Workspace collision resolution settings. Resolver iterations, spacing,
-    // and trigger thresholds are configured per canvas node type. Branch-lineage
-    // marker margins are replaced at runtime by mediaBranchLineage.nodeGap so one
-    // spacing knob controls every marker type across placement, drag, and rebalance.
-    workspaceCollision: {
-        // Viewport-centered insertions use wider breathing room.
-        insertion: {
-            nodeTypes: {
-                document: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
-                image: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
-                video: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
-                branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            },
-        },
-        // Drag-release cleanup keeps manually positioned nodes tight while runtime
-        // marker margins still prevent branch-lineage marker bodies from overlapping.
-        dragRelease: {
-            nodeTypes: {
-                document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            },
-        },
-        // Branch-tree rebalancing combines normal media/document breathing room
-        // with runtime branch-marker clearance from mediaBranchLineage.nodeGap.
-        branchTree: {
-            nodeTypes: {
-                document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            },
-        },
-    },
+    // Shared API/WebUI collision settings. Tune in @lixpi/constants only.
+    workspaceCollision: workspaceCollisionSettings,
 
     // Canvas media node settings. Shared values style the chrome, resize handles, generation outline, and selection states common to every media node (image, video, …); per-type subcategories hold values specific to one media type.
     mediaNode: {

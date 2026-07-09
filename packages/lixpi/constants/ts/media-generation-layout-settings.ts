@@ -73,6 +73,29 @@ export type MediaGenerationLayoutSettings = {
     generatedMediaChrome: GeneratedMediaChromeLayoutSettings
 }
 
+export type WorkspaceCollisionNodeTypeSettings = {
+    iterations: number
+    margin: number
+    overlapThreshold: number
+}
+
+export type WorkspaceCollisionFlowSettings = {
+    nodeTypes: {
+        document: WorkspaceCollisionNodeTypeSettings
+        image: WorkspaceCollisionNodeTypeSettings
+        video: WorkspaceCollisionNodeTypeSettings
+        branchOrigin: WorkspaceCollisionNodeTypeSettings
+        branchFork: WorkspaceCollisionNodeTypeSettings
+        branchLine: WorkspaceCollisionNodeTypeSettings
+    }
+}
+
+export type WorkspaceCollisionSettings = {
+    insertion: WorkspaceCollisionFlowSettings
+    dragRelease: WorkspaceCollisionFlowSettings
+    branchTree: WorkspaceCollisionFlowSettings
+}
+
 export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
     // Canvas-unit base width of a branch marker pill as the API projects it.
     markerWidth: 280,
@@ -133,5 +156,48 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
         iconSize: 28,
         videoControlsHeight: 40,
         videoControlsBottomInset: 8,
+    },
+}
+
+// Workspace collision resolution settings. Resolver iterations, spacing, and
+// trigger thresholds are configured per canvas node type. Branch-lineage marker
+// margins are replaced at runtime by mediaGenerationLayoutSettings.nodeGap so
+// one spacing knob controls every marker type across placement, drag, API
+// projection, and WebUI rebalance.
+export const workspaceCollisionSettings: WorkspaceCollisionSettings = {
+    // Viewport-centered insertions use wider breathing room.
+    insertion: {
+        nodeTypes: {
+            document: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
+            image: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
+            video: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
+            branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
+        },
+    },
+    // Drag-release cleanup keeps manually positioned nodes tight while runtime
+    // marker margins still prevent branch-lineage marker bodies from overlapping.
+    dragRelease: {
+        nodeTypes: {
+            document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+            image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+            video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+            branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
+        },
+    },
+    // Branch-tree rebalancing combines normal media/document breathing room with
+    // runtime branch-marker clearance from mediaGenerationLayoutSettings.nodeGap.
+    branchTree: {
+        nodeTypes: {
+            document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+            image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+            video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
+            branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
+        },
     },
 }

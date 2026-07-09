@@ -1,7 +1,13 @@
 'use strict'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CanvasState, MediaBranchLineagePlan, MediaGenerationRunMeta } from '@lixpi/constants'
+import {
+    mediaGenerationLayoutSettings,
+    type BranchForkCanvasNode,
+    type CanvasState,
+    type MediaBranchLineagePlan,
+    type MediaGenerationRunMeta,
+} from '@lixpi/constants'
 import { getPendingGeneratedMediaNodeId } from '@lixpi/canvas-engine'
 
 const workspaceMutateCanvasState = vi.hoisted(() => vi.fn())
@@ -16,6 +22,7 @@ import {
     upsertGeneratedImageToCanvas,
     upsertGeneratedVideoToCanvas,
     upsertMediaLineagePlanToCanvas,
+    refreshMediaGenerationRequestCanvasGeometry,
     settleMediaGenerationRequestOnCanvas,
 } from './media-generation-canvas-projection.ts'
 
@@ -49,11 +56,23 @@ const nodeRect = (node: CanvasState['nodes'][number]): { x: number; y: number; w
     height: node.dimensions.height,
 })
 
-const groupRect = (nodes: CanvasState['nodes']): { x: number; y: number; width: number; height: number } => {
-    const minX = Math.min(...nodes.map(node => node.position.x))
-    const minY = Math.min(...nodes.map(node => node.position.y))
-    const maxX = Math.max(...nodes.map(node => node.position.x + node.dimensions.width))
-    const maxY = Math.max(...nodes.map(node => node.position.y + node.dimensions.height))
+const pendingPreFrameCircleRect = (node: CanvasState['nodes'][number]): { x: number; y: number; width: number; height: number } => {
+    const size = Math.min(node.dimensions.width, node.dimensions.height) * mediaGenerationLayoutSettings.preFrameCircleScale
+    return {
+        x: node.position.x + (node.dimensions.width - size) / 2,
+        y: node.position.y + (node.dimensions.height - size) / 2,
+        width: size,
+        height: size,
+    }
+}
+
+type TestRect = { x: number; y: number; width: number; height: number }
+
+const groupRectFromRects = (rects: TestRect[]): TestRect => {
+    const minX = Math.min(...rects.map(rect => rect.x))
+    const minY = Math.min(...rects.map(rect => rect.y))
+    const maxX = Math.max(...rects.map(rect => rect.x + rect.width))
+    const maxY = Math.max(...rects.map(rect => rect.y + rect.height))
     return {
         x: minX,
         y: minY,
@@ -62,16 +81,18 @@ const groupRect = (nodes: CanvasState['nodes']): { x: number; y: number; width: 
     }
 }
 
+const groupRect = (nodes: CanvasState['nodes']): TestRect => groupRectFromRects(nodes.map(nodeRect))
+
 const rectsOverlap = (
-    a: { x: number; y: number; width: number; height: number },
-    b: { x: number; y: number; width: number; height: number },
+    a: TestRect,
+    b: TestRect,
 ): boolean =>
     a.x < b.x + b.width
     && a.x + a.width > b.x
     && a.y < b.y + b.height
     && a.y + a.height > b.y
 
-const expectNoOverlappingRects = (rects: Array<{ id: string; rect: { x: number; y: number; width: number; height: number } }>): void => {
+const expectNoOverlappingRects = (rects: Array<{ id: string; rect: TestRect }>): void => {
     for (let i = 0; i < rects.length; i++) {
         for (let j = i + 1; j < rects.length; j++) {
             const a = rects[i]
@@ -366,6 +387,47 @@ const generationRunFromAssignment = (
     lineageAssignment: assignment,
 })
 
+function paragraphText(value: string): unknown {
+    return { type: 'paragraph', content: [{ type: 'text', text: value }] }
+}
+
+function streamingThreadContentForPlan(
+    plan: MediaBranchLineagePlan,
+    responseText: string,
+): unknown {
+    const fork = plan.branchForks[0]
+    return {
+        type: 'doc',
+        content: [{
+            type: 'aiChatThread',
+            attrs: { threadId: 'thread-1' },
+            content: [
+                { type: 'aiUserMessage', content: [paragraphText(plan.promptText)] },
+                {
+                    type: 'aiResponseMessage',
+                    attrs: {
+                        id: 'response-1',
+                        generationRequestId: plan.generationRequestId,
+                        isReceivingAnimation: true,
+                    },
+                    content: [{
+                        type: 'aiReasoningSection',
+                        attrs: {
+                            generationRequestId: plan.generationRequestId,
+                            reasoningRunId: fork.reasoningRunId,
+                            reasoningModelId: fork.reasoningModelId,
+                            reasoningIndex: fork.reasoningIndex,
+                            branchForkNodeId: fork.nodeId,
+                            isReceivingAnimation: true,
+                        },
+                        content: [paragraphText(responseText)],
+                    }],
+                },
+            ],
+        }],
+    }
+}
+
 const pendingVideoNodeFromAssignment = (
     assignment: MediaBranchLineagePlan['runAssignments'][number],
 ): CanvasState['nodes'][number] => ({
@@ -491,7 +553,59 @@ describe('media-generation-canvas-projection', () => {
             .map(nodeId => canvasGeometry!.nodes.find(node => node.nodeId === nodeId)!)
             .sort((a, b) => a.position.y - b.position.y)
         expect(pendingGeometries).toHaveLength(2)
-        expect(pendingGeometries[0].position.y + pendingGeometries[0].dimensions.height).toBeLessThanOrEqual(pendingGeometries[1].position.y)
+        const pendingCircleGeometries = pendingGeometries
+            .map(pendingPreFrameCircleRect)
+            .sort((a, b) => a.y - b.y)
+        expect(pendingCircleGeometries[1].y - (pendingCircleGeometries[0].y + pendingCircleGeometries[0].height))
+            .toBe(mediaGenerationLayoutSettings.branchRowGap)
+    })
+
+    it('does not re-emit geometry for repeated stream refreshes after marker text settles', async () => {
+        const plan = mixedImageVideoLineagePlan()
+        let storedState = emptyCanvasState()
+        let layoutRevision = 3000
+        workspaceMutateCanvasState.mockImplementation(async ({ mutate }) => {
+            const result = mutate(storedState)
+            if (result.changed) {
+                storedState = result.canvasState
+                layoutRevision += 1
+            }
+            return {
+                changed: result.changed,
+                canvasState: storedState,
+                canvasStateUpdatedAt: layoutRevision,
+            }
+        })
+
+        const planGeometry = await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            lineagePlan: plan,
+        })
+        expect(planGeometry).not.toBeNull()
+
+        const proseMirrorThreadContent = streamingThreadContentForPlan(
+            plan,
+            'I will make the llama brighter with much more detailed lighting, fur, pose, and background notes.',
+        )
+        const firstRefresh = await refreshMediaGenerationRequestCanvasGeometry({
+            workspaceId: 'workspace-1',
+            generationRequestId: plan.generationRequestId,
+            aiChatThreadId: 'thread-1',
+            proseMirrorThreadContent,
+        })
+        expect(firstRefresh).not.toBeNull()
+        const positionsAfterFirstRefresh = storedState.nodes.map(node => [node.nodeId, node.position])
+
+        const secondRefresh = await refreshMediaGenerationRequestCanvasGeometry({
+            workspaceId: 'workspace-1',
+            generationRequestId: plan.generationRequestId,
+            aiChatThreadId: 'thread-1',
+            proseMirrorThreadContent,
+        })
+
+        expect(secondRefresh).toBeNull()
+        expect(storedState.nodes.map(node => [node.nodeId, node.position])).toEqual(positionsAfterFirstRefresh)
     })
 
     it('persists final generated images with API lineage metadata and connector edges', async () => {
@@ -992,6 +1106,52 @@ describe('media-generation-canvas-projection', () => {
         expect(result.canvasState.edges.map(edge => edge.targetNodeId)).not.toContain(videoPendingNodeId)
     })
 
+    it('settle preserves pending generated media when a planned request completes without resolved media', async () => {
+        const plan = mixedImageVideoLineagePlan()
+
+        await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            lineagePlan: plan,
+        })
+        const plannedState = latestMutator()(emptyCanvasState()).canvasState
+        const imagePendingNodeIds = plan.runAssignments
+            .filter(assignment => assignment.mediaType === 'image')
+            .map(getPendingGeneratedMediaNodeId)
+        const markerPendingState: NonNullable<BranchForkCanvasNode['pendingState']> = {
+            phase: 'planned',
+            promptText: plan.promptText,
+            reasoningModelIds: ['Anthropic:claude-haiku-4.5'],
+            reasoningModelId: 'Anthropic:claude-haiku-4.5',
+            reasoningIndex: 0,
+            imageModelIds: ['Stability:sd-3.5-large', 'Stability:stable-image-ultra'],
+            videoModelIds: [],
+        }
+        const plannedStateWithPendingMarker: CanvasState = {
+            ...plannedState,
+            nodes: plannedState.nodes.map((node): CanvasState['nodes'][number] =>
+                node.type === 'branchFork'
+                    ? { ...node, pendingState: markerPendingState }
+                    : node
+            ),
+        }
+        mockWorkspaceMutationFromState(plannedStateWithPendingMarker, 2802)
+
+        const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
+            workspaceId: 'workspace-1',
+            generationRequestId: plan.generationRequestId,
+            aiChatThreadId: 'thread-1',
+        })
+
+        expect(canvasGeometry?.removedNodeIds ?? []).toEqual([])
+        expect(canvasGeometry?.nodeSnapshots?.map(node => node.nodeId)).toEqual(expect.arrayContaining(imagePendingNodeIds))
+        expect(canvasGeometry?.edgeSnapshots?.map(edge => edge.targetNodeId)).toEqual(expect.arrayContaining(imagePendingNodeIds))
+
+        const result = latestMutator()(plannedStateWithPendingMarker)
+        expect(result.canvasState.nodes.map(node => node.nodeId)).toEqual(expect.arrayContaining(imagePendingNodeIds))
+        expect(result.canvasState.edges.map(edge => edge.targetNodeId)).toEqual(expect.arrayContaining(imagePendingNodeIds))
+    })
+
     it('keeps a 3x4 reasoning/media matrix as three balanced branch trees with one correct fork edge per output', async () => {
         const plan = matrixLineagePlan()
         let state = emptyCanvasState()
@@ -1107,10 +1267,23 @@ describe('media-generation-canvas-projection', () => {
         const branchGroupRects = forkNodes.map((fork) => {
             const branchChildren = generatedNodes.filter(node => node.generatedBy?.branchForkNodeId === fork.nodeId)
             expect(branchChildren).toHaveLength(4)
-            expectNoOverlappingRects(branchChildren.map(node => ({ id: node.nodeId, rect: nodeRect(node) })))
+            const childCircleRects = branchChildren
+                .map(node => ({ id: node.nodeId, rect: pendingPreFrameCircleRect(node) }))
+                .sort((a, b) => a.rect.y - b.rect.y)
+            expectNoOverlappingRects(childCircleRects)
+            for (let index = 1; index < childCircleRects.length; index += 1) {
+                const previous = childCircleRects[index - 1].rect
+                const current = childCircleRects[index].rect
+                expect(current.y - (previous.y + previous.height))
+                    .toBeCloseTo(mediaGenerationLayoutSettings.branchRowGap, 6)
+            }
+            for (const child of childCircleRects) {
+                expect(child.rect.x - (fork.position.x + fork.dimensions.width))
+                    .toBeCloseTo(mediaGenerationLayoutSettings.rootToFirstMediaGap, 6)
+            }
             return {
                 id: fork.nodeId,
-                rect: groupRect([fork, ...branchChildren]),
+                rect: groupRectFromRects([nodeRect(fork), ...childCircleRects.map(child => child.rect)]),
             }
         })
         expectNoOverlappingRects(branchGroupRects)

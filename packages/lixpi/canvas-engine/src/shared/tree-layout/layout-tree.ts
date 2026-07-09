@@ -30,6 +30,7 @@ export type LayoutTreeOptions = {
     depthGap: number              // LR: horizontal gap between depth columns
     siblingGap: number            // LR: vertical gap between sibling bands
     branchFanoutDepthGap?: number // LR: extra depth gap for each child after the first
+    getBranchFanoutDepthGap?: (node: TreeLayoutNode, children: TreeLayoutNode[]) => number
 }
 
 export type LayoutTreeResult = {
@@ -51,8 +52,13 @@ export function layoutTree(
 
     const { depthGap, siblingGap } = options
     const branchFanoutDepthGap = Math.max(0, options.branchFanoutDepthGap ?? 0)
-    const depthGapForChildCount = (childCount: number): number =>
-        depthGap + branchFanoutDepthGap * Math.max(0, childCount - 1)
+    const depthGapForChildren = (node: TreeLayoutNode, children: TreeLayoutNode[]): number => {
+        const configuredFanoutGap = options.getBranchFanoutDepthGap?.(node, children)
+        const fanoutDepthGap = configuredFanoutGap !== undefined && Number.isFinite(configuredFanoutGap)
+            ? Math.max(0, configuredFanoutGap)
+            : branchFanoutDepthGap
+        return depthGap + fanoutDepthGap * Math.max(0, children.length - 1)
+    }
 
     // Index nodes and build child lists, preserving input order so sibling
     // stacking is deterministic.
@@ -122,7 +128,7 @@ export function layoutTree(
         // Center the children stack within the parent's band, then lay each
         // child subtree into its own slice of that stack.
         let cursor = bandTop + (band - stack) / 2
-        const childX = depthX + node.width + depthGapForChildCount(children.length)
+        const childX = depthX + node.width + depthGapForChildren(node, children)
         for (const child of children) {
             place(child, cursor, childX)
             cursor += (bandHeight.get(child.id) ?? child.height) + siblingGap

@@ -4,7 +4,11 @@ export * from './types.ts'
 export * from './aws-resources.ts'
 export {
     mediaGenerationLayoutSettings,
+    workspaceCollisionSettings,
     type MediaGenerationLayoutSettings,
+    type WorkspaceCollisionFlowSettings,
+    type WorkspaceCollisionNodeTypeSettings,
+    type WorkspaceCollisionSettings,
 } from './media-generation-layout-settings.ts'
 export {
     workspacePersistenceSettings,

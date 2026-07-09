@@ -207,12 +207,12 @@ describe('buildBranchTrees', () => {
         const trees = buildBranchTrees(nodes, [])
         expect(trees).toHaveLength(1)
         expect(trees[0].rootId).toBe('branch-origin')
-        expect(trees[0].childrenByParentId.get('branch-origin')).toEqual(['branch-fork', 'branch-line'])
+        expect(trees[0].childrenByParentId.get('branch-origin')).toBeUndefined()
         expect(trees[0].childrenByParentId.get('branch-fork')).toEqual(['child'])
         expect(trees[0].childrenByParentId.has('branch-line')).toBe(false)
     })
 
-    it('keeps a branchLine continuation as a structural normal-gap chain', () => {
+    it('keeps a branchLine continuation as one normal-gap chain with the marker off the depth path', () => {
         const branchLineMarker = {
             nodeId: 'branch-line',
             type: 'branchLine',
@@ -237,11 +237,13 @@ describe('buildBranchTrees', () => {
         expect(trees).toHaveLength(1)
         expect(trees[0].rootId).toBe('parent')
         expect(new Set(trees[0].memberIds)).toEqual(new Set(['parent', 'branch-line', 'child']))
-        expect(trees[0].childrenByParentId.get('parent')).toEqual(['branch-line'])
-        expect(trees[0].childrenByParentId.get('branch-line')).toEqual(['child'])
+        // The child chains directly off the parent media (one normal gap); the
+        // marker is a member but never a depth child.
+        expect(trees[0].childrenByParentId.get('parent')).toEqual(['child'])
+        expect(trees[0].childrenByParentId.has('branch-line')).toBe(false)
     })
 
-    it('positions a branchLine marker as a structural depth-path member', () => {
+    it('positions a branchLine marker at the midpoint of the parent→child connector', () => {
         const branchLineMarker = {
             nodeId: 'branch-line', type: 'branchLine', workspaceId: 'w',
             dimensions: { width: SIZE, height: SIZE }, position: { x: 0, y: 0 },
@@ -260,10 +262,13 @@ describe('buildBranchTrees', () => {
         const parent = out.find(n => n.nodeId === 'parent')!
         const child = out.find(n => n.nodeId === 'child')!
         const marker = out.find(n => n.nodeId === 'branch-line')!
-        expect(marker.position.x).toBe(parent.position.x + SIZE + 100)
-        expect(marker.position.y).toBe(parent.position.y)
-        expect(child.position.x).toBe(marker.position.x + SIZE + 100)
+        // Child sits one normal gap to the right of the parent (collinear).
+        expect(child.position.x).toBe(parent.position.x + SIZE + 100)
         expect(child.position.y).toBe(parent.position.y)
+        // Marker is centered between the parent's right edge and the child's left
+        // edge, vertically centered on the parent.
+        expect(marker.position.x).toBe((parent.position.x + SIZE + child.position.x) / 2 - SIZE / 2)
+        expect(marker.position.y).toBe(parent.position.y + SIZE / 2 - SIZE / 2)
     })
 })
 
@@ -304,6 +309,142 @@ describe('applyBranchTreeLayout', () => {
 
         expect(parentOut.position).toEqual({ x: 500, y: 300 })
         expect(childCenterY).toBe(parentCenterY)
+    })
+
+    it('keeps a midpoint marker on the connector centerline when collision chrome extends below media', () => {
+        const parent = genMedia('R', 500, 300, { createdAt: 1, width: 400, height: 400 })
+        const marker = {
+            nodeId: 'line', type: 'branchLine', workspaceId: 'w',
+            dimensions: { width: 100, height: 40 }, position: { x: 0, y: 0 },
+            fileId: 'line', branchId: 'branch-A', generationRequestId: 'req-1',
+            parentBranchNodeId: 'R', temporary: true,
+        } as any
+        const child = genMedia('A', 9999, 9999, { parentMediaNodeId: 'R', createdAt: 2, width: 400, height: 400 }) as ImageCanvasNode
+        child.generatedBy!.branchLineNodeId = 'line'
+        const pendingVisualSize = 120
+        const pendingVisualInset = (400 - pendingVisualSize) / 2
+        const options = {
+            ...OPTS,
+            getNodeCollisionRect: (node: CanvasNode, worldPosition: { x: number; y: number }) => {
+                if (node.nodeId === 'A') {
+                    return {
+                        x: worldPosition.x + pendingVisualInset,
+                        y: worldPosition.y + pendingVisualInset,
+                        width: pendingVisualSize,
+                        height: pendingVisualSize,
+                    }
+                }
+                return {
+                    x: worldPosition.x,
+                    y: worldPosition.y,
+                    width: node.dimensions.width,
+                    height: node.dimensions.height + (node.nodeId === 'R' ? 40 : 0),
+                }
+            },
+            getNodeConnectorAnchorRect: (node: CanvasNode, worldPosition: { x: number; y: number }) => {
+                if (node.nodeId === 'A') {
+                    return {
+                        x: worldPosition.x + pendingVisualInset,
+                        y: worldPosition.y + pendingVisualInset,
+                        width: pendingVisualSize,
+                        height: pendingVisualSize,
+                    }
+                }
+                return {
+                    x: worldPosition.x,
+                    y: worldPosition.y,
+                    width: node.dimensions.width,
+                    height: node.dimensions.height,
+                }
+            },
+        }
+
+        const out = rebalanceBranchTreesAndResolve([parent, marker, child], [], options)
+        const parentOut = out.find(node => node.nodeId === 'R')!
+        const markerOut = out.find(node => node.nodeId === 'line')!
+        const childOut = out.find(node => node.nodeId === 'A')!
+        const parentCenterY = parentOut.position.y + parentOut.dimensions.height / 2
+        const markerCenterY = markerOut.position.y + markerOut.dimensions.height / 2
+        const childAnchorCenterY = childOut.position.y + pendingVisualInset + pendingVisualSize / 2
+
+        expect(markerCenterY).toBe(parentCenterY)
+        expect(childAnchorCenterY).toBe(parentCenterY)
+
+        const second = rebalanceBranchTreesAndResolve(out, [], options)
+        expect(second.map(node => [node.nodeId, node.position])).toEqual(out.map(node => [node.nodeId, node.position]))
+    })
+
+    it('spaces pending visual boxes by configured gaps even when persisted nodes are full media size', () => {
+        const parent = genMedia('R', 0, 0, { createdAt: 1 })
+        const children = [
+            genMedia('A', 9999, 9999, { parentMediaNodeId: 'R', createdAt: 2 }),
+            genMedia('B', 9999, 9999, { parentMediaNodeId: 'R', createdAt: 3 }),
+        ]
+        const pendingVisualSize = 200
+        const pendingVisualInset = (SIZE - pendingVisualSize) / 2
+        const out = applyBranchTreeLayout([parent, ...children], [], {
+            ...OPTS,
+            getNodeCollisionRect: (node, worldPosition) => node.nodeId === 'A' || node.nodeId === 'B'
+                ? {
+                    x: worldPosition.x + pendingVisualInset,
+                    y: worldPosition.y + pendingVisualInset,
+                    width: pendingVisualSize,
+                    height: pendingVisualSize,
+                }
+                : {
+                    x: worldPosition.x,
+                    y: worldPosition.y,
+                    width: node.dimensions.width,
+                    height: node.dimensions.height,
+                },
+        })
+
+        const a = out.find(node => node.nodeId === 'A')!
+        const b = out.find(node => node.nodeId === 'B')!
+        const aVisual = { x: a.position.x + pendingVisualInset, y: a.position.y + pendingVisualInset }
+        const bVisual = { x: b.position.x + pendingVisualInset, y: b.position.y + pendingVisualInset }
+
+        expect(aVisual.x).toBe(parent.position.x + parent.dimensions.width + OPTS.depthGap)
+        expect(bVisual.x).toBe(aVisual.x)
+        expect(bVisual.y - (aVisual.y + pendingVisualSize)).toBe(OPTS.siblingGap)
+    })
+
+    it('does not add fanout depth while every child is a pending visual box', () => {
+        const parent = genMedia('R', 0, 0, { createdAt: 1 })
+        const pendingIds = new Set(['A', 'B', 'C'])
+        const children = [
+            genMedia('A', 9999, 9999, { parentMediaNodeId: 'R', createdAt: 2 }),
+            genMedia('B', 9999, 9999, { parentMediaNodeId: 'R', createdAt: 3 }),
+            genMedia('C', 9999, 9999, { parentMediaNodeId: 'R', createdAt: 4 }),
+        ]
+        const pendingVisualSize = 200
+        const pendingVisualInset = (SIZE - pendingVisualSize) / 2
+        const out = applyBranchTreeLayout([parent, ...children], [], {
+            ...FANOUT_OPTS,
+            getBranchFanoutExtraGap: (_parentNode, childNodes) =>
+                childNodes.every(child => pendingIds.has(child.nodeId))
+                    ? 0
+                    : FANOUT_OPTS.branchFanoutExtraGap,
+            getNodeCollisionRect: (node, worldPosition) => pendingIds.has(node.nodeId)
+                ? {
+                    x: worldPosition.x + pendingVisualInset,
+                    y: worldPosition.y + pendingVisualInset,
+                    width: pendingVisualSize,
+                    height: pendingVisualSize,
+                }
+                : {
+                    x: worldPosition.x,
+                    y: worldPosition.y,
+                    width: node.dimensions.width,
+                    height: node.dimensions.height,
+                },
+        })
+
+        for (const child of children) {
+            const resolved = out.find(node => node.nodeId === child.nodeId)!
+            expect(resolved.position.x + pendingVisualInset)
+                .toBe(parent.position.x + parent.dimensions.width + FANOUT_OPTS.depthGap)
+        }
     })
 
     it('fans a two-child fork symmetrically around the anchored root', () => {

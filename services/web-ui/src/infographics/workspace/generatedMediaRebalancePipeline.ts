@@ -18,6 +18,7 @@ export type CanvasGeometry = { position: Point; dimensions: { width: number; hei
 export type GeneratedMediaRebalancePipelineConfig = {
     workspaceId: string
     mediaSize: number
+    pendingMediaPreFrameScale: number
     depthGap: number
     branchOriginDepthGap: number
     rootMarkerDepthGap: number
@@ -29,8 +30,10 @@ export type GeneratedMediaRebalancePipelineConfig = {
     getNodeWorldPosition: (node: CanvasNode, nodesById: Map<string, CanvasNode>) => Point
     getNodeWorldRect: (node: CanvasNode, nodesById: Map<string, CanvasNode>) => Rect
     getNodeCollisionRect: (node: CanvasNode, worldPosition: Point) => Rect
+    getNodeConnectorAnchorRect: (node: CanvasNode, worldPosition: Point) => Rect
     getNodeCollisionMargin: (node: CanvasNode) => number
     getNodeCollisionOverlapThreshold: (node: CanvasNode) => number
+    isPendingGeneratedMediaBeforeFrame: (node: CanvasNode) => boolean
 }
 export type GeneratedMediaRebalanceResult = {
     nodes: CanvasNode[]
@@ -270,10 +273,15 @@ export class GeneratedMediaRebalancePipeline {
             rootMarkerDepthGap: this.config.rootMarkerDepthGap,
             siblingGap: this.config.siblingGap,
             branchFanoutExtraGap: this.config.branchFanoutExtraGap,
+            getBranchFanoutExtraGap: (_parentNode, childNodes) =>
+                childNodes.length > 0 && childNodes.every(node => this.isPendingPreFrameLayoutNode(node))
+                    ? 0
+                    : this.config.branchFanoutExtraGap,
             branchOriginMarkerStackGap: this.config.branchOriginMarkerStackGap,
             collisionIterations: this.config.collisionIterations,
             collisionMargin: this.config.collisionMargin,
             getNodeCollisionRect: this.config.getNodeCollisionRect,
+            getNodeConnectorAnchorRect: this.config.getNodeConnectorAnchorRect,
             getNodeCollisionMargin: this.config.getNodeCollisionMargin,
             getNodeCollisionOverlapThreshold: this.config.getNodeCollisionOverlapThreshold,
         })
@@ -284,10 +292,15 @@ export class GeneratedMediaRebalancePipeline {
         }
     }
 
-    // Layout boxes must equal rendered boxes. Pending media keep their full
-    // placeholder footprint (the pre-frame circle is a render-only treatment),
-    // so collision resolution during streaming matches what the user sees. This
-    // stage only adds temporary future-media proxies for planned sibling markers.
+    private isPendingPreFrameLayoutNode(node: CanvasNode): boolean {
+        if (this.config.isPendingGeneratedMediaBeforeFrame(node)) return true
+        return node.type === 'image' && node.nodeId.includes(PLANNED_MEDIA_LAYOUT_PROXY_NODE_ID_SUFFIX)
+    }
+
+    // Layout boxes must equal rendered boxes. Pending media use the compact
+    // pre-frame circle footprint, not the eventual full frame, so streaming
+    // spacing matches what the user sees. This stage only adds temporary
+    // future-media proxies for planned sibling markers.
     private prepareLayoutProxyPlan(nodes: CanvasNode[]): RebalanceLayoutProxyPlan {
         const plannedMarkerProxiesByMarkerId = new Map<string, PlannedMarkerMediaProxy>()
         const proxyNodes = nodes
@@ -329,7 +342,12 @@ export class GeneratedMediaRebalancePipeline {
         nodesById: Map<string, CanvasNode>,
         proxyNodeId: string,
     ): ImageCanvasNode {
-        const mediaDimensions = { width: this.config.mediaSize, height: this.config.mediaSize }
+        const configuredScale = Number(this.config.pendingMediaPreFrameScale)
+        const scale = Number.isFinite(configuredScale) && configuredScale > 0
+            ? Math.min(1, configuredScale)
+            : 1 / 3
+        const proxySize = Math.max(1, this.config.mediaSize * scale)
+        const mediaDimensions = { width: proxySize, height: proxySize }
         const parentRect = this.config.getNodeWorldRect(parentNode, nodesById)
         const mediaGap = parentNode.type === 'branchOrigin'
             ? this.config.branchOriginDepthGap
@@ -353,8 +371,6 @@ export class GeneratedMediaRebalancePipeline {
             workspaceId: this.config.workspaceId,
             src: '',
             aspectRatio: 1,
-            // Full future-media footprint: the placeholder renders full-size, so
-            // the reserved row must match it — never a shrunken pre-frame box.
             position: {
                 x: futureMediaPosition.x,
                 y: futureMediaPosition.y,

@@ -132,10 +132,35 @@ function worldRect(node: CanvasNode): Rect {
     }
 }
 
+function isPendingGeneratedMediaBeforeFrame(node: CanvasNode): boolean {
+    if (node.type !== 'image') return false
+    return Boolean(node.generatedBy) && !node.fileId?.trim() && !node.src?.trim()
+}
+
+function collisionRect(node: CanvasNode, position: Point, preFrameScale: number): Rect {
+    if (!isPendingGeneratedMediaBeforeFrame(node)) {
+        return {
+            x: position.x,
+            y: position.y,
+            width: node.dimensions.width,
+            height: node.dimensions.height,
+        }
+    }
+    const size = Math.min(node.dimensions.width, node.dimensions.height) * preFrameScale
+    return {
+        x: position.x + (node.dimensions.width - size) / 2,
+        y: position.y + (node.dimensions.height - size) / 2,
+        width: size,
+        height: size,
+    }
+}
+
 function config(overrides: Partial<GeneratedMediaRebalancePipelineConfig> = {}): GeneratedMediaRebalancePipelineConfig {
+    const pendingMediaPreFrameScale = overrides.pendingMediaPreFrameScale ?? 1 / 3
     return {
         workspaceId: 'workspace-1',
         mediaSize: 100,
+        pendingMediaPreFrameScale,
         depthGap: 50,
         branchOriginDepthGap: 40,
         rootMarkerDepthGap: 40,
@@ -146,14 +171,11 @@ function config(overrides: Partial<GeneratedMediaRebalancePipelineConfig> = {}):
         collisionMargin: 0,
         getNodeWorldPosition: (node: CanvasNode) => worldPosition(node),
         getNodeWorldRect: (node: CanvasNode) => worldRect(node),
-        getNodeCollisionRect: (node: CanvasNode, position: Point) => ({
-            x: position.x,
-            y: position.y,
-            width: node.dimensions.width,
-            height: node.dimensions.height,
-        }),
+        getNodeCollisionRect: (node: CanvasNode, position: Point) => collisionRect(node, position, pendingMediaPreFrameScale),
+        getNodeConnectorAnchorRect: (node: CanvasNode, position: Point) => collisionRect(node, position, pendingMediaPreFrameScale),
         getNodeCollisionMargin: () => 0,
         getNodeCollisionOverlapThreshold: () => 0.5,
+        isPendingGeneratedMediaBeforeFrame,
         ...overrides,
     }
 }
@@ -163,7 +185,7 @@ function config(overrides: Partial<GeneratedMediaRebalancePipelineConfig> = {}):
 // =============================================================================
 
 describe('GeneratedMediaRebalancePipeline', () => {
-    it('lays out pending media with their full rendered footprint (no pre-frame shrink)', () => {
+    it('lays out pending media with their compact pre-frame footprint', () => {
         const root = image({
             nodeId: 'root',
             position: { x: 0, y: 0 },
@@ -172,6 +194,8 @@ describe('GeneratedMediaRebalancePipeline', () => {
         })
         const pending = image({
             nodeId: 'pending',
+            fileId: '',
+            src: '',
             position: { x: 1000, y: 1000 },
             dimensions: { width: 100, height: 100 },
             generatedBy: {
@@ -187,11 +211,13 @@ describe('GeneratedMediaRebalancePipeline', () => {
 
         expect(out.get('root')!.position).toEqual({ x: 0, y: 0 })
         expect(resolvedPending.dimensions).toEqual({ width: 100, height: 100 })
-        expect(resolvedPending.position).toEqual({ x: 150, y: 0 })
+        expect(collisionRect(resolvedPending, resolvedPending.position, 1 / 3).x).toBeCloseTo(150, 6)
+        expect(collisionRect(resolvedPending, resolvedPending.position, 1 / 3).y + collisionRect(resolvedPending, resolvedPending.position, 1 / 3).height / 2)
+            .toBeCloseTo(50, 6)
         expect(result.startedMarkerNodeIds).toEqual(new Set<string>())
     })
 
-    it('keeps a single pending branch-line continuation straight through the full media box', () => {
+    it('keeps a single pending branch-line continuation straight through the compact pre-frame box', () => {
         const parent = image({
             nodeId: 'parent',
             position: { x: 0, y: 0 },
@@ -206,6 +232,8 @@ describe('GeneratedMediaRebalancePipeline', () => {
         })
         const pending = image({
             nodeId: 'pending',
+            fileId: '',
+            src: '',
             position: { x: 1000, y: 1000 },
             dimensions: { width: 100, height: 100 },
             generatedBy: {
@@ -223,7 +251,8 @@ describe('GeneratedMediaRebalancePipeline', () => {
         const resolvedPending = out.get('pending')!
         const parentCenterY = resolvedParent.position.y + resolvedParent.dimensions.height / 2
         const markerCenterY = resolvedMarker.position.y + resolvedMarker.dimensions.height / 2
-        const pendingCenterY = resolvedPending.position.y + resolvedPending.dimensions.height / 2
+        const pendingRect = collisionRect(resolvedPending, resolvedPending.position, 1 / 3)
+        const pendingCenterY = pendingRect.y + pendingRect.height / 2
 
         expect(markerCenterY).toBe(parentCenterY)
         expect(pendingCenterY).toBe(parentCenterY)
@@ -253,6 +282,8 @@ describe('GeneratedMediaRebalancePipeline', () => {
         })
         const startedMedia = image({
             nodeId: 'started-media',
+            fileId: '',
+            src: '',
             position: { x: 900, y: 900 },
             dimensions: { width: 100, height: 100 },
             generatedBy: {

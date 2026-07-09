@@ -3620,11 +3620,52 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const dimensions = isBranchMarkerNode(node)
             ? liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions
             : node.dimensions
+        const pendingCircleGeometry = getPendingGeneratedMediaBeforeFrameCircleGeometry(
+            node.nodeId,
+            worldPosition,
+            dimensions,
+        )
+        if (pendingCircleGeometry) {
+            return {
+                x: pendingCircleGeometry.position.x,
+                y: pendingCircleGeometry.position.y,
+                width: pendingCircleGeometry.dimensions.width,
+                height: pendingCircleGeometry.dimensions.height,
+            }
+        }
         return {
             x: worldPosition.x,
             y: worldPosition.y,
             width: dimensions.width,
             height: dimensions.height + getGeneratedMediaChromeCollisionHeight(node),
+        }
+    }
+
+    function getCanvasNodeConnectorAnchorRect(
+        node: CanvasNode,
+        worldPosition: { x: number; y: number },
+    ): Rect {
+        const dimensions = isBranchMarkerNode(node)
+            ? liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions
+            : node.dimensions
+        const pendingCircleGeometry = getPendingGeneratedMediaBeforeFrameCircleGeometry(
+            node.nodeId,
+            worldPosition,
+            dimensions,
+        )
+        if (pendingCircleGeometry) {
+            return {
+                x: pendingCircleGeometry.position.x,
+                y: pendingCircleGeometry.position.y,
+                width: pendingCircleGeometry.dimensions.width,
+                height: pendingCircleGeometry.dimensions.height,
+            }
+        }
+        return {
+            x: worldPosition.x,
+            y: worldPosition.y,
+            width: dimensions.width,
+            height: dimensions.height,
         }
     }
 
@@ -3733,6 +3774,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return new GeneratedMediaRebalancePipeline({
             workspaceId,
             mediaSize: getGeneratedMediaInsertionSize(),
+            pendingMediaPreFrameScale: settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale,
             depthGap: settings.mediaBranchLineage.mediaToMediaGap,
             branchOriginDepthGap: getBranchOriginOutputGap(),
             rootMarkerDepthGap: getRootBranchMarkerOutputGap(),
@@ -3744,9 +3786,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             getNodeWorldPosition,
             getNodeWorldRect,
             getNodeCollisionRect: getCanvasNodeCollisionRect,
+            getNodeConnectorAnchorRect: getCanvasNodeConnectorAnchorRect,
             getNodeCollisionMargin: (node: CanvasNode) => getCanvasNodeCollisionSettings(node, collisionSettings).margin,
             getNodeCollisionOverlapThreshold: (node: CanvasNode) =>
                 getCanvasNodeCollisionSettings(node, collisionSettings).overlapThreshold,
+            isPendingGeneratedMediaBeforeFrame: (node: CanvasNode) => isPendingGeneratedMediaBeforeFirstFrame(node.nodeId),
         })
     }
 
@@ -3903,19 +3947,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             mediaDimensions.height,
             mediaGap,
         )
-        // Anchor to the FULL future-media stack, not the pre-frame circle: the
-        // rendered placeholders and the final layout both occupy full media rows,
-        // so preflight markers must sit at the same midpoints from the start.
-        const futureMediaLeft = futureMediaPosition.x
-        const futureMediaStep = mediaDimensions.height + settings.mediaBranchLineage.branchRowGap
-        const futureMediaStackHeight = mediaDimensions.height * siblingCount
+        const futureCircleInset = getPendingGeneratedMediaBeforeFrameCircleInset(mediaDimensions)
+        const futureCircleLeft = futureMediaPosition.x + futureCircleInset.x
+        const futureCircleStep = futureCircleInset.size + settings.mediaBranchLineage.branchRowGap
+        const futureCircleStackHeight = futureCircleInset.size * siblingCount
             + settings.mediaBranchLineage.branchRowGap * Math.max(0, siblingCount - 1)
-        const firstMediaCenterY = parentRect.y + parentRect.height / 2
-            - futureMediaStackHeight / 2
-            + mediaDimensions.height / 2
-        const futureMediaCenterY = siblingSlot
-            ? firstMediaCenterY + futureMediaStep * siblingSlot.index
-            : futureMediaPosition.y + mediaDimensions.height / 2
+        const firstCircleCenterY = parentRect.y + parentRect.height / 2
+            - futureCircleStackHeight / 2
+            + futureCircleInset.size / 2
+        const futureCircleCenterY = siblingSlot
+            ? firstCircleCenterY + futureCircleStep * siblingSlot.index
+            : futureMediaPosition.y + futureCircleInset.y + futureCircleInset.size / 2
         const parentAnchorX = parentRect.x + parentRect.width
         const parentAnchorY = parentRect.y + parentRect.height / 2
 
@@ -3923,7 +3965,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const stackIndex = siblingSlot?.index ?? 0
             const stackGap = getBranchMarkerStackGap()
             return {
-                x: (parentAnchorX + futureMediaLeft) / 2 - markerDimensions.width / 2,
+                x: (parentAnchorX + futureCircleLeft) / 2 - markerDimensions.width / 2,
                 y: parentRect.y + parentRect.height
                     + stackGap
                     + stackIndex * (markerDimensions.height + stackGap),
@@ -3931,8 +3973,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         return {
-            x: (parentAnchorX + futureMediaLeft) / 2 - markerDimensions.width / 2,
-            y: (parentAnchorY + futureMediaCenterY) / 2 - markerDimensions.height / 2,
+            x: (parentAnchorX + futureCircleLeft) / 2 - markerDimensions.width / 2,
+            y: (parentAnchorY + futureCircleCenterY) / 2 - markerDimensions.height / 2,
         }
     }
 

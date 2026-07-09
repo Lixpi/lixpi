@@ -7,10 +7,10 @@
 // A "branch tree" is a connected component of top-level generated-media nodes
 // (image/video carrying generatedBy.branchId, no parentId) and temporary
 // branch-origin / branch-fork / branch-line markers linked by lineage. A
-// generated member's in-tree parent is the API-assigned run marker
-// (branchForkNodeId / branchLineNodeId) when present, then its parent media, then
-// its branch origin; otherwise the member is a tree root. A parentless
-// branchFork is also a tree root.
+// generated member's in-tree parent is its generatedBy.parentMediaNodeId, then
+// its generatedBy.branchOriginNodeId, then its API-assigned branchFork/branchLine
+// marker when that marker is the only visible lineage parent; otherwise the
+// member is a tree root. A parentless branchFork is also a tree root.
 //
 // This module is pure: it reads node positions/sizes + API-assigned lineage
 // fields and returns new node arrays. It never touches PIXI, the DOM, or canvas
@@ -74,11 +74,19 @@ export type BranchTreeLayoutOptions = {
     rootMarkerDepthGap?: number       // LR horizontal gap from a parentless branch root marker to its first generated media node
     siblingGap: number                // LR vertical gap — mediaBranchLineage.branchRowGap
     branchFanoutExtraGap?: number     // LR extra depth gap for forked generated media nodes
+    getBranchFanoutExtraGap?: (
+        parentNode: CanvasNode,
+        childNodes: CanvasNode[],
+    ) => number
     branchOriginMarkerStackGap?: number // Vertical gap between a branchOrigin and child fork/line markers
     collisionMargin?: number          // resolver breathing room; defaults to the resolver's own 20
     collisionIterations?: number      // resolver iteration limit; defaults to the resolver's own 50
     collisionOverlapThreshold?: number // fallback resolver overlap threshold; defaults to the resolver's own 0.5
     getNodeCollisionRect?: (
+        node: CanvasNode,
+        worldPosition: { x: number; y: number },
+    ) => { x: number; y: number; width: number; height: number }
+    getNodeConnectorAnchorRect?: (
         node: CanvasNode,
         worldPosition: { x: number; y: number },
     ) => { x: number; y: number; width: number; height: number }
@@ -110,21 +118,23 @@ function isBranchTreeMember(node: CanvasNode): node is BranchTreeMemberNode {
     return isGeneratedMediaBranchMember(node) || isBranchOriginMember(node) || isBranchForkMember(node) || isBranchLineMember(node)
 }
 
-// A branchFork (split) and a branchLine (continuation) are API-owned run nodes.
-// Current lineage data treats them as structural tree members so generated media
-// rows fan out from the same prompt/continuation node on every client. The
-// midpoint fallback below only covers older canvas states where a marker exists
-// as an edge annotation but was not part of the tidy-tree layout.
+// A branchFork (split) and a branchLine (continuation) are normally
+// mid-connector markers: the child keeps the original parent media / branch
+// origin as its in-tree parent so it stays one normal gap away, and the marker is
+// positioned at the midpoint of that single connector (see positionLineageMarkers).
+// If the API marker is the only visible branch-tree parent, the marker becomes
+// the layout root for those generated media nodes so the tree still moves as one
+// API-declared lineage group.
 function isMidpointMarker(node: CanvasNode | undefined): node is BranchForkCanvasNode | BranchLineCanvasNode {
     return Boolean(node) && (node!.type === 'branchFork' || node!.type === 'branchLine')
 }
 
 function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<string | undefined> {
     return [
-        node.generatedBy?.branchForkNodeId,
-        node.generatedBy?.branchLineNodeId,
         node.generatedBy?.parentMediaNodeId,
         node.generatedBy?.branchOriginNodeId,
+        node.generatedBy?.branchForkNodeId,
+        node.generatedBy?.branchLineNodeId,
     ]
 }
 
@@ -184,7 +194,11 @@ export function buildBranchTrees(nodes: CanvasNode[], _edges: WorkspaceEdge[]): 
         const tree = ensureTree(rootOf(node.nodeId))
         tree.memberIds.push(node.nodeId)
         const parentId = inTreeParentById.get(node.nodeId) ?? null
-        if (parentId !== null) {
+        // Fork/line markers belong to the tree (so they move rigidly and survive
+        // pruning) but are never a tidy-layout child when they have a visible
+        // parent. They do not add a depth column; positionLineageMarkers places
+        // them at the connector midpoint instead.
+        if (parentId !== null && !isMidpointMarker(node)) {
             const siblings = tree.childrenByParentId.get(parentId) ?? []
             siblings.push(node.nodeId)
             tree.childrenByParentId.set(parentId, siblings)
@@ -252,6 +266,19 @@ function getNodeCollisionRect(
     }
 }
 
+function getNodeConnectorAnchorRect(
+    node: CanvasNode,
+    worldPosition: Point,
+    options: BranchTreeLayoutOptions,
+): Rect {
+    return options.getNodeConnectorAnchorRect?.(node, worldPosition) ?? {
+        x: worldPosition.x,
+        y: worldPosition.y,
+        width: node.dimensions.width,
+        height: node.dimensions.height,
+    }
+}
+
 function getNodeCollisionMargin(node: CanvasNode, options: BranchTreeLayoutOptions): number {
     const margin = options.getNodeCollisionMargin?.(node) ?? 0
     return Number.isFinite(margin) ? Math.max(0, margin) : 0
@@ -284,13 +311,11 @@ function getNodeLayoutBox(
         1,
         visualCenter.x - rect.x,
         rect.x + rect.width - visualCenter.x,
-        node.dimensions.width / 2,
     )
     const halfHeight = Math.max(
         1,
         visualCenter.y - rect.y,
         rect.y + rect.height - visualCenter.y,
-        node.dimensions.height / 2,
     )
     return {
         width: halfWidth * 2,
@@ -482,7 +507,11 @@ export function applyBranchTreeLayout(
         if (tree.memberIds.length <= 1) continue // single node: root stays put
 
         const parentByChild = parentByChildOf(tree)
-        const layoutMemberIds = new Set(tree.memberIds)
+        const layoutMemberIds = new Set(tree.memberIds
+            .filter((id: string) => {
+                const node = nodesById.get(id)
+                return !isMidpointMarker(node) || tree.childrenByParentId.has(id)
+            }))
         // layoutTree preserves input order for siblings, so members must be fed
         // in the sorted childrenByParentId order (DFS from the root), never in
         // canvas-state insertion order — parallel runs complete out of order.
@@ -514,6 +543,16 @@ export function applyBranchTreeLayout(
             depthGap: options.depthGap,
             siblingGap: options.siblingGap,
             branchFanoutDepthGap: options.branchFanoutExtraGap,
+            getBranchFanoutDepthGap: options.getBranchFanoutExtraGap
+                ? (node: TreeLayoutNode, children: TreeLayoutNode[]): number => {
+                    const parentNode = nodesById.get(node.id)
+                    if (!parentNode || !isBranchTreeMember(parentNode)) return options.branchFanoutExtraGap ?? 0
+                    const childNodes = children
+                        .map((child: TreeLayoutNode) => nodesById.get(child.id))
+                        .filter((child): child is BranchTreeMemberNode => Boolean(child) && isBranchTreeMember(child))
+                    return options.getBranchFanoutExtraGap!(parentNode, childNodes)
+                }
+                : undefined,
         })
 
         // Anchor the relative layout (root at 0,0) onto the root's current world
@@ -537,7 +576,7 @@ export function applyBranchTreeLayout(
         }
     }
 
-    positionLineageMarkers(nodes, nodesById, nextPositionById)
+    positionLineageMarkers(nodes, nodesById, nextPositionById, options)
     resolveLineageMarkerOverlaps(nodes, nodesById, nextPositionById, treeMemberIdsByRootId, options)
 
     if (nextPositionById.size === 0) return nodes
@@ -547,13 +586,17 @@ export function applyBranchTreeLayout(
     })
 }
 
-// Legacy fallback for old states where fork/line markers were edge annotations
-// instead of tidy-tree members. Current API-owned geometry lays these markers
-// out structurally, so this never overwrites a marker that layoutTree positioned.
+// Fork (split) and line (continuation) markers are one regular connector broken
+// in half: the parent media / branch origin and each generated media node is
+// laid out one normal gap apart, and the marker sits at the midpoint of the
+// connector between the parent's right edge and the child's left edge. This
+// keeps splits as compact as continuations instead of adding a wide second depth
+// column.
 function positionLineageMarkers(
     nodes: CanvasNode[],
     nodesById: Map<string, CanvasNode>,
     nextPositionById: Map<string, Point>,
+    options: BranchTreeLayoutOptions,
 ): void {
     const childrenByMarkerId = new Map<string, GeneratedMediaNode[]>()
     for (const node of nodes) {
@@ -574,7 +617,6 @@ function positionLineageMarkers(
 
     for (const node of nodes) {
         if (!isMidpointMarker(node)) continue
-        if (nextPositionById.has(node.nodeId)) continue
         const parentId = node.parentBranchNodeId
         const children = childrenByMarkerId.get(node.nodeId)
         if (!children?.length) continue
@@ -582,7 +624,8 @@ function positionLineageMarkers(
             let childAnchorY = 0
             for (const child of children) {
                 const childPos = worldOf(child.nodeId)
-                childAnchorY += childPos.y + child.dimensions.height / 2
+                const childRect = getNodeConnectorAnchorRect(child, childPos, options)
+                childAnchorY += childRect.y + childRect.height / 2
             }
             childAnchorY /= children.length
             const markerPos = worldOf(node.nodeId)
@@ -598,14 +641,16 @@ function positionLineageMarkers(
         // Midpoint of the connector group: parent right-edge anchor → average
         // left-edge anchor for every generated media node sharing this marker.
         const parentPos = worldOf(parentId)
-        const parentAnchorX = parentPos.x + parent.dimensions.width
-        const parentAnchorY = parentPos.y + parent.dimensions.height / 2
+        const parentRect = getNodeConnectorAnchorRect(parent, parentPos, options)
+        const parentAnchorX = parentRect.x + parentRect.width
+        const parentAnchorY = parentRect.y + parentRect.height / 2
         let childAnchorX = 0
         let childAnchorY = 0
         for (const child of children) {
             const childPos = worldOf(child.nodeId)
-            childAnchorX += childPos.x
-            childAnchorY += childPos.y + child.dimensions.height / 2
+            const childRect = getNodeConnectorAnchorRect(child, childPos, options)
+            childAnchorX += childRect.x
+            childAnchorY += childRect.y + childRect.height / 2
         }
         childAnchorX /= children.length
         childAnchorY /= children.length
