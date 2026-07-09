@@ -31,6 +31,18 @@ const subject = (workspaceId: string, aiChatThreadId: string): string =>
 
 const COMPLETED_PIPELINE_EVENT_RETENTION_MS = 10 * 60 * 1000
 
+const MEDIA_RESPONSE_PUBLISH_STATUSES: ReadonlySet<StreamStatus> = new Set([
+    STREAM_STATUS.IMAGE_GENERATION_TRACE,
+    STREAM_STATUS.IMAGE_PARTIAL,
+    STREAM_STATUS.IMAGE_COMPLETE,
+    STREAM_STATUS.IMAGE_ERROR,
+    STREAM_STATUS.VIDEO_GENERATION_TRACE,
+    STREAM_STATUS.VIDEO_PENDING,
+    STREAM_STATUS.VIDEO_GENERATING,
+    STREAM_STATUS.VIDEO_COMPLETE,
+    STREAM_STATUS.VIDEO_ERROR,
+])
+
 export type ChunkPayload = {
     content: {
         text?: string
@@ -255,6 +267,7 @@ export class StreamPublisher {
     private hasEnded = false
     private proseMirrorFinishPromise: Promise<void> | null = null
     private responsePublishChain: Promise<void> = Promise.resolve()
+    private readonly mediaResponsePublishChains = new Map<string, Promise<void>>()
     private canvasProjectionChain: Promise<void> = Promise.resolve()
     private streamCanvasGeometryRefreshScheduled = false
     private readonly mediaGenerationRequestIds = new Set<string>()
@@ -326,10 +339,67 @@ export class StreamPublisher {
             this.requestStreamCanvasGeometryRefresh(content)
         }
 
-        this.responsePublishChain = this.publishResponseAfterCurrent(this.responsePublishChain, {
+        this.enqueueResponsePublish({
             content,
             aiChatThreadId: this.aiChatThreadId,
         })
+    }
+
+    private enqueueResponsePublish(payload: ChunkPayload): void {
+        const queueKey = this.getResponsePublishQueueKey(payload.content)
+        if (!queueKey) {
+            this.responsePublishChain = this.publishResponseAfterCurrent(this.responsePublishChain, payload)
+            this.logResponsePublishQueued('main', payload)
+            return
+        }
+
+        const previous = this.mediaResponsePublishChains.get(queueKey) ?? Promise.resolve()
+        const next = this.publishResponseAfterCurrent(previous, payload)
+        this.mediaResponsePublishChains.set(queueKey, next)
+        this.logResponsePublishQueued(queueKey, payload)
+        void this.forgetSettledMediaResponsePublishChain(queueKey, next)
+    }
+
+    private getResponsePublishQueueKey(content: ChunkPayload['content']): string | null {
+        const mediaRunId = content.generationRun?.mediaRunId
+        if (!mediaRunId || !MEDIA_RESPONSE_PUBLISH_STATUSES.has(content.status)) return null
+        return `media:${mediaRunId}`
+    }
+
+    private logResponsePublishQueued(queueKey: string, payload: ChunkPayload): void {
+        const content = payload.content
+        const hasGenerationDebugContext = Boolean(
+            content.generationRequestId
+            || content.generationRun?.generationRequestId
+            || this.currentGenerationRun?.generationRequestId
+            || content.canvasGeometry,
+        )
+        if (queueKey === 'main' && !hasGenerationDebugContext) return
+        console.info('[StreamPublisher][pipeline-publish] queued', {
+            workspaceId: this.workspaceId,
+            aiChatThreadId: this.aiChatThreadId,
+            queueKey,
+            status: content.status,
+            textLength: content.text?.length ?? 0,
+            generationRequestId: content.generationRun?.generationRequestId ?? this.currentGenerationRun?.generationRequestId ?? '',
+            reasoningRunId: content.generationRun?.reasoningRunId ?? this.currentGenerationRun?.reasoningRunId ?? '',
+            mediaRunId: content.generationRun?.mediaRunId ?? '',
+            mediaModelId: content.generationRun?.mediaModelId ?? '',
+            partialIndex: content.partialIndex ?? null,
+            hasCanvasGeometry: Boolean(content.canvasGeometry),
+            mediaQueueCount: this.mediaResponsePublishChains.size,
+        })
+    }
+
+    private async forgetSettledMediaResponsePublishChain(queueKey: string, promise: Promise<void>): Promise<void> {
+        try {
+            await promise
+        } catch {
+            // publishResponseNow already logs and falls back to live publish.
+        }
+        if (this.mediaResponsePublishChains.get(queueKey) === promise) {
+            this.mediaResponsePublishChains.delete(queueKey)
+        }
     }
 
     private async publishResponseAfterCurrent(previous: Promise<void>, payload: ChunkPayload): Promise<void> {
@@ -366,8 +436,25 @@ export class StreamPublisher {
     }
 
     private async drainResponsePublishes(): Promise<void> {
+        while (true) {
+            const chains = [
+                this.responsePublishChain,
+                ...this.mediaResponsePublishChains.values(),
+            ]
+            await Promise.all(chains.map(chain => this.ignorePublishChainFailure(chain)))
+            const nextChains = [
+                this.responsePublishChain,
+                ...this.mediaResponsePublishChains.values(),
+            ]
+            if (nextChains.length === chains.length && nextChains.every((chain, index) => chain === chains[index])) {
+                return
+            }
+        }
+    }
+
+    private async ignorePublishChainFailure(chain: Promise<void>): Promise<void> {
         try {
-            await this.responsePublishChain
+            await chain
         } catch {
             // publishResponseNow already logs and falls back to live publish.
         }

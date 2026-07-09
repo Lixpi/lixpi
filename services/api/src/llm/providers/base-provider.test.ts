@@ -127,6 +127,96 @@ class FailingStreamProvider extends BaseProvider {
 }
 
 describe('BaseProvider image fanout errors', () => {
+    it('live-publishes mirrored media router content without duplicating the shared ProseMirror mirror', async () => {
+        const nats = makeFakeNats()
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as unknown as BaseProviderDeps
+        const provider = new TestProvider('ws1:thread1:request-1:reasoning:0', deps)
+        const sharedMirror = vi.fn()
+        const mediaRun: MediaGenerationRunMeta = {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'request-1:reasoning:0',
+            mediaRunId: 'request-1:reasoning:0:image:2',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'OpenAI:gpt-image-2',
+            mediaType: 'image',
+            reasoningIndex: 0,
+            mediaIndex: 2,
+            variantIndex: 2,
+        }
+        ;(provider as any).streamPublisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+            mediaRun,
+            { proseMirrorContentMirror: sharedMirror },
+        )
+        ;(provider as any).pipelineProseMirrorContentHandler = sharedMirror
+
+        ;(provider as any).publishPipelineProseMirrorContent({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            aiProvider: 'Anthropic',
+            imageUrl: 'partial.png',
+            fileId: 'partial-file',
+            partialIndex: 1,
+            generationRun: mediaRun,
+        })
+        await (provider as any).streamPublisher.drainPendingWrites()
+
+        expect(sharedMirror).toHaveBeenCalledTimes(1)
+        expect(sharedMirror).toHaveBeenCalledWith(expect.objectContaining({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            imageUrl: 'partial.png',
+            generationRun: mediaRun,
+        }))
+        expect(nats.published).toHaveLength(1)
+        expect(nats.published[0]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            imageUrl: 'partial.png',
+            fileId: 'partial-file',
+            partialIndex: 1,
+            generationRun: mediaRun,
+        })
+    })
+
+    it('does not live-publish mirrored non-media content from matrix children', async () => {
+        const nats = makeFakeNats()
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as unknown as BaseProviderDeps
+        const provider = new TestProvider('ws1:thread1:request-1:reasoning:0', deps)
+        const sharedMirror = vi.fn()
+        ;(provider as any).streamPublisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+        )
+        ;(provider as any).pipelineProseMirrorContentHandler = sharedMirror
+
+        ;(provider as any).publishPipelineProseMirrorContent({
+            status: STREAM_STATUS.STREAMING,
+            aiProvider: 'Anthropic',
+            text: 'shared reasoning text',
+        })
+        await (provider as any).streamPublisher.drainPendingWrites()
+
+        expect(sharedMirror).toHaveBeenCalledTimes(1)
+        expect(nats.published).toHaveLength(0)
+    })
+
     it('publishes IMAGE_ERROR for the failed media child while returning successful siblings', async () => {
         const nats = makeFakeNats()
         const runImageRouter = vi.fn(async (state: ProviderState): Promise<Partial<ProviderState>> => {

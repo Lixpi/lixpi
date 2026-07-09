@@ -4,7 +4,7 @@ import { StateGraph, END, START } from '@langchain/langgraph'
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn, err } from '@lixpi/debug-tools'
-import type { MediaGenerationRunMeta, ProviderName } from '@lixpi/constants'
+import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName, type StreamStatus } from '@lixpi/constants'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
@@ -45,6 +45,16 @@ type MediaRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
     getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
 }
+
+const LIVE_MIRRORED_MEDIA_STATUSES: ReadonlySet<StreamStatus> = new Set([
+    STREAM_STATUS.IMAGE_PARTIAL,
+    STREAM_STATUS.IMAGE_COMPLETE,
+    STREAM_STATUS.IMAGE_ERROR,
+    STREAM_STATUS.VIDEO_PENDING,
+    STREAM_STATUS.VIDEO_GENERATING,
+    STREAM_STATUS.VIDEO_COMPLETE,
+    STREAM_STATUS.VIDEO_ERROR,
+])
 
 const catalogModelIdFor = (model: AiModelMetaInfo): string =>
     `${model.provider}:${model.model}`
@@ -106,6 +116,19 @@ export abstract class BaseProvider {
     private publishPipelineProseMirrorContent(content: Parameters<ProseMirrorContentHandler>[0]): void {
         if (this.pipelineProseMirrorContentHandler) {
             this.pipelineProseMirrorContentHandler(content)
+            if (LIVE_MIRRORED_MEDIA_STATUSES.has(content.status)) {
+                info('[BaseProvider][pipeline-content] live-publish-mirrored-media', {
+                    instanceKey: this.instanceKey,
+                    status: content.status,
+                    generationRequestId: content.generationRun?.generationRequestId ?? '',
+                    reasoningRunId: content.generationRun?.reasoningRunId ?? '',
+                    mediaRunId: content.generationRun?.mediaRunId ?? '',
+                    mediaModelId: content.generationRun?.mediaModelId ?? '',
+                    partialIndex: content.partialIndex ?? null,
+                    hasCanvasGeometry: Boolean(content.canvasGeometry),
+                })
+                this.streamPublisher?.publishChatContent(content, { mirrorProseMirror: false })
+            }
             return
         }
         this.streamPublisher?.publishChatContent(content)
