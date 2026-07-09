@@ -5,6 +5,7 @@ packages:
 
 allowBuilds:
   "@pulumi/aws": true
+  "protobufjs": true
   "@pulumi/command": true
   "@pulumi/docker-build": true
   "@pulumi/pulumi": true

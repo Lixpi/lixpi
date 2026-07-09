@@ -25,6 +25,33 @@ const toCapacityUnits = (cc) => {
     return cc?.CapacityUnits ?? 0
 }
 
+// One operation inside a transaction — same shapes the models pass to
+// putItem / updateItem / deleteItems, discriminated by `type`. Soft deletes
+// are expressed as a 'update' setting the TTL attribute.
+export type TransactOperation =
+    | { type: 'put'; tableName: string; item: Record<string, unknown> }
+    | {
+        type: 'update'
+        tableName: string
+        key: Record<string, unknown>
+        updates?: Record<string, unknown>
+        updateExpression?: string
+        expressionAttributeNames?: Record<string, string>
+        expressionAttributeValues?: Record<string, unknown>
+        conditionExpression?: string
+    }
+    | { type: 'delete'; tableName: string; key: Record<string, unknown> }
+
+// A transaction is cancelled as a whole; a failed per-item condition surfaces
+// as TransactionCanceledException with a ConditionalCheckFailed reason instead
+// of ConditionalCheckFailedException. Models use this to keep their existing
+// optimistic-concurrency retry paths.
+export const isTransactionConditionalCheckFailure = (error: unknown): boolean => {
+    const candidate = error as { name?: string; CancellationReasons?: Array<{ Code?: string }> }
+    return candidate?.name === 'TransactionCanceledException'
+        && (candidate.CancellationReasons ?? []).some((reason) => reason?.Code === 'ConditionalCheckFailed')
+}
+
 const logStats = ({ operation, operationType, capacityUnits, tableName, origin }) => {
     let logColor = ''
 
@@ -459,14 +486,60 @@ export default class DynamoDBService {
         }
     }
 
-    async transactWriteItems({
-        transactItems = [],
+    // One atomic multi-table write. Operations mirror the argument shapes of
+    // putItem / updateItem / deleteItems; the raw SDK TransactItems are built
+    // internally so models never touch SDK shapes. Throws on cancellation —
+    // when it throws, nothing was applied.
+    async transactWrite({
+        operations,
+        logConditionalCheckFailures = true,
         origin = 'unknown'
+    }: {
+        operations: TransactOperation[]
+        logConditionalCheckFailures?: boolean
+        origin?: string
     }) {
-        if (transactItems.length === 0) {
-            console.error(`Error: At least one transaction item must be provided!, origin: ${origin}`)
-            return
+        if (!operations || operations.length === 0) {
+            throw new Error(`DynamoDB transactWrite: at least one operation must be provided, origin: ${origin}`)
         }
+
+        const transactItems = operations.map((operation) => {
+            if (operation.type === 'put') {
+                return { Put: { TableName: operation.tableName, Item: operation.item } }
+            }
+
+            if (operation.type === 'delete') {
+                return { Delete: { TableName: operation.tableName, Key: operation.key } }
+            }
+
+            // 'update' — same expression building rules as updateItem: simple
+            // `updates` map preferred, custom expression as the escape hatch.
+            let updateExpression = operation.updateExpression ?? ''
+            let expressionAttributeNames = operation.expressionAttributeNames ?? {}
+            let expressionAttributeValues = operation.expressionAttributeValues ?? {}
+
+            if (operation.updates && Object.keys(operation.updates).length > 0) {
+                const prepared = this.prepareAttributes(operation.updates)
+                updateExpression = `SET ${prepared.expression}`
+                expressionAttributeNames = { ...prepared.expressionAttributeNames, ...expressionAttributeNames }
+                expressionAttributeValues = { ...prepared.expressionAttributeValues, ...expressionAttributeValues }
+            }
+
+            if (!updateExpression) {
+                throw new Error(`DynamoDB transactWrite: update operation for ${operation.tableName} needs 'updates' or 'updateExpression', origin: ${origin}`)
+            }
+
+            return {
+                Update: {
+                    TableName: operation.tableName,
+                    Key: operation.key,
+                    UpdateExpression: updateExpression,
+                    ...(Object.keys(expressionAttributeNames).length > 0 && { ExpressionAttributeNames: expressionAttributeNames }),
+                    ...(Object.keys(expressionAttributeValues).length > 0 && { ExpressionAttributeValues: expressionAttributeValues }),
+                    ...(operation.conditionExpression && { ConditionExpression: operation.conditionExpression })
+                }
+            }
+        })
 
         try {
             const response = await this.dynamodbDocumentClient.send(new TransactWriteCommand({
@@ -475,16 +548,18 @@ export default class DynamoDBService {
             }))
 
             logStats({
-                operation: 'transactWriteItems',
+                operation: 'transactWrite',
                 operationType: 'write',
                 capacityUnits: toCapacityUnits(response.ConsumedCapacity),
-                tableName: transactItems.map((item) => Object.values(item)[0]?.TableName).join(','),
+                tableName: operations.map((operation) => operation.tableName).join(','),
                 origin
             })
 
             return response
         } catch (error) {
-            console.error('Error completing DynamoDB transaction:', error)
+            if (logConditionalCheckFailures || !isTransactionConditionalCheckFailure(error)) {
+                console.error('Error completing DynamoDB transaction:', error)
+            }
             throw error
         }
     }

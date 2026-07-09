@@ -6,7 +6,7 @@ import {
     getReasoningSectionLineageEvents,
     normalizeAiLineageEventKind,
     normalizeAiLineageProjectionScope,
-} from './lineage-events.ts'
+} from './shared/lineage-events.ts'
 
 describe('lineage kind normalization and labels', () => {
     it('falls back to branch-fork for unknown kinds', () => {

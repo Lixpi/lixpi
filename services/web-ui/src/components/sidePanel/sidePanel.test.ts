@@ -846,6 +846,88 @@ describe('SidePanel', () => {
         sidePanel.destroy()
     })
 
+    it('closes from an outside click across the full viewport when the overlay element is disabled', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            overlay: {
+                enabled: false,
+                closeOnPointerDown: true,
+            },
+            onOpenChange,
+        }))
+
+        expect(sidePanel.overlayElement).toBeNull()
+        sidePanel.setOpen(true)
+
+        overlayPointerDown(200, 200)
+        overlayClick(200, 200)
+        expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false)
+
+        sidePanel.destroy()
+    })
+
+    it('ignores outside clicks on the panel, toggle, or resize handle when the overlay element is disabled', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            overlay: {
+                enabled: false,
+                closeOnPointerDown: true,
+            },
+            toggle: {
+                iconSvg: '<svg></svg>',
+                openAriaLabel: 'Collapse panel',
+                closedAriaLabel: 'Open panel',
+                onToggle: vi.fn(),
+            },
+            onOpenChange,
+        }))
+        const panel = document.createElement('div')
+        document.body.appendChild(panel)
+        sidePanel.mountOpen(panel)
+        sidePanel.setOpen(true)
+
+        overlayPointerDown(200, 200, { target: panel })
+        overlayClick(200, 200, { target: panel })
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        overlayPointerDown(200, 200, { target: sidePanel.toggleElement as HTMLElement })
+        overlayClick(200, 200, { target: sidePanel.toggleElement as HTMLElement })
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        overlayPointerDown(200, 200, { target: sidePanel.element })
+        overlayClick(200, 200, { target: sidePanel.element })
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        sidePanel.destroy()
+    })
+
+    it('does not wire outside-close listeners when overlay config is entirely absent', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({ onOpenChange }))
+
+        sidePanel.setOpen(true)
+        overlayPointerDown(900, 900)
+        overlayClick(900, 900)
+        expect(onOpenChange).not.toHaveBeenCalled()
+
+        sidePanel.destroy()
+    })
+
+    it('removes document-level outside-close listeners on destroy even without an overlay element', () => {
+        const onOpenChange = vi.fn()
+        const sidePanel = createSidePanel(buildConfig({
+            overlay: { enabled: false, closeOnPointerDown: true },
+            onOpenChange,
+        }))
+        sidePanel.setOpen(true)
+
+        sidePanel.destroy()
+
+        overlayPointerDown(900, 900)
+        overlayClick(900, 900)
+        expect(onOpenChange).not.toHaveBeenCalled()
+    })
+
     it('does not start swipe-close gestures from interactive or opted-out panel children', () => {
         const onOpenChange = vi.fn()
         const sidePanel = createSidePanel(buildConfig({

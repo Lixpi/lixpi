@@ -31,7 +31,7 @@ docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescri
 Pass a specific test file after the domain to target it (for `api`/`web-ui`/`nex` only — `shared` runs every `packages/lixpi/*` package that defines a `test:run` script):
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/infographics/utils/zoomScaling.test.ts
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/infographics/workspace/workspace-canvas.test.ts
 ```
 
 For `shared`, an optional first argument selects a single package by its directory name under `packages/lixpi` (e.g. `auth-service`, or `debug-tools`/`nats-service` as shorthand for their nested `ts/` subfolder); any remaining arguments are passed through to vitest:

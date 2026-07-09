@@ -252,16 +252,17 @@ export default class AiInteractionService {
                     fileId: content.fileId,
                     workspaceId: this.workspaceId,
                     partialIndex: content.partialIndex,
+                    ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...segmentBase,
                 })
                 return
             }
 
-            if (content.status === STREAM_STATUS.IMAGE_BRANCH_RESOLVED) {
-                console.log('[AI_INTERACTION] IMAGE_BRANCH_RESOLVED received:', content)
+            if (content.status === STREAM_STATUS.MEDIA_BRANCH_RESOLVED) {
+                console.log('[AI_INTERACTION] MEDIA_BRANCH_RESOLVED received:', content)
                 this.segmentsReceiver.receiveSegment({
                     type: 'image_branch_resolved',
-                    imageBranchResolution: content.resolution,
+                    mediaBranchResolution: content.resolution,
                     ...segmentBase,
                 })
                 return
@@ -294,11 +295,36 @@ export default class AiInteractionService {
                 return
             }
 
-            if (content.status === STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR) {
-                console.log('[AI_INTERACTION] IMAGE_BRANCH_RESOLUTION_ERROR received:', content)
+            if (content.status === STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE) {
+                console.log('[AI_INTERACTION] MEDIA_GENERATION_REQUEST_COMPLETE received:', {
+                    generationRequestId: content.generationRequestId,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'media_generation_request_complete',
+                    generationRequestId: content.generationRequestId || generationRun?.generationRequestId || '',
+                    ...segmentBase,
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.MEDIA_BRANCH_RESOLUTION_ERROR) {
+                console.log('[AI_INTERACTION] MEDIA_BRANCH_RESOLUTION_ERROR received:', content)
                 this.segmentsReceiver.receiveSegment({
                     type: 'image_branch_resolution_error',
                     error: content.error || 'Image branch resolution failed',
+                    ...segmentBase,
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED) {
+                console.log('[AI_INTERACTION] CANVAS_GEOMETRY_RESOLVED received:', {
+                    layoutRevision: content.canvasGeometry?.layoutRevision,
+                    nodeCount: content.canvasGeometry?.nodes?.length ?? 0,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'canvas_geometry_resolved',
+                    canvasGeometry: content.canvasGeometry,
                     ...segmentBase,
                 })
                 return
@@ -318,6 +344,7 @@ export default class AiInteractionService {
                     usesServerProseMirror: true,
                     imageModelProvider: content.imageModelProvider || content.aiProvider || '',
                     imageModelId: content.imageModelId || '',
+                    ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...(generationRun ? { generationRun } : {}),
                     aiChatThreadId: this.aiChatThreadId
                 })
@@ -388,6 +415,7 @@ export default class AiInteractionService {
                     revisedPrompt: content.revisedPrompt,
                     videoModel: content.videoModelId,
                     videoModelProvider: content.videoModelProvider || content.aiProvider || '',
+                    ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...segmentBase,
                 })
                 return
@@ -432,7 +460,7 @@ export default class AiInteractionService {
         videoConfigGroups,
         videoSourceForExtension,
         referencedFeatureIds,
-        imageBranchCandidateSnapshot,
+        mediaBranchCandidateSnapshot,
         workspaceContextSnapshot,
         canvasVisibleArea,
         proseMirrorInitialDoc,
@@ -466,8 +494,8 @@ export default class AiInteractionService {
             payload.referencedFeatureIds = referencedFeatureIds
         }
 
-        if (imageBranchCandidateSnapshot) {
-            payload.imageBranchCandidateSnapshot = imageBranchCandidateSnapshot
+        if (mediaBranchCandidateSnapshot) {
+            payload.mediaBranchCandidateSnapshot = mediaBranchCandidateSnapshot
         }
 
         // Whole-workspace descriptors index for the API relevance stage. Sent on
@@ -496,7 +524,7 @@ export default class AiInteractionService {
 
         // Add video model routing options if a video model is selected. The
         // text model decides between generate_image vs generate_video at runtime
-        // when both are present — see ImageBranchResolver + LangGraph routing.
+        // when both are present — see MediaBranchResolver + LangGraph routing.
         if (videoModelIds.length > 0) {
             payload.aiVideoModels = videoModelIds
             if (videoAspectRatio) payload.videoAspectRatio = videoAspectRatio
@@ -507,7 +535,8 @@ export default class AiInteractionService {
 
         // The media-generation matrix is needed only when some section carries
         // more than one model; a single model per section runs the plain path.
-        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, videoModelIds.length]
+        const matrixVideoModelIds = videoModelsEnabled || Boolean(videoSourceForExtension) ? videoModelIds : []
+        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, matrixVideoModelIds.length]
         const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
         const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
         if (totalSelectedModelCount > sectionsWithSelection) {
@@ -519,18 +548,18 @@ export default class AiInteractionService {
                 useMultipleVideoModels: videoModelsEnabled,
                 reasoningModelIds,
                 imageModelIds,
-                videoModelIds,
+                videoModelIds: matrixVideoModelIds,
                 imageOptions: {
                     imageSize: imageSize || 'auto',
                     ...(imageModelsEnabled && imageConfigGroups?.length ? { configGroups: imageConfigGroups } : {}),
                 },
-                videoOptions: {
+                ...(matrixVideoModelIds.length > 0 ? { videoOptions: {
                     ...(videoAspectRatio ? { aspectRatio: videoAspectRatio } : {}),
                     ...(videoResolution ? { resolution: videoResolution } : {}),
                     ...(videoDuration ? { duration: videoDuration } : {}),
                     ...(videoSourceForExtension ? { sourceForExtension: videoSourceForExtension } : {}),
                     ...(videoModelsEnabled && videoConfigGroups?.length ? { configGroups: videoConfigGroups } : {}),
-                },
+                } } : {}),
             }
         }
 
@@ -544,7 +573,7 @@ export default class AiInteractionService {
             hasImageModel: imageModelIds.length > 0,
             hasVideoModel: videoModelIds.length > 0,
             referencedFeatureCount: referencedFeatureIds?.length ?? 0,
-            imageBranchCandidateCount: imageBranchCandidateSnapshot?.candidates.length ?? 0,
+            mediaBranchCandidateCount: mediaBranchCandidateSnapshot?.candidates.length ?? 0,
             workspaceContextNodeCount: workspaceContextSnapshot?.nodes.length ?? 0,
         })
 

@@ -111,15 +111,14 @@ describe('Document subject handlers — ownership and persistence', () => {
     })
 
     it('returns a persisted document for GET_DOCUMENT', async () => {
-        const persisted = { documentId: 'document-1', revision: 1, workspaceId: 'workspace-1' }
+        const persisted = { documentId: 'document-1', workspaceId: 'workspace-1' }
         mocks.document.getDocument.mockResolvedValueOnce(persisted)
 
         const result = await getHandler(SUBJECTS.GET_DOCUMENT)(baseDocumentData)
 
         expect(mocks.document.getDocument).toHaveBeenCalledWith({
             workspaceId: 'workspace-1',
-            documentId: 'document-1',
-            revision: 1,
+            documentId: 'document-1'
         })
         expect(result).toEqual(persisted)
     })
@@ -131,7 +130,7 @@ describe('Document subject handlers — ownership and persistence', () => {
             content: { type: 'doc' },
         }
 
-        const created = { documentId: 'new-document', revision: 1 }
+        const created = { documentId: 'new-document' }
         mocks.document.createDocument.mockResolvedValueOnce(created)
 
         const result = await getHandler(SUBJECTS.CREATE_DOCUMENT)(payload)
@@ -148,7 +147,6 @@ describe('Document subject handlers — ownership and persistence', () => {
         const payload = {
             ...baseDocumentData,
             title: 'Updated',
-            prevRevision: 0,
             content: { type: 'doc' },
         }
 
@@ -158,7 +156,6 @@ describe('Document subject handlers — ownership and persistence', () => {
             workspaceId: 'workspace-1',
             documentId: 'document-1',
             title: 'Updated',
-            prevRevision: 0,
             content: { type: 'doc' },
         })
         expect(result).toEqual({ success: true, documentId: 'document-1' })
@@ -278,6 +275,59 @@ describe('Document step submissions', () => {
             origin: 'client-edit',
         })
         expect(result).toEqual(transportResult)
+    })
+
+    it('schedules a debounced snapshot job when DOC_SUBMIT_STEPS is accepted', async () => {
+        vi.useFakeTimers()
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
+
+        try {
+            const payload = {
+                ...baseDocumentData,
+                docType: 'document',
+                docId: 'document-1',
+                baseVersion: 1,
+                expectedVersion: 1,
+                steps: [{ step: { type: 'replace' }, msgId: 'msg-1', clientId: 'client-1' }],
+                user: { userId: 'user-1' },
+            }
+            mocks.transport.submitSteps.mockResolvedValueOnce({ status: 'ACCEPTED', version: 2 })
+
+            const result = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEPS)(payload)
+
+            expect(result).toEqual({ status: 'ACCEPTED', version: 2 })
+            expect(setTimeoutSpy).toHaveBeenCalledTimes(1)
+            expect(setTimeoutSpy.mock.calls[0]?.[0]).toBeInstanceOf(Function)
+        } finally {
+            setTimeoutSpy.mockRestore()
+            vi.useRealTimers()
+        }
+    })
+
+    it('does not schedule snapshot persistence when DOC_SUBMIT_STEPS is not accepted', async () => {
+        vi.useFakeTimers()
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
+
+        try {
+            const payload = {
+                ...baseDocumentData,
+                docType: 'document',
+                docId: 'document-1',
+                baseVersion: 1,
+                expectedVersion: 1,
+                steps: [{ step: { type: 'replace' }, msgId: 'msg-1', clientId: 'client-1' }],
+                user: { userId: 'user-1' },
+            }
+            mocks.transport.submitSteps.mockResolvedValueOnce({ status: 'REJECTED', version: 2 })
+
+            const result = await getHandler(STEP_SUBJECTS.DOC_SUBMIT_STEPS)(payload)
+
+            expect(result).toEqual({ status: 'REJECTED', version: 2 })
+            expect(setTimeoutSpy).not.toHaveBeenCalled()
+        } finally {
+            setTimeoutSpy.mockRestore()
+            vi.useRealTimers()
+        }
     })
 
     it('submits document step batches to the prosemirror transport with one workspace access check', async () => {
@@ -430,7 +480,6 @@ describe('Document resume reconciliation', () => {
         expect(mocks.document.getDocument).toHaveBeenCalledWith({
             workspaceId: 'workspace-1',
             documentId: 'document-1',
-            revision: 1,
         })
         expect(result.events).toEqual([
             { kind: 'START', baseVersion: 1, version: 2, streamSequence: 2 },

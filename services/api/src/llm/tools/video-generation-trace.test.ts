@@ -42,7 +42,7 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
         featureReferenceImages: ['data:image/png;base64,feature-inline'],
         featureReferenceImageTraceUrls: ['/api/features/feature-1/samples/0?workspaceId=workspace-1'],
         featureUsagePrompt: 'Use rough watercolor paper and visible brush texture.',
-        imageBranchCandidateSnapshot: {
+        mediaBranchCandidateSnapshot: {
             resolverVersion: 'image-branch-vlm-v1',
             threadId: 'thread-1',
             regionNodeId: 'region-1',
@@ -74,7 +74,7 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
                 },
             ],
         },
-        imageBranchResolution: {
+        mediaBranchResolution: {
             resolverKind: 'structured-vlm',
             resolverVersion: 'image-branch-vlm-v1',
             resolverModelProvider: 'Anthropic',

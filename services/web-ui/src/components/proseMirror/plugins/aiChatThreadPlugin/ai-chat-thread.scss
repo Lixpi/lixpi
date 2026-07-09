@@ -362,18 +362,11 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 
         .ai-response-loading-spinner {
             display: none;
-            pointer-events: none;
+            margin: 0.75rem 1rem 0.25rem 1rem;
         }
 
         &.is-waiting .ai-response-loading-spinner {
             display: block;
-            width: 14px;
-            height: 14px;
-            margin: 0.75rem 1rem 0.25rem 1rem;
-            border: 2px solid rgba(42, 45, 47, 0.15);
-            border-top-color: rgba(42, 45, 47, 0.55);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
         }
 
         &.is-waiting .ai-response-message-content {
@@ -713,12 +706,6 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     letter-spacing: 0;
     line-height: 1.2;
     text-transform: uppercase;
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
 }
 
 // ========== AI GENERATION TRACE BLOCK ==========

@@ -11,7 +11,17 @@
         "vitest": "*"
     },
     "exports": {
-        ".": "./src/index.ts"
+        ".": "./src/index.ts",
+        "./shared/base-schema": "./src/shared/base-schema.ts",
+        "./shared/generated-media-turn-projection": "./src/shared/generated-media-turn-projection.ts",
+        "./shared/lineage-events": "./src/shared/lineage-events.ts",
+        "./shared/model-selection-attrs": "./src/shared/model-selection-attrs.ts",
+        "./shared/node-specs": "./src/shared/node-specs.ts",
+        "./shared/schema-builder": "./src/shared/schema-builder.ts",
+        "./shared/stream-assembly": "./src/shared/stream-assembly.ts",
+        "./shared/thread-doc": "./src/shared/thread-doc.ts",
+        "./shared/transport-types": "./src/shared/transport-types.ts",
+        "./backend/headless-engine": "./src/backend/headless-engine.ts"
     },
     "dependencies": {
         "@lixpi/constants": "workspace:*",

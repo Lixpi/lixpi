@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createPixiMediaLayer } from '$src/infographics/workspace/pixiMediaLayer.ts'
 
-function makeImageNode(nodeId: string): Record<string, any> {
+function makeImageNode(nodeId: string, overrides: Record<string, any> = {}): Record<string, any> {
     return {
         nodeId,
         type: 'image',
@@ -13,6 +13,7 @@ function makeImageNode(nodeId: string): Record<string, any> {
         dimensions: { width: 100, height: 70 },
         position: { x: 10, y: 20 },
         referenceId: `${nodeId}-ref`,
+        ...overrides,
     }
 }
 
@@ -194,26 +195,6 @@ vi.mock('pixi.js', () => {
     }
 })
 
-vi.mock('$src/utils/animations/gradients/pixiGlassBorderRenderer.ts', () => ({
-    PixiGlassBorderRenderer: class FakePixiGlassBorderRenderer {
-        public sync = vi.fn()
-        public getCaptureTexture = vi.fn(() => glassCaptureTexture)
-        public setCapturing = vi.fn()
-        public destroy = vi.fn()
-
-        public constructor(public options: { container: unknown; style: unknown }) {
-            glassBorderRendererInstances.push({
-                sync: this.sync,
-                getCaptureTexture: this.getCaptureTexture,
-                setCapturing: this.setCapturing,
-                destroy: this.destroy,
-                container: options.container,
-                style: options.style,
-            })
-        }
-    },
-}))
-
 vi.mock('$src/utils/domTemplates.ts', () => ({
     html: (_template: unknown, ..._values: unknown[]) => document.createElement('div'),
     applyStyle: vi.fn(),
@@ -237,6 +218,8 @@ vi.mock('$src/infographics/workspace/pixiMediaLayerLogic.ts', () => ({
     computeWorldPosition: (node: any) => node.position,
     getPixiLodTier: (zoom: number) => (zoom >= 1 ? 'full' : 'thumb-256') as const,
     getVisibleWorldRect: () => ({ minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 }),
+    isGeneratedImageNodeWaitingForFrame: (node: { generatedBy?: unknown; fileId?: string; src?: string }) =>
+        Boolean(node.generatedBy) && !node.fileId && !node.src,
     makeIndexedImage: (node: { nodeId: string; dimensions: { width: number; height: number }; position: { x: number; y: number } }) => ({
         nodeId: node.nodeId,
         minX: node.position.x,
@@ -260,13 +243,30 @@ vi.mock('$src/infographics/workspace/rendering/mediaNodeRegistry.ts', () => ({
     createMediaNodeRegistry: () => mediaNodeRegistryCalls,
 }))
 
-vi.mock('$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts', async () => {
-    const actual = await vi.importActual<typeof import('$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts')>(
-        '$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts'
+vi.mock('@lixpi/canvas-engine/frontend/rendering', async () => {
+    const actual = await vi.importActual<typeof import('@lixpi/canvas-engine/frontend/rendering')>(
+        '@lixpi/canvas-engine/frontend/rendering'
     )
 
     return {
         ...actual,
+        PixiGlassBorderRenderer: class FakePixiGlassBorderRenderer {
+            public sync = vi.fn()
+            public getCaptureTexture = vi.fn(() => glassCaptureTexture)
+            public setCapturing = vi.fn()
+            public destroy = vi.fn()
+
+            public constructor(public options: { container: unknown; style: unknown }) {
+                glassBorderRendererInstances.push({
+                    sync: this.sync,
+                    getCaptureTexture: this.getCaptureTexture,
+                    setCapturing: this.setCapturing,
+                    destroy: this.destroy,
+                    container: options.container,
+                    style: options.style,
+                })
+            }
+        },
         PixiTravelingOutlineRenderer: class FakePixiTravelingOutlineRenderer {
             public sync = vi.fn()
             public updateGeometry = vi.fn()
@@ -696,6 +696,32 @@ describe('createPixiMediaLayer runtime behavior', () => {
         })
     })
 
+    it('does not decode sourceless generated pending image nodes before tracker setup', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+        const decoder = await import('$src/infographics/workspace/pixiImageDecoder.ts')
+        vi.mocked(decoder.decodeImageInWorker).mockClear()
+
+        layer.sync(makeCanvasState({
+            nodes: [
+                makeImageNode('pending-image-api', {
+                    fileId: '',
+                    src: '',
+                    generatedBy: {
+                        aiChatThreadId: 'thread-1',
+                        responseId: '',
+                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        revisedPrompt: 'make a mountain',
+                        generationRequestId: 'request-1',
+                    },
+                }),
+            ],
+        }))
+
+        expect(decoder.decodeImageInWorker).not.toHaveBeenCalled()
+        expect(findLatestDebugEvent('ensure-texture-skip-frame-pending').details.nodeId).toBe('pending-image-api')
+    })
+
     it('records verbose debug payloads only when the reproduction flag is enabled', async () => {
         const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => undefined)
         window.localStorage.setItem('lixpi.debug.pixiMedia', '1')
@@ -759,6 +785,36 @@ describe('createPixiMediaLayer runtime behavior', () => {
         expect(sprite?.destroy).toHaveBeenCalledTimes(1)
         expect(mask?.destroy).toHaveBeenCalledTimes(1)
         expect(colorRect?.destroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('clears all PIXI scene content when canvas state is absent during workspace navigation', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const imageNode = makeImageNode('stale-image')
+        const videoNode = makeNonImageNode('stale-video', 'video')
+        layer.sync(makeCanvasState({ nodes: [imageNode, videoNode] }))
+        layer.setGeneratingImageNodes(new Set(['stale-image']))
+        layer.setPixiEdges([{ edgeId: 'stale-edge' } as any])
+        layer.setMarqueeRect({ x: 1, y: 2, width: 30, height: 40 })
+        layer.setSelectionOverlayBounds({ x: 3, y: 4, width: 50, height: 60 })
+
+        const sprite = pixiSpriteInstances.find((instance) => instance.label === 'pixi-image-stale-image')
+        const mask = pixiGraphicsInstances.find((instance) => instance.label === 'pixi-image-mask-stale-image')
+        const colorRect = pixiGraphicsInstances.find((instance) => instance.label === 'pixi-image-color-stale-image')
+        const outlineRenderer = outlineRendererInstances.at(-1)!
+        const edgeRenderer = edgeRendererInstances.at(-1)!
+        expect(getDebugDump().entries).toHaveLength(1)
+
+        layer.sync(null)
+
+        expect(getDebugDump().entries).toHaveLength(0)
+        expect(sprite?.destroy).toHaveBeenCalledTimes(1)
+        expect(mask?.destroy).toHaveBeenCalledTimes(1)
+        expect(colorRect?.destroy).toHaveBeenCalledTimes(1)
+        expect(mediaNodeRegistryCalls.dispatchRemove).toHaveBeenCalledWith('stale-video')
+        expect(outlineRenderer.sync.mock.calls.at(-1)?.[0]).toEqual([])
+        expect(edgeRenderer.render.mock.calls.at(-1)).toEqual([[], { x: 0, y: 0, zoom: 1 }])
     })
 
     it('forwards live transforms to registry for non-image nodes', async () => {

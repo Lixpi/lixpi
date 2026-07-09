@@ -2,6 +2,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { colorPalette, settings, type Settings } from '$src/settings.ts'
+import { workspaceCollisionSettings } from '@lixpi/constants'
 
 // Testing rule: assert config shape and ownership, not exact values.
 // This file protects against structural regressions while letting teams tune UI constants
@@ -85,11 +86,13 @@ describe('settings - grouped configuration', () => {
 			'aiPromptInput',
 			'connector',
 			'selection',
+			'workspaceCollision',
 			'mediaNode',
 			'videoControls',
 			'mediaBranchLineage',
 			'mediaLibrary',
 			'contentDescriptor',
+			'workspacePersistence',
 		]
 
 		expectOwnKeys(settings, topLevelSettingsSections, 'settings')
@@ -181,14 +184,30 @@ describe('settings - grouped configuration', () => {
 		expectFiniteNumber(settings.mediaBranchLineage.branchFanoutExtraGap, 'settings.mediaBranchLineage.branchFanoutExtraGap')
 		expectFiniteNumber(settings.mediaBranchLineage.branchOrigin.size, 'settings.mediaBranchLineage.branchOrigin.size')
 		expectFiniteNumber(settings.mediaBranchLineage.branchOrigin.iconSize, 'settings.mediaBranchLineage.branchOrigin.iconSize')
+		for (const [flowName, flowSettings] of Object.entries(settings.workspaceCollision)) {
+			for (const [nodeType, nodeSettings] of Object.entries(flowSettings.nodeTypes)) {
+				expectFiniteNumber(nodeSettings.iterations, `settings.workspaceCollision.${flowName}.nodeTypes.${nodeType}.iterations`)
+				expectFiniteNumber(nodeSettings.margin, `settings.workspaceCollision.${flowName}.nodeTypes.${nodeType}.margin`)
+				expectFiniteNumber(nodeSettings.overlapThreshold, `settings.workspaceCollision.${flowName}.nodeTypes.${nodeType}.overlapThreshold`)
+			}
+		}
 		expectFiniteNumber(settings.mediaLibrary.panelWidthFraction, 'settings.mediaLibrary.panelWidthFraction')
 		expectFiniteNumber(settings.contentDescriptor.editDebounceMs, 'settings.contentDescriptor.editDebounceMs')
+		expectFiniteNumber(settings.workspacePersistence.debounceMs, 'settings.workspacePersistence.debounceMs')
 		expectFiniteNumber(settings.contentDescriptor.minTextLength, 'settings.contentDescriptor.minTextLength')
 		expectFiniteNumber(settings.aiChatThread.panelTabs.transitionDurationMs, 'settings.aiChatThread.panelTabs.transitionDurationMs')
 		expectFiniteNumber(
 			settings.aiChatThread.panelTabs.transitionMinDurationMs,
 			'settings.aiChatThread.panelTabs.transitionMinDurationMs',
 		)
+	})
+
+	it('keeps content descriptor debounce aligned to workspace persistence debounce', () => {
+		expect(settings.contentDescriptor.editDebounceMs).toBe(settings.workspacePersistence.debounceMs)
+	})
+
+	it('uses shared API/WebUI workspace collision settings from constants', () => {
+		expect(settings.workspaceCollision).toBe(workspaceCollisionSettings)
 	})
 
 	it('keeps all feature flags as booleans', () => {

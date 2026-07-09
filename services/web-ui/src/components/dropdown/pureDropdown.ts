@@ -282,6 +282,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
             dotsMenu?.classList.remove('is-active')
         }
     })
+    infoBubble.dom.setAttribute('data-side-panel-no-drag', 'true')
 
     // Apply theme shadow
     infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)

@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import DynamoDBService from './dynamodb-service.ts'
+import DynamoDBService, { isTransactionConditionalCheckFailure } from './dynamodb-service.ts'
 
 type SendMock = ReturnType<typeof vi.fn>
 
@@ -695,25 +695,58 @@ describe('DynamoDBService', () => {
     })
 
     // =============================================================================
-    // transactWriteItems
+    // transactWrite
     // =============================================================================
 
-    describe('transactWriteItems', () => {
-        it('returns undefined when no transaction items are provided', async () => {
+    describe('transactWrite', () => {
+        it('throws when no operations are provided', async () => {
             const service = new DynamoDBService({ region: 'us-east-1' })
             const sendMock = vi.fn()
             setDocumentClientSend(service, sendMock)
 
-            const result = await service.transactWriteItems({ transactItems: [], origin: 'trans' })
-
-            expect(result).toBeUndefined()
+            await expect(
+                service.transactWrite({ operations: [], origin: 'trans' })
+            ).rejects.toThrow('at least one operation must be provided')
             expect(sendMock).not.toHaveBeenCalled()
-            expect(consoleErrorSpy).toHaveBeenCalledWith(
-                'Error: At least one transaction item must be provided!, origin: trans'
+        })
+
+        it('builds Put, Update, and Delete transact items from typed operations', async () => {
+            const service = new DynamoDBService({ region: 'us-east-1' })
+            const sendMock = vi.fn().mockResolvedValue({
+                ResponseMetadata: {},
+                ConsumedCapacity: [{ CapacityUnits: 6 }],
+            })
+            setDocumentClientSend(service, sendMock)
+
+            await service.transactWrite({
+                operations: [
+                    { type: 'put', tableName: 'users', item: { id: 'u1' } },
+                    { type: 'update', tableName: 'users-meta', key: { id: 'u1' }, updates: { status: 'ready' } },
+                    { type: 'delete', tableName: 'users-access', key: { id: 'u1' } },
+                ],
+                origin: 'trans2',
+            })
+
+            const input = (sendMock.mock.calls[0][0] as { input: Record<string, any> }).input
+            expect(input.TransactItems).toEqual([
+                { Put: { TableName: 'users', Item: { id: 'u1' } } },
+                {
+                    Update: {
+                        TableName: 'users-meta',
+                        Key: { id: 'u1' },
+                        UpdateExpression: 'SET #status = :status',
+                        ExpressionAttributeNames: { '#status': 'status' },
+                        ExpressionAttributeValues: { ':status': 'ready' },
+                    },
+                },
+                { Delete: { TableName: 'users-access', Key: { id: 'u1' } } },
+            ])
+            expect(consoleInfoSpy).toHaveBeenCalledWith(
+                expect.stringContaining('DynamoDB -> transactWrite users,users-meta,users-access, capacityUnits: 6,')
             )
         })
 
-        it('returns response and writes consumed capacity info', async () => {
+        it('passes custom update expressions and conditions through', async () => {
             const service = new DynamoDBService({ region: 'us-east-1' })
             const sendMock = vi.fn().mockResolvedValue({
                 ResponseMetadata: {},
@@ -721,32 +754,60 @@ describe('DynamoDBService', () => {
             })
             setDocumentClientSend(service, sendMock)
 
-            const result = await service.transactWriteItems({
-                transactItems: [{ Put: { TableName: 'users', Item: { id: 'u1' } } }],
-                origin: 'trans2',
+            await service.transactWrite({
+                operations: [
+                    {
+                        type: 'update',
+                        tableName: 'workspaces',
+                        key: { workspaceId: 'ws-1' },
+                        updateExpression: 'SET #updatedAt = :updatedAt',
+                        conditionExpression: '#updatedAt = :expected',
+                        expressionAttributeNames: { '#updatedAt': 'updatedAt' },
+                        expressionAttributeValues: { ':updatedAt': 2, ':expected': 1 },
+                    },
+                ],
+                origin: 'trans3',
             })
 
-            expect(result).toEqual({
-                ResponseMetadata: {},
-                ConsumedCapacity: [{ CapacityUnits: 2 }],
+            const input = (sendMock.mock.calls[0][0] as { input: Record<string, any> }).input
+            expect(input.TransactItems[0].Update).toMatchObject({
+                UpdateExpression: 'SET #updatedAt = :updatedAt',
+                ConditionExpression: '#updatedAt = :expected',
             })
-            expect(consoleInfoSpy).toHaveBeenCalledWith(
-                expect.stringContaining('DynamoDB -> transactWriteItems users, capacityUnits: 2,')
-            )
         })
 
-        it('rethrows and logs when write fails', async () => {
+        it('rethrows and logs when the transaction fails', async () => {
             const service = new DynamoDBService({ region: 'us-east-1' })
             const error = new Error('transact fail')
             const sendMock = vi.fn().mockRejectedValue(error)
             setDocumentClientSend(service, sendMock)
 
             await expect(
-                service.transactWriteItems({
-                    transactItems: [{ Put: { TableName: 'users', Item: { id: 'u1' } } }],
+                service.transactWrite({
+                    operations: [{ type: 'put', tableName: 'users', item: { id: 'u1' } }],
                 })
             ).rejects.toThrow('transact fail')
             expect(consoleErrorSpy).toHaveBeenCalledWith('Error completing DynamoDB transaction:', error)
+        })
+
+        it('suppresses logging for conditional-check cancellations when asked', async () => {
+            const service = new DynamoDBService({ region: 'us-east-1' })
+            const error = Object.assign(new Error('cancelled'), {
+                name: 'TransactionCanceledException',
+                CancellationReasons: [{ Code: 'ConditionalCheckFailed' }, { Code: 'None' }],
+            })
+            const sendMock = vi.fn().mockRejectedValue(error)
+            setDocumentClientSend(service, sendMock)
+
+            await expect(
+                service.transactWrite({
+                    operations: [{ type: 'put', tableName: 'users', item: { id: 'u1' } }],
+                    logConditionalCheckFailures: false,
+                })
+            ).rejects.toThrow('cancelled')
+            expect(consoleErrorSpy).not.toHaveBeenCalledWith('Error completing DynamoDB transaction:', error)
+            expect(isTransactionConditionalCheckFailure(error)).toBe(true)
+            expect(isTransactionConditionalCheckFailure(new Error('other'))).toBe(false)
         })
     })
 

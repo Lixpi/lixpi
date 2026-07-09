@@ -10,7 +10,7 @@ const projectionMocks = vi.hoisted(() => ({
 
 vi.mock('../../services/media-generation-canvas-projection.ts', () => projectionMocks)
 
-import { ImagePublisher } from './image-publisher.ts'
+import { ImagePublisher, readImageIntrinsicSize } from './image-publisher.ts'
 
 type Published = { subject: string, payload: any }
 
@@ -474,5 +474,57 @@ describe('ImagePublisher', () => {
             partialIndex: 3,
             aiProvider: 'Google',
         }))
+    })
+})
+
+describe('readImageIntrinsicSize', () => {
+    it('reads PNG dimensions from the IHDR chunk', () => {
+        const png = Buffer.alloc(24)
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png, 0)
+        png.writeUInt32BE(13, 8)
+        png.write('IHDR', 12)
+        png.writeUInt32BE(1600, 16)
+        png.writeUInt32BE(900, 20)
+        expect(readImageIntrinsicSize(png)).toEqual({ width: 1600, height: 900 })
+    })
+
+    it('reads JPEG dimensions from the SOF segment', () => {
+        // SOI, APP0 (16-byte segment), SOF0 with height 800 / width 1200.
+        const jpeg = Buffer.concat([
+            Buffer.from([0xff, 0xd8]),
+            Buffer.from([0xff, 0xe0, 0x00, 0x10]), Buffer.alloc(14),
+            Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, 0x03, 0x20, 0x04, 0xb0]), Buffer.alloc(10),
+        ])
+        expect(readImageIntrinsicSize(jpeg)).toEqual({ width: 1200, height: 800 })
+    })
+
+    it('returns null for unreadable bytes', () => {
+        expect(readImageIntrinsicSize(Buffer.from('not an image'))).toBeNull()
+        expect(readImageIntrinsicSize(Buffer.alloc(0))).toBeNull()
+    })
+})
+
+describe('ImagePublisher canvas geometry', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('threads the API-resolved canvasGeometry onto the IMAGE_COMPLETE event', async () => {
+        const canvasGeometry = {
+            layoutRevision: 99,
+            nodes: [{ nodeId: 'node-file-1', position: { x: 1, y: 2 }, dimensions: { width: 3, height: 4 } }],
+        }
+        projectionMocks.upsertGeneratedImageToCanvas.mockResolvedValueOnce(canvasGeometry as any)
+        const { publisher, published } = makePublisher()
+
+        await publisher.complete({
+            imageBase64: Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64'),
+            responseId: 'resp-1',
+            revisedPrompt: 'brighter',
+            imageModelId: 'gemini-2.5-flash-image',
+        })
+
+        const complete = published.find(({ payload }) => payload.content.status === STREAM_STATUS.IMAGE_COMPLETE)
+        expect(complete?.payload.content.canvasGeometry).toEqual(canvasGeometry)
     })
 })

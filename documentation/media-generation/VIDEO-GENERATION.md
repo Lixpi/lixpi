@@ -94,7 +94,7 @@ sequenceDiagram
 
 ## Video `ProviderState` Fields
 
-The video fields mirror the image fields and use the same **"keep if undefined"** channel reducers in [`state.ts`](../../services/api/src/llm/graph/state.ts). VLM branch resolution is **shared** with image generation, so there is no separate video resolution field — the resolved references are written onto the video conditioning fields below. For multi-model matrix requests the branch resolver runs once in shared preflight, so these conditioning fields reach each fanout child only through the complete resolved patch the orchestrator forwards; children run with `preflightResolved` and never re-resolve, so a conditioning field the preflight selects but the fanout omits would leave the video model running text-to-video (see [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md)). The shared fields (`workspaceContextSnapshot`, `workspaceContextResolution`, `imageBranchCandidateSnapshot`, `messages`, `model_version`) are documented in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md); only the modality-specific fields are listed here.
+The video fields mirror the image fields and use the same **"keep if undefined"** channel reducers in [`state.ts`](../../services/api/src/llm/graph/state.ts). VLM branch resolution is **shared** with image generation, so there is no separate video resolution field — the resolved references are written onto the video conditioning fields below. For multi-model matrix requests the branch resolver runs once in shared preflight, so these conditioning fields reach each fanout child only through the complete resolved patch the orchestrator forwards; children run with `preflightResolved` and never re-resolve, so a conditioning field the preflight selects but the fanout omits would leave the video model running text-to-video (see [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md)). The shared fields (`workspaceContextSnapshot`, `workspaceContextResolution`, `mediaBranchCandidateSnapshot`, `messages`, `model_version`) are documented in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md); only the modality-specific fields are listed here.
 
 | Field | Type | Purpose |
 |-------|------|---------|
@@ -169,7 +169,7 @@ The structured VLM resolver itself — candidate snapshots, role assignment, ref
 | No target, references present | `videoReferenceImages` (≤3) → VEO `referenceImages` (`referenceType: 'asset'`) |
 | No references | neither set → text-to-video |
 
-VEO's `image` (first frame) and `referenceImages` are **mutually exclusive** per the SDK, so the resolver populates exactly one path. The browser receives the same `IMAGE_BRANCH_RESOLVED` event it already understands for images.
+VEO's `image` (first frame) and `referenceImages` are **mutually exclusive** per the SDK, so the resolver populates exactly one path. The browser receives the same `MEDIA_BRANCH_RESOLVED` event it already understands for images.
 
 {% callout type="important" %}
 **Videos are grounded by a single still, never the MP4.** The browser's candidate snapshot includes prior **video** nodes alongside images, each contributing its representative frame (`frameFileId`, falling back to the frame-0 poster) as the candidate still — so an edit to a previous video variation can *continue that video's branch* at the **same VLM cost as an image** (one frame, never the clip). The full MP4 only ever reaches VEO through the explicit "extend video" action (`videoSourceForExtension`). Because a resolved continuation's still is the mid-frame, VEO's image-to-video anchor for that continuation is automatically that frame. The candidate-snapshot mechanics live in [Branch Lineage](./BRANCH-LINEAGE.md).
@@ -324,7 +324,7 @@ services/api/src/
 │   ├── graph/
 │   │   ├── state.ts                  # ProviderState video fields + VideoUsage
 │   │   ├── video-publisher.ts        # VIDEO_PENDING/GENERATING/COMPLETE/ERROR, MP4 validation
-│   │   ├── image-branch-resolver.ts  # VLM gate generalized to video; VEO ref mapping
+│   │   ├── media-branch-resolver.ts  # VLM gate generalized to video; VEO ref mapping
 │   │   └── stream-publisher.ts       # videoGenerationTrace()
 │   ├── usage/usage-reporter.ts       # reportVideoUsage (per-second VEO / per-token Seedance)
 │   ├── config.ts                     # VEO_POLL_INTERVAL_MS, BYTEPLUS_ARK_BASE_URL, BYTEPLUS_VIDEO_POLL_INTERVAL_MS

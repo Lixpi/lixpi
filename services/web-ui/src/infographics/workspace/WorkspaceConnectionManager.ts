@@ -18,16 +18,17 @@ import {
 } from '@xyflow/system'
 
 import {
-	computePath,
 	applyOffset,
+	computePath,
+	getAdaptiveBoundedZoomScalingOptions,
+	getEdgeScaledSizes,
 	type EdgeConfig,
 	type EdgeAnchor,
 	type NodeConfig,
 	type AnchorPosition,
-} from '$src/infographics/connectors/index.ts'
+} from '@lixpi/canvas-engine'
 import type { PixiEdgeRenderDatum, PixiEdgeArrow } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
-import { getAdaptiveBoundedZoomScalingOptions, getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 import { isBranchLineageMarkerNode } from '$src/infographics/workspace/branchLineageState.ts'
 import { applyStyle } from '$src/utils/domTemplates.ts'
 import {

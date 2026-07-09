@@ -48,6 +48,7 @@ vi.mock('$src/stores/workspaceStore.ts', () => ({ workspaceStore: { getData: wor
 vi.mock('$src/stores/documentsStore.ts', () => ({ documentsStore: { getData: vi.fn(() => []) } }))
 
 import AiChatThreadService from '$src/services/ai-chat-thread-service.ts'
+import { WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS } from '$src/services/requestTimeouts.ts'
 
 const { AI_CHAT_THREAD_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 
@@ -334,7 +335,7 @@ describe('AiChatThreadService.getWorkspaceAiChatThreads', () => {
         expect(request).toHaveBeenCalledWith(AI_CHAT_THREAD_SUBJECTS.GET_WORKSPACE_AI_CHAT_THREADS, {
             token: 'token-123',
             workspaceId: 'ws-1',
-        })
+        }, WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS)
         expect(aiChatThreadsStore.setMetaValues).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.loading })
         expect(aiChatThreadsStore.setThreads).toHaveBeenCalledWith([{ threadId: 'thread-a' }, { threadId: 'thread-b' }])
         expect(aiChatThreadsStore.setMetaValues).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.success })

@@ -6,7 +6,7 @@ import { info, warn } from '@lixpi/debug-tools'
 import type { BaseProvider, BaseProviderDeps } from './base-provider.ts'
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
-import type { ProseMirrorContentHandler } from '../graph/stream-publisher.ts'
+import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import type { StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
 import type { StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
@@ -24,6 +24,7 @@ export type ProviderConstructor = new (
 
 type MediaRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
+    getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
 }
 
 export class ProviderRegistry {

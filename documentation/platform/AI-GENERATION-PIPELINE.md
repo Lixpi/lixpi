@@ -24,8 +24,8 @@ The workflow processes every request through the same ordered nodes. Resolver an
 stateDiagram-v2
     [*] --> resolveWorkspaceContext
     resolveWorkspaceContext --> resolveFeatures
-    resolveFeatures --> resolveImageBranch
-    resolveImageBranch --> planMediaBranchLineage
+    resolveFeatures --> resolveMediaBranch
+    resolveMediaBranch --> planMediaBranchLineage
     planMediaBranchLineage --> validateRequest
     validateRequest --> streamTokens
 
@@ -59,7 +59,7 @@ The pre-stream resolvers and planner are large features in their own right; each
 |------|-----|
 | `resolveWorkspaceContext` | Ranks the descriptors-only workspace snapshot, force-includes explicit chips and edge-connected nodes, self-heals weak descriptors once, and narrows the media candidate set. Runs on every text, image, and video turn. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md). |
 | `resolveFeatures` | Always-on pre-stage. Resolves `/use` feature references at send time, fetching each feature (ACL-checked) and injecting its instructions, parameters, and content-free source crops as system context. See [Using Features](../library/USING-FEATURES.md). |
-| `resolveImageBranch` | Structured VLM resolver that assigns visual roles (target, base-context, style-reference, comparison-target, excluded) to the narrowed candidate media. Shared by image *and* video; a no-op when no media model is selected. See [Branch Lineage](../media-generation/BRANCH-LINEAGE.md). |
+| `resolveMediaBranch` | Structured VLM resolver that assigns visual roles (target, base-context, style-reference, comparison-target, excluded) to the narrowed candidate media. Shared by image *and* video; a no-op when no media model is selected. See [Branch Lineage](../media-generation/BRANCH-LINEAGE.md). |
 | `planMediaBranchLineage` / `MediaBranchLineagePlanner` | API-side planner used after branch resolution for media-enabled requests. It assigns branch origin/fork marker IDs, lineage parent IDs, neutral branch-root provenance, and per-run lineage assignments before reasoning/media fanout. Matrix requests run the same planner once in shared preflight and pass the plan to every child run. |
 | `validateRequest` | Validates required request fields and extracts model metadata (text model, and any image/video model pricing + capabilities) before streaming begins. |
 | `streamTokens` | Runs the text model's `_stream_impl()`. Injects the media tool(s), augments the system prompt when a media model is selected, publishes live pipeline lifecycle events, mirrors text through the API-side ProseMirror assembler, and extracts any `generate_image` / `generate_video` tool call into state. |
@@ -71,7 +71,7 @@ The pre-stream resolvers and planner are large features in their own right; each
 | `cleanup` | Finalizes the run and publishes the final usage report via NATS. |
 
 {% callout type="note" %}
-`resolveImageBranch` keeps its image-centric name even though it now grounds references for video too. Its gate runs whenever an image **or** video model is selected, and it requires the browser-built `imageBranchCandidateSnapshot`; a missing snapshot for a media-enabled request fails the graph visibly rather than guessing.
+`resolveMediaBranch` keeps its image-centric name even though it now grounds references for video too. Its gate runs whenever an image **or** video model is selected, and it requires the browser-built `mediaBranchCandidateSnapshot`; a missing snapshot for a media-enabled request fails the graph visibly rather than guessing.
 
 Empty candidate snapshots are valid. The resolver synthesizes a fresh-branch resolution in the API without calling the VLM, then `planMediaBranchLineage` assigns the branch topology.
 
@@ -96,7 +96,7 @@ The workflow's state is a `TypedDict` (`ProviderState`) that flows through every
 | `model_version` | `str` | Text model ID (e.g. `claude-sonnet-4-20250514`). |
 | `workspaceContextSnapshot` | `WorkspaceContextSnapshot?` | Descriptors-only workspace index consumed by `resolveWorkspaceContext`. |
 | `workspaceContextResolution` | `WorkspaceContextResolution?` | Selected context nodes, improved descriptors, and narrowed media IDs. |
-| `imageBranchCandidateSnapshot` | `ImageBranchCandidateSnapshot?` | Image/video still candidates (narrowed by workspace relevance) consumed by the shared structured VLM resolver. |
+| `mediaBranchCandidateSnapshot` | `MediaBranchCandidateSnapshot?` | Image/video still candidates (narrowed by workspace relevance) consumed by the shared structured VLM resolver. |
 
 ### Image-Specific Fields
 
@@ -224,7 +224,7 @@ When an image tool call is detected, `extractReferenceImages()` scans the **alre
 | Anthropic | `image` | `block.source.data` (base64) + `block.source.media_type` |
 | Google | `inline_data` | `block.data` (base64) + `block.mime_type` |
 
-For image branches, the reference set the text model writes against is the exact VLM-approved set produced by `resolveImageBranch` — branch resolution runs *before* `streamTokens` precisely so the prompt is written against approved references. See [Branch Lineage](../media-generation/BRANCH-LINEAGE.md).
+For image branches, the reference set the text model writes against is the exact VLM-approved set produced by `resolveMediaBranch` — branch resolution runs *before* `streamTokens` precisely so the prompt is written against approved references. See [Branch Lineage](../media-generation/BRANCH-LINEAGE.md).
 
 ### System Prompt Enhancement
 
@@ -256,11 +256,11 @@ The `StreamPublisher` ([`stream-publisher.ts`](../../services/api/src/llm/graph/
 - A pre-stream error publishes `ERROR` and then `END_STREAM`, so the browser never gets stuck receiving.
 - Transient media providers invoked through the routers skip their own lifecycle entirely — the parent chat stream owns it.
 
-Before `StreamPublisher` publishes a live `receiveMessage` payload, it writes that payload to the workspace pipeline JetStream log. Browser clients call `CHAT_PIPELINE_RESUME` with their last pipeline stream sequence after mount or reconnect and replay missed branch, lineage, trace, image/video, and error events through the same `AiInteractionService` handler used for live events.
+Before `StreamPublisher` publishes a live `receiveMessage` payload, it writes that payload to the workspace pipeline JetStream log. Browser clients call `CHAT_PIPELINE_RESUME` with their last pipeline stream sequence after mount or reconnect and replay missed branch, lineage, trace, image/video, and error events through the same `AiInteractionService` handler used for live events. Non-media events publish on the main response queue. Media events with a concrete `generationRun.mediaRunId` publish on that run's own queue, so a partial/complete sequence remains ordered inside one run while sibling media variants can publish without waiting on each other's JetStream writes.
 
 For AI chat text, `StreamPublisher` also mirrors content into `AiChatProseMirrorStreamAssembler`. The assembler runs `@lixpi/markdown-stream-parser` on the API, applies the shared ProseMirror assembly rules from `@lixpi/prosemirror`, and writes `START` / `STEP` / `END` / `ERROR` events to the `document.steps.{workspaceId}.aiChatThread.{threadId}` subject. The browser applies those step events through `ProseMirrorAuthorityService`; it does not parse raw AI chat text into ProseMirror transactions.
 
-Media trace and final media events are sent through both paths: they remain pipeline events for canvas side effects, and they are mirrored into the ProseMirror stream so the persisted AI chat transcript contains generation details and final generated-media atom nodes. When the text phase ends before media completion, the assembler flushes text but defers the final ProseMirror `END` until cleanup, after final snapshot persistence.
+Media trace and final media events are sent through both paths: they remain pipeline events for canvas side effects, and they are mirrored into the ProseMirror stream so the persisted AI chat transcript contains generation details and final generated-media atom nodes. Matrix child media router events that enter the shared ProseMirror/canvas mirror are also live-published without re-entering that mirror, so connected clients receive partial and final media events as the API persists each run's geometry. When the text phase ends before media completion, the assembler flushes text but defers the final ProseMirror `END` until cleanup, after final snapshot persistence.
 
 A **circuit breaker** bounds every request: `LLM_TIMEOUT_MS` (default 20 minutes) plus a shared `AbortController`. This matters most for video: a VEO submit+poll loop occupies a worker for minutes with no token traffic, so the poll loop publishes a `VIDEO_GENERATING` keepalive on a fixed interval to keep the browser informed while staying inside the breaker.
 
@@ -306,7 +306,7 @@ sequenceDiagram
         LLM->>PM: publish document START
         NATS-->>WebUI: receiving state
         PM-->>WebUI: document START
-        LLM->>LLM: resolveWorkspaceContext → resolveFeatures → resolveImageBranch
+        LLM->>LLM: resolveWorkspaceContext → resolveFeatures → resolveMediaBranch
         LLM->>LLM: planMediaBranchLineage
         LLM->>LLM: validateRequest
         deactivate API
@@ -367,7 +367,7 @@ Adding a new model vendor means implementing the `BaseProvider` class in [`servi
 - [Streaming and Events](./STREAMING-AND-EVENTS.md) — the wire-level event catalog these nodes emit and how the browser renders them.
 - [System Architecture](./SYSTEM-ARCHITECTURE.md) — how the API hosts this workflow and scales it.
 - [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md) — the `resolveWorkspaceContext` resolver.
-- [Branch Lineage](../media-generation/BRANCH-LINEAGE.md) — the shared `resolveImageBranch` structured VLM resolver.
+- [Branch Lineage](../media-generation/BRANCH-LINEAGE.md) — the shared `resolveMediaBranch` structured VLM resolver.
 - [Using Features](../library/USING-FEATURES.md) — the `resolveFeatures` `/use` pre-stage.
 - [Image Generation](../media-generation/IMAGE-GENERATION.md) — the image branch detail (providers, partial streaming).
 - [Video Generation](../media-generation/VIDEO-GENERATION.md) — the video branch detail (VEO submit/poll, playback).

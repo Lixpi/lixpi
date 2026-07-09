@@ -1,8 +1,8 @@
 'use strict'
 
 import type {
-    ImageBranchCandidateImage,
-    ImageBranchVlmReferenceDecision,
+    MediaBranchCandidateImage,
+    MediaBranchVlmReferenceDecision,
     ImageGenerationTraceExcludedReference,
     ImageGenerationTraceReference,
     VideoGenerationTrace,
@@ -102,7 +102,7 @@ const buildInputModeDirection = (state: ProviderState, profile: VideoModelProfil
 const STYLIZED_OR_SYNTHETIC_REFERENCE_RE =
     /\b(ai[- ]generated|generated|synthetic|fictional|illustration|illustrated|painting|painted|painterly|watercolor|gouache|anime|cartoon|comic|sketch|drawing|rendered|stylized|storybook|fantasy|character)\b/i
 
-const candidateHasStylizedOrSyntheticSignals = (candidate: ImageBranchCandidateImage): boolean => {
+const candidateHasStylizedOrSyntheticSignals = (candidate: MediaBranchCandidateImage): boolean => {
     if (candidate.roleHints.includes('generated-variant')) return true
 
     const text = [
@@ -125,7 +125,7 @@ const getVideoConditioningImageUrls = (state: ProviderState): Set<string> => {
 
 const getSelectedVideoReferenceNodeIds = (state: ProviderState): Set<string> => {
     const nodeIds = new Set<string>()
-    const resolution = state.imageBranchResolution
+    const resolution = state.mediaBranchResolution
     if (resolution?.targetImageNodeId) nodeIds.add(resolution.targetImageNodeId)
     for (const nodeId of resolution?.referenceImageNodeIds ?? []) nodeIds.add(nodeId)
     return nodeIds
@@ -138,7 +138,7 @@ const buildImageConditioningSafetyDirection = (state: ProviderState, profile: Vi
     if (conditioningImageUrls.size === 0) return undefined
 
     const selectedNodeIds = getSelectedVideoReferenceNodeIds(state)
-    const selectedCandidates = (state.imageBranchCandidateSnapshot?.candidates ?? []).filter((candidate) =>
+    const selectedCandidates = (state.mediaBranchCandidateSnapshot?.candidates ?? []).filter((candidate) =>
         selectedNodeIds.has(candidate.nodeId) || conditioningImageUrls.has(candidate.imageUrl),
     )
 
@@ -176,7 +176,7 @@ const shortText = (value: string | undefined, fallback: string): string => {
     return trimmed.length > 80 ? `${trimmed.slice(0, 77).trim()}...` : trimmed
 }
 
-const getCandidateLabel = (candidate: ImageBranchCandidateImage | undefined, fallback: string): string => {
+const getCandidateLabel = (candidate: MediaBranchCandidateImage | undefined, fallback: string): string => {
     if (!candidate) return fallback
     return shortText(
         candidate.visualEntitySummary
@@ -186,7 +186,7 @@ const getCandidateLabel = (candidate: ImageBranchCandidateImage | undefined, fal
     )
 }
 
-const getTraceSafeImageUrl = (imageUrl: string, candidate?: ImageBranchCandidateImage): string => {
+const getTraceSafeImageUrl = (imageUrl: string, candidate?: MediaBranchCandidateImage): string => {
     if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
         if (candidate?.workspaceId && candidate.fileId) {
             return `nats-obj://workspace-${candidate.workspaceId}-files/${candidate.fileId}`
@@ -197,16 +197,16 @@ const getTraceSafeImageUrl = (imageUrl: string, candidate?: ImageBranchCandidate
 }
 
 const getDecisionByNodeId = (
-    decisions: ImageBranchVlmReferenceDecision[] | undefined,
-): Map<string, ImageBranchVlmReferenceDecision> => {
+    decisions: MediaBranchVlmReferenceDecision[] | undefined,
+): Map<string, MediaBranchVlmReferenceDecision> => {
     return new Map((decisions ?? []).map((decision) => [decision.nodeId, decision]))
 }
 
 const buildBranchReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
-    const resolution = state.imageBranchResolution
+    const resolution = state.mediaBranchResolution
     if (!resolution) return []
     const candidatesByNodeId = new Map(
-        (state.imageBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]),
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]),
     )
     const decisionsByNodeId = getDecisionByNodeId(resolution.decisions)
 
@@ -250,10 +250,10 @@ const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReferenc
 }
 
 const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedReference[] => {
-    const resolution = state.imageBranchResolution
+    const resolution = state.mediaBranchResolution
     if (!resolution) return []
     const candidatesByNodeId = new Map(
-        (state.imageBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]),
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]),
     )
     const decisionsByNodeId = getDecisionByNodeId(resolution.decisions)
 
@@ -279,7 +279,7 @@ export const buildVideoGenerationTrace = (state: ProviderState): VideoGeneration
     if (!videoProvider || !videoModel || !toolPrompt) return undefined
 
     const finalPrompt = buildVideoModelPrompt(state)
-    const resolution = state.imageBranchResolution
+    const resolution = state.mediaBranchResolution
 
     return {
         traceVersion: 'video-generation-trace-v1',

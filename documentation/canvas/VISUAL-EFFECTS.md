@@ -34,13 +34,13 @@ Animation curves are centralized in `Easing` where a surface uses shared easing,
 
 | Class | Location | Responsibility |
 |---|---|---|
-| `Easing` | [`services/web-ui/src/utils/animations/easing.ts`](../../services/web-ui/src/utils/animations/easing.ts) | Cubic-bezier evaluation plus shared hover and shifting-gradient transition curves |
-| `FreeformGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/freeformGradient.ts`](../../services/web-ui/src/utils/animations/gradients/freeformGradient.ts) | Color parsing, phase positions, freeform sampling, image-data painting, and canvas bitmap drawing |
-| `ShiftingGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts) | Singleton-per-color-set canvas renderer, subscriptions, visibility, resize redraws, optional pattern overlays, and animated phase changes |
-| `SvgGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/svgGradient.ts`](../../services/web-ui/src/utils/animations/gradients/svgGradient.ts) | Linear gradient stop construction, repeating border stops, and rotating linear-gradient animation |
-| `GlassMaterial` | [`services/web-ui/src/utils/animations/gradients/pixiGlassMaterial.ts`](../../services/web-ui/src/utils/animations/gradients/pixiGlassMaterial.ts) | Shared per-pixel glass material used by PIXI traveling snake textures and shallow glass branch-lineage media-model circle backgrounds |
-| `PixiTravelingOutlineRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts) | Reusable PIXI rounded-path snake renderer with active-only animation lifecycle |
-| `PixiGlassBorderRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiGlassBorderRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiGlassBorderRenderer.ts) | Reusable PIXI screen-space glass border renderer that captures the PIXI stage into a render texture, generates rounded-border normal-map displacement from each target's geometry, and draws closed glass-material border meshes |
+| `Easing` | [`packages/lixpi/canvas-engine/src/frontend/animation/easing.ts`](../../packages/lixpi/canvas-engine/src/frontend/animation/easing.ts) | Cubic-bezier evaluation plus shared hover and shifting-gradient transition curves |
+| `FreeformGradientRenderer` | [`packages/lixpi/canvas-engine/src/frontend/rendering/gradients/freeformGradient.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/gradients/freeformGradient.ts) | Color parsing, phase positions, freeform sampling, image-data painting, and canvas bitmap drawing |
+| `ShiftingGradientRenderer` | [`packages/lixpi/canvas-engine/src/frontend/rendering/gradients/shiftingGradientRenderer.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/gradients/shiftingGradientRenderer.ts) | Singleton-per-color-set canvas renderer, subscriptions, visibility, resize redraws, optional pattern overlays, and animated phase changes |
+| `SvgGradientRenderer` | [`packages/lixpi/canvas-engine/src/frontend/rendering/gradients/svgGradient.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/gradients/svgGradient.ts) | Linear gradient stop construction, repeating border stops, and rotating linear-gradient animation |
+| `GlassMaterial` | [`packages/lixpi/canvas-engine/src/frontend/rendering/glass/pixiGlassMaterial.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/glass/pixiGlassMaterial.ts) | Shared per-pixel glass material used by PIXI traveling snake textures and shallow glass branch-lineage media-model circle backgrounds |
+| `PixiTravelingOutlineRenderer` | [`packages/lixpi/canvas-engine/src/frontend/rendering/progress/pixiTravelingOutlineRenderer.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/progress/pixiTravelingOutlineRenderer.ts) | Reusable PIXI rounded-path snake renderer with active-only animation lifecycle |
+| `PixiGlassBorderRenderer` | [`packages/lixpi/canvas-engine/src/frontend/rendering/glass/pixiGlassBorderRenderer.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/glass/pixiGlassBorderRenderer.ts) | Reusable PIXI screen-space glass border renderer that captures the PIXI stage into a render texture, generates rounded-border normal-map displacement from each target's geometry, and draws closed glass-material border meshes |
 
 ### Reuse Rules
 
@@ -123,12 +123,12 @@ Do not route ordinary CSS background treatments through `FreeformGradientRendere
 
 | Test | Coverage |
 |---|---|
-| [`easing.test.ts`](../../services/web-ui/src/utils/animations/easing.test.ts) | Cubic-bezier identity/clamping, valid curve bounds, and shared easing profiles |
-| [`freeformGradient.test.ts`](../../services/web-ui/src/utils/animations/gradients/freeformGradient.test.ts) | Colors, phases, sampling, bitmap painting, and context drawing |
-| [`svgGradient.test.ts`](../../services/web-ui/src/utils/animations/gradients/svgGradient.test.ts) | Stop creation, repeated stops, rotating transitions, and shared default easing |
-| [`pixiTravelingOutlineRenderer.test.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.test.ts) | Rounded perimeter sampling, default eased travel, and snake color interpolation |
-| [`pixiGlassBorderRenderer.test.ts`](../../services/web-ui/src/utils/animations/gradients/pixiGlassBorderRenderer.test.ts) | Screen-space target lifecycle, stable displacement texture/source updates, capture visibility toggling, ring-only displacement pixels, and mesh cleanup |
-| [`shiftingGradientRenderer.test.ts`](../../services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.test.ts) | Singleton lifecycle, animation phase changes, pixels, subscriptions, resize redraw, patterns, and teardown |
+| [`easing.test.ts`](../../packages/lixpi/canvas-engine/src/frontend/animation/easing.test.ts) | Cubic-bezier identity/clamping, valid curve bounds, and shared easing profiles |
+| [`freeformGradient.test.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/gradients/freeformGradient.test.ts) | Colors, phases, sampling, bitmap painting, and context drawing |
+| [`svgGradient.test.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/gradients/svgGradient.test.ts) | Stop creation, repeated stops, rotating transitions, and shared default easing |
+| [`pixiTravelingOutlineRenderer.test.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/progress/pixiTravelingOutlineRenderer.test.ts) | Rounded perimeter sampling, default eased travel, and snake color interpolation |
+| [`pixiGlassBorderRenderer.test.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/glass/pixiGlassBorderRenderer.test.ts) | Screen-space target lifecycle, stable displacement texture/source updates, capture visibility toggling, ring-only displacement pixels, and mesh cleanup |
+| [`shiftingGradientRenderer.test.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/gradients/shiftingGradientRenderer.test.ts) | Singleton lifecycle, animation phase changes, pixels, subscriptions, resize redraw, patterns, and teardown |
 
 Run the web UI suite via the shared test-runner image:
 
@@ -235,9 +235,9 @@ The renderer caches one singleton instance per configured color set. In ordinary
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| Shifting gradient controller | [`shiftingGradientRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts) | `ShiftingGradientRenderer` singleton class for subscriber and canvas lifecycle control |
-| Freeform gradient renderer | [`freeformGradient.ts`](../../services/web-ui/src/utils/animations/gradients/freeformGradient.ts) | `FreeformGradientRenderer` class for shared color parsing, phase positions, swirl sampling, and bitmap painting |
-| Easing utilities | [`easing.ts`](../../services/web-ui/src/utils/animations/easing.ts) | `Easing` class for shared cubic-bezier easing used by Canvas, PIXI, and SVG transitions |
+| Shifting gradient controller | [`shiftingGradientRenderer.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/gradients/shiftingGradientRenderer.ts) | `ShiftingGradientRenderer` singleton class for subscriber and canvas lifecycle control |
+| Freeform gradient renderer | [`freeformGradient.ts`](../../packages/lixpi/canvas-engine/src/frontend/rendering/gradients/freeformGradient.ts) | `FreeformGradientRenderer` class for shared color parsing, phase positions, swirl sampling, and bitmap painting |
+| Easing utilities | [`easing.ts`](../../packages/lixpi/canvas-engine/src/frontend/animation/easing.ts) | `Easing` class for shared cubic-bezier easing used by Canvas, PIXI, and SVG transitions |
 
 #### Swirl Distortion
 
@@ -515,7 +515,7 @@ Edit the `gradient.styles.shiftingColors` array in `settings.ts`:
 shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
 ```
 
-These hex values are converted to RGB at startup by `FreeformGradientRenderer` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`. Document shape borders reuse them through SVG gradient rendering; media progress outlines use the separate palette in `settings.mediaNode.inProgressOutlineAnimation.styles.snakeColors`.
+These hex values are converted to RGB at startup by `FreeformGradientRenderer` in `packages/lixpi/canvas-engine/src/frontend/rendering/gradients/freeformGradient.ts`. Document shape borders reuse them through SVG gradient rendering; media progress outlines use the separate palette in `settings.mediaNode.inProgressOutlineAnimation.styles.snakeColors`.
 
 #### Changing Animation Speed
 
@@ -527,7 +527,7 @@ const ANIMATION_DURATION_MS = 500  // milliseconds
 
 #### Changing Swirl Intensity
 
-Edit `FreeformGradientRenderer.swirlFactor` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`:
+Edit `FreeformGradientRenderer.swirlFactor` in `packages/lixpi/canvas-engine/src/frontend/rendering/gradients/freeformGradient.ts`:
 
 ```typescript
 private static readonly swirlFactor = 0.35  // 0 = no swirl, 1 = extreme swirl
@@ -568,7 +568,7 @@ The gradient canvas is positioned behind the AI chat thread content using CSS. T
 The renderer supports an optional pattern overlay (decorative icons/doodles on top of the gradient). This isn't currently used but the infrastructure exists:
 
 ```typescript
-// In services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts
+// In packages/lixpi/canvas-engine/src/frontend/rendering/gradients/shiftingGradientRenderer.ts
 private pattern: {
     image: HTMLImageElement
     options: Required<PatternOptions>

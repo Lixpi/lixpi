@@ -107,7 +107,7 @@ When the text model emits a `generate_image` tool call, `extractReferenceImages(
 | Google | `inline_data` | `block.data` (base64) + `block.mime_type` |
 
 {% callout type="note" %}
-The reference set the text model writes against is not "every attached photo" — it is the exact VLM-approved set produced by `resolveImageBranch` *before* the text model streams. Which media become target, base-context, style-reference, comparison-target, or excluded — and how those choices drive canvas placement and branch lineage — is owned by [Branch Lineage](./BRANCH-LINEAGE.md). This section only covers the per-provider *format* of the blocks `extractReferenceImages()` reads.
+The reference set the text model writes against is not "every attached photo" — it is the exact VLM-approved set produced by `resolveMediaBranch` *before* the text model streams. Which media become target, base-context, style-reference, comparison-target, or excluded — and how those choices drive canvas placement and branch lineage — is owned by [Branch Lineage](./BRANCH-LINEAGE.md). This section only covers the per-provider *format* of the blocks `extractReferenceImages()` reads.
 {% /callout %}
 
 ## System-Prompt Enhancement
@@ -188,7 +188,7 @@ Image generation publishes live pipeline events on the same per-thread receive s
 | `IMAGE_PARTIAL` (non-empty) | Up to three progressive partials (`partial_images=3`) are stored in the workspace Object Store, then sent as `{ imageUrl, fileId, partialIndex }`. Each event replaces the **same** preview sprite in place — the canvas updates one node, it does not create new ones. Gemini delivers thought images through this same event. |
 | `IMAGE_COMPLETE` | Stores the final image and sends `{ imageUrl, fileId, responseId, revisedPrompt, imageModelId }`. This finalizes the node, clears the traveling outline, and persists `generatedBy` metadata. The transient image provider never emits `START_STREAM` / `END_STREAM` — the text model owns the stream lifecycle. |
 
-On the workspace canvas, `IMAGE_PARTIAL` updates one generated image node in place and marks it as generating; `pixiMediaLayer.ts` renders the partial pixels and supplies the active image bounds to the reusable `PixiTravelingOutlineRenderer`, and `IMAGE_COMPLETE` is the event that clears that outline. These events **bypass** the markdown stream parser — `AiInteractionService` routes them straight to the canvas/media handlers.
+On the workspace canvas, `IMAGE_PARTIAL` updates one generated image node in place and marks it as generating; `pixiMediaLayer.ts` renders the partial pixels and supplies the active image bounds to the reusable `PixiTravelingOutlineRenderer`, and `IMAGE_COMPLETE` is the event that clears that outline. These events **bypass** the markdown stream parser — `AiInteractionService` routes them straight to the canvas/media handlers. In matrix fanout, each image model run carries a distinct `mediaRunId`, and its partial/final events publish through that run's response queue. The API preserves ordering for one run while allowing sibling image variants to render their partials as soon as their own object-store write and canvas projection finish.
 
 In the AI chat history, generated-image atom nodes are authored by the API-side ProseMirror assembler and rendered by `imageSelectionPlugin/ImageNodeView`. They carry the same generated-media provider badge used by canvas media chrome and in-chat generated videos. The badge resolves from `mediaModelId`; canvas rendering remains owned by PIXI and the canvas chrome layer.
 
@@ -202,7 +202,7 @@ services/api/src/llm/
 │   ├── anthropic-provider.ts       # generate_image tool injection + tool-call extraction for Claude
 │   └── google-provider.ts          # Gemini native image gen (response_modalities) + tool injection
 ├── graph/
-│   ├── image-branch-resolver.ts    # structured VLM media role assignment (see Branch Lineage)
+│   ├── media-branch-resolver.ts    # structured VLM media role assignment (see Branch Lineage)
 │   └── stream-publisher.ts         # IMAGE_PARTIAL / IMAGE_COMPLETE / trace events
 ├── tools/
 │   ├── image-generation.ts         # generate_image tool def + per-provider reference extractors

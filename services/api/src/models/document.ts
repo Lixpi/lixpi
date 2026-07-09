@@ -3,7 +3,7 @@
 import * as process from 'process'
 import { v4 as uuid } from 'uuid'
 
-import { getDynamoDbTableStageName, type Document, type DocumentMeta, type DocumentFile } from '@lixpi/constants'
+import { getDynamoDbTableStageName, type Document, type DocumentMeta } from '@lixpi/constants'
 import type { Partial, Pick } from 'type-fest'
 
 const {
@@ -11,27 +11,21 @@ const {
 	STAGE
 } = process.env
 
-import { sliceTime } from '../helpers/time-operations.ts'
 import User from './user.ts'
 
 export default {
 	getDocument: async ({
 		documentId,
-		revision,
 		workspaceId
-	}: Pick<Document, 'documentId' | 'revision' | 'workspaceId'>): Promise<Document | { error: string }> => {
+	}: Pick<Document, 'documentId' | 'workspaceId'>): Promise<Document | { error: string }> => {
 		const document = await dynamoDBService.getItem({
 			tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-			key: { documentId, revision },
-			origin: `model::Document->get(${documentId}:${revision})`
+			key: { workspaceId, documentId },
+			origin: `model::Document->get(${documentId})`
 		})
 
 		if (!document || Object.keys(document).length === 0) {
 			return { error: 'NOT_FOUND' }
-		}
-
-		if (document.workspaceId !== workspaceId) {
-			return { error: 'DOCUMENT_NOT_IN_WORKSPACE' }
 		}
 
 		return document
@@ -42,16 +36,14 @@ export default {
 	}: { workspaceId: string }): Promise<Document[]> => {
 		const documents = await dynamoDBService.queryItems({
 			tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-			indexName: 'workspaceId',
 			keyConditions: { workspaceId },
 			fetchAllItems: true,
-			scanIndexForward: false,
 			origin: 'model::Document->getWorkspaceDocuments()'
 		})
 
-		// Filter to only get the latest revision (revision = 1) in memory
-		const latestRevisions = (documents?.items || []).filter((doc: Document) => doc.revision === 1)
-		return latestRevisions
+		// Newest-first in memory over the workspace partition
+		return (documents?.items || [])
+			.sort((left: Document, right: Document) => right.updatedAt - left.updatedAt)
 	},
 
 	createDocument: async ({
@@ -60,36 +52,37 @@ export default {
 		content
 	}: Pick<Document, 'workspaceId' | 'title' | 'content'>): Promise<Document | undefined> => {
 		const currentDate = new Date().getTime()
-		const revision = 1
 
 		const newDocumentData: Document = {
 			documentId: uuid(),
 			workspaceId,
-			revision,
 			title,
 			content,
-			prevRevision: 1,
 			createdAt: currentDate,
 			updatedAt: currentDate
 		}
 
 		try {
-			await dynamoDBService.putItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-				item: newDocumentData,
-				origin: 'createDocument'
-			})
-
-			await dynamoDBService.putItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
-				item: {
-					documentId: newDocumentData.documentId,
-					workspaceId: newDocumentData.workspaceId,
-					title: newDocumentData.title,
-					tags: [],
-					createdAt: newDocumentData.createdAt,
-					updatedAt: newDocumentData.updatedAt
-				},
+			await dynamoDBService.transactWrite({
+				operations: [
+					{
+						type: 'put',
+						tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+						item: newDocumentData
+					},
+					{
+						type: 'put',
+						tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
+						item: {
+							documentId: newDocumentData.documentId,
+							workspaceId: newDocumentData.workspaceId,
+							title: newDocumentData.title,
+							tags: [],
+							createdAt: newDocumentData.createdAt,
+							updatedAt: newDocumentData.updatedAt
+						}
+					}
+				],
 				origin: 'createDocument'
 			})
 
@@ -103,61 +96,41 @@ export default {
 		title,
 		content,
 		documentId,
-		prevRevision,
 		workspaceId,
 		proseMirrorVersion
 	}: Partial<Document> & { documentId: string; workspaceId: string }): Promise<void> => {
 		const currentDate = new Date().getTime()
-		const currentRevision = sliceTime({ precision: 'hours' })
 
 		// TODO: Check if user has permission to update document
 
 		try {
-			// Create a new revision save point if the current revision is greater than the previous revision
-			// if(prevRevision < currentRevision) {
-			// 	await dynamoDBService.putItem({
-			// 		tableName: DYNAMODB_TABLES.DOCUMENTS,
-			// 		partitionKeyName: 'documentId',
-			// 		partitionKeyValue: documentId,
-			// 		sortKeyName: 'revision',
-			// 		sortKeyValue: currentRevision,
-			// 		item: {
-			// 			title,
-			// 			aiModel,
-			// 			content,
-			// 			prevRevision,
-			// 			revisionExpiresAt: sliceTime({ precision: 'hours', modify: { operation: 'add', amount: 1, unit: 'hours' } }),
-			// 			createdAt: currentDate,
-			// 			updatedAt: currentDate,
-			// 		},
-			// 		origin: 'updateDocument::revisionSavePoint'
-			// 	})
-			// }
-
 			const documentUpdates: Record<string, unknown> = {
-				// prevRevision: currentRevision,    // TODO: turn back on when versioning is ready
 				updatedAt: currentDate
 			}
 			if (title !== undefined) documentUpdates.title = title
 			if (content !== undefined) documentUpdates.content = content
 			if (proseMirrorVersion !== undefined) documentUpdates.proseMirrorVersion = proseMirrorVersion
 
-			await dynamoDBService.updateItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-				key: { documentId, revision: 1 },
-				updates: documentUpdates,
-				origin: 'updateDocument'
-			})
-
 			const documentMetaUpdates: Record<string, unknown> = {
 				updatedAt: currentDate
 			}
 			if (title !== undefined) documentMetaUpdates.title = title
 
-			await dynamoDBService.updateItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
-				key: { documentId },
-				updates: documentMetaUpdates,
+			await dynamoDBService.transactWrite({
+				operations: [
+					{
+						type: 'update',
+						tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+						key: { workspaceId, documentId },
+						updates: documentUpdates
+					},
+					{
+						type: 'update',
+						tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
+						key: { documentId },
+						updates: documentMetaUpdates
+					}
+				],
 				origin: 'updateDocument'
 			})
 		}
@@ -251,81 +224,25 @@ export default {
 		workspaceId
 	}: Pick<Document, 'documentId' | 'workspaceId'>): Promise<{ status: string; documentId: string }> => {
 		try {
-			await dynamoDBService.softDeleteItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-				key: { documentId, revision: 1 },
-				timeToLiveAttributeName: 'revisionExpiresAt',
-				timeToLiveAttributeValue: sliceTime({ precision: 'hours', modify: { operation: 'add', amount: 1, unit: 'hours' } }),
-				origin: 'deleteDocument:Documents'
-			})
-
-			await dynamoDBService.deleteItems({
-				tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
-				key: { documentId },
-				origin: 'deleteDocument:Meta'
+			await dynamoDBService.transactWrite({
+				operations: [
+					{
+						type: 'delete',
+						tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+						key: { workspaceId, documentId }
+					},
+					{
+						type: 'delete',
+						tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
+						key: { documentId }
+					}
+				],
+				origin: 'deleteDocument'
 			})
 
 			return { status: 'deleted', documentId }
 		} catch (error) {
 			throw error
-		}
-	},
-
-	addFile: async ({
-		documentId,
-		file
-	}: { documentId: string; file: DocumentFile }): Promise<void> => {
-		try {
-			// Get current document to append to files array
-			const document = await dynamoDBService.getItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-				key: { documentId, revision: 1 },
-				origin: 'addFile:getDocument'
-			})
-
-			const currentFiles = document?.files || []
-			const updatedFiles = [...currentFiles, file]
-
-			await dynamoDBService.updateItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-				key: { documentId, revision: 1 },
-				updates: {
-					files: updatedFiles,
-					updatedAt: Date.now()
-				},
-				origin: 'addFile'
-			})
-		} catch (e) {
-			throw e
-		}
-	},
-
-	removeFile: async ({
-		documentId,
-		fileId
-	}: { documentId: string; fileId: string }): Promise<void> => {
-		try {
-			// Get current document to filter out the file
-			const document = await dynamoDBService.getItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-				key: { documentId, revision: 1 },
-				origin: 'removeFile:getDocument'
-			})
-
-			const currentFiles = document?.files || []
-			const updatedFiles = currentFiles.filter((f: DocumentFile) => f.id !== fileId)
-
-			await dynamoDBService.updateItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-				key: { documentId, revision: 1 },
-				updates: {
-					files: updatedFiles,
-					updatedAt: Date.now()
-				},
-				origin: 'removeFile'
-			})
-		} catch (e) {
-			throw e
 		}
 	},
 
@@ -340,31 +257,33 @@ export default {
 		const documentData: Document = {
 			documentId,
 			workspaceId,
-			revision: 1,
 			title,
 			content,
-			prevRevision: 1,
 			createdAt,
 			updatedAt
 		}
 
 		try {
-			await dynamoDBService.putItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-				item: documentData,
-				origin: 'importDocument'
-			})
-
-			await dynamoDBService.putItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
-				item: {
-					documentId,
-					workspaceId,
-					title,
-					tags: [],
-					createdAt,
-					updatedAt
-				},
+			await dynamoDBService.transactWrite({
+				operations: [
+					{
+						type: 'put',
+						tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+						item: documentData
+					},
+					{
+						type: 'put',
+						tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
+						item: {
+							documentId,
+							workspaceId,
+							title,
+							tags: [],
+							createdAt,
+							updatedAt
+						}
+					}
+				],
 				origin: 'importDocument'
 			})
 
@@ -379,7 +298,6 @@ export default {
 	}: { workspaceId: string }): Promise<number> => {
 		const documents = await dynamoDBService.queryItems({
 			tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-			indexName: 'workspaceId',
 			keyConditions: { workspaceId },
 			fetchAllItems: true,
 			origin: 'deleteWorkspaceDocuments:query'
@@ -388,21 +306,24 @@ export default {
 		const allDocuments = documents?.items || []
 		let deletedCount = 0
 
+		// One transaction per document: its row and its meta row commit or fail together
 		for (const doc of allDocuments) {
 			try {
-				await dynamoDBService.deleteItems({
-					tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-					key: { documentId: doc.documentId, revision: doc.revision },
-					origin: 'deleteWorkspaceDocuments:document'
+				await dynamoDBService.transactWrite({
+					operations: [
+						{
+							type: 'delete',
+							tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+							key: { workspaceId, documentId: doc.documentId }
+						},
+						{
+							type: 'delete',
+							tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
+							key: { documentId: doc.documentId }
+						}
+					],
+					origin: 'deleteWorkspaceDocuments'
 				})
-
-				if (doc.revision === 1) {
-					await dynamoDBService.deleteItems({
-						tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
-						key: { documentId: doc.documentId },
-						origin: 'deleteWorkspaceDocuments:meta'
-					})
-				}
 
 				deletedCount++
 			} catch (error) {

@@ -132,6 +132,39 @@ describe('Workspace subject handlers', () => {
         expect(result).toEqual({ error: 'STORAGE_SERVICE_UNAVAILABLE' })
     })
 
+    it('rolls back workspace creation when object store creation fails', async () => {
+        mocks.nats.createObjectStore.mockRejectedValueOnce(new Error('object store failed'))
+
+        const result = await getHandler(WORKSPACE_SUBJECTS.CREATE_WORKSPACE)({
+            user: { userId: 'user-1' },
+            name: 'New Workspace',
+        })
+
+        expect(mocks.nats.deleteObjectStore).toHaveBeenCalledWith('workspace-ws-1-files')
+        expect(mocks.workspace.delete).toHaveBeenCalledWith({
+            userId: 'user-1',
+            workspaceId: 'ws-1',
+        })
+        expect(result).toEqual({ error: 'FAILED_TO_CREATE_BUCKET' })
+    })
+
+    it('creates an object store and returns created workspace metadata when storage service is healthy', async () => {
+        const result = await getHandler(WORKSPACE_SUBJECTS.CREATE_WORKSPACE)({
+            user: { userId: 'user-1' },
+            name: 'New Workspace',
+        })
+
+        expect(mocks.nats.createObjectStore).toHaveBeenCalledWith(
+            'workspace-ws-1-files',
+            {
+                description: 'Files for workspace ws-1',
+            },
+        )
+        expect(mocks.nats.deleteObjectStore).not.toHaveBeenCalled()
+        expect(mocks.workspace.delete).not.toHaveBeenCalled()
+        expect(result).toEqual({ workspaceId: 'ws-1', name: 'Workspace' })
+    })
+
     it('updates workspace metadata', async () => {
         const result = await getHandler(WORKSPACE_SUBJECTS.UPDATE_WORKSPACE)({
             user: { userId: 'user-1' },
@@ -163,6 +196,7 @@ describe('Workspace subject handlers', () => {
             canvasState: { nodes: [] },
             expectedCanvasStateUpdatedAt: 123,
             expectedUpdatedAt: 456,
+            persistViewport: false,
         })
     })
 

@@ -1,12 +1,18 @@
 'use strict'
 
 import {
-    resolveRigidCanvasNodeGroupCollisions,
+    estimateBranchMarkerDimensions,
+    fitDimensionsToAspectRatio,
+    getGeneratedMediaChromeCollisionHeight,
+    getPendingGeneratedMediaNodeId,
+    getStartedLineageMarkerState,
+    rebalanceBranchTreesAndResolve,
     type CanvasEngineRect,
-    type RigidCanvasNodeGroup,
 } from '@lixpi/canvas-engine'
 import {
     type AiModelId,
+    type CanvasGeometryUpdate,
+    type CanvasNodeGeometry,
     type BranchForkCanvasNode,
     type BranchForkLineagePlan,
     type BranchLineCanvasNode,
@@ -22,14 +28,22 @@ import {
     type MediaRunLineageAssignment,
     type VideoGeneratedByMetadata,
     type VideoCanvasNode,
+    type WorkspaceCollisionFlowSettings,
+    type WorkspaceCollisionNodeTypeSettings,
     type WorkspaceEdge,
 } from '@lixpi/constants'
 import { err } from '@lixpi/debug-tools'
+import {
+    getBranchMarkerConversationPreviewFromThreadContent,
+    shouldShowBranchMarkerConversationResponseLine,
+    type BranchMarkerTurnDescriptor,
+} from '@lixpi/prosemirror/shared/thread-doc'
 
 import Workspace from '../models/workspace.ts'
 import { settings } from '../settings.ts'
 
 const canvasProjectionSettings = settings.mediaGenerationCanvasProjection
+const workspaceCollisionSettings = settings.workspaceCollision
 
 type CanvasViewport = {
     x: number
@@ -56,8 +70,25 @@ type UpsertImageInput = {
     aiProvider: string
     imageModelProvider: string
     imageModelId: string
+    // Intrinsic aspect ratio of the stored image bytes (width / height). The API
+    // persists final fitted dimensions so clients never re-fit after load.
+    aspectRatio?: number
     canvasVisibleArea?: CanvasVisibleArea
     generationRun?: MediaGenerationRunMeta
+    proseMirrorThreadContent?: unknown
+}
+
+type UpsertPartialImageInput = {
+    workspaceId: string
+    aiChatThreadId: string
+    imageUrl: string
+    fileId: string
+    aiProvider: string
+    partialIndex: number
+    aspectRatio?: number
+    canvasVisibleArea?: CanvasVisibleArea
+    generationRun?: MediaGenerationRunMeta
+    proseMirrorThreadContent?: unknown
 }
 
 type UpsertVideoInput = {
@@ -79,15 +110,18 @@ type UpsertVideoInput = {
     videoModelId: string
     canvasVisibleArea?: CanvasVisibleArea
     generationRun?: MediaGenerationRunMeta
+    proseMirrorThreadContent?: unknown
 }
 
 type MarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
-type LineageCollisionNode = MarkerNode | GeneratedMediaNode
 type GeneratedByLineageMetadata = Partial<ImageGeneratedByMetadata & VideoGeneratedByMetadata>
 type BranchMarkerSiblingSlot = {
     index: number
     count: number
+}
+type LineageForestContext = {
+    proseMirrorThreadContent?: unknown
 }
 
 function markerDimensions(): { width: number; height: number } {
@@ -97,12 +131,102 @@ function markerDimensions(): { width: number; height: number } {
     }
 }
 
+// Markers are sized from their prompt text with the SAME shared estimator the
+// WebUI renders with, so the authoritative layout reserves exactly the painted
+// pill. Without prompt text, they use the shared default projection size.
+function lineageMarkerDimensions(
+    promptText: string | undefined,
+    options: { responseLine?: boolean; responseText?: string } = {},
+): { width: number; height: number } {
+    if (!promptText) return markerDimensions()
+    return estimateBranchMarkerDimensions(promptText, {
+        responseLine: options.responseLine,
+        responseText: options.responseText,
+    })
+}
+
 function mediaDimensions(aspectRatio = 1): { width: number; height: number } {
     const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1
     return {
         width: canvasProjectionSettings.generatedMediaSize,
         height: canvasProjectionSettings.generatedMediaSize / safeAspectRatio,
     }
+}
+
+function getPositiveAspectRatio(value: unknown): number | undefined {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function fitGeneratedMediaLayout(
+    existing: GeneratedMediaNode | undefined,
+    fallbackDimensions: { width: number; height: number },
+    aspectRatio?: number,
+): { dimensions: { width: number; height: number }; position?: { x: number; y: number } } {
+    const dimensions = aspectRatio
+        ? fitDimensionsToAspectRatio(existing?.dimensions ?? fallbackDimensions, aspectRatio)
+        : existing?.dimensions ?? fallbackDimensions
+    if (!existing) return { dimensions }
+
+    return {
+        dimensions,
+        position: {
+            x: existing.position.x + (existing.dimensions.width - dimensions.width) / 2,
+            y: existing.position.y + (existing.dimensions.height - dimensions.height) / 2,
+        },
+    }
+}
+
+function parseReasoningIndex(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+}
+
+function getMarkerPromptText(node: MarkerNode): string {
+    return node.provenance?.promptText ?? node.pendingState?.promptText ?? ''
+}
+
+function getMarkerTurnDescriptor(node: MarkerNode): BranchMarkerTurnDescriptor {
+    const markerNodeAttr = node.type === 'branchOrigin'
+        ? 'branchOriginNodeId' as const
+        : node.type === 'branchFork'
+            ? 'branchForkNodeId' as const
+            : 'branchLineNodeId' as const
+    const reasoningRunId = node.type === 'branchOrigin' ? '' : node.reasoningRunId ?? ''
+    const reasoningModelId = node.type === 'branchOrigin' ? '' : node.reasoningModelId ?? ''
+    const reasoningIndex = node.type === 'branchOrigin' ? null : parseReasoningIndex(node.reasoningIndex)
+
+    return {
+        ...(node.generationRequestId ? { generationRequestId: node.generationRequestId } : {}),
+        ...(reasoningRunId ? { reasoningRunId } : {}),
+        ...(reasoningModelId ? { reasoningModelId } : {}),
+        reasoningIndex,
+        markerNodeId: node.nodeId,
+        markerNodeAttr,
+    }
+}
+
+function getMarkerThreadPreview(node: MarkerNode, context: LineageForestContext = {}) {
+    if (!node.aiChatThreadId || !context.proseMirrorThreadContent) return null
+    return getBranchMarkerConversationPreviewFromThreadContent(
+        context.proseMirrorThreadContent,
+        node.aiChatThreadId,
+        getMarkerTurnDescriptor(node),
+    )
+}
+
+function getLineageMarkerDimensionsForNode(
+    node: MarkerNode,
+    context: LineageForestContext = {},
+    options: { fallbackResponseLine?: boolean } = {},
+): { width: number; height: number } {
+    const preview = getMarkerThreadPreview(node, context)
+    const promptText = preview?.userText || getMarkerPromptText(node)
+    return lineageMarkerDimensions(promptText, {
+        responseLine: shouldShowBranchMarkerConversationResponseLine(preview) || Boolean(options.fallbackResponseLine),
+        responseText: preview?.responseText ?? '',
+    })
 }
 
 function parseAspectRatio(value: string): number {
@@ -196,30 +320,32 @@ function positionBranchMarkerBeforeGeneratedMedia(
         + canvasProjectionSettings.branchFanoutExtraGap * Math.max(0, siblingCount - 1)
     const mediaBox = mediaDimensions()
     const futureMediaPosition = positionRightOf(parentNode, mediaBox, fallbackIndex, state, canvasVisibleArea, mediaGap)
+    const futureCircleInset = getPendingGeneratedMediaBeforeFrameCircleInset(mediaBox)
+    const futureCircleLeft = futureMediaPosition.x + futureCircleInset.x
     const parentAnchorX = parentNode.position.x + parentNode.dimensions.width
     const parentAnchorY = parentNode.position.y + parentNode.dimensions.height / 2
 
     if (parentNode.type === 'branchOrigin') {
         const stackIndex = siblingSlot?.index ?? 0
         return {
-            x: (parentAnchorX + futureMediaPosition.x) / 2 - dimensions.width / 2,
+            x: (parentAnchorX + futureCircleLeft) / 2 - dimensions.width / 2,
             y: parentNode.position.y + parentNode.dimensions.height
                 + canvasProjectionSettings.nodeGap
                 + stackIndex * (dimensions.height + canvasProjectionSettings.nodeGap),
         }
     }
 
-    const mediaStep = mediaBox.height + canvasProjectionSettings.branchRowGap
-    const mediaStackHeight = mediaBox.height * siblingCount
+    const circleStep = futureCircleInset.size + canvasProjectionSettings.branchRowGap
+    const circleStackHeight = futureCircleInset.size * siblingCount
         + canvasProjectionSettings.branchRowGap * Math.max(0, siblingCount - 1)
-    const firstMediaCenterY = parentAnchorY - mediaStackHeight / 2 + mediaBox.height / 2
-    const futureMediaCenterY = siblingSlot
-        ? firstMediaCenterY + mediaStep * siblingSlot.index
-        : futureMediaPosition.y + mediaBox.height / 2
+    const firstCircleCenterY = parentAnchorY - circleStackHeight / 2 + futureCircleInset.size / 2
+    const futureCircleCenterY = siblingSlot
+        ? firstCircleCenterY + circleStep * siblingSlot.index
+        : futureMediaPosition.y + futureCircleInset.y + futureCircleInset.size / 2
 
     return {
-        x: (parentAnchorX + futureMediaPosition.x) / 2 - dimensions.width / 2,
-        y: (parentAnchorY + futureMediaCenterY) / 2 - dimensions.height / 2,
+        x: (parentAnchorX + futureCircleLeft) / 2 - dimensions.width / 2,
+        y: (parentAnchorY + futureCircleCenterY) / 2 - dimensions.height / 2,
     }
 }
 
@@ -231,260 +357,362 @@ function buildNodesById(nodes: CanvasNode[]): Map<string, CanvasNode> {
     return new Map(nodes.map(node => [node.nodeId, node]))
 }
 
-function isTopLevelNode(node: CanvasNode): boolean {
-    return !node.parentId
-}
-
 function isMarkerNode(node: CanvasNode): node is MarkerNode {
     return node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
 }
 
-function isGeneratedMediaLineageNode(node: CanvasNode): node is GeneratedMediaNode {
-    return (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy?.branchId)
+function isGeneratedMediaNodeWaitingForFrame(node: CanvasNode): node is GeneratedMediaNode {
+    if ((node.type !== 'image' && node.type !== 'video') || !node.generatedBy?.generationRequestId) return false
+    if (node.fileId?.trim()) return false
+    if (node.type === 'image') return !node.src?.trim()
+    return !node.src?.trim()
+        && !node.posterSrc?.trim()
+        && !node.posterFileId?.trim()
+        && !node.frameFileId?.trim()
 }
 
-function getGeneratedMediaLineageParentNodeId(node: GeneratedMediaNode): string | undefined {
-    return node.generatedBy?.branchLineNodeId
-        ?? node.generatedBy?.branchForkNodeId
-        ?? node.generatedBy?.branchOriginNodeId
-        ?? node.generatedBy?.parentMediaNodeId
-        ?? node.generatedBy?.parentImageNodeId
-}
-
-function isLineageCollisionNode(node: CanvasNode): node is LineageCollisionNode {
-    return isTopLevelNode(node) && (isMarkerNode(node) || isGeneratedMediaLineageNode(node))
-}
-
-function getLineageCollisionLinks(node: LineageCollisionNode): Array<string | undefined> {
-    if (node.type === 'branchFork' || node.type === 'branchLine') return [node.parentBranchNodeId]
-    if (node.type === 'branchOrigin') return []
-
-    return [
-        node.generatedBy?.parentMediaNodeId,
-        node.generatedBy?.parentImageNodeId,
-        node.generatedBy?.branchOriginNodeId,
-        node.generatedBy?.branchForkNodeId,
-        node.generatedBy?.branchLineNodeId,
-    ]
-}
-
-function getSetRoot(parentById: Map<string, string>, nodeId: string): string {
-    const parentId = parentById.get(nodeId)
-    if (!parentId || parentId === nodeId) return nodeId
-
-    const rootId = getSetRoot(parentById, parentId)
-    parentById.set(nodeId, rootId)
-    return rootId
-}
-
-function unionSets(parentById: Map<string, string>, a: string, b: string): void {
-    const rootA = getSetRoot(parentById, a)
-    const rootB = getSetRoot(parentById, b)
-    if (rootA === rootB) return
-    parentById.set(rootB, rootA)
-}
-
-function getNodeRect(node: CanvasNode): CanvasEngineRect {
+function getPendingGeneratedMediaBeforeFrameCircleInset(dimensions: { width: number; height: number }): { x: number; y: number; size: number } {
+    const configuredScale = Number(canvasProjectionSettings.preFrameCircleScale)
+    const scale = Number.isFinite(configuredScale) && configuredScale > 0
+        ? Math.min(1, configuredScale)
+        : 1 / 3
+    const size = Math.max(1, Math.min(dimensions.width, dimensions.height) * scale)
     return {
-        x: getFiniteNumber(node.position.x, 0),
-        y: getFiniteNumber(node.position.y, 0),
-        width: Math.max(0, getFiniteNumber(node.dimensions.width, 0)),
-        height: Math.max(0, getFiniteNumber(node.dimensions.height, 0)),
+        x: (dimensions.width - size) / 2,
+        y: (dimensions.height - size) / 2,
+        size,
     }
 }
 
-function getGroupRect(nodeIds: string[], nodesById: Map<string, CanvasNode>): CanvasEngineRect | undefined {
-    let minX = Number.POSITIVE_INFINITY
-    let minY = Number.POSITIVE_INFINITY
-    let maxX = Number.NEGATIVE_INFINITY
-    let maxY = Number.NEGATIVE_INFINITY
+function getPendingGeneratedMediaBeforeFrameCircleRect(
+    node: GeneratedMediaNode,
+    worldPosition: { x: number; y: number },
+): CanvasEngineRect {
+    const inset = getPendingGeneratedMediaBeforeFrameCircleInset(node.dimensions)
+    return {
+        x: worldPosition.x + inset.x,
+        y: worldPosition.y + inset.y,
+        width: inset.size,
+        height: inset.size,
+    }
+}
 
-    for (const nodeId of nodeIds) {
-        const node = nodesById.get(nodeId)
-        if (!node) continue
-
-        const rect = getNodeRect(node)
-        minX = Math.min(minX, rect.x)
-        minY = Math.min(minY, rect.y)
-        maxX = Math.max(maxX, rect.x + rect.width)
-        maxY = Math.max(maxY, rect.y + rect.height)
+// Collision rect matches the WebUI exactly: node box plus the chrome strip
+// reserved under generated media (shared metric settings).
+function getLineageCollisionRect(node: CanvasNode, worldPosition: { x: number; y: number }): CanvasEngineRect {
+    if (isGeneratedMediaNodeWaitingForFrame(node)) {
+        return getPendingGeneratedMediaBeforeFrameCircleRect(node, worldPosition)
     }
 
-    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
-        return undefined
+    const chromeHeight = node.type === 'image' || node.type === 'video'
+        ? getGeneratedMediaChromeCollisionHeight(node.type)
+        : 0
+    return {
+        x: worldPosition.x,
+        y: worldPosition.y,
+        width: node.dimensions.width,
+        height: node.dimensions.height + chromeHeight,
+    }
+}
+
+function getLineageConnectorAnchorRect(node: CanvasNode, worldPosition: { x: number; y: number }): CanvasEngineRect {
+    if (isGeneratedMediaNodeWaitingForFrame(node)) {
+        return getPendingGeneratedMediaBeforeFrameCircleRect(node, worldPosition)
     }
 
     return {
-        x: minX,
-        y: minY,
-        width: maxX - minX,
-        height: maxY - minY,
+        x: worldPosition.x,
+        y: worldPosition.y,
+        width: node.dimensions.width,
+        height: node.dimensions.height,
     }
 }
 
-function getSortedGroupNodeIds(nodeIds: string[], nodesById: Map<string, CanvasNode>): string[] {
-    return [...nodeIds].sort((a, b) => {
-        const nodeA = nodesById.get(a)
-        const nodeB = nodesById.get(b)
-        const yDelta = getFiniteNumber(nodeA?.position.y, 0) - getFiniteNumber(nodeB?.position.y, 0)
-        if (yDelta !== 0) return yDelta
-        const xDelta = getFiniteNumber(nodeA?.position.x, 0) - getFiniteNumber(nodeB?.position.x, 0)
-        if (xDelta !== 0) return xDelta
-        return a.localeCompare(b)
-    })
+function getBranchLineageCollisionSettings(
+    nodeSettings: WorkspaceCollisionNodeTypeSettings,
+): WorkspaceCollisionNodeTypeSettings {
+    return { ...nodeSettings, margin: canvasProjectionSettings.nodeGap }
 }
 
-function buildCanvasProjectionCollisionGroups(state: CanvasState): RigidCanvasNodeGroup[] {
-    const nodesById = buildNodesById(state.nodes)
-    const lineageNodes = state.nodes.filter(isLineageCollisionNode)
-    const lineageNodeIds = new Set(lineageNodes.map(node => node.nodeId))
-    const parentById = new Map<string, string>()
-    for (const nodeId of lineageNodeIds) parentById.set(nodeId, nodeId)
-
-    for (const node of lineageNodes) {
-        for (const linkedNodeId of getLineageCollisionLinks(node)) {
-            if (linkedNodeId && lineageNodeIds.has(linkedNodeId)) {
-                unionSets(parentById, node.nodeId, linkedNodeId)
-            }
-        }
+function getLineageCollisionSettings(
+    node: CanvasNode,
+    collisionSettings: WorkspaceCollisionFlowSettings,
+): WorkspaceCollisionNodeTypeSettings {
+    switch (node.type) {
+        case 'image':
+            return collisionSettings.nodeTypes.image
+        case 'video':
+            return collisionSettings.nodeTypes.video
+        case 'branchOrigin':
+            return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchOrigin)
+        case 'branchFork':
+            return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchFork)
+        case 'branchLine':
+            return getBranchLineageCollisionSettings(collisionSettings.nodeTypes.branchLine)
+        case 'document':
+        default:
+            return collisionSettings.nodeTypes.document
     }
-
-    for (const edge of state.edges ?? []) {
-        if (!lineageNodeIds.has(edge.sourceNodeId) || !lineageNodeIds.has(edge.targetNodeId)) continue
-        unionSets(parentById, edge.sourceNodeId, edge.targetNodeId)
-    }
-
-    const lineageGroupsByRoot = new Map<string, string[]>()
-    for (const nodeId of lineageNodeIds) {
-        const rootId = getSetRoot(parentById, nodeId)
-        const group = lineageGroupsByRoot.get(rootId) ?? []
-        group.push(nodeId)
-        lineageGroupsByRoot.set(rootId, group)
-    }
-
-    const groups: RigidCanvasNodeGroup[] = []
-    const groupedNodeIds = new Set<string>()
-    for (const nodeIds of lineageGroupsByRoot.values()) {
-        const sortedNodeIds = getSortedGroupNodeIds(nodeIds, nodesById)
-        const rect = getGroupRect(sortedNodeIds, nodesById)
-        if (!rect) continue
-
-        for (const nodeId of sortedNodeIds) groupedNodeIds.add(nodeId)
-        groups.push({
-            id: `lineage:${sortedNodeIds[0]}`,
-            nodeIds: sortedNodeIds,
-            rect,
-            margin: canvasProjectionSettings.nodeGap,
-            overlapThreshold: 0,
-        })
-    }
-
-    for (const node of state.nodes) {
-        if (!isTopLevelNode(node) || groupedNodeIds.has(node.nodeId)) continue
-        groups.push({
-            id: `node:${node.nodeId}`,
-            nodeIds: [node.nodeId],
-            rect: getNodeRect(node),
-            margin: 20,
-            overlapThreshold: 0.5,
-        })
-    }
-
-    return groups
 }
 
-function resolveCanvasProjectionCollisions(
+function getWorkspaceCollisionFlowIterations(collisionSettings: WorkspaceCollisionFlowSettings): number {
+    return Math.max(
+        ...Object.values(collisionSettings.nodeTypes)
+            .map((nodeSettings: WorkspaceCollisionNodeTypeSettings) => nodeSettings.iterations),
+    )
+}
+
+// The authoritative layout pass: refresh marker dimensions from their prompt
+// text (response row once the marker's turn has produced media), then run the
+// SAME shared tidy-tree + rigid collision resolution the WebUI uses for local
+// drag/delete rebalances. Persisted geometry is final — clients apply it.
+function rebalanceLineageForest(
     state: CanvasState,
     context: string,
+    lineageContext: LineageForestContext = {},
 ): { state: CanvasState; changed: boolean } {
-    const groups = buildCanvasProjectionCollisionGroups(state)
-    const collisionResult = resolveRigidCanvasNodeGroupCollisions(state.nodes, groups, {
-        iterations: 50,
-        margin: 20,
-        overlapThreshold: 0.5,
-    })
-    if (!collisionResult.changed) return { state, changed: false }
-
-    console.info('[media-generation-canvas-projection] resolved canvas collisions', {
-        context,
-        groupCount: groups.length,
-        movedGroupCount: collisionResult.movedGroupCount,
-        movedNodeCount: collisionResult.movedNodeCount,
-        collisionIterations: collisionResult.collisionIterations,
+    const { markerIdsWithGeneratedChildren } = getStartedLineageMarkerState(state.nodes)
+    let markerDimensionsChanged = false
+    const nodes = state.nodes.map((node): CanvasNode => {
+        if (!isMarkerNode(node)) return node
+        const dimensions = getLineageMarkerDimensionsForNode(node, lineageContext, {
+            fallbackResponseLine: markerIdsWithGeneratedChildren.has(node.nodeId),
+        })
+        if (node.dimensions.width === dimensions.width && node.dimensions.height === dimensions.height) return node
+        markerDimensionsChanged = true
+        return { ...node, dimensions } as CanvasNode
     })
 
-    return {
-        state: {
-            ...state,
-            nodes: collisionResult.nodes,
-        },
-        changed: true,
-    }
-}
+    const collisionSettings = workspaceCollisionSettings.branchTree
+    const resolvedNodes = rebalanceBranchTreesAndResolve(nodes, state.edges ?? [], {
+        depthGap: canvasProjectionSettings.mediaToMediaGap,
+        branchOriginDepthGap: canvasProjectionSettings.branchOriginToFirstMediaGap,
+        rootMarkerDepthGap: canvasProjectionSettings.rootToFirstMediaGap,
+        siblingGap: canvasProjectionSettings.branchRowGap,
+        branchFanoutExtraGap: canvasProjectionSettings.branchFanoutExtraGap,
+        getBranchFanoutExtraGap: (_parentNode, childNodes) =>
+            childNodes.length > 0 && childNodes.every(isGeneratedMediaNodeWaitingForFrame)
+                ? 0
+                : canvasProjectionSettings.branchFanoutExtraGap,
+        branchOriginMarkerStackGap: canvasProjectionSettings.nodeGap,
+        collisionIterations: getWorkspaceCollisionFlowIterations(collisionSettings),
+        collisionMargin: 0,
+        getNodeCollisionRect: getLineageCollisionRect,
+        getNodeConnectorAnchorRect: getLineageConnectorAnchorRect,
+        getNodeCollisionMargin: (node: CanvasNode) => getLineageCollisionSettings(node, collisionSettings).margin,
+        getNodeCollisionOverlapThreshold: (node: CanvasNode) =>
+            getLineageCollisionSettings(node, collisionSettings).overlapThreshold,
+    })
 
-function compareOptionalNumber(a: number | undefined, b: number | undefined): number {
-    const normalizedA = Number.isFinite(a) ? Number(a) : Number.MAX_SAFE_INTEGER
-    const normalizedB = Number.isFinite(b) ? Number(b) : Number.MAX_SAFE_INTEGER
-    return normalizedA - normalizedB
-}
-
-function compareOptionalString(a: string | undefined, b: string | undefined): number {
-    return (a ?? '').localeCompare(b ?? '')
-}
-
-function compareGeneratedMediaSiblingOrder(a: GeneratedMediaNode, b: GeneratedMediaNode): number {
-    return compareOptionalNumber(a.generatedBy?.reasoningIndex, b.generatedBy?.reasoningIndex)
-        || compareOptionalNumber(a.generatedBy?.createdAt, b.generatedBy?.createdAt)
-        || compareOptionalNumber(a.generatedBy?.variantIndex, b.generatedBy?.variantIndex)
-        || compareOptionalNumber(a.generatedBy?.mediaIndex, b.generatedBy?.mediaIndex)
-        || compareOptionalString(a.generatedBy?.mediaType, b.generatedBy?.mediaType)
-        || compareOptionalString(a.generatedBy?.mediaModelId, b.generatedBy?.mediaModelId)
-        || compareOptionalString(a.generatedBy?.mediaRunId, b.generatedBy?.mediaRunId)
-        || a.nodeId.localeCompare(b.nodeId)
-}
-
-function rebalanceGeneratedMediaChildren(
-    state: CanvasState,
-    lineageParentNodeId: string | undefined,
-): { state: CanvasState; changed: boolean } {
-    if (!lineageParentNodeId) return { state, changed: false }
-
-    const parentNode = findNode(state.nodes, lineageParentNodeId)
-    if (!parentNode) return { state, changed: false }
-
-    const siblings = state.nodes
-        .filter((node): node is GeneratedMediaNode => isGeneratedMediaLineageNode(node))
-        .filter(node => getGeneratedMediaLineageParentNodeId(node) === lineageParentNodeId)
-        .sort(compareGeneratedMediaSiblingOrder)
-
-    if (siblings.length <= 1) return { state, changed: false }
-
-    const totalHeight = siblings.reduce((height, node) => height + node.dimensions.height, 0)
-        + canvasProjectionSettings.branchRowGap * Math.max(0, siblings.length - 1)
-    const parentCenterY = parentNode.position.y + parentNode.dimensions.height / 2
-    const childX = parentNode.position.x + parentNode.dimensions.width + getGapToGeneratedMedia(parentNode)
-    let childY = parentCenterY - totalHeight / 2
-    let changed = false
-    const nextPositionsByNodeId = new Map<string, { x: number; y: number }>()
-
-    for (const sibling of siblings) {
-        const position = { x: childX, y: childY }
-        nextPositionsByNodeId.set(sibling.nodeId, position)
-        changed = changed || sibling.position.x !== position.x || sibling.position.y !== position.y
-        childY += sibling.dimensions.height + canvasProjectionSettings.branchRowGap
-    }
-
+    const beforeById = buildNodesById(state.nodes)
+    const changed = markerDimensionsChanged || resolvedNodes.some((node) => {
+        const before = beforeById.get(node.nodeId)
+        return !before
+            || before.position.x !== node.position.x
+            || before.position.y !== node.position.y
+    })
     if (!changed) return { state, changed: false }
 
+    console.info('[media-generation-canvas-projection] rebalanced lineage forest', {
+        context,
+        nodeCount: resolvedNodes.length,
+        markerDimensionsChanged,
+    })
+
     return {
-        state: {
-            ...state,
-            nodes: state.nodes.map((node) => {
-                const position = nextPositionsByNodeId.get(node.nodeId)
-                return position ? { ...node, position } as CanvasNode : node
-            }),
-        },
+        state: { ...state, nodes: resolvedNodes },
         changed: true,
+    }
+}
+
+// Nodes whose geometry differs between the pre-mutation and resolved states —
+// the exact set clients must apply (collision can move unrelated siblings).
+function diffCanvasGeometry(before: CanvasState, after: CanvasState): CanvasNodeGeometry[] {
+    const beforeById = buildNodesById(before.nodes)
+    const changedGeometries: CanvasNodeGeometry[] = []
+    for (const node of after.nodes) {
+        const previous = beforeById.get(node.nodeId)
+        if (previous
+            && previous.position.x === node.position.x
+            && previous.position.y === node.position.y
+            && previous.dimensions.width === node.dimensions.width
+            && previous.dimensions.height === node.dimensions.height) continue
+        changedGeometries.push({
+            nodeId: node.nodeId,
+            position: { x: node.position.x, y: node.position.y },
+            dimensions: { width: node.dimensions.width, height: node.dimensions.height },
+            ...(node.parentId ? { parentNodeId: node.parentId } : {}),
+        })
+    }
+    return changedGeometries
+}
+
+function canvasNodeToGeometry(node: CanvasNode): CanvasNodeGeometry {
+    return {
+        nodeId: node.nodeId,
+        position: { x: node.position.x, y: node.position.y },
+        dimensions: { width: node.dimensions.width, height: node.dimensions.height },
+        ...(node.parentId ? { parentNodeId: node.parentId } : {}),
+    }
+}
+
+function mergeProjectionGeometryNodes(
+    changedGeometryNodes: CanvasNodeGeometry[],
+    nodeSnapshots: CanvasNode[],
+): CanvasNodeGeometry[] {
+    const geometryByNodeId = new Map(changedGeometryNodes.map(node => [node.nodeId, node]))
+    for (const snapshot of nodeSnapshots) {
+        if (!geometryByNodeId.has(snapshot.nodeId)) {
+            geometryByNodeId.set(snapshot.nodeId, canvasNodeToGeometry(snapshot))
+        }
+    }
+    return [...geometryByNodeId.values()]
+}
+
+function getGeneratedMediaGenerationRequestId(node: CanvasNode): string | undefined {
+    if (node.type !== 'image' && node.type !== 'video') return undefined
+    return node.generatedBy?.generationRequestId
+}
+
+function isProjectionSnapshotNode(
+    node: CanvasNode,
+    generationRequestId: string,
+    geometryNodeIds: Set<string>,
+): boolean {
+    if (geometryNodeIds.has(node.nodeId)) return true
+    if (isMarkerNode(node) && node.generationRequestId === generationRequestId) return true
+    return getGeneratedMediaGenerationRequestId(node) === generationRequestId
+}
+
+function getProjectionNodeSnapshots(params: {
+    state: CanvasState
+    generationRequestId: string
+    geometryNodes: CanvasNodeGeometry[]
+    removedNodeIds?: string[]
+}): CanvasNode[] {
+    const geometryNodeIds = new Set(params.geometryNodes.map(node => node.nodeId))
+    const removedNodeIds = new Set(params.removedNodeIds ?? [])
+    return params.state.nodes.filter(node =>
+        !removedNodeIds.has(node.nodeId)
+        && isProjectionSnapshotNode(node, params.generationRequestId, geometryNodeIds)
+    )
+}
+
+function getProjectionEdgeSnapshots(params: {
+    state: CanvasState
+    geometryNodes: CanvasNodeGeometry[]
+    nodeSnapshots: CanvasNode[]
+    removedNodeIds?: string[]
+}): WorkspaceEdge[] {
+    const removedNodeIds = new Set(params.removedNodeIds ?? [])
+    const projectionNodeIds = new Set([
+        ...params.geometryNodes.map(node => node.nodeId),
+        ...params.nodeSnapshots.map(node => node.nodeId),
+    ])
+
+    return (params.state.edges ?? []).filter(edge =>
+        !removedNodeIds.has(edge.sourceNodeId)
+        && !removedNodeIds.has(edge.targetNodeId)
+        && (projectionNodeIds.has(edge.sourceNodeId) || projectionNodeIds.has(edge.targetNodeId))
+    )
+}
+
+function getCompletedGeneratedMediaPendingNodeId(node: CanvasNode): string | undefined {
+    if ((node.type !== 'image' && node.type !== 'video') || !node.fileId || !node.generatedBy?.generationRequestId) {
+        return undefined
+    }
+    const pendingNodeId = getPendingGeneratedMediaNodeId({
+        generationRequestId: node.generatedBy.generationRequestId,
+        ...(node.generatedBy.reasoningRunId ? { reasoningRunId: node.generatedBy.reasoningRunId } : {}),
+        ...(node.generatedBy.mediaRunId ? { mediaRunId: node.generatedBy.mediaRunId } : {}),
+        ...(node.generatedBy.mediaModelId ? { mediaModelId: node.generatedBy.mediaModelId } : {}),
+        mediaType: node.generatedBy.mediaType ?? node.type,
+        ...(node.generatedBy.mediaIndex !== undefined ? { mediaIndex: node.generatedBy.mediaIndex } : {}),
+        ...(node.generatedBy.reasoningIndex !== undefined ? { reasoningIndex: node.generatedBy.reasoningIndex } : {}),
+    })
+    return pendingNodeId === node.nodeId ? undefined : pendingNodeId
+}
+
+function getObsoletePendingGeneratedMediaNodeIds(state: CanvasState, generationRequestId: string): string[] {
+    const pendingNodeIds = new Set<string>()
+    for (const node of state.nodes) {
+        if ((node.type !== 'image' && node.type !== 'video') || node.generatedBy?.generationRequestId !== generationRequestId) continue
+        const pendingNodeId = getCompletedGeneratedMediaPendingNodeId(node)
+        if (pendingNodeId) pendingNodeIds.add(pendingNodeId)
+    }
+    return [...pendingNodeIds].sort()
+}
+
+function isUnresolvedPendingGeneratedMediaNode(node: CanvasNode, generationRequestId: string): node is GeneratedMediaNode {
+    if ((node.type !== 'image' && node.type !== 'video') || node.generatedBy?.generationRequestId !== generationRequestId) return false
+    if (node.fileId?.trim()) return false
+    if (node.type === 'image') return !node.src?.trim()
+    return !node.src?.trim()
+        && !node.posterSrc?.trim()
+        && !node.posterFileId?.trim()
+        && !node.frameFileId?.trim()
+}
+
+function getUnresolvedPendingGeneratedMediaNodeIds(state: CanvasState, generationRequestId: string): string[] {
+    return state.nodes
+        .filter(node => isUnresolvedPendingGeneratedMediaNode(node, generationRequestId))
+        .map(node => node.nodeId)
+        .sort()
+}
+
+function hasResolvedGeneratedMediaForRequest(state: CanvasState, generationRequestId: string): boolean {
+    return state.nodes.some(node =>
+        (node.type === 'image' || node.type === 'video')
+        && node.generatedBy?.generationRequestId === generationRequestId
+        && !isUnresolvedPendingGeneratedMediaNode(node, generationRequestId)
+    )
+}
+
+function buildCanvasGeometryUpdate(params: {
+    context: string
+    layoutRevision: number
+    state: CanvasState
+    generationRequestId: string
+    geometryNodes: CanvasNodeGeometry[]
+    removedNodeIds?: string[]
+}): CanvasGeometryUpdate {
+    const requestedRemovedNodeIds = params.removedNodeIds?.filter(Boolean) ?? []
+    const derivedRemovedPendingNodeIds = getObsoletePendingGeneratedMediaNodeIds(params.state, params.generationRequestId)
+    const removedNodeIds = [...new Set([...requestedRemovedNodeIds, ...derivedRemovedPendingNodeIds])]
+    const nodeSnapshots = getProjectionNodeSnapshots({
+        state: params.state,
+        generationRequestId: params.generationRequestId,
+        geometryNodes: params.geometryNodes,
+        removedNodeIds,
+    })
+    const authoritativeGeometryNodes = mergeProjectionGeometryNodes(params.geometryNodes, nodeSnapshots)
+    const edgeSnapshots = getProjectionEdgeSnapshots({
+        state: params.state,
+        geometryNodes: authoritativeGeometryNodes,
+        nodeSnapshots,
+        removedNodeIds,
+    })
+    console.info('[media-generation-canvas-projection] canvas geometry update payload', {
+        context: params.context,
+        generationRequestId: params.generationRequestId,
+        layoutRevision: params.layoutRevision,
+        changedGeometryNodeCount: params.geometryNodes.length,
+        changedGeometryNodeIds: params.geometryNodes.map(node => node.nodeId),
+        geometryNodeCount: authoritativeGeometryNodes.length,
+        geometryNodeIds: authoritativeGeometryNodes.map(node => node.nodeId),
+        nodeSnapshotCount: nodeSnapshots.length,
+        nodeSnapshotIds: nodeSnapshots.map(node => node.nodeId),
+        edgeSnapshotCount: edgeSnapshots.length,
+        edgeSnapshotIds: edgeSnapshots.map(edge => edge.edgeId),
+        derivedRemovedPendingNodeIds,
+        removedNodeIds,
+    })
+    return {
+        layoutRevision: params.layoutRevision,
+        nodes: authoritativeGeometryNodes,
+        ...(nodeSnapshots.length > 0 ? { nodeSnapshots } : {}),
+        ...(edgeSnapshots.length > 0 ? { edgeSnapshots } : {}),
+        ...(removedNodeIds.length > 0 ? { removedNodeIds } : {}),
     }
 }
 
@@ -562,6 +790,23 @@ function upsertNode(nodes: CanvasNode[], nextNode: CanvasNode): { nodes: CanvasN
     }
 }
 
+function upsertNodeWithIncomingGeometry(nodes: CanvasNode[], nextNode: CanvasNode): { nodes: CanvasNode[]; changed: boolean } {
+    const index = nodes.findIndex(node => node.nodeId === nextNode.nodeId)
+    if (index < 0) return { nodes: [...nodes, nextNode], changed: true }
+
+    const existing = nodes[index]
+    const mergedNode = {
+        ...existing,
+        ...nextNode,
+        position: nextNode.position,
+        dimensions: nextNode.dimensions,
+    } as CanvasNode
+    return {
+        nodes: nodes.map((node, nodeIndex) => nodeIndex === index ? mergedNode : node),
+        changed: JSON.stringify(existing) !== JSON.stringify(mergedNode),
+    }
+}
+
 function addEdgeIfMissing(edges: WorkspaceEdge[], edge: WorkspaceEdge | undefined): { edges: WorkspaceEdge[]; changed: boolean } {
     if (!edge) return { edges, changed: false }
     if (edges.some(existing => existing.edgeId === edge.edgeId)) return { edges, changed: false }
@@ -588,7 +833,7 @@ function branchOriginNodeFromPlan(
     anchorNodeId?: string,
     canvasVisibleArea?: CanvasVisibleArea,
 ): BranchOriginCanvasNode {
-    const dimensions = markerDimensions()
+    const dimensions = lineageMarkerDimensions(plan.provenance.promptText)
     return {
         nodeId: plan.nodeId,
         type: 'branchOrigin',
@@ -612,7 +857,7 @@ function branchForkNodeFromPlan(
     canvasVisibleArea?: CanvasVisibleArea,
     siblingSlot?: BranchMarkerSiblingSlot,
 ): BranchForkCanvasNode {
-    const dimensions = markerDimensions()
+    const dimensions = lineageMarkerDimensions(plan.provenance.promptText)
     const parentNode = findNode(nodes, plan.parentBranchNodeId)
     return {
         nodeId: plan.nodeId,
@@ -643,7 +888,7 @@ function branchLineNodeFromPlan(
     canvasVisibleArea?: CanvasVisibleArea,
     siblingSlot?: BranchMarkerSiblingSlot,
 ): BranchLineCanvasNode {
-    const dimensions = markerDimensions()
+    const dimensions = lineageMarkerDimensions(plan.provenance.promptText)
     const parentNode = findNode(nodes, plan.parentBranchNodeId)
     return {
         nodeId: plan.nodeId,
@@ -716,8 +961,16 @@ function markerNodesFromAssignment(
             branchId: assignment.branchId,
             generationRequestId: assignment.generationRequestId,
             aiChatThreadId,
-            position: fallbackPosition(state, markers.length, markerDimensions(), canvasVisibleArea),
-            dimensions: markerDimensions(),
+            provenance: {
+                kind: 'branch-root-fork-decision',
+                promptText: assignment.promptText,
+                referenceNodeIds: assignment.referenceNodeIds,
+                sourceContextNodeIds: assignment.sourceContextNodeIds,
+                forked: Boolean(assignment.branchForkNodeId),
+                forkCount: assignment.branchForkNodeId ? 1 : 0,
+            },
+            position: fallbackPosition(state, markers.length, lineageMarkerDimensions(assignment.promptText), canvasVisibleArea),
+            dimensions: lineageMarkerDimensions(assignment.promptText),
             temporary: true,
         })
     }
@@ -734,10 +987,19 @@ function markerNodesFromAssignment(
             ...(assignment.reasoningModelId ? { reasoningModelId: assignment.reasoningModelId } : {}),
             reasoningIndex: assignment.reasoningIndex ?? 0,
             ...(parentBranchNodeId ? { parentBranchNodeId } : {}),
+            provenance: {
+                kind: 'reasoning-run',
+                promptText: assignment.promptText,
+                referenceNodeIds: assignment.referenceNodeIds,
+                sourceContextNodeIds: assignment.sourceContextNodeIds,
+                reasoningRunId: assignment.reasoningRunId ?? '',
+                reasoningModelId: (assignment.reasoningModelId ?? '') as AiModelId,
+                reasoningIndex: assignment.reasoningIndex ?? 0,
+            },
             position: parentBranchNodeId
-                ? positionBranchMarkerBeforeGeneratedMedia(parentNode, markerDimensions(), markers.length, state, canvasVisibleArea)
-                : positionRightOf(parentNode, markerDimensions(), markers.length, state, canvasVisibleArea),
-            dimensions: markerDimensions(),
+                ? positionBranchMarkerBeforeGeneratedMedia(parentNode, lineageMarkerDimensions(assignment.promptText), markers.length, state, canvasVisibleArea)
+                : positionRightOf(parentNode, lineageMarkerDimensions(assignment.promptText), markers.length, state, canvasVisibleArea),
+            dimensions: lineageMarkerDimensions(assignment.promptText),
             temporary: true,
         })
     }
@@ -757,10 +1019,22 @@ function markerNodesFromAssignment(
             ...(assignment.mediaModelId ? { mediaModelId: assignment.mediaModelId } : {}),
             ...(assignment.mediaType ? { mediaType: assignment.mediaType } : {}),
             ...(parentBranchNodeId ? { parentBranchNodeId } : {}),
+            provenance: {
+                kind: 'branch-continuation',
+                promptText: assignment.promptText,
+                referenceNodeIds: assignment.referenceNodeIds,
+                sourceContextNodeIds: assignment.sourceContextNodeIds,
+                reasoningRunId: assignment.reasoningRunId ?? '',
+                reasoningModelId: (assignment.reasoningModelId ?? '') as AiModelId,
+                reasoningIndex: assignment.reasoningIndex ?? 0,
+                ...(assignment.mediaRunId ? { mediaRunId: assignment.mediaRunId } : {}),
+                ...(assignment.mediaModelId ? { mediaModelId: assignment.mediaModelId } : {}),
+                ...(assignment.mediaType ? { mediaType: assignment.mediaType } : {}),
+            },
             position: parentBranchNodeId
-                ? positionBranchMarkerBeforeGeneratedMedia(parentNode, markerDimensions(), markers.length, state, canvasVisibleArea)
-                : positionRightOf(parentNode, markerDimensions(), markers.length, state, canvasVisibleArea),
-            dimensions: markerDimensions(),
+                ? positionBranchMarkerBeforeGeneratedMedia(parentNode, lineageMarkerDimensions(assignment.promptText), markers.length, state, canvasVisibleArea)
+                : positionRightOf(parentNode, lineageMarkerDimensions(assignment.promptText), markers.length, state, canvasVisibleArea),
+            dimensions: lineageMarkerDimensions(assignment.promptText),
             temporary: true,
         })
     }
@@ -786,8 +1060,9 @@ function ensureMarkers(state: CanvasState, markers: MarkerNode[]): { state: Canv
 
 function getLineageParentNodeId(assignment: MediaRunLineageAssignment): string | undefined {
     return assignment.lineageParentNodeId
-        ?? assignment.branchForkNodeId
         ?? assignment.branchLineNodeId
+        ?? assignment.branchForkNodeId
+        ?? assignment.parentMediaNodeId
         ?? assignment.branchOriginNodeId
 }
 
@@ -808,12 +1083,244 @@ function generatedByLineage(assignment: MediaRunLineageAssignment | undefined): 
         ...(assignment.branchOriginNodeId ? { branchOriginNodeId: assignment.branchOriginNodeId } : {}),
         ...(assignment.branchForkNodeId ? { branchForkNodeId: assignment.branchForkNodeId } : {}),
         ...(assignment.branchLineNodeId ? { branchLineNodeId: assignment.branchLineNodeId } : {}),
+        ...(assignment.lineageParentNodeId ? { lineageParentNodeId: assignment.lineageParentNodeId } : {}),
         referenceImageNodeIds: assignment.referenceNodeIds,
         sourceContextNodeIds: assignment.sourceContextNodeIds,
         ...(assignment.operationKind ? { operationKind: assignment.operationKind } : {}),
         promptText: assignment.promptText,
         ...(assignment.promptFingerprint ? { promptFingerprint: assignment.promptFingerprint } : {}),
         createdAt: assignment.createdAt,
+    }
+}
+
+function getMediaTypeForAssignment(assignment: MediaRunLineageAssignment): 'image' | 'video' {
+    return assignment.mediaType === 'video' ? 'video' : 'image'
+}
+
+function assignmentMatchesGeneratedMediaNode(
+    node: CanvasNode,
+    assignment: MediaRunLineageAssignment,
+): node is GeneratedMediaNode {
+    const mediaType = getMediaTypeForAssignment(assignment)
+    if (node.type !== mediaType) return false
+    const generatedBy = node.generatedBy
+    if (!generatedBy) return false
+    if (assignment.mediaRunId && generatedBy.mediaRunId === assignment.mediaRunId) return true
+    if (generatedBy.generationRequestId !== assignment.generationRequestId) return false
+    if (assignment.reasoningRunId && generatedBy.reasoningRunId && generatedBy.reasoningRunId !== assignment.reasoningRunId) return false
+    if (assignment.mediaModelId && generatedBy.mediaModelId !== assignment.mediaModelId) return false
+    if (assignment.branchForkNodeId && generatedBy.branchForkNodeId !== assignment.branchForkNodeId) return false
+    if (assignment.branchLineNodeId && generatedBy.branchLineNodeId !== assignment.branchLineNodeId) return false
+    return Boolean(assignment.reasoningRunId || assignment.mediaModelId || assignment.branchForkNodeId || assignment.branchLineNodeId)
+}
+
+function hasCompletedGeneratedMediaForAssignment(nodes: CanvasNode[], assignment: MediaRunLineageAssignment): boolean {
+    return nodes.some((node) => {
+        if (!assignmentMatchesGeneratedMediaNode(node, assignment)) return false
+        return Boolean(node.fileId)
+    })
+}
+
+function pendingImageNodeFromAssignment(params: {
+    assignment: MediaRunLineageAssignment
+    workspaceId: string
+    aiChatThreadId: string
+    sourceNode: CanvasNode | undefined
+    existing: ImageCanvasNode | undefined
+    state: CanvasState
+    fallbackIndex: number
+    canvasVisibleArea?: CanvasVisibleArea
+}): ImageCanvasNode {
+    const dimensions = params.existing?.dimensions ?? mediaDimensions()
+    const position = params.existing?.position
+        ?? getGeneratedMediaPosition(
+            params.sourceNode,
+            params.state.nodes,
+            dimensions,
+            params.fallbackIndex,
+            params.state,
+            params.canvasVisibleArea,
+        )
+    const mediaModelId = (params.assignment.mediaModelId ?? '') as AiModelId
+    return {
+        nodeId: params.existing?.nodeId ?? getPendingGeneratedMediaNodeId(params.assignment),
+        type: 'image',
+        fileId: '',
+        workspaceId: params.workspaceId,
+        src: '',
+        aspectRatio: params.existing?.aspectRatio ?? 1,
+        position,
+        dimensions,
+        generatedBy: {
+            aiChatThreadId: params.aiChatThreadId,
+            responseId: '',
+            aiModel: (params.assignment.reasoningModelId ?? '') as AiModelId,
+            revisedPrompt: params.assignment.promptText,
+            responseMessageId: '',
+            ...generatedByLineage(params.assignment),
+            mediaModelId,
+        },
+    }
+}
+
+function pendingVideoNodeFromAssignment(params: {
+    assignment: MediaRunLineageAssignment
+    workspaceId: string
+    aiChatThreadId: string
+    sourceNode: CanvasNode | undefined
+    existing: VideoCanvasNode | undefined
+    state: CanvasState
+    fallbackIndex: number
+    canvasVisibleArea?: CanvasVisibleArea
+}): VideoCanvasNode {
+    const dimensions = params.existing?.dimensions ?? mediaDimensions()
+    const position = params.existing?.position
+        ?? getGeneratedMediaPosition(
+            params.sourceNode,
+            params.state.nodes,
+            dimensions,
+            params.fallbackIndex,
+            params.state,
+            params.canvasVisibleArea,
+        )
+    const mediaModelId = (params.assignment.mediaModelId ?? '') as AiModelId
+    return {
+        nodeId: params.existing?.nodeId ?? getPendingGeneratedMediaNodeId(params.assignment),
+        type: 'video',
+        fileId: '',
+        posterFileId: '',
+        frameFileId: '',
+        workspaceId: params.workspaceId,
+        src: '',
+        posterSrc: '',
+        aspectRatio: params.existing?.aspectRatio ?? 1,
+        durationSeconds: params.existing?.durationSeconds ?? 0,
+        hasAudio: params.existing?.hasAudio ?? false,
+        position,
+        dimensions,
+        generatedBy: {
+            aiChatThreadId: params.aiChatThreadId,
+            responseId: '',
+            videoModel: mediaModelId,
+            revisedPrompt: params.assignment.promptText,
+            responseMessageId: '',
+            ...generatedByLineage(params.assignment),
+            mediaModelId,
+        },
+    }
+}
+
+function pendingGeneratedMediaNodeFromAssignment(params: {
+    assignment: MediaRunLineageAssignment
+    workspaceId: string
+    aiChatThreadId: string
+    state: CanvasState
+    fallbackIndex: number
+    canvasVisibleArea?: CanvasVisibleArea
+}): GeneratedMediaNode | null {
+    if (hasCompletedGeneratedMediaForAssignment(params.state.nodes, params.assignment)) return null
+
+    const existing = params.state.nodes.find((node): node is GeneratedMediaNode =>
+        assignmentMatchesGeneratedMediaNode(node, params.assignment)
+    )
+    const lineageParentNodeId = getLineageParentNodeId(params.assignment)
+    const sourceNode = findNode(params.state.nodes, lineageParentNodeId)
+    if (!sourceNode) {
+        console.info('[media-generation-canvas-projection] pending media projection missing lineage parent', {
+            generationRequestId: params.assignment.generationRequestId,
+            mediaRunId: params.assignment.mediaRunId,
+            mediaType: params.assignment.mediaType,
+            lineageParentNodeId,
+        })
+    }
+
+    return getMediaTypeForAssignment(params.assignment) === 'video'
+        ? pendingVideoNodeFromAssignment({
+            ...params,
+            sourceNode,
+            existing: existing?.type === 'video' ? existing : undefined,
+        })
+        : pendingImageNodeFromAssignment({
+            ...params,
+            sourceNode,
+            existing: existing?.type === 'image' ? existing : undefined,
+        })
+}
+
+function upsertPendingGeneratedMediaNodes(
+    state: CanvasState,
+    params: {
+        workspaceId: string
+        aiChatThreadId: string
+        lineagePlan: MediaBranchLineagePlan
+        canvasVisibleArea?: CanvasVisibleArea
+    },
+): { state: CanvasState; changed: boolean; projectedCount: number; skippedCompletedCount: number; skippedPlanVideoCount: number } {
+    let nextState = state
+    let changed = false
+    let projectedCount = 0
+    let skippedCompletedCount = 0
+    let skippedPlanVideoCount = 0
+    const skippedPlanVideoAssignmentIds: string[] = []
+
+    for (const assignment of params.lineagePlan.runAssignments) {
+        if (getMediaTypeForAssignment(assignment) === 'video') {
+            skippedPlanVideoCount += 1
+            skippedPlanVideoAssignmentIds.push(assignment.mediaRunId ?? getPendingGeneratedMediaNodeId(assignment))
+            continue
+        }
+        if (hasCompletedGeneratedMediaForAssignment(nextState.nodes, assignment)) {
+            skippedCompletedCount += 1
+            continue
+        }
+        const pendingNode = pendingGeneratedMediaNodeFromAssignment({
+            assignment,
+            workspaceId: params.workspaceId,
+            aiChatThreadId: params.aiChatThreadId,
+            state: nextState,
+            fallbackIndex: nextState.nodes.length,
+            canvasVisibleArea: params.canvasVisibleArea,
+        })
+        if (!pendingNode) continue
+        const nodeResult = upsertNode(nextState.nodes, pendingNode)
+        nextState = { ...nextState, nodes: nodeResult.nodes }
+        changed = changed || nodeResult.changed
+        projectedCount += 1
+
+        const edgeResult = addGeneratedMediaEdge(nextState, getLineageParentNodeId(assignment), pendingNode.nodeId)
+        nextState = edgeResult.state
+        changed = changed || edgeResult.changed
+    }
+
+    if (projectedCount > 0 || skippedCompletedCount > 0 || skippedPlanVideoCount > 0) {
+        console.info('[media-generation-canvas-projection] projected pending generated media from lineage plan', {
+            generationRequestId: params.lineagePlan.generationRequestId,
+            assignmentCount: params.lineagePlan.runAssignments.length,
+            projectedCount,
+            skippedCompletedCount,
+            skippedPlanVideoCount,
+            skippedPlanVideoAssignmentIds,
+        })
+    }
+
+    return { state: nextState, changed, projectedCount, skippedCompletedCount, skippedPlanVideoCount }
+}
+
+function replaceExistingPendingGeneratedMediaNode(
+    state: CanvasState,
+    existing: GeneratedMediaNode | undefined,
+    finalNodeId: string,
+): { state: CanvasState; changed: boolean } {
+    if (!existing || existing.nodeId === finalNodeId) return { state, changed: false }
+    return {
+        state: {
+            ...state,
+            nodes: state.nodes.filter((node) => node.nodeId !== existing.nodeId),
+            edges: (state.edges ?? []).filter((edge) =>
+                edge.sourceNodeId !== existing.nodeId && edge.targetNodeId !== existing.nodeId
+            ),
+        },
+        changed: true,
     }
 }
 
@@ -853,35 +1360,283 @@ export async function upsertMediaLineagePlanToCanvas(params: {
     aiChatThreadId: string
     lineagePlan: MediaBranchLineagePlan
     canvasVisibleArea?: CanvasVisibleArea
-}): Promise<void> {
-    await Workspace.mutateCanvasState({
+    proseMirrorThreadContent?: unknown
+}): Promise<CanvasGeometryUpdate | null> {
+    let geometryNodes: CanvasNodeGeometry[] = []
+    const result = await Workspace.mutateCanvasState({
         workspaceId: params.workspaceId,
         origin: 'upsertMediaLineagePlanToCanvas',
         mutate: (canvasState) => {
             const markers = markerNodesFromLineagePlan(params.lineagePlan, params.aiChatThreadId, canvasState, params.canvasVisibleArea)
             const markerResult = ensureMarkers(canvasState, markers)
-            const collisionResult = resolveCanvasProjectionCollisions(markerResult.state, 'upsertMediaLineagePlanToCanvas')
+            const pendingMediaResult = upsertPendingGeneratedMediaNodes(markerResult.state, {
+                workspaceId: params.workspaceId,
+                aiChatThreadId: params.aiChatThreadId,
+                lineagePlan: params.lineagePlan,
+                canvasVisibleArea: params.canvasVisibleArea,
+            })
+            const rebalanceResult = rebalanceLineageForest(pendingMediaResult.state, 'upsertMediaLineagePlanToCanvas', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
+            geometryNodes = diffCanvasGeometry(canvasState, rebalanceResult.state)
+            console.info('[media-generation-canvas-projection] lineage plan geometry diff', {
+                generationRequestId: params.lineagePlan.generationRequestId,
+                markerCount: markers.length,
+                runAssignmentCount: params.lineagePlan.runAssignments.length,
+                pendingMediaProjectedCount: pendingMediaResult.projectedCount,
+                pendingVideoSkippedAtPlanCount: pendingMediaResult.skippedPlanVideoCount,
+                geometryNodeCount: geometryNodes.length,
+                geometryNodeIds: geometryNodes.map(node => node.nodeId),
+            })
             return {
-                canvasState: collisionResult.state,
-                changed: markerResult.changed || collisionResult.changed,
+                canvasState: rebalanceResult.state,
+                changed: markerResult.changed || pendingMediaResult.changed || rebalanceResult.changed,
             }
         },
     })
+    if (!result.changed || result.canvasStateUpdatedAt === null || !result.canvasState) return null
+    return buildCanvasGeometryUpdate({
+        context: 'upsertMediaLineagePlanToCanvas',
+        layoutRevision: result.canvasStateUpdatedAt,
+        state: result.canvasState,
+        generationRequestId: params.lineagePlan.generationRequestId,
+        geometryNodes,
+    })
 }
 
-export async function upsertGeneratedImageToCanvas(params: UpsertImageInput): Promise<void> {
-    const assignment = params.generationRun?.lineageAssignment
-    if (!assignment) return
+export async function settleMediaGenerationRequestOnCanvas(params: {
+    workspaceId: string
+    generationRequestId: string
+    aiChatThreadId?: string
+    proseMirrorThreadContent?: unknown
+}): Promise<CanvasGeometryUpdate | null> {
+    let geometryNodes: CanvasNodeGeometry[] = []
+    let removedNodeIds: string[] = []
+    const result = await Workspace.mutateCanvasState({
+        workspaceId: params.workspaceId,
+        origin: 'settleMediaGenerationRequestOnCanvas',
+        mutate: (canvasState) => {
+            let changed = false
+            const nodes = canvasState.nodes.map((node: CanvasNode): CanvasNode => {
+                if (!isMarkerNode(node) || node.generationRequestId !== params.generationRequestId || !node.pendingState) {
+                    return node
+                }
+                const settledNode = { ...node }
+                delete settledNode.pendingState
+                changed = true
+                return settledNode
+            })
+            const stateWithSettledMarkers = { ...canvasState, nodes }
+            const shouldRemoveUnresolvedPendingNodes = hasResolvedGeneratedMediaForRequest(stateWithSettledMarkers, params.generationRequestId)
+            removedNodeIds = shouldRemoveUnresolvedPendingNodes
+                ? getUnresolvedPendingGeneratedMediaNodeIds(stateWithSettledMarkers, params.generationRequestId)
+                : []
+            const removedNodeIdSet = new Set(removedNodeIds)
+            const settledState = removedNodeIds.length > 0
+                ? {
+                    ...canvasState,
+                    nodes: nodes.filter(node => !removedNodeIdSet.has(node.nodeId)),
+                    edges: (canvasState.edges ?? []).filter(edge =>
+                        !removedNodeIdSet.has(edge.sourceNodeId) && !removedNodeIdSet.has(edge.targetNodeId)
+                    ),
+                }
+                : { ...canvasState, nodes }
+            // The settle pass is the final authoritative layout for the request:
+            // clients load these persisted positions with no post-load movement.
+            const rebalanceResult = rebalanceLineageForest(settledState, 'settleMediaGenerationRequestOnCanvas', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
+            geometryNodes = diffCanvasGeometry(canvasState, rebalanceResult.state)
+            console.info('[media-generation-canvas-projection] settle request geometry diff', {
+                generationRequestId: params.generationRequestId,
+                shouldRemoveUnresolvedPendingNodes,
+                removedUnresolvedPendingNodeCount: removedNodeIds.length,
+                removedUnresolvedPendingNodeIds: removedNodeIds,
+                geometryNodeCount: geometryNodes.length,
+                geometryNodeIds: geometryNodes.map(node => node.nodeId),
+            })
+            return {
+                canvasState: rebalanceResult.state,
+                changed: changed || removedNodeIds.length > 0 || rebalanceResult.changed,
+            }
+        },
+    })
+    if (!result.changed || result.canvasStateUpdatedAt === null || !result.canvasState) return null
+    return buildCanvasGeometryUpdate({
+        context: 'settleMediaGenerationRequestOnCanvas',
+        layoutRevision: result.canvasStateUpdatedAt,
+        state: result.canvasState,
+        generationRequestId: params.generationRequestId,
+        geometryNodes,
+        removedNodeIds,
+    })
+}
 
-    await Workspace.mutateCanvasState({
+export async function refreshMediaGenerationRequestCanvasGeometry(params: {
+    workspaceId: string
+    generationRequestId: string
+    aiChatThreadId?: string
+    proseMirrorThreadContent?: unknown
+}): Promise<CanvasGeometryUpdate | null> {
+    let geometryNodes: CanvasNodeGeometry[] = []
+    const result = await Workspace.mutateCanvasState({
+        workspaceId: params.workspaceId,
+        origin: 'refreshMediaGenerationRequestCanvasGeometry',
+        mutate: (canvasState) => {
+            const hasRequestMarker = canvasState.nodes.some((node: CanvasNode) =>
+                isMarkerNode(node) && node.generationRequestId === params.generationRequestId
+            )
+            if (!hasRequestMarker) {
+                return {
+                    canvasState,
+                    changed: false,
+                }
+            }
+
+            const rebalanceResult = rebalanceLineageForest(canvasState, 'refreshMediaGenerationRequestCanvasGeometry', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
+            geometryNodes = diffCanvasGeometry(canvasState, rebalanceResult.state)
+            console.info('[media-generation-canvas-projection] stream refresh geometry diff', {
+                generationRequestId: params.generationRequestId,
+                geometryNodeCount: geometryNodes.length,
+                geometryNodeIds: geometryNodes.map(node => node.nodeId),
+            })
+            return {
+                canvasState: rebalanceResult.state,
+                changed: rebalanceResult.changed,
+            }
+        },
+    })
+    if (!result.changed || result.canvasStateUpdatedAt === null || !result.canvasState) return null
+    return buildCanvasGeometryUpdate({
+        context: 'refreshMediaGenerationRequestCanvasGeometry',
+        layoutRevision: result.canvasStateUpdatedAt,
+        state: result.canvasState,
+        generationRequestId: params.generationRequestId,
+        geometryNodes,
+    })
+}
+
+export async function upsertPartialGeneratedImageToCanvas(params: UpsertPartialImageInput): Promise<CanvasGeometryUpdate | null> {
+    const assignment = params.generationRun?.lineageAssignment
+    if (!assignment) return null
+
+    let geometryNodes: CanvasNodeGeometry[] = []
+    const result = await Workspace.mutateCanvasState({
+        workspaceId: params.workspaceId,
+        origin: 'upsertPartialGeneratedImageToCanvas',
+        mutate: (canvasState) => {
+            const pendingNodeId = getPendingGeneratedMediaNodeId(assignment)
+            const existingBeforeMarkers = findGeneratedMediaNodeForRun(canvasState.nodes, 'image', params.fileId, params.generationRun)
+            if (isImageNode(existingBeforeMarkers) && existingBeforeMarkers.nodeId !== pendingNodeId && hasCompletedGeneratedMediaForAssignment(canvasState.nodes, assignment)) {
+                console.info('[media-generation-canvas-projection] skip stale partial after completed image', {
+                    generationRequestId: assignment.generationRequestId,
+                    mediaRunId: assignment.mediaRunId,
+                    partialIndex: params.partialIndex,
+                    existingNodeId: existingBeforeMarkers.nodeId,
+                    pendingNodeId,
+                    partialFileId: params.fileId,
+                })
+                return {
+                    canvasState,
+                    changed: false,
+                }
+            }
+
+            const markerResult = ensureMarkers(canvasState, markerNodesFromAssignment(assignment, params.aiChatThreadId, canvasState, params.canvasVisibleArea))
+            let nextState = markerResult.state
+            const existing = findGeneratedMediaNodeForRun(nextState.nodes, 'image', params.fileId, params.generationRun)
+            const intrinsicAspectRatio = getPositiveAspectRatio(params.aspectRatio)
+            const layout = fitGeneratedMediaLayout(
+                isImageNode(existing) ? existing : undefined,
+                mediaDimensions(intrinsicAspectRatio ?? (isImageNode(existing) ? existing.aspectRatio : 1)),
+                intrinsicAspectRatio,
+            )
+            const lineageParentNodeId = getLineageParentNodeId(assignment)
+            const sourceNode = findNode(nextState.nodes, lineageParentNodeId)
+            const mediaModelId = (params.generationRun?.mediaModelId ?? assignment.mediaModelId ?? '') as AiModelId
+            const imageNode: ImageCanvasNode = {
+                nodeId: pendingNodeId,
+                type: 'image',
+                fileId: params.fileId || (isImageNode(existing) ? existing.fileId : ''),
+                workspaceId: params.workspaceId,
+                src: params.imageUrl || (isImageNode(existing) ? existing.src : ''),
+                aspectRatio: intrinsicAspectRatio ?? (isImageNode(existing) ? existing.aspectRatio : 1),
+                position: layout.position ?? getGeneratedMediaPosition(sourceNode, nextState.nodes, layout.dimensions, nextState.nodes.length, nextState, params.canvasVisibleArea),
+                dimensions: layout.dimensions,
+                generatedBy: {
+                    aiChatThreadId: params.aiChatThreadId,
+                    responseId: isImageNode(existing) ? existing.generatedBy?.responseId ?? '' : '',
+                    aiModel: (params.generationRun?.reasoningModelId ?? params.aiProvider) as AiModelId,
+                    imageModelProvider: params.aiProvider,
+                    revisedPrompt: assignment.promptText,
+                    responseMessageId: isImageNode(existing) ? existing.generatedBy?.responseMessageId ?? '' : '',
+                    ...generatedByLineage(assignment),
+                    ...(params.generationRun?.variantIndex !== undefined ? { variantIndex: params.generationRun.variantIndex } : {}),
+                    mediaModelId,
+                },
+            }
+            const nodeResult = upsertNodeWithIncomingGeometry(nextState.nodes, imageNode)
+            nextState = { ...nextState, nodes: nodeResult.nodes }
+            const edgeResult = addGeneratedMediaEdge(nextState, lineageParentNodeId, pendingNodeId)
+            nextState = edgeResult.state
+            const forestResult = rebalanceLineageForest(nextState, 'upsertPartialGeneratedImageToCanvas', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
+            geometryNodes = diffCanvasGeometry(canvasState, forestResult.state)
+            console.info('[media-generation-canvas-projection] upsert partial image geometry diff', {
+                generationRequestId: assignment.generationRequestId,
+                mediaRunId: assignment.mediaRunId,
+                partialIndex: params.partialIndex,
+                pendingNodeId,
+                fileId: params.fileId,
+                imageUrlPresent: Boolean(params.imageUrl),
+                intrinsicAspectRatio,
+                geometryNodeCount: geometryNodes.length,
+                geometryNodeIds: geometryNodes.map(node => node.nodeId),
+            })
+            return {
+                canvasState: forestResult.state,
+                changed: markerResult.changed || nodeResult.changed || edgeResult.changed || forestResult.changed,
+            }
+        },
+    })
+    if (!result.changed || result.canvasStateUpdatedAt === null || !result.canvasState) return null
+    return buildCanvasGeometryUpdate({
+        context: 'upsertPartialGeneratedImageToCanvas',
+        layoutRevision: result.canvasStateUpdatedAt,
+        state: result.canvasState,
+        generationRequestId: assignment.generationRequestId,
+        geometryNodes,
+    })
+}
+
+export async function upsertGeneratedImageToCanvas(params: UpsertImageInput): Promise<CanvasGeometryUpdate | null> {
+    const assignment = params.generationRun?.lineageAssignment
+    if (!assignment) return null
+
+    let geometryNodes: CanvasNodeGeometry[] = []
+    let removedNodeIds: string[] = []
+    const result = await Workspace.mutateCanvasState({
         workspaceId: params.workspaceId,
         origin: 'upsertGeneratedImageToCanvas',
         mutate: (canvasState) => {
             const markerResult = ensureMarkers(canvasState, markerNodesFromAssignment(assignment, params.aiChatThreadId, canvasState, params.canvasVisibleArea))
             let nextState = markerResult.state
             const existing = findGeneratedMediaNodeForRun(nextState.nodes, 'image', params.fileId, params.generationRun)
-            const nodeId = existing?.nodeId ?? `node-${params.fileId}`
-            const dimensions = existing?.dimensions ?? mediaDimensions()
+            const nodeId = params.fileId ? `node-${params.fileId}` : existing?.nodeId ?? getPendingGeneratedMediaNodeId(assignment)
+            const replacementResult = replaceExistingPendingGeneratedMediaNode(nextState, existing, nodeId)
+            removedNodeIds = replacementResult.changed && existing ? [existing.nodeId] : []
+            nextState = replacementResult.state
+            const intrinsicAspectRatio = getPositiveAspectRatio(params.aspectRatio)
+            // Final fitted dimensions are persisted here so the client's
+            // intrinsic-size handler is a no-op on load — no post-load movement.
+            const layout = fitGeneratedMediaLayout(
+                isImageNode(existing) ? existing : undefined,
+                mediaDimensions(intrinsicAspectRatio ?? (isImageNode(existing) ? existing.aspectRatio : 1)),
+                intrinsicAspectRatio,
+            )
             const lineageParentNodeId = getLineageParentNodeId(assignment)
             const sourceNode = findNode(nextState.nodes, lineageParentNodeId)
             const mediaModelId = (params.generationRun?.mediaModelId ?? `${params.imageModelProvider}:${params.imageModelId}`) as AiModelId
@@ -891,9 +1646,9 @@ export async function upsertGeneratedImageToCanvas(params: UpsertImageInput): Pr
                 fileId: params.fileId,
                 workspaceId: params.workspaceId,
                 src: params.imageUrl,
-                aspectRatio: isImageNode(existing) ? existing.aspectRatio : 1,
-                position: existing?.position ?? getGeneratedMediaPosition(sourceNode, nextState.nodes, dimensions, nextState.nodes.length, nextState, params.canvasVisibleArea),
-                dimensions,
+                aspectRatio: intrinsicAspectRatio ?? (isImageNode(existing) ? existing.aspectRatio : 1),
+                position: layout.position ?? getGeneratedMediaPosition(sourceNode, nextState.nodes, layout.dimensions, nextState.nodes.length, nextState, params.canvasVisibleArea),
+                dimensions: layout.dimensions,
                 generatedBy: {
                     aiChatThreadId: params.aiChatThreadId,
                     responseId: params.responseId,
@@ -910,31 +1665,60 @@ export async function upsertGeneratedImageToCanvas(params: UpsertImageInput): Pr
             nextState = { ...nextState, nodes: nodeResult.nodes }
             const edgeResult = addGeneratedMediaEdge(nextState, lineageParentNodeId, nodeId)
             nextState = edgeResult.state
-            const rebalanceResult = rebalanceGeneratedMediaChildren(nextState, lineageParentNodeId)
-            nextState = rebalanceResult.state
-            const collisionResult = resolveCanvasProjectionCollisions(nextState, 'upsertGeneratedImageToCanvas')
+            const forestResult = rebalanceLineageForest(nextState, 'upsertGeneratedImageToCanvas', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
+            geometryNodes = diffCanvasGeometry(canvasState, forestResult.state)
+            console.info('[media-generation-canvas-projection] upsert generated image geometry diff', {
+                generationRequestId: assignment.generationRequestId,
+                mediaRunId: assignment.mediaRunId,
+                pendingNodeId: existing?.nodeId ?? '',
+                finalNodeId: nodeId,
+                replacedPendingNode: replacementResult.changed,
+                removedNodeIds,
+                geometryNodeCount: geometryNodes.length,
+                geometryNodeIds: geometryNodes.map(node => node.nodeId),
+            })
             return {
-                canvasState: collisionResult.state,
-                changed: markerResult.changed || nodeResult.changed || edgeResult.changed || rebalanceResult.changed || collisionResult.changed,
+                canvasState: forestResult.state,
+                changed: markerResult.changed || replacementResult.changed || nodeResult.changed || edgeResult.changed || forestResult.changed,
             }
         },
     })
+    if (!result.changed || result.canvasStateUpdatedAt === null || !result.canvasState) return null
+    return buildCanvasGeometryUpdate({
+        context: 'upsertGeneratedImageToCanvas',
+        layoutRevision: result.canvasStateUpdatedAt,
+        state: result.canvasState,
+        generationRequestId: assignment.generationRequestId,
+        geometryNodes,
+        removedNodeIds,
+    })
 }
 
-export async function upsertGeneratedVideoToCanvas(params: UpsertVideoInput): Promise<void> {
+export async function upsertGeneratedVideoToCanvas(params: UpsertVideoInput): Promise<CanvasGeometryUpdate | null> {
     const assignment = params.generationRun?.lineageAssignment
-    if (!assignment) return
+    if (!assignment) return null
 
-    await Workspace.mutateCanvasState({
+    let geometryNodes: CanvasNodeGeometry[] = []
+    let removedNodeIds: string[] = []
+    const result = await Workspace.mutateCanvasState({
         workspaceId: params.workspaceId,
         origin: 'upsertGeneratedVideoToCanvas',
         mutate: (canvasState) => {
             const markerResult = ensureMarkers(canvasState, markerNodesFromAssignment(assignment, params.aiChatThreadId, canvasState, params.canvasVisibleArea))
             let nextState = markerResult.state
             const existing = findGeneratedMediaNodeForRun(nextState.nodes, 'video', params.fileId, params.generationRun)
-            const nodeId = existing?.nodeId ?? `node-${params.fileId}`
+            const nodeId = params.fileId ? `node-${params.fileId}` : existing?.nodeId ?? getPendingGeneratedMediaNodeId(assignment)
+            const replacementResult = replaceExistingPendingGeneratedMediaNode(nextState, existing, nodeId)
+            removedNodeIds = replacementResult.changed && existing ? [existing.nodeId] : []
+            nextState = replacementResult.state
             const aspectRatio = parseAspectRatio(params.aspectRatio)
-            const dimensions = existing?.dimensions ?? mediaDimensions(aspectRatio)
+            const layout = fitGeneratedMediaLayout(
+                isVideoNode(existing) ? existing : undefined,
+                mediaDimensions(aspectRatio),
+                aspectRatio,
+            )
             const lineageParentNodeId = getLineageParentNodeId(assignment)
             const sourceNode = findNode(nextState.nodes, lineageParentNodeId)
             const videoNode: VideoCanvasNode = {
@@ -946,11 +1730,11 @@ export async function upsertGeneratedVideoToCanvas(params: UpsertVideoInput): Pr
                 workspaceId: params.workspaceId,
                 src: params.videoUrl,
                 posterSrc: params.posterUrl,
-                aspectRatio: isVideoNode(existing) ? existing.aspectRatio : aspectRatio,
+                aspectRatio,
                 durationSeconds: params.durationSeconds,
                 hasAudio: params.hasAudio,
-                position: existing?.position ?? getGeneratedMediaPosition(sourceNode, nextState.nodes, dimensions, nextState.nodes.length, nextState, params.canvasVisibleArea),
-                dimensions,
+                position: layout.position ?? getGeneratedMediaPosition(sourceNode, nextState.nodes, layout.dimensions, nextState.nodes.length, nextState, params.canvasVisibleArea),
+                dimensions: layout.dimensions,
                 generatedBy: {
                     aiChatThreadId: params.aiChatThreadId,
                     responseId: params.responseId,
@@ -970,14 +1754,35 @@ export async function upsertGeneratedVideoToCanvas(params: UpsertVideoInput): Pr
             nextState = { ...nextState, nodes: nodeResult.nodes }
             const edgeResult = addGeneratedMediaEdge(nextState, lineageParentNodeId, nodeId)
             nextState = edgeResult.state
-            const rebalanceResult = rebalanceGeneratedMediaChildren(nextState, lineageParentNodeId)
-            nextState = rebalanceResult.state
-            const collisionResult = resolveCanvasProjectionCollisions(nextState, 'upsertGeneratedVideoToCanvas')
+            const forestResult = rebalanceLineageForest(nextState, 'upsertGeneratedVideoToCanvas', {
+                proseMirrorThreadContent: params.proseMirrorThreadContent,
+            })
+            geometryNodes = diffCanvasGeometry(canvasState, forestResult.state)
+            console.info('[media-generation-canvas-projection] upsert generated video geometry diff', {
+                generationRequestId: assignment.generationRequestId,
+                mediaRunId: assignment.mediaRunId,
+                pendingNodeId: existing?.nodeId ?? '',
+                finalNodeId: nodeId,
+                replacedPendingNode: replacementResult.changed,
+                aspectRatio,
+                removedNodeIds,
+                geometryNodeCount: geometryNodes.length,
+                geometryNodeIds: geometryNodes.map(node => node.nodeId),
+            })
             return {
-                canvasState: collisionResult.state,
-                changed: markerResult.changed || nodeResult.changed || edgeResult.changed || rebalanceResult.changed || collisionResult.changed,
+                canvasState: forestResult.state,
+                changed: markerResult.changed || replacementResult.changed || nodeResult.changed || edgeResult.changed || forestResult.changed,
             }
         },
+    })
+    if (!result.changed || result.canvasStateUpdatedAt === null || !result.canvasState) return null
+    return buildCanvasGeometryUpdate({
+        context: 'upsertGeneratedVideoToCanvas',
+        layoutRevision: result.canvasStateUpdatedAt,
+        state: result.canvasState,
+        generationRequestId: assignment.generationRequestId,
+        geometryNodes,
+        removedNodeIds,
     })
 }
 

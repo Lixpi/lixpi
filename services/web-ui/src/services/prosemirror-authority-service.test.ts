@@ -217,6 +217,60 @@ describe('ProseMirrorAuthorityService', () => {
         service.disconnect()
     })
 
+    it('accepts END stream events even when local version is already ahead', async () => {
+        const nats = createNats()
+        nats.request.mockResolvedValue({
+            snapshot: null,
+            currentVersion: 5,
+            currentStreamSeq: 5,
+            events: [],
+        })
+        mocks.getData.mockReturnValue(nats)
+
+        let subscriptionHandler: (event: StepStreamEvent) => void = () => undefined
+        const onReceivingChange = vi.fn()
+        nats.subscribe.mockImplementation((_subject: string, handler: (event: StepStreamEvent) => void) => {
+            subscriptionHandler = handler
+            return { unsubscribe: vi.fn() }
+        })
+
+        const { view } = createView()
+
+        const service = new ProseMirrorAuthorityService({
+            ...coordinate,
+            baseVersion: 5,
+            docType: DOCUMENT_TYPE.AI_CHAT_THREAD,
+            getView: () => view,
+            onReceivingChange,
+        })
+
+        await Promise.resolve()
+
+        subscriptionHandler(createEvent({
+            kind: 'END',
+            docType: DOCUMENT_TYPE.AI_CHAT_THREAD,
+            baseVersion: 3,
+            finalVersion: 3,
+            version: 3,
+            subjectSeq: 1,
+            streamSequence: 1,
+        }) as StepEnvelope)
+        await Promise.resolve()
+
+        expect(onReceivingChange).toHaveBeenCalledWith(false, expect.objectContaining({
+            kind: 'END',
+            finalVersion: 3,
+        }))
+        expect(view.dispatch).toHaveBeenCalledTimes(1)
+        const dispatchedTransaction = view.dispatch.mock.calls[0]?.[0] as MockTransaction | undefined
+        expect(dispatchedTransaction?.metadata.get('setReceiving')).toEqual({
+            threadId: 'thread-1',
+            receiving: false,
+            runKey: 'thread-1',
+        })
+        service.disconnect()
+    })
+
     it('batches multiple local steps and submits one request after the debounce window', async () => {
         vi.useFakeTimers()
         const nats = createNats()

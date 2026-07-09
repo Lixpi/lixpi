@@ -85,7 +85,7 @@ const baseMessageData = {
     videoDuration: '30',
     videoSourceForExtension: 'webp',
     referencedFeatureIds: ['feature-1'],
-    imageBranchCandidateSnapshot: { nodes: [] },
+    mediaBranchCandidateSnapshot: { nodes: [] },
     workspaceContextSnapshot: { summary: 'context' },
     proseMirrorInitialDoc: { type: 'doc', content: [] },
     proseMirrorBaseVersion: 12,

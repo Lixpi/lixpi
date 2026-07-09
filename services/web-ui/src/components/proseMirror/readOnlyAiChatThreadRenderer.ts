@@ -1,5 +1,5 @@
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
-import type { ProseMirrorJsonNode } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
+import type { ProseMirrorJsonNode } from '@lixpi/prosemirror/shared/thread-doc'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import type { AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import { html } from '$src/utils/domTemplates.ts'

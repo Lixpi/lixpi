@@ -28,7 +28,7 @@ Do not rely on tiny routing files or stale folder names. To find the right guida
 1. Use this index for the main product and platform entry points.
 2. Use the generated docs-site sidebar for the complete current file list.
 3. Search by the concept you are changing, then read nearby pages before editing.
-4. For every implementation iteration, read [`Testing Guide Selection`](testing/USING-TESTING-GUIDES.md), then read the relevant coding and source README guidance that matches the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread. If cleanup or an edit would delete repository files, ask the user to confirm the exact file path(s) first; if the user does not confirm, keep the files and report them as cleanup candidates.
+4. For every implementation iteration, read [`Testing Guide Selection`](testing/USING-TESTING-GUIDES.md), then read the relevant coding and source README guidance that matches the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread.
 5. For `services/web-ui` TypeScript UI work, [`TypeScript Coding Style`](coding-style-guides/TYPESCRIPT.md) and [`UI Components Coding Style`](coding-style-guides/UI-COMPONENTS.md) are mandatory before editing.
 
 When the architecture changes, update this map and the affected domain pages together. Avoid creating new "using this folder" stubs; add useful guidance to a real page instead.
@@ -42,6 +42,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Service responsibilities, NATS as the backbone, subject conventions, design decisions, scaling |
 | [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md) | The shared LangGraph workflow, `ProviderState`, the post-stream 3-way router, dual-model routing, tool injection/extraction, `ImageRouter`/`VideoRouter`, stream lifecycle, usage |
 | [Streaming & Events](platform/STREAMING-AND-EVENTS.md) | Live AI pipeline subjects, JetStream replay logs, ProseMirror step streams, and the stream-event catalog |
+| [Data Storage](platform/DATA-STORAGE.md) | DynamoDB table layout, the Main/Meta/Access-List triad, scope-partitioned keys, the transactional multi-table write rule, and the object-store split |
 | [Authentication](platform/AUTHENTICATION.md) | Dual auth model, NATS auth callout, `@lixpi/auth-service`, LocalAuth0 |
 | [Nano Stores](platform/NANOSTORES.md) | Browser-side store conventions for `nanostores`, persistent stores, and framework-agnostic TypeScript consumers |
 | [Infrastructure Overview](platform/deployment/INFRASTRUCTURE-OVERVIEW.md) | Pulumi, AWS topology, network, ECS `api`, web-ui delivery, DynamoDB |

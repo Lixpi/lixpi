@@ -1,14 +1,14 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
+import { STREAM_STATUS, type CanvasGeometryUpdate, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
 
 import {
     logCanvasProjectionError,
     upsertGeneratedVideoToCanvas,
 } from '../../services/media-generation-canvas-projection.ts'
 import type { StoreWorkspaceImageFn } from './image-publisher.ts'
-import type { ChunkPayload, ProseMirrorContentHandler } from './stream-publisher.ts'
+import type { ChunkPayload, ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from './stream-publisher.ts'
 
 // Store-function contract for generated video. Implemented by a
 // storeWorkspaceFile adapter at the composition root (store-media-adapters.ts).
@@ -51,6 +51,7 @@ export class VideoPublisher {
         private readonly onProseMirrorContent?: ProseMirrorContentHandler,
         private readonly onPipelineContent?: ProseMirrorContentHandler,
         private readonly canvasVisibleArea?: { width: number; height: number },
+        private readonly getProseMirrorSnapshot?: ProseMirrorSnapshotProvider,
     ) {}
 
     private publish(content: ChunkPayload['content']): void {
@@ -143,8 +144,10 @@ export class VideoPublisher {
         const poster = await storeFrameImage(posterBuffer, 'generated-video-poster.png')
         const frame = await storeFrameImage(frameBuffer, 'generated-video-frame.png')
 
+        let canvasGeometry: CanvasGeometryUpdate | null = null
         try {
-            await upsertGeneratedVideoToCanvas({
+            const proseMirrorThreadContent = await this.getProseMirrorSnapshot?.()
+            canvasGeometry = await upsertGeneratedVideoToCanvas({
                 workspaceId: this.workspaceId,
                 aiChatThreadId: this.aiChatThreadId,
                 videoUrl: videoResult.url,
@@ -162,6 +165,7 @@ export class VideoPublisher {
                 videoModelProvider: this.provider,
                 videoModelId,
                 generationRun: this.generationRun,
+                ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
                 ...(this.canvasVisibleArea ? { canvasVisibleArea: this.canvasVisibleArea } : {}),
             })
         } catch (error) {
@@ -184,6 +188,7 @@ export class VideoPublisher {
             aiProvider: this.provider,
             videoModelProvider: this.provider,
             videoModelId,
+            ...(canvasGeometry ? { canvasGeometry } : {}),
             ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
     }

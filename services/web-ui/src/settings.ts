@@ -1,7 +1,14 @@
-import { mediaGenerationLayoutSettings } from '@lixpi/constants'
-
-import type { WorkspaceEdgePathType } from '@lixpi/constants'
-import type { CircularGlassMaterialStyle } from '$src/utils/animations/gradients/pixiGlassMaterial.ts'
+import {
+    mediaGenerationLayoutSettings,
+    workspaceCollisionSettings,
+    workspacePersistenceSettings,
+    type WorkspaceEdgePathType,
+    type WorkspaceCollisionFlowSettings,
+    type WorkspaceCollisionNodeTypeSettings,
+    type WorkspaceCollisionSettings,
+    type WorkspacePersistenceSettings,
+} from '@lixpi/constants'
+import type { CircularGlassMaterialStyle } from '@lixpi/canvas-engine'
 
 export const colorPalette = {
     nightBlue: '#42494f',
@@ -494,6 +501,11 @@ export type VideoControlsSettings = {
     }
 }
 
+export type WorkspaceLoadingOutlineSettings = {
+    // Diameter of the workspace-switch loading circle relative to the generated-media pending circle.
+    diameterScale: number
+}
+
 export type MediaBranchLineageColorMixSettings = {
     targetColor: string
     amount: number
@@ -536,29 +548,6 @@ export type MediaBranchLineageMediaModelCircleSettings = {
         opacity: number
         backgroundSizePercent: number
     }
-}
-
-export type WorkspaceCollisionNodeTypeSettings = {
-    iterations: number
-    margin: number
-    overlapThreshold: number
-}
-
-export type WorkspaceCollisionFlowSettings = {
-    nodeTypes: {
-        document: WorkspaceCollisionNodeTypeSettings
-        image: WorkspaceCollisionNodeTypeSettings
-        video: WorkspaceCollisionNodeTypeSettings
-        branchOrigin: WorkspaceCollisionNodeTypeSettings
-        branchFork: WorkspaceCollisionNodeTypeSettings
-        branchLine: WorkspaceCollisionNodeTypeSettings
-    }
-}
-
-export type WorkspaceCollisionSettings = {
-    insertion: WorkspaceCollisionFlowSettings
-    dragRelease: WorkspaceCollisionFlowSettings
-    branchTree: WorkspaceCollisionFlowSettings
 }
 
 export type MediaBranchLineageSettings = {
@@ -642,11 +631,15 @@ export type Settings = {
 
     mediaNode: MediaNodeSettings
 
+    workspaceLoadingOutline: WorkspaceLoadingOutlineSettings
+
     videoControls: VideoControlsSettings
 
     mediaBranchLineage: MediaBranchLineageSettings
 
     mediaLibrary: MediaLibrarySettings
+
+    workspacePersistence: WorkspacePersistenceSettings
 
     contentDescriptor: ContentDescriptorSettings
 }
@@ -914,8 +907,10 @@ export const settings: Settings = {
             closeEasing: 'cubic-bezier(0.64, 0, 0.78, 0)',
         },
         overlay: {
-            // Full-viewport dark glass tint layer behind the side panel.
-            enabled: true,
+            // The visual overlay is disabled so the workspace list does not dim
+            // the canvas. `closeOnPointerDown` still collapses the panel from
+            // document-level outside clicks.
+            enabled: false,
             closeOnPointerDown: true,
             fill: 'rgba(15, 23, 42, 0.18)',
             fillOpaque: 'rgba(15, 23, 42, 0.22)',
@@ -1138,47 +1133,8 @@ export const settings: Settings = {
         },
     },
 
-    // Workspace collision resolution settings. Resolver iterations, spacing,
-    // and trigger thresholds are configured per canvas node type. Branch-lineage
-    // marker margins are replaced at runtime by mediaBranchLineage.nodeGap so one
-    // spacing knob controls every marker type across placement, drag, and rebalance.
-    workspaceCollision: {
-        // Viewport-centered insertions use wider breathing room.
-        insertion: {
-            nodeTypes: {
-                document: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
-                image: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
-                video: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
-                branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            },
-        },
-        // Drag-release cleanup keeps manually positioned nodes tight while runtime
-        // marker margins still prevent branch-lineage marker bodies from overlapping.
-        dragRelease: {
-            nodeTypes: {
-                document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            },
-        },
-        // Branch-tree rebalancing combines normal media/document breathing room
-        // with runtime branch-marker clearance from mediaBranchLineage.nodeGap.
-        branchTree: {
-            nodeTypes: {
-                document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-                branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
-                branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            },
-        },
-    },
+    // Shared API/WebUI collision settings. Tune in @lixpi/constants only.
+    workspaceCollision: workspaceCollisionSettings,
 
     // Canvas media node settings. Shared values style the chrome, resize handles, generation outline, and selection states common to every media node (image, video, …); per-type subcategories hold values specific to one media type.
     mediaNode: {
@@ -1195,10 +1151,10 @@ export const settings: Settings = {
 
         // Provenance/descriptor icon strip below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; the expandable info panel is rendered separately and does not inherit this transform.
         generatedMediaChrome: {
-            // Base screen-pixel icon/button size at 100% and higher zoom.
-            iconSize: 28,
-            // Base screen-pixel gap at 100% and higher zoom between the media node's bottom edge and the chrome strip.
-            topGap: 8,
+            // Base screen-pixel icon/button size at 100% and higher zoom. Shared with the API collision boxes via @lixpi/constants.
+            iconSize: mediaGenerationLayoutSettings.generatedMediaChrome.iconSize,
+            // Base screen-pixel gap at 100% and higher zoom between the media node's bottom edge and the chrome strip. Shared with the API collision boxes via @lixpi/constants.
+            topGap: mediaGenerationLayoutSettings.generatedMediaChrome.topGap,
             // Scale applied to generated-media badges rendered inside AI chat history cards.
             chatScale: 0.72,
             // Separator between the provider brand and model title in the model badge, e.g. "OpenAI : GPT Image 2". Includes its own surrounding spacing so it can be tuned freely (" : ", " — ", " / ", …).
@@ -1275,7 +1231,7 @@ export const settings: Settings = {
             // Empty screen-pixel gap between the media node edge and the inside edge of the snake at 100% zoom.
             gap: 3,
             // Diameter of the pre-first-frame generation circle as a fraction of the pending media node's shortest side.
-            preFrameCircleScale: 1 / 3,
+            preFrameCircleScale: mediaGenerationLayoutSettings.preFrameCircleScale,
             // Screen-pixel width of the snake head at 100% zoom. The body tapers from this value toward the tail.
             snakeWidth: 9,
             // Tail width as a fraction of `snakeWidth`; lower values make the tail taper to a finer point.
@@ -1381,10 +1337,15 @@ export const settings: Settings = {
         },
     },
 
+    workspaceLoadingOutline: {
+        // Relative to the generated-media pending circle. 0.6 makes the workspace-switch spinner 40% smaller in diameter.
+        diameterScale: 0.6,
+    },
+
     // Shared SVG video player controls used by canvas video nodes and in-chat generated videos.
     videoControls: {
-        // Screen-pixel height of the control bar and host.
-        height: 40,
+        // Screen-pixel height of the control bar and host. Shared with the API collision boxes via @lixpi/constants.
+        height: mediaGenerationLayoutSettings.generatedMediaChrome.videoControlsHeight,
         // Canvas video-node mount geometry.
         canvas: {
             // Horizontal inset for normal-width video nodes.
@@ -1393,8 +1354,8 @@ export const settings: Settings = {
             compactHorizontalInset: 0,
             // Node width below which the compact horizontal inset is used.
             compactWidthThreshold: 260,
-            // Vertical gap between the video node edge and the external controls strip.
-            bottomInset: 8,
+            // Vertical gap between the video node edge and the external controls strip. Shared with the API collision boxes via @lixpi/constants.
+            bottomInset: mediaGenerationLayoutSettings.generatedMediaChrome.videoControlsBottomInset,
             // Bounded zoom scaling for the canvas control strip.
             zoomScaling: { minZoom: 1.2 },
         },
@@ -1512,13 +1473,13 @@ export const settings: Settings = {
         // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
         branchFanoutExtraGap: mediaGenerationLayoutSettings.branchFanoutExtraGap,
         // Vertical gap between stacked screen-fixed pending branch markers.
-        pendingMarkerInputGap: 8,
+        pendingMarkerInputGap: mediaGenerationLayoutSettings.pendingMarkerInputGap,
         // Milliseconds for moving and scaling a pending branch marker from its screen-fixed preflight position to its API-planned canvas position.
-        pendingMarkerMoveDurationMs: 420,
+        pendingMarkerMoveDurationMs: mediaGenerationLayoutSettings.pendingMarkerMoveDurationMs,
         // Temporary root marker used when a fresh multi-model branch has no real source node.
         branchOrigin: {
-            // Canvas-unit base size for branch lineage markers; final width and height are derived in WorkspaceCanvas.
-            size: 96,
+            // Canvas-unit base size for branch lineage markers; final width and height derive from the shared marker sizing in @lixpi/constants.
+            size: mediaGenerationLayoutSettings.marker.baseSize,
             // Canvas-unit base size for the branch icon inside marker labels.
             iconSize: 52,
             styles: {
@@ -1868,30 +1829,33 @@ export const settings: Settings = {
                 backgroundSizePercent: 142,
             },
         },
-        // Width sizing for the branch marker pill that hugs a user message.
+        // Width sizing for the branch marker pill that hugs a user message. The
+        // sizing metrics come from the shared mediaGenerationLayoutSettings.marker
+        // so the API layout estimates marker dimensions with identical values —
+        // tune them in @lixpi/constants only.
         marker: {
             // Multiplier on branchOrigin.size for the marker's comfortable minimum width (the pill never shrinks below this).
-            minWidthMultiplier: 2.6,
+            minWidthMultiplier: mediaGenerationLayoutSettings.marker.minWidthMultiplier,
             // Multiplier on the minimum width capping how wide an on-canvas (already-placed) marker may grow before its preview wraps to a second line and truncates. Lower it to keep long placed messages more compact.
-            maxWidthGrowth: 1.5,
+            maxWidthGrowth: mediaGenerationLayoutSettings.marker.maxWidthGrowth,
             // Multiplier on the minimum width capping the screen-fixed preflight pose. Kept wider than maxWidthGrowth so long prompts stay on one line while still being assessed; once the marker lands on the canvas it tightens to maxWidthGrowth.
-            screenFixedMaxWidthGrowth: 6,
+            screenFixedMaxWidthGrowth: mediaGenerationLayoutSettings.marker.screenFixedMaxWidthGrowth,
             // Hard cap on the screen-fixed preflight pose's on-screen width as a fraction of the prompt input field width. The pill hugs its content but never grows past this share of the input; longer messages truncate with an ellipsis.
-            screenFixedMaxWidthFraction: 0.8,
+            screenFixedMaxWidthFraction: mediaGenerationLayoutSettings.marker.screenFixedMaxWidthFraction,
             // Text sizing for the marker's preview lines. Matches the floating detail panel's body text (1rem / 16px) so a marker reads at the same size as the thread it represents.
-            text: {
-                messageFontSize: 16,
-                messageLineHeight: 1.14,
-                responseFontSize: 11.5,
-                responseLineHeight: 1.15,
-            },
+            text: mediaGenerationLayoutSettings.marker.text,
         },
     },
 
+    // Shared workspace/document persistence timing, sourced from @lixpi/constants
+    // so browser fallback saves and API settled snapshots use the same delay.
+    workspacePersistence: workspacePersistenceSettings,
+
     // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).
     contentDescriptor: {
-        // Quiet period (ms) before a text node descriptor seed/refresh runs. Canvas document typing does not proactively call this path.
-        editDebounceMs: 5000,
+        // Quiet period (ms) before a text node descriptor seed/refresh runs.
+        // Kept aligned with workspace persistence so document-derived workspace metadata settles on the same cadence.
+        editDebounceMs: workspacePersistenceSettings.debounceMs,
         // Minimum trimmed plain-text length before a document/thread is worth describing. Below this we skip the model call (nothing meaningful to summarize).
         minTextLength: 16,
     },

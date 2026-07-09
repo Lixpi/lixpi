@@ -5,7 +5,7 @@ import {
     getWorkspaceStepStreamName,
     getWorkspaceStepStreamSubject,
     PROSEMIRROR_STEP_SUBJECT_PREFIX,
-} from './transport-types.ts'
+} from './shared/transport-types.ts'
 
 describe('stream name sanitization', () => {
     it('replaces illegal characters in workspace IDs', () => {

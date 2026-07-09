@@ -3,16 +3,16 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-    type ImageBranchCandidateImage,
-    type ImageBranchCandidateSnapshot,
-    type ImageBranchVlmResolution,
+    type MediaBranchCandidateImage,
+    type MediaBranchCandidateSnapshot,
+    type MediaBranchVlmResolution,
 } from '@lixpi/constants'
 
 import { MediaBranchLineagePlanner } from './media-branch-lineage-planner.ts'
 
 const planner = new MediaBranchLineagePlanner()
 
-const candidate = (overrides: Partial<ImageBranchCandidateImage>): ImageBranchCandidateImage => ({
+const candidate = (overrides: Partial<MediaBranchCandidateImage>): MediaBranchCandidateImage => ({
     nodeId: 'node-1',
     fileId: 'file-1',
     workspaceId: 'workspace-1',
@@ -26,7 +26,7 @@ const candidate = (overrides: Partial<ImageBranchCandidateImage>): ImageBranchCa
 
 describe('MediaBranchLineagePlanner', () => {
     it('uses a generated lineage source when VLM target points to an eligible generated node', () => {
-        const snapshot: ImageBranchCandidateSnapshot = {
+        const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
             threadId: 'thread-1',
             regionNodeId: 'region-root',
@@ -44,7 +44,7 @@ describe('MediaBranchLineagePlanner', () => {
             ],
         }
 
-        const resolution: ImageBranchVlmResolution = {
+        const resolution: MediaBranchVlmResolution = {
             resolverKind: 'structured-vlm',
             resolverVersion: 'image-branch-vlm-v1',
             resolverModelProvider: 'OpenAI',
@@ -71,8 +71,8 @@ describe('MediaBranchLineagePlanner', () => {
         const plan = planner.buildPlan({
             generationRequestId: 'request-1',
             reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
-            imageBranchCandidateSnapshot: snapshot,
-            imageBranchResolution: resolution,
+            mediaBranchCandidateSnapshot: snapshot,
+            mediaBranchResolution: resolution,
             createdAt: 1700000000000,
         })
 
@@ -117,7 +117,7 @@ describe('MediaBranchLineagePlanner', () => {
     })
 
     it('uses explicit placement from a non-standalone region node when no lineage source is matched', () => {
-        const snapshot: ImageBranchCandidateSnapshot = {
+        const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
             threadId: 'thread-1',
             regionNodeId: 'region-1',
@@ -132,7 +132,7 @@ describe('MediaBranchLineagePlanner', () => {
         const plan = planner.buildPlan({
             generationRequestId: 'request-2',
             reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
-            imageBranchCandidateSnapshot: snapshot,
+            mediaBranchCandidateSnapshot: snapshot,
             createdAt: 1700000001000,
         })
 
@@ -157,7 +157,7 @@ describe('MediaBranchLineagePlanner', () => {
     })
 
     it('constructs branch forks and uses them as lineage parents for multi-reasoning runs', () => {
-        const snapshot: ImageBranchCandidateSnapshot = {
+        const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
             threadId: 'thread-1',
             regionNodeId: 'standalone:region-1',
@@ -169,7 +169,7 @@ describe('MediaBranchLineagePlanner', () => {
             ],
         }
 
-        const resolution: ImageBranchVlmResolution = {
+        const resolution: MediaBranchVlmResolution = {
             resolverKind: 'structured-vlm',
             resolverVersion: 'image-branch-vlm-v1',
             resolverModelProvider: 'OpenAI',
@@ -198,8 +198,8 @@ describe('MediaBranchLineagePlanner', () => {
                 'Anthropic:claude-sonnet-4-6',
                 'Anthropic:claude-opus-4-1',
             ],
-            imageBranchCandidateSnapshot: snapshot,
-            imageBranchResolution: resolution,
+            mediaBranchCandidateSnapshot: snapshot,
+            mediaBranchResolution: resolution,
             createdAt: 1700000002000,
         })
 
@@ -253,7 +253,7 @@ describe('MediaBranchLineagePlanner', () => {
     })
 
     it('deduplicates candidate/reference nodes and records explicit reference provenance', () => {
-        const snapshot: ImageBranchCandidateSnapshot = {
+        const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
             threadId: 'thread-2',
             regionNodeId: 'standalone:region-2',
@@ -269,8 +269,8 @@ describe('MediaBranchLineagePlanner', () => {
         const plan = planner.buildPlan({
             generationRequestId: 'request-4',
             reasoningModelIds: ['Anthropic:claude-sonnet-4-6', 'Anthropic:claude-opus-4-1'],
-            imageBranchCandidateSnapshot: snapshot,
-            imageBranchResolution: {
+            mediaBranchCandidateSnapshot: snapshot,
+            mediaBranchResolution: {
                 ...(resolutionForCandidate(snapshot) as any),
             },
             workspaceContextSnapshot: {
@@ -301,7 +301,7 @@ describe('MediaBranchLineagePlanner', () => {
     })
 
     it('forks per media run when a single reasoning model fans out to multiple image models', () => {
-        const snapshot: ImageBranchCandidateSnapshot = {
+        const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
             threadId: 'thread-5',
             regionNodeId: 'standalone:region-5',
@@ -314,7 +314,7 @@ describe('MediaBranchLineagePlanner', () => {
             generationRequestId: 'request-5',
             reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
             imageModelIds: ['OpenAI:gpt-image-1-mini', 'Google:gemini-2.5-flash-image'],
-            imageBranchCandidateSnapshot: snapshot,
+            mediaBranchCandidateSnapshot: snapshot,
             createdAt: 1700000005000,
         })
 
@@ -349,7 +349,7 @@ describe('MediaBranchLineagePlanner', () => {
     })
 
     it('falls back placement anchor to the first reference node for standalone regions without lineage source', () => {
-        const snapshot: ImageBranchCandidateSnapshot = {
+        const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
             threadId: 'thread-6',
             regionNodeId: 'standalone:region-6',
@@ -361,7 +361,7 @@ describe('MediaBranchLineagePlanner', () => {
             ],
         }
 
-        const resolution: ImageBranchVlmResolution = {
+        const resolution: MediaBranchVlmResolution = {
             resolverKind: 'structured-vlm',
             resolverVersion: 'image-branch-vlm-v1',
             resolverModelProvider: 'OpenAI',
@@ -387,8 +387,8 @@ describe('MediaBranchLineagePlanner', () => {
         const plan = planner.buildPlan({
             generationRequestId: 'request-6',
             reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
-            imageBranchCandidateSnapshot: snapshot,
-            imageBranchResolution: resolution,
+            mediaBranchCandidateSnapshot: snapshot,
+            mediaBranchResolution: resolution,
             createdAt: 1700000006000,
         })
 
@@ -400,7 +400,7 @@ describe('MediaBranchLineagePlanner', () => {
     })
 })
 
-const resolutionForCandidate = (snapshot: ImageBranchCandidateSnapshot) => {
+const resolutionForCandidate = (snapshot: MediaBranchCandidateSnapshot) => {
     const firstCandidate = snapshot.candidates?.[0]
     return {
         resolverKind: 'structured-vlm',

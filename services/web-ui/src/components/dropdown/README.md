@@ -117,6 +117,8 @@ createPureDropdown({
 - `errorState`: Enables red error text for the selected-value label unless `enabled` is `false`. Missing `title` falls back to `Error state`; missing `textColor` uses `settings.dropdown.errorState.textColor`
 - Various rendering flags for icons, colors, titles
 
+The dropdown marks both its trigger and popover with `data-side-panel-no-drag`, so body-mounted menus inside side panels remain interactive and do not trigger side-panel drag or overlay-close behavior before option clicks run.
+
 **Note**: `renderPosition` is deprecated and removed. The dropdown now uses InfoBubble's smart auto-flip logic instead.
 
 ### Return Value

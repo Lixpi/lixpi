@@ -40,7 +40,7 @@ import type {
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
     AiModelId,
-    ImageBranchVlmResolution,
+    MediaBranchVlmResolution,
     ImageGenerationTrace,
     ImageGenerationSize,
     MediaBranchLineagePlan,
@@ -100,7 +100,7 @@ type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_error' | 'im
 type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' | 'video_error' | 'video_generation_trace'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'
-type MediaLineageSegmentType = 'media_lineage_planned' | 'media_generation_skipped'
+type MediaLineageSegmentType = 'media_lineage_planned' | 'media_generation_skipped' | 'media_generation_request_complete' | 'canvas_geometry_resolved'
 export type SegmentEvent = {
     status?: StreamStatus
     type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType | MediaLineageSegmentType
@@ -118,8 +118,9 @@ export type SegmentEvent = {
     partialIndex?: number
     responseId?: string
     revisedPrompt?: string
-    imageBranchResolution?: ImageBranchVlmResolution
+    mediaBranchResolution?: MediaBranchVlmResolution
     mediaBranchLineagePlan?: MediaBranchLineagePlan
+    canvasGeometry?: import('@lixpi/constants').CanvasGeometryUpdate
     generationRequestId?: string
     workspaceContextResolution?: WorkspaceContextResolution
     imageGenerationTrace?: ImageGenerationTrace
@@ -1669,6 +1670,18 @@ class AiChatThreadPluginClass {
                 return
             }
 
+            if (type === 'media_generation_request_complete') {
+                routeSegmentEventToCanvas(event)
+                return
+            }
+
+            // API-resolved canvas geometry never touches the chat document —
+            // it routes straight to the canvas apply callback.
+            if (type === 'canvas_geometry_resolved') {
+                routeSegmentEventToCanvas(event)
+                return
+            }
+
             if (type === 'context_relevance_resolved') {
                 if (usesServerAuthoritativeProseMirror(event)) {
                     routeSegmentEventToCanvas(event)
@@ -2511,7 +2524,8 @@ class AiChatThreadPluginClass {
 
         // The media-generation matrix is needed only when some section carries
         // more than one model; a single model per section runs the plain path.
-        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, videoModelIds.length]
+        const matrixVideoModelIds = videoModelsEnabled || Boolean(sourceVideoNodeId) ? videoModelIds : []
+        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, matrixVideoModelIds.length]
         const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
         const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
         const usesMediaGenerationMatrix = totalSelectedModelCount > sectionsWithSelection

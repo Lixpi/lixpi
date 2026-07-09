@@ -23,6 +23,7 @@ import {
     computeWorldPosition,
     getPixiLodTier,
     getVisibleWorldRect,
+    isGeneratedImageNodeWaitingForFrame,
     makeIndexedImage,
     resolveStoredImagePath,
     tierRank,
@@ -35,19 +36,15 @@ import {
 import { createPixiEdgeRenderer, type PixiEdgeRenderer } from '$src/infographics/workspace/rendering/pixiEdgeRenderer.ts'
 import { createMediaNodeRegistry, type MediaNodeRegistry } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
 import {
+    getAdaptiveBoundedZoomScalingOptions,
     getRoundedOutlinePerimeter,
+    PixiGlassBorderRenderer,
     PixiTravelingOutlineRenderer,
+    type PixiGlassBorderDatum,
     type PixiTravelingOutlineDatum,
     type PixiTravelingOutlineDirection,
-} from '$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts'
-import {
-    PixiGlassBorderRenderer,
-    type PixiGlassBorderDatum,
-} from '$src/utils/animations/gradients/pixiGlassBorderRenderer.ts'
-import {
-    getAdaptiveBoundedZoomScalingOptions,
     scaleCanvasChromeWorldSizeForZoom,
-} from '$src/infographics/utils/zoomScaling.ts'
+} from '@lixpi/canvas-engine'
 import { settings } from '$src/settings.ts'
 
 type PixiImageEntry = {
@@ -503,6 +500,14 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
     }
 
+    function isFinalGeneratedImageNode(node: ImageCanvasNode): boolean {
+        return Boolean(node.generatedBy && node.fileId)
+    }
+
+    function logFinalGeneratedImageLifecycle(event: string, details: Record<string, unknown>): void {
+        console.info('[CANVAS][pixi-media]', event, details)
+    }
+
     // Snapshot all live image entries at the moment of the dump. The dump avoids
     // retaining entry references so pasted output cannot mutate after capture.
     function getDebugEntrySnapshots(): PixiMediaDebugImageSnapshot[] {
@@ -807,9 +812,14 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function sync(canvasState: CanvasState | null): void {
         lastState = canvasState
-        if (!canvasState || health !== 'ready' || destroyed) {
+        if (!canvasState) {
+            clearPixiScene()
+            return
+        }
+
+        if (health !== 'ready' || destroyed) {
             debugLog('sync-skipped', {
-                hasCanvasState: Boolean(canvasState),
+                hasCanvasState: true,
                 health,
                 destroyed,
             })
@@ -889,6 +899,58 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             entriesAfter: verbose ? getDebugEntrySnapshots() : entries.size,
             registryDispatchedNodes: [...registryDispatchedNodes],
         }))
+    }
+
+    function clearPixiScene(): void {
+        if (destroyed) return
+        debugLog('sync-clear-start', {
+            health,
+            entries: entries.size,
+            registryDispatchedNodes: [...registryDispatchedNodes],
+            edgeCount: latestPixiEdges.length,
+            generatingOutlineCount: generatingImageNodeOutlines.size,
+        })
+
+        for (const [nodeId, entry] of entries) {
+            entry.requestId++
+            entry.requestedTier = null
+            entry.loadedTier = null
+            releaseTexture(entry.textureKey)
+            imageLayer.removeChild(entry.sprite)
+            imageLayer.removeChild(entry.spriteMask)
+            imageLayer.removeChild(entry.colorRect)
+            entry.sprite.mask = null
+            entry.sprite.renderable = false
+            entry.spriteMask.renderable = false
+            entry.colorRect.renderable = false
+            entry.sprite.destroy()
+            entry.spriteMask.destroy()
+            entry.colorRect.destroy()
+            entries.delete(nodeId)
+        }
+        spatialIndex.clear()
+
+        for (const nodeId of registryDispatchedNodes) {
+            mediaNodeRegistry.dispatchRemove(nodeId)
+        }
+        registryDispatchedNodes.clear()
+
+        generatingImageNodeOutlines.clear()
+        generatingBorderRenderer.sync([])
+        latestPixiEdges = []
+        edgeRenderer?.render(latestPixiEdges, currentViewport)
+        hideForegroundGraphics(marqueeGraphics)
+        hideForegroundGraphics(groupOverlayGraphics)
+
+        if (health === 'ready') {
+            scheduleRender()
+        }
+        debugLog('sync-clear-end', {
+            entries: entries.size,
+            registryDispatchedNodes: [...registryDispatchedNodes],
+            edgeCount: latestPixiEdges.length,
+            generatingOutlineCount: generatingImageNodeOutlines.size,
+        })
     }
 
     function dispatchNonImageMediaNodes(canvasState: CanvasState): void {
@@ -1424,6 +1486,16 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 worldPosition,
                 dimensions: node.dimensions,
             })
+            if (isFinalGeneratedImageNode(node)) {
+                logFinalGeneratedImageLifecycle('final-generated-entry-create-start', {
+                    nodeId: node.nodeId,
+                    fileId: node.fileId,
+                    src: cleanDebugUrl(node.src),
+                    sourceKey: cleanDebugUrl(newSourceKey),
+                    worldPosition,
+                    dimensions: node.dimensions,
+                })
+            }
             const sprite = createImageSprite(node.nodeId)
             const spriteMask = createImageSpriteMask(node.nodeId)
             sprite.mask = spriteMask
@@ -1458,6 +1530,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             debugLog('entry-create-end', (verbose) => ({
                 entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
             }))
+            if (isFinalGeneratedImageNode(node)) {
+                logFinalGeneratedImageLifecycle('final-generated-entry-create-end', {
+                    entry: getDebugEntrySummary(entry),
+                })
+            }
         } else if (entry.sourceKey !== newSourceKey) {
             // Source image replaced. Most replacements keep the current texture
             // visible while the next source loads; generated placeholder -> final
@@ -1485,7 +1562,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 entry.textureKey = null
                 bindTextureToEntrySprite(entry, Texture.EMPTY)
                 entry.sprite.visible = false
-                entry.colorRect.visible = entry.isVisible && !isPreFrameCircleGeneratingNode(node.nodeId)
+                entry.colorRect.visible = entry.isVisible && !shouldTreatImageEntryAsFramePending(entry)
                 if (oldKey) releaseTexture(oldKey)
             }
         }
@@ -1604,6 +1681,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         return generatingImageNodeOutlines.get(nodeId)?.shape === 'preFrameCircle'
     }
 
+    function shouldTreatImageEntryAsFramePending(entry: PixiImageEntry): boolean {
+        return isPreFrameCircleGeneratingNode(entry.nodeRef.nodeId) || isGeneratedImageNodeWaitingForFrame(entry.nodeRef)
+    }
+
     // Idempotent texture-quality guarantor. Ensures the entry has at least
     // `desiredTier`-quality pixels loaded. Three cardinal rules:
     //   1) If a higher-or-equal tier is already on the sprite, do NOTHING —
@@ -1614,18 +1695,27 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     //      progressively load `thumb-256` first for instant visual feedback,
     //      then schedule a background upgrade to the desired tier in idle time.
     function ensureTextureForEntry(entry: PixiImageEntry, desiredTier: LodTier): void {
-        const isPreFrameCircle = isPreFrameCircleGeneratingNode(entry.nodeRef.nodeId)
+        const isPreFramePending = shouldTreatImageEntryAsFramePending(entry)
         debugLog('ensure-texture-start', (verbose) => ({
             nodeId: entry.nodeRef.nodeId,
             desiredTier,
-            isPreFrameCircle,
+            isPreFramePending,
             entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
         }))
+        if (isPreFramePending) {
+            entry.sprite.visible = false
+            entry.colorRect.visible = false
+            debugLog('ensure-texture-skip-frame-pending', (verbose) => ({
+                nodeId: entry.nodeRef.nodeId,
+                entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
+            }))
+            return
+        }
         if (desiredTier === 'color') {
             // Extreme zoom-out: tinted rectangle suffices. Keep any existing
             // texture cached on the sprite for when the user zooms back in.
             entry.sprite.visible = entry.loadedTier !== null
-            entry.colorRect.visible = entry.loadedTier === null && !isPreFrameCircle
+            entry.colorRect.visible = entry.loadedTier === null && !isPreFramePending
             debugLog('ensure-texture-color-tier', (verbose) => ({
                 nodeId: entry.nodeRef.nodeId,
                 entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
@@ -1689,7 +1779,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         const hasTexture = entry.textureKey !== null
         if (!hasTexture) {
             entry.sprite.visible = false
-            entry.colorRect.visible = !isPreFrameCircle
+            entry.colorRect.visible = !isPreFramePending
         }
 
         const node = entry.nodeRef
@@ -1703,6 +1793,18 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             hasTexture,
             entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
         }))
+        if (isFinalGeneratedImageNode(node)) {
+            logFinalGeneratedImageLifecycle('final-generated-texture-request-start', {
+                nodeId: node.nodeId,
+                fileId: node.fileId,
+                src: cleanDebugUrl(node.src),
+                desiredTier,
+                fetchTier,
+                requestId,
+                hasTexture,
+                entry: getDebugEntrySummary(entry),
+            })
+        }
 
         void (async () => {
             let acquiredKey: string | null = null
@@ -1770,6 +1872,19 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     textureHeight: texture.height,
                     entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
                 }))
+                if (isFinalGeneratedImageNode(node)) {
+                    logFinalGeneratedImageLifecycle('final-generated-texture-request-loaded', {
+                        nodeId: node.nodeId,
+                        fileId: node.fileId,
+                        requestId,
+                        fetchTier,
+                        desiredTier,
+                        resolved: cleanDebugUrl(resolved),
+                        textureWidth: texture.width,
+                        textureHeight: texture.height,
+                        entry: getDebugEntrySummary(entry),
+                    })
+                }
 
                 // If the user actually wants a higher tier than we just loaded,
                 // schedule a background upgrade in an idle slot. The user sees
@@ -1779,7 +1894,33 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     scheduleProgressiveUpgrade(entry, desiredTier)
                 }
             } catch (error) {
+                const staleRequest = destroyed || entry.requestId !== requestId || entries.get(node.nodeId) !== entry
+                if (staleRequest) {
+                    debugLog('texture-request-error-stale', (verbose) => ({
+                        nodeId: node.nodeId,
+                        requestId,
+                        currentRequestId: entry.requestId,
+                        destroyed,
+                        acquiredKey: cleanDebugUrl(acquiredKey),
+                        message: error instanceof Error ? error.message : String(error),
+                        entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
+                    }))
+                    if (acquiredKey) releaseTexture(acquiredKey)
+                    return
+                }
                 console.error('[PixiMediaLayer] Failed to load image texture.', error)
+                if (isFinalGeneratedImageNode(node)) {
+                    logFinalGeneratedImageLifecycle('final-generated-texture-request-error', {
+                        nodeId: node.nodeId,
+                        fileId: node.fileId,
+                        requestId,
+                        fetchTier,
+                        desiredTier,
+                        acquiredKey: cleanDebugUrl(acquiredKey),
+                        message: error instanceof Error ? error.message : String(error),
+                        entry: getDebugEntrySummary(entry),
+                    })
+                }
                 debugLog('texture-request-error', (verbose) => ({
                     nodeId: node.nodeId,
                     requestId,
@@ -1795,7 +1936,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     entry.requestedTier = null
                     if (!hasTexture) {
                         entry.sprite.visible = false
-                        entry.colorRect.visible = !isPreFrameCircle
+                        entry.colorRect.visible = !shouldTreatImageEntryAsFramePending(entry)
                     }
                     scheduleRender()
                 }
@@ -2073,7 +2214,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 textureKey: entry.textureKey,
             }
             const isVisible = visibleNodeIds.has(nodeId)
-            const shouldRenderColorRect = isVisible && !isPreFrameCircleGeneratingNode(nodeId)
+            const shouldRenderColorRect = isVisible && !shouldTreatImageEntryAsFramePending(entry)
             if (isVisible !== entry.isVisible) {
                 entry.sprite.renderable = isVisible
                 generatingBorderRenderer.setVisible(nodeId, isVisible)
@@ -2138,6 +2279,22 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             blankVisibleCandidateCount,
             ...(verbose ? { changed, blankVisibleCandidates, entries: getDebugEntrySnapshots() } : {}),
         }))
+        if (blankVisibleCandidateCount > 0) {
+            console.warn('[CANVAS][pixi-media]', 'blank-visible-candidates', {
+                blankVisibleCandidateCount,
+                entries: Array.from(entries.values())
+                    .filter((entry) =>
+                        entry.isVisible
+                        && entry.sprite.renderable
+                        && !entry.sprite.visible
+                        && entry.colorRect.renderable
+                        && !entry.colorRect.visible
+                        && entry.textureKey === null
+                        && entry.requestedTier === null
+                    )
+                    .map((entry) => getDebugEntrySummary(entry)),
+            })
+        }
     }
 
     // Idle-time prefetch — cache `thumb-256` for the entire workspace,

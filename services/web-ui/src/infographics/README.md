@@ -52,8 +52,6 @@ We do NOT use React Flow or Svelte Flow components directly. Instead, we call th
 
 ```
 infographics/
-├── animationConstants.ts   # Shared animation timing values
-├── connectors/             # Edge/connection rendering (future)
 ├── shapes/                 # Shape primitives (rectangles, etc.)
 └── workspace/              # Workspace canvas implementation
     ├── WorkspaceCanvas.ts  # Core canvas logic

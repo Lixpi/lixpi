@@ -171,7 +171,7 @@ classDiagram
 
 ### Zoom-Compensated Connector Sizes
 
-Connector scaling uses the shared bounded canvas-chrome helpers from [`zoomScaling.ts`](../../services/web-ui/src/infographics/utils/zoomScaling.ts). The important boundary is coordinate space:
+Connector scaling uses the shared bounded canvas-chrome helpers from [`zoom-scaling.ts`](../../packages/lixpi/canvas-engine/src/shared/zoom-scaling/zoom-scaling.ts). The important boundary is coordinate space:
 
 - Marker offsets and invisible hit widths are geometry values. `WorkspaceConnectionManager.ts` computes them in world units because path routing and hit testing use world coordinates.
 - Stroke width and arrowhead size are render values. `PixiEdgeRenderDatum` stores them as base screen pixels, and `pixiEdgeRenderer.ts` applies the adaptive bounded screen-size curve while painting.
@@ -202,7 +202,7 @@ Handles are:
 
 ## Edge Rendering
 
-Edges are rendered as PIXI `Graphics` by [`pixiEdgeRenderer.ts`](../../services/web-ui/src/infographics/workspace/rendering/pixiEdgeRenderer.ts). `WorkspaceConnectionManager` builds edge render data with shared path helpers from [`paths.ts`](../../services/web-ui/src/infographics/connectors/paths.ts), then sends it to the PIXI media layer for drawing, hit testing, and bubble-menu anchoring. For the full DOM/PIXI ownership split and the viewport bridge that keeps the two layers aligned, see [Rendering Engine](./RENDERING-ENGINE.md).
+Edges are rendered as PIXI `Graphics` by [`pixiEdgeRenderer.ts`](../../services/web-ui/src/infographics/workspace/rendering/pixiEdgeRenderer.ts). `WorkspaceConnectionManager` builds edge render data with frontend connector path helpers from [`paths.ts`](../../packages/lixpi/canvas-engine/src/frontend/connectors/paths.ts), then sends it to the PIXI media layer for drawing, hit testing, and bubble-menu anchoring. For the full DOM/PIXI ownership split and the viewport bridge that keeps the two layers aligned, see [Rendering Engine](./RENDERING-ENGINE.md).
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%

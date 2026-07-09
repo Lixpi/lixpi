@@ -8,21 +8,27 @@ The package is intentionally split by runtime boundary:
 src/
   shared/      Rendering-agnostic code. Safe in API, workers, tests, and browser code.
   backend/     Server-side adapters and orchestration helpers. No DOM, Svelte, PIXI, or browser APIs.
-  frontend/    Browser-side adapters. May depend on web-ui concepts.
-    rendering/ Actual rendering modules. DOM, Svelte, PIXI, canvas, and animation code belong here.
+  frontend/    Browser-side adapters. No web-ui imports or Svelte components.
+    animation/ Shared animation timing utilities.
+    rendering/ Actual rendering modules. DOM, PIXI, canvas, and SVG drawing code belongs here.
 ```
 
-The package root exports the shared rendering-agnostic surface directly:
+The package root is the public import surface for application code. Root exports must use wildcard re-exports for shared, app-facing frontend rendering, and app-facing frontend connector modules:
 
 ```typescript
-import { resolveRigidCanvasNodeGroupCollisions } from '@lixpi/canvas-engine'
+export * from './shared/index.ts'
+export * from './frontend/rendering/index.ts'
+export * from './frontend/connectors/index.ts'
+export * as backend from './backend/index.ts'
+export * as frontend from './frontend/index.ts'
 ```
 
-Runtime-specific imports should use subpath exports:
+Application code should not import package implementation subpaths from `@lixpi/canvas-engine`.
+
+Application imports should come from the package root:
 
 ```typescript
-import { resolveRigidCanvasNodeGroupCollisions } from '@lixpi/canvas-engine/backend'
-import { resolveRigidCanvasNodeGroupCollisions } from '@lixpi/canvas-engine/frontend'
+import { resolveRigidCanvasNodeGroupCollisions, PixiTravelingOutlineRenderer } from '@lixpi/canvas-engine'
 ```
 
 There are no implementation modules directly under `src`. New code belongs under `shared`, `backend`, or `frontend` according to its runtime boundary.
@@ -61,7 +67,17 @@ Use `frontend` for browser-only canvas orchestration that does not directly rend
 - pointer or keyboard interaction planning;
 - web-ui integration helpers.
 
-Frontend modules can depend on browser concepts when needed. Keep pure data logic in `shared` instead.
+Frontend modules can depend on browser concepts when needed. They must not import `services/web-ui` modules or Svelte components. Keep pure data logic in `shared` instead.
+
+### `src/frontend/animation`
+
+Use `frontend/animation` for reusable animation timing code:
+
+- easing curves;
+- duration-independent transition math;
+- browser-safe animation helpers that do not own DOM or PIXI objects.
+
+Animation modules can be used by rendering code, but should stay independent from app settings and concrete UI elements.
 
 ### `src/frontend/rendering`
 
@@ -70,16 +86,22 @@ Use `frontend/rendering` for modules that produce or mutate visible output:
 - PIXI renderers;
 - DOM/SVG canvas chrome;
 - animation loops;
-- Svelte-specific surfaces;
 - measuring rendered elements.
 
 Rendering modules can consume `shared` plans, but shared/backend modules must never import rendering modules.
 
 ## Existing Shared Modules
 
-- `shared/geometry`: point and rectangle types.
+- `shared/geometry`: minimal point and rectangle types shared by collision and canvas-node adapters. Keep executable algorithms in the domain modules that own them.
 - `shared/collision`: geometry-agnostic rectangle collision resolver.
 - `shared/canvas-node`: adapters that apply shared collision output to canvas-node groups.
+- `shared/tree-layout`: geometry-agnostic tidy-tree layout for abstract node boxes.
+- `shared/zoom-scaling`: deterministic bounded zoom-scaling helpers for canvas chrome.
+- `frontend/animation`: shared easing curves used by Canvas, PIXI, and SVG transitions.
+- `frontend/connectors`: frontend-only connector path helpers. These depend on `@xyflow/system`, emit SVG path strings, and are not backend-safe shared geometry.
+- `frontend/rendering/gradients`: freeform, shifting, and SVG gradient renderers.
+- `frontend/rendering/glass`: PIXI glass material and glass border renderers.
+- `frontend/rendering/progress`: traveling outline renderer used by workspace progress indicators.
 
 The collision flow is:
 
@@ -93,7 +115,8 @@ The collision flow is:
 - Put reusable data algorithms in `shared` first.
 - Put API-only orchestration in `backend`.
 - Put browser orchestration in `frontend`.
-- Put DOM/PIXI/Svelte/canvas drawing in `frontend/rendering`.
-- Keep package-root exports stable and small; prefer explicit subpath exports for runtime-specific surfaces.
+- Put DOM/PIXI/canvas/SVG drawing in `frontend/rendering`.
+- Do not import `services/web-ui` modules from this package.
+- Keep `src/index.ts` as wildcard re-exports in this order: `shared`, `frontend/rendering`, `frontend/connectors`, then the `backend` and `frontend` namespace exports. Do not replace these with curated symbol lists.
 - Do not add rendering imports to `shared` or `backend`.
 - Do not add new implementation directories directly under `src`; choose `shared`, `backend`, or `frontend`.

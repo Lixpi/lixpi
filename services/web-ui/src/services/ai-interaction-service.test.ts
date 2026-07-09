@@ -210,7 +210,7 @@ describe('AiInteractionService', () => {
 
         service.onChatMessageResponse({
             content: {
-                status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
+                status: STREAM_STATUS.MEDIA_BRANCH_RESOLVED,
                 resolution: { target: 'node-1' },
             },
         })
@@ -237,7 +237,7 @@ describe('AiInteractionService', () => {
         expect(receiveSegmentMock).toHaveBeenCalledWith(
             expect.objectContaining({
                 type: 'image_branch_resolved',
-                imageBranchResolution: expect.objectContaining({ target: 'node-1' }),
+                mediaBranchResolution: expect.objectContaining({ target: 'node-1' }),
             }),
         )
         expect(receiveSegmentMock).toHaveBeenCalledWith(
@@ -343,6 +343,22 @@ describe('AiInteractionService', () => {
                         },
                     },
                     {
+                        eventId: 'replay-3',
+                        streamSequence: 11,
+                        payload: {
+                            pipelineEventId: 'replay-3',
+                            pipelineStreamSeq: 11,
+                            content: {
+                                status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
+                                generationRequestId: 'request-complete-resume',
+                                generationRun: {
+                                    generationRequestId: 'request-complete-resume',
+                                    reasoningRunId: 'run-image',
+                                },
+                            },
+                        },
+                    },
+                    {
                         eventId: 'replay-2',
                         streamSequence: 9,
                         payload: {
@@ -373,10 +389,14 @@ describe('AiInteractionService', () => {
             error: 'frame dropped',
         }))
         expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'media_generation_request_complete',
+            generationRequestId: 'request-complete-resume',
+        }))
+        expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
             type: 'media_generation_skipped',
             generationRequestId: 'media-req',
         }))
-        expect(service.pipelineLocalStreamSeq).toBe(9)
+        expect(service.pipelineLocalStreamSeq).toBe(11)
     })
 
     it('ignores text-only streaming status payloads', () => {
@@ -446,7 +466,7 @@ describe('AiInteractionService', () => {
             useMultipleVideoModels: true,
             videoConfigGroups: [{ id: 'quality', configs: [] }],
             referencedFeatureIds: ['feat-1'],
-            imageBranchCandidateSnapshot: {
+            mediaBranchCandidateSnapshot: {
                 resolverVersion: 'image-branch-v1',
                 threadId: aiChatThreadId,
                 regionNodeId: 'node-1',
@@ -473,7 +493,7 @@ describe('AiInteractionService', () => {
             aiImageModels: ['image-a', 'image-b'],
             aiVideoModels: ['video-a', 'video-b'],
             imageSize: '768x768',
-            imageBranchCandidateSnapshot: { resolverVersion: 'image-branch-v1', threadId: aiChatThreadId },
+            mediaBranchCandidateSnapshot: { resolverVersion: 'image-branch-v1', threadId: aiChatThreadId },
             workspaceContextSnapshot: {
                 workspaceId,
                 nodes: [],
@@ -503,6 +523,31 @@ describe('AiInteractionService', () => {
             organizationId: 'org-1',
         })
         expect(payload.token).toBe('auth-token')
+    })
+
+    it('excludes a disabled scalar video model from image matrix planning', async () => {
+        await service.sendChatMessage({
+            messages: [{ role: 'user', content: 'paint' }],
+            aiReasoningModels: ['reasoner-a'],
+            useMultipleReasoningModels: false,
+            aiImageModels: ['image-a', 'image-b'],
+            imageSize: '768x768',
+            useMultipleImageModels: true,
+            aiVideoModels: ['video-a'],
+            videoAspectRatio: '16:9',
+            videoResolution: '720p',
+            videoDuration: '6',
+            useMultipleVideoModels: false,
+        })
+
+        const payload = natsPublishMock.mock.calls.at(-1)?.[1] as Record<string, any>
+        expect(payload.aiVideoModels).toEqual(['video-a'])
+        expect(payload.mediaGenerationRequest).toMatchObject({
+            useMultipleVideoModels: false,
+            imageModelIds: ['image-a', 'image-b'],
+            videoModelIds: [],
+        })
+        expect(payload.mediaGenerationRequest).not.toHaveProperty('videoOptions')
     })
 
     it('publishes stop event through NATS', async () => {
