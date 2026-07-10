@@ -134,10 +134,134 @@ type QueuedTask = {
     resolve: () => void
 }
 
+type PersistedProseMirrorJsonNode = {
+    type?: string
+    attrs?: Record<string, unknown>
+    content?: PersistedProseMirrorJsonNode[]
+    [key: string]: unknown
+}
+
+type PersistedGenerationCancellationResult = {
+    found: boolean
+    requestMatched: boolean
+    changed: boolean
+}
+
 const MAX_AUTHORITY_CAS_RETRIES = 5
 const AI_GENERATED_MEDIA_WIDTH = '75%'
 const AI_GENERATED_MEDIA_ALIGNMENT = 'left'
 const AI_GENERATED_MEDIA_TEXT_WRAP = 'none'
+
+function parsePersistedProseMirrorContent(content: unknown): PersistedProseMirrorJsonNode | null {
+    if (typeof content === 'string') {
+        try {
+            const parsed = JSON.parse(content) as unknown
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? parsed as PersistedProseMirrorJsonNode
+                : null
+        } catch {
+            return null
+        }
+    }
+    return content && typeof content === 'object' && !Array.isArray(content)
+        ? content as PersistedProseMirrorJsonNode
+        : null
+}
+
+function persistedNodeContainsGenerationRequest(
+    node: PersistedProseMirrorJsonNode,
+    generationRequestId: string,
+): boolean {
+    if (node.attrs?.generationRequestId === generationRequestId) return true
+    return Boolean(node.content?.some(child => persistedNodeContainsGenerationRequest(child, generationRequestId)))
+}
+
+function settlePersistedGenerationNode(
+    node: PersistedProseMirrorJsonNode,
+    generationRequestId: string,
+    inheritedRequestScope = false,
+): { node: PersistedProseMirrorJsonNode; changed: boolean } {
+    const ownRequestMatch = node.attrs?.generationRequestId === generationRequestId
+    const responseRequestMatch = node.type === aiResponseMessageNodeType
+        && persistedNodeContainsGenerationRequest(node, generationRequestId)
+    const requestScoped = inheritedRequestScope || ownRequestMatch
+    const nextChildren = node.content?.map(child =>
+        settlePersistedGenerationNode(child, generationRequestId, requestScoped)
+    )
+    const childrenChanged = Boolean(nextChildren?.some(result => result.changed))
+    let nextAttrs = node.attrs
+    let attrsChanged = false
+
+    if ((node.type === aiResponseMessageNodeType && (responseRequestMatch || requestScoped))
+        || (node.type === aiReasoningSectionNodeType && requestScoped)) {
+        const isInitialRenderAnimation = node.type === aiResponseMessageNodeType
+            ? false
+            : node.attrs?.isInitialRenderAnimation
+        if (node.attrs?.isReceivingAnimation !== false
+            || (node.type === aiResponseMessageNodeType && node.attrs?.isInitialRenderAnimation !== false)) {
+            nextAttrs = {
+                ...node.attrs,
+                ...(node.type === aiResponseMessageNodeType ? { isInitialRenderAnimation } : {}),
+                isReceivingAnimation: false,
+            }
+            attrsChanged = true
+        }
+    } else if (node.type === aiCollapsibleBlockNodeType && requestScoped && node.attrs?.isStreaming !== false) {
+        nextAttrs = {
+            ...node.attrs,
+            isStreaming: false,
+        }
+        attrsChanged = true
+    } else if (node.type === aiGeneratedVideoNodeType && requestScoped && node.attrs?.isPending !== false) {
+        nextAttrs = {
+            ...node.attrs,
+            isPending: false,
+            errorMessage: node.attrs?.errorMessage || 'Generation cancelled',
+        }
+        attrsChanged = true
+    }
+
+    if (!childrenChanged && !attrsChanged) return { node, changed: false }
+    return {
+        node: {
+            ...node,
+            ...(nextAttrs ? { attrs: nextAttrs } : {}),
+            ...(nextChildren ? { content: nextChildren.map(result => result.node) } : {}),
+        },
+        changed: true,
+    }
+}
+
+export async function settlePersistedAiChatGenerationRequest(params: {
+    workspaceId: string
+    aiChatThreadId: string
+    generationRequestId: string
+}): Promise<PersistedGenerationCancellationResult> {
+    const thread = await AiChatThread.getAiChatThread({
+        workspaceId: params.workspaceId,
+        threadId: params.aiChatThreadId,
+    })
+    if (!thread || 'error' in thread) return { found: false, requestMatched: false, changed: false }
+
+    const content = parsePersistedProseMirrorContent(thread.content)
+    if (!content) return { found: true, requestMatched: false, changed: false }
+    const requestMatched = persistedNodeContainsGenerationRequest(content, params.generationRequestId)
+    const useStandaloneThreadFallback = !requestMatched && params.aiChatThreadId.startsWith('canvas-')
+    const settled = settlePersistedGenerationNode(
+        content,
+        params.generationRequestId,
+        useStandaloneThreadFallback,
+    )
+    if (!settled.changed) return { found: true, requestMatched, changed: false }
+
+    await AiChatThread.update({
+        workspaceId: params.workspaceId,
+        threadId: params.aiChatThreadId,
+        content: settled.node,
+        proseMirrorVersion: (thread.proseMirrorVersion ?? 0) + 1,
+    })
+    return { found: true, requestMatched, changed: true }
+}
 
 export class AiChatProseMirrorStreamAssembler {
     private readonly coordinate: DocCoordinate
@@ -269,7 +393,7 @@ export class AiChatProseMirrorStreamAssembler {
         const textPhasePromise = this.finishTextPhase()
         this.isEnded = true
         const finalizationPromise = this.enqueue(async () => {
-            await this.finalizeResponseTarget()
+            await this.finalizeResponseTargets(this.activeGenerationRun?.generationRequestId)
             const finalVersion = this.engine.version
             const persisted = await this.persistFinalSnapshot(finalVersion)
             if (!persisted) return
@@ -282,6 +406,18 @@ export class AiChatProseMirrorStreamAssembler {
         })
         await textPhasePromise
         await finalizationPromise
+    }
+
+    async cancelGenerationRequest(generationRequestId: string): Promise<void> {
+        if (!this.isStarted || !generationRequestId) return
+
+        await this.enqueue(async () => {
+            await this.finalizeResponseTargets(generationRequestId, {
+                publishSteps: !this.isEnded,
+                cancelled: true,
+            })
+            await this.persistFinalSnapshot(this.engine.version)
+        })
     }
 
     publishError(message: string): void {
@@ -886,20 +1022,82 @@ export class AiChatProseMirrorStreamAssembler {
         })
     }
 
-    private async finalizeResponseTarget(): Promise<void> {
-        const responseInfo = this.findResponseNode(this.activeGenerationRun)
-        if (!responseInfo.found || responseInfo.nodePos === undefined) return
-
-        const node = this.engine.state.doc.nodeAt(responseInfo.nodePos)
-        if (!node || (node.type.name !== aiResponseMessageNodeType && node.type.name !== aiReasoningSectionNodeType)) return
-        if (node.attrs.isInitialRenderAnimation === false && node.attrs.isReceivingAnimation === false) return
-
-        const transaction = this.engine.state.tr.setNodeMarkup(responseInfo.nodePos, undefined, {
-            ...node.attrs,
-            isInitialRenderAnimation: false,
-            isReceivingAnimation: false,
+    private nodeContainsGenerationRequest(node: ProseMirrorNode, generationRequestId: string): boolean {
+        if (node.attrs?.generationRequestId === generationRequestId) return true
+        let matches = false
+        node.descendants((child: ProseMirrorNode) => {
+            if (child.attrs?.generationRequestId !== generationRequestId) return
+            matches = true
+            return false
         })
-        await this.applyAndPublishTransaction(transaction)
+        return matches
+    }
+
+    private async finalizeResponseTargets(
+        generationRequestId?: string,
+        options: { publishSteps?: boolean; cancelled?: boolean } = {},
+    ): Promise<void> {
+        if (!generationRequestId) {
+            const responseInfo = this.findResponseNode(this.activeGenerationRun)
+            if (!responseInfo.found || responseInfo.nodePos === undefined) return
+
+            const node = this.engine.state.doc.nodeAt(responseInfo.nodePos)
+            if (!node || (node.type.name !== aiResponseMessageNodeType && node.type.name !== aiReasoningSectionNodeType)) return
+            if (node.attrs.isInitialRenderAnimation === false && node.attrs.isReceivingAnimation === false) return
+
+            const transaction = this.engine.state.tr.setNodeMarkup(responseInfo.nodePos, undefined, {
+                ...node.attrs,
+                isInitialRenderAnimation: false,
+                isReceivingAnimation: false,
+            })
+            await this.applyFinalizationTransaction(transaction, options.publishSteps !== false)
+            return
+        }
+
+        const transaction = this.engine.state.tr
+        this.engine.state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+            const nodeType = node.type.name
+            const matchesRequest = nodeType === aiResponseMessageNodeType
+                ? this.nodeContainsGenerationRequest(node, generationRequestId)
+                : node.attrs?.generationRequestId === generationRequestId
+            if (!matchesRequest) return
+
+            if (nodeType === aiResponseMessageNodeType || nodeType === aiReasoningSectionNodeType) {
+                if (node.attrs.isInitialRenderAnimation === false && node.attrs.isReceivingAnimation === false) return
+                transaction.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    isInitialRenderAnimation: false,
+                    isReceivingAnimation: false,
+                })
+                return
+            }
+
+            if (nodeType === aiCollapsibleBlockNodeType && node.attrs.isStreaming !== false) {
+                transaction.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    isStreaming: false,
+                })
+                return
+            }
+
+            if (options.cancelled && nodeType === aiGeneratedVideoNodeType && node.attrs.isPending !== false) {
+                transaction.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    isPending: false,
+                    errorMessage: node.attrs.errorMessage || 'Generation cancelled',
+                })
+            }
+        })
+        await this.applyFinalizationTransaction(transaction, options.publishSteps !== false)
+    }
+
+    private async applyFinalizationTransaction(transaction: Transaction, publishSteps: boolean): Promise<void> {
+        if (!transaction.docChanged || transaction.steps.length === 0) return
+        if (publishSteps) {
+            await this.applyAndPublishTransaction(transaction)
+            return
+        }
+        this.engine.applyTransaction(transaction)
     }
 
     private async applyAndPublishTransaction(transaction: Transaction): Promise<void> {

@@ -65,7 +65,7 @@ export type PromptControlFactories = {
 export type AiPromptComposerConfig = {
     // Persisted prompt draft to restore, if any.
     initialContent?: object
-    // Thread the composer is bound to (drives draft keying / receiving state).
+    // Thread the composer is bound to when the host needs thread-scoped editor identity.
     // Null/undefined means the composer is not bound to a chat thread.
     threadId?: string | null
     // Extra class names appended to the wrapper (e.g. panel/persistent variants).
@@ -75,10 +75,7 @@ export type AiPromptComposerConfig = {
     placeholderText?: string
     controlFactories?: PromptControlFactories
     onSubmit: (data: AiPromptComposerSubmitData) => void | Promise<void>
-    onStop: () => void
-    isReceiving: () => boolean
     onContentChange?: (value: object) => void
-    onReceivingStateChange?: (threadId: string, receiving: boolean) => void
 }
 
 export type AiPromptComposerInstance = {
@@ -109,7 +106,7 @@ export function createDefaultPromptControlFactories(): PromptControlFactories {
 }
 
 // Owns one prompt input editor instance, its wrapper element, optional gradient
-// background, and the submit/stop wiring. Hosts (chat panel, canvas) own where
+// background, and the submit wiring. Hosts (chat panel, canvas) own where
 // the element mounts and which submit strategy runs; this class stays ignorant
 // of chat-thread vs canvas behavior.
 class AiPromptComposer implements AiPromptComposerInstance {
@@ -147,11 +144,7 @@ class AiPromptComposer implements AiPromptComposerInstance {
             onAiChatSubmit: () => {},
             onAiChatStop: () => {},
             onPromptSubmit: (data: AiPromptComposerSubmitData) => config.onSubmit(data),
-            onPromptStop: () => config.onStop(),
-            isPromptReceiving: () => config.isReceiving(),
             promptControlFactories: controlFactories,
-            onReceivingStateChange: (threadId: string, receiving: boolean) =>
-                config.onReceivingStateChange?.(threadId, receiving),
         })
     }
 

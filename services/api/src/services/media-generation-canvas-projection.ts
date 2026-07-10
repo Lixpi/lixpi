@@ -122,6 +122,7 @@ type BranchMarkerSiblingSlot = {
 }
 type LineageForestContext = {
     proseMirrorThreadContent?: unknown
+    preserveMarkerDimensionsForGenerationRequestIds?: ReadonlySet<string>
 }
 
 function markerDimensions(): { width: number; height: number } {
@@ -465,7 +466,9 @@ function getWorkspaceCollisionFlowIterations(collisionSettings: WorkspaceCollisi
 // The authoritative layout pass: refresh marker dimensions from their prompt
 // text (response row once the marker's turn has produced media), then run the
 // SAME shared tidy-tree + rigid collision resolution the WebUI uses for local
-// drag/delete rebalances. Persisted geometry is final — clients apply it.
+// drag/delete rebalances. Cancellation can preserve the stopped request's marker
+// dimensions while still rebalancing around removed pending media. Persisted
+// geometry is final — clients apply it.
 function rebalanceLineageForest(
     state: CanvasState,
     context: string,
@@ -475,6 +478,10 @@ function rebalanceLineageForest(
     let markerDimensionsChanged = false
     const nodes = state.nodes.map((node): CanvasNode => {
         if (!isMarkerNode(node)) return node
+        if (node.generationRequestId
+            && lineageContext.preserveMarkerDimensionsForGenerationRequestIds?.has(node.generationRequestId)) {
+            return node
+        }
         const dimensions = getLineageMarkerDimensionsForNode(node, lineageContext, {
             fallbackResponseLine: markerIdsWithGeneratedChildren.has(node.nodeId),
         })
@@ -617,11 +624,11 @@ function getProjectionEdgeSnapshots(params: {
     )
 }
 
-function getCompletedGeneratedMediaPendingNodeId(node: CanvasNode): string | undefined {
-    if ((node.type !== 'image' && node.type !== 'video') || !node.fileId || !node.generatedBy?.generationRequestId) {
+function getProjectedPendingGeneratedMediaNodeId(node: CanvasNode): string | undefined {
+    if ((node.type !== 'image' && node.type !== 'video') || !node.generatedBy?.generationRequestId) {
         return undefined
     }
-    const pendingNodeId = getPendingGeneratedMediaNodeId({
+    return getPendingGeneratedMediaNodeId({
         generationRequestId: node.generatedBy.generationRequestId,
         ...(node.generatedBy.reasoningRunId ? { reasoningRunId: node.generatedBy.reasoningRunId } : {}),
         ...(node.generatedBy.mediaRunId ? { mediaRunId: node.generatedBy.mediaRunId } : {}),
@@ -630,6 +637,12 @@ function getCompletedGeneratedMediaPendingNodeId(node: CanvasNode): string | und
         ...(node.generatedBy.mediaIndex !== undefined ? { mediaIndex: node.generatedBy.mediaIndex } : {}),
         ...(node.generatedBy.reasoningIndex !== undefined ? { reasoningIndex: node.generatedBy.reasoningIndex } : {}),
     })
+}
+
+function getCompletedGeneratedMediaPendingNodeId(node: CanvasNode): string | undefined {
+    if ((node.type !== 'image' && node.type !== 'video') || !node.fileId) return undefined
+    const pendingNodeId = getProjectedPendingGeneratedMediaNodeId(node)
+    if (!pendingNodeId) return undefined
     return pendingNodeId === node.nodeId ? undefined : pendingNodeId
 }
 
@@ -657,6 +670,17 @@ function getUnresolvedPendingGeneratedMediaNodeIds(state: CanvasState, generatio
     return state.nodes
         .filter(node => isUnresolvedPendingGeneratedMediaNode(node, generationRequestId))
         .map(node => node.nodeId)
+        .sort()
+}
+
+function getProjectedPendingGeneratedMediaNodeIds(state: CanvasState, generationRequestId: string): string[] {
+    return state.nodes
+        .filter((node): node is GeneratedMediaNode =>
+            (node.type === 'image' || node.type === 'video')
+            && node.generatedBy?.generationRequestId === generationRequestId
+        )
+        .filter((node) => getProjectedPendingGeneratedMediaNodeId(node) === node.nodeId)
+        .map((node) => node.nodeId)
         .sort()
 }
 
@@ -708,6 +732,7 @@ function buildCanvasGeometryUpdate(params: {
         removedNodeIds,
     })
     return {
+        generationRequestId: params.generationRequestId,
         layoutRevision: params.layoutRevision,
         nodes: authoritativeGeometryNodes,
         ...(nodeSnapshots.length > 0 ? { nodeSnapshots } : {}),
@@ -1409,6 +1434,7 @@ export async function settleMediaGenerationRequestOnCanvas(params: {
     generationRequestId: string
     aiChatThreadId?: string
     proseMirrorThreadContent?: unknown
+    removeProjectedPendingNodes?: boolean
 }): Promise<CanvasGeometryUpdate | null> {
     let geometryNodes: CanvasNodeGeometry[] = []
     let removedNodeIds: string[] = []
@@ -1427,10 +1453,13 @@ export async function settleMediaGenerationRequestOnCanvas(params: {
                 return settledNode
             })
             const stateWithSettledMarkers = { ...canvasState, nodes }
-            const shouldRemoveUnresolvedPendingNodes = hasResolvedGeneratedMediaForRequest(stateWithSettledMarkers, params.generationRequestId)
-            removedNodeIds = shouldRemoveUnresolvedPendingNodes
-                ? getUnresolvedPendingGeneratedMediaNodeIds(stateWithSettledMarkers, params.generationRequestId)
-                : []
+            const shouldRemovePendingNodes = params.removeProjectedPendingNodes === true
+                || hasResolvedGeneratedMediaForRequest(stateWithSettledMarkers, params.generationRequestId)
+            removedNodeIds = params.removeProjectedPendingNodes === true
+                ? getProjectedPendingGeneratedMediaNodeIds(stateWithSettledMarkers, params.generationRequestId)
+                : shouldRemovePendingNodes
+                    ? getUnresolvedPendingGeneratedMediaNodeIds(stateWithSettledMarkers, params.generationRequestId)
+                    : []
             const removedNodeIdSet = new Set(removedNodeIds)
             const settledState = removedNodeIds.length > 0
                 ? {
@@ -1443,15 +1472,22 @@ export async function settleMediaGenerationRequestOnCanvas(params: {
                 : { ...canvasState, nodes }
             // The settle pass is the final authoritative layout for the request:
             // clients load these persisted positions with no post-load movement.
+            const preserveMarkerDimensionsForGenerationRequestIds = params.removeProjectedPendingNodes === true
+                ? new Set([params.generationRequestId])
+                : undefined
             const rebalanceResult = rebalanceLineageForest(settledState, 'settleMediaGenerationRequestOnCanvas', {
                 proseMirrorThreadContent: params.proseMirrorThreadContent,
+                ...(preserveMarkerDimensionsForGenerationRequestIds
+                    ? { preserveMarkerDimensionsForGenerationRequestIds }
+                    : {}),
             })
             geometryNodes = diffCanvasGeometry(canvasState, rebalanceResult.state)
             console.info('[media-generation-canvas-projection] settle request geometry diff', {
                 generationRequestId: params.generationRequestId,
-                shouldRemoveUnresolvedPendingNodes,
-                removedUnresolvedPendingNodeCount: removedNodeIds.length,
-                removedUnresolvedPendingNodeIds: removedNodeIds,
+                removeProjectedPendingNodes: params.removeProjectedPendingNodes === true,
+                shouldRemovePendingNodes,
+                removedPendingNodeCount: removedNodeIds.length,
+                removedPendingNodeIds: removedNodeIds,
                 geometryNodeCount: geometryNodes.length,
                 geometryNodeIds: geometryNodes.map(node => node.nodeId),
             })

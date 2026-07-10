@@ -58,6 +58,31 @@ type PipelineReplayResult = {
     events?: PipelineEventEnvelope[]
 }
 
+type StopAiChatMessageTarget = {
+    workspaceId: string
+    aiChatThreadId: string
+    generationRequestId?: string
+}
+
+export async function stopAiChatMessageForThread({
+    workspaceId,
+    aiChatThreadId,
+    generationRequestId,
+}: StopAiChatMessageTarget): Promise<void> {
+    const payload = {
+        token: await AuthService.getTokenSilently(),
+        workspaceId,
+        aiChatThreadId,
+        ...(generationRequestId ? { generationRequestId } : {}),
+    }
+
+    const result = await servicesStore.getData('nats')!.request(
+        AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE,
+        payload,
+    ) as { error?: string }
+    if (result?.error) throw new Error(result.error)
+}
+
 export default class AiInteractionService {
     workspaceId: string
     aiChatThreadId: string
@@ -580,14 +605,11 @@ export default class AiInteractionService {
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE, payload)
     }
 
-    async stopChatMessage() {
-        const payload = {
-            token: await AuthService.getTokenSilently(),
+    async stopChatMessage(): Promise<void> {
+        await stopAiChatMessageForThread({
             workspaceId: this.workspaceId,
-            aiChatThreadId: this.aiChatThreadId
-        }
-
-        servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE, payload)
+            aiChatThreadId: this.aiChatThreadId,
+        })
     }
 
     disconnect() {
