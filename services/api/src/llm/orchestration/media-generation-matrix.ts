@@ -15,6 +15,8 @@ import type {
 } from '@lixpi/constants'
 
 import AiModelModel from '../../models/ai-model.ts'
+import { settlePersistedAiChatGenerationRequest } from '../../prosemirror/ai-chat-stream-assembler.ts'
+import { settleMediaGenerationRequestOnCanvas } from '../../services/media-generation-canvas-projection.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
@@ -201,9 +203,14 @@ export const buildMediaGenerationThreadGroupPrefix = (
 const buildReasoningInstanceKey = (requestGroupKey: string, reasoningIndex: number): string =>
     `${requestGroupKey}:reasoning:${reasoningIndex}`
 
+const COMPLETED_REQUEST_PUBLISHER_RETENTION_MS = 10 * 60 * 1000
+
 export class MediaGenerationMatrixOrchestrator {
     private readonly lineagePlanner = new MediaBranchLineagePlanner()
     private readonly runPlanner = new MediaGenerationRunPlanner()
+    private readonly cancelledRequestGroupKeys = new Set<string>()
+    private readonly requestPublishers = new Map<string, StreamPublisher>()
+    private readonly requestPublisherCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
     constructor(
         private readonly registry: ProviderRegistry,
@@ -241,6 +248,7 @@ export class MediaGenerationMatrixOrchestrator {
             primaryImageOptions,
             primaryVideoOptions,
         })
+        this.rememberRequestPublisher(normalized.requestGroupKey, sharedPreflight.publisher)
         const sharedPreflightState = sharedPreflight.state
 
         info('[MEDIA_MATRIX] Starting media generation matrix request', {
@@ -345,18 +353,80 @@ export class MediaGenerationMatrixOrchestrator {
             const rejectedResult = results.find(result => result.status === 'rejected')
             if (rejectedResult?.status === 'rejected') throw rejectedResult.reason
         } finally {
-            sharedPreflight.publisher.mediaGenerationRequestComplete(normalized.generationRequestId)
+            const removeProjectedPendingNodes = this.cancelledRequestGroupKeys.delete(normalized.requestGroupKey)
+            sharedPreflight.publisher.mediaGenerationRequestComplete(normalized.generationRequestId, {
+                removeProjectedPendingNodes,
+            })
+            await sharedPreflight.publisher.drainPendingWrites()
             await sharedPreflight.publisher.finishProseMirrorStream()
+            this.scheduleRequestPublisherCleanup(normalized.requestGroupKey)
         }
     }
 
     async stop({ workspaceId, aiChatThreadId, generationRequestId }: StopMatrixRequestParams): Promise<void> {
         if (generationRequestId) {
-            await this.registry.stopGroup(buildMediaGenerationRequestGroupKey(workspaceId, aiChatThreadId, generationRequestId))
+            const requestGroupKey = buildMediaGenerationRequestGroupKey(workspaceId, aiChatThreadId, generationRequestId)
+            this.cancelledRequestGroupKeys.add(requestGroupKey)
+            await this.registry.stopGroup(requestGroupKey)
+            const publisher = this.requestPublishers.get(requestGroupKey)
+            if (publisher) {
+                await publisher.cancelProseMirrorGenerationRequest(generationRequestId)
+                publisher.mediaGenerationRequestComplete(generationRequestId, {
+                    removeProjectedPendingNodes: true,
+                })
+                await publisher.drainPendingWrites()
+                await publisher.finishProseMirrorStream()
+                this.cancelledRequestGroupKeys.delete(requestGroupKey)
+                this.scheduleRequestPublisherCleanup(requestGroupKey)
+            } else {
+                const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
+                    workspaceId,
+                    generationRequestId,
+                    aiChatThreadId,
+                    removeProjectedPendingNodes: true,
+                })
+                info('[MEDIA_MATRIX] Persisted cancellation without a live request publisher', {
+                    requestGroupKey,
+                    generationRequestId,
+                    removedNodeIds: canvasGeometry?.removedNodeIds ?? [],
+                })
+                this.scheduleRequestPublisherCleanup(requestGroupKey)
+            }
+            const persistedThreadCancellation = await settlePersistedAiChatGenerationRequest({
+                workspaceId,
+                aiChatThreadId,
+                generationRequestId,
+            })
+            info('[MEDIA_MATRIX] Persisted cancelled transcript state', {
+                requestGroupKey,
+                generationRequestId,
+                ...persistedThreadCancellation,
+            })
             return
         }
 
         await this.registry.stopGroupsWithPrefix(buildMediaGenerationThreadGroupPrefix(workspaceId, aiChatThreadId))
+    }
+
+    private rememberRequestPublisher(requestGroupKey: string, publisher: StreamPublisher): void {
+        const cleanupTimer = this.requestPublisherCleanupTimers.get(requestGroupKey)
+        if (cleanupTimer) clearTimeout(cleanupTimer)
+        this.requestPublisherCleanupTimers.delete(requestGroupKey)
+        this.requestPublishers.set(requestGroupKey, publisher)
+    }
+
+    private scheduleRequestPublisherCleanup(requestGroupKey: string): void {
+        const currentTimer = this.requestPublisherCleanupTimers.get(requestGroupKey)
+        if (currentTimer) clearTimeout(currentTimer)
+        const cleanupTimer = setTimeout(() => {
+            this.requestPublishers.delete(requestGroupKey)
+            this.requestPublisherCleanupTimers.delete(requestGroupKey)
+            this.cancelledRequestGroupKeys.delete(requestGroupKey)
+        }, COMPLETED_REQUEST_PUBLISHER_RETENTION_MS)
+        if (typeof cleanupTimer === 'object' && 'unref' in cleanupTimer && typeof cleanupTimer.unref === 'function') {
+            cleanupTimer.unref()
+        }
+        this.requestPublisherCleanupTimers.set(requestGroupKey, cleanupTimer)
     }
 
     private normalizeRequest(requestData: MatrixRequestData): NormalizedMatrixRequest {

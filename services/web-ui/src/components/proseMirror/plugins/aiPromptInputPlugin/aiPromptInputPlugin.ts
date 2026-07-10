@@ -2,7 +2,7 @@ import { Plugin, EditorState, Transaction, TextSelection } from 'prosemirror-sta
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 
-import { AI_PROMPT_INPUT_PLUGIN_KEY, SUBMIT_AI_PROMPT_META, STOP_AI_PROMPT_META } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
+import { AI_PROMPT_INPUT_PLUGIN_KEY, SUBMIT_AI_PROMPT_META } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
 import {
     aiPromptInputNodeType,
     createAiPromptInputNodeView,
@@ -31,12 +31,8 @@ type SubmitHandler = (data: {
     }
 }) => void
 
-type StopHandler = () => void
-
 type AiPromptInputPluginOptions = {
     onSubmit: SubmitHandler
-    onStop: StopHandler
-    isReceiving: () => boolean
     createContextTray?: Parameters<typeof createAiPromptInputNodeView>[0]['createContextTray']
     createModelDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createModelDropdown']
     createModelMultiSelect?: Parameters<typeof createAiPromptInputNodeView>[0]['createModelMultiSelect']
@@ -167,8 +163,6 @@ function clearInputContent(view: EditorView): void {
 export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): Plugin {
     const {
         onSubmit,
-        onStop,
-        isReceiving,
         createContextTray,
         createModelDropdown,
         createModelMultiSelect,
@@ -278,8 +272,6 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                     onSubmit: () => {
                         if (editorViewRef) handleSubmit(editorViewRef)
                     },
-                    onStop,
-                    isReceiving,
                     placeholderText,
                     createContextTray,
                     createModelDropdown,
@@ -316,12 +308,6 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                     const attrs = getInputAttrs(newState)
                     onSubmit(buildSubmitPayload(contentJSON, attrs))
                 }
-            }
-
-            // Handle stop meta if dispatched
-            const stopTx = transactions.find(tr => tr.getMeta(STOP_AI_PROMPT_META))
-            if (stopTx) {
-                onStop()
             }
 
             return null

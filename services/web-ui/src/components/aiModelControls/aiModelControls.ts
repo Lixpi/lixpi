@@ -1,6 +1,5 @@
 import {
     sendIcon,
-    pauseIcon,
     chevronDownIcon,
     gptAvatarIcon,
     claudeIcon,
@@ -43,8 +42,6 @@ type AiModelControls = {
 
 type SubmitControls = {
     onSubmit: () => void
-    onStop: () => void
-    isReceiving: () => boolean
 }
 
 type ImageSizeControls = {
@@ -283,12 +280,6 @@ export function createGenericSubmitButton(controls: SubmitControls) {
     const handleClick = (e: MouseEvent) => {
         e.preventDefault()
         e.stopPropagation()
-
-        if (controls.isReceiving()) {
-            controls.onStop()
-            return
-        }
-
         controls.onSubmit()
     }
 
@@ -303,9 +294,6 @@ export function createGenericSubmitButton(controls: SubmitControls) {
             </div>
             <div className="button-hover">
                 <span className="send-icon" innerHTML=${sendIcon}></span>
-            </div>
-            <div className="button-receiving">
-                <span className="stop-icon" innerHTML=${pauseIcon}></span>
             </div>
         </div>
     `

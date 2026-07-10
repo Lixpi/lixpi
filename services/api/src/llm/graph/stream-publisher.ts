@@ -97,6 +97,10 @@ export type StreamPublisherOptions = {
     proseMirrorContentMirror?: ProseMirrorContentHandler
 }
 
+type MediaGenerationRequestCompleteOptions = {
+    removeProjectedPendingNodes?: boolean
+}
+
 export type ProseMirrorContentHandler = (content: ChunkPayload['content']) => void
 export type ProseMirrorSnapshotProvider = () => object | null | Promise<object | null>
 
@@ -272,6 +276,7 @@ export class StreamPublisher {
     private streamCanvasGeometryRefreshScheduled = false
     private readonly mediaGenerationRequestIds = new Set<string>()
     private readonly completedMediaGenerationRequestIds = new Set<string>()
+    private readonly cancelledMediaGenerationRequestIds = new Set<string>()
 
     constructor(
         private readonly nats: NatsService,
@@ -614,11 +619,16 @@ export class StreamPublisher {
     async drainPendingWrites(): Promise<void> {
         await this.drainResponsePublishes()
         await this.drainCanvasProjectionWrites()
+        // Canvas projection writes can enqueue authoritative geometry events.
+        await this.drainResponsePublishes()
+    }
+
+    async cancelProseMirrorGenerationRequest(generationRequestId: string): Promise<void> {
+        await this.proseMirrorAssembler?.cancelGenerationRequest(generationRequestId)
     }
 
     private async finishPipelineStream(): Promise<void> {
-        await this.drainResponsePublishes()
-        await this.drainCanvasProjectionWrites()
+        await this.drainPendingWrites()
         if (this.proseMirrorAssembler) {
             await this.proseMirrorAssembler.end()
         }
@@ -765,11 +775,20 @@ export class StreamPublisher {
         })
     }
 
-    mediaGenerationRequestComplete(generationRequestId: string): void {
-        if (!generationRequestId || this.completedMediaGenerationRequestIds.has(generationRequestId)) return
+    mediaGenerationRequestComplete(
+        generationRequestId: string,
+        options: MediaGenerationRequestCompleteOptions = {},
+    ): void {
+        if (!generationRequestId) return
+
+        const alreadyCompleted = this.completedMediaGenerationRequestIds.has(generationRequestId)
+        const requiresCancellationCleanup = options.removeProjectedPendingNodes === true
+            && !this.cancelledMediaGenerationRequestIds.has(generationRequestId)
+        if (alreadyCompleted && !requiresCancellationCleanup) return
 
         this.mediaGenerationRequestIds.add(generationRequestId)
         this.completedMediaGenerationRequestIds.add(generationRequestId)
+        if (requiresCancellationCleanup) this.cancelledMediaGenerationRequestIds.add(generationRequestId)
         this.enqueueCanvasProjection(
             async () => {
                 const proseMirrorThreadContent = await this.getProseMirrorSnapshot()
@@ -778,11 +797,14 @@ export class StreamPublisher {
                     generationRequestId,
                     aiChatThreadId: this.aiChatThreadId,
                     ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
+                    ...(requiresCancellationCleanup ? { removeProjectedPendingNodes: true } : {}),
                 })
                 this.canvasGeometryResolved(canvasGeometry)
             },
             'failed to settle media generation request on canvas',
         )
+        if (alreadyCompleted) return
+
         this.publishChatContent({
             status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
             aiProvider: this.provider,

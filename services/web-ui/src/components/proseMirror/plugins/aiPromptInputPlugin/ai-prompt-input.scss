@@ -210,8 +210,7 @@
         box-sizing: border-box;
 
         .button-default,
-        .button-hover,
-        .button-receiving {
+        .button-hover {
             display: flex;
             align-items: center;
             justify-content: center;
@@ -226,8 +225,7 @@
             z-index: 1;
         }
 
-        .button-hover,
-        .button-receiving {
+        .button-hover {
             position: absolute;
             inset: 0;
             opacity: 0;
@@ -235,7 +233,6 @@
         }
 
         .button-hover { z-index: 2; }
-        .button-receiving { z-index: 3; }
 
         .send-icon {
             display: inline-flex;
@@ -252,54 +249,14 @@
             }
         }
 
-        .stop-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 26px;
-            height: 26px;
-
-            svg {
-                width: 26px;
-                height: 26px;
-                fill: rgba(0, 0, 0, 0.5);
-                transition: fill 150ms ease;
-            }
-        }
-
         &:hover {
             opacity: 1;
 
             .button-default { opacity: 0; pointer-events: none; }
             .button-hover { opacity: 1; pointer-events: auto; }
-            .button-receiving { opacity: 0; pointer-events: none; }
 
             .send-icon svg {
                 fill: rgba(0, 0, 0, 0.8);
-            }
-        }
-    }
-
-    // ===== RECEIVING STATE =====
-    &.receiving {
-        .ai-submit-button {
-            background-color: rgba(255, 255, 255, 0.5);
-
-            .button-default,
-            .button-hover {
-                opacity: 0 !important;
-                pointer-events: none !important;
-            }
-
-            .button-receiving {
-                opacity: 1 !important;
-                pointer-events: auto !important;
-            }
-
-            &:hover {
-                .button-receiving .stop-icon svg {
-                    fill: #ff4d6a;
-                }
             }
         }
     }

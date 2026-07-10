@@ -635,8 +635,11 @@ export type CanvasNodeGeometry = {
 // node/edge snapshots and removals for clients that have not locally seen
 // projected pending nodes yet. layoutRevision is the persisted
 // canvasStateUpdatedAt, so clients discard stale events that arrive out of
-// order.
+// order. Media projection updates include generationRequestId so a client that
+// locally cancelled a request can ignore late upserts while still accepting the
+// authoritative removal update.
 export type CanvasGeometryUpdate = {
+    generationRequestId?: string
     layoutRevision: number
     nodes: CanvasNodeGeometry[]
     nodeSnapshots?: CanvasNode[]
@@ -1928,6 +1931,7 @@ export type AiChatThread = {
     workspaceId: string
     threadId: string
     content: object
+    proseMirrorVersion?: number
     aiModel: string
     title?: string
     owner?: AiChatThreadOwner

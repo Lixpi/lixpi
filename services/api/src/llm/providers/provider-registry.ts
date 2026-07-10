@@ -151,7 +151,15 @@ export class ProviderRegistry {
             warn(`Instance not found: ${instanceKey}`)
             return
         }
+        const activeTask = this.activeTasks.get(instanceKey)
         await provider.stop()
+        if (activeTask) {
+            try {
+                await activeTask
+            } catch (error) {
+                warn(`Stopped instance completed with an error ${instanceKey}: ${error}`)
+            }
+        }
         info(`Stopped instance: ${instanceKey}`)
     }
 

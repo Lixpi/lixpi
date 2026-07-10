@@ -499,13 +499,13 @@ The document structure uses a single AI chat thread container:
 
 **Floating AI Prompt Input**
 
-User input is handled by a separate `aiPromptInputPlugin` which renders as a floating canvas element:
-- Appears below the currently selected canvas node
+User input is handled by a separate `aiPromptInputPlugin` which renders in the bottom-center canvas composer:
+- Remains a submit surface while earlier user-message runs are active
 - Has its own `ProseMirrorEditor` with `documentType: 'aiPromptInput'`
 - `aiPromptComposer.ts` wraps that editor for hosts that mount a reusable prompt surface
-- `AiPromptInputController` coordinates message injection into thread editors
 - Controls (model selector, image toggle, submit button) are generic reusable factories in `$src/components/aiModelControls/`
-- Can target any canvas node type — auto-creates a new AI chat thread when targeting non-thread nodes
+- Each submit creates a standalone hidden AI chat thread and a pending branch-lineage projection
+- Each active branch-lineage marker shows its thread stop control at the right-center until every planned media branch has finished; the composer has no aggregate receiving/stop state
 
 **Key design decisions**:
 - Fresh documents are created using ProseMirror's `createAndFill()` which auto-populates required nodes based on schema
