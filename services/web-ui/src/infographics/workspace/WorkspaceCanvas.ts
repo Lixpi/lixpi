@@ -1571,7 +1571,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             viewport,
             worldPosition: position,
             worldDimensions: dimensions,
-            baseGap: settings.mediaNode.generatedMediaChrome.topGap,
+            baseGap: settings.mediaNode.generatedMediaChrome.gap,
             zoomScaling: getAdaptiveBoundedZoomScalingOptions(settings.mediaNode.generatedMediaChrome.zoomScaling),
         })
         applyStyle(chromeEl, {
@@ -1623,7 +1623,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const panelSettings = settings.mediaNode.generatedMediaInfoPanel
         const zoom = Number.isFinite(viewport.zoom) ? Math.max(viewport.zoom, 0.01) : 1
         const iconStripScreenGap = scaleCanvasChromeToScreenForZoom(
-            settings.mediaNode.generatedMediaChrome.topGap,
+            settings.mediaNode.generatedMediaChrome.gap,
             zoom,
             getAdaptiveBoundedZoomScalingOptions(settings.mediaNode.generatedMediaChrome.zoomScaling),
         )
@@ -1636,7 +1636,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // so its top coordinate must be converted back to world units. The strip
         // gap and icon height are computed in final screen pixels, then divided
         // by zoom before being added to the media node's world-space bottom.
-        const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize + panelSettings.mediaTopOffset) / zoom
+        const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize + iconStripScreenGap) / zoom
         const anchorWidth = Number.isFinite(dimensions.width) && dimensions.width > 0
             ? dimensions.width
             : settings.mediaBranchLineage.generatedMediaSize
@@ -2291,10 +2291,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             id: `asset-scope-${node.nodeId}`,
             selectedValue: selectedScope,
             options: scopeOptions,
-            theme: 'light',
+            theme: 'dark',
+            ignoreColorValuesForOptions: true,
+            ignoreColorValuesForSelectedValue: true,
             renderIconForSelectedValue: false,
             renderIconForOptions: false,
-            mountToBody: true,
+            mountToBody: false,
+            disableAutoPositioning: true,
             onSelect: (option) => {
                 void (async () => {
                     const current = assetsStore.get(asset.assetId)
