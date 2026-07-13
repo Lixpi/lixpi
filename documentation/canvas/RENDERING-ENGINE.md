@@ -106,7 +106,6 @@ flowchart TB
     subgraph Pane[".workspace-pane"]
         subgraph Viewport[".workspace-viewport (z-index 1, CSS-transformed)"]
             DOC[Document Nodes]
-            THR[AI Chat Thread Nodes]
             IMG_DOM[Image Node DOM shells<br/>data-node-id + interaction chrome]
             HANDLE[Handles, drag overlays, resize handles]
         end
@@ -296,7 +295,7 @@ sequenceDiagram
         activate PIXI
         PIXI->>Pool: decodeImageInWorker(url)
         activate Pool
-        Pool->>API: GET /api/files/:workspaceId/:fileId?size=...
+        Pool->>API: GET /api/assets/:assetId/renditions/:renditionName
         activate API
         API-->>Pool: image bytes
         deactivate API

@@ -242,10 +242,6 @@ When an edge has a `sourceMessageId` — connecting a specific AI response to a 
 
 The `sourceMessageId` is the same property defined on `WorkspaceEdge` (see [Workspace Model](./WORKSPACE-MODEL.md#workspaceedge)); it ties a generated image back to the exact `aiResponseMessage` that produced it, and that linkage is what lets context extraction associate images with their originating conversation turns ([Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md)).
 
-## Proximity Connect
-
-Dragging a node (Document or Image) near an AI Chat Thread automatically suggests a connection with a dashed "ghost" line. Dropping the node creates the link. The proximity threshold is **1200px**, and the system prevents duplicate connections. This makes it easy to pull source material into a thread's context without precisely targeting a handle.
-
 ## Edge Selection and Deletion
 
 An edge starts unselected; clicking it selects it (and shows a bubble menu below the edge with a Delete action). Clicking elsewhere or pressing Escape deselects it; Delete or Backspace removes the selected edge.

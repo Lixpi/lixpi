@@ -1,6 +1,6 @@
 ---
 title: Using Features
-description: How feature extraction is triggered, how features are applied to a prompt via /use, the extraction progress content the user sees, and the four-scope sharing model.
+description: How feature extraction is triggered, how organization Features are applied to a prompt via /use, and the extraction progress content the user sees.
 ---
 
 # Using Features
@@ -53,7 +53,7 @@ graph LR
 
 | Entry point | Where the user is | How source context is gathered |
 |---|---|---|
-| Image bubble "Ask AI" | A selected image node on the canvas | The image's `nats-obj://` URL plus directly-upstream connected nodes via `findConnectedNodes` |
+| Image bubble "Ask AI" | A selected image node on the canvas | The image's `asset://<assetId>` reference plus directly-upstream connected nodes via `findConnectedNodes` |
 | Natural-language intent | Typing inside any chat thread | The thread's connected context, with the user's phrase carried as `intent` |
 | `/extract` slash command | Any prompt input | The current thread's full edge-graph context via `extractConnectedContext`, with post-command text as the seed |
 
@@ -65,7 +65,7 @@ The image bubble's "Ask AI" handler — in
 wand:
 
 1. Creates a local pending extraction placeholder with a client-generated
-   `extractionRunId`, the source image's `nats-obj://` URL, and directly-upstream
+   `extractionRunId`, the source image's Asset ID, and directly-upstream
    connected context gathered through the existing context traversal. This
    placeholder is not persisted.
 2. Opens the right-side panel on the `Features` surface and selects a placeholder
@@ -126,7 +126,7 @@ sequenceDiagram
         Note over User, DDB: Selection — pick a feature from the slash menu
         User->>Editor: type "/" then "use"
         activate Editor
-        Editor->>DDB: LIST_BY_SCOPE (all four scopes)
+        Editor->>DDB: LIST_BY_SCOPE (organization scope)
         activate DDB
         DDB-->>Editor: accessible features
         deactivate DDB
@@ -173,11 +173,10 @@ sequenceDiagram
    [README](../../services/web-ui/src/components/proseMirror/plugins/slashCommandsMenuPlugin/README.md)).
 2. **Pick a feature.** Selecting `/use` swaps the menu for a feature picker — a
    flat, scrollable list of accessible features. Each row shows an icon, a
-   category badge, the name, a one-line summary, and a scope chip (Workspace /
-   Mine / Org / Public). The three most recent features are pinned at the top,
+   category badge, the name, a one-line summary, and an Organization scope chip.
+   The three most recent features are pinned at the top,
    and the list filters as the user types after `/use`. Source data is
-   `FEATURE_SUBJECTS.LIST_BY_SCOPE`, aggregated across all four scopes (paged for
-   `public`).
+   `FEATURE_SUBJECTS.LIST_BY_SCOPE` for the active Workspace's organization.
 3. **Insert the chip.** Picking a feature inserts a **`feature_reference` inline
    node** at the slash position. The chip is a small pill (`@loose-watercolor`)
    styled to be obviously highlighted — per the explicit requirement that *"it
@@ -212,9 +211,9 @@ The chip carries only an **ID**; the server expands it. Three reasons:
 - **Edits propagate retroactively.** Editing a feature improves every future
   invocation — the user's growing taste applies to all past chips automatically,
   with no re-typing.
-- **ACL is enforced on every send.** Demoting a feature from `public` to
-  `workspace` immediately revokes access for non-members, because the check runs
-  server-side at resolution time rather than being baked into old message text.
+- **Organization access is enforced on every send.** Leaving or losing access to
+  the owning organization immediately prevents resolution, because the check
+  runs server-side rather than being baked into old message text.
 
 {% callout type="note" %}
 The mechanics of `resolveFeatures` — the LRU cache, the structured
@@ -245,62 +244,27 @@ The feature-specific content is:
    `Saving`.
 2. **Confirmation section.** Explains that extraction analyzes the selected
    source and connected context, generates source-safe samples, and saves a
-   workspace Feature.
+   organization Feature.
 3. **Stage-aware timeline.** Renders one row per `StageTraceEvent` as it streams
    in. Each row shows the stage name, the model name, the duration, the status,
    and an expandable detail panel with the prompt preview and output summary.
 4. **Agent reasoning.** Adaptive-thinking models stream visible reasoning during
    the router and synthesis stages under the active stage.
 5. **Final feature card.** When the special `feature_card` block streams in at
-   completion, it shows the name, a category badge, a scope chip (Workspace by
+   completion, it shows the name, a category badge, an Organization scope chip,
    default), the summary, tags as pills, and sample thumbnails. The saved Feature
    row appears in the library from the created Feature event.
 
-## Feature scope and sharing model
+## Feature scope
 
-Every feature has a **scope** that controls who can see it. There are four
-levels, in order of openness; `workspace` is the default.
+Extracted Features are organization scoped. Any member of the owning
+organization can list and resolve them from any Workspace in that organization;
+only the Feature owner can update or delete the record. The `shared` type value
+is reserved for a future external-sharing design and has no runtime or UI path.
 
-| Scope | Visibility | Default? |
-|---|---|---|
-| `workspace` | Everyone with access to that specific workspace | Yes — extracted features are workspace-local by default |
-| `user` | Only the owner, visible across all their workspaces (their private library) | No — the user promotes |
-| `organization` | Everyone in the owner's organization, across all org workspaces | No |
-| `public` | Anyone authenticated to Lixpi (community-shared, instant publish) | No |
-
-**Promotion is one click** in the feature card. Promoting to `public` shows a
-confirmation modal explaining that anyone can find it. **Demotion** (e.g. from
-`public` back to `workspace`) breaks `/use` chips for users who lost access —
-those references gracefully degrade to "feature no longer available" at
-resolution time. This is the same UX as accidentally deleting a referenced
-image; feature content is deliberately never snapshotted into messages.
-
-### Public moderation: instant publish plus community reports
-
-Public scope is **instant publish with community-driven reports** — there is no
-pre-publication review gate.
-
-- Any user can flag a public feature via the `Report` button on its card.
-- The `FEATURE_SUBJECTS.REPORT_ABUSE` handler increments `reportCount`. When
-  `reportCount >= REPORT_THRESHOLD` (configurable, default 5), the feature's
-  `status` flips from `'active'` to `'reported'`, and `LIST_BY_SCOPE` queries for
-  `public` exclude reported features.
-- Restoration (false-positive reports, etc.) is a manual DB operation today; an
-  admin moderation UI is parked for later.
-
-{% callout type="warning" %}
-Instant publish plus community reports covers the **data path**, but the
-**policy layer** is incomplete: there is no admin review UI, no appeal mechanism,
-and no takedown flow for legal / copyright / CSAM concerns. These need to land
-before public scope is widely advertised. See the known limitations in
-[Feature Storage](./FEATURE-STORAGE.md#known-limitations-and-trade-offs).
-{% /callout %}
-
-### Discovery
-
-**Public discovery** is a simple GSI scan on the `byScopeAndOwner` index with
-partition `public#public`, sorted by `updatedAt`. A real search index
-(OpenSearch / Algolia) is deferred until discovery patterns are clearer.
+`Features-Meta` is queried by its `organization#<organizationId>` primary-key
+partition and sorted in memory by `updatedAt`. The active model adds no Feature
+GSI and exposes no public discovery or moderation path.
 
 ## Where features are browsed and persisted
 

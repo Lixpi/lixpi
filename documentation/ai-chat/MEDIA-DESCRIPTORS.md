@@ -1,15 +1,16 @@
 ---
 title: Media and Content Descriptors
-description: The compact text descriptor every context-bearing canvas node carries, how it is sourced, repaired, and surfaced.
+description: The compact text descriptor stored on each context-bearing Asset, how it is sourced, repaired, and surfaced.
 ---
 
 # Media and Content Descriptors
 
-Every context-bearing canvas node carries a compact, model-friendly
+Every context-bearing Asset can carry a compact, model-friendly
 **descriptor**: a one-to-two sentence summary plus a few entity and style tags.
 Images and videos still expose the historical `MediaDescriptor` name, but the
 canonical shared contract is now `ContentDescriptor` because documents and AI
-chat thread nodes use the same shape.
+conversation Assets use the same shape. Canvas nodes carry only `assetId`; they
+resolve the descriptor from `assetsStore` and never persist a copy.
 
 Descriptors exist so workspace-wide features can tell nodes apart and feed short
 textual hints into model context without re-analyzing every artifact. They are
@@ -33,10 +34,10 @@ if it is otherwise `ready`.
 
 ## Shape
 
-`ContentDescriptor` (`packages/lixpi/constants/ts/types.ts`) hangs off
-`DocumentCanvasNode`, `AiChatThreadCanvasNode`, `ImageCanvasNode`, and
-`VideoCanvasNode` as the optional `descriptor` field. `MediaDescriptor` is an
-alias for the same type.
+`ContentDescriptor` (`packages/lixpi/constants/ts/types.ts`) is the optional
+`Asset.descriptor` component. `Asset-Meta` projects its summary and tags for
+catalog listing, while workspace placements resolve the authoritative Asset.
+`MediaDescriptor` is an alias for the same type.
 
 ```typescript
 export type ContentDescriptor = {
@@ -44,7 +45,7 @@ export type ContentDescriptor = {
     summary: string
     entityTags: string[]
     styleTags: string[]
-    source: 'generation' | 'analysis'
+    source: 'analysis'
     version: string
     updatedAt: number
 }
@@ -58,7 +59,7 @@ export type MediaDescriptor = ContentDescriptor
 | `summary` | `string` | 1-2 sentences naming the dominant subjects and overall look/content |
 | `entityTags` | `string[]` | A few concrete subjects, objects, people, or concepts |
 | `styleTags` | `string[]` | A few medium, palette, mood, lighting, or document-style descriptors |
-| `source` | `'generation' \| 'analysis'` | `analysis` for new descriptors; `generation` is legacy persisted data and must not be newly written or rendered as media description |
+| `source` | `'analysis'` | Descriptor produced from media pixels or document/conversation text |
 | `version` | `string` | `MEDIA_DESCRIPTOR_VERSION` |
 | `updatedAt` | `number` | Last write timestamp |
 
@@ -79,7 +80,7 @@ flowchart TB
         Up --> UpAnalyze --> UpDescribe
     end
 
-    subgraph Text["Documents and Threads — text analysis"]
+    subgraph Text["Document and Conversation Assets — text analysis"]
         Txt[ProseMirror content / transcript]
         TxtSummary[Text descriptor service]
         Txt --> TxtSummary
@@ -92,8 +93,8 @@ flowchart TB
 ### Media — one VLM caption
 
 When an AI-generated image finalizes, when a generated video completes, or when
-media is uploaded/imported/materialized onto the canvas, the node is inserted or
-updated with a `status: 'analyzing'` descriptor. The browser requests
+media is uploaded/imported/materialized onto the canvas, the Asset is updated
+with a `status: 'analyzing'` descriptor. The browser requests
 `MEDIA_DESCRIBE`, and the API handler
 (`services/api/src/NATS/subscriptions/media-descriptor-subjects.ts`) calls
 `describeMediaStill` (`services/api/src/llm/media-descriptor.ts`) against the
@@ -102,12 +103,11 @@ model is API-owned through `settings.mediaDescriptor.defaultVlmModelId` in
 `services/api/src/settings.ts`, not selected by the browser. For video,
 captioning runs on the representative still/poster, never the MP4.
 
-### Documents and threads — text analysis
+### Document and conversation Assets — text analysis
 
-Document nodes and AI chat thread nodes get descriptors from their text
-content/transcript. The browser can seed a descriptor from existing text content
-when a node is inserted, but plain canvas document typing does not proactively
-request descriptor analysis. Missing or weak document/thread descriptors are
+Document and conversation Assets get descriptors from their text
+content/transcript. Plain canvas document typing and Asset creation do not
+proactively request descriptor analysis. Missing or weak document/conversation descriptors are
 repaired during workspace context self-heal when an AI turn needs the node.
 These descriptors let the workspace relevance engine rank documents and
 conversations alongside media using one uniform contract.
@@ -115,10 +115,10 @@ conversations alongside media using one uniform contract.
 ## Self-Heal
 
 [`resolveWorkspaceContext`](../platform/AI-GENERATION-PIPELINE.md) can repair
-weak descriptors inside the same chat turn. Nodes with missing, failed,
+weak descriptors inside the same chat turn. Assets resolved through nodes with missing, failed,
 analyzing, or too-thin descriptors can be flagged by the relevance model. The
-API improves flagged descriptors once, persists them through a targeted
-node-descriptor patch, re-ranks the workspace snapshot, and streams
+API improves flagged descriptors once, persists them through an Asset revision
+update, re-ranks the workspace snapshot, and streams
 `improvedDescriptors` in `CONTEXT_RELEVANCE_RESOLVED`.
 
 {% callout type="important" %}
@@ -128,8 +128,8 @@ re-ranks, and proceeds. This keeps a single chat turn from fanning out into an
 unbounded number of VLM captions.
 {% /callout %}
 
-The browser applies improved descriptors to local canvas state so analyzing
-indicators and info panels update without a reload. See
+The browser applies improved descriptors to `assetsStore` so every placement's
+analyzing indicator and info panel updates without a reload. See
 [Workspace Context Relevance](./CONTEXT-RELEVANCE.md) for how self-heal sits
 inside the larger rank → force-include → assemble flow.
 
@@ -141,20 +141,15 @@ and its title/aria-label explains what is happening. Opening the panel shows an
 "Analyzing media..." note. When ready, the same panel renders the summary and
 tags via `buildMediaDescriptorSection`.
 
-When canvas state is loaded, persisted media descriptors that still have
-`status: 'analyzing'` are reset to `failed`. This keeps canceled browser
-requests, incomplete reloads, and unreachable caption replies from pinning the
-media chrome in an active analysis state.
-
-Documents and thread nodes use descriptors for relevance, not media chrome —
+Documents and conversation nodes use descriptors for relevance, not media chrome —
 they do not render the analyzing pulse. See
 [Workspace Model](../canvas/WORKSPACE-MODEL.md) for the canvas node chrome these
 indicators attach to.
 
 ## Why Videos Send a Still, Not the Clip
 
-A video candidate contributes its representative frame (`frameFileId`, falling
-back to the poster) as the still the resolver and captioner see. This keeps
+A video candidate contributes the Asset's `representativeFrame` rendition,
+falling back to its `poster` rendition, as the still the resolver and captioner see. This keeps
 per-candidate VLM cost identical to an image and means an edit to a previous
 video can continue that video's branch without sending the MP4. See
 [Video Generation](../media-generation/VIDEO-GENERATION.md) for frame extraction

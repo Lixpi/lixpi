@@ -8,24 +8,26 @@ import type { FeatureSampleRef, FeatureRecommendedSampleSubject } from '@lixpi/c
 import { parseDataUrl } from '../utils/attachments.ts'
 import type { ProviderState } from '../graph/state.ts'
 import type { ExtractionDeps, ExtractionState, StageLogger } from './types.ts'
+import BlobModel from '../../models/blob.ts'
 
 const ANTI_LEAKAGE_INSTRUCTION = 'Render the requested neutral subject using ONLY the medium and stylistic traits evidenced by the attached source crops and the style brief. The source crops are intentionally sub-frame — they carry mark-making, palette, edge behavior, and rendering technique. Do NOT reproduce any subject, identity, pose, layout, or composition the crops happen to contain. A fragment of fur is not permission to draw a cat; a fragment of an eye is not permission to draw a face. Apply the medium to the new subject, not to a decorative backdrop behind it.'
 
-// Fetches raw bytes for a source-crop sample by fileId from the workspace bucket.
-// We need this to feed crops back into composite builders or image-router calls.
-const fetchSourceCropBytes = async (workspaceId: string, sample: FeatureSampleRef): Promise<Buffer | undefined> => {
-    if (sample.kind !== 'source-crop' || !sample.fileId) return undefined
+// Fetches source-crop bytes from the organization Blob registry for composite
+// builders and image-router calls.
+const fetchSourceCropBytes = async (organizationId: string, sample: FeatureSampleRef): Promise<Buffer | undefined> => {
+    if (sample.kind !== 'source-crop' || !sample.blobHash) return undefined
     if (sample.imageUrl?.startsWith('data:')) {
         try { return Buffer.from(parseDataUrl(sample.imageUrl).base64, 'base64') } catch { return undefined }
     }
     const nats = NATS_Service.getInstance()
     if (!nats) return undefined
-    const bucket = `workspace-${workspaceId}-files`
     try {
-        const data = await nats.getObject(bucket, sample.fileId)
+        const blob = await BlobModel.get({ organizationId, blobHash: sample.blobHash })
+        if (!blob) return undefined
+        const data = await nats.getObject(blob.bucketName, blob.objectKey)
         return data ? Buffer.from(data) : undefined
     } catch (e) {
-        warn(`Failed to fetch source-crop bytes ${sample.fileId}: ${e instanceof Error ? e.message : String(e)}`)
+        warn(`Failed to fetch source-crop bytes ${sample.blobHash}: ${e instanceof Error ? e.message : String(e)}`)
         return undefined
     }
 }
@@ -68,8 +70,9 @@ const buildTextureSpecimen = async (state: ExtractionState): Promise<Buffer> => 
     }
     const cellSize = 512
     const tileBytes: Buffer[] = []
+    if (!state.input.organizationId) throw new Error('Organization context required for source-crop Blob storage')
     for (const crop of crops) {
-        const bytes = await fetchSourceCropBytes(state.input.workspaceId, crop)
+        const bytes = await fetchSourceCropBytes(state.input.organizationId, crop)
         if (!bytes) continue
         const resized = await sharp(bytes).resize({ width: cellSize, height: cellSize, fit: 'cover' }).png().toBuffer()
         tileBytes.push(resized)
@@ -181,12 +184,12 @@ export const generateSamples = async (state: ExtractionState, logger: StageLogge
                 }
                 if (!buffer) throw new Error(`Sample ${idx} (${subject.kind}) produced no bytes`)
                 const ext = detectExt(buffer)
-                const stored = await deps.storeWorkspaceImage({
-                    workspaceId: state.input.workspaceId,
-                    buffer,
-                    originalName: `extraction-${state.input.extractionRunId}-sample-${idx}.${ext}`,
+                if (!state.input.organizationId) throw new Error('Organization context required for sample Blob storage')
+                const stored = await BlobModel.store({
+                    organizationId: state.input.organizationId,
+                    bytes: buffer,
                     mimeType: ext === 'jpg' ? 'image/jpeg' : 'image/png',
-                    useContentHash: true,
+                    description: `extraction-${state.input.extractionRunId}-sample-${idx}.${ext}`,
                 })
                 const sample: FeatureSampleRef = {
                     idx,
@@ -194,14 +197,14 @@ export const generateSamples = async (state: ExtractionState, logger: StageLogge
                     rationale: subject.rationale,
                     aspectRatio: subject.aspectRatio,
                     ext,
-                    fileId: stored.fileId,
-                    imageUrl: stored.url,
+                    blobHash: stored.blobHash,
+                    imageUrl: `data:${ext === 'jpg' ? 'image/jpeg' : 'image/png'};base64,${buffer.toString('base64')}`,
                     kind: subject.kind,
                 }
                 return sample
             }, {
                 inputSummary: `kind=${subject.kind} subject=${subject.prompt.slice(0, 80)}`,
-                outputSummarizer: (sample) => sample ? `idx=${sample.idx} fileId=${sample.fileId}` : 'no sample',
+                outputSummarizer: (sample) => sample ? `idx=${sample.idx} blobHash=${sample.blobHash}` : 'no sample',
             }),
         ))
 

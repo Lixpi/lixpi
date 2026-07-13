@@ -1,49 +1,27 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import { STREAM_STATUS, type CanvasGeometryUpdate, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
-
 import {
-    logCanvasProjectionError,
-    upsertGeneratedVideoToCanvas,
-} from '../../services/media-generation-canvas-projection.ts'
-import type { StoreWorkspaceImageFn } from './image-publisher.ts'
+    getAiInteractionCanonicalResponseSubject,
+    STREAM_STATUS,
+    type CanvasGeometryUpdate,
+    type MediaGenerationRunMeta,
+    type ProviderName,
+} from '@lixpi/constants'
 import type { ChunkPayload, ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from './stream-publisher.ts'
-
-// Store-function contract for generated video. Implemented by a
-// storeWorkspaceFile adapter at the composition root (store-media-adapters.ts).
-export type StoreVideoInput = {
-    workspaceId: string
-    buffer: Buffer
-    originalName?: string
-    mimeType?: string
-    useContentHash?: boolean
-}
-
-export type StoreVideoResult = {
-    fileId: string
-    url: string
-    isDuplicate: boolean
-    size: number
-    mimeType: string
-}
-
-export type StoreWorkspaceVideoFn = (input: StoreVideoInput) => Promise<StoreVideoResult>
-
-const subject = (workspaceId: string, aiChatThreadId: string): string =>
-    `ai.interaction.chat.receiveMessage.${workspaceId}.${aiChatThreadId}`
+import { attachGeneratedAssetNode, settleGeneratedAssetOriginal } from '../../services/generated-asset-storage.ts'
+import { materializeAssetProvenance } from '../../services/asset-provenance-materializer.ts'
+import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
 
 // Mirrors ImagePublisher but for the async VEO lifecycle. There are no partial
 // frames: the browser sees VIDEO_PENDING (placeholder + traveling outline), then
 // periodic VIDEO_GENERATING keepalive pings during the poll loop, then a single
-// VIDEO_COMPLETE (or VIDEO_ERROR). The poster image (if ffmpeg produced one) is
-// stored as a normal workspace image so the PIXI media layer can render it at low
-// LoD before swapping to the live video texture.
+// VIDEO_COMPLETE (or VIDEO_ERROR). NEX materializes poster/preview renditions on
+// the same Asset for low-cost initial paint and later visual grounding.
 export class VideoPublisher {
     constructor(
         private readonly nats: NatsService,
-        private readonly storeVideo: StoreWorkspaceVideoFn,
-        private readonly storeImage: StoreWorkspaceImageFn,
+        private readonly organizationId: string,
         private readonly workspaceId: string,
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
@@ -60,9 +38,9 @@ export class VideoPublisher {
             return
         }
 
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+        this.nats.publish(getAiInteractionCanonicalResponseSubject(this.organizationId, this.aiChatThreadId), {
             content,
-            aiChatThreadId: this.aiChatThreadId,
+            conversationAssetId: this.aiChatThreadId,
         })
         this.onProseMirrorContent?.(content)
     }
@@ -72,7 +50,7 @@ export class VideoPublisher {
         this.publish({
             status: STREAM_STATUS.VIDEO_PENDING,
             videoUrl: '',
-            fileId: '',
+            assetId: this.generationRun?.lineageAssignment?.assetId,
             aiProvider: this.provider,
             ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
@@ -98,7 +76,7 @@ export class VideoPublisher {
         revisedPrompt: string
         videoModelId: string
     }): Promise<void> {
-        const { videoBuffer, posterBuffer, frameBuffer, durationSeconds, aspectRatio, hasAudio, responseId, revisedPrompt, videoModelId } = args
+        const { videoBuffer, durationSeconds, aspectRatio, hasAudio, responseId, revisedPrompt, videoModelId } = args
 
         if (!videoBuffer || videoBuffer.length === 0) {
             throw new Error('Video completion failed: provider returned no video bytes')
@@ -113,73 +91,31 @@ export class VideoPublisher {
             throw new Error('Video completion failed: provider returned bytes that are not an MP4 (no ftyp box)')
         }
 
-        const videoResult = await this.storeVideo({
+        if (!this.generationRun) throw new Error('Video completion is missing generationRun')
+        const videoResult = await settleGeneratedAssetOriginal({
+            generationRun: this.generationRun,
             workspaceId: this.workspaceId,
             buffer: videoBuffer,
             originalName: 'generated-video.mp4',
             mimeType: 'video/mp4',
-            useContentHash: true,
+            kind: 'video',
         })
-
-        // Both the poster (frame 0, for the PIXI low-LoD preview) and the
-        // representative mid-frame (for the branch resolver / VEO anchor) are
-        // stored as ordinary workspace images. Both are best-effort: the video
-        // still completes without either.
-        const storeFrameImage = async (buffer: Buffer | null | undefined, originalName: string): Promise<{ url: string; fileId: string }> => {
-            if (!buffer || buffer.length === 0) return { url: '', fileId: '' }
-            try {
-                const result = await this.storeImage({
-                    workspaceId: this.workspaceId,
-                    buffer,
-                    originalName,
-                    mimeType: 'image/png',
-                    useContentHash: true,
-                })
-                return { url: result.url, fileId: result.fileId }
-            } catch {
-                return { url: '', fileId: '' }
-            }
-        }
-
-        const poster = await storeFrameImage(posterBuffer, 'generated-video-poster.png')
-        const frame = await storeFrameImage(frameBuffer, 'generated-video-frame.png')
-
-        let canvasGeometry: CanvasGeometryUpdate | null = null
-        try {
-            const proseMirrorThreadContent = await this.getProseMirrorSnapshot?.()
-            canvasGeometry = await upsertGeneratedVideoToCanvas({
-                workspaceId: this.workspaceId,
-                aiChatThreadId: this.aiChatThreadId,
-                videoUrl: videoResult.url,
-                fileId: videoResult.fileId,
-                posterUrl: poster.url,
-                posterFileId: poster.fileId,
-                frameUrl: frame.url,
-                frameFileId: frame.fileId,
-                durationSeconds,
-                aspectRatio,
-                hasAudio,
-                responseId,
-                revisedPrompt,
-                aiProvider: this.provider,
-                videoModelProvider: this.provider,
-                videoModelId,
-                generationRun: this.generationRun,
-                ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
-                ...(this.canvasVisibleArea ? { canvasVisibleArea: this.canvasVisibleArea } : {}),
-            })
-        } catch (error) {
-            logCanvasProjectionError('failed to persist generated video to canvas', error)
-        }
+        const parsedAspectRatio = aspectRatio.includes(':')
+            ? Number(aspectRatio.split(':')[0]) / Number(aspectRatio.split(':')[1])
+            : Number(aspectRatio)
+        const canvasGeometry: CanvasGeometryUpdate = await attachGeneratedAssetNode({
+            assetId: videoResult.assetId,
+            workspaceId: this.workspaceId,
+            kind: 'video',
+            aspectRatio: Number.isFinite(parsedAspectRatio) ? parsedAspectRatio : 16 / 9,
+            generationRun: this.generationRun,
+            conversationAssetId: this.aiChatThreadId,
+        })
 
         this.publish({
             status: STREAM_STATUS.VIDEO_COMPLETE,
             videoUrl: videoResult.url,
-            fileId: videoResult.fileId,
-            posterUrl: poster.url,
-            posterFileId: poster.fileId,
-            frameUrl: frame.url,
-            frameFileId: frame.fileId,
+            assetId: videoResult.assetId,
             durationSeconds,
             aspectRatio,
             hasAudio,
@@ -188,9 +124,25 @@ export class VideoPublisher {
             aiProvider: this.provider,
             videoModelProvider: this.provider,
             videoModelId,
-            ...(canvasGeometry ? { canvasGeometry } : {}),
+            canvasGeometry,
             ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
+        const provenancePayload = {
+            assetId: videoResult.assetId,
+            organizationId: videoResult.organizationId,
+            workspaceId: this.workspaceId,
+            conversationAssetId: this.aiChatThreadId,
+            generationRun: this.generationRun,
+            terminalStatus: 'completed' as const,
+        }
+        try {
+            await materializeAssetProvenance(provenancePayload)
+        } catch (error) {
+            if ((error as { message?: unknown })?.message !== 'PROVENANCE_PROJECTION_NOT_READY') {
+                console.error('Video Asset provenance materialization failed; queued retry', error)
+            }
+            await enqueueProvenanceRebuild(provenancePayload)
+        }
     }
 
     error(message: string): void {

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type NatsService from '@lixpi/nats-service'
 import { err } from '@lixpi/debug-tools'
 import {
+    getAiInteractionCanonicalResponseSubject,
     STREAM_STATUS,
     type CanvasGeometryUpdate,
     type MediaBranchVlmResolution,
@@ -23,11 +24,14 @@ import {
     refreshMediaGenerationRequestCanvasGeometry,
     settleMediaGenerationRequestOnCanvas,
     upsertMediaLineagePlanToCanvas,
-} from '../../services/media-generation-canvas-projection.ts'
+} from '../../services/asset-canvas-projection.ts'
 import { PipelineEventLog } from './pipeline-event-log.ts'
-
-const subject = (workspaceId: string, aiChatThreadId: string): string =>
-    `ai.interaction.chat.receiveMessage.${workspaceId}.${aiChatThreadId}`
+import {
+    materializeAssetProvenance,
+    settleUnfinishedGeneratedAssets,
+} from '../../services/asset-provenance-materializer.ts'
+import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
+import { getAssetRecord } from '../../models/asset.ts'
 
 const COMPLETED_PIPELINE_EVENT_RETENTION_MS = 10 * 60 * 1000
 
@@ -50,13 +54,11 @@ export type ChunkPayload = {
         aiProvider: ProviderName
         collapsibleTitle?: string
         imageUrl?: string
-        fileId?: string
+        assetId?: string
         partialIndex?: number
         videoUrl?: string
         posterUrl?: string
-        posterFileId?: string
         frameUrl?: string
-        frameFileId?: string
         durationSeconds?: number
         aspectRatio?: string | number
         hasAudio?: boolean
@@ -80,7 +82,7 @@ export type ChunkPayload = {
         featureCard?: Record<string, any>
         generationRun?: MediaGenerationRunMeta
     }
-    aiChatThreadId: string
+    conversationAssetId: string
 }
 
 type PipelineChunkPayload = ChunkPayload & {
@@ -89,6 +91,9 @@ type PipelineChunkPayload = ChunkPayload & {
 }
 
 export type StreamPublisherOptions = {
+    organizationId?: string
+    assetLeaseId?: string
+    assetLeaseHolderId?: string
     enableProseMirrorStream?: boolean
     proseMirrorBaseVersion?: number
     proseMirrorInitialDoc?: object
@@ -275,6 +280,7 @@ export class StreamPublisher {
     private canvasProjectionChain: Promise<void> = Promise.resolve()
     private streamCanvasGeometryRefreshScheduled = false
     private readonly mediaGenerationRequestIds = new Set<string>()
+    private readonly mediaLineagePlans = new Map<string, MediaBranchLineagePlan>()
     private readonly completedMediaGenerationRequestIds = new Set<string>()
     private readonly cancelledMediaGenerationRequestIds = new Set<string>()
 
@@ -286,12 +292,19 @@ export class StreamPublisher {
         generationRun?: MediaGenerationRunMeta,
         private readonly options: StreamPublisherOptions = {},
     ) {
+        if (options.enableProseMirrorStream
+            && (!options.organizationId || !options.assetLeaseId || !options.assetLeaseHolderId)) {
+            throw new Error('Conversation Asset streaming requires organizationId, assetLeaseId, and assetLeaseHolderId')
+        }
         this.currentGenerationRun = generationRun
         this.pipelineEventLog = new PipelineEventLog(nats)
         this.proseMirrorAssembler = options.enableProseMirrorStream
             ? new AiChatProseMirrorStreamAssembler({
+                organizationId: options.organizationId!,
                 workspaceId,
                 aiChatThreadId,
+                leaseId: options.assetLeaseId!,
+                leaseHolderId: options.assetLeaseHolderId!,
                 provider,
                 generationRun,
                 baseVersion: options.proseMirrorBaseVersion,
@@ -346,8 +359,27 @@ export class StreamPublisher {
 
         this.enqueueResponsePublish({
             content,
-            aiChatThreadId: this.aiChatThreadId,
+            conversationAssetId: this.aiChatThreadId,
         })
+        if (content.status === STREAM_STATUS.IMAGE_ERROR || content.status === STREAM_STATUS.VIDEO_ERROR) {
+            const generationRun = content.generationRun
+            const assetId = generationRun?.lineageAssignment?.assetId
+            const organizationId = this.options.organizationId
+            if (generationRun && assetId && organizationId) {
+                const payload = {
+                    organizationId,
+                    assetId,
+                    workspaceId: this.workspaceId,
+                    conversationAssetId: this.aiChatThreadId,
+                    generationRun,
+                    terminalStatus: 'failed' as const,
+                }
+                void materializeAssetProvenance(payload).catch(async (error) => {
+                    err('[StreamPublisher] failed provenance materialization; queued retry:', error)
+                    await enqueueProvenanceRebuild(payload)
+                })
+            }
+        }
     }
 
     private enqueueResponsePublish(payload: ChunkPayload): void {
@@ -430,13 +462,19 @@ export class StreamPublisher {
                 eventId: pipelineEventId,
                 payload: pipelinePayload as unknown as Record<string, any>,
             })
-            this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            this.nats.publish(getAiInteractionCanonicalResponseSubject(
+                this.options.organizationId ?? this.workspaceId,
+                this.aiChatThreadId,
+            ), {
                 ...pipelinePayload,
                 pipelineStreamSeq: event.streamSequence,
             })
         } catch (error) {
             err('[StreamPublisher] Failed to persist pipeline event before live publish:', error)
-            this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), pipelinePayload)
+            this.nats.publish(getAiInteractionCanonicalResponseSubject(
+                this.options.organizationId ?? this.workspaceId,
+                this.aiChatThreadId,
+            ), pipelinePayload)
         }
     }
 
@@ -554,7 +592,6 @@ export class StreamPublisher {
                 const canvasGeometry = await refreshMediaGenerationRequestCanvasGeometry({
                     workspaceId: this.workspaceId,
                     generationRequestId,
-                    aiChatThreadId: this.aiChatThreadId,
                     proseMirrorThreadContent,
                 })
                 console.info('[StreamPublisher][canvas-geometry-refresh] resolved', {
@@ -635,17 +672,25 @@ export class StreamPublisher {
         this.schedulePipelineEventPurge()
     }
 
-    private schedulePipelineEventPurge(): void {
+    private schedulePipelineEventPurge(delayMs = COMPLETED_PIPELINE_EVENT_RETENTION_MS): void {
         const timer = setTimeout(() => {
             const purgeCompletedPipeline = async (): Promise<void> => {
                 try {
+                    const outputAssetIds = [...this.mediaLineagePlans.values()]
+                        .flatMap((plan) => plan.runAssignments.map((assignment) => assignment.assetId))
+                    const outputAssets = await Promise.all(outputAssetIds.map(async (assetId) => await getAssetRecord(assetId)))
+                    const provenancePending = outputAssets.some((asset) => asset && !['sealed', 'failed', 'cancelled'].includes(asset.states.provenance))
+                    if (provenancePending) {
+                        this.schedulePipelineEventPurge(60_000)
+                        return
+                    }
                     await this.pipelineEventLog.purgePipelineEvents(this.workspaceId, this.aiChatThreadId)
                 } catch (error) {
                     err('[StreamPublisher] Failed to purge completed pipeline event log:', error)
                 }
             }
             void purgeCompletedPipeline()
-        }, COMPLETED_PIPELINE_EVENT_RETENTION_MS)
+        }, delayMs)
         if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') {
             timer.unref()
         }
@@ -737,6 +782,7 @@ export class StreamPublisher {
 
     mediaLineagePlanned(lineagePlan: MediaBranchLineagePlan, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
         this.setGenerationRun(generationRun)
+        this.mediaLineagePlans.set(lineagePlan.generationRequestId, lineagePlan)
         if (lineagePlan.generationRequestId) {
             this.mediaGenerationRequestIds.add(lineagePlan.generationRequestId)
         }
@@ -745,7 +791,7 @@ export class StreamPublisher {
                 const proseMirrorThreadContent = await this.getProseMirrorSnapshot()
                 const canvasGeometry = await upsertMediaLineagePlanToCanvas({
                     workspaceId: this.workspaceId,
-                    aiChatThreadId: this.aiChatThreadId,
+                    conversationAssetId: this.aiChatThreadId,
                     lineagePlan,
                     ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
                     ...(this.options.canvasVisibleArea ? { canvasVisibleArea: this.options.canvasVisibleArea } : {}),
@@ -795,9 +841,11 @@ export class StreamPublisher {
                 const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
                     workspaceId: this.workspaceId,
                     generationRequestId,
-                    aiChatThreadId: this.aiChatThreadId,
                     ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
                     ...(requiresCancellationCleanup ? { removeProjectedPendingNodes: true } : {}),
+                    ...(this.mediaLineagePlans.get(generationRequestId)
+                        ? { lineagePlan: this.mediaLineagePlans.get(generationRequestId) }
+                        : {}),
                 })
                 this.canvasGeometryResolved(canvasGeometry)
             },
@@ -811,6 +859,17 @@ export class StreamPublisher {
             generationRequestId,
             ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         })
+        const plan = this.mediaLineagePlans.get(generationRequestId)
+        const organizationId = this.options.organizationId
+        if (plan && organizationId) {
+            void settleUnfinishedGeneratedAssets({
+                plan,
+                organizationId,
+                workspaceId: this.workspaceId,
+                conversationAssetId: this.aiChatThreadId,
+                terminalStatus: requiresCancellationCleanup ? 'cancelled' : 'failed',
+            }).catch((error) => err('[StreamPublisher] failed to settle unfinished generated Assets:', error))
+        }
     }
 
     completeKnownMediaGenerationRequests(): void {

@@ -10,7 +10,7 @@ A Lixpi-owned [NATS NEX](https://github.com/synadia-io/nex) **node**: a process 
 | Workload | Type / lifecycle | What it does |
 |---|---|---|
 | `ai-models-sync` | `native` / `service` | Runs `AiModelsSync.synchronizeModels()` at boot and **every hour**, writing the `AI_MODELS_LIST` DynamoDB table. ([`workloads/ai-models-synchronization`](./workloads/ai-models-synchronization)) |
-| `file-conversion` | `native` / `service` | NATS responder on `workspace.file.convert` that does all heavy media transcoding (sharp/ffmpeg/libreoffice/poppler) **off** the API: reads an uploaded original from the workspace Object Store bucket, writes the canonical (+ poster) back, and replies with canvas hints. Connects as the AUTH-account `regular_user` (not the NEX node creds) to reach the AUTH-account Object Store. ([`workloads/file-conversion`](./workloads/file-conversion)) |
+| `file-conversion` | `native` / `service` | Active responder on `blob.processing.generateRenditions`. It runs heavy image/video/audio/document transcoding and probing (sharp/ffmpeg/libreoffice/poppler) off the API. Jobs read content-addressed originals from the organization Blob bucket and write immutable canonical, preview, thumbnail, poster, and representative-frame outputs without DynamoDB access. Connects as the AUTH-account `regular_user` to reach Object Store. ([`workloads/file-conversion`](./workloads/file-conversion)) |
 | `system-reporter` | `native` / `service` | Trivial smoke-test workload (echoes uptime every 30 s). Deployed **manually** to prove the substrate. ([`workloads/system-reporter`](./workloads/system-reporter)) |
 
 ## How it works
@@ -59,7 +59,7 @@ docker exec lixpi-nex-1 sh -c 'nex -s "$NATS_SERVERS" --nats.nkey "$NATS_NEX_NOD
 
 Workload stdout/stderr stream on `$NEX.FEED.lixpi.logs.>` and lifecycle events on `$NEX.FEED.lixpi.event.>` **within the NEX account** (observe with any NATS subscriber holding the NEX nkey). The fastest local check that the real workload ran is the DynamoDB `AI_MODELS_LIST` table being (re)populated. To watch it run quickly, set `LIXPI_SYNC_INTERVAL_MS` to a small value and rebuild.
 
-For file conversion, the fastest local check is uploading a file that needs conversion or probing. The API returns `processing`, the workload handles `workspace.file.convert`, and the browser receives `workspace.file.convert.response.<workspaceId>.<conversionId>` before replacing the upload placeholder.
+For the active rendition path, upload a file that needs conversion or probing. The API creates a processing Asset and requests `blob.processing.generateRenditions`; the workload reads the original Blob, validates tenant/hash coordinates, writes hash-addressed outputs, and returns the result through the requester's NATS reply inbox. The API validates returned objects before updating Asset renditions. The browser replaces its upload placeholder after Asset creation/attach and observes rendition state through Asset reload/events.
 
 ## Adding a workload
 

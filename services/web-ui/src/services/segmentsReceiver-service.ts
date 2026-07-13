@@ -45,9 +45,9 @@ class SegmentsReceiver {
     // Dispatch segment to the thread-specific listeners only. The full chunk is
     // forwarded intact so run-level metadata can survive thread routing.
     receiveSegment(chunk) {
-        const threadId = chunk.aiChatThreadId || chunk.threadId
+        const threadId = chunk.conversationAssetId
         if (!threadId) {
-            console.warn('[SegmentsReceiver] Segment has no threadId, dropping:', chunk.status || chunk.type)
+            console.warn('[SegmentsReceiver] Segment has no conversationAssetId, dropping:', chunk.status || chunk.type)
             return
         }
 

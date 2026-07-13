@@ -17,7 +17,7 @@ export const organizationSubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [ ORGANIZATION_SUBJECTS.GET_ORGANIZATION ] },
-            sub: { allow: [ ORGANIZATION_SUBJECTS.GET_ORGANIZATION ] }
+            sub: { allow: [] }
         },
         handler: async (data, msg) => {
             const { organizationId } = data
@@ -33,7 +33,7 @@ export const organizationSubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [ ORGANIZATION_SUBJECTS.CREATE_ORGANIZATION ] },
-            sub: { allow: [ ORGANIZATION_SUBJECTS.CREATE_ORGANIZATION ] }
+            sub: { allow: [] }
         },
         handler: async (data, msg) => {
             const { name, availableModels } = data
@@ -52,7 +52,7 @@ export const organizationSubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [ ORGANIZATION_SUBJECTS.UPDATE_ORGANIZATION ] },
-            sub: { allow: [ ORGANIZATION_SUBJECTS.UPDATE_ORGANIZATION ] }
+            sub: { allow: [] }
         },
         handler: async (data, msg) => {
             infoStr([
@@ -80,7 +80,7 @@ export const organizationSubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [ ORGANIZATION_SUBJECTS.CREATE_ORGANIZATION_TAG ] },
-            sub: { allow: [ ORGANIZATION_SUBJECTS.CREATE_ORGANIZATION_TAG ] }
+            sub: { allow: [] }
         },
         handler: async (data, msg) => {
             const { organizationId, name, color } = data
@@ -95,7 +95,7 @@ export const organizationSubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [ ORGANIZATION_SUBJECTS.UPDATE_ORGANIZATION_TAG ] },
-            sub: { allow: [ ORGANIZATION_SUBJECTS.UPDATE_ORGANIZATION_TAG ] }
+            sub: { allow: [] }
         },
         handler: async (data, msg) => {
             const { organizationId, tagId, name, color } = data
@@ -110,7 +110,7 @@ export const organizationSubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [ ORGANIZATION_SUBJECTS.DELETE_ORGANIZATION_TAG ] },
-            sub: { allow: [ ORGANIZATION_SUBJECTS.DELETE_ORGANIZATION_TAG ] }
+            sub: { allow: [] }
         },
         handler: async (data, msg) => {
             const { organizationId, tagId } = data

@@ -122,7 +122,7 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 
 | Priority | Input (state field) | VEO parameter | Notes |
 |----------|--------------------|---------------|-------|
-| 1 | Extension (`videoSourceForExtension`) | `video` | Source MP4 bytes read from the workspace Object Store (`fetchObjectStoreBytes`) and passed as base64. Mutually exclusive with image/references per the API; takes precedence. |
+| 1 | Extension (`videoSourceForExtension`) | `video` | The API authorizes the source video Asset, resolves its canonical/original Blob, and passes the organization Object Store coordinates to the provider adapter. Mutually exclusive with image/references per the API; takes precedence. |
 | 2 | First frame (`videoFirstFrameImage`) | `image` | Image-to-video. |
 | 3 | Reference images (`videoReferenceImages`, ≤3) | `referenceImages` | Style/content references (`referenceType: 'asset'`). |
 | 4 | Text-to-video | — | None of the above set. |
@@ -133,7 +133,7 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 
 ## Seedance 2.0 via BytePlus ModelArk
 
-`BytePlusProvider` ([`byteplus-provider.ts`](../../services/api/src/llm/providers/byteplus-provider.ts)) is a first-party peer of `GoogleProvider` that produces video through **BytePlus ModelArk's** official Seedance 2.0 API. It is **video-only** — text streaming throws a capability error — and runs **only** when `enableVideoGeneration && /seedance/i.test(modelVersion)`. Everything else is reused unchanged: the same `generate_video` tool, post-stream router, VLM resolver, video NATS lifecycle, workspace storage, ffmpeg posters, and `VideoCanvasNode`. The router selects it exactly like VEO (`createTransient(instanceKey, 'BytePlus')`).
+`BytePlusProvider` ([`byteplus-provider.ts`](../../services/api/src/llm/providers/byteplus-provider.ts)) is a first-party peer of `GoogleProvider` that produces video through **BytePlus ModelArk's** official Seedance 2.0 API. It is **video-only** — text streaming throws a capability error — and runs **only** when `enableVideoGeneration && /seedance/i.test(modelVersion)`. Everything else is reused unchanged: the same `generate_video` tool, post-stream router, VLM resolver, generated Asset settlement, NEX rendition processing, and `VideoCanvasNode`. The router selects it exactly like VEO (`createTransient(instanceKey, 'BytePlus')`).
 
 **Official route** (overridable via `BYTEPLUS_ARK_BASE_URL`):
 
@@ -172,51 +172,37 @@ The structured VLM resolver itself — candidate snapshots, role assignment, ref
 VEO's `image` (first frame) and `referenceImages` are **mutually exclusive** per the SDK, so the resolver populates exactly one path. The browser receives the same `MEDIA_BRANCH_RESOLVED` event it already understands for images.
 
 {% callout type="important" %}
-**Videos are grounded by a single still, never the MP4.** The browser's candidate snapshot includes prior **video** nodes alongside images, each contributing its representative frame (`frameFileId`, falling back to the frame-0 poster) as the candidate still — so an edit to a previous video variation can *continue that video's branch* at the **same VLM cost as an image** (one frame, never the clip). The full MP4 only ever reaches VEO through the explicit "extend video" action (`videoSourceForExtension`). Because a resolved continuation's still is the mid-frame, VEO's image-to-video anchor for that continuation is automatically that frame. The candidate-snapshot mechanics live in [Branch Lineage](./BRANCH-LINEAGE.md).
+**Videos are grounded by a single still, never the MP4.** The browser's candidate snapshot includes prior video Assets alongside images, each contributing the `representativeFrame` rendition and falling back to `poster`. An edit therefore continues a previous video branch at the same VLM cost as an image. The full `original` rendition reaches VEO only for explicit extension. The candidate-snapshot mechanics live in [Branch Lineage](./BRANCH-LINEAGE.md).
 {% /callout %}
 
 ## Storage & Durability
 
-Video reuses the workspace bucket and the **same content-hash dedup as images**.
+Video uses the same Asset/Blob contract as every other media kind. The MP4 is the Asset's `original` rendition; NEX writes `canonical`, `poster`, and `representativeFrame` renditions required by the shared matrix. Each rendition points to a SHA-256-addressed Blob in `blobs-{organizationId}-files`. Existing Blob metadata is reused only after its object hash and byte size verify.
 
-- **MP4** -> `workspace-{workspaceId}-files/{fileId}` via `storeWorkspaceVideo`, an adapter over [`storeWorkspaceFile`](../../services/api/src/services/file-storage.ts) with `kind: 'video'`, `modelSafe: true`, SHA-256 content-hash dedup, and `mimeType: 'video/mp4'`.
-- **Poster and representative frame** -> stored as normal workspace image objects via `storeWorkspaceImage`, so the unified `GET /api/files/:workspaceId/:fileId` route serves them for PIXI and VLM grounding.
-
-**Poster + representative frame.** Generated-video providers stage the completed MP4 into a temporary workspace Object Store key and call [`extractVideoFramesViaWorkload`](../../services/api/src/services/video-frame-extraction.ts). That helper sends `FILE_SUBJECTS.EXTRACT_FRAMES` to the NEX file-conversion workload, which runs ffmpeg, writes temporary poster/frame objects, and returns their keys. The API reads those temporary objects, deletes the temporary keys, then stores the final poster and representative frame through the normal workspace image adapter. Frame extraction is **best-effort**: if the workload is unavailable or a seek fails, generation still completes without that frame.
-
-**Self-healing dedup.** In line with the NATS Object Store durability work, the hash-dedup short-circuit only returns "duplicate" after confirming the bytes are actually present (`getObjectInfo`). If a hash is registered in `workspace.files` but its bytes are missing, `storeWorkspaceVideo` re-stores them, so a dangling reference self-heals instead of returning a URL to lost bytes. Object-store reads/deletes are open-only and never auto-create a bucket.
-
-**HTTP routes** ([`file-routes.ts`](../../services/api/src/routes/file-routes.ts)).
+**HTTP routes** ([`asset-routes.ts`](../../services/api/src/routes/asset-routes.ts)).
 
 | Route | Behavior |
 |-------|----------|
-| `GET /api/files/:workspaceId/:fileId` | Streams video and audio with **HTTP Range support** (`206 Partial Content`) so media elements can seek and scrub; returns `404` when the object or bucket is missing. Images, posters, PDFs, text, and other documents are served whole. |
-| `POST /api/files/:workspaceId` | Accepts user uploads, sniffs bytes, stores the original, and either returns a ready file or queues the NEX file-conversion workload for probing/transcoding. |
+| `GET /api/assets/:assetId/renditions/:renditionName` | Authorizes the Asset, resolves its Blob, and supports **HTTP Range** responses for audio/video playback. |
+| `POST /api/assets/workspaces/:workspaceId` | Accepts user uploads, sniffs bytes, creates the Asset and original Blob, and queues required NEX renditions. |
 
 Authentication supports Bearer tokens and `?token=` for browser media element URLs.
 
-**Deletion.** `workspace.video.delete` (`video-subjects.ts`) removes the MP4 metadata and Object Store bytes only after the API re-reads canonical canvas state and confirms no media node still references the file, its original/canonical pair, or related frame objects. On the canvas, `canvasMediaNodeLifecycle.ts` tracks configured media node types across state commits. For `VideoCanvasNode`, when the node disappears it fires `deleteVideo(fileId, workspaceId, posterFileId)` — the MP4 via the video subject and the poster via the image-delete subject (the poster is a normal image). Workspace deletion cleans up video Media Library items by branching on `item.kind`.
+**Deletion.** Removing a canvas node atomically removes that node's Workspace reference. Catalog references and placements are independent references to the same Asset. Only a zero-reference Asset enters maintenance deletion; maintenance removes rendition Blob references, and zero-reference Blobs are garbage-collected after object verification.
 
 ## The `VideoCanvasNode`
 
-Generated videos persist as a discriminated member of the `CanvasNode` union (`type: 'video'`), in [`packages/lixpi/constants/ts/types.ts`](../../packages/lixpi/constants/ts/types.ts), alongside `image`, `document`, and `aiChatThread`. There is **no new database table** — like images, video nodes live in the workspace `canvasState.nodes[]`, with MP4 + poster bytes in the NATS Object Store.
+Generated videos persist as a discriminated member of the `CanvasNode` union (`type: 'video'`). The canvas node is a placement that points to an Asset; media facts and bytes do not live in `canvasState`.
 
 | Field | Type | Purpose |
 |-------|------|---------|
 | `nodeId` | `string` | Stable canvas identity. |
 | `type` | `'video'` | Discriminant in `CanvasNode` / `CanvasNodeType`. |
-| `fileId` | `string` | MP4 object key in `workspace-{workspaceId}-files`. |
-| `posterFileId` | `string` | ffmpeg frame-0 poster (an image object key). |
-| `frameFileId` | `string?` | ffmpeg representative mid-frame (image object key) used to ground the video to the VLM and as VEO's image-to-video anchor; falls back to `posterFileId`. |
-| `workspaceId` | `string` | Deletion + bucket context. |
-| `src` | `string` | Tokenized MP4 URL from the Range-capable file route. |
-| `posterSrc` | `string` | Tokenized poster image URL used by PIXI for initial paint and by the DOM `<video>` as its native poster. |
-| `aspectRatio` | `number` | width / height (e.g. 16:9 → 1.778). |
-| `durationSeconds` | `number` | Effective generated duration from the synced model option. |
-| `hasAudio` | `boolean` | VEO 3 generates audio by default. |
+| `assetId` | `string` | Stable Asset identity used to resolve playback, poster, metadata, lineage, and provenance. |
 | `position` / `dimensions` | `{x,y}` / `{w,h}` | Canvas geometry. |
 | `generatedBy` | `VideoGeneratedByMetadata?` | Provenance + branch lineage (mirrors `ImageGeneratedByMetadata`, adds `videoModel`, `resolution`, `durationSeconds`, `veoOperationName`, `sourceVideoNodeId`). |
-| `descriptor` | `MediaDescriptor?` (`ContentDescriptor` alias) | Compact summary + entity/style tags (see [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md)); derived for free from `generatedBy` for generated video. |
+
+Aspect ratio, duration, audio presence, original name, rendition readiness, and descriptor live on the Asset. The UI joins the node with `assetsStore` and never persists rendition URLs.
 
 ## Video-Specific Stream Nuances
 
@@ -227,17 +213,16 @@ Video events use the same live per-thread receive subject as the rest of the AI 
 | `VIDEO_GENERATION_TRACE` | Tool prompt + selected/excluded references, published **before** VEO runs so chat history can render the trace even if VEO later fails. |
 | `VIDEO_PENDING` | Creates the placeholder `VideoCanvasNode` and starts the traveling outline — the video analogue of an empty `IMAGE_PARTIAL`, but there is exactly **one** placeholder event, not a partial stream. |
 | `VIDEO_GENERATING` | Pure keepalive ping during the poll loop. There is **no image-side equivalent** — images stream real partial pixels; VEO has no partial frames, so this carries no payload and only proves the worker is alive. |
-| `VIDEO_COMPLETE` | Carries `videoUrl`, `fileId`, `posterUrl`, `posterFileId`, `frameUrl`, `frameFileId`, `durationSeconds`, `aspectRatio`, `hasAudio`, plus provenance. PIXI renders the poster behind the browser-composited `<video>`; `frameFileId` enables cheap re-grounding of later edits. |
+| `VIDEO_COMPLETE` | Carries `videoUrl`, `assetId`, media facts, provenance fields, and API-authored `canvasGeometry`. Playback and grounding resolve named renditions from the Asset. |
 | `VIDEO_ERROR` | Surfaces the VEO failure and cleans up the placeholder. Because the trace was published first, the failed attempt still leaves an auditable record in chat. |
 
-The relevant workspace subject groups in [`nats-subjects.json`](../../packages/lixpi/constants/nats-subjects.json):
+The relevant public subject group in [`nats-subjects.json`](../../packages/lixpi/constants/nats-subjects.json) is Asset-centric; internal rendition request/reply subjects are not browser permissions:
 
 ```jsonc
-"VIDEO_SUBJECTS": { "DELETE_VIDEO": "workspace.video.delete" },
-"FILE_SUBJECTS": {
-  "CONVERT": "workspace.file.convert",
-  "CONVERT_RESPONSE": "workspace.file.convert.response",
-  "EXTRACT_FRAMES": "workspace.file.extractFrames"
+"ASSET_SUBJECTS": {
+  "GET": "asset.get",
+  "ATTACH": "asset.attach",
+  "DETACH": "asset.detach"
 }
 ```
 
@@ -247,7 +232,7 @@ The `CHAT_SEND_MESSAGE` payload gains `aiVideoModel`, `videoAspectRatio`, `video
 
 On `VIDEO_PENDING`, `WorkspaceCanvas` (`setAiGeneratedVideoCallbacks`) drops a placeholder `VideoCanvasNode` near the API-declared lineage source or reference group with a traveling progress outline; on `VIDEO_COMPLETE` it upgrades the node to poster + MP4 with `generatedBy` lineage and removes the outline; on `VIDEO_ERROR` it cleans up. Reference/style/source media can anchor placement and animate while generation prepares, but they do not become connector parents unless the API lineage plan selected an existing generated-media branch member as `parentMediaNodeId` (see [Branch Lineage](./BRANCH-LINEAGE.md)). The in-chat `aiGeneratedVideoNode` mirrors the generated-image node, showing pending / keepalive / playable / error states while the `<video_prompt>` text streams.
 
-Completed playback is **browser-composited**: a finished video plays inline through a visible DOM `<video>` element that `WorkspaceCanvas.ts` moves into the transformed video chrome layer, above the PIXI poster. PIXI owns the frame-0 poster/placeholder behind the node for stable canvas geometry and initial paint, but completed playback, seeking, fullscreen, and scrubbing are driven by the browser-composited element — the PIXI layer never creates a `VideoSource` frame loop that would fight the edge renderer and connector canvas. The complete control bar, the two mount points, scrubbing behavior, and the renderer-ownership split are owned by [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md); the PIXI media layer and DOM chrome overlay are owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md). The canvas bubble menu exposes a `CANVAS_VIDEO_CONTEXT` with **Add to Media Library**, **Extend video in new thread**, **Connect** (shared with images), and **Delete video**.
+Completed playback is **browser-composited**: a finished video plays inline through a visible DOM `<video>` element that `WorkspaceCanvas.ts` moves into the transformed video chrome layer, above the PIXI poster. PIXI owns the poster/placeholder behind the node for stable canvas geometry and initial paint, but playback, seeking, fullscreen, and scrubbing are driven by the browser-composited element. The bubble menu exposes Asset details, extension, connection, download/replace, and deletion actions.
 
 ## Model Sync & Pricing
 
@@ -273,18 +258,18 @@ Usage reports are computed and logged today; they are not published to NATS yet.
 
 ## Media Library for Video
 
-Videos are first-class Media Library items alongside images, reusing the same scope/access model and buckets — see [Media Library](../library/MEDIA-LIBRARY.md). The item is `kind: 'video'`-discriminated (`MediaLibraryVideoItem`), carrying a separate `poster` asset reference so the panel renders a still without decoding the MP4.
+Videos are first-class Assets in Media Library. Their initial catalog reference is created with the Asset; inserting one adds a Workspace reference. No byte copy or second media record is created. See [Media Library](../library/MEDIA-LIBRARY.md).
 
 | Subject | Handler |
 |---------|---------|
-| `workspace.mediaLibrary.video.createFromCanvas` | `copyWorkspaceVideoToLibrary` → `createVideoItem` (copies MP4 + optional poster into the library bucket) |
-| `workspace.mediaLibrary.video.materializeToWorkspace` | `materializeLibraryVideoToWorkspace` (re-stores MP4 via `storeWorkspaceVideo`, poster via `storeWorkspaceImage`) |
-| `workspace.mediaLibrary.get` | kind-discriminated; returns image or video meta |
-| `workspace.mediaLibrary.changeScope` / `delete` | branch on `item.kind` |
+| `asset.attach` | Adds a Workspace placement/reference. |
+| `asset.detach` | Removes a Workspace placement or catalog reference. |
+| `asset.changeScope` | Changes discovery scope without copying bytes. |
+| `asset.list` | Lists authorized Asset metadata projections. |
 
 ## Multi-Turn Extension
 
-A completed `VideoCanvasNode` can be continued: the bubble-menu **Extend video in new thread** action spawns a thread whose prompt-input node carries `sourceVideoNodeId`. At submit, `WorkspaceCanvas` builds an `nats-obj://workspace-{ws}-files/{fileId}` URI from the source node and sends it as `videoSourceForExtension`. The VEO provider loads those bytes and passes them as VEO's `video` (extension) input, which takes precedence over first-frame/reference inputs. The `generate_video` tool and provider code are unchanged — extension is driven entirely through state.
+A completed `VideoCanvasNode` can be continued. The browser sends its `assetId` as `videoSourceForExtension`; the API authorizes the Asset, resolves its ready `original` Blob, and converts that internal Blob coordinate to an `nats-obj://` URI for the provider path. Blob coordinates never cross the browser boundary.
 
 ## Differences from Image Generation
 
@@ -316,7 +301,7 @@ services/api/src/
 │   │   ├── byteplus-video-types.ts   # typed ModelArk REST client + buildSeedanceContent + pollVideoGenerationTask
 │   │   ├── anthropic-provider.ts     # generate_video injection + extraction
 │   │   ├── openai-provider.ts        # generate_video injection + extraction
-│   │   └── provider-registry.ts      # runVideoRouter dep, storeWorkspaceVideo, Partial provider-ctor map
+│   │   └── provider-registry.ts      # runVideoRouter dependency and provider constructor map
 │   ├── tools/
 │   │   ├── video-generation.ts       # generate_video tool def + per-provider extractors
 │   │   ├── video-router.ts           # VideoRouter — text model → transient VEO provider
@@ -332,31 +317,28 @@ services/api/src/
 │       ├── load-prompts.ts           # getSystemPrompt(includeVideoGeneration)
 │       └── video_generation_instructions.txt
 ├── services/
-│   ├── file-storage.ts               # storeWorkspaceFile, content-hash dedup, canonical pointers
-│   ├── store-media-adapters.ts       # storeWorkspaceImage/storeWorkspaceVideo adapters over file storage
-│   ├── video-frame-extraction.ts     # stages generated MP4s and requests NEX frame extraction
-│   └── media-library-storage.ts      # copy/materialize/scope video helpers
-├── routes/file-routes.ts             # POST /api/files/:ws + GET /api/files/:ws/:fileId (Range for audio/video)
+│   ├── generated-asset-storage.ts    # settle bytes and attach API-owned canvas projection
+│   ├── asset-rendition-service.ts    # request and apply required renditions
+│   └── blob-storage.ts               # organization-scoped content-addressed bytes
+├── routes/asset-routes.ts            # upload/import + authenticated rendition GET with Range support
 └── NATS/subscriptions/
-    ├── video-subjects.ts             # workspace.video.delete
-    ├── file-conversion-subjects.ts   # browser permission for conversion completion subjects
+    ├── asset-subjects.ts             # Asset CRUD/reference/scope/document authority
     ├── ai-interaction-subjects.ts    # resolve videoModelMetaInfo + forward video params
-    └── media-library-subjects.ts     # createFromVideo / materializeVideo
+    └── media-descriptor-subjects.ts  # authorize Asset and resolve representative rendition
 
 services/web-ui/src/
 ├── infographics/workspace/
 │   ├── WorkspaceCanvas.ts            # VideoCanvasNode placement, lifecycle callbacks, extend-in-new-thread
 │   ├── rendering/videoNodeHandler.ts # PIXI poster + authenticated DOM video element
-│   ├── canvasMediaNodeLifecycle.ts   # generic media-node storage cleanup configs
 │   ├── pixiMediaLayer.ts             # dispatch non-image nodes to the registry
 │   └── canvasBubbleMenuItems.ts      # CANVAS_VIDEO_CONTEXT (extend / connect / delete)
 ├── components/videoControls/         # shared SVG playback controls
 └── services/ai-interaction-service.ts # VIDEO_* handlers → chat segments
 
 packages/lixpi/constants/
-├── ts/types.ts                       # VideoCanvasNode, VideoGeneratedByMetadata, MediaLibraryVideoItem, AiModel video fields
+├── ts/types.ts                       # VideoCanvasNode, VideoGeneratedByMetadata, Asset, Blob, AiModel video fields
 ├── ai-interaction-constants.json     # VIDEO_* statuses
-└── nats-subjects.json                # VIDEO_SUBJECTS + video Media Library subjects
+└── nats-subjects.json                # Asset and internal rendition subjects
 ```
 
 ## References

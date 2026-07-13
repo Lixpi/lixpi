@@ -1,5 +1,7 @@
 'use strict'
 
+import { v4 as uuid } from 'uuid'
+
 import type {
     AiModelId,
     BranchForkLineagePlan,
@@ -153,9 +155,9 @@ export class MediaBranchLineagePlanner {
         }
     }
 
-    // Expands the reasoning x media grid into one spec per concrete generation.
-    // When no media model IDs are supplied (legacy callers) it falls back to one
-    // synthetic run per reasoning model so the plan still has run assignments.
+    // Expands the reasoning x media grid into one spec per concrete media
+    // generation. A reasoning-only matrix has no media run assignments and
+    // therefore creates no pending output Assets.
     private enumerateMediaRuns(input: MediaBranchLineagePlannerInput): MediaRunSpec[] {
         const imageModelIds = input.imageModelIds ?? []
         const videoModelIds = input.videoModelIds ?? []
@@ -165,10 +167,6 @@ export class MediaBranchLineagePlanner {
             const reasoningRunId = this.mediaGenerationRunPlanner.buildReasoningRunId(input.generationRequestId, reasoningIndex)
             const base = { reasoningModelId, reasoningIndex, reasoningRunId }
 
-            if (imageModelIds.length === 0 && videoModelIds.length === 0) {
-                specs.push({ ...base, mediaIndex: 0 })
-                continue
-            }
             imageModelIds.forEach((mediaModelId, mediaIndex) => {
                 specs.push({ ...base, mediaModelId, mediaType: 'image', mediaIndex, mediaRunId: `${reasoningRunId}:image:${mediaIndex}` })
             })
@@ -287,6 +285,7 @@ export class MediaBranchLineagePlanner {
         usesReasoningForks: boolean
         reasoningBranchCount: number
     }): BranchOriginLineagePlan | undefined {
+        if (args.reasoningBranchCount === 0) return undefined
         if (args.sourceDecision.sourceNodeId) return undefined
         if (args.usesReasoningForks) return undefined
         const forkCount = Math.max(0, args.reasoningBranchCount)
@@ -397,6 +396,7 @@ export class MediaBranchLineagePlanner {
                 ?? args.sourceDecision.sourceNodeId
                 ?? args.branchOrigin?.nodeId
             return {
+                assetId: uuid(),
                 generationRequestId: args.input.generationRequestId,
                 reasoningRunId: run.reasoningRunId,
                 reasoningModelId: run.reasoningModelId,

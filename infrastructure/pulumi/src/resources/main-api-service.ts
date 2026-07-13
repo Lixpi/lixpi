@@ -172,6 +172,7 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
                         'dynamodb:PutItem',
                         'dynamodb:UpdateItem',
                         'dynamodb:DeleteItem',
+                        'dynamodb:TransactWriteItems',
                     ],
                     Resource: [arn, `${arn}/index/*`],
                 }],

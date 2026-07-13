@@ -67,11 +67,8 @@ export function getAiChatPanelState(canvasState: CanvasState | null | undefined)
 
 export function setAiChatPanelState(canvasState: CanvasState, panelState: CanvasAiChatPanelState): CanvasState {
     const normalized = getAiChatPanelState({ ...canvasState, aiChatPanel: panelState })
-    const { activeAiChatSidebarTabId: _existingActiveTabId, ...canvasStateWithoutLegacyActiveTab } = canvasState
     return {
-        ...canvasStateWithoutLegacyActiveTab,
+        ...canvasState,
         aiChatPanel: normalized,
-        aiChatSidebarTabs: normalized.tabs,
-        ...(normalized.activeTabId ? { activeAiChatSidebarTabId: normalized.activeTabId } : {}),
     }
 }

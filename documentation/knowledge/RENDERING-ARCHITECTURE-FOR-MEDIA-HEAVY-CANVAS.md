@@ -388,7 +388,10 @@ The same overlay handles both static images and individual video frames. This is
 
 ### 7.8 Inter-service data flow stays NATS-native
 
-No changes to the existing NATS architecture. The PIXI sprites read from the same `canvasState.nodes`, `canvasState.edges`, and image references (`nats-obj://` URLs from JetStream Object Store) that the current DOM nodes read. PIXI is a pure renderer; persistence and streaming are unaffected.
+No changes to the existing NATS architecture. PIXI and DOM surfaces read the
+same `canvasState.nodes`/`canvasState.edges`; media nodes carry Asset IDs and the
+client resolves authenticated `/api/assets/<assetId>/renditions/<name>` URLs.
+PIXI remains a pure renderer; Object Store coordinates stay inside API/NEX.
 
 ---
 

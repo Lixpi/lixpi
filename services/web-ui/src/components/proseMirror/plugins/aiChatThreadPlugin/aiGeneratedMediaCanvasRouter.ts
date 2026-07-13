@@ -19,7 +19,7 @@ type RouteOptions = {
 // branch lineage nodes). This keeps the event → callback payload mapping in one
 // place so the two paths can never drift.
 export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOptions = {}): void {
-    const threadId = event.threadId || event.aiChatThreadId
+    const threadId = event.conversationAssetId || event.threadId
     if (!threadId) return
 
     const imageCallbacks = getAiGeneratedImageCallbacks()
@@ -36,8 +36,7 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
             imageCallbacks.onImagePartialToCanvas?.({
                 threadId,
                 imageUrl: event.imageUrl || '',
-                fileId: event.fileId || '',
-                workspaceId: event.workspaceId || '',
+                assetId: event.assetId || '',
                 partialIndex: event.partialIndex || 0,
                 aiProvider: event.aiProvider || '',
                 ...(event.canvasGeometry ? { canvasGeometry: event.canvasGeometry } : {}),
@@ -46,12 +45,11 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
             return
 
         case 'image_complete':
-            if (!event.imageUrl && !event.fileId && !event.canvasGeometry) return
+            if (!event.imageUrl && !event.assetId && !event.canvasGeometry) return
             imageCallbacks.onImageCompleteToCanvas?.({
                 threadId,
                 imageUrl: event.imageUrl || '',
-                fileId: event.fileId || '',
-                workspaceId: event.workspaceId || '',
+                assetId: event.assetId || '',
                 responseId: event.responseId || '',
                 revisedPrompt: event.revisedPrompt || '',
                 aiModel: event.aiProvider || '',
@@ -153,12 +151,7 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
             videoCallbacks.onVideoCompleteToCanvas?.({
                 threadId,
                 videoUrl: event.videoUrl,
-                fileId: event.fileId || '',
-                workspaceId: event.workspaceId || '',
-                posterUrl: event.posterUrl || '',
-                posterFileId: event.posterFileId || '',
-                frameUrl: event.frameUrl || '',
-                frameFileId: event.frameFileId || '',
+                assetId: event.assetId || '',
                 durationSeconds: event.durationSeconds || 0,
                 aspectRatio: event.aspectRatio || 1.777,
                 hasAudio: event.hasAudio ?? true,

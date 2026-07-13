@@ -10,7 +10,6 @@
     import '$src/components/navigationSidePanel/navigation-side-panel.scss'
     import IntroPage from '$src/components/intro-page.svelte'
     import WorkspaceCanvas from '$src/components/WorkspaceCanvas.svelte'
-    import ProjectDetails from '$src/components/project-details/project-details.svelte'
     import PaymentDetails from '$src/components/subscription-management/payment-details.svelte'
 
     import AuthService from '$src/services/auth-service'
@@ -174,9 +173,7 @@
 
 <div class="md:block h-full">
     <div class="workspace-main-content h-full">
-        {#if $routerStore.data.currentRoute.path === '/document/:documentId'}
-            <ProjectDetails />
-        {:else if $routerStore.data.currentRoute.path === '/workspace/:workspaceId'}
+        {#if $routerStore.data.currentRoute.path === '/workspace/:workspaceId'}
             <WorkspaceCanvas />
         {:else}
             <IntroPage />

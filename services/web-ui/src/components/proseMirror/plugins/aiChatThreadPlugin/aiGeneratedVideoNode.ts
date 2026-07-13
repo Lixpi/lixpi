@@ -1,6 +1,6 @@
 import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
+import { buildAssetRenditionPath, resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { NodeSelection } from 'prosemirror-state'
@@ -29,9 +29,7 @@ export {
 export type AiGeneratedVideoCallbacks = {
     onAddToCanvas?: (data: {
         videoUrl: string
-        fileId: string
-        posterUrl: string
-        posterFileId: string
+        assetId: string
         durationSeconds: number
         aspectRatio: number
         hasAudio: boolean
@@ -52,12 +50,7 @@ export type AiGeneratedVideoCallbacks = {
     onVideoCompleteToCanvas?: (data: {
         threadId: string
         videoUrl: string
-        fileId: string
-        workspaceId: string
-        posterUrl: string
-        posterFileId: string
-        frameUrl: string
-        frameFileId: string
+        assetId: string
         durationSeconds: number
         aspectRatio: number
         hasAudio: boolean
@@ -238,7 +231,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
             .style('transform', `scale(${controlsScale})`)
 
         videoControls = createVideoControls(controlsSvg, {
-            id: String(node.attrs.responseId || node.attrs.fileId || 'chat-video'),
+            id: String(node.attrs.responseId || node.attrs.assetId || 'chat-video'),
             x: 0,
             y: 0,
             width,
@@ -255,7 +248,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     }
 
     const updateDisplay = async () => {
-        const { videoUrl, posterUrl, isPending, errorMessage } = node.attrs
+        const { videoUrl, posterUrl, assetId, isPending, errorMessage } = node.attrs
 
         if (errorMessage) {
             titleElement.hidden = true
@@ -270,7 +263,8 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
             return
         }
 
-        if (isPending || !videoUrl) {
+        const videoSource = videoUrl || (assetId ? buildAssetRenditionPath(assetId, 'original') : '')
+        if (isPending || !videoSource) {
             titleElement.hidden = true
             clearErrorPlaceholder()
             applyStyle(videoElement, { display: 'none' })
@@ -287,8 +281,9 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         applyStyle(videoElement, { display: 'block' })
         applyStyle(controlsHost, { display: 'block' })
 
-        const resolvedVideoSrc = await buildAuthenticatedUrl(videoUrl)
-        const resolvedPosterSrc = posterUrl ? await buildAuthenticatedUrl(posterUrl) : ''
+        const resolvedVideoSrc = await buildAuthenticatedUrl(videoSource)
+        const posterSource = posterUrl || (assetId ? buildAssetRenditionPath(assetId, 'poster') : '')
+        const resolvedPosterSrc = posterSource ? await buildAuthenticatedUrl(posterSource) : ''
 
         if (videoElement.src !== resolvedVideoSrc) {
             videoElement.src = resolvedVideoSrc

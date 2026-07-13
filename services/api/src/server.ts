@@ -22,20 +22,14 @@ import { aiInteractionSubjects, setLlmModule } from './NATS/subscriptions/ai-int
 import { extractionSubjects, setExtractionLlmModule } from './NATS/subscriptions/extraction-subjects.ts'
 import { mediaDescriptorSubjects } from './NATS/subscriptions/media-descriptor-subjects.ts'
 import { workspaceSubjects } from './NATS/subscriptions/workspace-subjects.ts'
-import { documentSubjects } from './NATS/subscriptions/document-subjects.ts'
-import { aiChatThreadSubjects } from './NATS/subscriptions/ai-chat-thread-subjects.ts'
-import { imageSubjects } from './NATS/subscriptions/image-subjects.ts'
-import { videoSubjects } from './NATS/subscriptions/video-subjects.ts'
-import { fileConversionSubjects } from './NATS/subscriptions/file-conversion-subjects.ts'
 import { featureSubjects } from './NATS/subscriptions/feature-subjects.ts'
-import { mediaLibrarySubjects } from './NATS/subscriptions/media-library-subjects.ts'
-import fileRoutes from './routes/file-routes.ts'
+import { assetSubjects } from './NATS/subscriptions/asset-subjects.ts'
+import assetRoutes from './routes/asset-routes.ts'
 import workspaceExportRoutes from './routes/workspace-export-routes.ts'
 import featureRoutes from './routes/feature-routes.ts'
-import mediaLibraryRoutes from './routes/media-library-routes.ts'
 
 import { createLlmModule } from './llm/index.ts'
-import { storeWorkspaceImage, storeWorkspaceVideo } from './services/store-media-adapters.ts'
+import { startAssetMaintenanceWorker } from './services/asset-maintenance-worker.ts'
 
 const env = process.env
 
@@ -79,17 +73,12 @@ const subscriptions = [
     ...extractionSubjects,
     ...mediaDescriptorSubjects,
 
-    // Workspace records, document authority, and chat-thread records.
+    // Workspace records and unified Asset authority.
     ...workspaceSubjects,
-    ...documentSubjects,
-    ...aiChatThreadSubjects,
+    ...assetSubjects,
 
-    // Workspace media, reusable features, and media library records.
-    ...imageSubjects,
-    ...videoSubjects,
-    ...fileConversionSubjects,
+    // Reusable Features store sample bytes through the shared Blob registry.
     ...featureSubjects,
-    ...mediaLibrarySubjects,
 ]
 
 // Registered NATS-internal identities that the auth callout can authenticate
@@ -194,7 +183,7 @@ if (env.NATS_NEX_NODE_NKEY_PUBLIC) {
 }
 
 // Initialize with your NATS server connection
-await NATS_Service.init({
+const apiNatsService = await NATS_Service.init({
     servers: env.NATS_SERVERS,
     name: 'api-server',
     user: 'regular_user',
@@ -207,6 +196,8 @@ await NATS_Service.init({
     ],
     subscriptions
 })
+
+await startAssetMaintenanceWorker(apiNatsService)
 
 await startNatsAuthCalloutService({
     natsService: await NATS_Service.getInstance(),
@@ -234,8 +225,6 @@ await startNatsAuthCalloutService({
 // ran in the standalone services/llm-api Python service now runs here directly.
 const llmModule = createLlmModule({
     natsService: await NATS_Service.getInstance(),
-    storeWorkspaceImage,
-    storeWorkspaceVideo,
 })
 setLlmModule(llmModule)
 setExtractionLlmModule(llmModule)
@@ -257,15 +246,13 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }))
 app.use(cors(corsOptions))
 app.use(cookieParser())
 
-// Unified file upload/download route — accepts any media kind, sniffs the bytes,
-// transcodes to a model-safe canonical, and serves originals/canonicals/posters
-// with Range support for seekable media.
-app.use('/api/files', fileRoutes)
+// Asset upload/import and authorized rendition delivery. The API resolves
+// organization-scoped Blobs and supports Range requests for seekable media.
+app.use('/api/assets', assetRoutes)
 
 // Workspace export routes
 app.use('/api/workspaces', workspaceExportRoutes)
 app.use('/api/features', featureRoutes)
-app.use('/api/media-library', mediaLibraryRoutes)
 
 
 

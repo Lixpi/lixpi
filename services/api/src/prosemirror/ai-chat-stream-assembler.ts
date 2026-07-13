@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { err } from '@lixpi/debug-tools'
+import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
 import {
     STREAM_STATUS,
@@ -26,18 +27,18 @@ import {
     aiReasoningSectionNodeType,
     aiResponseMessageNodeType,
     applyStreamingSegmentToTransaction,
-    documentTitleNodeType,
     getAiLineageEventsForProjection,
     Step,
     type AiLineageEventDescriptor,
-    type DocCoordinate,
+    type AssetDocCoordinate,
 } from '@lixpi/prosemirror'
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { Transaction } from 'prosemirror-state'
 
-import AiChatThread from '../models/ai-chat-thread.ts'
-import { ProseMirrorStepTransport } from './prosemirror-step-transport.ts'
+import { getAssetRecord } from '../models/asset.ts'
+import AssetDocumentService from '../services/asset-document-service.ts'
+import { AssetProseMirrorStepTransport } from './asset-prosemirror-step-transport.ts'
 
 type AiStreamContent = {
     status: StreamStatus
@@ -47,12 +48,10 @@ type AiStreamContent = {
     collapsibleTitle?: string
     generationRun?: MediaGenerationRunMeta
     imageUrl?: string
+    assetId?: string
     videoUrl?: string
-    fileId?: string
     posterUrl?: string
-    posterFileId?: string
     frameUrl?: string
-    frameFileId?: string
     partialIndex?: number
     responseId?: string
     revisedPrompt?: string
@@ -68,13 +67,16 @@ type AiStreamContent = {
 }
 
 type AiChatProseMirrorStreamAssemblerConfig = {
+    organizationId: string
     workspaceId: string
     aiChatThreadId: string
+    leaseId: string
+    leaseHolderId: string
     provider: ProviderName
     generationRun?: MediaGenerationRunMeta
     baseVersion?: number
     initialDoc?: object
-    transport?: ProseMirrorStepTransport
+    transport?: AssetProseMirrorStepTransport
 }
 
 type ParserInstance = ReturnType<typeof MarkdownStreamParser.getInstance>
@@ -237,36 +239,44 @@ export async function settlePersistedAiChatGenerationRequest(params: {
     aiChatThreadId: string
     generationRequestId: string
 }): Promise<PersistedGenerationCancellationResult> {
-    const thread = await AiChatThread.getAiChatThread({
-        workspaceId: params.workspaceId,
-        threadId: params.aiChatThreadId,
+    const asset = await getAssetRecord(params.aiChatThreadId)
+    if (!asset) {
+        return { found: false, requestMatched: false, changed: false }
+    }
+    if (asset.editLease && asset.editLease.expiresAt > Date.now() && asset.editLease.workspaceId !== params.workspaceId) {
+        return { found: true, requestMatched: false, changed: false }
+    }
+    const coordinate: AssetDocCoordinate = {
+        organizationId: asset.organizationId,
+        assetId: asset.assetId,
+        role: 'conversation',
+    }
+    const transport = AssetProseMirrorStepTransport.fromSingleton()
+    const capturedState = await transport.getCurrentSubjectState(coordinate)
+    const snapshot = await AssetDocumentService.loadCurrentSnapshot(asset, 'conversation')
+    if (!snapshot) return { found: true, requestMatched: false, changed: false }
+    const doc = parsePersistedProseMirrorContent(snapshot.doc)
+    if (!doc) return { found: true, requestMatched: false, changed: false }
+    const requestMatched = persistedNodeContainsGenerationRequest(doc, params.generationRequestId)
+    if (!requestMatched) return { found: true, requestMatched: false, changed: false }
+    const settled = settlePersistedGenerationNode(doc, params.generationRequestId)
+    if (!settled.changed) return { found: true, requestMatched: true, changed: false }
+    await AssetDocumentService.replaceSystemSnapshot({
+        asset,
+        role: 'conversation',
+        doc: settled.node,
+        version: snapshot.version + 1,
     })
-    if (!thread || 'error' in thread) return { found: false, requestMatched: false, changed: false }
-
-    const content = parsePersistedProseMirrorContent(thread.content)
-    if (!content) return { found: true, requestMatched: false, changed: false }
-    const requestMatched = persistedNodeContainsGenerationRequest(content, params.generationRequestId)
-    const useStandaloneThreadFallback = !requestMatched && params.aiChatThreadId.startsWith('canvas-')
-    const settled = settlePersistedGenerationNode(
-        content,
-        params.generationRequestId,
-        useStandaloneThreadFallback,
-    )
-    if (!settled.changed) return { found: true, requestMatched, changed: false }
-
-    await AiChatThread.update({
-        workspaceId: params.workspaceId,
-        threadId: params.aiChatThreadId,
-        content: settled.node,
-        proseMirrorVersion: (thread.proseMirrorVersion ?? 0) + 1,
-    })
-    return { found: true, requestMatched, changed: true }
+    if (capturedState.streamSequence > 0) {
+        await transport.purgeThrough(coordinate, capturedState.streamSequence)
+    }
+    return { found: true, requestMatched: true, changed: true }
 }
 
 export class AiChatProseMirrorStreamAssembler {
-    private readonly coordinate: DocCoordinate
+    private readonly coordinate: AssetDocCoordinate
     private readonly engine: HeadlessProseMirrorEngine
-    private readonly transport: ProseMirrorStepTransport
+    private readonly transport: AssetProseMirrorStepTransport
     private readonly streamId = randomUUID()
     private readonly workQueue: QueuedTask[] = []
     private parser: ParserInstance | null = null
@@ -285,13 +295,13 @@ export class AiChatProseMirrorStreamAssembler {
 
     constructor(private readonly config: AiChatProseMirrorStreamAssemblerConfig) {
         this.coordinate = {
-            workspaceId: config.workspaceId,
-            docType: DOCUMENT_TYPE.AI_CHAT_THREAD,
-            docId: config.aiChatThreadId,
+            organizationId: config.organizationId,
+            assetId: config.aiChatThreadId,
+            role: 'conversation',
         }
-        this.transport = config.transport ?? ProseMirrorStepTransport.fromSingleton()
+        this.transport = config.transport ?? AssetProseMirrorStepTransport.fromSingleton()
         this.engine = new HeadlessProseMirrorEngine({
-            documentType: DOCUMENT_TYPE.AI_CHAT_THREAD,
+            documentType: DOCUMENT_TYPE.ASSET_CONVERSATION,
             doc: config.initialDoc ?? this.createEmptyThreadDoc(),
             version: config.baseVersion ?? 0,
         })
@@ -335,6 +345,10 @@ export class AiChatProseMirrorStreamAssembler {
         }
         if (content.status === STREAM_STATUS.IMAGE_COMPLETE) {
             this.upsertImage(content, false)
+            return
+        }
+        if (content.status === STREAM_STATUS.IMAGE_ERROR) {
+            this.upsertImage(content, false, true)
             return
         }
         if (content.status === STREAM_STATUS.VIDEO_PENDING) {
@@ -854,7 +868,7 @@ export class AiChatProseMirrorStreamAssembler {
         responseContext: ResponseTargetContext,
         options: {
             partialIndex?: number
-            fileId?: string
+            assetId?: string
             responseId?: string
             mediaRunId?: string
             partialOnly?: boolean
@@ -872,7 +886,7 @@ export class AiChatProseMirrorStreamAssembler {
                 nodePos: responseContext.responseStartPos + 1 + offset,
             }
 
-            if (options.fileId && child.attrs.fileId === options.fileId) {
+            if (options.assetId && child.attrs.assetId === options.assetId) {
                 matchedImage = nodeInfo
                 return
             }
@@ -895,7 +909,7 @@ export class AiChatProseMirrorStreamAssembler {
         return matchedImage
     }
 
-    private upsertImage(content: AiStreamContent, isPartial: boolean): void {
+    private upsertImage(content: AiStreamContent, isPartial: boolean, clearImageData = false): void {
         if (!this.isStarted) this.start()
 
         this.enqueue(async () => {
@@ -908,12 +922,12 @@ export class AiChatProseMirrorStreamAssembler {
 
             const existingImage = this.findGeneratedImageInResponse(responseContext, {
                 mediaRunId: content.generationRun?.mediaRunId,
-                fileId: content.fileId,
+                assetId: content.assetId,
                 responseId: content.responseId,
                 ...(isPartial ? { partialIndex: content.partialIndex ?? 0, partialOnly: true } : {}),
             }) ?? (!isPartial ? this.findGeneratedImageInResponse(responseContext, {
                 mediaRunId: content.generationRun?.mediaRunId,
-                fileId: content.fileId,
+                assetId: content.assetId,
                 responseId: content.responseId,
                 partialOnly: true,
             }) : null)
@@ -941,7 +955,13 @@ export class AiChatProseMirrorStreamAssembler {
             const imageNodePos = existingImage ? transaction.mapping.map(existingImage.nodePos, 1) : undefined
             const insertionPos = transaction.mapping.map(responseContext.responseEndPos - 1, -1)
             const partialIndex = content.partialIndex ?? existingImage?.node.attrs.partialIndex ?? 0
-            const imageAttrs = this.buildGeneratedImageAttrs(content, isPartial, partialIndex, existingImage?.node.attrs)
+            const imageAttrs = this.buildGeneratedImageAttrs(
+                content,
+                isPartial,
+                partialIndex,
+                existingImage?.node.attrs,
+                clearImageData,
+            )
 
             if (imageNodePos !== undefined) {
                 transaction.setNodeMarkup(imageNodePos, undefined, imageAttrs)
@@ -957,7 +977,7 @@ export class AiChatProseMirrorStreamAssembler {
         responseContext: ResponseTargetContext,
         options: {
             mediaRunId?: string
-            fileId?: string
+            assetId?: string
             responseId?: string
         },
     ): MediaNodeInfo | null {
@@ -972,7 +992,7 @@ export class AiChatProseMirrorStreamAssembler {
                 nodePos: responseContext.responseStartPos + 1 + offset,
             }
 
-            if (options.fileId && child.attrs.fileId === options.fileId) {
+            if (options.assetId && child.attrs.assetId === options.assetId) {
                 matchedVideo = nodeInfo
                 return
             }
@@ -1003,7 +1023,7 @@ export class AiChatProseMirrorStreamAssembler {
 
             const existingVideo = this.findGeneratedVideoInResponse(responseContext, {
                 mediaRunId: content.generationRun?.mediaRunId,
-                fileId: content.fileId,
+                assetId: content.assetId,
                 responseId: content.responseId,
             })
             const transaction = this.engine.state.tr
@@ -1128,17 +1148,24 @@ export class AiChatProseMirrorStreamAssembler {
     }
 
     private async persistFinalSnapshot(finalVersion: number): Promise<boolean> {
-        if (this.coordinate.docType !== DOCUMENT_TYPE.AI_CHAT_THREAD) return true
-
         try {
-            const snapshot = this.snapshotForProjection()
-            await AiChatThread.update({
-                workspaceId: this.coordinate.workspaceId,
-                threadId: this.coordinate.docId,
-                content: snapshot,
-                proseMirrorVersion: finalVersion,
-            })
-            return true
+            for (let attempt = 0; attempt < 5; attempt += 1) {
+                const asset = await getAssetRecord(this.coordinate.assetId)
+                if (!asset) throw new Error('CONVERSATION_ASSET_NOT_FOUND')
+                try {
+                    await AssetDocumentService.settle({
+                        asset,
+                        role: 'conversation',
+                        workspaceId: this.config.workspaceId,
+                        leaseId: this.config.leaseId,
+                        holderId: this.config.leaseHolderId,
+                    })
+                    return true
+                } catch (error) {
+                    if (!isTransactionConditionalCheckFailure(error) || attempt === 4) throw error
+                }
+            }
+            return false
         } catch (error) {
             err('[AiChatProseMirrorStreamAssembler] final snapshot persistence failed:', error)
             await this.publishControl('ERROR', {
@@ -1602,14 +1629,14 @@ export class AiChatProseMirrorStreamAssembler {
         isPartial: boolean,
         partialIndex: number,
         previousAttrs: Record<string, any> = {},
+        clearImageData = false,
     ): Record<string, any> {
         const runAttrs = this.buildGeneratedMediaRunAttrs(content.generationRun, previousAttrs)
         const mediaModelId = runAttrs.mediaModelId || this.buildMediaModelId(content.imageModelProvider, content.imageModelId)
 
         return {
-            imageData: content.imageUrl || previousAttrs.imageData || '',
-            fileId: content.fileId || previousAttrs.fileId || '',
-            workspaceId: this.config.workspaceId || previousAttrs.workspaceId || '',
+            imageData: clearImageData ? '' : content.imageUrl || previousAttrs.imageData || '',
+            assetId: content.assetId || previousAttrs.assetId || content.generationRun?.lineageAssignment?.assetId || '',
             revisedPrompt: content.revisedPrompt || previousAttrs.revisedPrompt || '',
             responseId: content.responseId || previousAttrs.responseId || '',
             aiModel: content.aiProvider || previousAttrs.aiModel || '',
@@ -1638,10 +1665,8 @@ export class AiChatProseMirrorStreamAssembler {
 
         return {
             videoUrl: content.videoUrl || previousAttrs.videoUrl || '',
-            fileId: content.fileId || previousAttrs.fileId || '',
-            workspaceId: this.config.workspaceId || previousAttrs.workspaceId || '',
+            assetId: content.assetId || previousAttrs.assetId || content.generationRun?.lineageAssignment?.assetId || '',
             posterUrl: content.posterUrl || previousAttrs.posterUrl || '',
-            posterFileId: content.posterFileId || previousAttrs.posterFileId || '',
             durationSeconds: content.durationSeconds ?? previousAttrs.durationSeconds ?? 0,
             aspectRatio: this.normalizeAspectRatio(content.aspectRatio, previousAttrs.aspectRatio),
             hasAudio: content.hasAudio ?? previousAttrs.hasAudio ?? true,
@@ -1701,7 +1726,6 @@ export class AiChatProseMirrorStreamAssembler {
         return {
             type: 'doc',
             content: [
-                { type: documentTitleNodeType },
                 {
                     type: aiChatThreadNodeType,
                     attrs: {

@@ -1,6 +1,7 @@
 'use strict'
 
 export * from './types.ts'
+export * from './asset-types.ts'
 export * from './aws-resources.ts'
 export {
     mediaGenerationLayoutSettings,
@@ -20,6 +21,34 @@ import aiInteractionConstants from '../ai-interaction-constants.json' with { typ
 
 // Single dynamic export of all NATS subjects
 export const NATS_SUBJECTS = natsSubjects
+
+export const getNatsUserSubjectToken = (userId: string): string =>
+    [...new TextEncoder().encode(userId)]
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('')
+
+export const getAiInteractionResponseSubject = (
+    userId: string,
+    scopeId: string,
+    conversationOrRunId: string,
+): string => [
+    NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE,
+    getNatsUserSubjectToken(userId),
+    scopeId.replace(/[^A-Za-z0-9_-]/g, '_'),
+    conversationOrRunId.replace(/[^A-Za-z0-9_-]/g, '_'),
+].join('.')
+
+export const getAiInteractionCanonicalResponseSubject = (
+    scopeId: string,
+    conversationOrRunId: string,
+): string => [
+    NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE,
+    scopeId.replace(/[^A-Za-z0-9_-]/g, '_'),
+    conversationOrRunId.replace(/[^A-Za-z0-9_-]/g, '_'),
+].join('.')
+
+export const getAssetEventSubject = (userId: string, canonicalSubject: string): string =>
+    `${canonicalSubject}.${getNatsUserSubjectToken(userId)}`
 
 // AI interaction constants
 export const AI_INTERACTION_CONSTANTS = aiInteractionConstants
@@ -41,7 +70,7 @@ export const BILLING_CONFIG: Record<string, string> = {
 export const MEDIA_DESCRIPTOR_VERSION = 'media-descriptor-v1'
 export const MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH = 280
 
-// Upper bound on the plain-text fed into a document/thread descriptor pass. A
+// Upper bound on the plain-text fed into a document/conversation Asset descriptor pass. A
 // descriptor only needs the gist, so we cap the prompt rather than paying to
 // summarize an entire long document/transcript every edit.
 export const CONTENT_DESCRIPTOR_TEXT_INPUT_MAX_LENGTH = 12000

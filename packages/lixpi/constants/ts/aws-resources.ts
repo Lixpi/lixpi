@@ -8,10 +8,6 @@ export const DYNAMODB_TABLES: Record<string, string> = {
     WORKSPACES: 'Workspaces',
     WORKSPACES_META: 'Workspaces-Meta',
     WORKSPACES_ACCESS_LIST: 'Workspaces-Access-List',
-    DOCUMENTS: 'Documents',
-    DOCUMENTS_META: 'Documents-Meta',
-    DOCUMENTS_ACCESS_LIST: 'Documents-Access-List',
-    AI_CHAT_THREADS: 'AI-Chat-Threads',
     AI_TOKENS_USAGE_TRANSACTIONS: 'AI-Tokens-Usage-Transactions',
     FINANCIAL_TRANSACTIONS: 'Financial-Transactions',
     AI_TOKENS_USAGE_REPORTS: 'AI-Tokens-Usage-Reports',
@@ -20,9 +16,12 @@ export const DYNAMODB_TABLES: Record<string, string> = {
     FEATURES_META: 'Features-Meta',
     FEATURES_ACCESS_LIST: 'Features-Access-List',
     EXTRACTION_RUNS: 'Extraction-Runs',
-    MEDIA_LIBRARY_ITEMS: 'Media-Library-Items',
-    MEDIA_LIBRARY_ITEMS_META: 'Media-Library-Items-Meta',
-    MEDIA_LIBRARY_ITEMS_ACCESS_LIST: 'Media-Library-Items-Access-List',
+    ASSETS: 'Assets',
+    ASSETS_META: 'Assets-Meta',
+    ASSETS_ACCESS_LIST: 'Assets-Access-List',
+    ASSET_REFERENCES: 'Asset-References',
+    BLOBS: 'Blobs',
+    BLOB_REFERENCES: 'Blob-References',
 }
 
 export const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string => `${resourceName}-${orgName}-${stageName}`

@@ -1,7 +1,7 @@
 'use strict'
 
 // Shared canvas layout geometry for generated-media branch lineage. The API
-// canvas projection (services/api/src/services/media-generation-canvas-projection.ts)
+// canvas projection (services/api/src/services/asset-canvas-projection.ts)
 // and the WebUI canvas (services/web-ui/src/infographics/workspace) must place
 // markers and media with identical dimensions and gaps — two diverging copies
 // make the persisted API geometry fight the client-side rebalance, so nodes

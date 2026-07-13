@@ -13,7 +13,6 @@
     import { applyStyle } from '$src/utils/domTemplates.ts'
 
     import OrganizationService from '$src/services/organization-service.js'
-    import DocumentService from '$src/services/document-service.ts'
 
     import { userStore } from '$src/stores/userStore.js'
 
@@ -23,8 +22,7 @@
         recentTags = [],
         submenuState = $bindable({}),
         id,
-        organizationId,
-        documentId
+        organizationId
     } = $props();
 
     let submenuRef = $state()
@@ -87,9 +85,6 @@
     const addTag = async (tag) => {
         if (!selectedTags.includes(tag)) {
             // Add the existing tag to the project
-            const projectService = DocumentService.getInstance(documentId)
-            await projectService.addTagToDocument({ documentId, tagId: tag.tagId, organizationId })
-
             selectedTags = [...selectedTags, tag]
         }
 
@@ -101,9 +96,6 @@
 
     const removeTag = async (index) => {
         const tag = selectedTags[index];
-        const projectService = DocumentService.getInstance(documentId);
-        await projectService.removeTagFromDocument({ documentId, tagId: tag.tagId });
-
         // Remove the tag from selectedTags
         selectedTags = selectedTags.filter((_, i) => i !== index);
 

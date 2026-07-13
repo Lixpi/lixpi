@@ -16,7 +16,8 @@ import type {
 
 import AiModelModel from '../../models/ai-model.ts'
 import { settlePersistedAiChatGenerationRequest } from '../../prosemirror/ai-chat-stream-assembler.ts'
-import { settleMediaGenerationRequestOnCanvas } from '../../services/media-generation-canvas-projection.ts'
+import { settleMediaGenerationRequestOnCanvas } from '../../services/asset-canvas-projection.ts'
+import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
@@ -382,7 +383,6 @@ export class MediaGenerationMatrixOrchestrator {
                 const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
                     workspaceId,
                     generationRequestId,
-                    aiChatThreadId,
                     removeProjectedPendingNodes: true,
                 })
                 info('[MEDIA_MATRIX] Persisted cancellation without a live request publisher', {
@@ -603,6 +603,9 @@ export class MediaGenerationMatrixOrchestrator {
             reasoningModel.provider,
             generationRun,
             {
+                organizationId: requestData.organizationId,
+                assetLeaseId: requestData.assetLeaseId,
+                assetLeaseHolderId: requestData.assetLeaseHolderId,
                 enableProseMirrorStream: Boolean(requestData.proseMirrorInitialDoc),
                 proseMirrorBaseVersion: requestData.proseMirrorBaseVersion,
                 proseMirrorInitialDoc: requestData.proseMirrorInitialDoc,
@@ -691,6 +694,20 @@ export class MediaGenerationMatrixOrchestrator {
             mediaBranchResolution: state.mediaBranchResolution,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
             createdAt: Date.now(),
+        })
+        const organizationId = requestData.eventMeta?.organizationId as string | undefined
+        const ownerUserId = requestData.eventMeta?.userId as string | undefined
+        if (!organizationId || !ownerUserId) {
+            throw new Error('Asset media generation requires organization and user context')
+        }
+        await ensurePendingGeneratedAssets({
+            lineagePlan: mediaBranchLineagePlan,
+            workspaceId: requestData.workspaceId,
+            conversationAssetId: requestData.aiChatThreadId,
+            organizationId,
+            ownerUserId,
+            mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
+            workspaceContextSnapshot: state.workspaceContextSnapshot,
         })
         const firstLineageAssignment = this.getRunLineageAssignment(mediaBranchLineagePlan, generationRun.reasoningRunId)
         const lineageGenerationRun = firstLineageAssignment

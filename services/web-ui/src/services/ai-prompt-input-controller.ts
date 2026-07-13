@@ -390,10 +390,6 @@ export class AiPromptInputController {
             type: 'doc',
             content: [
                 {
-                    type: 'documentTitle',
-                    content: [{ type: 'text', text: 'AI Chat' }]
-                },
-                {
                     type: 'aiChatThread',
                     attrs: {
                         threadId,

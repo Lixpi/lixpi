@@ -6,24 +6,22 @@
     import {
         LoadingStatus,
         MAX_UPLOAD_FILE_SIZE,
-        NATS_SUBJECTS,
         type CanvasState,
         type DocumentCanvasNode,
-	        type DocumentMediaCanvasNode,
-	        type ImageCanvasNode,
-	        type VideoCanvasNode,
-	        type AudioCanvasNode,
-	        type UploadPlaceholderCanvasNode,
-	        type MediaKind,
-	        type ConvertFileNotification
-	    } from '@lixpi/constants'
+        type DocumentMediaCanvasNode,
+        type ImageCanvasNode,
+        type VideoCanvasNode,
+        type AudioCanvasNode,
+        type UploadPlaceholderCanvasNode,
+        type MediaKind
+    } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
-    import DocumentService from '$src/services/document-service.ts'
-    import AiChatThreadService from '$src/services/ai-chat-thread-service.ts'
+    import AssetService from '$src/services/asset-service.ts'
     import { workspaceStore } from '$src/stores/workspaceStore.ts'
-    import { documentsStore } from '$src/stores/documentsStore.ts'
-    import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
+    import { assetsStore } from '$src/stores/assetsStore.ts'
+    import { assetDocumentsStore } from '$src/stores/assetDocumentsStore.ts'
+    import { userStore } from '$src/stores/userStore.ts'
     import { routerStore } from '$src/stores/routerStore.ts'
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
@@ -32,13 +30,6 @@
     import '$src/components/sidePanel/side-panel.scss'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
-
-    type PendingDocumentUpdate = {
-        workspaceId: string
-        documentId: string
-        title?: string
-        content?: any
-    }
 
     type PersistCanvasStateOptions = {
         persistViewport?: boolean
@@ -57,9 +48,34 @@
     let loadedWorkspaceId = $derived($workspaceStore.data.workspaceId)
     let isRouteWorkspaceLoaded = $derived(Boolean(workspaceId && loadedWorkspaceId === workspaceId))
     let canvasState = $derived(isRouteWorkspaceLoaded && $workspaceStore.meta.loadingStatus === LoadingStatus.success ? $workspaceStore.data.canvasState : null)
-    let isRightSidePanelOpen = $derived(Boolean(isRouteWorkspaceLoaded && (canvasState?.aiChatPanel?.isOpen ?? canvasState?.lastActiveAiChatThreadId)))
-    let documents = $derived(isRouteWorkspaceLoaded ? $documentsStore.data.filter((document: any) => document.workspaceId === workspaceId) : [])
-    let aiChatThreads = $derived(isRouteWorkspaceLoaded ? Array.from($aiChatThreadsStore.data.values()).filter((thread: any) => thread.workspaceId === workspaceId) : [])
+    let isRightSidePanelOpen = $derived(Boolean(isRouteWorkspaceLoaded && (canvasState?.aiChatPanel?.isOpen ?? canvasState?.lastActiveConversationAssetId)))
+    let documents = $derived(isRouteWorkspaceLoaded ? Array.from($assetsStore.items.values())
+        .filter((asset) => Boolean(asset.documents.content))
+        .map((asset) => ({
+            documentId: asset.assetId,
+            assetId: asset.assetId,
+            workspaceId,
+            title: asset.title,
+            content: $assetDocumentsStore.get(`${asset.assetId}#content`)?.doc,
+            proseMirrorVersion: asset.documents.content?.version ?? 0,
+            revision: asset.revision,
+            organizationId: asset.organizationId,
+        })) : [])
+    let aiChatThreads = $derived(isRouteWorkspaceLoaded ? Array.from($assetsStore.items.values())
+        .filter((asset) => Boolean(asset.documents.conversation))
+        .map((asset) => ({
+            threadId: asset.assetId,
+            assetId: asset.assetId,
+            workspaceId,
+            title: asset.title,
+            content: $assetDocumentsStore.get(`${asset.assetId}#conversation`)?.doc,
+            proseMirrorVersion: asset.documents.conversation?.version ?? 0,
+            status: asset.states.conversation === 'none' ? 'idle' : asset.states.conversation,
+            revision: asset.revision,
+            organizationId: asset.organizationId,
+            createdAt: asset.createdAt,
+            updatedAt: asset.updatedAt,
+        })) : [])
 
     let viewport: Viewport = $state({ x: 0, y: 0, zoom: 1 })
     let imageSubmenuOpen = $state(false)
@@ -68,12 +84,10 @@
     let imageWrapperEl: HTMLDivElement
     let fileInputEl: HTMLInputElement
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
+    let transientCanvasMutationInProgress = false
     let pendingViewportSave: Viewport | null = null
     let lastPersistedViewport: Viewport | null = null
-    const documentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
-    const pendingDocumentUpdates = new Map<string, PendingDocumentUpdate>()
-    const documentService = new DocumentService()
-    const aiChatThreadService = new AiChatThreadService()
+    const assetService = new AssetService()
     const DEFAULT_DOCUMENT_NODE_DIMENSIONS = { width: 400, height: 350 }
     const rightSidePanelSettings = settings.rightSidePanel
     const rightSidePanelStyle = [
@@ -137,6 +151,7 @@
         }
 
         workspaceStore.updateCanvasState(stateToPersist)
+        if (transientCanvasMutationInProgress) return
         if (workspaceId) {
             servicesStore.getData('workspaceService').updateCanvasState({
                 workspaceId,
@@ -189,31 +204,6 @@
         }, 1000)
     }
 
-    function scheduleDocumentUpdate(update: PendingDocumentUpdate): void {
-        const { workspaceId: targetWorkspaceId, documentId } = update
-        const pendingUpdate = {
-            ...pendingDocumentUpdates.get(documentId),
-            workspaceId: targetWorkspaceId,
-            documentId,
-            ...(update.title !== undefined ? { title: update.title } : {}),
-            ...(update.content !== undefined ? { content: update.content } : {}),
-        }
-        pendingDocumentUpdates.set(documentId, pendingUpdate)
-
-        const existingTimer = documentSaveTimers.get(documentId)
-        if (existingTimer) clearTimeout(existingTimer)
-
-        const timer = setTimeout(() => {
-            documentSaveTimers.delete(documentId)
-            const pending = pendingDocumentUpdates.get(documentId)
-            pendingDocumentUpdates.delete(documentId)
-            if (!pending) return
-            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
-            documentService.updateDocument(pending)
-        }, settings.workspacePersistence.debounceMs)
-        documentSaveTimers.set(documentId, timer)
-    }
-
     async function handleCreateDocument() {
         const targetWorkspaceId = workspaceId
         if (!targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) {
@@ -222,25 +212,12 @@
         }
 
         try {
-            // Create document with valid ProseMirror content structure
-            // Schema requires: documentTitle block+
-            const initialContent = {
-                type: 'doc',
-                content: [
-                    {
-                        type: 'documentTitle',
-                        content: [{ type: 'text', text: 'New Document' }]
-                    },
-                    {
-                        type: 'paragraph'
-                    }
-                ]
-            }
-
-            const doc = await servicesStore.getData('documentService').createDocument({
+            const organizationId = workspaceStore.getData('organizationId')
+            const doc = await assetService.create({
+                organizationId,
                 workspaceId: targetWorkspaceId,
                 title: 'New Document',
-                content: initialContent
+                primaryCategory: 'document',
             })
 
             if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
@@ -248,13 +225,30 @@
             if (doc) {
                 const dimensions = { ...DEFAULT_DOCUMENT_NODE_DIMENSIONS }
                 const documentNode: Omit<DocumentCanvasNode, 'position'> = {
-                    nodeId: `node-${doc.documentId}`,
+                    nodeId: `node-${crypto.randomUUID()}`,
                     type: 'document',
-                    referenceId: doc.documentId,
+                    assetId: doc.assetId,
                     dimensions,
                 }
-
-                renderer?.insertNodeAtViewportCenter(documentNode)
+                const nextCanvasState = renderer?.insertNodeAtViewportCenter(documentNode, {}, false)
+                const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                if (nextCanvasState && typeof expectedCanvasStateUpdatedAt === 'number') {
+                    const canvasStateUpdatedAt = Date.now()
+                    const response = await assetService.attach({
+                        assetId: doc.assetId,
+                        workspaceId: targetWorkspaceId,
+                        nodeId: documentNode.nodeId,
+                        workspaceMutation: {
+                            expectedCanvasStateUpdatedAt,
+                            canvasStateUpdatedAt,
+                            canvasState: nextCanvasState,
+                        },
+                    }) as { error?: string }
+                    if (response?.error) throw new Error(response.error)
+                    renderer?.commitTransientCanvasState(nextCanvasState)
+                    workspaceStore.updateCanvasState(nextCanvasState)
+                    workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
+                }
             }
         } catch (error) {
             console.error('Error creating document:', error)
@@ -288,83 +282,11 @@
         }
     }
 
-    // Shape the unified upload/import endpoint returns. The API does no heavy
-    // processing: it stores the original and returns immediately. `status` is
-    // 'ready' (model-safe image / text — build the node now) or 'processing'
-    // (a transcode/probe is running on the NEX file-conversion workload; subscribe
-    // to the completion subject keyed by `conversionId`). The per-kind hints are
-    // present on the async completion notification, not the initial response.
     type IngestResult = {
-        status: 'ready' | 'processing'
-        fileId: string
+        status: 'processing'
+        assetId: string
         kind: MediaKind
-        url: string
-        modelSafe: boolean
-        conversionId?: string
-        sourceFileId?: string
-        canonicalFileId?: string
-        canonicalMimeType?: string
-        aspectRatio?: number
-        durationSeconds?: number
-        hasAudio?: boolean
-        posterFileId?: string
-        posterUrl?: string
-        pageCount?: number
-    }
-
-    const { FILE_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
-
-    // Subscribe to the per-upload conversion completion subject. The API publishes
-    // a ConvertFileNotification here once the NEX workload settles; we then replace
-    // the upload placeholder with the real node, or fail it. Best-effort like the
-    // feature-extraction run subscription it mirrors.
-    function subscribeToConversion(
-        targetWorkspaceId: string,
-        conversionId: string,
-        token: string,
-        placeholderNodeId: string | null,
-        fileId: string,
-        kind: MediaKind,
-    ) {
-        const nats = servicesStore.getData('nats')
-        if (!nats) return
-        const subject = `${FILE_SUBJECTS.CONVERT_RESPONSE}.${targetWorkspaceId}.${conversionId}`
-
-        const handle = (data: ConvertFileNotification) => {
-            nats.getSubscriptions?.([subject])?.forEach((sub: any) => sub.unsubscribe())
-            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
-
-            if (!data?.success) {
-                markUploadPlaceholderFailed(placeholderNodeId, data?.error || 'The file could not be converted to a supported format.')
-                return
-            }
-
-            // The canvas file is the canonical derivative when one was produced,
-            // else the stored original (model-safe inputs that only needed probing).
-            const canvasFileId = data.canonicalFileId ?? fileId
-            const result: IngestResult = {
-                status: 'ready',
-                fileId: canvasFileId,
-                kind,
-                url: `/api/files/${targetWorkspaceId}/${canvasFileId}`,
-                modelSafe: true,
-                canonicalFileId: data.canonicalFileId,
-                canonicalMimeType: data.canonicalMimeType,
-                aspectRatio: data.aspectRatio,
-                durationSeconds: data.durationSeconds,
-                hasAudio: data.hasAudio,
-                posterFileId: data.posterFileId,
-                posterUrl: data.posterFileId ? `/api/files/${targetWorkspaceId}/${data.posterFileId}` : undefined,
-                pageCount: data.pageCount,
-            }
-            addFileToCanvas(result, token, targetWorkspaceId, placeholderNodeId)
-        }
-
-        nats.subscribe(subject, handle)
-    }
-
-    function tokenizeUrl(url: string, token: string): string {
-        return `${API_BASE_URL}${url}?token=${encodeURIComponent(token)}`
+        originalUrl: string
     }
 
     function getUploadPlaceholderNodeId(): string {
@@ -387,7 +309,9 @@
             createdAt: now,
             updatedAt: now,
         }
+        transientCanvasMutationInProgress = true
         renderer?.insertNodeAtViewportCenter(placeholderNode)
+        transientCanvasMutationInProgress = false
         return renderer ? nodeId : null
     }
 
@@ -415,7 +339,7 @@
             if (!token) return
 
             placeholderNodeId = insertUploadPlaceholder(getRemotePlaceholderName(url))
-            const response = await fetch(`${API_BASE_URL}/api/files/${targetWorkspaceId}/import-url`, {
+            const response = await fetch(`${API_BASE_URL}/api/assets/workspaces/${targetWorkspaceId}/import-url`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -432,7 +356,7 @@
             if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
             closeImageSubmenu()
-            await finalizeIngest(data, token, targetWorkspaceId, placeholderNodeId)
+            await addAssetToCanvas(data, targetWorkspaceId, placeholderNodeId)
         } catch (error) {
             console.error('File URL import failed:', error)
             markUploadPlaceholderFailed(placeholderNodeId, 'File URL import failed')
@@ -462,7 +386,7 @@
             const formData = new FormData()
             formData.append('file', file)
 
-            const response = await fetch(`${API_BASE_URL}/api/files/${targetWorkspaceId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/assets/workspaces/${targetWorkspaceId}`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
@@ -475,111 +399,45 @@
             }
             if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
-            await finalizeIngest(data, token, targetWorkspaceId, placeholderNodeId)
+            await addAssetToCanvas(data, targetWorkspaceId, placeholderNodeId)
         } catch (error) {
             console.error('File upload failed:', error)
             markUploadPlaceholderFailed(placeholderNodeId, 'Upload failed')
         }
     }
 
-    // Settle an ingest response: a `ready` file (plain text / Markdown) becomes a
-    // node now; a `processing` file keeps its placeholder and subscribes for the
-    // async conversion completion. The browser never inspects file bytes — every
-    // server-derived hint (image aspectRatio, video/audio duration + poster, PDF
-    // page count) arrives on the completion notification.
-    function finalizeIngest(result: IngestResult, token: string, targetWorkspaceId: string, placeholderNodeId: string | null) {
-        if (result.status === 'processing') {
-            if (result.conversionId) {
-                subscribeToConversion(targetWorkspaceId, result.conversionId, token, placeholderNodeId, result.fileId, result.kind)
-            } else {
-                markUploadPlaceholderFailed(placeholderNodeId, 'Upload could not be queued for conversion.')
-            }
-            return
-        }
-
-        addFileToCanvas(result, token, targetWorkspaceId, placeholderNodeId)
-    }
-
-    // Dispatch an ingested file onto the canvas as the typed node its `kind`
-    // selects. Uploads stay client-placed at the viewport center (they have no
-    // server-side lineage to position against).
-    function addFileToCanvas(result: IngestResult, token: string, targetWorkspaceId: string, placeholderNodeId: string | null = null) {
+    async function addAssetToCanvas(result: IngestResult, targetWorkspaceId: string, placeholderNodeId: string | null = null) {
         if (!targetWorkspaceId || workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
-
-        const { fileId, kind } = result
-        const src = tokenizeUrl(result.url, token)
-        const posterSrc = result.posterUrl ? tokenizeUrl(result.posterUrl, token) : undefined
-
-        if (kind === 'image') {
-            const aspectRatio = result.aspectRatio && result.aspectRatio > 0 ? result.aspectRatio : 1
-            const dimensions = getImageInsertionDimensions(aspectRatio)
-            const imageNode: Omit<ImageCanvasNode, 'position'> = {
-                nodeId: `node-${fileId}`,
-                type: 'image',
-                fileId,
-                workspaceId: targetWorkspaceId,
-                src,
-                aspectRatio,
-                dimensions,
-            }
-            if (placeholderNodeId && renderer?.replaceUploadPlaceholder(placeholderNodeId, imageNode)) return
-            renderer?.insertNodeAtViewportCenter(imageNode)
-            return
-        }
-
-        if (kind === 'video') {
-            const aspectRatio = result.aspectRatio && result.aspectRatio > 0 ? result.aspectRatio : 1
-            const videoNode: Omit<VideoCanvasNode, 'position'> = {
-                nodeId: `node-${fileId}`,
-                type: 'video',
-                fileId,
-                posterFileId: result.posterFileId ?? '',
-                workspaceId: targetWorkspaceId,
-                src,
-                posterSrc: posterSrc ?? '',
-                aspectRatio,
-                durationSeconds: result.durationSeconds ?? 0,
-                hasAudio: result.hasAudio ?? true,
-                dimensions: getImageInsertionDimensions(aspectRatio),
-            }
-            if (placeholderNodeId && renderer?.replaceUploadPlaceholder(placeholderNodeId, videoNode)) return
-            renderer?.insertNodeAtViewportCenter(videoNode)
-            return
-        }
-
-        if (kind === 'audio') {
-            // Audio has no aspect; use a compact fixed strip.
-            const audioNode: Omit<AudioCanvasNode, 'position'> = {
-                nodeId: `node-${fileId}`,
-                type: 'audio',
-                fileId,
-                workspaceId: targetWorkspaceId,
-                src,
-                durationSeconds: result.durationSeconds ?? 0,
-                hasAudio: true,
-                dimensions: { width: 360, height: 96 },
-            }
-            if (placeholderNodeId && renderer?.replaceUploadPlaceholder(placeholderNodeId, audioNode)) return
-            renderer?.insertNodeAtViewportCenter(audioNode)
-            return
-        }
-
-        // document (PDF / converted office doc / text)
-        const aspectRatio = result.aspectRatio && result.aspectRatio > 0 ? result.aspectRatio : 0.7727 // ~A4 portrait
-        const documentNode: Omit<DocumentMediaCanvasNode, 'position'> = {
-            nodeId: `node-${fileId}`,
-            type: 'mediaDocument',
-            fileId,
+        const asset = await assetService.refresh(result.assetId)
+        if ('error' in asset) throw new Error(asset.error)
+        const nodeId = `node-${crypto.randomUUID()}`
+        const type = result.kind === 'document' ? 'mediaDocument' : result.kind
+        const dimensions = result.kind === 'audio'
+            ? { width: 360, height: 96 }
+            : getImageInsertionDimensions(result.kind === 'document' ? 0.7727 : 1)
+        const node = { nodeId, type, assetId: result.assetId, dimensions } as Omit<
+            ImageCanvasNode | VideoCanvasNode | AudioCanvasNode | DocumentMediaCanvasNode,
+            'position'
+        >
+        const replacedState = placeholderNodeId ? renderer?.replaceUploadPlaceholder(placeholderNodeId, node, false) : null
+        const nextCanvasState = replacedState ?? renderer?.insertNodeAtViewportCenter(node, {}, false)
+        const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+        if (!nextCanvasState || typeof expectedCanvasStateUpdatedAt !== 'number') return
+        const canvasStateUpdatedAt = Date.now()
+        const response = await assetService.attach({
+            assetId: result.assetId,
             workspaceId: targetWorkspaceId,
-            src,
-            posterFileId: result.posterFileId,
-            posterSrc,
-            pageCount: result.pageCount,
-            aspectRatio,
-            dimensions: getImageInsertionDimensions(aspectRatio),
-        }
-        if (placeholderNodeId && renderer?.replaceUploadPlaceholder(placeholderNodeId, documentNode)) return
-        renderer?.insertNodeAtViewportCenter(documentNode)
+            nodeId,
+            workspaceMutation: {
+                expectedCanvasStateUpdatedAt,
+                canvasStateUpdatedAt,
+                canvasState: nextCanvasState,
+            },
+        }) as { error?: string }
+        if (response?.error) throw new Error(response.error)
+        renderer?.commitTransientCanvasState(nextCanvasState)
+        workspaceStore.updateCanvasState(nextCanvasState)
+        workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
     }
 
     onMount(() => {
@@ -600,30 +458,44 @@
             aiChatThreads,
             onViewportChange: handleViewportChange,
             onCanvasStateChange: persistCanvasState,
-            onDocumentContentChange: ({ documentId, title, content }) => {
-                if (!workspaceId || loadedWorkspaceId !== workspaceId) return
-                scheduleDocumentUpdate({
+            onDocumentContentChange: () => {},
+            onAiChatThreadContentChange: () => {},
+            onAssetDetach: async ({ assetId, nodeId, canvasState: nextCanvasState }) => {
+                const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
+                const canvasStateUpdatedAt = Date.now()
+                const response = await assetService.detach({
+                    assetId,
                     workspaceId,
-                    documentId,
-                    content
-                })
+                    nodeId,
+                    workspaceMutation: {
+                        expectedCanvasStateUpdatedAt,
+                        canvasStateUpdatedAt,
+                        canvasState: nextCanvasState,
+                    },
+                }) as { error?: string }
+                if (response?.error) throw new Error(response.error)
+                workspaceStore.updateCanvasState(nextCanvasState)
+                workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
             },
-            onDocumentTitleChange: ({ documentId, title }) => {
-                if (!workspaceId || loadedWorkspaceId !== workspaceId) return
-                documentsStore.updateDocument(documentId, { title })
-                scheduleDocumentUpdate({
+            onAssetAttach: async ({ assetId, nodeId, canvasState: nextCanvasState }) => {
+                const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
+                const canvasStateUpdatedAt = Date.now()
+                const response = await assetService.attach({
+                    assetId,
                     workspaceId,
-                    documentId,
-                    title
-                })
+                    nodeId,
+                    workspaceMutation: {
+                        expectedCanvasStateUpdatedAt,
+                        canvasStateUpdatedAt,
+                        canvasState: nextCanvasState,
+                    },
+                }) as { error?: string }
+                if (response?.error) throw new Error(response.error)
+                workspaceStore.updateCanvasState(nextCanvasState)
+                workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
             },
-            onAiChatThreadContentChange: ({ workspaceId: wsId, threadId, content }) => {
-                aiChatThreadService.updateAiChatThread({
-                    workspaceId: wsId,
-                    threadId,
-                    content
-                })
-            }
         })
 
     })
@@ -641,6 +513,11 @@
 
         setTimeout(() => document.addEventListener('click', handleClickOutside), 0)
         return () => document.removeEventListener('click', handleClickOutside)
+    })
+
+    $effect(() => {
+        if (!workspaceId || loadedWorkspaceId !== workspaceId) return
+        return assetService.startWorkspaceSynchronization(workspaceId)
     })
 
     $effect(() => {
@@ -669,9 +546,6 @@
             persistViewportState(pendingViewportSave)
         }
         pendingViewportSave = null
-        for (const timer of documentSaveTimers.values()) clearTimeout(timer)
-        documentSaveTimers.clear()
-        pendingDocumentUpdates.clear()
         renderer?.destroy()
     })
 </script>

@@ -10,16 +10,6 @@ import {
     parseBooleanAttr,
 } from './model-selection-attrs.ts'
 
-export const documentTitleNodeType = 'documentTitle'
-
-export const documentTitleNodeSpec = {
-    content: 'text*',
-    defining: true,
-    selectable: false,
-    toDOM() { return ['h1', { class: 'document-title' }, 0] },
-    parseDOM: [{ tag: 'h1.document-title' }],
-} as NodeSpec
-
 export const codeBlockNodeType = 'code_block'
 
 export const codeBlockNodeSpec = {
@@ -66,7 +56,6 @@ export const taskRowNodeSpec = {
 } as NodeSpec
 
 export const customNodeSpecs = {
-    [documentTitleNodeType]: documentTitleNodeSpec,
     [taskRowNodeType]: taskRowNodeSpec,
     [codeBlockNodeType]: codeBlockNodeSpec,
 }
@@ -356,8 +345,7 @@ export const aiGeneratedImageNodeType = 'aiGeneratedImage'
 export const aiGeneratedImageNodeSpec = {
     attrs: {
         imageData: { default: '' },
-        fileId: { default: '' },
-        workspaceId: { default: '' },
+        assetId: { default: '' },
         revisedPrompt: { default: '' },
         responseId: { default: '' },
         aiModel: { default: '' },
@@ -389,8 +377,7 @@ export const aiGeneratedImageNodeSpec = {
             getAttrs(dom: HTMLElement) {
                 return {
                     imageData: dom.getAttribute('data-image-data') || '',
-                    fileId: dom.getAttribute('data-file-id') || '',
-                    workspaceId: dom.getAttribute('data-workspace-id') || '',
+                    assetId: dom.getAttribute('data-asset-id') || '',
                     revisedPrompt: dom.getAttribute('data-revised-prompt') || '',
                     responseId: dom.getAttribute('data-response-id') || '',
                     aiModel: dom.getAttribute('data-ai-model') || '',
@@ -420,8 +407,7 @@ export const aiGeneratedImageNodeSpec = {
         return ['div', {
             class: 'ai-generated-image',
             'data-image-data': node.attrs.imageData,
-            'data-file-id': node.attrs.fileId,
-            'data-workspace-id': node.attrs.workspaceId,
+            'data-asset-id': node.attrs.assetId,
             'data-revised-prompt': node.attrs.revisedPrompt,
             'data-response-id': node.attrs.responseId,
             'data-ai-model': node.attrs.aiModel,
@@ -452,10 +438,8 @@ export const aiGeneratedVideoNodeType = 'aiGeneratedVideo'
 export const aiGeneratedVideoNodeSpec = {
     attrs: {
         videoUrl: { default: '' },
-        fileId: { default: '' },
-        workspaceId: { default: '' },
+        assetId: { default: '' },
         posterUrl: { default: '' },
-        posterFileId: { default: '' },
         durationSeconds: { default: 0 },
         aspectRatio: { default: 1.777 },
         hasAudio: { default: true },
@@ -490,10 +474,8 @@ export const aiGeneratedVideoNodeSpec = {
             getAttrs(dom: HTMLElement) {
                 return {
                     videoUrl: dom.getAttribute('data-video-url') || '',
-                    fileId: dom.getAttribute('data-file-id') || '',
-                    workspaceId: dom.getAttribute('data-workspace-id') || '',
+                    assetId: dom.getAttribute('data-asset-id') || '',
                     posterUrl: dom.getAttribute('data-poster-url') || '',
-                    posterFileId: dom.getAttribute('data-poster-file-id') || '',
                     durationSeconds: Number(dom.getAttribute('data-duration-seconds') || 0),
                     aspectRatio: Number(dom.getAttribute('data-aspect-ratio') || 1.777),
                     hasAudio: dom.getAttribute('data-has-audio') === 'true',
@@ -526,10 +508,8 @@ export const aiGeneratedVideoNodeSpec = {
         return ['div', {
             class: 'ai-generated-video',
             'data-video-url': node.attrs.videoUrl,
-            'data-file-id': node.attrs.fileId,
-            'data-workspace-id': node.attrs.workspaceId,
+            'data-asset-id': node.attrs.assetId,
             'data-poster-url': node.attrs.posterUrl,
-            'data-poster-file-id': node.attrs.posterFileId,
             'data-duration-seconds': String(node.attrs.durationSeconds),
             'data-aspect-ratio': String(node.attrs.aspectRatio),
             'data-has-audio': String(node.attrs.hasAudio),

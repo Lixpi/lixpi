@@ -42,7 +42,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Service responsibilities, NATS as the backbone, subject conventions, design decisions, scaling |
 | [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md) | The shared LangGraph workflow, `ProviderState`, the post-stream 3-way router, dual-model routing, tool injection/extraction, `ImageRouter`/`VideoRouter`, stream lifecycle, usage |
 | [Streaming & Events](platform/STREAMING-AND-EVENTS.md) | Live AI pipeline subjects, JetStream replay logs, ProseMirror step streams, and the stream-event catalog |
-| [Data Storage](platform/DATA-STORAGE.md) | DynamoDB table layout, the Main/Meta/Access-List triad, scope-partitioned keys, the transactional multi-table write rule, and the object-store split |
+| [Data Storage](platform/DATA-STORAGE.md) | Asset/Blob tables, typed references, scope projections, organization Object Store layout, deletion/repair, and revision-2 portability |
 | [Authentication](platform/AUTHENTICATION.md) | Dual auth model, NATS auth callout, `@lixpi/auth-service`, LocalAuth0 |
 | [Nano Stores](platform/NANOSTORES.md) | Browser-side store conventions for `nanostores`, persistent stores, and framework-agnostic TypeScript consumers |
 | [Infrastructure Overview](platform/deployment/INFRASTRUCTURE-OVERVIEW.md) | Pulumi, AWS topology, network, ECS `api`, web-ui delivery, DynamoDB |

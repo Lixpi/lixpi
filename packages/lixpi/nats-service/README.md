@@ -183,8 +183,8 @@ The TypeScript package also exposes a small wrapper over the modular `@nats-io/j
 // Create or update a stream. Existing subjects are preserved and new subjects
 // are merged into the stream config.
 await natsService.ensureJetStreamStream({
-    name: 'PM_STEPS_workspace_123',
-    subjects: ['document.steps.workspace_123.>'],
+    name: 'ASSET_STEPS_organization_123',
+    subjects: ['asset.document.steps.organization_123.>'],
     retention: 'limits',
     storage: 'file',
     allow_direct: true,
@@ -194,30 +194,30 @@ await natsService.ensureJetStreamStream({
 
 // Publish JSON with idempotency and optimistic expectation options.
 const ack = await natsService.publishJetStream(
-    'document.steps.workspace_123.aiChatThread.thread_456',
+    'asset.document.steps.organization_123.asset_456.conversation',
     { kind: 'STEP', version: 42, step: {} },
     {
         msgID: 'pm-ai-run-step-42',
         expect: {
-            streamName: 'PM_STEPS_workspace_123',
+            streamName: 'ASSET_STEPS_organization_123',
             lastSubjectSequence: 128,
         },
     },
 )
 
 // Direct reads return null when the stream or message is genuinely missing.
-const last = await natsService.getJetStreamMessage('PM_STEPS_workspace_123', {
-    last_by_subj: 'document.steps.workspace_123.aiChatThread.thread_456',
+const last = await natsService.getJetStreamMessage('ASSET_STEPS_organization_123', {
+    last_by_subj: 'asset.document.steps.organization_123.asset_456.conversation',
 })
 
-const next = await natsService.getJetStreamMessage('PM_STEPS_workspace_123', {
+const next = await natsService.getJetStreamMessage('ASSET_STEPS_organization_123', {
     seq: (last?.seq ?? 0) + 1,
-    next_by_subj: 'document.steps.workspace_123.aiChatThread.thread_456',
+    next_by_subj: 'asset.document.steps.organization_123.asset_456.conversation',
 })
 
 await natsService.purgeJetStreamSubject(
-    'PM_STEPS_workspace_123',
-    'document.steps.workspace_123.aiChatThread.thread_456',
+    'ASSET_STEPS_organization_123',
+    'asset.document.steps.organization_123.asset_456.conversation',
 )
 ```
 
@@ -229,8 +229,8 @@ Relevant methods:
 | `getJetStreamStreamInfo(name)` / `getJetStreamStreamInfoOrNull(name)` | Read stream metadata; return `null` only when the stream is genuinely absent. |
 | `publishJetStream(subject, data, options)` | Publish JSON or bytes with `msgID`, expectation, or header options. |
 | `getJetStreamMessage(streamName, request)` | Directly read messages by requests such as `last_by_subj`, `seq`, and `next_by_subj`. |
-| `ensureJetStreamConsumer(streamName, config)` / `consumeJetStreamMessages(...)` | Pull-consumer helpers for workloads that need an explicit consumer. |
-| `purgeJetStreamSubject(streamName, subject)` | Purge one filtered subject from a stream. |
+| `ensureJetStreamConsumer(streamName, config)` / `consumeJetStreamMessages(...)` | Create or update a durable pull consumer, then consume explicitly acknowledged messages. |
+| `purgeJetStreamSubject(streamName, subject, options)` | Purge one filtered subject completely or through an inclusive stream sequence. |
 
 ### Python
 

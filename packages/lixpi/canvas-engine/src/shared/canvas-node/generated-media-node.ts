@@ -8,10 +8,11 @@ export function isGeneratedMediaCanvasNode(node: CanvasNode): node is GeneratedM
     return (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy)
 }
 
-export function isPendingGeneratedMediaCanvasNode(node: CanvasNode): boolean {
-    if (!isGeneratedMediaCanvasNode(node)) return false
-    if (node.type === 'image') return !node.fileId && !node.src
-    return !node.fileId && !node.posterFileId && !node.frameFileId && !node.src && !node.posterSrc
+export function isPendingGeneratedMediaCanvasNode(_node: CanvasNode): boolean {
+    // Asset lifecycle is authoritative and is intentionally not duplicated on
+    // canvas nodes. Callers that need pending/ready state must resolve node.assetId
+    // through the Asset store.
+    return false
 }
 
 export function isCompletedGeneratedMediaCanvasNode(node: CanvasNode): boolean {

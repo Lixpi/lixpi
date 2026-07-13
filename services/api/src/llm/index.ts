@@ -14,8 +14,6 @@ import { VideoRouter } from './tools/video-router.ts'
 import { ExtractionOrchestrator } from './extraction/orchestrator.ts'
 import { MediaGenerationMatrixOrchestrator, type MatrixRequestData } from './orchestration/media-generation-matrix.ts'
 
-import type { StoreWorkspaceImageFn } from './graph/image-publisher.ts'
-import type { StoreWorkspaceVideoFn } from './graph/video-publisher.ts'
 import type { ExtractionInput, ExtractionResult } from './extraction/types.ts'
 
 export type LlmModule = {
@@ -32,15 +30,11 @@ export type LlmModule = {
 
 export type LlmModuleDeps = {
     natsService: NatsService
-    storeWorkspaceImage: StoreWorkspaceImageFn
-    storeWorkspaceVideo: StoreWorkspaceVideoFn
 }
 
 export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
     const registry = new ProviderRegistry(
         deps.natsService,
-        deps.storeWorkspaceImage,
-        deps.storeWorkspaceVideo,
         {
             OpenAI: OpenAIProvider,
             Anthropic: AnthropicProvider,
@@ -58,7 +52,6 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
 
     const extractionOrchestrator = new ExtractionOrchestrator(deps.natsService, {
         runImageRouter: (state) => imageRouter.execute(state),
-        storeWorkspaceImage: deps.storeWorkspaceImage,
     })
     const mediaGenerationMatrixOrchestrator = new MediaGenerationMatrixOrchestrator(registry, deps.natsService)
 

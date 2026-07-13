@@ -1,17 +1,19 @@
 import type {
+    Asset,
     CanvasNode,
     DocumentCanvasNode,
     ImageCanvasNode,
     VideoCanvasNode,
 } from '@lixpi/constants'
 import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
-import { extractContentFromProseMirror } from '$src/services/ai-chat-thread-service.ts'
+import { extractContentFromProseMirror } from '$src/utils/prosemirrorText.ts'
 import { documentIcon, videoPlayGlyphIcon } from '$src/svgIcons/index.ts'
 import { html } from '$src/utils/domTemplates.ts'
 import {
+    buildAssetRenditionPath,
     resolveAuthenticatedMediaUrl,
     resolveMediaUrl,
-} from '$src/utils/workspaceFileUrls.ts'
+} from '$src/utils/mediaUrls.ts'
 
 export type ContextPreviewDocumentSource = {
     documentId: string
@@ -28,6 +30,7 @@ export type ContextPreviewThreadSource = {
 export type ContextPreviewEnvironment = {
     getDocuments: () => ContextPreviewDocumentSource[]
     getThreads: () => ContextPreviewThreadSource[]
+    getAsset?: (assetId: string) => Asset | undefined
     getApiBaseUrl: () => string
     getAuthToken: () => Promise<string>
 }
@@ -71,10 +74,6 @@ export const CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
 ]
 
 function getContextChipLabel(node: CanvasNode): string {
-    const descriptor = 'descriptor' in node ? node.descriptor : undefined
-    const summary = descriptor && descriptor.status === 'ready' ? descriptor.summary : ''
-    const trimmed = summary.trim()
-    if (trimmed) return trimmed
     switch (node.type) {
         case 'document': return 'Document'
         case 'image':
@@ -84,8 +83,12 @@ function getContextChipLabel(node: CanvasNode): string {
 }
 
 function getContextPreviewTitle(node: CanvasNode, environment: ContextPreviewEnvironment): string {
+    if ('assetId' in node) {
+        const assetTitle = environment.getAsset?.(node.assetId)?.title?.trim()
+        if (assetTitle) return assetTitle
+    }
     if (node.type === 'document') {
-        const document = environment.getDocuments().find((item) => item.documentId === node.referenceId)
+        const document = environment.getDocuments().find((item) => item.documentId === node.assetId)
         const title = document?.title?.trim()
         if (title) return title
     }
@@ -94,13 +97,14 @@ function getContextPreviewTitle(node: CanvasNode, environment: ContextPreviewEnv
 }
 
 function getContextPreviewText(node: CanvasNode, environment: ContextPreviewEnvironment): string {
-    const descriptor = 'descriptor' in node && node.descriptor?.status === 'ready'
-        ? node.descriptor.summary.trim()
+    const asset = 'assetId' in node ? environment.getAsset?.(node.assetId) : undefined
+    const descriptor = asset?.descriptor?.status === 'ready'
+        ? asset.descriptor.summary.trim()
         : ''
     if (descriptor) return descriptor
 
     if (node.type === 'document') {
-        const document = environment.getDocuments().find((item) => item.documentId === node.referenceId)
+        const document = environment.getDocuments().find((item) => item.documentId === node.assetId)
         const { text } = extractContentFromProseMirror((document?.content ?? '') as string | object)
         return text.trim()
     }
@@ -160,23 +164,26 @@ function hydrateContextPreviewMedia(
 }
 
 function setContextPreviewVideoSources(videoEl: HTMLVideoElement, node: VideoCanvasNode, environment: ContextPreviewEnvironment): void {
-    const initialSrc = buildContextPreviewInitialMediaSrc(node.src)
-    const initialPoster = buildContextPreviewInitialMediaSrc(node.posterSrc)
+    const videoUrl = buildAssetRenditionPath(node.assetId, 'original')
+    const posterUrl = buildAssetRenditionPath(node.assetId, 'poster')
+    const initialSrc = buildContextPreviewInitialMediaSrc(videoUrl)
+    const initialPoster = buildContextPreviewInitialMediaSrc(posterUrl)
     if (initialSrc) videoEl.src = initialSrc
     if (initialPoster) videoEl.poster = initialPoster
-    hydrateContextPreviewMedia(videoEl, node.src, environment)
-    hydrateContextPreviewMedia(videoEl, node.posterSrc, environment, 'poster')
+    hydrateContextPreviewMedia(videoEl, videoUrl, environment)
+    hydrateContextPreviewMedia(videoEl, posterUrl, environment, 'poster')
 }
 
 function renderContextImagePreview(node: ImageCanvasNode, label: string, environment: ContextPreviewEnvironment, size: 'mini' | 'large'): HTMLElement {
+    const previewUrl = buildAssetRenditionPath(node.assetId, 'preview')
     const imageEl = html`<img
         className=${`workspace-ai-chat-panel-context-preview-image workspace-ai-chat-panel-context-preview-image-${size}`}
-        src=${buildContextPreviewInitialMediaSrc(node.src)}
+        src=${buildContextPreviewInitialMediaSrc(previewUrl)}
         alt=""
         loading="lazy"
     />` as HTMLImageElement
     imageEl.setAttribute('aria-label', label)
-    hydrateContextPreviewMedia(imageEl, node.src, environment)
+    hydrateContextPreviewMedia(imageEl, previewUrl, environment)
     return imageEl
 }
 
@@ -251,9 +258,6 @@ function renderContextPreviewVisual(
 }
 
 function getContextPreviewPopoverOrientation(node: ImageCanvasNode | VideoCanvasNode): ContextPreviewPopoverOrientation {
-    if (Number.isFinite(node.aspectRatio) && node.aspectRatio > 0) {
-        return node.aspectRatio < 1 ? 'portrait' : 'landscape'
-    }
     return node.dimensions.height > node.dimensions.width ? 'portrait' : 'landscape'
 }
 

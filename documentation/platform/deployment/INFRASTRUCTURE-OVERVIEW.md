@@ -165,6 +165,28 @@ if (!DEPLOY_TO_AWS) return { dynamoDBtables }
 // ... everything else runs only for real AWS stacks
 ```
 
+### Staged legacy-table removal
+
+The Asset/Blob cutover removed the document, chat-thread, and media-library tables from the active table contract. Production tables had DynamoDB deletion protection, so their infrastructure removal requires two Pulumi deployments against the same stack:
+
+1. Before the removal window, set `LEGACY_STORAGE_REMOVAL_STAGE=retain` explicitly. Pulumi retains the inert legacy resource URNs and keeps production deletion protection enabled.
+2. Set `LEGACY_STORAGE_REMOVAL_STAGE=disable-protection` and deploy. Pulumi retains the same resource URNs and updates only `deletionProtectionEnabled` to `false`.
+3. Set `LEGACY_STORAGE_REMOVAL_STAGE=remove` (or unset it, because `remove` is the completed phase-11 default) and deploy again. The legacy definitions are absent, so Pulumi deletes the now-unprotected tables.
+
+Do not skip the disable-protection deployment on a stack that still owns protected resources. Do not set `retain` again after removal because that would redeclare the retired tables. Local DynamoDB definitions contain only the current tables and do not participate in this removal gate.
+
+Legacy Object Store buckets were created dynamically and are not Pulumi
+resources. After the revision-2 archive/rollback artifact is verified and the
+cutover release is active, enumerate NATS Object Stores and delete only the
+retired families `workspace-<workspaceId>-files` and
+`media-library-<scope>-<scopeOwnerId>-files` through the NATS administrative
+path. [`remove-legacy-object-stores.ts`](../../../services/api/src/debug-tools/remove-legacy-object-stores.ts)
+enumerates those exact retired families in dry-run mode and requires
+`--confirm-delete-legacy-object-stores` before calling the destructive Object
+Store operation. It always excludes `blobs-<organizationId>-files`; those are
+the active content-addressed buckets. Current Workspace deletion contains no
+bucket-lifecycle call.
+
 ### Deployment Order
 
 Pulumi figures out the dependency graph automatically, but the program is written in the order that matches the dependency chain. A few edges are explicit via `dependsOn`:
@@ -243,7 +265,7 @@ flowchart LR
 
 **Why NATS sits in public subnets.** Browsers connect directly to NATS over WebSocket-Secure. Putting NATS tasks in public subnets means each Fargate task gets a routable public IP, and the Lambda sidecar can publish those IPs to Route53.
 
-**Why api sits in private subnets.** The main app-command path reaches the API through NATS subjects, so the Fargate service does not need public ingress for normal workspace/document/thread operations or AI streaming. Outbound traffic (Auth0, OpenAI, Anthropic, Google, Stability) goes through the single NAT Gateway.
+**Why api sits in private subnets.** The main app-command path reaches the API through NATS subjects, so the Fargate service does not need public ingress for normal Workspace/Asset operations or AI streaming. Outbound traffic (Auth0, OpenAI, Anthropic, Google, Stability) goes through the single NAT Gateway.
 
 The API process also defines HTTP routes for media bytes, feature/media-library previews, workspace export/import, and health checks. Local development calls those routes directly through `VITE_API_URL`. The current AWS topology shown here does not create a public `api.*` route or a CloudFront API origin, so any production feature that depends on those HTTP routes needs an explicit front door before it can work from the hosted SPA.
 
@@ -261,7 +283,9 @@ The CPU/memory baseline is sized to accommodate the in-process LangGraph LLM wor
 
 For NATS request/reply subjects, there is nothing HTTP-shaped to route. The service pulls work off NATS subjects using **queue groups**. When you add another `api` task, it joins the same queue group, NATS starts distributing messages across the tasks, and no external load balancer needs to know about that subject.
 
-That does not remove the need for an HTTP front door for byte routes. The Express routes under `/api/files`, `/api/workspaces`, `/api/features`, and `/api/media-library` exist in the API service; exposing them from the hosted SPA is a separate deployment concern.
+That does not remove the need for an HTTP front door for byte routes. The Express routes under `/api/assets`, `/api/workspaces`, and `/api/features` exist in the API service; exposing them from the hosted SPA is a separate deployment concern.
+
+The revision-2 storage cutover removes the legacy document, chat-thread, and media-library tables after their deletion protection is disabled. Production therefore requires two explicitly staged removal deployments: `disable-protection`, then `remove`. Phase 11 defaults to the completed `remove` state so retired resources are not recreated; use explicit `retain` only before the removal window. Verify the revision-2 export/rollback artifact before the second deployment. Do not target-delete protected tables or bypass Pulumi state.
 
 ### Deployment Strategy
 
@@ -276,7 +300,7 @@ The service uses standard rolling deploy settings:
 
 Each service gets a `taskRole` with only the permissions it actually needs:
 
-- `api` — DynamoDB R/W on its bound tables, SSM read, CloudWatch Logs write. AI provider keys (OpenAI, Anthropic, Google, Stability) are passed via env vars; egress to vendor APIs flows through the NAT Gateway.
+- `api` — DynamoDB point, batch, query/scan, and `TransactWriteItems` access on its bound tables and indexes; SSM read; CloudWatch Logs write. AI provider keys (OpenAI, Anthropic, Google, Stability) are passed via env vars; egress to vendor APIs flows through the NAT Gateway.
 - `nats` — CloudWatch Logs + Secrets Manager read (for the TLS cert). Nothing else.
 
 {% callout type="note" %}
@@ -341,13 +365,17 @@ Highlights:
 | `USERS` | `userId` | — | |
 | `WORKSPACES` / `WORKSPACES_META` | `workspaceId` | — | Split for hot canvas state vs cold meta |
 | `WORKSPACES_ACCESS_LIST` | `userId / workspaceId` | LSI on createdAt, updatedAt | |
-| `DOCUMENTS` | `workspaceId / documentId` | LSI on createdAt, updatedAt | Documents partitioned by workspace |
-| `AI_CHAT_THREADS` | `workspaceId / threadId` | LSI on createdAt | Threads scoped per workspace |
+| `ASSETS` | `assetId` | — | Aggregate identity, documents, media, lineage, state, and counters |
+| `ASSETS_META` | `scopeAndOwner / assetId` | LSI on updatedAt | Scope/principal list projections |
+| `ASSETS_ACCESS_LIST` | `assetId / principalId` | — | Point authorization and grant cleanup |
+| `ASSET_REFERENCES` | `assetId / referenceKey` | — | Workspace placements and catalog lifetime references |
+| `BLOBS` | `blobKey` | — | Organization-qualified immutable-object registry |
+| `BLOB_REFERENCES` | `blobKey / referenceKey` | — | Idempotent Asset/Feature ownership of Blob objects |
 | `AI_TOKENS_USAGE_TRANSACTIONS` | `userId / transactionProcessedAt` | LSI x4 (document, model, org, formatted date) | Usage ledger |
 | `FINANCIAL_TRANSACTIONS` | `userId / transactionId` | LSI on status, createdAt, provider | Billing |
 | `AI_MODELS_LIST` | `provider / model` | — | Provider/model registry |
 
-All real-AWS stacks enable DynamoDB **streams** with `NEW_AND_OLD_IMAGES` (skipped only for local DynamoDB). **Deletion protection** is additionally enabled on production stacks only.
+The six Asset/Blob tables have no GSIs; `ASSETS_META.updatedAt` is their only secondary index. All real-AWS stacks enable DynamoDB **streams** with `NEW_AND_OLD_IMAGES` (skipped only for local DynamoDB). **Deletion protection** is additionally enabled on production stacks only. Retired document/thread/media-library table definitions exist only inside the explicit staged-removal helper and are excluded from the normal resource set.
 
 ## How Services Communicate — End to End
 
@@ -409,8 +437,9 @@ sequenceDiagram
         Note over Browser, AI: PHASE 5 - STREAM BACK
         loop Token Streaming
             AI-->>API: chunk
-            API->>NATS: publish receiveMessage.{workspaceId}.{threadId}
-            NATS-->>Browser: chunk
+            API->>NATS: publish canonical receiveMessage.{scopeId}.{pipelineId}
+            API->>NATS: relay to receiveMessage.{userIdToken}.{scopeId}.{pipelineId}
+            NATS-->>Browser: authorized chunk
         end
         deactivate AI
         deactivate API
@@ -420,7 +449,7 @@ sequenceDiagram
 
 Two things to note:
 
-1. **AI events flow directly from API to NATS.** The API does the setup work (DynamoDB lookup, context enrichment, auth), then runs the LangGraph workflow in-process. Live pipeline events publish to a subject the browser is already subscribed to, while AI chat text is mirrored into ProseMirror document steps with short-lived JetStream replay logs. Streaming latency is dominated by the AI provider, not by Lixpi's infrastructure.
+1. **AI events flow from API to NATS through authorized relays.** The API does the setup work (DynamoDB lookup, context enrichment, auth), then runs the LangGraph workflow in-process. Live pipeline events publish to an internal canonical subject and are relayed to a tokenized browser subject only after authorization; AI chat text is mirrored into internal ProseMirror document steps with authorized replay/live relays. Streaming latency is dominated by the AI provider, not by Lixpi's infrastructure.
 2. **Scale-out is drop-in.** Add a second `api` task and NATS starts splitting `ai.interaction.chat.sendMessage` messages between the two workers automatically. No load balancer config to update.
 
 ## Related Pages

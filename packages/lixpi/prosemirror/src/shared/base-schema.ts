@@ -73,8 +73,7 @@ export const nodes = {
             src: {},
             alt: { default: null },
             title: { default: null },
-            fileId: { default: null },
-            workspaceId: { default: null },
+            assetId: { default: null },
             width: { default: null },
             alignment: { default: 'left' },
             textWrap: { default: 'none' },
@@ -95,8 +94,7 @@ export const nodes = {
                         src: img.getAttribute('src'),
                         title: img.getAttribute('title'),
                         alt: img.getAttribute('alt'),
-                        fileId: img.getAttribute('data-file-id'),
-                        workspaceId: img.getAttribute('data-workspace-id'),
+                        assetId: img.getAttribute('data-asset-id'),
                         width: dom.getAttribute('data-width'),
                         alignment: dom.getAttribute('data-alignment') || 'center',
                         textWrap: dom.getAttribute('data-text-wrap') || 'none',
@@ -110,8 +108,7 @@ export const nodes = {
                         src: dom.getAttribute('src'),
                         title: dom.getAttribute('title'),
                         alt: dom.getAttribute('alt'),
-                        fileId: dom.getAttribute('data-file-id'),
-                        workspaceId: dom.getAttribute('data-workspace-id'),
+                        assetId: dom.getAttribute('data-asset-id'),
                         width: null,
                         alignment: 'center',
                         textWrap: 'none',
@@ -120,12 +117,11 @@ export const nodes = {
             },
         ],
         toDOM(node) {
-            const { src, alt, title, fileId, workspaceId, width, alignment, textWrap } = node.attrs
+            const { src, alt, title, assetId, width, alignment, textWrap } = node.attrs
             const imgAttrs: Record<string, string> = { src }
             if (alt) imgAttrs.alt = alt
             if (title) imgAttrs.title = title
-            if (fileId) imgAttrs['data-file-id'] = fileId
-            if (workspaceId) imgAttrs['data-workspace-id'] = workspaceId
+            if (assetId) imgAttrs['data-asset-id'] = assetId
 
             const figureAttrs: Record<string, string> = {
                 class: `pm-image-wrapper pm-image-align-${alignment} pm-image-wrap-${textWrap}`,

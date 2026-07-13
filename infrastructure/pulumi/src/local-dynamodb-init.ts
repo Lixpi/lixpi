@@ -46,7 +46,7 @@ async function tableExists(tableName: string): Promise<boolean> {
 }
 
 async function createTables() {
-    const tableDefs = getTableDefinitions()
+    const tableDefs = Object.values(getTableDefinitions())
 
     console.log(`Creating DynamoDB tables in ${DYNAMODB_ENDPOINT}...`)
     console.log(`Stage: ${process.env.STAGE}, Org: ${process.env.ORG_NAME}`)
@@ -77,16 +77,6 @@ async function createTables() {
                             { AttributeName: lsi.rangeKey, KeyType: 'RANGE' as const },
                         ],
                         Projection: { ProjectionType: lsi.projectionType },
-                    })),
-                }),
-                ...(table.globalSecondaryIndexes && {
-                    GlobalSecondaryIndexes: table.globalSecondaryIndexes.map(gsi => ({
-                        IndexName: gsi.name,
-                        KeySchema: [
-                            { AttributeName: gsi.hashKey, KeyType: 'HASH' as const },
-                            ...(gsi.rangeKey ? [{ AttributeName: gsi.rangeKey, KeyType: 'RANGE' as const }] : []),
-                        ],
-                        Projection: { ProjectionType: gsi.projectionType },
                     })),
                 }),
             }))

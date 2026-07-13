@@ -1,178 +1,149 @@
 # LLM Module
 
-The in-process LangGraph workflow that orchestrates AI provider streaming. It replaces the standalone Python `services/llm-api/` Fargate service that previously did this work; the TypeScript LangGraph package now covers the workflow features Lixpi needs.
+The in-process TypeScript LangGraph workflow for conversation streaming, context resolution, multi-model media generation, Asset lineage, provenance, usage, and cancellation.
 
-## What it does
+## Storage contract
 
-- Receives a chat request from the NATS gateway handler (`services/api/src/NATS/subscriptions/ai-interaction-subjects.ts`).
-- Starts the top-level chat stream immediately, then runs a LangGraph state machine per provider: `resolveWorkspaceContext → resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration` or `executeVideoGeneration` → `calculateUsage → cleanup`.
-- Publishes live chat pipeline events to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) — the API HTTP server is not in the streaming path.
-- Persists chat pipeline events to a workspace JetStream log before live publish, so refreshed or second clients can replay missed branch, lineage, media, and extraction events through `CHAT_PIPELINE_RESUME`.
-- Mirrors AI chat text and generated-media transcript mutations into a workspace ProseMirror JetStream step log through `AiChatProseMirrorStreamAssembler`, so browser clients render API-authored `START` / `STEP` / `END` events instead of parsing raw tokens.
-- Publishes media events with concrete `mediaRunId` values through per-run response queues, preserving partial-before-complete ordering inside one run while allowing sibling image/video variants to publish independently.
-- Stops the complete matrix request by `generationRequestId`: the registry aborts and awaits every grouped reasoning/media provider, the shared ProseMirror assembler clears receiving/initial animation flags on every matching response and reasoning section, closes matching streaming prompt blocks, settles pending video transcript atoms, and persists the cancelled snapshot before stop completion. Cancellation also upgrades terminal canvas settlement even if a provider already emitted request-complete, removes every API-projected pending/partial media node for that request from persisted canvas state, and publishes the authoritative node removals back to clients. The request publisher stays addressable for the pipeline replay-retention window so a stop arriving just after provider teardown still performs the same cleanup. If the API has restarted or the request group/publisher is already gone, the stop path directly patches the stored AI chat thread by `generationRequestId` and runs the persisted canvas cancellation mutation, so cleanup does not depend on in-memory orchestration state. `CHAT_STOP_MESSAGE` is request/reply; success is returned only after this durable cancellation path completes.
-- Routes dual-model image/video generation: text model emits `generate_image` or `generate_video`, then the workflow spawns a transient image-model provider or VEO video provider that stores the generated media in NATS Object Store.
-- Routes multi-model media matrix requests by running one shared workspace/branch preflight, starting one reasoning run per selected reasoning model, then fanning each emitted media prompt out to the selected image or video models with per-run stream metadata and per-model media options from API-authored configuration groups.
-- Plans media branch topology in the API for media-enabled requests, including branch origin/fork marker IDs, lineage parent IDs, neutral branch-root provenance when needed, and per-run generated-media lineage assignments.
-- Assigns reasoning/media run metadata through a shared media-agnostic run planner, so image and video providers only receive already-planned run IDs and lineage assignments instead of deciding topology themselves.
-- Publishes `IMAGE_GENERATION_TRACE` and `VIDEO_GENERATION_TRACE` events immediately before invoking transient media providers, and mirrors those trace plus final media events into the authoritative ProseMirror stream. These traces contain the text-model tool prompt, routed media prompt, selected/excluded reference candidates, and preview-safe reference URLs when available.
-- Computes token, image, and video usage costs via `decimal.js` pricing math against the model's pricing metadata. The reporter currently logs/returns the calculations; publishing usage events is still pending.
+- A conversation is an Asset with a `conversation` ProseMirror role.
+- Every concrete image/video run receives a pending output Asset before provider fan-out.
+- Media bytes and document/provenance JSON are organization content-addressed Blobs.
+- Canvas nodes contain `assetId`; node IDs remain independent topology identities.
+- The conversation streams once. Output provenance is projected from the settled conversation Asset at terminal state.
 
-Frontend code must not recreate this orchestration. Branching, reasoning-run fanout, context relevance, resolver decisions, media lineage topology, marker provenance, and run assignments are API responsibilities. The browser may submit snapshots and render stream results, but any decision that changes generated-media graph state must be represented here or in another backend service through a typed contract.
+There is no document/chat-thread persistence model or workspace file storage adapter in this module.
 
-## Public surface
+## Entry points
 
-```typescript
-import { createLlmModule } from './llm/index.ts'
-import { storeWorkspaceImage } from './services/image-storage.ts'
-import { storeWorkspaceVideo } from './services/video-storage.ts'
+`createLlmModule()` returns:
 
-const llmModule = createLlmModule({
-    natsService: await NATS_Service.getInstance(),
-    storeWorkspaceImage,
-    storeWorkspaceVideo,
-})
+- `process()` for a single reasoning request;
+- `processMediaGenerationMatrix()` for shared-preflight multi-model fan-out;
+- `stop()` and `stopMediaGenerationMatrix()`;
+- `shutdown()`;
+- `getSubscriptions()` (currently empty because the API gateway invokes the module in-process).
 
-// Used by the gateway handler
-await llmModule.process(instanceKey, providerName, requestData)
+The NATS gateway authenticates the conversation Asset, acquires its workspace lease, obtains the authoritative `organizationId` from the Asset, and renews the lease while the workflow runs.
 
-// Used by the gateway handler for multi-model media sends
-await llmModule.processMediaGenerationMatrix(requestData)
+## Workflow
 
-// Used by the stop handler
-await llmModule.stop(instanceKey)
-await llmModule.stopMediaGenerationMatrix({ workspaceId, aiChatThreadId, generationRequestId })
-
-// Used on SIGINT
-await llmModule.shutdown()
+```text
+resolveWorkspaceContext
+  → resolveFeatures
+  → resolveMediaBranch
+  → planMediaBranchLineage
+  → validateRequest
+  → streamTokens
+  → generate_image | generate_video | skip
+  → calculateUsage
+  → cleanup
 ```
 
-The factory returns `{ process, processMediaGenerationMatrix, stop, stopMediaGenerationMatrix, shutdown, getSubscriptions }`. `getSubscriptions()` is currently `[]` because the gateway invokes `process()` in-process. It marks the intended boundary for a future worker split, but the worker subscriptions still need to be implemented before a separate `llm-workers` service can run.
+Context snapshots contain node/Asset IDs and descriptors. The API point-authorizes selected Assets and resolves model-safe Blob URLs. Video candidates use representative-frame/poster renditions; explicit extension resolves the authorized source video Asset to canonical/original MP4 internally.
+
+## Streams
+
+Live interaction events:
+
+```text
+ai.interaction.chat.receiveMessage.<organizationId>.<conversationAssetId>               # internal canonical
+ai.interaction.chat.receiveMessage.<userIdToken>.<organizationId>.<conversationAssetId> # authorized browser relay
+```
+
+Pipeline replay logs are keyed by workspace and conversation pipeline ID. `StreamPublisher` writes replay before live publication and preserves per-`mediaRunId` event ordering without serializing sibling runs.
+
+Conversation document steps use:
+
+```text
+asset.document.steps.<organizationId>.<conversationAssetId>.conversation               # internal durable
+asset.document.events.<userIdToken>.<organizationId>.<conversationAssetId>.conversation # authorized browser relay
+```
+
+`AiChatProseMirrorStreamAssembler` is the single writer for AI transcript steps. It parses streamed Markdown, updates reasoning/trace/generated-media nodes, and publishes expected-sequence step/control events through `AssetProseMirrorStepTransport`.
+Before provider invocation, the API rebuilds messages and the current prompt from that authoritative conversation document; browser-serialized transcript history and prompt fingerprints are not trusted.
+
+## Media preflight and Asset creation
+
+`MediaBranchLineagePlanner` enumerates reasoning/media axes and returns marker topology plus one `MediaRunLineageAssignment` per concrete output. Each assignment includes its stable `assetId`.
+
+Shared preflight creates pending Assets with:
+
+- workspace scope/catalog and conversation/media surface reference;
+- owner ACL and Meta projection;
+- `creating/processing/building` states;
+- `sourceConversationAssetId`;
+- `parentAssetId` and `sourceAssetIds` resolved from authorized node-to-Asset maps;
+- generation/reasoning/media IDs and prompt fingerprint.
+
+Providers and browser code must never synthesize assignments, marker IDs, or output Asset IDs.
+A reasoning-only matrix has no concrete media assignments, so it creates no pending output Assets or media-lineage canvas markers.
+
+## Image and video publishers
+
+Image partials are ephemeral data URLs and are never Blob renditions. Final publishers:
+
+1. validate provider bytes;
+2. store/register the original Blob on the preassigned Asset;
+3. start the rendition service;
+4. project and attach the final canvas node through the Asset transaction;
+5. publish `IMAGE_COMPLETE` or `VIDEO_COMPLETE` with `assetId` and authoritative canvas geometry;
+6. materialize terminal provenance, queuing a rebuild on failure.
+
+Canvas attach failure propagates; the publisher does not emit a fabricated durable completion.
+
+## Provenance
+
+`asset-provenance-materializer.ts` projects only the matching reasoning/media run from the settled conversation Asset into a schema-valid, title-free ProseMirror provenance snapshot. It stores the sealed snapshot Blob in `documents.provenance` and updates terminal states under Asset revision. A completed run retries while the rich conversation projection is still settling, then uses a minimal valid terminal projection only after bounded retries are exhausted. Failed/cancelled runs receive the same minimal valid terminal projection when no generated-media atom exists. Deferred reconstruction does not depend on pipeline events that normal cleanup may already have purged.
+
+Request-level failure/cancellation settles every unfinished planned Asset. Assets whose original already settled rely on their per-publisher provenance job/retry.
+
+Pipeline cleanup may discard source events after terminal delivery because deferred provenance reconstruction reads the settled conversation Asset.
+
+## Cancellation
+
+Matrix stop aborts and awaits provider groups, patches cancelled state into the persisted conversation Asset through the system snapshot path, settles canvas removals using the retained lineage plan, materializes cancelled provenance for unfinished outputs, drains projection/document queues, and releases the lease.
+
+If no live publisher exists, the API still performs persisted conversation cancellation and canvas settlement. It never depends solely on browser state.
 
 ## File layout
 
-```
-src/
-    settings.ts                  # API-owned defaults, including mediaDescriptor.defaultVlmModelId
-src/llm/
-    index.ts                     # createLlmModule({ natsService, storeWorkspaceImage, storeWorkspaceVideo })
-    config.ts                    # LLM_TIMEOUT_MS, VEO_POLL_INTERVAL_MS, BYTEPLUS_ARK_BASE_URL, BYTEPLUS_VIDEO_POLL_INTERVAL_MS
-    graph/
-        state.ts                 # ProviderState type + channel reducers (partial-overlay semantics)
-        stream-publisher.ts      # START_STREAM, STREAMING, END_STREAM + image/video trace/error events; per-media-run publish queues; single-writer streams also mirror ProseMirror steps
-        pipeline-event-log.ts    # Workspace JetStream replay log for chat/media/extraction pipeline events
-        image-publisher.ts       # IMAGE_PARTIAL, IMAGE_COMPLETE + content-hash deduped storage and API canvas projection
-        video-publisher.ts       # VIDEO_PENDING, VIDEO_GENERATING, VIDEO_COMPLETE, VIDEO_ERROR
-        workspace-context-resolver.ts # Descriptor-first workspace relevance resolver
-        image-branch-resolver.ts # Structured VLM target/reference resolver for image and video generation
-    lineage/
-        media-branch-lineage-planner.ts # API-owned branchOrigin/branchFork topology and run assignments
-        media-generation-run-planner.ts # Shared reasoning/media run IDs, media run enrichment, and event metadata
-    media-descriptor.ts          # Structured-VLM media still/text descriptor step used by uploads, generated final frames, and descriptor self-heal
-    providers/
-        base-provider.ts         # Abstract BaseProvider — owns the StateGraph, AbortController, workflow nodes
-        provider-registry.ts     # Map<instanceKey, provider> + active-task dedupe via Map<string, AbortController>
-        openai-provider.ts       # OpenAI Responses API + Image API (gpt-image-*)
-        anthropic-provider.ts    # Anthropic messages.stream() + tool_use blocks
-        google-provider.ts       # Google generateContentStream + native image generation + VEO submit/poll/download and input-mode config
-        byteplus-provider.ts     # BytePlus ModelArk Seedance 2.0 (video-only: create/poll/download)
-        byteplus-video-types.ts  # Typed ModelArk REST client + buildSeedanceContent + pollVideoGenerationTask
-        stability-provider.ts    # Stability v2beta REST (multipart, no streaming, reference pixel-cap resizing)
-    orchestration/
-        media-generation-matrix.ts # Normalizes multi-model media requests, resolves model metadata, runs shared preflight, starts grouped reasoning runs
-    tools/
-        image-generation.ts      # Tool definition, per-provider format builders, tool-call extractors
-        image-generation-trace.ts # Final image-model prompt + reference-image trace payload builder
-        image-router.ts          # Spawns transient image-model provider for generate_image tool calls
-        video-generation.ts      # Tool definition, per-provider format builders, tool-call extractors
-        video-generation-trace.ts # Final video-model prompt (shared core + VEO/Seedance profiles) + reference trace builder
-        video-router.ts          # Spawns transient video provider (VEO or BytePlus/Seedance) for generate_video tool calls; provider-aware reference cap
-    utils/
-        attachments.ts           # nats-obj:// resolver, magic-byte MIME detection, sharp downscaling
-    prompts/
-        load-prompts.ts          # readFileSync at module load
-        system.txt               # Base system prompt
-        image_generation_instructions.txt
-        video_generation_instructions.txt
-        anthropic_code_block_hack.txt
-    ../prosemirror/
-        ai-chat-stream-assembler.ts    # API-side markdown parser + ProseMirror step author for AI chat threads
-        prosemirror-step-transport.ts  # Workspace JetStream step stream ensure/publish/replay helpers
-    usage/
-        usage-reporter.ts        # decimal.js token, image, and video pricing math
+```text
+llm/
+├── graph/
+│   ├── state.ts
+│   ├── stream-publisher.ts
+│   ├── pipeline-event-log.ts
+│   ├── workspace-context-resolver.ts
+│   ├── media-branch-resolver.ts
+│   ├── image-publisher.ts
+│   └── video-publisher.ts
+├── lineage/
+│   ├── media-branch-lineage-planner.ts
+│   └── media-generation-run-planner.ts
+├── orchestration/media-generation-matrix.ts
+├── providers/
+├── tools/
+├── extraction/
+├── prompts/
+└── usage/
+
+../prosemirror/ai-chat-stream-assembler.ts
+../prosemirror/asset-prosemirror-step-transport.ts
+../services/asset-canvas-projection.ts
+../services/generated-asset-storage.ts
+../services/asset-provenance-materializer.ts
 ```
 
-## LangGraph workflow
+## Provider invariants
 
-```
-resolveWorkspaceContext
-    ↓
-resolveFeatures
-    ↓
-resolveImageBranch (structured VLM; no-op unless an image or video model is selected)
-    ↓
-planMediaBranchLineage (API-owned media branch topology; no-op without media)
-    ↓
-validateRequest
-    ↓
-streamTokens (provider-specific streamImpl)
-    ↓
-routeAfterStream?
-    ↓ generate_image                 ↓ generate_video          ↓ skip
-validateImagePrompt                  executeVideoGeneration    |
-    ↓                                ↓                         |
-shouldGenerateImage? (post-rewrite)  calculateUsage ←──────────┘
-    ↓ generate_image  ↓ skip         ↑
-executeImageGeneration ──────────────┘
-    ↓
-cleanup
-    ↓
-END
-```
+- Provider state updates are partial overlays; undefined fields do not erase state.
+- Transient media providers do not emit their own top-level start/end lifecycle.
+- Reference traces never contain inline image bytes.
+- Provider routers receive exact preplanned run metadata.
+- Usage uses synchronized model pricing and decimal arithmetic.
+- Every request has an AbortController and the global timeout.
 
-Top-level chat requests publish `START_STREAM` before graph invocation. This keeps the API-side stream lifecycle active while pre-stream work such as workspace relevance, `/use` resolution, branch VLM resolution, image URL fetches, and image downscaling runs. `StreamPublisher` records each pipeline event to a workspace JetStream subject before publishing the live `receiveMessage` event; clients call `CHAT_PIPELINE_RESUME` with their last stream sequence after reconnecting or mounting a second tab. Non-media events publish on the main response queue. Media events that carry a concrete `generationRun.mediaRunId` publish on that run's own queue, so one image/video run preserves its event order without waiting for a sibling run's JetStream write. For single-writer chat streams, `StreamPublisher` mirrors token content through the API-side `AiChatProseMirrorStreamAssembler`, which runs `@lixpi/markdown-stream-parser`, applies the shared ProseMirror assembly rules, and writes `START` / `STEP` / `END` events to the per-document JetStream subject. Browser clients apply text through that document step subject rather than parsing raw token events. Transient image-model providers spawned by `ImageRouter` and `VideoRouter` still skip their own `START_STREAM`/`END_STREAM`; the parent chat stream owns that lifecycle, receives their trace/partial/complete events through the same pipeline publisher, flushes the ProseMirror text phase as soon as the raw assistant stream ends, and defers only the final ProseMirror `END` until `cleanup` so the persisted thread includes generation details and final media atoms. Provider cleanup must await that finalization promise; otherwise a page refresh can cold-load the previous snapshot before DynamoDB has the generated-media transcript.
+## Related docs
 
-`resolveWorkspaceContext` runs first on every request carrying a `WorkspaceContextSnapshot`. It ranks compact node descriptors with the resolver model config (falling back to the chat text model), force-includes explicit chips and edge-forced nodes, and runs one bounded self-heal round for selected nodes whose descriptors are missing, failed, analyzing, thin, or explicitly flagged by the ranker. Improved descriptors are persisted through a targeted `canvasState.nodes[index].descriptor` patch, emitted on `CONTEXT_RELEVANCE_RESOLVED`, and used for one rerank before selected document/thread/media context is prepended to `state.messages` and `imageBranchCandidateSnapshot` is narrowed to the selected media set. When a branch snapshot already exists, auto-selected workspace media outside that snapshot is ignored; only forced chips and edge-forced media may expand it. Missing snapshots no-op so older call sites do not crash.
-
-`resolveImageBranch` runs after workspace relevance and `/use` feature resolution, before the chat provider streams. It consumes the narrowed `imageBranchCandidateSnapshot`, normalizes candidate media URLs once, calls the structured VLM client when candidates exist, publishes `IMAGE_BRANCH_RESOLVED`, and rewrites `state.messages` so only VLM-selected candidate images reach provider `extractReferenceImages()`. Empty candidate snapshots are resolved in the API as fresh generated branches without a VLM call. The same resolver is used for video generation; video candidates contribute a representative still (`frameFileId`, falling back to poster) and the selected result maps to VEO first-frame or reference-image inputs. When the snapshot includes `activeTargetNodeId` / an `active-target` role hint, the resolver prompt treats that candidate as a weak UI selection hint for purely deictic edit prompts while still requiring the selected pixels to match any explicit subject named by the user. For example, a selected goat must not win a prompt that says "that man"; the resolver should choose a visible man candidate or return ambiguous. If the selected target/identity reference is an existing generated candidate, the resolver continues that generated branch even for substantial palette or medium changes; targetless `fresh-branch` is reserved for genuinely new subjects with no generated target. Feature sample references injected by `resolveFeatures` are preserved; only candidate image blocks from the workspace snapshot are stripped/replaced. The selected reference message reuses the resolver-normalized image URLs so the chat provider and media routers do not downscale the same candidate refs again.
-
-For media-enabled requests, `MediaBranchLineagePlanner` runs immediately after branch resolution. It publishes `MEDIA_LINEAGE_PLANNED` with branch origin/fork marker IDs, marker provenance, lineage parent IDs, and run assignments. Branch forks are reasoning-run markers: multiple reasoning models produce separate forks, while multiple image/video models under the same reasoning run share that reasoning fork and fan out from it. When no lineage source exists, that reasoning fork is the visible root marker rather than being wrapped in a separate neutral origin. Those assignments are copied into `generationRun.lineageAssignment` before reasoning and media fanout, so image/video events carry API-owned topology. Matrix requests run the planner once in shared preflight and pass the plan to every reasoning child; single media requests run it as the graph's `planMediaBranchLineage` node.
-
-Lineage planning is an API-only contract. Provider routers, media routers, and browser code must not synthesize missing lineage assignments, recover marker IDs from model counts, or fall back to older reasoning-level metadata when a concrete media run is missing its exact assignment. Missing lineage is a planner/stream-ordering/data issue to fix in the API path.
-
-Generated-media canvas projection is also API-owned. The lineage-plan projection creates pending image slots for planned image assignments only; video slots are not inserted until an actual video generation event starts, so a default selected video model cannot leave a phantom pending video node after an image-only tool call. Partial image frames and final image/video outputs persist their generated-media node snapshots, fitted dimensions, connector edges, and branch-marker geometry before their stream events carry `canvasGeometry` to clients. The terminal request-settle pass removes any unresolved pending media nodes for the request that never received stored bytes. Browsers apply those snapshots and removals; they must not create alternate media node IDs or locally rebalance partial/final outputs for API lineage runs.
-
-`MediaBranchLineagePlanner` treats uploaded/source/reference media as context only. A media node becomes `parentMediaNodeId` only when it is already a generated branch member selected by the API as a continuation target. Reference-only video/image requests are rooted through a planned `branchOrigin` or chat/thread source, never by drawing a lineage edge from the uploaded source media itself.
-
-`MediaGenerationRunPlanner` is the separate run metadata layer used by the single-request graph, matrix orchestrator, `ImageRouter`, and `VideoRouter`. It owns stable `reasoningRunId` / `mediaRunId` construction, event metadata enrichment, and copying a run's `MediaRunLineageAssignment` onto concrete image/video media runs. Provider-specific media routers must not duplicate branching or lineage-parent logic.
-
-When the text provider emits `generate_image`, `BaseProvider.executeImageGeneration()` builds and publishes an `IMAGE_GENERATION_TRACE` payload before calling `ImageRouter`. When it emits `generate_video`, `BaseProvider.executeVideoGeneration()` builds and publishes `VIDEO_GENERATION_TRACE` before calling `VideoRouter`. The router and trace builders share prompt helpers so the prompt shown in chat is the exact prompt routed to the transient media provider, including `/use` feature-transfer wrapping when present. Traces must never carry inline image data. Branch references point back to workspace media objects, and `/use` feature sample references point to the authenticated feature sample route, so persisted chat history can render reference thumbnails after a page reload without storing image bytes in NATS stream payloads or ProseMirror state. Image router failures publish `IMAGE_ERROR` with the same media `generationRun` so the browser can remove only that failed placeholder, even when sibling media variants continue.
-
-The Seedance video prompt profile uses affirmative quality wording, omits the negative-prompt line, and adds an image-safety context that preserves visible reference characteristics when selected image-conditioned references are generated or visibly stylized canvas media.
-
-For multi-model media matrix requests, `MediaGenerationMatrixOrchestrator` resolves the selected models, normalizes media settings per selected model from `imageOptions.configGroups` and `videoOptions.configGroups`, runs workspace context, `/use` feature, branch resolution, and media lineage planning once, then forwards the complete resolved patch into every reasoning child with `preflightResolved`. Because that flag makes each child's provider graph skip the resolver nodes, the fanout propagates the whole patch every resolver emitted — rewritten `messages`, workspace context resolution, the narrowed `imageBranchCandidateSnapshot` used later by generation traces to render stored reference previews, the image/feature reference images, and the VLM-selected `videoFirstFrameImage` / `videoReferenceImages` — rather than a hand-picked subset, so reference inputs for images, video, and any future media modality stay intact through fanout. The shared preflight is the single source of truth for what is forwarded: it returns exactly the accumulated resolver patches, so a new resolved field is carried to children without editing the fanout. Optional section-mode flags on the matrix request gate stale model arrays and config groups, so disabled image/video multi-model sections collapse to their scalar model settings before API fanout. Each reasoning child keeps its own `generationRun.reasoningRunId` and API lineage assignment; when a media tool call is emitted, the shared provider path fans out across the selected media models and gives each router call a `mediaRunId` plus the media options normalized for that provider/model. Transient media providers use those run ids in their instance keys, trace events, partial events, complete events, and usage metadata so parallel variants do not collide. Matrix child media lifecycle events are mirrored into the shared ProseMirror/canvas path and also live-published without a second ProseMirror mirror, so `IMAGE_PARTIAL`, `IMAGE_COMPLETE`, `IMAGE_ERROR`, and video lifecycle events reach connected browsers as independent run events.
-
-Each provider subclasses `BaseProvider` and implements `streamImpl(state)` — everything else is shared.
-
-State updates flow through LangGraph channels with a "keep if undefined" reducer (`graph/state.ts`), giving the same partial-overlay semantics as Python's `TypedDict(total=False)`. A node returning `{ partialField: 'x' }` only mutates `partialField`; all other fields are preserved.
-
-## Cancellation & timeouts
-
-Every `process(...)` call gets an `AbortController`. The 20-minute circuit breaker (`LLM_TIMEOUT_MS = LLM_TIMEOUT_SECONDS * 1000`) aborts mid-stream if a request runs too long. The `stop(instanceKey)` API also aborts, propagating into the vendor SDK call via `{ signal }`.
-
-## Future split
-
-If LLM streaming workload grows enough to want deployment isolation from the gateway:
-1. Implement the `getSubscriptions()` entries that route chat and stop subjects to `process()` / `stop()` from a worker process.
-2. Deploy the same Docker image as `llm-workers` with a different CMD that subscribes to NATS via those entries instead of running the Express server.
-3. Update Pulumi to add the `llm-workers` ECS service with the broader CPU/memory and AI provider env vars.
-4. Restore a `serviceAuthConfigs` entry in the auth callout for `svc:llm-workers` (see `documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`).
-
-Most of the workflow code can stay in `src/llm/`; the missing piece is the worker-facing subscription layer.
-
-## Reference
-
-- [`documentation/platform/SYSTEM-ARCHITECTURE.md`](../../../documentation/platform/SYSTEM-ARCHITECTURE.md) — system-wide architecture overview.
-- [`documentation/platform/AI-GENERATION-PIPELINE.md`](../../../documentation/platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow this module implements.
-- [`documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`](../../../documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md) — auth pattern preserved from the original Python service.
-- [`@langchain/langgraph` JS docs](https://github.com/langchain-ai/langgraphjs).
+- [`documentation/platform/AI-GENERATION-PIPELINE.md`](../../../documentation/platform/AI-GENERATION-PIPELINE.md)
+- [`documentation/media-generation/BRANCH-LINEAGE.md`](../../../documentation/media-generation/BRANCH-LINEAGE.md)
+- [`documentation/platform/DATA-STORAGE.md`](../../../documentation/platform/DATA-STORAGE.md)

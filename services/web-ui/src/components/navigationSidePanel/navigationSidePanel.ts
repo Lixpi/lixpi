@@ -347,10 +347,7 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
             if (currentWorkspaceId === workspaceId) {
                 const workspaceService = new WorkspaceService()
                 await workspaceService.getWorkspace({ workspaceId })
-                await Promise.all([
-                    servicesStore.getData('documentService').getWorkspaceDocuments({ workspaceId }),
-                    servicesStore.getData('aiChatThreadService').getWorkspaceAiChatThreads({ workspaceId }),
-                ])
+                await servicesStore.getData('assetService').loadWorkspaceAssets(workspaceId)
             }
         } catch (error) {
             console.error('Workspace import failed:', error)

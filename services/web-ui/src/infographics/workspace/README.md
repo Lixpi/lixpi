@@ -1,6 +1,6 @@
 # Workspace Canvas
 
-This module renders the main workspace view: a zoomable, pannable canvas where documents, images, videos, and branch lineage markers appear as draggable, resizable canvas nodes. The only AI prompt input is the screen-fixed composer at the bottom-center of the canvas; the right-side panel is a view-only surface for browsing and reopening past sessions (chat transcripts and feature-extraction runs). Persisted `aiChatThread` canvas records are accepted for compatibility, but normal chat sessions live in the right-side panel.
+This module renders the main workspace view: a zoomable, pannable canvas where Asset-backed documents, images, videos, and branch lineage markers appear as draggable, resizable canvas nodes. The only AI prompt input is the screen-fixed composer at the bottom-center of the canvas; the right-side panel is a view-only surface for browsing and reopening conversation Assets and feature-extraction runs. Conversations do not persist as canvas nodes.
 
 > **Where to look first.**
 >
@@ -27,8 +27,8 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
 - **Chat with AI** from the bottom-center composer; each submit creates a standalone session. The right-side panel opens as a view-only transcript of past sessions
 - **Upload files** via the toolbar button; the server sniffs the bytes, stores the original, and returns or later publishes the canonical canvas-safe media object
-- **Open the Media Library** from the independent bottom-right icon above the original zoom badge to browse Features, explicitly saved Images, or explicitly saved Videos; the canvas-owned full-height drawer shifts left when AI chat is open and covers its launcher while open
-- **Save media for reuse** from an image or video bubble menu; saved Media Library items are independent Object Store copies that survive removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same source media reuses the existing item instead of duplicating it
+- **Open the Media Library** from the independent bottom-right icon to browse Features and cataloged Assets
+- **Open Asset details** from any Asset-backed node; every created Asset already has its initial catalog reference and survives placement removal without copying bytes
 - **Connect nodes** by dragging from a handle, then use AI Chat composer context previews and workspace relevance to decide what the next prompt sees
 - **Provide AI context** from explicit composer previews while also sending a compact workspace descriptor snapshot with each chat turn
 - **Use the bottom-center canvas composer** to send prompts with context previews and workspace relevance
@@ -41,21 +41,21 @@ All of this happens without the Svelte component knowing the details. It just pa
 ## Node Types
 
 ### Document Nodes
-- Contain embedded ProseMirror editors with `documentType: 'document'`
+- Reference an Asset with a `content` role and embed a ProseMirror editor using `documentType: 'assetContent'`
 - Have a drag overlay at the top (20px)
 - Free resize (no aspect ratio constraint)
 - Support block-level content (paragraphs, headings, lists, etc.)
 
 ### Image Nodes
-- Display uploaded images from workspace storage
+- Resolve uploaded/generated image renditions from the node's `assetId`
 - Have a full-area drag overlay
 - Resize preserves aspect ratio (stored when image is uploaded)
-- Request workspace-object cleanup when removed from canvas; the API deletes bytes only after canonical canvas state no longer references the file, and explicitly saved Media Library copies are separate objects and remain available
-- Expose `Add to Media Library` in the bubble menu once their stored object is available; streaming generated-image placeholders hide the action until completion
+- Detach their Workspace reference atomically with canvas removal; zero-reference Asset and Blob cleanup is asynchronous
+- Expose Asset details once metadata is loaded; pending generation keeps its stable Asset identity
 
 ### Uploaded File Placeholders
-- File uploads insert an inert `uploadPlaceholder` node before the API returns. The placeholder is persisted in `canvasState`, carries no `fileId`, and is ignored by media descriptor analysis and Object Store cleanup.
-- The upload response supplies the model-safe object id and URL. Converted HEIC/HEIF/AVIF/TIFF and other non-model-safe inputs therefore replace the placeholder with a canonical image/video/audio/document node; the canvas never creates a media node from the preserved original bytes.
+- File uploads insert an inert `uploadPlaceholder` before the API returns. The placeholder carries no `assetId` and is ignored by descriptor analysis and Asset reference maintenance.
+- The upload response supplies an Asset ID. Once the required rendition is ready, the placeholder becomes an image/video/audio/document node containing only that `assetId` and canvas geometry.
 - Converting placeholders show the same compact ring loading indicator used by waiting AI responses and extraction sections.
 - Conversion failures mark the placeholder as failed instead of creating an image/video node that would trigger descriptor analysis against unsupported bytes.
 
@@ -67,7 +67,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Project generated-media provider/info chrome below the external control row for video nodes, so the model badge and info button stay below playback controls
 - Scrubbing pauses at the pressed timestamp, moves the control position immediately, writes the first video seek immediately, then applies the latest drag target as soon as the active seek settles so paused video frames keep updating during drag; it resumes on release only when the video was already playing
 - Support play/pause, seek, continuous speed, volume, and fullscreen without persisting playback state into `canvasState`
-- Expose `Add to Media Library` once their stored MP4 is available; videos still polling through VEO hide the action until completion
+- Resolve playback and Asset details from the same Asset while generated videos transition from pending to ready
 
 ### Uploaded Audio and Document Nodes
 - Uploaded audio nodes use an `audio` canvas node. PIXI renders the rounded audio geometry while a hidden DOM `<audio>` element owns playback metadata and controls.
@@ -84,6 +84,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Removing the last generated image/video that references a `branchOrigin` or `branchFork` also removes the temporary marker and any incident lineage edges, so lineage chrome cannot remain as unreachable canvas nodes
 - Depth spacing uses `settings.mediaBranchLineage.mediaToMediaGap`, plus `branchFanoutExtraGap` for each extra generated media node when a lineage forks; the first segment from a parentless root branch marker uses `rootToFirstMediaGap`, and the first segment from a temporary `branchOrigin` marker uses `branchOriginToFirstMediaGap`. `settings.mediaBranchLineage.nodeGap` is the minimum empty space reserved around every `branchOrigin`, `branchFork`, and `branchLine` marker during reference-root placement, on-canvas marker stacking, drag-release cleanup, and branch-tree rigid separation. Sibling spacing uses `branchRowGap` for generated media rows, while screen-projected preflight markers use `pendingMarkerInputGap` as their compact marker-to-marker gap. Pending stack reflow preserves the current top-to-bottom marker order and only runs for pending markers that do not already own generated-media children; branch-marker preview refresh follows the same rule and drops stale projection overrides for started markers. Completed fork/line markers are structural API run nodes in the tidy tree, so generated media fan out from the prompt/continuation node instead of a client-derived midpoint. The root keeps its anchor, generated media fan out symmetrically around its vertical center, and linear chains stay collinear. Before the first generated frame exists, tree placement uses the configured pre-frame circle size from `settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale` instead of the hidden full media box, so the visible pending node never sits farther away than the full generated media node will after frame arrival. Collision cleanup iterations and overlap thresholds are configured per canvas node type in `settings.workspaceCollision`; branch lineage marker margins are normalized from `nodeGap` so the same clearance applies across insertion, drag release, and generated-media rebalance. Final image/video aspect-ratio updates preserve the node center, then re-tidy the tree so resolved media proportions cannot collapse a fork back onto the predecessor center line
 - Pending image/video interaction before the first frame uses that same visible pre-frame circle for both the DOM drag target and pane coordinate hit-testing. The transparent future full-size media rectangle is non-interactive, so it cannot cover a nearby branch marker, steal the marker stop-button hover/click, or open the media bubble menu from outside the visible spinner.
+- Branch marker stop controls remain visible only while marker pending state or lineage-run bookkeeping is active. Completed generated descendants are structural history and do not keep the stop control alive after `MEDIA_GENERATION_REQUEST_COMPLETE` settles the request.
 - The whole tree is then rigid-separated from neighbors by the unchanged resolver (one bounding box per tree), so a tree moves as a block and never loses its internal balance — see [`documentation/canvas/COLLISION-RESOLUTION.md`](../../../../../documentation/canvas/COLLISION-RESOLUTION.md)
 - Dragging a tree node runs settings-backed overlap cleanup and does not snap back; branch-marker connector geometry keeps the live release bounds through the commit so edges do not render against stale marker dimensions, and moved branch markers are locked as manually positioned so stream-driven stack reflow cannot put them back on top of each other. The next add/remove re-tidies deterministically
 
@@ -93,38 +94,32 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Renders `Features` through the established Feature subjects; promoted Feature samples copy to durable storage before scope changes and promoted samples are migrated before origin-workspace deletion.
 - Feature extraction runs render as placeholder rows in the Features surface. Unconfirmed rows are local UI state and are not persisted into `canvasState`; confirmed, running, failed, and completed runs are loaded from the API `ExtractionRun` records and reconnected to their NATS stream when possible. The web UI only renders that API-owned state.
 - Feature rows and extraction-run rows render through the same Feature Library row shell, share the same borderless light-blue hover/selection skin, and use section-level gradient dividers between groups. Rows open the inspector on click and opt out of the side-panel swipe-drag handler so card taps remain local to the library; the Use action inserts the feature into the active prompt and opens the same inspector.
-- Live extraction inspectors keep their streaming DOM mounted while feature-created events update the library list; terminal extraction state refreshes the panel from the persisted run.
-- Renders `Images` and `Videos` through generic media-library records whose Object Store bytes are copied on save and copied again when inserted back onto the canvas.
-- Supports `Workspace`, `Mine`, `Organization`, `Public`, and `All available` filtering in one compact scope selector; new media saves start in the current workspace scope.
+- Live extraction inspectors keep their streaming DOM mounted while tokenized extraction pipeline events update the run/card; terminal extraction state refreshes the panel from persisted Feature and Extraction Run records. Global Feature event subjects are not browser-subscribable.
+- Renders media through Asset metadata projections; save and insertion create references without copying Blob bytes.
+- Supports authorized Workspace, user, and Organization Asset scopes plus their `All available` union.
 - Uses `settings.mediaLibrary` for its two-thirds width, is flush to the canvas top and bottom, and occupies the space immediately to the left of visible AI chat.
 - Uses concise Feature browse cards with large previews and two-line summary previews; selection opens a full-detail inspector, or a focused detail view with Back at narrow widths.
 
 ### AI Chat Panel And Sessions
 
-The canvas owns a singleton right side panel that hosts the view-only AI Chat surface — it has no prompt input of its own; all prompting happens in the bottom-center canvas composer. Its `SidePanel` instance owns the outside top-right toggle, using the panel collapse icon in both states; the closed state rotates it 180 degrees, and the open state moves it with the panel. It opens the panel with zero tabs if needed, without creating an `AiChatThread`. Open/closed panel state, ordered tabs, active tab, width, and explicit context chips are stored in `canvasState.aiChatPanel`. Opening a thread mounts it as a tab; opening an extraction run selects its placeholder row on the top-level Features surface. When more than one chat tab is open, tabs render through the shared SVG `components/slidingTabsSwitch` primitive, with geometry and slide timing configured by `settings.aiChatThread.panelTabs` and active-tab theming under `settings.aiChatThread.panelTabs.styles`; a single open tab renders only a section divider at the tab strip's top edge. The opened thread keeps a live ProseMirror transcript mounted for `DOC_RESUME`, document-step subscription, and receiving-state projection. When the active generated-media thread is not receiving, the panel displays the same read-only generated-media projection used by branch lineage and media info panels; open branch provenance, selected generated media, and the latest generated output are the projection target priority. Sent user-message reference previews, branch-origin provided-reference previews, and generation-trace reference items use the shared `components/contextPreview` tile renderer and stylesheet. Context preview hover cards use the shared `components/helpTooltip` primitive so placement stays clamped to the visible viewport while image and video previews fill their media container with normal sizing; portrait media places text beside the preview, and taller cards scroll after their bounded natural height. Their color, radius, border, and shadow tokens live in `settings.aiChatThread.contextPreview.styles`; canvas-only chip controls stay in `workspace-canvas.scss`.
+The canvas owns a singleton right side panel that hosts the view-only AI Chat surface — it has no prompt input of its own; all prompting happens in the bottom-center canvas composer. Its `SidePanel` instance owns the outside top-right toggle, using the panel collapse icon in both states; the closed state rotates it 180 degrees, and the open state moves it with the panel. It opens the panel with zero tabs if needed, without creating a conversation Asset. Open/closed panel state, ordered tabs, active tab, width, and explicit context chips are stored in `canvasState.aiChatPanel`. Opening a conversation mounts it as a tab; opening an extraction run selects its placeholder row on the top-level Features surface. When more than one chat tab is open, tabs render through the shared SVG `components/slidingTabsSwitch` primitive, with geometry and slide timing configured by `settings.aiChatThread.panelTabs` and active-tab theming under `settings.aiChatThread.panelTabs.styles`; a single open tab renders only a section divider at the tab strip's top edge. The opened conversation keeps a live ProseMirror transcript mounted for `asset.document.resume`, Asset-role step subscription, and receiving-state projection. When the active generated-media conversation is not receiving, the panel displays the same read-only generated-media projection used by branch lineage and media info panels; open branch provenance, selected generated media, and the latest generated output are the projection target priority. Sent user-message reference previews, branch-origin provided-reference previews, and generation-trace reference items use the shared `components/contextPreview` tile renderer and stylesheet. Context preview hover cards use the shared `components/helpTooltip` primitive so placement stays clamped to the visible viewport while image and video previews fill their media container with normal sizing; portrait media places text beside the preview, and taller cards scroll after their bounded natural height. Their color, radius, border, and shadow tokens live in `settings.aiChatThread.contextPreview.styles`; canvas-only chip controls stay in `workspace-canvas.scss`.
 
 The Sessions surface includes standalone chats and feature-extraction sessions. It is collapsed by default and toggled from the history icon in the panel control row; when expanded it renders directly under that row and above the tab strip when multiple chat tabs are open. Closing the active chat tab selects the tab to its right, or the new rightmost tab when the closed tab was already rightmost. Closing the last open chat tab clears the active tab and leaves the panel on its empty "reopen a session" state. Each history row shows a title, absolute update date plus relative recency, and session metadata such as chat message count, status, extraction provider, or source count. Its expanded state is persisted in `canvasState.aiChatPanel`. Closing any tab leaves its session reopenable. Standalone chats and extraction sessions can be deleted explicitly; deleting an extraction session does not delete a separately saved Feature.
 
 Session history colors, row hover gradient, and thread marker colors live under `settings.aiChatThread.sessionHistory.styles`; the shared panel divider border lives under `settings.aiChatThread.styles`. Fixed control sizing stays in `workspace-canvas.scss`.
 
-### Persisted AI Chat Thread Canvas Nodes
-This section documents canvas-thread nodes that can exist in persisted workspace state. The workspace renderer does not create new `aiChatThread` canvas nodes; active chat sessions live in the right side panel.
+### Conversation Assets
 
-- Compatibility records can mount embedded ProseMirror editors with `documentType: 'aiChatThread'`.
-- Legacy canvas records keep their drag overlay, free-resize behavior, and visual chrome when restored.
-- Mounted threads use `AiInteractionService` for live pipeline side events and `ProseMirrorAuthorityService` for API-authored transcript steps.
-- Content is persisted separately from documents in the AI-Chat-Threads table after the authoritative stream finalizes.
-- Context comes from explicit chips, workspace relevance, and supported edge-connected nodes when sending messages.
-- New AI chat sessions have no on-canvas node. A thread is a transcript hosted in the canvas-owned right side panel, and all prompting happens in the bottom-center canvas composer. The former on-canvas thread node and its vertical connection rail have been removed.
+AI chat sessions are conversation Assets whose `conversation` ProseMirror role is authoritative. Sessions live in the right-side panel and branch-marker projections; they are not persisted as canvas transcript nodes. `ProseMirrorAuthorityService` submits Asset-coordinate steps under an edit lease, and the API settles immutable Blob snapshots. Context comes from explicit chips, workspace relevance, and supported connected Asset nodes.
 
 - **Connector auto-alignment** — a connector's left-side anchor slides along the target node's left edge to align with its source, clamped to a top/bottom margin (`settings.connector.autoAlign.edgeMargin`). When the target node is shorter than `settings.connector.autoAlign.minSlideHeight` (default 120px) the anchor snaps to the vertical center instead of sliding. This applies to every node type.
 - **Menu-driven connect snap** — the image-node “Connect to node” action snaps against target node geometry and only commits the edge on mouse release so the snap preview is visible before creation. The snap distance is configurable via `settings.connector.menuConnectionSnapRadius`
 - **Floating panel resize and overlay** — the canvas-owned right side panel uses its `SidePanel` resize handle on the left edge as the horizontal resize target. Dragging that handle changes `--workspace-right-side-panel-width`, keeping the panel right edge fixed and preserving the zoom indicator offset. The same `SidePanel` instance owns the optional full-canvas overlay behind the panel and the pointer/touch swipe-to-close gesture. Dimensions, resize-handle geometry, toggle geometry, overlay behavior, drag thresholds, and slide timing are configured via `settings.rightSidePanel`.
 - **AI-generated media** appears as independent canvas nodes positioned to the right of the API-declared thread source, generated-media parent, or lineage marker, with generous canvas-space breathing room. New thread-rooted branch rows are placed below the previous root branch using `settings.mediaBranchLineage.branchRowGap`, while descendants in the same lineage continue horizontally using `mediaToMediaGap` and remain vertically center-aligned with their preceding media. When a generated-media node forks, `branchFanoutExtraGap` adds more horizontal space for every extra generated media node, so a large fan pushes the whole media column and its descendants farther right during the same tree rebalance. Fresh/reference-only branches use the combined reference-media bounds to place the API-planned root marker; the marker preserves the configured first-media slot when it fits, but clamps after the reference group by at least `settings.mediaBranchLineage.nodeGap` so long prompt labels cannot overlap source media. With no reference bounds, the root marker is inset from the visible viewport's left edge by `settings.mediaBranchLineage.nodeGap` and vertically centered in that viewport. Pending media without a frame is laid out through a temporary pre-frame circle proxy using the same configured circle scale that PIXI renders; connector anchors still use the visible outline bounds, including the configured outline gap, stroke width, and zoom-scaling behavior. Intrinsic image/video proportion updates preserve the resolved node center and re-run branch-tree layout instead of re-centering every generated media node on the predecessor, so final frames keep forks balanced. Their insertion dimensions are fixed canvas units regardless of the current zoom, so generated outputs arrive at the same logical size as a 100% zoom insertion. Generated outputs are connected by an edge with `sourceMessageId` only when the API plan continues a real thread or generated-media lineage; uploaded/source/reference/style media never become parent connectors by themselves. On every add/remove the lineage re-tidies into a balanced tree and is rigid-separated from neighbors through `generatedMediaRebalancePipeline.ts` and `branchTreeLayout.ts` (see [Collision Resolution](../../../../../documentation/canvas/COLLISION-RESOLUTION.md)); the first generated media node is the branch root and carries the originating prompt + references in its own provenance.
-- Progressive partial previews update the same PIXI-backed canvas image node in real-time by applying API-authored `canvasGeometry` snapshots that include the pending media node's current `src`, `fileId`, fitted dimensions, and lineage edge. The browser treats missing partial/final geometry on API lineage runs as a backend projection error instead of creating alternate nodes locally. The finalized response inserts the revised prompt plus a small `aiGeneratedImage` thumbnail that references the same stored image (`imageUrl`, `fileId`, and `workspaceId`) as the canvas node. Standalone right side panel generations use explicit context chips, selected media, workspace relevance, and the image-branch resolver to anchor that placeholder on the canvas and persist the same `generatedBy` provenance as thread-rooted generations. While the reasoning model is preparing the media prompt, the same PIXI traveling outline renderer frames selected/reference media using canvas-state node bounds; the image/video generation trace clears those reference outlines when the request hands off to media models, leaving only generated placeholders/outputs outlined until their media run completes.
-- The bottom-center canvas AI input creates a standalone hidden AI chat ProseMirror thread for each media-enabled submit, then immediately renders pending branch markers as spatial projections of that stored message. The composer remains a send surface while any number of earlier runs are active; it does not aggregate their receiving state or expose a global stop action. The marker starts with the user-message row only; pending markers add the horizontal separator and response row only after the assistant stream is receiving response text outside generated-prompt collapsible blocks. The response row shows the last 50 normalized characters while the response or generated-media run is active, then the first 50 normalized characters after receiving completes. The progress indicator stays on the user row until the response row exists, then moves to the response row while assistant or prompt-enhancement text is still receiving; when receiving ends before a generated-media placeholder exists, the spinner returns to the user/model icon row until the image/video placeholder takes over progress. A separate pause/stop button stays visible at the marker's right-center while its generation request has any planned or active media run; it disappears only after all spanned branches finish. The button is a direct marker child above the transparent drag/details overlay, and consumes its own pointer/mouse/click events; every other marker click still reaches the node click handler and opens the chat-thread details. Its hover state only scales the inherited-color icon; it adds no color override, background layer, ring, or shadow. The reused button is rebound when a preflight marker promotes to a different API marker/request identity, but is not rebuilt during ordinary stream-content updates, so hover and click survive the canvas handoff without stale closures. Activating the button immediately removes all tracker-backed, waiting, or API-projected pending media nodes for that generation request, locally forces the matching reasoning preview to its done state, ignores late nonterminal events for the cancelled request, and sends request/reply `CHAT_STOP_MESSAGE` with the marker's `aiChatThreadId` and `generationRequestId`. Clearing cancellation state preserves the marker's current position and dimensions instead of running the normal completion-time content resize, and the API's durable cancellation cleanup likewise preserves marker dimensions while it removes pending media and rebalances the remaining tree. The API aborts and awaits every grouped reasoning/media provider, persists every matching ProseMirror response/reasoning section with loading flags disabled and streaming prompt blocks closed, then removes the request's persisted pending/partial canvas media nodes. If live orchestration state is already absent, the API directly patches both DynamoDB records; it acknowledges stop only after durable cleanup, then the browser refreshes the stored thread. Cancellation remains authoritative even if ordinary request-complete settled first, so reload cannot resurrect either the reasoning spinner or PIXI media spinner and sibling user-message runs remain untouched. Multi-reasoning submits create one stacked pending marker per reasoning model, each later promoting independently to its API-declared fork/line marker. Marker display geometry is a local projection of the stored ProseMirror content and does not persist derived preview state into `canvasState`. While preflight is waiting on the API lineage plan, each marker renders in a compact screen-fixed overlay anchored by its right edge above the bottom-center composer as a stack, so canvas pan/zoom does not scale or resize it before it promotes into the resolved canvas position. `MEDIA_LINEAGE_PLANNED` is the first event that may promote a preflight marker into the transformed canvas; API-persisted planned markers for the same active lineage stay deferred while a matching screen-fixed preflight marker exists, with `[CANVAS][branch-marker-handoff]` logs showing the defer/promote reason. If the page reloads before any marker has been promoted into `canvasState`, the canvas reattaches recent standalone `canvas-*` threads that contain a submitted user turn but no assistant response, replays the pipeline log, recreates the missing preflight marker from `MEDIA_LINEAGE_PLANNED`, and then runs the same API-planned promotion path. Submit reserves the detached thread id as active before persisted thread creation so store updates cannot race the reattach scanner into creating a second preflight marker or hidden editor for the same user turn. `MEDIA_GENERATION_SKIPPED` / branch-resolution errors settle the detached run immediately so the scanner cannot replay the finished pipeline while the hidden editor waits briefly for final text to flush. Promotion reuses the existing marker DOM to preserve active editors, so the append path must move planned markers out of the screen-fixed overlay, drop stale duplicate overlay nodes with the same API marker id, and sync marker geometry from the rebalanced state before rendering connector edges. During the ProseMirror lineage-attr handoff, marker preview binding still prefers exact API marker ids but falls back to matching reasoning run/model/index or the only response section, logging `[CANVAS][branch-marker-preview]` when a fallback or miss occurs.
+- Progressive partial previews update the deterministic PIXI-backed pending Asset node. An empty partial carrying only the preassigned `assetId` remains a pre-frame circle and does not request a rendition. Final events carry `assetId` and API-authored `canvasGeometry`; completion fetches the ready original rendition without LoD URL rewriting and keeps only the pre-frame circle visible until PIXI has decoded real pixels, while derived previews remain asynchronous. A successful local decode is authoritative for frame visibility, so a late or stale Asset invalidation cannot replace displayed pixels with the pending spinner. The browser treats missing final geometry as a projection error and never persists partial URLs. The chat thumbnail references the same Asset. Explicit context, workspace relevance, lineage, and traveling-outline behavior remain shared across panel and canvas generation.
+- The bottom-center composer creates a conversation Asset for each submit and projects pending branch markers from its authoritative ProseMirror snapshot. `MEDIA_LINEAGE_PLANNED` promotes preflight markers into API-authored canvas topology. Cancellation uses the conversation Asset ID plus generation request ID, aborts all grouped providers, seals transcript/provenance state, removes pending Asset placements, and persists the rebalanced canvas before acknowledging the request. Reload replays durable pipeline events and Asset document steps; late nonterminal events for a cancelled request are ignored.
 - Multi-model media requests keep one shared pending placement group per `generationRequestId`, then track each image/video media run by `mediaRunId`. Trace events register expected media runs before media placeholders arrive, so one completed variant does not delete the shared lineage/reference placement while siblings are still running. Every generated sibling receives the same branch resolution plus its own run metadata in `generatedBy`, and branch-tree sibling order uses `variantIndex` before `createdAt` for deterministic fanout layout.
-- Generated media model chrome renders in a screen-space chrome layer above the viewport DOM but below the PIXI media layer, so active generation outlines can pass over provider badges and info buttons. Before the first generated frame arrives, pending media renders the same provider icon without the text label in a separate centered icon layer above PIXI; after the first frame, the below-node strip appears. The strip is projected from the media node bounds and contains only the provider badge plus info button. It uses `settings.mediaNode.generatedMediaChrome.zoomScaling` through the shared adaptive bounded canvas-chrome curve: at 100% and higher zoom the icon uses its configured screen-pixel size, below 100% it shrinks with the low-zoom curve, and below the lower breakpoint the world-size compensation freezes so overview zooms keep thinning the strip. Layout and collision reserve the strip's configured `topGap + iconSize` below generated images, and add the external video controls height for videos, so generated media rows do not overlap another node's model badge or info icon; branch-tree layout reserves that asymmetric chrome with a centered layout box so media-to-media continuations still align to the visual media center. The strip matches the media node's projected width, shows the provider icon plus the pretty model title from the model catalog on the left, keeps the media info button aligned to the right edge of the media node, and uses `settings.mediaNode.generatedMediaChrome.topGap` for the top gap. Video nodes add the external playback-control row height before this projection so the strip sits below the controls. The info button remains clickable because the PIXI media layer ignores pointer events, and it opens a separate, fully decoupled info panel in `.workspace-generated-media-info-panel-layer`: the panel is anchored from the same media node bounds and uses the normal viewport transform, so it matches the configured `settings.mediaNode.generatedMediaInfoPanel` width proportion and zooms naturally with the canvas, but it is not nested in or transformed by the icon strip. That settings block controls the panel surface styling, radius, overflow, layer z-index, horizontal offset, media top offset, branch-marker top offset, and min/max width. The full provenance panel mounts a scoped read-only AI chat ProseMirror projection only from the producing stored thread turn, including the real chat message, reasoning, selected generated-media node, and generation-details NodeViews. Branch-fork provenance intentionally keeps sibling generated outputs visible. The compact Description section is separate descriptor chrome and only renders `source: analysis` summaries produced by the API VLM media-descriptor step; prompts and revised prompts are never used as media descriptions. Persisted media descriptors that load with `status: 'analyzing'` are reset to `failed` during canvas state normalization so a canceled or incomplete caption request cannot keep the info button pulsing across refreshes. The canvas provenance block expands to its full content height; it does not crop long prompts or reference metadata.
+- Generated media model chrome renders in a screen-space chrome layer above the viewport DOM but below the PIXI media layer, so active generation outlines can pass over provider badges and info buttons. Before the first generated frame arrives, pending media renders the same provider icon without the text label in a separate centered icon layer above PIXI; after the first frame, the below-node strip appears. The strip is projected from the media node bounds and contains only the provider badge plus info button. It uses `settings.mediaNode.generatedMediaChrome.zoomScaling` through the shared adaptive bounded canvas-chrome curve: at 100% and higher zoom the icon uses its configured screen-pixel size, below 100% it shrinks with the low-zoom curve, and below the lower breakpoint the world-size compensation freezes so overview zooms keep thinning the strip. Layout and collision reserve the strip's configured `topGap + iconSize` below generated images, and add the external video controls height for videos, so generated media rows do not overlap another node's model badge or info icon; branch-tree layout reserves that asymmetric chrome with a centered layout box so media-to-media continuations still align to the visual media center. The strip matches the media node's projected width, shows the provider icon plus the pretty model title from the model catalog on the left, keeps the media info button aligned to the right edge of the media node, and uses `settings.mediaNode.generatedMediaChrome.topGap` for the top gap. Video nodes add the external playback-control row height before this projection so the strip sits below the controls. The info button remains clickable because the PIXI media layer ignores pointer events, and it opens a separate, fully decoupled info panel in `.workspace-generated-media-info-panel-layer`: the panel is anchored from the same media node bounds and uses the normal viewport transform, so it matches the configured `settings.mediaNode.generatedMediaInfoPanel` width proportion and zooms naturally with the canvas, but it is not nested in or transformed by the icon strip. That settings block controls the panel surface styling, radius, overflow, layer z-index, horizontal offset, media top offset, branch-marker top offset, and min/max width. The full provenance panel mounts a scoped read-only AI chat ProseMirror projection only from the producing stored thread turn, including the real chat message, reasoning, selected generated-media node, and generation-details NodeViews. Branch-fork provenance intentionally keeps sibling generated outputs visible. The compact Description section is separate descriptor chrome and only renders `source: analysis` summaries produced by the API VLM media-descriptor step; prompts and revised prompts are never used as media descriptions. Descriptors resolve from the authoritative Asset through assetsStore; canvas state never stores a copy. The canvas provenance block expands to its full content height; it does not crop long prompts or reference metadata.
 - Drag membership is planned by `workspaceDragPlan.ts`, so AI chat thread drags move only the thread node and real `parentId` descendants. Generated outputs remain independent branch nodes.
 - Render-state reconciliation is planned by `workspaceRenderStatePlan.ts`. When the active right side panel emits a stale metadata render while a local user-driven canvas commit is still waiting for store acknowledgement, the canvas preserves the locally committed visual node/edge state until the store catches up. Generated branch markers, partial media, and completion handoff visuals are transient and do not create a pending local visual commit that can mask the API-owned canvas projection. Active generated-media trackers are overlaid back onto incoming API canvas renders until the run completes, so a lineage-plan projection cannot erase an in-flight placeholder/progress outline.
 
@@ -135,8 +130,8 @@ flowchart TB
     subgraph Svelte["Svelte Layer"]
         WC[WorkspaceCanvas.svelte]
         WS[workspaceStore]
-        DS[documentsStore]
-        TS[aiChatThreadsStore]
+        AS[assetsStore]
+        ADS[assetDocumentsStore]
     end
 
     subgraph Core["Framework-Agnostic Core"]
@@ -145,48 +140,49 @@ flowchart TB
         ECM[WorkspaceConnectionManager]
         DN[Document Nodes]
         IN[Image Nodes]
-        TN[AI Chat Thread Nodes]
+        PN[Conversation Panel]
         PM[ProseMirror Editors]
         AIS[AiInteractionService]
-        IL[Canvas Media Node Lifecycle]
     end
 
     subgraph Services["Services Layer"]
-        ATS[AiChatThreadService]
+        AssetService
+        Authority[ProseMirrorAuthorityService]
         CTX[Context Extraction]
     end
 
     subgraph Backend["Backend Services"]
         NS[NATS Service]
-        API[Workspace API]
+        API[Workspace and Asset API]
         LLM[API LLM module<br/>in-process LangGraph]
-        OBJ[NATS Object Store]
+        OBJ[Organization Blob Object Store]
     end
 
     WC -->|"paneEl, viewportEl"| CC
-    WC -->|"canvasState, documents, threads"| CC
+    WC -->|"canvasState, Assets, role snapshots"| CC
     CC -->|"onCanvasStateChange"| WC
     WC -->|"persistCanvasState"| WS
     WS -->|"updateCanvasState"| NS
     NS --> API
+    AssetService --> NS
+    AssetService --> AS
+    AssetService --> ADS
 
     CC --> PZ
     CC --> ECM
     CC --> DN
     CC --> IN
-    CC --> TN
     DN --> PM
-    TN --> PM
-    TN --> AIS
-    CC -->|"onAiChatSubmit"| ATS
-    ATS --> CTX
+    PN --> PM
+    PN --> AIS
+    PM --> Authority
+    Authority --> NS
+    CC --> CTX
     CTX -->|"reads edges, nodes"| WS
-    CTX -->|"reads content"| DS
-    CTX -->|"reads content"| TS
+    CTX -->|"reads Assets and role snapshots"| AS
+    CTX --> ADS
     AIS -->|"streaming via NATS"| LLM
-    CC --> IL
-    IL -->|"deleteImage/deleteVideo"| NS
-    NS -->|"DELETE_IMAGE / DELETE_VIDEO"| OBJ
+    API --> OBJ
 ```
 
 ## How It Works
@@ -307,7 +303,7 @@ When an AI-generated image is being created, the canvas provides visual feedback
 
 ### Media Node Lifecycle
 
-When a tracked media node is removed from the canvas, the `canvasMediaNodeLifecycle` tracker detects the change and triggers the configured deletion path. Image nodes route through `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE`; video nodes route through `WORKSPACE_SUBJECTS.VIDEO_SUBJECTS.DELETE_VIDEO` and best-effort poster cleanup. The API re-reads canonical canvas state and refuses storage deletion while any current node still references the file, its canonical/original pair, or a related poster/frame object. Do not add a new cleanup path unless the API-side delete handler has the same canonical-state guard; lifecycle diffs alone must never be trusted to remove Object Store bytes.
+When an Asset-backed node is removed, the host submits `asset.detach` with the node ID and the exact canvas mutation. The API commits Workspace geometry and Asset reference removal transactionally. It never deletes bytes inline; zero-reference Asset and Blob maintenance rechecks counters before removing records or Object Store bytes.
 
 Media replacement is a normal canvas-state save plus storage cleanup. Replacing a generated media node must include a transient `mediaReplacement` marker with the previous file id, because the API full-save merge otherwise preserves API-owned generated-media payloads over stale browser saves. The API consumes that marker, applies the incoming media payload to the same generated node id, keeps lineage metadata, patches the matching generated-media node in the owning AI chat thread document, and does not persist the marker. The canvas schedules a persisted thread refresh for generated-media replacements so provenance panels use the same file id as the canvas node. If the API reports `STALE_CANVAS_STATE` with a current canvas save token, `WorkspaceService` must retry the pending local save with that token instead of throwing away the visual replacement and reloading old canvas state. If cleanup reaches the API before the replacement save is visible, image/video delete utilities retry `FILE_STILL_REFERENCED_BY_CANVAS` rather than treating it as a permanent failure.
 
@@ -416,7 +412,7 @@ Edges are stored in `canvasState.edges` and rendered by the PIXI edge renderer. 
 
 ### AI Chat Context Extraction
 
-Standalone chat tabs and the screen-fixed canvas composer use composer context previews as explicit forced context for the next submitted message. The panel renders those previews inside its composer; the screen-fixed canvas composer renders them in a separate tray above the input pill. Preview node ids are resolved through the existing extraction service, each submit snapshots then clears the explicit set, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags plus generated-media thread ownership for the API relevance stage. Media-generation submits also send the relevant branch candidate snapshot, even when the candidate list is empty, so workspace-wide auto relevance cannot pull an unrelated branch into the image-branch VLM. When the API streams `CONTEXT_RELEVANCE_RESOLVED`, the canvas uses those submitted-turn selections for generation placement/reference bookkeeping and commits any `improvedDescriptors` through the canvas metadata persistence path so descriptor chrome updates without a reload and survives refresh. Resolver-selected context never writes back into the draft composer.
+Standalone chat tabs and the screen-fixed canvas composer use composer context previews as explicit forced context for the next submitted message. The panel renders those previews inside its composer; the screen-fixed canvas composer renders them in a separate tray above the input pill. Preview node ids are resolved through the existing extraction service, each submit snapshots then clears the explicit set, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags plus generated-media thread ownership for the API relevance stage. Media-generation submits also send the relevant branch candidate snapshot, even when the candidate list is empty, so workspace-wide auto relevance cannot pull an unrelated branch into the image-branch VLM. When the API streams `CONTEXT_RELEVANCE_RESOLVED`, the canvas uses those submitted-turn selections for generation placement/reference bookkeeping and applies any `improvedDescriptors` to `assetsStore`; the API has already persisted them under the Asset revision, so every placement updates without a canvas metadata mirror. Resolver-selected context never writes back into the draft composer.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -433,17 +429,17 @@ flowchart LR
 The extraction flow:
 
 1. **Context source** - Standalone tabs call `extractSelectedContext({ nodeIds })` for the explicit composer previews snapshotted on submit
-2. **Content extraction** - Documents and AI threads have their ProseMirror content parsed; embedded images are collected. Image nodes are fetched and converted to base64; video nodes contribute their representative still (`frameFileId`, falling back to poster) for normal model context
+2. **Content extraction** - Document and conversation Asset snapshots are parsed; media nodes resolve authorized Asset renditions. Video nodes contribute `representativeFrame`, falling back to `poster`.
 3. **Workspace snapshot** - `buildWorkspaceContextSnapshot()` indexes all context-bearing nodes by descriptor summary/tags plus media object references, generated-media thread ownership, and force-include flags; it never embeds pixel data
 4. **Resolution feedback** - `CONTEXT_RELEVANCE_RESOLVED` bypasses markdown parsing, keeps engine selections scoped to the submitted turn, and applies improved descriptors to the live canvas
 5. **Message building** - `buildContextMessage()` formats explicit context as multimodal content blocks (`input_text` for text, `input_image` for images and video stills)
 6. **Submission** - The context message is prepended to the user's messages, and the workspace snapshot is sent alongside the chat request
 
-The context extraction logic lives in `AiChatThreadService`, not in the canvas module, since it's business logic rather than rendering.
+Context selection is split between the canvas snapshot builders and API resolvers. The browser identifies explicit node context and sends descriptor/Asset coordinates; the API authorizes Assets and resolves Blob-backed model inputs.
 
 ### ProseMirror Integration
 
-Each document node instantiates a `ProseMirrorEditor`. The editor container has `.nopan` so clicking inside doesn't pan the canvas. Canvas document editors use the ProseMirror authority transport for local edits; the API persists settled snapshots after the shared workspace persistence debounce exposed as `settings.workspacePersistence.debounceMs`. The `onDocumentContentChange` fallback is debounced with the same setting in the Svelte host before calling `DocumentService`. Plain document typing does not request text descriptors or VLM analysis; descriptor repair happens during API context self-heal when an AI turn needs a better descriptor.
+Each document node instantiates a `ProseMirrorEditor`. The editor container has `.nopan` so clicking inside does not pan the canvas. Canvas document editors use `ProseMirrorAuthorityService` with Asset/organization/role coordinates. Local steps require the workspace lease, stream through `asset.document.steps`, and settle to immutable content snapshot Blobs. Plain document typing does not request text descriptors or VLM analysis; descriptor repair happens during API context self-heal when an AI turn needs a better descriptor.
 
 ## State Flow
 
@@ -471,14 +467,14 @@ When an image node, video node, or edge is selected on the canvas, a bubble menu
 
 ### Image Node Actions
 - **Create Variant** — dispatches a `canvas-create-image-variant` custom event on the viewport element
-- **Download** — downloads the stored file through the authenticated `/api/files` attachment route
-- **Add to Media Library** — saves a completed stored image as an independent library copy
+- **Download** — downloads the Asset's `original` rendition through the authenticated `/api/assets` route
+- **Open Asset details** — opens global title, scope, content, lineage, rendition state, and provenance
 - **Delete** — removes the node and its associated edges from canvas state
 
 ### Video Node Actions
-- **Replace** — uploads a new video for the selected node, swaps the MP4/poster IDs on the existing node, and keeps the node in place
-- **Download** — downloads the stored MP4 through the authenticated `/api/files` attachment route
-- **Add to Media Library** — saves a completed stored video and poster as independent library copies
+- **Replace** — uploads a new video Asset and atomically changes the placement reference while keeping node geometry
+- **Download** — downloads the Asset's `original` rendition through the authenticated `/api/assets` route
+- **Open Asset details** — opens global title, scope, content, lineage, rendition state, and provenance
 - **Connect to node** — starts the same menu-driven graph connection flow as images
 - **Delete** — removes the node and its associated edges from canvas state
 
@@ -507,7 +503,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `rendering/mediaNodeRegistry.ts` | Dispatches non-image media nodes to specialized handlers. Image nodes are handled directly by `pixiMediaLayer`; video nodes route to `videoNodeHandler.ts` |
 | `rendering/videoNodeHandler.ts` | Video renderer that owns PIXI poster/placeholder sprites and the authenticated `HTMLVideoElement` moved into DOM video chrome |
 | `workspace-canvas.scss` | All styles for canvas, DOM interaction nodes, handles, edges, editors, and media chrome |
-| `canvasMediaNodeLifecycle.ts` | Tracks configured media-node types and deletes orphaned workspace media from storage |
+| `asset-service.ts` | Asset metadata, scope, lease, catalog, and transactional placement operations |
 | `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image and edge actions) |
 | `imagePositioning.ts` | Computes viewport-normalized insertion dimensions and generated image placement positions next to source threads |
 | `nodeLayering.ts` | Z-index management for bringing nodes to front |
@@ -548,17 +544,17 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.nopan` | Prevents panning when interacting |
 | `.is-dragging` / `.is-resizing` | State classes during interaction |
 
-## AI Chat Thread Canvas Node Background
+## AI Prompt Surface Background
 
-AI chat thread canvas nodes can display an animated shifting gradient background. The gradient is rendered to a small 60x80 pixel bitmap and scaled up with bilinear interpolation for smooth, low-cost rendering. The canvas element is injected as the first child of `.workspace-ai-chat-thread-node` with class `.shifting-gradient-canvas`.
+AI prompt surfaces can display an animated shifting gradient background. The gradient is rendered to a small bitmap and scaled with bilinear interpolation for smooth, low-cost rendering.
 
 The gradient uses 4 color points with inverse distance weighting and a subtle swirl distortion for an organic feel. When sending a message, the gradient animates to the next phase position.
 
-During thread resizing, the gradient canvas keeps the existing bitmap visible while its CSS box changes. When the backing-store size really changes, the renderer redraws immediately; unchanged `ResizeObserver` callbacks are ignored so the canvas is not cleared unnecessarily.
+During surface resizing, the gradient canvas keeps the existing bitmap visible while its CSS box changes. When the backing-store size changes, the renderer redraws immediately.
 
 The thread node gradient and the bottom-center composer gradient are controlled by feature flags in `settings.ts`:
 
-- `settings.aiPromptInput.useShiftingGradientBackground` (default `true`) — gradient on AI prompt input surfaces, including the bottom-center canvas composer.
+- `settings.aiPromptInput.useShiftingGradientBackground` — gradient on AI prompt input surfaces, including the bottom-center canvas composer.
 - `settings.canvasChrome.glassBorder` — 10px screen-space Pixi glass border for the bottom-center composer and adjacent action panels. `pixiMediaLayer` captures the Pixi stage into a render texture and refracts that capture through a per-target liquid normal-map border, so Pixi edges, media sprites, generation outlines, and foreground overlays distort under the ring while flat background remains visually quiet.
 
 For the shared freeform/SVG gradient architecture, shifting-background technical details, color customization, and the color analysis tool, see [Visual Effects](../../../../../documentation/canvas/VISUAL-EFFECTS.md).

@@ -1,79 +1,42 @@
 # Lixpi Constants
 
-Shared constants for NATS subjects, AWS resources, and service types. The TypeScript package is used by the live app; the Python package is preserved for legacy tooling and future internal-service splits.
+Shared runtime contracts for TypeScript services and the browser.
 
-All NATS subjects are defined once in `nats-subjects.json` and accessed through language-specific wrappers.
+## Storage contracts
 
-## Structure
+`ts/asset-types.ts` defines Asset, Meta, ACL, typed references, edit leases, media/rendition states, Blob rows/references, and rendition job request/response types.
 
-```
+`ts/types.ts` defines Asset-backed canvas nodes, media lineage plans/assignments, conversation stream payloads, Workspace state, Features, and shared UI/runtime contracts. Canvas media/document nodes use `assetId` only; Object Store keys and rendition URLs are not canvas state.
+
+`ts/aws-resources.ts` contains only active DynamoDB resource names, including the six revision-2 tables. `nats-subjects.json` contains only active Asset/Blob processing and maintenance subjects alongside unrelated current product subjects.
+
+## Main files
+
+```text
 packages/lixpi/constants/
-├── nats-subjects.json        # Shared subject definitions
-├── ai-interaction-constants.json
-├── python/                   # Python package
-└── ts/                       # TypeScript/JavaScript package
-    ├── media-generation-layout-settings.ts # Shared API/WebUI generated-media placement geometry
-    └── workspace-persistence-settings.ts   # Shared workspace persistence debounce
+├── nats-subjects.json
+└── ts/
+    ├── asset-types.ts
+    ├── aws-resources.ts
+    ├── media-generation-layout-settings.ts
+    ├── workspace-persistence-settings.ts
+    ├── types.ts
+    └── index.ts
 ```
 
-## Usage
+## TypeScript usage
 
-### TypeScript
+```ts
+import {
+  NATS_SUBJECTS,
+  STREAM_STATUS,
+  type Asset,
+  type CanvasNode,
+  type GenerateRenditionsRequest,
+} from '@lixpi/constants'
 
-```typescript
-import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
-import type { AiInteractionChatSendMessagePayload, User, AiModel, ImageSizeOption, ProviderName, StreamStatus } from '@lixpi/constants'
-
-const { AI_INTERACTION_SUBJECTS, WORKSPACE_SUBJECTS } = NATS_SUBJECTS
-
-// Access AI interaction subjects
-const subject = AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE
-const responseSubject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${threadId}`
-
-// Access workspace-related subjects (nested under WORKSPACE_SUBJECTS)
-const { DOCUMENT_SUBJECTS, AI_CHAT_THREAD_SUBJECTS, IMAGE_SUBJECTS } = WORKSPACE_SUBJECTS
-const createDocSubject = DOCUMENT_SUBJECTS.CREATE_DOCUMENT
-const createThreadSubject = AI_CHAT_THREAD_SUBJECTS.CREATE_AI_CHAT_THREAD
-const deleteImageSubject = IMAGE_SUBJECTS.DELETE_IMAGE
-
-// Use types
-const payload: AiInteractionChatSendMessagePayload = { messages, aiModel, threadId }
-
-// CanvasNode includes document, image, video, and AI chat thread nodes.
-
-// AiModel includes imageSizes for image generation providers
-// ImageSizeOption: { value: string; label: string }
-const sizes: ImageSizeOption[] = model.imageSizes ?? []
-
-// Shared stream/provider constants
-const streaming: StreamStatus = STREAM_STATUS.STREAMING
-const provider: ProviderName = 'Anthropic'
+const createAssetSubject = NATS_SUBJECTS.ASSET_SUBJECTS.CREATE
+const renditionSubject = NATS_SUBJECTS.BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS
 ```
 
-### Python
-
-```python
-from lixpi_constants import NATS_SUBJECTS
-
-ai_interaction_subjects = NATS_SUBJECTS["AI_INTERACTION_SUBJECTS"]
-send_subject = ai_interaction_subjects["CHAT_SEND_MESSAGE"]
-
-# Workspace-related subjects are nested
-workspace_subjects = NATS_SUBJECTS["WORKSPACE_SUBJECTS"]
-document_subjects = workspace_subjects["DOCUMENT_SUBJECTS"]
-create_doc_subject = document_subjects["CREATE_DOCUMENT"]
-```
-
-## Adding New Subjects
-
-Edit `nats-subjects.json`:
-
-```json
-{
-  "AI_INTERACTION_SUBJECTS": {
-    "YOUR_NEW_SUBJECT": "ai.interaction.your.new.subject"
-  }
-}
-```
-
-Both languages will pick it up automatically.
+Edit `nats-subjects.json` once; TypeScript wrappers consume it directly. The preserved Python wrapper is for non-runtime legacy tooling and future service splits, not an alternate active storage contract.

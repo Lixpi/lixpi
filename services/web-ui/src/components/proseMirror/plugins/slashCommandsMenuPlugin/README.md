@@ -108,7 +108,7 @@ $slashMenuSelectedBg: rgba(95, 143, 207, 0.3);
 
 ## Future Improvements
 
-- **Image upload**: Full file upload with placeholder pattern (see `NEXT-STEPS.md`)
+- **Image upload and URL import**: Both paths create an image Asset through `/api/assets/workspaces/:workspaceId` before inserting a ProseMirror image node with `assetId`; direct external hotlinks are not persisted
 - **Fuzzy matching**: Integrate Fuse.js for better filtering
 - **Command categories**: Group commands with section headers
 - **Recent commands**: Show recently used commands at top

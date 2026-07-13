@@ -45,8 +45,7 @@ const createImageCommand = (): SlashCommand['execute'] => {
                         src: result.src,
                         alt: '',
                         title: '',
-                        fileId: result.fileId || null,
-                        workspaceId: result.fileId ? workspaceId : null,
+                        assetId: result.assetId || null,
                     }
 
                     const image = imageType.create(attrs)

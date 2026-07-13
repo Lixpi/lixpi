@@ -3,7 +3,11 @@
 import { NATS_SUBJECTS } from '@lixpi/constants'
 import NATS_Service from '@lixpi/nats-service'
 
-const DEFAULT_MAX_AGE_MS = 30 * 60 * 1000
+// Explicit terminal-state cleanup normally purges completed pipelines after all
+// output provenance is sealed. This age limit is only the crash/orphan backstop;
+// it must outlive long media jobs and API restarts so provenance retries retain
+// their authoritative source log.
+const DEFAULT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 const DEFAULT_MAX_MSGS_PER_SUBJECT = 10000
 const NANOS_PER_MS = 1000000
@@ -42,6 +46,7 @@ export type PipelineReplayResult = {
     streamName: string
     subject: string
     events: PipelineEventEnvelope[]
+    hasMore: boolean
 }
 
 export class PipelineEventLog {
@@ -93,6 +98,7 @@ export class PipelineEventLog {
                 streamName,
                 subject,
                 events: [],
+                hasMore: false,
             }
         }
 
@@ -115,6 +121,7 @@ export class PipelineEventLog {
                 ...message.data,
                 streamSequence: message.seq,
             })),
+            hasMore: (messages.at(-1)?.seq ?? startStreamSeq - 1) < lastMessage.seq,
         }
     }
 

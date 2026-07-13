@@ -34,7 +34,7 @@ export type GeneratedMediaTurnLocator = {
     reasoningModelId?: string
     mediaRunId?: string
     mediaType?: string
-    fileId?: string
+    assetId?: string
     variantIndex?: number | null
 }
 
@@ -130,7 +130,7 @@ function generatedMediaNodeMatchesLocator(node: ProseMirrorJsonNode, locator: Ge
 
     const attrs = node.attrs ?? {}
     if (locator.mediaType && attrs.mediaType && attrs.mediaType !== locator.mediaType) return false
-    if (locator.fileId && attrs.fileId && attrs.fileId !== locator.fileId) return false
+    if (locator.assetId && attrs.assetId && attrs.assetId !== locator.assetId) return false
     if (locator.mediaRunId && attrs.mediaRunId !== locator.mediaRunId) return false
 
     const locatorVariantIndex = parseNullableNumber(locator.variantIndex)
@@ -138,7 +138,7 @@ function generatedMediaNodeMatchesLocator(node: ProseMirrorJsonNode, locator: Ge
     if (locatorVariantIndex != null && nodeVariantIndex != null && nodeVariantIndex !== locatorVariantIndex) return false
 
     if (locator.mediaRunId && attrs.mediaRunId === locator.mediaRunId) return true
-    if (locator.fileId && attrs.fileId === locator.fileId) return true
+    if (locator.assetId && attrs.assetId === locator.assetId) return true
     return false
 }
 
@@ -167,7 +167,7 @@ function nodeRunAttrsMatchLocator(node: ProseMirrorJsonNode, locator: GeneratedM
 function getReasoningContainer(responseNode: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): ProseMirrorJsonNode | null {
     const sections = (responseNode.content ?? []).filter((child) => child.type === 'aiReasoningSection')
     if (sections.length === 0) {
-        if (locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.fileId && !locator.reasoningModelId) {
+        if (locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.assetId && !locator.reasoningModelId) {
             return responseNode
         }
         if (nodeRunAttrsMatchLocator(responseNode, locator)) return responseNode
@@ -179,7 +179,7 @@ function getReasoningContainer(responseNode: ProseMirrorJsonNode, locator: Gener
         if (matched) return matched
     }
 
-    if (locator.mediaRunId || locator.fileId) {
+    if (locator.mediaRunId || locator.assetId) {
         const matched = sections.find((section) => containerContainsGeneratedMedia(section, locator))
         if (matched) return matched
     }
@@ -189,7 +189,7 @@ function getReasoningContainer(responseNode: ProseMirrorJsonNode, locator: Gener
         if (matched) return matched
     }
 
-    if (locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.fileId && !locator.reasoningModelId) {
+    if (locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.assetId && !locator.reasoningModelId) {
         return responseNode
     }
 
@@ -199,13 +199,13 @@ function getReasoningContainer(responseNode: ProseMirrorJsonNode, locator: Gener
 function responseMessageMatchesLocator(responseNode: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): boolean {
     const responseId = typeof responseNode.attrs?.id === 'string' ? responseNode.attrs.id : ''
     if (locator.responseMessageId && responseId !== locator.responseMessageId) return false
-    if (!locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.fileId && !locator.reasoningModelId) return false
-    if (locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.fileId && !locator.reasoningModelId) return true
+    if (!locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.assetId && !locator.reasoningModelId) return false
+    if (locator.responseMessageId && !locator.reasoningRunId && !locator.mediaRunId && !locator.assetId && !locator.reasoningModelId) return true
     return Boolean(getReasoningContainer(responseNode, locator))
 }
 
 function createSingleGeneratedMediaFilter(locator: GeneratedMediaTurnLocator): ProjectionNodeFilter | undefined {
-    if (!locator.mediaRunId && !locator.fileId) return undefined
+    if (!locator.mediaRunId && !locator.assetId) return undefined
     return (node) => projectionNodeMatchesLocator(node, locator)
 }
 
@@ -348,18 +348,10 @@ function cloneProjectionNode(
     return cloneProjectionNodeTree(node, forceGenerationDetailsOpen, shouldKeepNode, reasoningModelId) ?? cloneProseMirrorJsonNode(node)
 }
 
-function createDocumentTitleNode(text: string): ProseMirrorJsonNode {
-    return {
-        type: 'documentTitle',
-        content: [{ type: 'text', text }],
-    }
-}
-
 function createProjectionDocument(threadId: string, threadAttrs: Record<string, any> | undefined, messages: ProseMirrorJsonNode[]): ProseMirrorJsonNode {
     return {
         type: 'doc',
         content: [
-            createDocumentTitleNode('Generated media provenance'),
             {
                 type: 'aiChatThread',
                 attrs: {

@@ -3,7 +3,6 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { EditorView } from 'prosemirror-view'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildBubbleMenuItems, getSelectionContext, updateImageButtonStates, type MenuItemElement, type SelectionContext } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/bubbleMenuItems.ts'
-import { documentTitleNodeType } from '@lixpi/prosemirror'
 
 export const bubbleMenuPluginKey = new PluginKey('bubbleMenu')
 
@@ -117,10 +116,6 @@ class BubbleMenuView {
         // Don't show in code blocks
         const isCodeBlock = $from.parent.type.name === 'code_block' || $to.parent.type.name === 'code_block'
         if (isCodeBlock) return false
-
-        // Don't show in document title
-        const isDocumentTitle = $from.parent.type.name === documentTitleNodeType || $to.parent.type.name === documentTitleNodeType
-        if (isDocumentTitle) return false
 
         return true
     }

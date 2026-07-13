@@ -5,7 +5,7 @@ import process from 'node:process'
 import DynamoDBService from '@lixpi/dynamodb-service'
 import NATS_Service from '@lixpi/nats-service'
 import {
-    getDynamoDbTableStageName,
+    formatStageResourceName,
     type CanvasNode,
     type CanvasState,
 } from '@lixpi/constants'
@@ -108,7 +108,11 @@ function requireEnv(name: string): string {
 }
 
 function tableName(name: 'WORKSPACES' | 'AI_CHAT_THREADS'): string {
-    return getDynamoDbTableStageName(name, requireEnv('ORG_NAME'), requireEnv('STAGE'))
+    const legacyNames = {
+        WORKSPACES: 'Workspaces',
+        AI_CHAT_THREADS: 'AI-Chat-Threads',
+    } as const
+    return formatStageResourceName(legacyNames[name], requireEnv('ORG_NAME'), requireEnv('STAGE'))
 }
 
 function createDynamoDbService(): DynamoDBService {

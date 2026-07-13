@@ -98,8 +98,8 @@ const normalizeDescriptorResult = (parsed: MediaDescriptorResult | undefined): M
 }
 
 // Caption a single still (image file, or a video's representative frame/poster).
-// `imageUrl` is a `nats-obj://workspace-{ws}-files/{fileId}` URI that the VLM
-// client resolves to inline image bytes.
+// `imageUrl` is an organization Blob Object Store URI that the VLM client
+// resolves to inline image bytes.
 export const describeMediaStill = async (args: DescribeMediaStillArgs): Promise<MediaDescriptorResult> => {
     const callVlm = args.callVlm ?? ((vlmArgs: VlmCallArgs) => callStructuredVlm<MediaDescriptorResult>(vlmArgs))
 

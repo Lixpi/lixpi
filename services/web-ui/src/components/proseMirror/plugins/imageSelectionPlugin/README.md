@@ -68,8 +68,7 @@ image: {
     src: {},                          // Image URL or path
     alt: {default: null},
     title: {default: null},
-    fileId: {default: null},
-    documentId: {default: null},
+    assetId: {default: null},
     width: {default: null},           // Percentage string, e.g., "50%"
     alignment: {default: 'left'},     // 'left' | 'center' | 'right'
     textWrap: {default: 'none'}       // 'none' | 'left' | 'right'
@@ -82,7 +81,7 @@ aiGeneratedImage: {
   group: "block",
   attrs: {
     imageData: {},                    // Image URL or base64 data
-    fileId: {default: null},
+    assetId: {default: ''},
     revisedPrompt: {default: null},
     responseId: {default: null},
     aiModel: {default: null},

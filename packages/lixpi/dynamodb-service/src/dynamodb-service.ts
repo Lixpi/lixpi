@@ -29,7 +29,14 @@ const toCapacityUnits = (cc) => {
 // putItem / updateItem / deleteItems, discriminated by `type`. Soft deletes
 // are expressed as a 'update' setting the TTL attribute.
 export type TransactOperation =
-    | { type: 'put'; tableName: string; item: Record<string, unknown> }
+    | {
+        type: 'put'
+        tableName: string
+        item: Record<string, unknown>
+        conditionExpression?: string
+        expressionAttributeNames?: Record<string, string>
+        expressionAttributeValues?: Record<string, unknown>
+    }
     | {
         type: 'update'
         tableName: string
@@ -40,7 +47,14 @@ export type TransactOperation =
         expressionAttributeValues?: Record<string, unknown>
         conditionExpression?: string
     }
-    | { type: 'delete'; tableName: string; key: Record<string, unknown> }
+    | {
+        type: 'delete'
+        tableName: string
+        key: Record<string, unknown>
+        conditionExpression?: string
+        expressionAttributeNames?: Record<string, string>
+        expressionAttributeValues?: Record<string, unknown>
+    }
 
 // A transaction is cancelled as a whole; a failed per-item condition surfaces
 // as TransactionCanceledException with a ConditionalCheckFailed reason instead
@@ -48,7 +62,8 @@ export type TransactOperation =
 // optimistic-concurrency retry paths.
 export const isTransactionConditionalCheckFailure = (error: unknown): boolean => {
     const candidate = error as { name?: string; CancellationReasons?: Array<{ Code?: string }> }
-    return candidate?.name === 'TransactionCanceledException'
+    return candidate?.name === 'ConditionalCheckFailedException'
+        || candidate?.name === 'TransactionCanceledException'
         && (candidate.CancellationReasons ?? []).some((reason) => reason?.Code === 'ConditionalCheckFailed')
 }
 
@@ -115,6 +130,7 @@ export default class DynamoDBService {
     async getItem({
         tableName = '',
         key = {},
+        consistentRead = false,
         origin = 'unknown'
     }) {
         if (!tableName || Object.keys(key).length === 0) {
@@ -126,6 +142,7 @@ export default class DynamoDBService {
             const response = await this.dynamodbDocumentClient.send(new GetCommand({
                 TableName: tableName,
                 Key: key,
+                ConsistentRead: consistentRead,
                 ReturnConsumedCapacity: 'TOTAL'
             }))
 
@@ -150,6 +167,8 @@ export default class DynamoDBService {
         limit = 1,
         fetchAllItems = false,
         scanIndexForward = true,
+        consistentRead = false,
+        exclusiveStartKey = undefined,
         origin = 'unknown'
     }) {
         if (Object.keys(keyConditions).length === 0) {
@@ -167,6 +186,8 @@ export default class DynamoDBService {
             ExpressionAttributeNames: expressionAttributeNames,
             Limit: limit,
             ScanIndexForward: scanIndexForward,
+            ConsistentRead: consistentRead,
+            ...(exclusiveStartKey && { ExclusiveStartKey: exclusiveStartKey }),
             ReturnConsumedCapacity: 'TOTAL'
         }
 
@@ -200,13 +221,14 @@ export default class DynamoDBService {
             origin
         })
 
-        return { items, consumedCapacities, readIterations }
+        return { items, consumedCapacities, readIterations, lastEvaluatedKey }
     }
 
     async scanItems({
         tableName = '',
         limit = 1000,
         fetchAllItems = false,
+        consistentRead = false,
         origin = 'unknown'
     }) {
         if (!tableName) {
@@ -217,6 +239,7 @@ export default class DynamoDBService {
         const params: any = {
             TableName: tableName,
             Limit: limit,
+            ConsistentRead: consistentRead,
             ReturnConsumedCapacity: 'TOTAL'
         }
 
@@ -502,14 +525,33 @@ export default class DynamoDBService {
         if (!operations || operations.length === 0) {
             throw new Error(`DynamoDB transactWrite: at least one operation must be provided, origin: ${origin}`)
         }
+        if (operations.length > 100) {
+            throw new Error(`DynamoDB transactWrite: at most 100 operations are allowed, received ${operations.length}, origin: ${origin}`)
+        }
 
         const transactItems = operations.map((operation) => {
             if (operation.type === 'put') {
-                return { Put: { TableName: operation.tableName, Item: operation.item } }
+                return {
+                    Put: {
+                        TableName: operation.tableName,
+                        Item: operation.item,
+                        ...(operation.conditionExpression && { ConditionExpression: operation.conditionExpression }),
+                        ...(operation.expressionAttributeNames && { ExpressionAttributeNames: operation.expressionAttributeNames }),
+                        ...(operation.expressionAttributeValues && { ExpressionAttributeValues: operation.expressionAttributeValues }),
+                    },
+                }
             }
 
             if (operation.type === 'delete') {
-                return { Delete: { TableName: operation.tableName, Key: operation.key } }
+                return {
+                    Delete: {
+                        TableName: operation.tableName,
+                        Key: operation.key,
+                        ...(operation.conditionExpression && { ConditionExpression: operation.conditionExpression }),
+                        ...(operation.expressionAttributeNames && { ExpressionAttributeNames: operation.expressionAttributeNames }),
+                        ...(operation.expressionAttributeValues && { ExpressionAttributeValues: operation.expressionAttributeValues }),
+                    },
+                }
             }
 
             // 'update' — same expression building rules as updateItem: simple

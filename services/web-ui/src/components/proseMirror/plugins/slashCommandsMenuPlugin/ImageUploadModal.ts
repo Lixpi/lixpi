@@ -9,7 +9,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 export type ImageUploadResult = {
     success: boolean
-    fileId?: string
+    assetId?: string
     src?: string
     error?: string
 }
@@ -354,16 +354,18 @@ export class ImageUploadModal {
                 cursor: 'pointer',
                 fontSize: '14px',
             },
-            onClick: () => {
+            onClick: async () => {
                 const urlInput = this.modal.querySelector('[data-url-input]') as HTMLInputElement
                 const url = urlInput?.value?.trim()
 
                 if (url) {
-                    this.close()
-                    this.options.onComplete({
-                        success: true,
-                        src: url,
-                    })
+                    try {
+                        const result = await this.importUrl(url)
+                        this.close()
+                        this.options.onComplete(result)
+                    } catch (error) {
+                        alert(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                    }
                 }
             },
         }, 'Insert')
@@ -419,6 +421,7 @@ export class ImageUploadModal {
             const xhr = new XMLHttpRequest()
             const formData = new FormData()
             formData.append('file', file)
+            formData.append('expectedKind', 'image')
 
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
@@ -431,13 +434,10 @@ export class ImageUploadModal {
                 if (xhr.status >= 200 && xhr.status < 300) {
                     try {
                         const response = JSON.parse(xhr.responseText)
-                        // Include token in image URL for browser to load via <img> tag
-                        const token = await AuthService.getTokenSilently()
-                        const imageUrl = `${API_BASE_URL}${response.url}?token=${encodeURIComponent(token)}`
                         resolve({
                             success: true,
-                            fileId: response.fileId,
-                            src: imageUrl,
+                            assetId: response.assetId,
+                            src: response.originalUrl,
                         })
                     } catch {
                         reject(new Error('Invalid response from server'))
@@ -460,10 +460,32 @@ export class ImageUploadModal {
                 reject(new Error('Upload was cancelled'))
             })
 
-            xhr.open('POST', `${API_BASE_URL}/api/files/${workspaceId}`)
+            xhr.open('POST', `${API_BASE_URL}/api/assets/workspaces/${workspaceId}`)
             xhr.setRequestHeader('Authorization', `Bearer ${token}`)
             xhr.send(formData)
         })
+    }
+
+    private async importUrl(url: string): Promise<ImageUploadResult> {
+        const workspaceId = RouterService.getRouteParams().workspaceId as string
+        if (!workspaceId) throw new Error('No workspace ID available')
+        const token = await AuthService.getTokenSilently()
+        if (!token) throw new Error('Authentication required')
+        const response = await fetch(`${API_BASE_URL}/api/assets/workspaces/${encodeURIComponent(workspaceId)}/import-url`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ url, expectedKind: 'image' }),
+        })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || `Import failed with status ${response.status}`)
+        return {
+            success: true,
+            assetId: result.assetId,
+            src: result.originalUrl,
+        }
     }
 
     private showProgress(): void {

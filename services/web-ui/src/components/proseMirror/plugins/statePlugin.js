@@ -3,7 +3,6 @@ import { Plugin, PluginKey } from 'prosemirror-state'
 export const statePlugin = (
     initialStateContent,
     dispatchUpdateCallback,
-    documentTitleChangeCallback,
     dispatchLiveUpdateCallback,
     dispatchLocalTransactionCallback,
 ) => {
@@ -29,7 +28,7 @@ export const statePlugin = (
         return found
     }
 
-    const applyPluginState = (tr, _, oldState) => {
+    const applyPluginState = (tr) => {
         const skipDispatch = tr.getMeta('skipDispatch');
         // Live consumers (e.g. branch lineage markers) need to mirror the document
         // as it streams. Streamed AI tokens are dispatched with `skipDispatch` set
@@ -42,14 +41,6 @@ export const statePlugin = (
         }
         if (!skipDispatch && tr.docChanged) {
             dispatchLocalTransactionCallback?.(tr);
-        }
-        if (!skipDispatch && tr.docChanged && !isAiChatThreadDocument(tr.doc)) {
-            const oldTitle = oldState.doc.firstChild?.textContent;
-            const newTitle = tr.doc.firstChild?.textContent;
-
-            if (newTitle !== oldTitle) {
-                documentTitleChangeCallback(newTitle);
-            }
         }
         // If the transaction has the 'skipDispatch' flag set, don't call the update callback
         if (!skipDispatch && !dispatchLocalTransactionCallback && tr.docChanged && !hasInProgressAiContent(tr.doc) && !isAiChatThreadDocument(tr.doc)) {

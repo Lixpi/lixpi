@@ -11,11 +11,11 @@ import type {
 } from '@lixpi/constants'
 
 import type { AiModelMetaInfo, ChatMessage, ProviderState } from '../graph/state.ts'
-import type { StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
 
 export type ReferenceImage = {
     imageRef: string
     url: string
+    assetId?: string
     width?: number
     height?: number
 }
@@ -27,6 +27,7 @@ export type ExtractionInput = {
     organizationId?: string
     intent?: string
     messages: ChatMessage[]
+    sourceAssetIds?: string[]
     analysisProvider: ProviderName
     analysisModel: AiModelMetaInfo
     imageProvider?: ProviderName
@@ -65,7 +66,6 @@ export type StageLogger = {
 
 export type ExtractionDeps = {
     runImageRouter: (state: ProviderState) => Promise<Partial<ProviderState>>
-    storeWorkspaceImage: StoreWorkspaceImageFn
 }
 
 export type FeatureExtractor = {

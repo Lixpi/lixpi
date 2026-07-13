@@ -1,12 +1,11 @@
 import type {
-    AiChatThread,
     CanvasState,
 } from '@lixpi/constants'
 
 export type GeneratedMediaEventWorkspaceGuardState = {
     workspaceId: string
     currentCanvasState: Pick<CanvasState, 'nodes' | 'aiChatPanel'> | null
-    currentAiChatThreads: Pick<AiChatThread, 'threadId'>[]
+    currentAiChatThreads: Array<{ threadId: string }>
 }
 
 export type GeneratedMediaEventWorkspaceGuardInput = GeneratedMediaEventWorkspaceGuardState & {

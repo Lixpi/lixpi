@@ -1,39 +1,17 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import { STREAM_STATUS, type CanvasGeometryUpdate, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
-
 import {
-    logCanvasProjectionError,
-    upsertGeneratedImageToCanvas,
-    upsertPartialGeneratedImageToCanvas,
-} from '../../services/media-generation-canvas-projection.ts'
+    getAiInteractionCanonicalResponseSubject,
+    STREAM_STATUS,
+    type CanvasGeometryUpdate,
+    type MediaGenerationRunMeta,
+    type ProviderName,
+} from '@lixpi/constants'
 import type { ChunkPayload, ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from './stream-publisher.ts'
-
-// Store-function contract for the generation pipeline. The concrete
-// implementation injected at the composition root is a storeWorkspaceFile
-// adapter (see services/store-media-adapters.ts); the result is a superset of
-// these fields.
-export type StoreImageInput = {
-    workspaceId: string
-    buffer: Buffer
-    originalName?: string
-    mimeType?: string
-    useContentHash?: boolean
-}
-
-export type StoreImageResult = {
-    fileId: string
-    url: string
-    isDuplicate: boolean
-    size: number
-    mimeType: string
-}
-
-export type StoreWorkspaceImageFn = (input: StoreImageInput) => Promise<StoreImageResult>
-
-const subject = (workspaceId: string, aiChatThreadId: string): string =>
-    `ai.interaction.chat.receiveMessage.${workspaceId}.${aiChatThreadId}`
+import { attachGeneratedAssetNode, settleGeneratedAssetOriginal } from '../../services/generated-asset-storage.ts'
+import { materializeAssetProvenance } from '../../services/asset-provenance-materializer.ts'
+import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
 
 // Intrinsic pixel size read straight from the PNG IHDR / JPEG SOF header bytes
 // (no image library). Lets the API persist final fitted node dimensions so
@@ -78,9 +56,11 @@ export function readImageIntrinsicSize(buffer: Buffer): { width: number; height:
 }
 
 export class ImagePublisher {
+    private pendingCanvasGeometry?: Promise<CanvasGeometryUpdate>
+
     constructor(
         private readonly nats: NatsService,
-        private readonly storeImage: StoreWorkspaceImageFn,
+        private readonly organizationId: string,
         private readonly workspaceId: string,
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
@@ -97,81 +77,55 @@ export class ImagePublisher {
             return
         }
 
-        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+        this.nats.publish(getAiInteractionCanonicalResponseSubject(this.organizationId, this.aiChatThreadId), {
             content,
-            aiChatThreadId: this.aiChatThreadId,
+            conversationAssetId: this.aiChatThreadId,
         })
         this.onProseMirrorContent?.(content)
     }
 
-    // Empty imageBase64 publishes a placeholder event (UI shows animated border).
-    // Non-empty uploads to NATS Object Store with content-hash dedup, then publishes IMAGE_PARTIAL.
+    // Empty imageBase64 publishes a placeholder event. Non-empty provider
+    // partials stay transient; only final bytes settle the preassigned Asset.
     async partial(imageBase64: string, partialIndex: number): Promise<void> {
+        if (!this.generationRun) throw new Error('Image partial is missing generationRun')
+        const assetId = this.generationRun.lineageAssignment?.assetId
+        if (!assetId) throw new Error('Image partial is missing Asset assignment')
+        const intrinsicSize = imageBase64
+            ? readImageIntrinsicSize(Buffer.from(imageBase64, 'base64'))
+            : null
+        this.pendingCanvasGeometry ??= attachGeneratedAssetNode({
+            assetId,
+            workspaceId: this.workspaceId,
+            kind: 'image',
+            aspectRatio: intrinsicSize ? intrinsicSize.width / intrinsicSize.height : 1,
+            generationRun: this.generationRun,
+            conversationAssetId: this.aiChatThreadId,
+        })
+        const canvasGeometry = await this.pendingCanvasGeometry
+
         if (!imageBase64) {
             this.publish({
                 status: STREAM_STATUS.IMAGE_PARTIAL,
                 imageUrl: '',
-                fileId: '',
+                assetId,
                 partialIndex,
                 aiProvider: this.provider,
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+                canvasGeometry,
+                generationRun: this.generationRun,
             })
             return
         }
 
         try {
-            const buffer = Buffer.from(imageBase64, 'base64')
-            const result = await this.storeImage({
-                workspaceId: this.workspaceId,
-                buffer,
-                originalName: 'generated-image.png',
-                mimeType: 'image/png',
-                useContentHash: true,
-            })
-
-            const intrinsicSize = readImageIntrinsicSize(buffer)
-            let canvasGeometry: CanvasGeometryUpdate | null = null
-            try {
-                const proseMirrorThreadContent = await this.getProseMirrorSnapshot?.()
-                canvasGeometry = await upsertPartialGeneratedImageToCanvas({
-                    workspaceId: this.workspaceId,
-                    aiChatThreadId: this.aiChatThreadId,
-                    imageUrl: result.url,
-                    fileId: result.fileId,
-                    aiProvider: this.provider,
-                    partialIndex,
-                    ...(intrinsicSize ? { aspectRatio: intrinsicSize.width / intrinsicSize.height } : {}),
-                    generationRun: this.generationRun,
-                    ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
-                    ...(this.canvasVisibleArea ? { canvasVisibleArea: this.canvasVisibleArea } : {}),
-                })
-            } catch (error) {
-                logCanvasProjectionError('failed to persist partial generated image to canvas', error)
-            }
-
-            console.info('[ImagePublisher] IMAGE_PARTIAL prepared', {
-                workspaceId: this.workspaceId,
-                aiChatThreadId: this.aiChatThreadId,
-                generationRequestId: this.generationRun?.generationRequestId ?? '',
-                mediaRunId: this.generationRun?.mediaRunId ?? '',
-                mediaModelId: this.generationRun?.mediaModelId ?? '',
-                partialIndex,
-                fileId: result.fileId,
-                hasCanvasGeometry: Boolean(canvasGeometry),
-                layoutRevision: canvasGeometry?.layoutRevision ?? null,
-                geometryNodeCount: canvasGeometry?.nodes.length ?? 0,
-                nodeSnapshotCount: canvasGeometry?.nodeSnapshots?.length ?? 0,
-                edgeSnapshotCount: canvasGeometry?.edgeSnapshots?.length ?? 0,
-            })
-
             this.publish({
                 status: STREAM_STATUS.IMAGE_PARTIAL,
-                imageUrl: result.url,
-                fileId: result.fileId,
+                imageUrl: `data:image/png;base64,${imageBase64}`,
+                assetId,
                 partialIndex,
                 aiProvider: this.provider,
-                ...(canvasGeometry ? { canvasGeometry } : {}),
-                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+                ...(intrinsicSize ? { aspectRatio: intrinsicSize.width / intrinsicSize.height } : {}),
+                canvasGeometry,
+                generationRun: this.generationRun,
             })
         } catch {
             // Match Python behavior: log-and-skip on partial failure rather than
@@ -203,63 +157,63 @@ export class ImagePublisher {
         if (!isPng && !isJpeg) {
             throw new Error('Image completion failed: provider returned bytes that are not a PNG or JPEG image')
         }
-        const result = await this.storeImage({
+        if (!this.generationRun) throw new Error('Image completion is missing generationRun')
+        const result = await settleGeneratedAssetOriginal({
+            generationRun: this.generationRun,
             workspaceId: this.workspaceId,
             buffer,
             originalName: isPng ? 'generated-image.png' : 'generated-image.jpg',
             mimeType: isPng ? 'image/png' : 'image/jpeg',
-            useContentHash: true,
+            kind: 'image',
         })
 
         const intrinsicSize = readImageIntrinsicSize(buffer)
-        let canvasGeometry: CanvasGeometryUpdate | null = null
-        try {
-            const proseMirrorThreadContent = await this.getProseMirrorSnapshot?.()
-            canvasGeometry = await upsertGeneratedImageToCanvas({
-                workspaceId: this.workspaceId,
-                aiChatThreadId: this.aiChatThreadId,
-                imageUrl: result.url,
-                fileId: result.fileId,
-                responseId,
-                revisedPrompt,
-                aiProvider: this.provider,
-                imageModelProvider: this.provider,
-                imageModelId,
-                ...(intrinsicSize ? { aspectRatio: intrinsicSize.width / intrinsicSize.height } : {}),
-                generationRun: this.generationRun,
-                ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
-                ...(this.canvasVisibleArea ? { canvasVisibleArea: this.canvasVisibleArea } : {}),
-            })
-        } catch (error) {
-            logCanvasProjectionError('failed to persist generated image to canvas', error)
-        }
+        const canvasGeometry: CanvasGeometryUpdate = await attachGeneratedAssetNode({
+            assetId: result.assetId,
+            workspaceId: this.workspaceId,
+            kind: 'image',
+            aspectRatio: intrinsicSize ? intrinsicSize.width / intrinsicSize.height : 1,
+            generationRun: this.generationRun,
+            conversationAssetId: this.aiChatThreadId,
+        })
 
         console.info('[ImagePublisher] IMAGE_COMPLETE prepared', {
             workspaceId: this.workspaceId,
-            aiChatThreadId: this.aiChatThreadId,
+            conversationAssetId: this.aiChatThreadId,
             generationRequestId: this.generationRun?.generationRequestId ?? '',
             mediaRunId: this.generationRun?.mediaRunId ?? '',
             mediaModelId: this.generationRun?.mediaModelId ?? '',
             responseId,
-            fileId: result.fileId,
-            hasCanvasGeometry: Boolean(canvasGeometry),
-            layoutRevision: canvasGeometry?.layoutRevision ?? null,
-            geometryNodeCount: canvasGeometry?.nodes.length ?? 0,
-            nodeSnapshotCount: canvasGeometry?.nodeSnapshots?.length ?? 0,
-            edgeSnapshotCount: canvasGeometry?.edgeSnapshots?.length ?? 0,
+            assetId: result.assetId,
         })
 
         this.publish({
             status: STREAM_STATUS.IMAGE_COMPLETE,
             imageUrl: result.url,
-            fileId: result.fileId,
+            assetId: result.assetId,
             responseId,
             revisedPrompt,
             aiProvider: this.provider,
             imageModelProvider: this.provider,
             imageModelId,
-            ...(canvasGeometry ? { canvasGeometry } : {}),
+            canvasGeometry,
             ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
+        const provenancePayload = {
+            assetId: result.assetId,
+            organizationId: result.organizationId,
+            workspaceId: this.workspaceId,
+            conversationAssetId: this.aiChatThreadId,
+            generationRun: this.generationRun,
+            terminalStatus: 'completed' as const,
+        }
+        try {
+            await materializeAssetProvenance(provenancePayload)
+        } catch (error) {
+            if ((error as { message?: unknown })?.message !== 'PROVENANCE_PROJECTION_NOT_READY') {
+                console.error('Image Asset provenance materialization failed; queued retry', error)
+            }
+            await enqueueProvenanceRebuild(provenancePayload)
+        }
     }
 }

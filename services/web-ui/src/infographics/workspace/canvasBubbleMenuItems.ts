@@ -13,7 +13,7 @@ import {
     downloadIcon,
     triggerNodesConnectionIcon,
     changeNodesConnectorLineCurve,
-    mediaFoloderIcon
+    infoCircleFilledIcon,
 } from '$src/svgIcons/index.ts'
 import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
 
@@ -33,8 +33,7 @@ type CanvasBubbleMenuCallbacks = {
     onAskAi: (nodeId: string) => void
     onDownloadMedia: (nodeId: string) => void
     onReplaceMedia: (nodeId: string) => void
-    onAddToMediaLibrary: (nodeId: string) => void
-    canAddToMediaLibrary: (nodeId: string | null) => boolean
+    onOpenAsset: (nodeId: string) => void
     onTriggerConnection: (nodeId: string) => void
     onHide: () => void
 }
@@ -114,13 +113,13 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
     const replaceSvg = replaceButton.querySelector('svg')
     if (replaceSvg) applyStyle(replaceSvg, { transform: 'rotate(180deg)' })
 
-    const addToLibraryButton = createCanvasButton({
-        icon: mediaFoloderIcon,
-        title: 'Add to Media Library',
+    const assetDetailsButton = createCanvasButton({
+        icon: infoCircleFilledIcon,
+        title: 'Open Asset details',
         iconSize: 16,
         onClick: () => {
             if (activeNodeId) {
-                callbacks.onAddToMediaLibrary(activeNodeId)
+                callbacks.onOpenAsset(activeNodeId)
                 callbacks.onHide()
             }
         },
@@ -209,13 +208,7 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         { element: askAiButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: replaceButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT] },
         { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT] },
-        {
-            element: addToLibraryButton,
-            context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT],
-            update: () => applyStyle(addToLibraryButton, {
-                display: callbacks.canAddToMediaLibrary(activeNodeId) ? '' : 'none',
-            }),
-        },
+        { element: assetDetailsButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT] },
         // Connect is shared across all media contexts because any node can be
         // wired into a downstream thread the same way.
         { element: connectButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT] },

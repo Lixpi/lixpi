@@ -25,7 +25,6 @@ import {
     VIDEO_TOOL_NAME,
     getVideoToolForProvider,
 } from '../tools/video-generation.ts'
-import { extractVideoFramesViaWorkload } from '../../services/video-frame-extraction.ts'
 import { VEO_POLL_INTERVAL_MS } from '../config.ts'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -455,7 +454,7 @@ export class GoogleProvider extends BaseProvider {
         // Video extension (Phase 6) is mutually exclusive with image/referenceImages
         // per the VEO API ("Not allowed if image is provided"). When the canvas
         // submits with sourceVideoNodeId set, the backend reads the existing MP4
-        // bytes from the workspace Object Store and passes them as VEO's `video`
+        // bytes from the authorized Asset Blob and passes them as VEO's `video`
         // parameter. Extension takes precedence; first-frame + reference images
         // are skipped on this path.
         let extensionVideo: { videoBytes: string; mimeType: string } | undefined
@@ -544,20 +543,10 @@ export class GoogleProvider extends BaseProvider {
             }
 
             const durationSeconds = Number(state.videoDurationSeconds) || 0
-            // Heavy ffmpeg frame extraction runs on the NEX file-conversion
-            // workload, never on the API. Seek to the clip midpoint for the
-            // representative frame; fall back to frame-0 semantics when the
-            // duration is unknown.
-            const { posterBuffer, frameBuffer } = await extractVideoFramesViaWorkload({
-                workspaceId: state.workspaceId,
-                videoBuffer,
-                atSeconds: durationSeconds > 0 ? durationSeconds / 2 : undefined,
-            })
-
             await this.videoPub.complete({
                 videoBuffer,
-                posterBuffer,
-                frameBuffer,
+                posterBuffer: null,
+                frameBuffer: null,
                 durationSeconds,
                 aspectRatio: state.videoAspectRatio ?? '',
                 hasAudio: true,
@@ -573,7 +562,7 @@ export class GoogleProvider extends BaseProvider {
         }
     }
 
-    // Reads a `nats-obj://workspace-{ws}-files/{fileId}` URI from the workspace
+    // Reads the API-resolved internal Blob Object Store URI for the source Asset
     // Object Store and returns the raw bytes. Used by the video-extension path
     // to load the source MP4 so VEO can extend it. Returns undefined when the
     // URI is malformed, the bucket is missing, or the object can't be fetched —
