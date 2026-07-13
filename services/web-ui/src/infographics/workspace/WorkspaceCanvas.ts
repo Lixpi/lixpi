@@ -1585,7 +1585,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (titleEl) {
             const nodeScreenTop = viewport.y + position.y * getSafeViewportZoom(viewport)
             applyStyle(titleEl, {
-                top: `${(nodeScreenTop - chromeLayout.top - extraTopOffsetScreen) / chromeLayout.screenScale - 10}px`,
+                top: `${(nodeScreenTop - chromeLayout.top - extraTopOffsetScreen) / chromeLayout.screenScale - 2}px`,
             })
         }
     }
@@ -2160,7 +2160,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return assetsStore.get(node.assetId)?.descriptor as MediaDescriptor | undefined
     }
 
-    function buildAssetMetadataEditorDocument(asset: Asset): ProseMirrorJsonNode {
+    function buildAssetMetadataEditorDocument(
+        asset: Asset,
+        mode: 'node' | 'details',
+    ): ProseMirrorJsonNode {
         const title = asset.title.trim()
         const description = asset.descriptor?.summary?.trim() ?? ''
         return {
@@ -2170,20 +2173,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     type: 'documentTitle',
                     ...(title ? { content: [{ type: 'text', text: title }] } : {}),
                 },
-                {
+                ...(mode === 'details' ? [{
                     type: 'paragraph',
                     ...(description ? { content: [{ type: 'text', text: description }] } : {}),
-                },
+                }] : []),
             ],
         }
     }
 
-    function readAssetMetadataEditorDocument(value: ProseMirrorJsonNode): { title: string; description: string } {
+    function readAssetMetadataEditorDocument(value: ProseMirrorJsonNode): { title: string; description?: string } {
         const titleNode = value.content?.find((node) => node.type === 'documentTitle')
         const descriptionNode = value.content?.find((node) => node.type === 'paragraph')
         return {
             title: collectProseMirrorText(titleNode).trim(),
-            description: collectProseMirrorText(descriptionNode).trim(),
+            ...(descriptionNode ? { description: collectProseMirrorText(descriptionNode).trim() } : {}),
         }
     }
 
@@ -2194,7 +2197,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     ): void {
         const asset = assetsStore.get(node.assetId)
         if (!asset) return
-        let draft = buildAssetMetadataEditorDocument(asset)
+        let draft = buildAssetMetadataEditorDocument(asset, mode)
         const editorKey = `${node.nodeId}:metadata:${mode}`
         const commit = async (): Promise<void> => {
             const current = assetsStore.get(node.assetId)
@@ -2202,8 +2205,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const metadata = readAssetMetadataEditorDocument(draft)
             if (!metadata.title) return
             const currentDescription = current.descriptor?.summary ?? ''
-            if (metadata.title === current.title && metadata.description === currentDescription) return
-            const descriptor = current.descriptor
+            const descriptionChanged = metadata.description !== undefined
+                && metadata.description !== currentDescription
+            if (metadata.title === current.title && !descriptionChanged) return
+            const descriptor = current.descriptor && metadata.description !== undefined
                 ? { ...current.descriptor, summary: metadata.description, updatedAt: Date.now() }
                 : undefined
             const updated = await assetService.updateMetadata(current.assetId, current.revision, {
@@ -2220,7 +2225,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             content: html`<div></div>` as HTMLDivElement,
             initialVal: draft,
             isDisabled: false,
-            documentType: 'assetMetadata',
+            documentType: mode === 'node' ? 'assetTitle' : 'assetMetadata',
             onEditorChange: (value: ProseMirrorJsonNode) => { draft = value },
             onStreamingUpdate: () => {},
             onAiChatSubmit: () => {},

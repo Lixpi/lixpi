@@ -52,7 +52,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Resize preserves aspect ratio (stored when image is uploaded)
 - Detach their Workspace reference atomically with canvas removal; zero-reference Asset and Blob cleanup is asynchronous
 - Expose Asset details once metadata is loaded; pending generation keeps its stable Asset identity
-- Render editable Asset title and description metadata through the shared ProseMirror schema both above the media node and at the top of its details panel
+- Render the editable Asset title through a title-only ProseMirror document above the media node; render editable title and description metadata together at the top of its details panel
 - Use the shared dropdown primitive for Asset scope changes and keep storage, rendition, and lineage state visible as read-only details
 
 ### Uploaded File Placeholders

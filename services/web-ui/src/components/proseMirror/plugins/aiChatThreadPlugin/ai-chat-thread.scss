@@ -117,15 +117,9 @@ $userMessageTextColor: #fff;
     margin-top: 2rem;
     min-height: $aiChatThreadMinHeight;
 
-    // Reserve space so the sticky composer doesn't cover content
-    padding-bottom: 5rem;
-
     // ===== THREAD CONTENT =====
     .ai-chat-thread-content {
         position: relative;
-
-        // Reserve space so sticky composer doesn't cover last message
-        padding-bottom: 3.25rem;
     }
 
     .ai-chat-thread-content .ai-generated-media-node {

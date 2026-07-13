@@ -37,6 +37,7 @@ The active Asset editor modes have different document shapes:
 - Asset content (`documentType: 'assetContent'`): `block+`
 - Asset conversation (`documentType: 'assetConversation'`): `aiChatThread+`
 - Sealed Asset provenance (`documentType: 'assetProvenance'`): `aiChatThread+`, mounted read-only
+- Asset title (`documentType: 'assetTitle'`): `documentTitle`, an ephemeral title-only editor used above media nodes
 - Asset metadata (`documentType: 'assetMetadata'`): `documentTitle paragraph`, an ephemeral editor that maps edits to `Asset.title` and the media descriptor summary
 - Floating prompt input (`documentType: 'aiPromptInput'`): `aiPromptInput`
 

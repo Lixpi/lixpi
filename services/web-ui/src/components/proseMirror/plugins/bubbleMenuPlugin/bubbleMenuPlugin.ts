@@ -8,6 +8,16 @@ export const bubbleMenuPluginKey = new PluginKey('bubbleMenu')
 
 const isTouchDevice = (): boolean => 'ontouchstart' in window || navigator.maxTouchPoints > 0
 
+function resolvedPositionHasNodeType(
+    position: { depth: number; node: (depth: number) => ProseMirrorNode },
+    nodeType: string,
+): boolean {
+    for (let depth = position.depth; depth >= 0; depth -= 1) {
+        if (position.node(depth).type.name === nodeType) return true
+    }
+    return false
+}
+
 type BubbleMenuViewOptions = {
     view: EditorView
 }
@@ -112,6 +122,12 @@ class BubbleMenuView {
         const { state } = this.view
         const { selection } = state
         const { $from, $to } = selection
+
+        const selectsDocumentTitle = selection instanceof NodeSelection
+            ? selection.node.type.name === 'documentTitle'
+            : resolvedPositionHasNodeType($from, 'documentTitle')
+                || resolvedPositionHasNodeType($to, 'documentTitle')
+        if (selectsDocumentTitle) return false
 
         // Don't show in code blocks
         const isCodeBlock = $from.parent.type.name === 'code_block' || $to.parent.type.name === 'code_block'

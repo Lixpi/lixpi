@@ -415,8 +415,9 @@
     box-shadow: none;
     transform: translateY(-100%);
     pointer-events: auto;
+    cursor: text;
 
-    .ProseMirror {
+    &.canvas-asset-metadata-editor .ProseMirror {
         min-height: 0;
         padding: 0 0 12px;
         color: #252b33;
@@ -424,24 +425,19 @@
         border: 0;
         box-shadow: none;
         outline: none;
+        cursor: text;
     }
 
-    h1.document-title {
+    &.canvas-asset-metadata-editor .ProseMirror h1.document-title {
         margin: 0;
         color: #252b33;
         font-size: 1.85rem;
         font-weight: 700;
         letter-spacing: -0.025em;
         line-height: 1.08;
+        cursor: text;
     }
 
-    p {
-        max-width: 46rem;
-        margin: 0.38rem 0 0;
-        color: rgba(37, 43, 51, 0.68);
-        font-size: 0.9rem;
-        line-height: 1.45;
-    }
 }
 
 .workspace-branch-origin-info-chrome,
@@ -763,20 +759,24 @@
 
         &.is-details {
             margin: 1rem 1rem 0;
+            cursor: text;
 
             .ProseMirror {
                 padding: 0;
+                cursor: text;
             }
 
             h1.document-title {
                 margin: 0 0 0.45rem;
                 font-size: 1.55rem;
                 line-height: 1.12;
+                cursor: text;
             }
 
             p {
                 margin: 0;
                 font-size: 0.82rem;
+                cursor: text;
             }
         }
     }
