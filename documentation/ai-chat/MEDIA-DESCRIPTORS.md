@@ -7,6 +7,8 @@ description: The compact text descriptor stored on each context-bearing Asset, h
 
 Every context-bearing Asset can carry a compact, model-friendly
 **descriptor**: a one-to-two sentence summary plus a few entity and style tags.
+The same final media VLM call also returns a specific two-to-three-word title,
+which replaces the Asset's provisional upload/generated title.
 Images and videos still expose the historical `MediaDescriptor` name, but the
 canonical shared contract is now `ContentDescriptor` because documents and AI
 conversation Assets use the same shape. Canvas nodes carry only `assetId`; they
@@ -23,7 +25,8 @@ also renders ready descriptors for media nodes.
 The descriptor is deliberately short so it can fit into a resolver transcript or
 workspace relevance prompt without bloat. The summary is capped at
 `MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH` (280 chars) and stamped with
-`MEDIA_DESCRIPTOR_VERSION` so stale descriptors can be detected later.
+`MEDIA_DESCRIPTOR_VERSION` so stale descriptors can be detected later. Media
+titles are capped at `MEDIA_DESCRIPTOR_TITLE_MAX_WORDS` (three words).
 
 {% callout type="note" %}
 The summary length cap and the version stamp are the two mechanisms that keep
@@ -35,7 +38,8 @@ if it is otherwise `ready`.
 ## Shape
 
 `ContentDescriptor` (`packages/lixpi/constants/ts/types.ts`) is the optional
-`Asset.descriptor` component. `Asset-Meta` projects its summary and tags for
+`Asset.descriptor` component. The VLM title is stored in `Asset.title`, not
+duplicated inside `ContentDescriptor`. `Asset-Meta` projects its title, summary, and tags for
 catalog listing, while workspace placements resolve the authoritative Asset.
 `MediaDescriptor` is an alias for the same type.
 
@@ -101,7 +105,10 @@ with a `status: 'analyzing'` descriptor. The browser requests
 stored image, final frame, representative frame, or poster. The media-analysis
 model is API-owned through `settings.mediaDescriptor.defaultVlmModelId` in
 `services/api/src/settings.ts`, not selected by the browser. For video,
-captioning runs on the representative still/poster, never the MP4.
+captioning runs on the representative still/poster, never the MP4. The
+structured response contains `title`, `summary`, `entityTags`, and `styleTags`;
+the API persists the media title and descriptor together under one Asset
+revision.
 
 ### Document and conversation Assets — text analysis
 
@@ -138,8 +145,9 @@ inside the larger rank → force-include → assemble flow.
 While media `status === 'analyzing'`, the media node's info button pulses
 (`.media-info-button.is-analyzing`, animation `workspace-media-analyzing-pulse`)
 and its title/aria-label explains what is happening. Opening the panel shows an
-"Analyzing media..." note. When ready, the same panel renders the summary and
-tags via `buildMediaDescriptorSection`.
+"Analyzing media..." note. When ready, the media title remains visible over the
+top of the node, while the expanded panel renders the summary and tags first,
+before Asset diagnostics and provenance.
 
 Documents and conversation nodes use descriptors for relevance, not media chrome —
 they do not render the analyzing pulse. See

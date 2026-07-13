@@ -32,14 +32,15 @@ flowchart LR
 
 The schema contract lives in `packages/lixpi/prosemirror`. That package exports the base CommonMark-like schema, custom node specs, AI chat node specs, the AI prompt input node spec, model-selection attr normalizers, streaming segment assembly helpers, and the schema builder used by both browser and API code. Web-ui files under `components/schema.ts` and `customNodes/` are thin re-exports; they do not define a second schema.
 
-The active Asset editor modes have different title-free document shapes:
+The active Asset editor modes have different document shapes:
 
 - Asset content (`documentType: 'assetContent'`): `block+`
 - Asset conversation (`documentType: 'assetConversation'`): `aiChatThread+`
 - Sealed Asset provenance (`documentType: 'assetProvenance'`): `aiChatThread+`, mounted read-only
+- Asset metadata (`documentType: 'assetMetadata'`): `documentTitle paragraph`, an ephemeral editor that maps edits to `Asset.title` and the media descriptor summary
 - Floating prompt input (`documentType: 'aiPromptInput'`): `aiPromptInput`
 
-The authoritative title is `Asset.title`; Asset snapshots never contain `documentTitle`.
+The authoritative title is `Asset.title`; persisted Asset snapshots never contain `documentTitle`. The metadata editor uses `documentTitle` only as its editing surface and commits the value through Asset metadata APIs.
 
 The shared schema builder does two important things:
 

@@ -54,6 +54,7 @@ import {
     MEDIA_DESCRIPTOR_VERSION,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
+import { createPureDropdown } from '$src/components/dropdown/index.ts'
 import {
     createAiPromptComposer,
     createDefaultPromptControlFactories,
@@ -945,6 +946,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const expandedBranchLineInfoNodeIds: Set<string> = new Set()
     const generatedMediaInfoRenderers: Map<string, ReadOnlyAiChatThreadRendererInstance> = new Map()
     const generatedMediaAssetEditors: Map<string, ProseMirrorEditor> = new Map()
+    const generatedMediaAssetDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const RESET_GENERATED_MEDIA_CHROME_SYNC_KEY = '\u0000reset-generated-media-chrome'
     let generatedMediaChromeSyncKey = RESET_GENERATED_MEDIA_CHROME_SYNC_KEY
@@ -1579,6 +1581,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             transformOrigin: '0 0',
             transform: `scale(${chromeLayout.screenScale})`,
         })
+        const titleEl = chromeEl.querySelector('.workspace-generated-media-title') as HTMLElement | null
+        if (titleEl) {
+            const nodeScreenTop = viewport.y + position.y * getSafeViewportZoom(viewport)
+            applyStyle(titleEl, {
+                top: `${(nodeScreenTop - chromeLayout.top - extraTopOffsetScreen) / chromeLayout.screenScale - 10}px`,
+            })
+        }
     }
 
     function applyPendingGeneratedMediaIconGeometry(
@@ -2101,7 +2110,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // The node's compact descriptor (summary + tags) — shown for all media,
     // including uploads with no generation metadata. Failed analysis still gets
     // a visible row so the info panel never collapses into an empty surface.
-    function buildMediaDescriptorSection(descriptor: MediaDescriptor | undefined): HTMLElement | null {
+    function buildMediaDescriptorSection(
+        descriptor: MediaDescriptor | undefined,
+        options: { includeSummary?: boolean } = {},
+    ): HTMLElement | null {
         if (!descriptor) return null
         if (descriptor.source !== 'analysis') return null
         if (descriptor.status === 'analyzing') {
@@ -2127,8 +2139,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const section = html`
             <div className="canvas-media-descriptor">
-                <span className="canvas-media-descriptor-label">Description</span>
-                <p className="canvas-media-descriptor-summary">${descriptor.summary}</p>
+                ${options.includeSummary === false ? '' : html`
+                    <span className="canvas-media-descriptor-label">Description</span>
+                    <p className="canvas-media-descriptor-summary">${descriptor.summary}</p>
+                `}
             </div>
         ` as HTMLElement
         const tags = [...descriptor.entityTags, ...descriptor.styleTags]
@@ -2146,32 +2160,112 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return assetsStore.get(node.assetId)?.descriptor as MediaDescriptor | undefined
     }
 
+    function buildAssetMetadataEditorDocument(asset: Asset): ProseMirrorJsonNode {
+        const title = asset.title.trim()
+        const description = asset.descriptor?.summary?.trim() ?? ''
+        return {
+            type: 'doc',
+            content: [
+                {
+                    type: 'documentTitle',
+                    ...(title ? { content: [{ type: 'text', text: title }] } : {}),
+                },
+                {
+                    type: 'paragraph',
+                    ...(description ? { content: [{ type: 'text', text: description }] } : {}),
+                },
+            ],
+        }
+    }
+
+    function readAssetMetadataEditorDocument(value: ProseMirrorJsonNode): { title: string; description: string } {
+        const titleNode = value.content?.find((node) => node.type === 'documentTitle')
+        const descriptionNode = value.content?.find((node) => node.type === 'paragraph')
+        return {
+            title: collectProseMirrorText(titleNode).trim(),
+            description: collectProseMirrorText(descriptionNode).trim(),
+        }
+    }
+
+    function mountAssetMetadataEditor(
+        node: ImageCanvasNode | VideoCanvasNode,
+        mount: HTMLElement,
+        mode: 'node' | 'details',
+    ): void {
+        const asset = assetsStore.get(node.assetId)
+        if (!asset) return
+        let draft = buildAssetMetadataEditorDocument(asset)
+        const editorKey = `${node.nodeId}:metadata:${mode}`
+        const commit = async (): Promise<void> => {
+            const current = assetsStore.get(node.assetId)
+            if (!current) return
+            const metadata = readAssetMetadataEditorDocument(draft)
+            if (!metadata.title) return
+            const currentDescription = current.descriptor?.summary ?? ''
+            if (metadata.title === current.title && metadata.description === currentDescription) return
+            const descriptor = current.descriptor
+                ? { ...current.descriptor, summary: metadata.description, updatedAt: Date.now() }
+                : undefined
+            const updated = await assetService.updateMetadata(current.assetId, current.revision, {
+                title: metadata.title,
+                ...(descriptor ? { descriptor } : {}),
+            })
+            if ('error' in updated) return
+            assetsStore.upsert(updated)
+            resetGeneratedMediaChromeSyncKey()
+            scheduleGeneratedMediaChromeSync()
+        }
+        const editor = new ProseMirrorEditor({
+            editorMountElement: mount,
+            content: html`<div></div>` as HTMLDivElement,
+            initialVal: draft,
+            isDisabled: false,
+            documentType: 'assetMetadata',
+            onEditorChange: (value: ProseMirrorJsonNode) => { draft = value },
+            onStreamingUpdate: () => {},
+            onAiChatSubmit: () => {},
+            onAiChatStop: () => {},
+        })
+        mount.addEventListener('focusout', (event: FocusEvent) => {
+            const nextTarget = event.relatedTarget
+            if (nextTarget instanceof Node && mount.contains(nextTarget)) return
+            void commit()
+        })
+        generatedMediaAssetEditors.set(editorKey, editor)
+    }
+
     function createAssetDetailsSection(node: ImageCanvasNode | VideoCanvasNode): HTMLElement | null {
         const asset = assetsStore.get(node.assetId)
         if (!asset) return null
         const section = html`
             <section className="canvas-asset-details">
-                <label className="canvas-asset-details-label">Title</label>
-                <input className="canvas-asset-title-input" type="text" />
-                <label className="canvas-asset-details-label">Scope</label>
-                <select className="canvas-asset-scope-select">
-                    <option value="workspace">Workspace</option>
-                    <option value="user">Mine</option>
-                    <option value="organization">Organization</option>
-                </select>
-                <div className="canvas-asset-details-status"></div>
-                <div className="canvas-asset-renditions"></div>
-                <div className="canvas-asset-lineage"></div>
+                <div className="canvas-asset-details-toolbar">
+                    <span className="canvas-asset-details-heading">Asset details</span>
+                    <div className="canvas-asset-scope-control">
+                        <span className="canvas-asset-details-label">Scope</span>
+                        <div className="canvas-asset-scope-dropdown"></div>
+                    </div>
+                </div>
+                <div className="canvas-asset-storage-lineage">
+                    <div className="canvas-asset-detail-row">
+                        <span className="canvas-asset-diagnostics-label">Status</span>
+                        <div className="canvas-asset-details-status"></div>
+                    </div>
+                    <div className="canvas-asset-detail-row">
+                        <span className="canvas-asset-diagnostics-label">Renditions</span>
+                        <div className="canvas-asset-renditions"></div>
+                    </div>
+                    <div className="canvas-asset-detail-row">
+                        <span className="canvas-asset-diagnostics-label">Lineage</span>
+                        <div className="canvas-asset-lineage"></div>
+                    </div>
+                </div>
             </section>
         ` as HTMLElement
-        const titleInput = section.querySelector('.canvas-asset-title-input') as HTMLInputElement
-        const scopeSelect = section.querySelector('.canvas-asset-scope-select') as HTMLSelectElement
         const statusEl = section.querySelector('.canvas-asset-details-status') as HTMLElement
         const renditionsEl = section.querySelector('.canvas-asset-renditions') as HTMLElement
         const lineageEl = section.querySelector('.canvas-asset-lineage') as HTMLElement
-        titleInput.value = asset.title
-        scopeSelect.value = asset.scope
-        statusEl.textContent = `Lifecycle: ${asset.states.lifecycle} · Media: ${asset.states.media} · Provenance: ${asset.states.provenance}`
+        statusEl.textContent = `${asset.states.lifecycle} · ${asset.states.media} · ${asset.states.provenance}`
         const renditionNames = Object.entries(asset.media?.renditions ?? {})
             .map(([name, rendition]) => `${name}: ${rendition?.status ?? 'missing'}`)
         renditionsEl.textContent = renditionNames.length > 0 ? renditionNames.join(' · ') : 'No media renditions'
@@ -2180,53 +2274,47 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             asset.lineage?.parentAssetId ? `parent ${asset.lineage.parentAssetId}` : '',
             ...(asset.lineage?.sourceAssetIds ?? []).map((assetId) => `source ${assetId}`),
         ].filter(Boolean)
-        lineageEl.textContent = lineageParts.length > 0 ? `Lineage: ${lineageParts.join(' · ')}` : 'No lineage'
+        lineageEl.textContent = lineageParts.length > 0 ? lineageParts.join('\n') : 'No lineage'
 
-        const showError = (message: string): void => {
-            statusEl.textContent = message
-            statusEl.classList.add('is-error')
-        }
-        const commitTitle = async (): Promise<void> => {
-            const current = assetsStore.get(asset.assetId)
-            const title = titleInput.value.trim()
-            if (!current || !title || title === current.title) return
-            const updated = await assetService.updateMetadata(current.assetId, current.revision, { title })
-            if ('error' in updated) {
-                showError(`Title update failed: ${updated.error}`)
-                titleInput.value = current.title
-                return
-            }
-            assetsStore.upsert(updated)
-            resetGeneratedMediaChromeSyncKey()
-            scheduleGeneratedMediaChromeSync()
-        }
-        titleInput.addEventListener('blur', () => { void commitTitle() })
-        titleInput.addEventListener('keydown', (event) => {
-            if (event.key !== 'Enter') return
-            event.preventDefault()
-            titleInput.blur()
+        const scopeOptions: Array<{ title: string; scope: Asset['scope'] }> = [
+            { title: 'Workspace', scope: 'workspace' },
+            { title: 'Mine', scope: 'user' },
+            { title: 'Organization', scope: 'organization' },
+        ]
+        const selectedScope = scopeOptions.find((option) => option.scope === asset.scope) ?? scopeOptions[0]!
+        const scopeDropdown = createPureDropdown({
+            id: `asset-scope-${node.nodeId}`,
+            selectedValue: selectedScope,
+            options: scopeOptions,
+            theme: 'light',
+            renderIconForSelectedValue: false,
+            renderIconForOptions: false,
+            mountToBody: true,
+            onSelect: (option) => {
+                void (async () => {
+                    const current = assetsStore.get(asset.assetId)
+                    if (!current) return
+                    const scope = option.scope as Asset['scope']
+                    const scopeOwnerId = scope === 'workspace'
+                        ? workspaceId
+                        : scope === 'user'
+                            ? userStore.getData('userId')
+                            : current.organizationId
+                    const updated = await assetService.changeScope(current.assetId, current.revision, scope, scopeOwnerId)
+                    if ('error' in updated) {
+                        statusEl.textContent = `Scope update failed: ${updated.error}`
+                        statusEl.classList.add('is-error')
+                        return
+                    }
+                    assetsStore.upsert(updated)
+                    resetGeneratedMediaChromeSyncKey()
+                    scheduleGeneratedMediaChromeSync()
+                })()
+            },
         })
-        scopeSelect.addEventListener('change', () => {
-            void (async () => {
-                const current = assetsStore.get(asset.assetId)
-                if (!current) return
-                const scope = scopeSelect.value as Asset['scope']
-                const scopeOwnerId = scope === 'workspace'
-                    ? workspaceId
-                    : scope === 'user'
-                        ? userStore.getData('userId')
-                        : current.organizationId
-                const updated = await assetService.changeScope(current.assetId, current.revision, scope, scopeOwnerId)
-                if ('error' in updated) {
-                    showError(`Scope update failed: ${updated.error}`)
-                    scopeSelect.value = current.scope
-                    return
-                }
-                assetsStore.upsert(updated)
-                resetGeneratedMediaChromeSyncKey()
-                scheduleGeneratedMediaChromeSync()
-            })()
-        })
+        const scopeMount = section.querySelector('.canvas-asset-scope-dropdown') as HTMLElement
+        scopeMount.appendChild(scopeDropdown.dom)
+        generatedMediaAssetDropdowns.set(node.nodeId, scopeDropdown)
 
         const contentSnapshot = assetDocumentsStore.get(asset.assetId, 'content')
         if (asset.documents.content && contentSnapshot) {
@@ -2302,6 +2390,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const showChatThread = Boolean(generatedBy) && !options.descriptorOnly
         const panelClassName = ['canvas-generated-media-info-panel', options.className, 'nopan'].filter(Boolean).join(' ')
         const panel = html`<div className=${panelClassName}></div>` as HTMLElement
+        if (options.includeDescriptor !== false) {
+            const metadataEditorMount = html`<div className="canvas-asset-metadata-editor is-details nopan"></div>` as HTMLElement
+            panel.appendChild(metadataEditorMount)
+            mountAssetMetadataEditor(node, metadataEditorMount, 'details')
+            const descriptorSection = buildMediaDescriptorSection(getAssetDescriptor(node), { includeSummary: false })
+            if (descriptorSection) panel.appendChild(descriptorSection)
+        }
         const assetDetails = createAssetDetailsSection(node)
         if (assetDetails) panel.appendChild(assetDetails)
 
@@ -2340,11 +2435,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     threadId: generatedBy.conversationAssetId,
                 })
             }
-        }
-
-        if (!showChatThread && options.includeDescriptor !== false) {
-            const descriptorSection = buildMediaDescriptorSection(getAssetDescriptor(node))
-            if (descriptorSection) panel.appendChild(descriptorSection)
         }
 
         return panel
@@ -2779,12 +2869,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const modelBadge = createMediaModelBadge({ modelId, modelProvider })
         const chromeEl = html`
             <div className="workspace-generated-media-chrome" data=${{ mediaChromeNodeId: node.nodeId }}>
+                <div className="workspace-generated-media-title canvas-asset-metadata-editor is-node nopan"></div>
                 <div className="workspace-generated-media-actions">
                     ${modelBadge}
                     ${createMediaInfoButton(node)}
                 </div>
             </div>
         ` as HTMLElement
+        const metadataEditorMount = chromeEl.querySelector('.workspace-generated-media-title') as HTMLElement
+        mountAssetMetadataEditor(node, metadataEditorMount, 'node')
 
         const viewport = getLiveViewport()
         applyGeneratedMediaChromeGeometry(
@@ -2966,6 +3059,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         generatedMediaInfoRenderers.clear()
         for (const editor of generatedMediaAssetEditors.values()) editor.destroy()
         generatedMediaAssetEditors.clear()
+        for (const dropdown of generatedMediaAssetDropdowns.values()) dropdown.destroy()
+        generatedMediaAssetDropdowns.clear()
         for (const tile of generatedMediaInfoPreviewTiles) {
             tile.destroy()
         }
@@ -3187,6 +3282,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 (node.type === 'image' || node.type === 'video')
                 && !pendingBeforeFirstFrameNodeIds.has(node.nodeId)
                 && Boolean(assetsStore.get((node as ImageCanvasNode | VideoCanvasNode).assetId)))
+        for (const node of mediaInfoNodes) {
+            const descriptor = getAssetDescriptor(node)
+            if (descriptor?.status === 'ready' && descriptor.version !== MEDIA_DESCRIPTOR_VERSION) {
+                queueCanvasMediaAnalysis(node.nodeId, getMediaDescriptorStillAssetId(node))
+            }
+        }
         const pendingIconNodes = canvasNodes
             .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
                 (node.type === 'image' || node.type === 'video')
@@ -10106,11 +10207,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Patch a single media node's descriptor and re-commit so the canvas chrome
     // (analyzing indicator, info panel) re-renders. No-op if the node is gone.
-    function patchMediaNodeDescriptor(nodeId: string, descriptor: MediaDescriptor): void {
+    function patchMediaNodeDescriptor(nodeId: string, descriptor: MediaDescriptor, title?: string): void {
         const node = getCurrentCanvasMediaNode(nodeId)
         const asset = node ? assetsStore.get(node.assetId) : undefined
         if (!asset) return
-        assetsStore.upsert({ ...asset, descriptor })
+        assetsStore.upsert({ ...asset, ...(title ? { title } : {}), descriptor })
         scheduleGeneratedMediaChromeSync()
     }
 
@@ -10158,7 +10259,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 source: 'analysis',
                 version: MEDIA_DESCRIPTOR_VERSION,
                 updatedAt: Date.now(),
-            })
+            }, result.title)
         } catch {
             if (!currentMediaStillMatches(nodeId, stillAssetId)) return
             if (scheduleCanvasMediaAnalysisRetry(nodeId, stillAssetId, analysisAttempt)) return

@@ -67,8 +67,9 @@ export const BILLING_CONFIG: Record<string, string> = {
 // stale descriptors can be detected/regenerated. SUMMARY_MAX_LENGTH keeps the
 // summary "descriptive but not massive" — short enough to feed into model
 // context (e.g. the branch-resolver transcript) without bloat.
-export const MEDIA_DESCRIPTOR_VERSION = 'media-descriptor-v1'
+export const MEDIA_DESCRIPTOR_VERSION = 'media-descriptor-v2'
 export const MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH = 280
+export const MEDIA_DESCRIPTOR_TITLE_MAX_WORDS = 3
 
 // Upper bound on the plain-text fed into a document/conversation Asset descriptor pass. A
 // descriptor only needs the gist, so we cap the prompt rather than paying to

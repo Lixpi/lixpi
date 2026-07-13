@@ -13,6 +13,7 @@ export const DOCUMENT_TYPE = {
     ASSET_CONTENT: 'assetContent',
     ASSET_CONVERSATION: 'assetConversation',
     ASSET_PROVENANCE: 'assetProvenance',
+    ASSET_METADATA: 'assetMetadata',
 } as const
 
 export const PROSEMIRROR_SCHEMA_VERSION = 'prosemirror-schema-v1'
@@ -75,6 +76,7 @@ function getDocContent(documentType: ProseMirrorDocumentType | string): string {
         return `${aiChatThreadNodeType}+`
     }
     if (documentType === DOCUMENT_TYPE.ASSET_CONTENT) return 'block+'
+    if (documentType === DOCUMENT_TYPE.ASSET_METADATA) return 'documentTitle paragraph'
     if (documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
         return aiPromptInputNodeType
     }

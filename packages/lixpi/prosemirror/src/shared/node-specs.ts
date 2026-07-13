@@ -39,6 +39,20 @@ export const codeBlockNodeSpec = {
     },
 } as NodeSpec
 
+export const documentTitleNodeType = 'documentTitle'
+
+export const documentTitleNodeSpec = {
+    content: 'inline*',
+    group: 'block',
+    defining: true,
+    draggable: false,
+    selectable: false,
+    parseDOM: [{ tag: 'h1.document-title' }],
+    toDOM() {
+        return ['h1', { class: 'document-title' }, 0]
+    },
+} as NodeSpec
+
 export const taskRowDefaultAttrs = {
     taskKey: 'LIX-1',
     status: 'New Task Status',
@@ -56,6 +70,7 @@ export const taskRowNodeSpec = {
 } as NodeSpec
 
 export const customNodeSpecs = {
+    [documentTitleNodeType]: documentTitleNodeSpec,
     [taskRowNodeType]: taskRowNodeSpec,
     [codeBlockNodeType]: codeBlockNodeSpec,
 }

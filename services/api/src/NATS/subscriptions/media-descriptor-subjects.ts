@@ -59,10 +59,12 @@ const persistDescriptor = async ({
     assetId,
     requester,
     descriptor,
+    title,
 }: {
     assetId: string
     requester: Awaited<ReturnType<typeof getAssetRequesterContext>>
     descriptor: ContentDescriptor
+    title?: string
 }) => {
     for (let attempt = 0; attempt < 5; attempt += 1) {
         const current = await AssetModel.get({ assetId, requester })
@@ -72,6 +74,7 @@ const persistDescriptor = async ({
             requester,
             expectedRevision: current.revision,
             descriptor,
+            ...(title ? { title } : {}),
         })
         if (!('error' in persisted) || persisted.error !== 'REVISION_CONFLICT') return persisted
     }
@@ -130,15 +133,20 @@ export const mediaDescriptorSubjects = [{
             const persisted = await persistDescriptor({
                 assetId,
                 requester,
+                title: isMedia ? descriptor.title : undefined,
                 descriptor: {
-                    ...descriptor,
+                    summary: descriptor.summary,
+                    entityTags: descriptor.entityTags,
+                    styleTags: descriptor.styleTags,
                     status: 'ready',
                     source: 'analysis',
                     version: MEDIA_DESCRIPTOR_VERSION,
                     updatedAt: Date.now(),
                 },
             })
-            return 'error' in persisted ? persisted : persisted.descriptor
+            return 'error' in persisted
+                ? persisted
+                : { ...persisted.descriptor, title: persisted.title }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
             err(`Asset descriptor failed for ${assetId}: ${message}`)

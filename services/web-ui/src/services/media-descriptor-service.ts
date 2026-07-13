@@ -8,6 +8,7 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 const { MEDIA_DESCRIBE } = NATS_SUBJECTS.AI_INTERACTION_SUBJECTS
 
 export type DescribeMediaResult = {
+    title?: string
     summary?: string
     entityTags?: string[]
     styleTags?: string[]
