@@ -490,7 +490,7 @@
 .workspace-generated-media-actions {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 4px;
     width: 100%;
     pointer-events: auto;
 }
@@ -562,7 +562,6 @@
     width: var(--workspace-generated-media-chrome-icon-size, 34px);
     height: var(--workspace-generated-media-chrome-icon-size, 34px);
     flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
-    margin-left: auto;
     background: transparent;
     border: none;
     border-radius: 50%;
@@ -577,9 +576,19 @@
     cursor: pointer;
     pointer-events: auto;
 
-    svg {
+    > span {
+        display: flex;
+        align-items: center;
+        justify-content: center;
         width: var(--workspace-generated-media-chrome-icon-size, 34px);
         height: var(--workspace-generated-media-chrome-icon-size, 34px);
+    }
+
+    svg {
+        // Provider icons use a 24px viewBox with a 20px visual circle. Scale the
+        // info glyph to that same 5/6 visual diameter while keeping equal boxes.
+        width: 83.3333%;
+        height: 83.3333%;
         fill: currentColor;
     }
 
@@ -603,6 +612,77 @@
     &.is-analyzing {
         color: $steelBlue;
         animation: workspace-media-analyzing-pulse 1.4s ease-in-out infinite;
+    }
+}
+
+.media-info-model-separator {
+    position: relative;
+    width: 1px;
+    height: 70%;
+    flex: 0 0 1px;
+    pointer-events: none;
+
+    &::before {
+        --media-info-model-separator-mask: linear-gradient(
+            90deg,
+            transparent 0%,
+            transparent 16%,
+            rgba(0, 0, 0, 0.18) 32%,
+            #000 44%,
+            #000 56%,
+            rgba(0, 0, 0, 0.18) 68%,
+            transparent 84%,
+            transparent 100%
+        );
+
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: calc(var(--workspace-generated-media-chrome-icon-size, 34px) - 6px);
+        height: 1px;
+        background: var(
+            --workspace-branch-marker-separator-gradient,
+            linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.18) 10%, rgba(255, 255, 255, 0.34) 26%, rgba(255, 255, 255, 0.62) 50%, rgba(255, 255, 255, 0.34) 74%, rgba(255, 255, 255, 0.18) 90%, rgba(255, 255, 255, 0) 100%)
+        );
+        border-radius: 999px;
+        filter: invert(1);
+        opacity: 0.64;
+        mask-image: var(--media-info-model-separator-mask);
+        -webkit-mask-image: var(--media-info-model-separator-mask);
+        transform: translate(-50%, -50%) rotate(90deg);
+        transform-origin: center;
+    }
+}
+
+.media-history-button {
+    height: var(--workspace-generated-media-chrome-icon-size, 34px);
+    min-width: 160px;
+    margin-left: auto;
+    padding: 0 16px;
+    overflow: hidden;
+    color: var(--workspace-branch-origin-icon-color);
+    background: var(--workspace-branch-origin-background-color);
+    border: 1px solid var(--workspace-branch-origin-border-color);
+    border-radius: 9999px;
+    box-shadow: var(--workspace-branch-origin-box-shadow);
+    font-size: 16px;
+    font-weight: var(--workspace-media-model-badge-name-font-weight, 400);
+    line-height: 1;
+    text-overflow: clip;
+    white-space: nowrap;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: hoverTransition(filter, 150ms);
+
+    &:hover,
+    &.is-active {
+        filter: brightness(0.94);
+    }
+
+    &:focus-visible {
+        outline: 2px solid currentColor;
+        outline-offset: 2px;
     }
 }
 

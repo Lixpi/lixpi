@@ -246,16 +246,11 @@ type BaseNodeInteractionOptions = {
     allowDrag?: boolean
     onClick?: () => void
 }
-type GeneratedMediaInfoPanelOptions = {
+type GeneratedMediaHistoryPanelOptions = {
     className?: string
-    includeDescriptor?: boolean
     rendererKey?: string
     limitProjectionToSelectedMedia?: boolean
     lineageProjectionScope?: AiLineageProjectionScope
-    // When true the panel only renders the media descriptor (summary + tags) and
-    // never the AI chat thread projection — used by the media info (i) button,
-    // which must always show media meta info, not the generating conversation.
-    descriptorOnly?: boolean
 }
 type GeneratedMediaProjectionTarget = {
     node: ImageCanvasNode | VideoCanvasNode
@@ -274,6 +269,7 @@ type MountGeneratedMediaProjectionOptions = {
     previewTiles: Set<ContextPreviewTileInstance>
     lineageProjectionScope: AiLineageProjectionScope
     limitProjectionToSelectedMedia: boolean
+    includeReasoningModelHeader?: boolean
 }
 type BranchMarkerModelDescriptor = {
     modelId: string
@@ -941,6 +937,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let selectedNodeIds: Set<string> = new Set()
     let selectedEdgeId: string | null = null
     const expandedGeneratedMediaInfoNodeIds: Set<string> = new Set()
+    const expandedGeneratedMediaHistoryNodeIds: Set<string> = new Set()
     const expandedBranchOriginInfoNodeIds: Set<string> = new Set()
     const expandedBranchForkInfoNodeIds: Set<string> = new Set()
     const expandedBranchLineInfoNodeIds: Set<string> = new Set()
@@ -1889,6 +1886,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const pendingIconEl = pendingGeneratedMediaIconLayerEl?.querySelector(`[data-pending-media-icon-node-id="${nodeId}"]`) as HTMLElement | null
         if (pendingIconEl) applyPendingGeneratedMediaIconGeometry(pendingIconEl, position, dimensions, viewport)
         updateGeneratedMediaInfoPanelPosition(nodeId, position, dimensions, viewport)
+        updateGeneratedMediaHistoryPanelPosition(nodeId, position, dimensions, viewport)
         const videoChromeEl = mediaChromeViewportEl?.querySelector(`[data-video-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (videoChromeEl) applyVideoControlsGeometry(videoChromeEl, position, dimensions, viewport)
         const branchOriginChromeEl = mediaChromeViewportEl?.querySelector(`[data-branch-origin-chrome-node-id="${nodeId}"]`) as HTMLElement | null
@@ -2018,6 +2016,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         previewTiles,
         lineageProjectionScope,
         limitProjectionToSelectedMedia,
+        includeReasoningModelHeader = true,
     }: MountGeneratedMediaProjectionOptions): ReadOnlyAiChatThreadRendererInstance | null {
         const generatedBy = node.generatedBy
         if (!generatedBy) return null
@@ -2037,7 +2036,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         if (!projection) return null
 
-        appendGeneratedMediaReasoningModelHeader(mount, node)
+        if (includeReasoningModelHeader) appendGeneratedMediaReasoningModelHeader(mount, node)
         const projectionMount = html`<div className="canvas-generated-media-projection"></div>` as HTMLElement
         mount.appendChild(projectionMount)
 
@@ -2355,96 +2354,55 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             generatedMediaAssetEditors.set(node.nodeId, editor)
         }
 
-        if (asset.documents.provenance) {
-            const provenanceMount = html`<div className="canvas-asset-provenance">Loading provenance…</div>` as HTMLElement
-            section.appendChild(provenanceMount)
-            void assetService.resumeDocument({
-                organizationId: asset.organizationId,
-                assetId: asset.assetId,
-                role: 'provenance',
-            }).then(() => {
-                if (!provenanceMount.isConnected) return
-                const snapshot = assetDocumentsStore.get(asset.assetId, 'provenance')
-                if (!snapshot) {
-                    provenanceMount.textContent = 'Provenance unavailable'
-                    return
-                }
-                provenanceMount.replaceChildren()
-                const rendererKey = `asset-provenance:${node.nodeId}`
-                const renderer = mountReadOnlyAiChatThreadProjection({
-                    mount: provenanceMount,
-                    content: snapshot.doc as ProseMirrorJsonNode,
-                    threadId: asset.lineage?.sourceConversationAssetId ?? asset.assetId,
-                    documentType: 'assetProvenance',
-                    className: 'canvas-asset-provenance-editor',
-                })
-                generatedMediaInfoRenderers.set(rendererKey, renderer)
-            }).catch(() => {
-                if (provenanceMount.isConnected) provenanceMount.textContent = 'Provenance unavailable'
-            })
-        }
         return section
     }
 
-    // Shared info panel for generated AND uploaded media (image or video). When
-    // the node carries generation context it mounts a scoped read-only AI chat
-    // ProseMirror projection. Uploaded media without generation context can show
-    // the compact descriptor generated by media analysis.
-    function createGeneratedMediaInfoPanel(
+    function appendGeneratedMediaMetadata(
+        panel: HTMLElement,
         node: ImageCanvasNode | VideoCanvasNode,
-        options: GeneratedMediaInfoPanelOptions = {}
-    ): HTMLElement {
-        const generatedBy = node.generatedBy
-        const showChatThread = Boolean(generatedBy) && !options.descriptorOnly
-        const panelClassName = ['canvas-generated-media-info-panel', options.className, 'nopan'].filter(Boolean).join(' ')
-        const panel = html`<div className=${panelClassName}></div>` as HTMLElement
-        if (options.includeDescriptor !== false) {
-            const metadataEditorMount = html`<div className="canvas-asset-metadata-editor is-details nopan"></div>` as HTMLElement
-            panel.appendChild(metadataEditorMount)
-            mountAssetMetadataEditor(node, metadataEditorMount, 'details')
-            const descriptorSection = buildMediaDescriptorSection(getAssetDescriptor(node), { includeSummary: false })
-            if (descriptorSection) panel.appendChild(descriptorSection)
-        }
+    ): void {
+        const metadataEditorMount = html`<div className="canvas-asset-metadata-editor is-details nopan"></div>` as HTMLElement
+        panel.appendChild(metadataEditorMount)
+        mountAssetMetadataEditor(node, metadataEditorMount, 'details')
+        const descriptorSection = buildMediaDescriptorSection(getAssetDescriptor(node), { includeSummary: false })
+        if (descriptorSection) panel.appendChild(descriptorSection)
         const assetDetails = createAssetDetailsSection(node)
         if (assetDetails) panel.appendChild(assetDetails)
+    }
 
-        if (generatedBy && showChatThread) {
-            const rendererKey = options.rendererKey ?? `media:${node.nodeId}`
-            console.info('[CANVAS][generated-media-chrome]', 'projection-renderer-mount-start', {
-                rendererKey,
-                nodeId: node.nodeId,
-                nodeType: node.type,
-                threadId: generatedBy.conversationAssetId,
-                lineageProjectionScope: options.lineageProjectionScope ?? 'media-run',
-                limitProjectionToSelectedMedia: options.limitProjectionToSelectedMedia ?? true,
-            })
-            destroyGeneratedMediaInfoRenderer(rendererKey)
-            const renderer = mountGeneratedMediaChatProjection({
-                mount: panel,
-                node,
-                rendererClassName: 'canvas-generated-media-projection-editor',
-                traceDetailsClassName: 'canvas-generated-media-trace-details',
-                previewTiles: generatedMediaInfoPreviewTiles,
-                lineageProjectionScope: options.lineageProjectionScope ?? 'media-run',
-                limitProjectionToSelectedMedia: options.limitProjectionToSelectedMedia ?? true,
-            })
-            if (renderer) {
-                generatedMediaInfoRenderers.set(rendererKey, renderer)
-                console.info('[CANVAS][generated-media-chrome]', 'projection-renderer-mounted', {
-                    rendererKey,
-                    nodeId: node.nodeId,
-                    threadId: generatedBy.conversationAssetId,
-                    rendererCount: generatedMediaInfoRenderers.size,
-                })
-            } else {
-                console.info('[CANVAS][generated-media-chrome]', 'projection-renderer-missing', {
-                    rendererKey,
-                    nodeId: node.nodeId,
-                    threadId: generatedBy.conversationAssetId,
-                })
-            }
-        }
+    // Metadata-only panel used exclusively by the media info button. Chat
+    // history cannot be mounted through this construction path.
+    function createGeneratedMediaMetadataPanel(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
+        const panel = html`<div className="canvas-generated-media-info-panel canvas-generated-media-metadata-panel nopan"></div>` as HTMLElement
+        appendGeneratedMediaMetadata(panel, node)
+        return panel
+    }
 
+    function createGeneratedMediaHistoryPanel(
+        node: ImageCanvasNode | VideoCanvasNode,
+        options: GeneratedMediaHistoryPanelOptions = {},
+    ): HTMLElement | null {
+        if (!node.generatedBy) return null
+
+        const panelClassName = ['canvas-generated-media-info-panel', 'canvas-generated-media-history-panel', options.className, 'nopan']
+            .filter(Boolean)
+            .join(' ')
+        const panel = html`<div className=${panelClassName}></div>` as HTMLElement
+        const rendererKey = options.rendererKey ?? `media-history:${node.nodeId}`
+        destroyGeneratedMediaInfoRenderer(rendererKey)
+        const renderer = mountGeneratedMediaChatProjection({
+            mount: panel,
+            node,
+            rendererClassName: 'canvas-generated-media-projection-editor',
+            traceDetailsClassName: 'canvas-generated-media-trace-details',
+            previewTiles: generatedMediaInfoPreviewTiles,
+            lineageProjectionScope: options.lineageProjectionScope ?? 'media-run',
+            limitProjectionToSelectedMedia: options.limitProjectionToSelectedMedia ?? true,
+            includeReasoningModelHeader: false,
+        })
+        if (!renderer) return null
+
+        generatedMediaInfoRenderers.set(rendererKey, renderer)
         return panel
     }
 
@@ -2454,7 +2412,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createBranchMarkerInfoPanel(
         marker: BranchMarkerNode,
-        options: GeneratedMediaInfoPanelOptions = {},
+        options: GeneratedMediaHistoryPanelOptions = {},
     ): HTMLElement | null {
         const panelClassName = ['canvas-generated-media-info-panel', options.className, 'nopan'].filter(Boolean).join(' ')
         const panel = html`<div className=${panelClassName}></div>` as HTMLElement
@@ -2498,7 +2456,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function toggleGeneratedMediaInfo(nodeId: string): void {
-        if (expandedGeneratedMediaInfoNodeIds.has(nodeId)) {
+        const wasExpanded = expandedGeneratedMediaInfoNodeIds.has(nodeId)
+        expandedGeneratedMediaHistoryNodeIds.delete(nodeId)
+        if (wasExpanded) {
             expandedGeneratedMediaInfoNodeIds.delete(nodeId)
         } else {
             expandedGeneratedMediaInfoNodeIds.add(nodeId)
@@ -2506,8 +2466,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncGeneratedMediaChrome(currentCanvasState)
     }
 
+    function toggleGeneratedMediaHistory(nodeId: string): void {
+        const wasExpanded = expandedGeneratedMediaHistoryNodeIds.has(nodeId)
+        expandedGeneratedMediaInfoNodeIds.delete(nodeId)
+        if (wasExpanded) {
+            expandedGeneratedMediaHistoryNodeIds.delete(nodeId)
+        } else {
+            expandedGeneratedMediaHistoryNodeIds.add(nodeId)
+        }
+        syncGeneratedMediaChrome(currentCanvasState)
+    }
+
     function hasOpenGeneratedMediaInfoPanels(): boolean {
         return expandedGeneratedMediaInfoNodeIds.size > 0
+            || expandedGeneratedMediaHistoryNodeIds.size > 0
             || expandedBranchOriginInfoNodeIds.size > 0
             || expandedBranchForkInfoNodeIds.size > 0
             || expandedBranchLineInfoNodeIds.size > 0
@@ -2516,6 +2488,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function clearGeneratedMediaInfoPanels(options: { preserveBranchInfo?: boolean } = {}): void {
         if (!hasOpenGeneratedMediaInfoPanels()) return
         expandedGeneratedMediaInfoNodeIds.clear()
+        expandedGeneratedMediaHistoryNodeIds.clear()
         if (!options.preserveBranchInfo) {
             expandedBranchOriginInfoNodeIds.clear()
             expandedBranchForkInfoNodeIds.clear()
@@ -2703,15 +2676,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createBranchOriginInfoPanel(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
         const generatedMediaNode = getBranchOriginGeneratedMediaNodes(branchOriginNode.nodeId)[0]
-        const panelOptions: GeneratedMediaInfoPanelOptions = {
+        const panelOptions: GeneratedMediaHistoryPanelOptions = {
             className: 'canvas-branch-origin-info-panel',
-            includeDescriptor: false,
             rendererKey: `branch-origin:${branchOriginNode.nodeId}`,
             limitProjectionToSelectedMedia: false,
             lineageProjectionScope: 'branch-origin',
         }
         const generatedMediaPanel = generatedMediaNode
-            ? createGeneratedMediaInfoPanel(generatedMediaNode, panelOptions)
+            ? createGeneratedMediaHistoryPanel(generatedMediaNode, panelOptions)
             : null
         if (hasPanelContent(generatedMediaPanel)) return generatedMediaPanel
         return createBranchMarkerInfoPanel(branchOriginNode, panelOptions)
@@ -2740,15 +2712,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createBranchForkInfoPanel(branchForkNode: BranchForkCanvasNode): HTMLElement | null {
         const generatedMediaNode = getBranchForkGeneratedMediaNodes(branchForkNode.nodeId)[0]
-        const panelOptions: GeneratedMediaInfoPanelOptions = {
+        const panelOptions: GeneratedMediaHistoryPanelOptions = {
             className: 'canvas-branch-fork-info-panel',
-            includeDescriptor: false,
             rendererKey: `branch-fork:${branchForkNode.nodeId}`,
             limitProjectionToSelectedMedia: false,
             lineageProjectionScope: 'branch-fork',
         }
         const generatedMediaPanel = generatedMediaNode
-            ? createGeneratedMediaInfoPanel(generatedMediaNode, panelOptions)
+            ? createGeneratedMediaHistoryPanel(generatedMediaNode, panelOptions)
             : null
         if (hasPanelContent(generatedMediaPanel)) return generatedMediaPanel
         return createBranchMarkerInfoPanel(branchForkNode, panelOptions)
@@ -2777,15 +2748,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createBranchLineInfoPanel(branchLineNode: BranchLineCanvasNode): HTMLElement | null {
         const generatedMediaNode = getBranchLineGeneratedMediaNodes(branchLineNode.nodeId)[0]
-        const panelOptions: GeneratedMediaInfoPanelOptions = {
+        const panelOptions: GeneratedMediaHistoryPanelOptions = {
             className: 'canvas-branch-line-info-panel',
-            includeDescriptor: false,
             rendererKey: `branch-line:${branchLineNode.nodeId}`,
             limitProjectionToSelectedMedia: true,
             lineageProjectionScope: 'media-run',
         }
         const generatedMediaPanel = generatedMediaNode
-            ? createGeneratedMediaInfoPanel(generatedMediaNode, panelOptions)
+            ? createGeneratedMediaHistoryPanel(generatedMediaNode, panelOptions)
             : null
         if (hasPanelContent(generatedMediaPanel)) return generatedMediaPanel
         return createBranchMarkerInfoPanel(branchLineNode, panelOptions)
@@ -2837,6 +2807,59 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return button
     }
 
+    function getGeneratedMediaUserMessage(node: ImageCanvasNode | VideoCanvasNode): string {
+        const generatedBy = node.generatedBy
+        if (!generatedBy) return ''
+
+        const locator = getGeneratedMediaProjectionLocator(node)
+        const projection = locator
+            ? buildGeneratedMediaTurnProjectionFromThreadContent(
+                getAiChatThreadContentForProjection(generatedBy.conversationAssetId),
+                locator,
+                {
+                    threadId: generatedBy.conversationAssetId,
+                    limitToLocatorMedia: true,
+                    lineageProjectionScope: 'media-run',
+                },
+            )
+            : null
+        const root = parseProseMirrorJsonContent(projection?.content)
+        const thread = root ? findAiChatThreadContentNode(root, generatedBy.conversationAssetId) : null
+        const userMessage = thread?.content?.find((child) => child.type === 'aiUserMessage')
+        return collectProseMirrorText(userMessage).trim() || generatedBy.promptText?.trim() || ''
+    }
+
+    function getGeneratedMediaUserMessagePreview(message: string): string {
+        const normalized = message.replace(/\s+/g, ' ').trim()
+        if (normalized.length <= 20) return normalized
+        return `${normalized.slice(0, 17).trimEnd()}...`
+    }
+
+    function createMediaHistoryButton(node: ImageCanvasNode | VideoCanvasNode): HTMLButtonElement | null {
+        const message = getGeneratedMediaUserMessage(node)
+        if (!message) return null
+
+        const isExpanded = expandedGeneratedMediaHistoryNodeIds.has(node.nodeId)
+        const preview = getGeneratedMediaUserMessagePreview(message)
+        const button = html`
+            <button
+                className=${`media-history-button nopan${isExpanded ? ' is-active' : ''}`}
+                type="button"
+                aria-label=${`Open generation history for: ${message}`}
+                aria-expanded=${String(isExpanded)}
+                title=${message}
+            >
+                ${preview}
+            </button>
+        ` as HTMLButtonElement
+        button.addEventListener('click', (event: MouseEvent) => {
+            event.preventDefault()
+            event.stopPropagation()
+            toggleGeneratedMediaHistory(node.nodeId)
+        })
+        return button
+    }
+
     function splitAiModelId(modelId: string): { provider: string; model: string } {
         const separatorIndex = modelId.indexOf(':')
         if (separatorIndex < 0) return { provider: '', model: modelId }
@@ -2868,9 +2891,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return splitAiModelId(modelId).provider
     }
 
-    // Model badge (colored brand icon + title) + info button only. This screen-space
-    // strip is projected from media node bounds and uses bounded zoom compensation.
-    // The expandable info panel renders separately in the viewport-transformed panel layer.
+    // Info, model, and user-message history controls share one screen-space strip
+    // projected from media bounds with bounded zoom compensation. Their panels
+    // render separately in the viewport-transformed panel layer.
     function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
         const modelId = getGeneratedMediaModelId(node)
         const modelProvider = getGeneratedMediaModelProvider(node, modelId)
@@ -2879,8 +2902,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             <div className="workspace-generated-media-chrome" data=${{ mediaChromeNodeId: node.nodeId }}>
                 <div className="workspace-generated-media-title canvas-asset-metadata-editor is-node nopan"></div>
                 <div className="workspace-generated-media-actions">
-                    ${modelBadge}
                     ${createMediaInfoButton(node)}
+                    ${modelBadge ? html`<div className="media-info-model-separator" aria-hidden="true"></div>` : null}
+                    ${modelBadge}
+                    ${createMediaHistoryButton(node)}
                 </div>
             </div>
         ` as HTMLElement
@@ -2923,8 +2948,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // uses normal viewport-transformed canvas coordinates, so zooming the canvas
     // changes the panel and text naturally instead of applying bounded icon scaling.
     function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
-        const panel = createGeneratedMediaInfoPanel(node, { descriptorOnly: true })
+        const panel = createGeneratedMediaMetadataPanel(node)
         panel.setAttribute('data-media-info-panel-node-id', node.nodeId)
+        applyStyle(panel, { position: 'absolute', top: '0', left: '0' })
+        return panel
+    }
+
+    function createGeneratedMediaHistoryPanelChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement | null {
+        const panel = createGeneratedMediaHistoryPanel(node)
+        if (!panel) return null
+        panel.setAttribute('data-media-history-panel-node-id', node.nodeId)
         applyStyle(panel, { position: 'absolute', top: '0', left: '0' })
         return panel
     }
@@ -2936,6 +2969,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewport: Viewport,
     ): void {
         const panel = generatedMediaInfoPanelLayerEl?.querySelector(`[data-media-info-panel-node-id="${nodeId}"]`) as HTMLElement | null
+        if (!panel) return
+        applyGeneratedMediaInfoPanelGeometry(
+            panel,
+            position,
+            dimensions,
+            viewport,
+            getVideoControlsOutsideOffsetScreen(nodeId, viewport),
+        )
+    }
+
+    function updateGeneratedMediaHistoryPanelPosition(
+        nodeId: string,
+        position: { x: number; y: number },
+        dimensions: { width: number; height: number },
+        viewport: Viewport,
+    ): void {
+        const panel = generatedMediaInfoPanelLayerEl?.querySelector(`[data-media-history-panel-node-id="${nodeId}"]`) as HTMLElement | null
         if (!panel) return
         applyGeneratedMediaInfoPanelGeometry(
             panel,
@@ -3112,7 +3162,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             asset?.title ?? '',
             asset?.scope ?? '',
             asset?.states.provenance ?? '',
-            expandedGeneratedMediaInfoNodeIds.has(node.nodeId)
+            expandedGeneratedMediaInfoNodeIds.has(node.nodeId) ? 'metadata-open' : '',
+            expandedGeneratedMediaHistoryNodeIds.has(node.nodeId)
                 ? getJsonChromeKey(getAiChatThreadContentForProjection(node.generatedBy?.conversationAssetId ?? ''))
                 : '',
         ].join('\u001f')
@@ -3317,7 +3368,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // deleted node doesn't leak an orphaned open panel.
         const infoNodeIds = new Set<string>(mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => node.nodeId))
         for (const expandedNodeId of Array.from(expandedGeneratedMediaInfoNodeIds)) {
-            if (!infoNodeIds.has(expandedNodeId)) expandedGeneratedMediaInfoNodeIds.delete(expandedNodeId)
+            if (!infoNodeIds.has(expandedNodeId)) {
+                expandedGeneratedMediaInfoNodeIds.delete(expandedNodeId)
+                continue
+            }
+            expandedGeneratedMediaHistoryNodeIds.delete(expandedNodeId)
+        }
+        for (const expandedNodeId of Array.from(expandedGeneratedMediaHistoryNodeIds)) {
+            const node = mediaInfoNodes.find((candidate) => candidate.nodeId === expandedNodeId)
+            if (!node?.generatedBy) expandedGeneratedMediaHistoryNodeIds.delete(expandedNodeId)
         }
         const branchOriginNodeIds = new Set<string>(branchOriginNodes.map((node: BranchOriginCanvasNode) => node.nodeId))
         for (const expandedNodeId of Array.from(expandedBranchOriginInfoNodeIds)) {
@@ -3346,6 +3405,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 pendingIconNodeCount: pendingIconNodes.length,
                 playableVideoNodeCount: playableVideoNodes.length,
                 expandedMediaInfoNodeIds: Array.from(expandedGeneratedMediaInfoNodeIds).join(','),
+                expandedMediaHistoryNodeIds: Array.from(expandedGeneratedMediaHistoryNodeIds).join(','),
                 expandedBranchOriginInfoNodeIds: Array.from(expandedBranchOriginInfoNodeIds).join(','),
                 expandedBranchForkInfoNodeIds: Array.from(expandedBranchForkInfoNodeIds).join(','),
                 expandedBranchLineInfoNodeIds: Array.from(expandedBranchLineInfoNodeIds).join(','),
@@ -3363,6 +3423,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             branchForkNodeCount: branchForkNodes.length,
             branchLineNodeCount: branchLineNodes.length,
             expandedMediaInfoNodeIds: Array.from(expandedGeneratedMediaInfoNodeIds).join(','),
+            expandedMediaHistoryNodeIds: Array.from(expandedGeneratedMediaHistoryNodeIds).join(','),
             expandedBranchOriginInfoNodeIds: Array.from(expandedBranchOriginInfoNodeIds).join(','),
             expandedBranchForkInfoNodeIds: Array.from(expandedBranchForkInfoNodeIds).join(','),
             expandedBranchLineInfoNodeIds: Array.from(expandedBranchLineInfoNodeIds).join(','),
@@ -3404,13 +3465,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (generatedMediaInfoPanelLayerEl) {
             const expandedMediaInfoNodes = mediaInfoNodes.filter((node: ImageCanvasNode | VideoCanvasNode) =>
                 expandedGeneratedMediaInfoNodeIds.has(node.nodeId))
+            const expandedMediaHistoryNodes = mediaInfoNodes.filter((node: ImageCanvasNode | VideoCanvasNode) =>
+                expandedGeneratedMediaHistoryNodeIds.has(node.nodeId))
             generatedMediaInfoPanelLayerEl.replaceChildren(
                 ...expandedMediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaInfoPanelChrome(node)),
+                ...expandedMediaHistoryNodes
+                    .map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaHistoryPanelChrome(node))
+                    .filter((panel): panel is HTMLElement => Boolean(panel)),
             )
             const nodesById = getCanvasNodesById(canvasNodes)
             const viewport = getLiveViewport()
             for (const node of expandedMediaInfoNodes) {
                 updateGeneratedMediaInfoPanelPosition(
+                    node.nodeId,
+                    getNodeWorldPosition(node, nodesById),
+                    liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions,
+                    viewport,
+                )
+            }
+            for (const node of expandedMediaHistoryNodes) {
+                updateGeneratedMediaHistoryPanelPosition(
                     node.nodeId,
                     getNodeWorldPosition(node, nodesById),
                     liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions,
@@ -9667,7 +9741,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!currentCanvasState) return false
         return currentCanvasState.nodes.some((node: CanvasNode) => {
             if ((node.type === 'image' || node.type === 'video')
-                && expandedGeneratedMediaInfoNodeIds.has(node.nodeId)
+                && expandedGeneratedMediaHistoryNodeIds.has(node.nodeId)
                 && node.generatedBy?.conversationAssetId === threadId) {
                 return true
             }
@@ -13911,6 +13985,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     previousVisualSyncKeyLength: lastVisualSyncKey.length,
                     nextVisualSyncKeyLength: nextVisualSyncKey.length,
                     openMediaInfoPanelCount: expandedGeneratedMediaInfoNodeIds.size,
+                    openMediaHistoryPanelCount: expandedGeneratedMediaHistoryNodeIds.size,
                     openBranchOriginInfoPanelCount: expandedBranchOriginInfoNodeIds.size,
                     openBranchForkInfoPanelCount: expandedBranchForkInfoNodeIds.size,
                     openBranchLineInfoPanelCount: expandedBranchLineInfoNodeIds.size,
@@ -14065,6 +14140,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             pendingBranchMarkerOverlayEl?.remove()
             pendingBranchMarkerOverlayEl = null
             expandedGeneratedMediaInfoNodeIds.clear()
+            expandedGeneratedMediaHistoryNodeIds.clear()
             expandedBranchOriginInfoNodeIds.clear()
             expandedBranchForkInfoNodeIds.clear()
             expandedBranchLineInfoNodeIds.clear()

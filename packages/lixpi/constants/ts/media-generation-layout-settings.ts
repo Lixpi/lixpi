@@ -153,7 +153,7 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
     // in collision boxes, on both the API and the WebUI.
     generatedMediaChrome: {
         topGap: 8,
-        iconSize: 28,
+        iconSize: 34,
         videoControlsHeight: 40,
         videoControlsBottomInset: 8,
     },
