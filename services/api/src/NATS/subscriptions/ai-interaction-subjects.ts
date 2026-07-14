@@ -121,11 +121,17 @@ export const aiInteractionSubjects = [
             const aiVideoModel = aiVideoModels?.[0]
 
             const natsService = await NATS_Service.getInstance()
-            const organizationId = referencedFeatureIds?.length ? await resolveUserOrganizationId(userId) : undefined
 
-            // Org keys metrics spend. Prefer the org resolved for feature access;
-            // otherwise use the client-supplied one from the payload. Never resolve
-            // it unconditionally — that would add a lookup on every message.
+            // Org keys metrics spend, so the synchronous metrics check needs it on
+            // every message when metering is enabled — not only when features are
+            // referenced. Resolve it server-side when features are referenced (for
+            // feature access) OR when metrics is enabled (for the spend gate);
+            // otherwise skip the lookup to avoid a query on every message.
+            const shouldResolveOrganizationId = Boolean(referencedFeatureIds?.length) || process.env.METRICS_ENABLED === 'true'
+            const organizationId = shouldResolveOrganizationId ? await resolveUserOrganizationId(userId) : undefined
+
+            // Prefer the org resolved server-side; otherwise fall back to the
+            // client-supplied one from the payload.
             const eventOrganizationId = organizationId ?? (data.organizationId as string | undefined)
 
             if (mediaGenerationRequest) {
