@@ -77,7 +77,6 @@ type AiPromptInputControllerOptions = {
         owner?: { type: 'standalone' }
     }) => Promise<any>
     onAiSubmit: (threadId: string, payload: AiSubmitPayload) => void
-    onAiStop: (threadId: string) => void
 }
 
 export class AiPromptInputController {
@@ -91,7 +90,6 @@ export class AiPromptInputController {
     private persistCanvasState: (state: CanvasState) => void
     private createAiChatThread: AiPromptInputControllerOptions['createAiChatThread']
     private onAiSubmit: AiPromptInputControllerOptions['onAiSubmit']
-    private onAiStop: AiPromptInputControllerOptions['onAiStop']
     private onAiChatThreadCreated?: AiPromptInputControllerOptions['onAiChatThreadCreated']
 
     constructor(options: AiPromptInputControllerOptions) {
@@ -100,7 +98,6 @@ export class AiPromptInputController {
         this.persistCanvasState = options.persistCanvasState
         this.createAiChatThread = options.createAiChatThread
         this.onAiSubmit = options.onAiSubmit
-        this.onAiStop = options.onAiStop
         this.onAiChatThreadCreated = options.onAiChatThreadCreated
     }
 
@@ -209,13 +206,6 @@ export class AiPromptInputController {
                 videoOptions,
                 referenceNodeIds,
             })
-        }
-    }
-
-    stopStreaming(): void {
-        const threadId = this.getTargetThreadId()
-        if (threadId) {
-            this.onAiStop(threadId)
         }
     }
 

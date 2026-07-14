@@ -189,8 +189,7 @@ $userMessageTextColor: #fff;
 
         // Button state containers
         .button-default,
-        .button-hover,
-        .button-receiving {
+        .button-hover {
             display: flex;
             align-items: center;
             justify-content: center;
@@ -206,9 +205,8 @@ $userMessageTextColor: #fff;
             z-index: 1;
         }
 
-        // Hover and receiving states (overlays)
-        .button-hover,
-        .button-receiving {
+        // Hover state overlay
+        .button-hover {
             position: absolute;
             inset: 0; // shorthand for top/left/right/bottom 0
             opacity: 0;
@@ -217,7 +215,6 @@ $userMessageTextColor: #fff;
 
         // Z-index layering
         .button-hover { z-index: 2; }
-        .button-receiving { z-index: 3; }
 
         // Icon styles
         .send-icon {
@@ -235,20 +232,6 @@ $userMessageTextColor: #fff;
             }
         }
 
-        .stop-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 26px;
-            height: 26px;
-
-            svg {
-                width: 26px;
-                height: 26px;
-                fill: $nightBlue;
-                transition: hoverTransition(fill, 150ms);
-            }
-        }
     }
 
     // ===== IMAGE MODEL CONTROLS =====
@@ -260,8 +243,8 @@ $userMessageTextColor: #fff;
 
     // ===== INTERACTION STATES =====
 
-    // Submit button hover (when not receiving)
-    &:not(.receiving) .ai-submit-button:hover {
+    // Submit button hover
+    .ai-submit-button:hover {
         opacity: 1;
         // Removed border-color to satisfy requirement: no visible border on hover
         // Keep transition for opacity only to avoid layout shift
@@ -269,7 +252,6 @@ $userMessageTextColor: #fff;
 
         .button-default { opacity: 0; pointer-events: none; }
         .button-hover { opacity: 1; pointer-events: auto; }
-        .button-receiving { opacity: 0; pointer-events: none; }
     }
 
     // Thread focus state
@@ -278,44 +260,6 @@ $userMessageTextColor: #fff;
         transform: translateY(-2px);
     }
 
-    // ===== RECEIVING STATE =====
-    &.receiving {
-        .ai-submit-button {
-            background-color: white;
-            transition: hoverTransition(background, 300ms);
-
-            // Hide normal states
-            .button-default,
-            .button-hover {
-                opacity: 0 !important;
-                pointer-events: none !important;
-            }
-
-            // Show receiving state
-            .button-receiving {
-                opacity: 1 !important;
-                pointer-events: auto !important;
-            }
-
-            // Receiving hover state
-            &:hover {
-                .button-default,
-                .button-hover {
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                }
-
-                .button-receiving {
-                    opacity: 1 !important;
-                    pointer-events: auto !important;
-
-                    .stop-icon svg {
-                        fill: $redPink;
-                    }
-                }
-            }
-        }
-    }
 }
 
 $aiResponseMessageEmptyNodeMinHeight: 1.5rem;

@@ -56,8 +56,6 @@ type ProseMirrorEditorConfig = {
     onAiChatSubmit?: (value: any) => void
     onAiChatStop?: (value: any) => void
     onPromptSubmit?: (value: any) => void
-    onPromptStop?: () => void
-    isPromptReceiving?: () => boolean
     promptControlFactories?: any
     onReceivingStateChange?: (threadId: string, receiving: boolean) => void
     readOnly?: boolean
@@ -83,8 +81,6 @@ export class ProseMirrorEditor {
         onAiChatSubmit,
         onAiChatStop,
         onPromptSubmit,
-        onPromptStop,
-        isPromptReceiving,
         promptControlFactories,
         onReceivingStateChange,
         readOnly = false,
@@ -97,8 +93,6 @@ export class ProseMirrorEditor {
         this.onAiChatSubmit = onAiChatSubmit
         this.onAiChatStop = onAiChatStop
         this.onPromptSubmit = onPromptSubmit
-        this.onPromptStop = onPromptStop
-        this.isPromptReceiving = isPromptReceiving
         this.promptControlFactories = promptControlFactories
         this.onReceivingStateChange = onReceivingStateChange
         this.proseMirrorAuthorityOptions = proseMirrorAuthority
@@ -237,8 +231,6 @@ export class ProseMirrorEditor {
             basePlugins.push(
                 createAiPromptInputPlugin({
                     onSubmit: (data) => this.onPromptSubmit?.(data),
-                    onStop: () => this.onPromptStop?.(),
-                    isReceiving: () => this.isPromptReceiving?.() ?? false,
                     createContextTray: this.promptControlFactories?.createContextTray,
                     createModelDropdown: this.promptControlFactories?.createModelDropdown,
                     createModelMultiSelect: this.promptControlFactories?.createModelMultiSelect,

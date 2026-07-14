@@ -321,11 +321,12 @@ export const aiInteractionSubjects = [
     // Stop AI message streaming
     {
         subject: AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE,
-        type: 'subscribe',
+        type: 'reply',
         queue: 'aiInteraction',
         payloadType: 'json',
         permissions: {
             pub: { allow: [AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE] },
+            sub: { allow: [AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE] },
         },
         handler: async (data: any, _msg: any) => {
             const { workspaceId, aiChatThreadId, generationRequestId } = data as {
@@ -351,8 +352,13 @@ export const aiInteractionSubjects = [
                     aiChatThreadId,
                     generationRequestId,
                 })
+                return {
+                    status: 'stopped',
+                    ...(generationRequestId ? { generationRequestId } : {}),
+                }
             } catch (e) {
                 err(`Failed to stop ${instanceKey}:`, e)
+                return { error: e instanceof Error ? e.message : String(e) }
             }
         },
     },

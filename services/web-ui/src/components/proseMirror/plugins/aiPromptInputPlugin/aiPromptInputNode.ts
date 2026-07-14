@@ -62,8 +62,6 @@ type SelectedModelTagsControls = {
 
 type SubmitControls = {
     onSubmit: () => void
-    onStop: () => void
-    isReceiving: () => boolean
 }
 
 type ImageSizeControls = {
@@ -102,8 +100,6 @@ type DropdownView = {
 
 type AiPromptInputNodeViewOptions = {
     onSubmit: () => void
-    onStop: () => void
-    isReceiving: () => boolean
     placeholderText?: string
     createContextTray?: () => HTMLElement | null
     createModelDropdown: (controls: AiModelControls, dropdownId: string) => DropdownView
@@ -576,8 +572,6 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
 
         const submitControls: SubmitControls = {
             onSubmit: options.onSubmit,
-            onStop: options.onStop,
-            isReceiving: options.isReceiving,
         }
 
         const reasoningMultipleModelsToggle = createUseMultipleModelsToggle(
@@ -863,15 +857,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             dom.setAttribute('data-empty', String(empty))
         }
 
-        const syncReceivingState = () => {
-            const receiving = options.isReceiving()
-            controlsEl.classList.toggle('receiving', receiving)
-        }
-
         syncEmptyState(node)
-        syncReceivingState()
-
-        const receivingPollInterval = setInterval(syncReceivingState, 200)
 
         return {
             dom,
@@ -889,12 +875,10 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 if (updatedNode.type.name !== aiPromptInputNodeType) return false
                 node = updatedNode
                 syncEmptyState(updatedNode)
-                syncReceivingState()
                 updateModelDropdowns()
                 return true
             },
             destroy: () => {
-                clearInterval(receivingPollInterval)
                 document.removeEventListener('mousedown', handleDocumentMouseDown, true)
                 modelMenuContent.destroy()
                 modelMenu?.destroy()
