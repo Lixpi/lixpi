@@ -2841,15 +2841,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const isExpanded = expandedGeneratedMediaHistoryNodeIds.has(node.nodeId)
         const preview = getGeneratedMediaUserMessagePreview(message)
+        const reasoningModelEntry = getBranchMarkerModelEntry(String(node.generatedBy?.reasoningModelId ?? ''))
+        const reasoningModelIcon = reasoningModelEntry ? reasoningModelEntry.icon ?? atomIcon : null
+        const reasoningModelLabel = reasoningModelEntry?.title ? ` Reasoning model: ${reasoningModelEntry.title}.` : ''
         const button = html`
             <button
                 className=${`media-history-button nopan${isExpanded ? ' is-active' : ''}`}
                 type="button"
-                aria-label=${`Open generation history for: ${message}`}
+                aria-label=${`Open generation history for: ${message}.${reasoningModelLabel}`}
                 aria-expanded=${String(isExpanded)}
                 title=${message}
             >
-                ${preview}
+                ${reasoningModelIcon ? html`
+                    <span
+                        className="workspace-branch-marker-message-icon media-history-reasoning-icon"
+                        innerHTML=${reasoningModelIcon}
+                        aria-hidden="true"
+                    ></span>
+                ` : null}
+                <span className="media-history-button-text">${preview}</span>
             </button>
         ` as HTMLButtonElement
         button.addEventListener('click', (event: MouseEvent) => {
@@ -3157,6 +3167,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             node.type,
             node.assetId,
             getGeneratedMediaModelId(node),
+            node.generatedBy?.reasoningModelId ?? '',
             getDescriptorChromeKey(node),
             asset?.revision ?? '',
             asset?.title ?? '',

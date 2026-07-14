@@ -656,10 +656,14 @@
 }
 
 .media-history-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     height: var(--workspace-generated-media-chrome-icon-size, 34px);
     min-width: 160px;
     margin-left: auto;
     padding: 0 16px;
+    gap: 7px;
     overflow: hidden;
     color: var(--workspace-branch-origin-icon-color);
     background: var(--workspace-branch-origin-background-color);
@@ -684,6 +688,19 @@
         outline: 2px solid currentColor;
         outline-offset: 2px;
     }
+}
+
+.media-history-reasoning-icon {
+    flex: 0 0 14px;
+    pointer-events: none;
+}
+
+.media-history-button-text {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: clip;
+    white-space: nowrap;
 }
 
 @keyframes workspace-media-analyzing-pulse {
