@@ -356,7 +356,7 @@ Some things to note:
 
 ## DynamoDB
 
-[`db/DynamoDB-tables.ts`](../../../infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts) defines the application tables through a shared table-definition function (`getTableDefinitions()`). The same definitions are reused by [`local-dynamodb-init.ts`](../../../infrastructure/pulumi/src/local-dynamodb-init.ts) to bootstrap DynamoDB Local for development, so local and cloud schemas stay aligned.
+[`db/DynamoDB-tables.ts`](../../../infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts) defines the application tables through a shared table-definition function (`getTableDefinitions()`). The same definitions are reused by [`local-dynamodb-init.ts`](../../../infrastructure/pulumi/src/local-dynamodb-init.ts) to bootstrap DynamoDB Local for development, so local and cloud schemas stay aligned. Existing local tables are force-recreated from the current definitions by default (interactive runs are prompted; `LOCAL_DYNAMODB_FORCE_RECREATE=true|false` overrides), and each recreation logs the table's item count so any local data loss is explicit — see [`local-dynamodb-table-reconciler.ts`](../../../infrastructure/pulumi/src/local-dynamodb-table-reconciler.ts).
 
 Highlights:
 
