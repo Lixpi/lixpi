@@ -1,5 +1,7 @@
 # TypeScript Coding Style Guide
 
+This guide applies to every TypeScript file in the repository — `services/api`, `services/nex`, `services/web-ui`, `packages/lixpi`, `infrastructure/pulumi`, and scripts. The [DOM Templating](#dom-templating-web-ui) section is the only web-ui-specific part.
+
 ## Imports
 
 - Always use `.ts` extension when importing files — never `.js`.
