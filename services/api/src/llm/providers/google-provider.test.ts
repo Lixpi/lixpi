@@ -11,8 +11,11 @@ const debugTools = vi.hoisted(() => ({
 vi.mock('@lixpi/debug-tools', () => debugTools)
 
 import { type BaseProviderDeps } from './base-provider.ts'
-import { buildVeoReferenceImages, getGoogleImageResponseSummary } from './google-provider.ts'
-import { GoogleProvider } from './google-provider.ts'
+import {
+    buildVeoReferenceImages,
+    getGoogleImageResponseSummary,
+    GoogleProvider,
+} from './google-provider.ts'
 
 const { generateContent } = vi.hoisted(() => ({
     generateContent: vi.fn(),

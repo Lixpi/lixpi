@@ -9,15 +9,14 @@ import DynamoDBService, { marshall, unmarshall } from '@lixpi/dynamodb-service'
 //INFO: do not remove unused imports!
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
-import type {
-    AiModel,
-    AiModelId,
-    DefaultAiModelCapability,
-    ImageSizeMode,
-    ImageSizeOption,
+import {
+    getDynamoDbTableStageName,
+    type AiModel,
+    type AiModelId,
+    type DefaultAiModelCapability,
+    type ImageSizeMode,
+    type ImageSizeOption,
 } from '@lixpi/constants'
-
-import { getDynamoDbTableStageName } from '@lixpi/constants'
 import type { PartialDeep } from 'type-fest'
 
 // Modality metadata constants
@@ -161,7 +160,7 @@ type ProviderModelDefaults = {
     fallback?: ModelDefaults
 }
 
-export interface AiModelsSyncOptions {
+export type AiModelsSyncOptions = {
     dynamoDBService?: DynamoDBService
     openaiApiKey?: string
     anthropicApiKey?: string
@@ -169,7 +168,7 @@ export interface AiModelsSyncOptions {
     stabilityApiKey?: string
 }
 
-export interface AiModelsSyncResult {
+export type AiModelsSyncResult = {
     openAI: {
         processed: number
         newModels: number

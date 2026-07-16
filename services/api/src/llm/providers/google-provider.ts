@@ -563,7 +563,8 @@ export class GoogleProvider extends BaseProvider {
         } catch (e: any) {
             const message = e?.message ?? String(e)
             err(`[Google:${this.instanceKey}] VEO failed: ${message}`)
-            try { this.videoPub.error(message) } catch { /* publisher may not be initialized */ }
+            // publisher may not be initialized
+            try { this.videoPub.error(message) } catch {}
             throw e
         }
     }

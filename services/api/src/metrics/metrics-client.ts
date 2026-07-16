@@ -18,11 +18,11 @@ const METRICS_SUBJECTS = (NATS_SUBJECTS as any).METRICS_SUBJECTS as {
 // request/reply call. Depending on an interface (not the singleton) keeps the
 // client unit-testable. The spend guard is synchronous now, so this is a request,
 // not a fire-and-forget publish.
-export interface MetricsNats {
+export type MetricsNats = {
     request<Req = any, Res = any>(subject: string, data: Req, timeoutMs: number): Promise<Res>
 }
 
-export interface MetricsClientOptions {
+export type MetricsClientOptions = {
     // enabled=false is the open-source plug: check always approves and confirm is a
     // no-op, so Lixpi runs with no metering backend and makes no network call.
     enabled: boolean

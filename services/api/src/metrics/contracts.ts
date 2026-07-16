@@ -24,7 +24,7 @@ export type MeasuringUnit = 'tokens' | 'images' | 'seconds'
 
 // CheckRequest asks whether the org's balance covers an upcoming paid provider
 // call. The implementation prices estimatedUnits as an upper bound.
-export interface CheckRequest {
+export type CheckRequest = {
     orgId: string
     userId: string
     workspaceId?: string
@@ -37,7 +37,7 @@ export interface CheckRequest {
 
 // CheckResponse is the admission decision. operationId correlates this admission
 // to the later confirm (opaque to Lixpi; the metering side's handle for the call).
-export interface CheckResponse {
+export type CheckResponse = {
     approved: boolean
     operationId?: string
     estimatedCost?: number // micro-dollars, for display/telemetry
@@ -49,7 +49,7 @@ export interface CheckResponse {
 // call. Only the fields relevant to the modality are set; the implementation
 // prices from these, so the split (prompt vs completion, image size/quality,
 // video seconds-vs-tokens) is what makes accurate pricing possible.
-export interface UsageBreakdown {
+export type UsageBreakdown = {
     // Text tokens — kept split because input and output are priced differently.
     // Invariants the backend relies on (normalize per-provider before sending):
     //   promptTokens INCLUDES cachedTokens (cached ⊆ prompt);
@@ -74,7 +74,7 @@ export interface UsageBreakdown {
 // It carries dimensioned unit counts only — the implementation prices them.
 // measuringUnit is the primary unit for the modality (and disambiguates video:
 // seconds vs tokens). Idempotent on providerRequestId.
-export interface ConfirmRequest {
+export type ConfirmRequest = {
     providerRequestId: string
     operationId?: string // from the matching check; empty/unknown → the backend charges by actuals
     orgId: string
@@ -91,7 +91,7 @@ export interface ConfirmRequest {
 }
 
 // ConfirmResponse is the posted charge and resulting balance.
-export interface ConfirmResponse {
+export type ConfirmResponse = {
     transferId?: string
     resaleCost?: number // micro-dollars, amount charged to the org
     balance?: number // micro-dollars, new balance after the debit
