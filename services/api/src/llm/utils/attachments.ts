@@ -12,10 +12,9 @@ const MAX_IMAGE_DIMENSION = 2048
 
 const SAFE_MIMES = new Set(['image/png', 'image/jpeg', 'image/gif'])
 
-// 'OPENAI' targets the Responses API (input_text / input_image), used by the
-// main provider. 'OPENAI_CHAT' targets the legacy chat/completions API
-// (text / image_url object), used by the VLM client which calls chat.completions.
-export type AttachmentFormat = 'OPENAI' | 'OPENAI_CHAT' | 'ANTHROPIC' | 'GOOGLE'
+// 'OPENAI' targets the Responses API content shape (input_text / input_image),
+// used by both the main provider and the structured VLM client.
+export type AttachmentFormat = 'OPENAI' | 'ANTHROPIC' | 'GOOGLE'
 
 const detectImageMime = (data: Buffer): string => {
     if (data.length > 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47 &&
@@ -360,37 +359,12 @@ const convertContentForGoogle = (
     return out.length > 0 ? out : ''
 }
 
-// Legacy chat/completions content shape: `text` blocks and `image_url` objects
-// (vs the Responses API's `input_text` / `input_image` string form). Used by the
-// VLM client, which calls chat.completions rather than responses.create.
-const convertContentForOpenAIChat = (
-    content: string | Array<Record<string, any>>,
-): string | Array<Record<string, any>> => {
-    if (typeof content === 'string') return content
-    if (!Array.isArray(content)) return content
-    const out: Array<Record<string, any>> = []
-    for (const block of content) {
-        if (typeof block !== 'object' || block === null) continue
-        const blockType = block.type
-        if (blockType === 'input_text') {
-            out.push({ type: 'text', text: block.text ?? '' })
-        } else if (blockType === 'input_image') {
-            out.push({
-                type: 'image_url',
-                image_url: { url: block.image_url ?? '', detail: block.detail ?? 'auto' },
-            })
-        }
-    }
-    return out.length > 0 ? out : ''
-}
-
 export const convertAttachmentsForProvider = (
     content: string | Array<Record<string, any>>,
     targetFormat: AttachmentFormat,
 ): string | Array<Record<string, any>> => {
     if (targetFormat === 'ANTHROPIC') return convertContentForAnthropic(content)
     if (targetFormat === 'OPENAI') return convertContentForOpenAI(content)
-    if (targetFormat === 'OPENAI_CHAT') return convertContentForOpenAIChat(content)
     if (targetFormat === 'GOOGLE') return convertContentForGoogle(content)
     return content
 }
