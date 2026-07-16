@@ -110,8 +110,9 @@ The design keeps three boundaries clear:
 ## System Architecture
 
 The browser builds the snapshot and streams it with the chat message; the API
-ranks, self-heals, and assembles; storage holds canvas state, descriptors, and
-the media bytes the resolver pulls stills from.
+ranks, self-heals, and assembles; Workspace storage holds local canvas state,
+while Assets hold descriptors and Blob pointers for the media stills the
+resolver loads.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -198,7 +199,7 @@ sequenceDiagram
         activate Describe
         Describe-->>Resolver: improved descriptors
         deactivate Describe
-        Resolver->>Store: targeted node-descriptor patch
+        Resolver->>Store: Asset descriptor revision update
         Resolver->>Resolver: re-rank once
         deactivate Resolver
     end
@@ -232,8 +233,8 @@ sequenceDiagram
    and nodes that need better descriptors.
 2. **Self-heal once.** Missing, failed, analyzing, or too-thin descriptors are
    repaired within the same turn. Media uses `describeMediaStill`; documents and
-   threads use text descriptor generation. The API persists improved descriptors
-   through a targeted node-descriptor patch and re-ranks once. This bound is
+   conversations use text descriptor generation. The API persists improved descriptors
+   through an Asset revision update and re-ranks once. This bound is
    detailed in [Media and Content Descriptors](./MEDIA-DESCRIPTORS.md).
 3. **Force-include.** Explicit chip IDs and edge-connected IDs are unioned into
    the result as `forced-chip` and `forced-edge`. Automatic relevance can add to
@@ -244,8 +245,8 @@ sequenceDiagram
    See [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) for the full
    event catalog.
 5. **Assemble.** Full content for selected nodes is inserted into
-   `state.messages`. Documents and threads resolve from stored ProseMirror
-   content. Media resolves through Object Store URLs and stills. The narrowed
+   `state.messages`. Document Assets resolve from stored ProseMirror content.
+   Media Assets resolve through authorized Blob renditions. The narrowed
    media set feeds `mediaBranchCandidateSnapshot`.
 
 The stage can improve recall on text-only turns as well as media turns. For
@@ -255,8 +256,8 @@ without invoking pixel branch routing.
 ## Context Chips vs Automatic Selections
 
 The AI Chat panel owns the composer context previews. Opening the panel creates no session
-and no hidden canvas node; the first submit creates a standalone `AiChatThread`
-only when a prompt is sent (see
+and no hidden canvas node; the first submit creates a standalone conversation
+Asset only when a prompt is sent (see
 [Chat Panel and Sessions](./CHAT-PANEL-AND-SESSIONS.md)).
 
 | Aspect | Context Chip (explicit) | Automatic selection |
@@ -290,15 +291,15 @@ snapshot is the browser request payload; the resolution is the API result.
 export type WorkspaceContextNode = {
     nodeId: string
     type: CanvasNodeType
-    referenceId?: string
+    assetId?: string
     descriptorStatus?: ContentDescriptorStatus
     title?: string
     descriptorSummary?: string
     entityTags?: string[]
     styleTags?: string[]
-    fileId?: string
-    imageUrl?: string
     branchId?: string
+    sourceConversationAssetId?: string
+    isCurrentConversationGenerated?: boolean
     isExplicitChip: boolean
     isEdgeForced: boolean
 }
@@ -306,7 +307,7 @@ export type WorkspaceContextNode = {
 export type WorkspaceContextSnapshot = {
     resolverVersion: string
     workspaceId: string
-    threadId: string
+    conversationAssetId: string
     promptText: string
     nodes: WorkspaceContextNode[]
 }
@@ -385,7 +386,7 @@ There is no live context-region feature page.
 | Provider state channels | `services/api/src/llm/graph/state.ts` |
 | Stream events | `services/api/src/llm/graph/stream-publisher.ts` |
 | Browser stream handling | `services/web-ui/src/services/ai-interaction-service.ts` |
-| Explicit context extraction | `services/web-ui/src/services/ai-chat-thread-service.ts` |
+| Explicit context extraction | `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`, `services/web-ui/src/services/ai-image-branching.ts` |
 | Attachment conversion | `services/api/src/llm/utils/attachments.ts` |
 | Descriptor generation | `services/api/src/llm/media-descriptor.ts`, `services/api/src/NATS/subscriptions/media-descriptor-subjects.ts`, `services/web-ui/src/services/media-descriptor-service.ts` |
 | Canvas placement and branch-tree layout | `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`, `services/web-ui/src/infographics/workspace/branchTreeLayout.ts` |

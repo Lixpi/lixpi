@@ -6,7 +6,7 @@ import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { decodeImageInWorker } from '$src/infographics/workspace/pixiImageDecoder.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
+import { buildAssetRenditionPath, resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 
 import type { MediaNodeHandler } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
 import type { WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
@@ -95,9 +95,9 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
     const updateMediaSources = async (entry: VideoEntry, node: VideoCanvasNode): Promise<void> => {
         // Load poster as the default texture so the node is visible immediately
         // without paying the cost of decoding the MP4 just to extract frame 0.
-        if (node.posterSrc) {
+        if (node.assetId) {
             try {
-                const posterSrc = await buildAuthenticatedUrl(node.posterSrc)
+                const posterSrc = await buildAuthenticatedUrl(buildAssetRenditionPath(node.assetId, 'poster'))
                 // The same element is shown directly on the canvas node by
                 // createVideoControlsChrome. Give it a native poster so the DOM
                 // surface and PIXI poster agree before playback starts.
@@ -123,9 +123,9 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
             }
         }
 
-        if (node.src) {
+        if (node.assetId) {
             try {
-                const videoSrc = await buildAuthenticatedUrl(node.src)
+                const videoSrc = await buildAuthenticatedUrl(buildAssetRenditionPath(node.assetId, 'original'))
                 if (destroyed) return
                 if (entry.videoElement.src !== videoSrc) {
                     entry.videoElement.src = videoSrc
@@ -240,11 +240,11 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
             drawColorRect(entry.colorRect, w, h)
         }
         entry.colorRect.position.set(x, y)
-        entry.colorRect.visible = Boolean(node.fileId || node.posterFileId || node.frameFileId || node.src || node.posterSrc)
+        entry.colorRect.visible = Boolean(node.assetId)
 
         entry.worldRect = { x, y, width: w, height: h }
 
-        const sourceKey = `${node.workspaceId}|${node.fileId}|${node.posterFileId}|${node.src}|${node.posterSrc}`
+        const sourceKey = node.assetId
         if (sourceKey !== entry.sourceKey) {
             entry.sourceKey = sourceKey
             updateMediaSources(entry, node).catch(() => {})

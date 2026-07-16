@@ -98,7 +98,13 @@ The three paths converge on the same `IMAGE_PARTIAL` / `IMAGE_COMPLETE` stream c
 
 ## Reference Image Extraction
 
-When the text model emits a `generate_image` tool call, `extractReferenceImages()` scans the **already-resolved** user messages for attached images. "Already-resolved" matters: each provider passes its messages *after* `nats-obj://` object-store references have been converted to data URLs, so every image is available as base64 regardless of how it entered the conversation. Because messages may already have been converted into any of the three provider shapes, the extractor handles all three block formats:
+When the text model emits a `generate_image` tool call,
+`extractReferenceImages()` scans the **already-resolved** user messages for
+attached images. "Already-resolved" matters: the API has authorized the source
+Assets, selected ready rendition Blobs, and converted its internal Object Store
+coordinates to data URLs before provider dispatch. Because messages may already
+have been converted into any of the three provider shapes, the extractor handles
+all three block formats:
 
 | Format | Block type | Image data location |
 |--------|-----------|---------------------|
@@ -142,7 +148,7 @@ Other generation knobs are **hardcoded** for best output rather than exposed to 
 
 ## Storage and Deduplication
 
-Generated images are stored through the unified workspace file storage adapter, with `kind: 'image'`, `modelSafe: true`, and NATS Object Store bytes in `workspace-{workspaceId}-files`. To avoid duplicates, the storage path computes a **SHA-256 hash** of the image content and uses `hash-{sha256}` as the `fileId`. Before returning a duplicate, it confirms the Object Store bytes still exist; if metadata exists but bytes are missing, it writes the image again so the reference self-heals. Video generation uses the same `storeWorkspaceFile` adapter through `storeWorkspaceVideo` — see [Video Generation](./VIDEO-GENERATION.md). Saved-copy independence (Media Library) is covered in [Media Library](../library/MEDIA-LIBRARY.md).
+The lineage planner preassigns an Asset ID for every media run. Final image bytes are SHA-256 hashed, stored as an organization-scoped Blob, attached as the Asset's `original` rendition, and processed through the shared rendition matrix. Blob dedup verifies both registry metadata and Object Store bytes before reuse. The Asset owns lifecycle, media, lineage, provenance, workspace references, and catalog references; canvas nodes store only `assetId` and geometry. See [Data Storage](../platform/DATA-STORAGE.md) and [Media Library](../library/MEDIA-LIBRARY.md).
 
 ## Multi-Turn Image Editing
 
@@ -151,7 +157,9 @@ Image editing is **provider-agnostic** and driven by canvas edges rather than pr
 1. It appears as an `ImageCanvasNode` connected to the AI chat thread by a `WorkspaceEdge`.
 2. The edge's `sourceMessageId` links the image to the specific `aiResponseMessage` that produced it.
 3. When extracting connected context for a follow-up message, `extractConnectedContext()` traverses incoming edges and includes image nodes with their `sourceMessageId` metadata.
-4. The API fetches those images from the Object Store via `nats-obj://` references and converts them to provider-ready attachment blocks before sending to any provider.
+4. The API authorizes those Asset IDs, fetches their selected rendition Blobs,
+   and converts the internal Blob coordinates to provider-ready attachment
+   blocks. Browser payloads never contain Object Store bucket/key coordinates.
 
 **Thread-level continuity.** Every AI-generated image connected to the thread is automatically included in subsequent requests through the workspace edge system, so *"make the background blue"* works because the previous image is part of the connected context. For OpenAI specifically, conversation context is also maintained via `previousResponseId` (`previous_response_id`) when continuing within the same thread, which complements — but does not replace — the edge-based association.
 
@@ -184,9 +192,9 @@ Image generation publishes live pipeline events on the same per-thread receive s
 
 | Event | Image-specific nuance |
 |-------|-----------------------|
-| `IMAGE_PARTIAL` (empty) | Empty `imageUrl`/`fileId` is a *signal*, not pixels: it tells the canvas to create the placeholder `ImageCanvasNode` (a transparent 1×1 PNG) and start the PIXI traveling progress border before any real pixel data exists. |
-| `IMAGE_PARTIAL` (non-empty) | Up to three progressive partials (`partial_images=3`) are stored in the workspace Object Store, then sent as `{ imageUrl, fileId, partialIndex }`. Each event replaces the **same** preview sprite in place — the canvas updates one node, it does not create new ones. Gemini delivers thought images through this same event. |
-| `IMAGE_COMPLETE` | Stores the final image and sends `{ imageUrl, fileId, responseId, revisedPrompt, imageModelId }`. This finalizes the node, clears the traveling outline, and persists `generatedBy` metadata. The transient image provider never emits `START_STREAM` / `END_STREAM` — the text model owns the stream lifecycle. |
+| `IMAGE_PARTIAL` (empty) | Empty `imageUrl` is a signal, not pixels: the canvas renders the deterministic pending Asset node and starts the PIXI traveling progress border. |
+| `IMAGE_PARTIAL` (non-empty) | Up to three transient data-URL partials update the same pending node. Partials are not durable Asset renditions. Gemini thought images use the same event. |
+| `IMAGE_COMPLETE` | Settles final bytes into the preassigned Asset and sends `{ imageUrl, assetId, responseId, revisedPrompt, imageModelId, canvasGeometry }`. The API-owned geometry finalizes the node and lineage. |
 
 On the workspace canvas, `IMAGE_PARTIAL` updates one generated image node in place and marks it as generating; `pixiMediaLayer.ts` renders the partial pixels and supplies the active image bounds to the reusable `PixiTravelingOutlineRenderer`, and `IMAGE_COMPLETE` is the event that clears that outline. These events **bypass** the markdown stream parser — `AiInteractionService` routes them straight to the canvas/media handlers. In matrix fanout, each image model run carries a distinct `mediaRunId`, and its partial/final events publish through that run's response queue. The API preserves ordering for one run while allowing sibling image variants to render their partials as soon as their own object-store write and canvas projection finish.
 

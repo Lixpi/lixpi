@@ -39,7 +39,10 @@ export type ExtractionResult = {
 // Pulls every image_url out of input messages and turns them into ReferenceImages
 // the pipeline can route to extractors and sharp. The router stage and crop stage
 // reference these by imageRef (input-0, input-1, ...).
-const extractReferenceImagesFromMessages = (messages: ExtractionInput['messages']): ReferenceImage[] => {
+const extractReferenceImagesFromMessages = (
+    messages: ExtractionInput['messages'],
+    sourceAssetIds: string[] = [],
+): ReferenceImage[] => {
     const refs: ReferenceImage[] = []
     let idx = 0
     for (const message of messages) {
@@ -50,7 +53,8 @@ const extractReferenceImagesFromMessages = (messages: ExtractionInput['messages'
             if ((block as any).type !== 'input_image') continue
             const url = (block as any).image_url
             if (typeof url === 'string' && url) {
-                refs.push({ imageRef: `input-${idx++}`, url })
+                const assetId = sourceAssetIds[idx]
+                refs.push({ imageRef: `input-${idx++}`, url, ...(assetId ? { assetId } : {}) })
             }
         }
     }
@@ -76,7 +80,7 @@ export class ExtractionOrchestrator {
             publisher,
         })
 
-        const references = extractReferenceImagesFromMessages(input.messages)
+        const references = extractReferenceImagesFromMessages(input.messages, input.sourceAssetIds)
         const initial: ExtractionState = {
             input,
             references,
@@ -120,7 +124,7 @@ export class ExtractionOrchestrator {
             mergeInto(initial, stage6)
 
             publisher.end()
-            info(`[extraction:${input.extractionRunId}] orchestrator finished — featureId=${initial.featureId ?? '<stub>'}`)
+            info(`[extraction:${input.extractionRunId}] orchestrator finished — featureId=${initial.featureId ?? '<none>'}`)
             return { state: initial, success: !initial.error, error: initial.error }
         } catch (e: any) {
             const message = e?.message ?? String(e)

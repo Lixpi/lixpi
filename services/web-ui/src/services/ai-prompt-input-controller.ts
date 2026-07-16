@@ -177,7 +177,7 @@ export class AiPromptInputController {
         }
 
         if (!aiReasoningModels[0]) {
-            alert('Please select an AI model from the dropdown before submitting.')
+            console.error('[AiPromptInputController] Cannot submit without a reasoning model.')
             return
         }
 
@@ -389,10 +389,6 @@ export class AiPromptInputController {
         const initialContent = {
             type: 'doc',
             content: [
-                {
-                    type: 'documentTitle',
-                    content: [{ type: 'text', text: 'AI Chat' }]
-                },
                 {
                     type: 'aiChatThread',
                     attrs: {

@@ -1,13 +1,10 @@
 'use strict'
 
 import { v4 as uuid } from 'uuid'
-import NATS_Service from '@lixpi/nats-service'
-import { NATS_SUBJECTS } from '@lixpi/constants'
-import { info, err } from '@lixpi/debug-tools'
+import { info } from '@lixpi/debug-tools'
 
 import Feature from '../../models/feature.ts'
 import ExtractionRun from '../../models/extraction-run.ts'
-import { ensureFeatureSamplesForScope } from '../../services/feature-sample-storage.ts'
 import type { ExtractionDeps, ExtractionState, StageLogger } from './types.ts'
 
 export const persistFeature = async (state: ExtractionState, logger: StageLogger, _deps: ExtractionDeps): Promise<Partial<ExtractionState>> => {
@@ -23,12 +20,18 @@ export const persistFeature = async (state: ExtractionState, logger: StageLogger
         }
 
         const featureId = uuid()
+        if (state.references.some((reference) => !reference.assetId)) {
+            throw new Error('Cannot persist feature: every source image must resolve to an Asset')
+        }
         // Sample order: source crops first (kind=source-crop), then synthesized samples
         // (palette boards, texture specimens, applied-medium probes). Stable idx assignment.
         const orderedSamples = [
             ...state.sourceCrops.map((s, i) => ({ ...s, idx: i })),
             ...state.samples.map((s, i) => ({ ...s, idx: state.sourceCrops.length + i })),
-        ]
+        ].map((sample) => ({
+            ...sample,
+            imageUrl: `/api/features/${featureId}/samples/${sample.idx}`,
+        }))
 
         const feature = await Feature.createFeature({
             featureId,
@@ -47,7 +50,7 @@ export const persistFeature = async (state: ExtractionState, logger: StageLogger
                 sourceWorkspaceId: state.input.workspaceId,
                 sourceImages: state.references.map((ref, idx) => ({
                     idx,
-                    imageUrl: ref.url,
+                    assetId: ref.assetId!,
                     role: 'source-reference' as const,
                 })),
             },
@@ -57,26 +60,11 @@ export const persistFeature = async (state: ExtractionState, logger: StageLogger
             throw new Error('Feature.createFeature returned undefined')
         }
 
-        // Features are org-wide and outlive any single workspace, so copy sample bytes
-        // from the origin workspace bucket into the durable per-owner features bucket.
-        try {
-            await ensureFeatureSamplesForScope({ feature, newScope: 'organization', newScopeOwnerId: organizationId })
-        } catch (e) {
-            err(`Failed to durably store feature samples for ${featureId}: ${e instanceof Error ? e.message : String(e)}`)
-        }
-
         await ExtractionRun.markComplete({
             extractionRunId: state.input.extractionRunId,
             workspaceId: state.input.workspaceId,
             featureId,
         })
-
-        try {
-            const nats = NATS_Service.getInstance()
-            nats?.publish(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.EVENTS.CREATED, { type: 'created', feature })
-        } catch (e) {
-            err(`Failed to publish FEATURE_SUBJECTS.CREATE: ${e instanceof Error ? e.message : String(e)}`)
-        }
 
         // Stream the feature as structured content so the extraction tab can render it.
         // Goes through logger.featureCard (not the token text stream) so it can't be

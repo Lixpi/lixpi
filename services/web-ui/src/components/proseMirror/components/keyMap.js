@@ -9,12 +9,10 @@ import {
     lift,
     selectParentNode
 } from "prosemirror-commands"
-import { TextSelection } from 'prosemirror-state';
 import {wrapInList, splitListItem, liftListItem, sinkListItem} from "prosemirror-schema-list"
 import {undo, redo} from "prosemirror-history"
 import {undoInputRule} from "prosemirror-inputrules"
 
-import { documentTitleNodeType } from "@lixpi/prosemirror"
 import { insertAiChatThread } from "$src/components/proseMirror/components/commands.js"
 
 const mac = typeof navigator != "undefined" ? /Mac|iP(hone|[oa]d)/.test(navigator.platform) : false
@@ -40,52 +38,13 @@ export const buildKeymap = (schema, documentType, mapKeys) => {
     bind("Mod-BracketLeft", lift)
     bind("Escape", selectParentNode)
 
-    /**
-     * This 'Mod-a' keybinding customized the 'Select All' (Ctrl/Cmd+A) action in the context of our editor.
-     *
-     * When the cursor is inside a `documentTitleNodeType` node, it selects only the content within that node.
-     * If the cursor is outside, it selects all content from the first non-title node to the end.
-     *
-     * If a title node is not found, or the document only contains the title node, the function will not modify the selection.
-     */
-    bind("Mod-a", (state, dispatch) => {
-        const {doc, tr, selection} = state;
-        const {nodes} = state.schema;
-        let selFrom, selTo;
-
-        if (selection.$head.parent.type.name === documentTitleNodeType) {
-            // Cursor is inside node of `documentTitleNodeType`
-            const parentNode = selection.$head.parent;
-            selFrom = selection.$head.start();
-            selTo = selFrom + parentNode.content.size;
-        } else {
-            // Cursor is outside node of `documentTitleNodeType`
-            doc.forEach((node, pos) => {
-                if (node.type === nodes[documentTitleNodeType]) {
-                    selFrom = pos + node.nodeSize;
-                }
-            });
-            // If `documentTitleNodeType` not found or it's the only node in the doc
-            if (selFrom == null || selFrom >= doc.content.size) return false;
-            selTo = doc.content.size - 1; //- excluding end-of-document node
-        }
-
-        if (selTo > selFrom) {
-            const textSelection = TextSelection.create(doc, selFrom, selTo);
-            dispatch(tr.setSelection(textSelection));
-            return true;
-        }
-        return false;
-    });
-
-
     if (type = schema.marks.strong) {
         bind("Mod-b", toggleMark(type))
         bind("Mod-B", toggleMark(type))
     }
 
-    // AI-specific keybindings - only for aiChatThread documents
-    if (documentType === 'aiChatThread') {
+    // AI-specific keybindings for Asset conversation documents
+    if (documentType === 'assetConversation') {
         // AI Chat Thread trigger
         bind("Mod-Shift-i", insertAiChatThread)
         bind("Mod-Shift-I", insertAiChatThread)

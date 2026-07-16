@@ -19,9 +19,8 @@
 import { applyStyle } from '$src/utils/domTemplates.ts'
 import {
     isApiEndpoint,
-    normalizeWorkspaceFileEndpoint,
-    resolveApiMediaUrl,
-} from '$src/utils/workspaceFileUrls.ts'
+    resolveMediaUrl,
+} from '$src/utils/mediaUrls.ts'
 
 type DownloadImageOptions = {
     filename?: string
@@ -85,12 +84,15 @@ async function downloadViaFetch(imageUrl: string, filename?: string): Promise<vo
 }
 
 async function downloadViaNavigation(imageUrl: string, getAuthToken?: () => Promise<string>): Promise<void> {
-    let url = normalizeWorkspaceFileEndpoint(imageUrl)
+    let url = imageUrl
 
     // Refresh stale auth token if a token refresher is provided.
     if (getAuthToken && isApiEndpoint(url)) {
         const freshToken = await getAuthToken()
-        url = resolveApiMediaUrl(url, { token: freshToken })
+        url = resolveMediaUrl(url, {
+            apiBaseUrl: import.meta.env.VITE_API_URL || '',
+            token: freshToken,
+        })
     }
 
     const downloadUrl = appendDownloadParam(url)

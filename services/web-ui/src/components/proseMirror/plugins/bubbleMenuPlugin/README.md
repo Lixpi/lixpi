@@ -59,6 +59,8 @@ The menu detects selection type using `getSelectionContext()`:
 - `'image'` — NodeSelection of an image node (`image` or `aiGeneratedImage`)
 - `'none'` — Empty selection or unsupported node type
 
+Selections inside `documentTitle` never open the bubble menu. Titles remain directly editable without exposing body-text formatting controls.
+
 **IMPORTANT:** When adding new image-like node types, you MUST update:
 1. `getSelectionContext()` in `bubbleMenuItems.ts` — to return `'image'` context
 2. `getSelectedImageNode()` in `bubbleMenuItems.ts` — to return the node for actions

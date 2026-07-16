@@ -8,6 +8,7 @@ export type ReadOnlyAiChatThreadRenderOptions = {
     mount: HTMLElement
     content: ProseMirrorJsonNode
     threadId: string
+    documentType?: 'assetConversation' | 'assetProvenance'
     className?: string
     traceDetailsOptions?: ImageGenerationTraceDetailsOptions
     contextPreview?: AiUserMessageContextPreviewRenderer
@@ -38,7 +39,7 @@ class ReadOnlyAiChatThreadRenderer implements ReadOnlyAiChatThreadRendererInstan
             initialVal: options.content,
             isDisabled: false,
             readOnly: true,
-            documentType: 'aiChatThread',
+            documentType: options.documentType ?? 'assetProvenance',
             threadId: options.threadId,
             aiChatThreadRenderContext: {
                 readOnly: true,
@@ -46,7 +47,6 @@ class ReadOnlyAiChatThreadRenderer implements ReadOnlyAiChatThreadRendererInstan
                 contextPreview: options.contextPreview,
             },
             onEditorChange: () => {},
-            onProjectTitleChange: () => {},
             onAiChatSubmit: () => {},
             onAiChatStop: () => {},
         })

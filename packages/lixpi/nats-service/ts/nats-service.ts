@@ -86,6 +86,11 @@ export type JetStreamPublishOptions = {
 export type JetStreamConsumeOptions = {
     maxMessages?: number
     expiresMs?: number
+    nakDelayMs?: number
+}
+
+export type JetStreamMessageDisposition = {
+    nakDelayMs: number
 }
 
 const encode = (value: any, type: 'json' | 'buffer'): any => {
@@ -775,7 +780,11 @@ export default class NatsService {
     async ensureJetStreamConsumer(streamName: string, config: Record<string, any>): Promise<any> {
         const jsm = await this.getJetStreamManager()
         try {
-            return await (jsm.consumers as any).info(streamName, config.durable_name)
+            const consumerInfo = await (jsm.consumers as any).info(streamName, config.durable_name)
+            return await (jsm.consumers as any).update(streamName, config.durable_name, {
+                ...consumerInfo.config,
+                ...config,
+            })
         } catch (e: any) {
             if (!this.isStreamNotFoundError(e)) throw e
             return await (jsm.consumers as any).add(streamName, config)
@@ -806,9 +815,51 @@ export default class NatsService {
         return decodedMessages
     }
 
-    async purgeJetStreamSubject(streamName: string, subject: string): Promise<void> {
+    async processJetStreamMessages<T = any>(
+        streamName: string,
+        consumerName: string,
+        handler: (message: { data: T; subject: string; seq: number }) => Promise<void | JetStreamMessageDisposition>,
+        options: JetStreamConsumeOptions = {},
+    ): Promise<number> {
+        const consumer = await (this.getJetStream() as any).consumers.get(streamName, consumerName)
+        const messages = await consumer.consume({
+            max_messages: options.maxMessages ?? 100,
+            expires: options.expiresMs ?? 1000,
+        })
+        let processed = 0
+        for await (const message of messages) {
+            try {
+                const disposition = await handler({
+                    data: JSON.parse(message.string()) as T,
+                    subject: message.subject,
+                    seq: message.seq,
+                })
+                if (disposition) {
+                    message.nak(disposition.nakDelayMs)
+                    continue
+                }
+                message.ack()
+                processed += 1
+            } catch (error) {
+                message.nak(options.nakDelayMs)
+                throw error
+            }
+        }
+        return processed
+    }
+
+    async purgeJetStreamSubject(
+        streamName: string,
+        subject: string,
+        options: { throughSequence?: number } = {},
+    ): Promise<void> {
         const jsm = await this.getJetStreamManager()
-        await jsm.streams.purge(streamName, { filter: subject })
+        await jsm.streams.purge(streamName, {
+            filter: subject,
+            ...(typeof options.throughSequence === 'number'
+                ? { seq: options.throughSequence + 1 }
+                : {}),
+        })
     }
 
     // Helper to convert Uint8Array to ReadableStream (required by @nats-io/obj)

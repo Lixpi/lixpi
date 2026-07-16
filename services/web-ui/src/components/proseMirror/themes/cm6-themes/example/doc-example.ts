@@ -79,7 +79,7 @@ Inline \`code\` has \`back-ticks around\` it.
 
 \`\`\`javascript
 const message = "JavaScript syntax highlighting";
-alert(message);
+console.error(message);
 
 const regexp = /foo/g;
 

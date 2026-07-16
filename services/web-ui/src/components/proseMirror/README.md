@@ -5,7 +5,7 @@ This document is the canonical, deep-dive reference for the ProseMirror-based ed
 
 ## High-level overview
 
-- The Svelte component `ProseMirror.svelte` owns editor lifecycle and data synchronization to app stores and services.
+- Workspace canvas hosts own editor lifecycle and join Asset metadata with role snapshots before instantiating the editor driver.
 - `components/editor.ts` imports the shared ProseMirror schema factory from `@lixpi/prosemirror` and wires all editor plugins.
 - A rich plugin stack handles state propagation, AI triggers, authority-backed step application, placeholders/menus, CodeMirror code blocks, and UX behaviors.
 - Transaction meta flags (e.g., `use:aiChat`, `insert:<nodeType>`) are the core intra-plugin signaling mechanism.
@@ -13,13 +13,13 @@ This document is the canonical, deep-dive reference for the ProseMirror-based ed
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
-  Svelte[ProseMirror.svelte] -->|instantiates| PMEditor[ProseMirrorEditor]
+  CanvasHost[Workspace canvas host] -->|instantiates| PMEditor[ProseMirrorEditor]
   PMEditor -->|builds| SharedSchema["@lixpi/prosemirror schema builder"]
     PMEditor -->|creates| Plugins[Plugin Stack]
     Plugins -->|compose| EditorView
-    EditorView -->|doc JSON| DocumentService
-    Svelte --> AiInteractionService
-    Svelte --> ProseMirrorAuthorityService
+    EditorView -->|Asset role doc JSON| AssetService
+    CanvasHost --> AiInteractionService
+    CanvasHost --> ProseMirrorAuthorityService
     AiInteractionService --> SegmentsReceiver
     SegmentsReceiver -->|media/branch/pipeline events| aiChatThreadPlugin
     ProseMirrorAuthorityService -->|START/STEP/END| EditorView
@@ -30,24 +30,27 @@ flowchart LR
 
 ## Schema and custom nodes
 
-The schema contract lives in `packages/lixpi/prosemirror`. That package exports the base CommonMark-like schema, custom node specs, AI chat node specs, the AI prompt input node spec, model-selection attr normalizers, streaming segment assembly helpers, and the schema builder used by both browser and API code. Web-ui files under `components/schema.ts` and `customNodes/` are compatibility exports so older imports do not create a second schema definition.
+The schema contract lives in `packages/lixpi/prosemirror`. That package exports the base CommonMark-like schema, custom node specs, AI chat node specs, the AI prompt input node spec, model-selection attr normalizers, streaming segment assembly helpers, and the schema builder used by both browser and API code. Web-ui files under `components/schema.ts` and `customNodes/` are thin re-exports; they do not define a second schema.
 
-We have two editor modes with different document shapes:
+The active Asset editor modes have different document shapes:
 
-- Regular documents (`documentType: 'document'`)
-  - doc content: `documentTitle block+`
-- AI chat threads (`documentType: 'aiChatThread'`)
-  - doc content: `documentTitle aiChatThread+`
+- Asset content (`documentType: 'assetContent'`): `block+`
+- Asset conversation (`documentType: 'assetConversation'`): `aiChatThread+`
+- Sealed Asset provenance (`documentType: 'assetProvenance'`): `aiChatThread+`, mounted read-only
+- Asset title (`documentType: 'assetTitle'`): `documentTitle`, an ephemeral title-only editor used above media nodes
+- Asset metadata (`documentType: 'assetMetadata'`): `documentTitle paragraph`, an ephemeral editor that maps edits to `Asset.title` and the media descriptor summary
+- Floating prompt input (`documentType: 'aiPromptInput'`): `aiPromptInput`
+
+The authoritative title is `Asset.title`; persisted Asset snapshots never contain `documentTitle`. The metadata editor uses `documentTitle` only as its editing surface and commits the value through Asset metadata APIs.
 
 The shared schema builder does two important things:
 
 - Adds *new* custom nodes before `paragraph` (so they behave like normal block nodes).
-- Updates *existing* base nodes (e.g. `code_block`) **in place** to preserve the base schema order. This avoids ProseMirror picking `code_block` as the “default block” when leaving the title.
+- Updates *existing* base nodes (e.g. `code_block`) **in place** to preserve the base schema order.
 
 Custom nodes are intentionally split by responsibility:
 
 - Base custom nodes (exported by `@lixpi/prosemirror`, re-exported through `customNodes/index.js`):
-  - `documentTitleNode` (`documentTitle`): h1 title, non-selectable, defining.
   - `code_block` override (`codeBlockNode`): extends the base `code_block` with attrs (e.g. theme) used by the CodeMirror NodeView.
   - `taskRowNode`: placeholder for future Svelte-backed rendering.
 
@@ -64,8 +67,7 @@ Custom nodes are intentionally split by responsibility:
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TD
-  A[doc] --> B[documentTitle]
-  A --> T[aiChatThread]
+  A[Asset conversation doc] --> T[aiChatThread]
   T --> UM[aiUserMessage]
   T --> R[aiResponseMessage]
   UM --> UMC["(paragraph | block)+"]
@@ -89,15 +91,15 @@ Notes
   - AI chat threads extend base `customNodes` with AI chat node specs from `aiChatThreadPlugin`.
 - Initializes `EditorView` with:
   - Initial doc via `createInitialDocument(...)`:
-    - Regular docs: parse from `initialVal` JSON or DOM `content`.
-    - AI chat threads: parse JSON if valid, otherwise create a schema-valid doc using `createAndFill()` and the provided `threadId`.
+    - Asset content: parse the title-free role snapshot or create a paragraph.
+    - Asset conversation/provenance: parse the role snapshot or create a schema-valid `aiChatThread` using the Asset ID as `threadId`.
   - Plugin list (order matters):
     - `statePlugin`, `focusPlugin`, `bubbleMenuPlugin`, `linkTooltipPlugin`, `slashCommandsMenuPlugin`
-    - `imageLifecyclePlugin`, `imageSelectionPlugin`
+    - `imageSelectionPlugin`
     - `buildInputRules`, `keymap(buildKeymap)`, `keymap(baseKeymap)`, `dropCursor`, `gapCursor`, `history`
     - `createCodeBlockPlugin` + `codeBlockInputRule` (CodeMirror integration and ``` fences)
     - `activeNodePlugin`
-    - AI stack (AI chat threads only): `createAiChatThreadPlugin`
+    - AI stack (Asset conversation and provenance roles): `createAiChatThreadPlugin`
 
 
 ## Transaction meta signaling: contract
@@ -172,9 +174,10 @@ graph LR
 
 ### statePlugin (`plugins/statePlugin.js`)
 - Emits full doc JSON on any doc-changing transaction unless `skipDispatch` is set.
-- Detects first child (title) text change and calls `documentTitleChangeCallback` to sync stores/services.
+- Legacy titled schemas may detect first-child title changes. Asset `content`, `conversation`, and `provenance` roles are title-free; global titles update through Asset metadata.
 - Skips persistence callbacks for AI chat thread documents. AI chat final snapshots are written by the API when the authoritative stream ends; the live callback still mirrors in-flight docs for canvas previews.
-- Authority-backed editors call `DOC_RESUME` on mount and use the returned JetStream stream sequence only as a replay cursor. Document freshness is tracked through ProseMirror document versions from step/control payloads, so START/END control messages do not make the browser wait for nonexistent edit versions.
+- Authority-backed editors call `asset.document.resume` on mount and use the returned organization Asset-step stream sequence only as a replay cursor. Document freshness is tracked through role versions from step/control payloads.
+- Settled step history remains replayable for five minutes before the API purges through the incorporated stream sequence. When local steps are still pending, resume replays and rebases those events instead of replacing the editor with the newer settled snapshot.
 
 ### focusPlugin (`plugins/focusPlugin.js`)
 - Listens to DOM focus/blur and sets plugin meta. Callback toggles `editable` prop based on `isDisabled`.
@@ -222,7 +225,6 @@ graph TD
 - `components/keyMap.js` binds:
   - Mod-Z/Shift-Mod-Z/Mod-Y for undo/redo, Backspace undoInputRule.
   - Navigation: Alt-ArrowUp/Down join siblings, Mod-[ lift, Escape select parent.
-  - Custom Mod-A: inside `documentTitle` selects title content; elsewhere selects content after title only.
   - Mark toggles: Mod-B/Mod-I/Mod-`.
   - List bindings: Shift-Ctrl-8/9, Enter split list item, Mod-[ / Mod-] outdent/indent.
   - Block type bindings: Shift-Ctrl-0 paragraph, Shift-Ctrl-\\ code_block, Shift-Ctrl-(1..6) headings.
@@ -321,6 +323,7 @@ The main plugin orchestrating AI chat functionality. All AI chat logic is consol
 **Streaming response handling:**
 - Subscribes to `SegmentsReceiver.subscribeToeceiveSegment()` for streaming events
 - `ProseMirrorAuthorityService` subscribes to the live ProseMirror step subject and applies `Step.fromJSON(schema, step)` events from the API
+- Conflict resume preserves pending local steps and rebases them over replayed authority events; it applies a newer snapshot directly only when there are no pending local steps
 - The submit payload includes the post-placeholder thread doc JSON so API-authored step positions match the browser doc
 - If a remote step is structurally invalid for a mounted editor, the authority service stops retrying that step and waits for a newer persisted snapshot to recover the document
 - `SegmentsReceiver` remains for non-ProseMirror pipeline events such as media trace, lineage, partial, complete, and error events
@@ -347,7 +350,7 @@ sequenceDiagram
       activate Plugin
       Plugin->>S: onAiChatSubmit(messages, aiReasoningModels)
       activate S
-      S->>Auth: live document subscription + DOC_RESUME
+      S->>Auth: Asset-role subscription + asset.document.resume
       deactivate Ctrl
   end
   %% ═══════════════════════════════════════════════════════════════
@@ -381,27 +384,24 @@ sequenceDiagram
 - `components/commands.js` exports helpers for programmatic document manipulation.
 
 
-## Svelte integration (`ProseMirror.svelte`)
+## Workspace host integration
 
-- Instantiates `ProseMirrorEditor` with initial doc JSON and callbacks:
-  - `onEditorChange(json)`: legacy/fallback snapshot callback and store mirroring. Authority-backed editors submit local transactions through `ProseMirrorAuthorityService`.
+- The Workspace canvas instantiates `ProseMirrorEditor` with an Asset role snapshot and callbacks:
+  - `onEditorChange(json)`: local document projection and store mirroring. Authority-backed editors submit local transactions through `ProseMirrorAuthorityService`.
   - `onStreamingUpdate(json)`: live, non-persisting projection used by canvas branch marker previews while authority steps arrive.
-  - `onProjectTitleChange(title)`: immediate title sync to stores and persistence.
   - `onAiChatSubmit(messages, aiReasoningModels, …)`: forwards to `AiInteractionService.sendChatMessage` (which feeds `SegmentsReceiver`).
   - `onAiChatStop()`: stops active AI streaming.
-- Manages teardown on unmount and re-creation when document metadata changes.
+- It manages teardown on node removal and re-creation when the Asset coordinate changes.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
-  Svelte --> PMEditor
+  CanvasHost --> PMEditor
   PMEditor -->|statePlugin| onEditorChange
   PMEditor -->|authority live doc| onStreamingUpdate
-  PMEditor -->|title change| onProjectTitleChange
   PMEditor -->|aiChatThreadPlugin| onAiChatSubmit
-  onEditorChange --> DocumentService
+  onEditorChange --> AssetService
   onStreamingUpdate --> CanvasPreviews[Branch marker previews]
-  onProjectTitleChange --> DocumentService & Stores
   onAiChatSubmit --> AiInteractionService --> SegmentsReceiver --> aiChatThreadPlugin
   ProseMirrorAuthorityService --> PMEditor
 ```
@@ -442,8 +442,8 @@ flowchart LR
 
 ## Edge cases and invariants
 
-- Regular document shape: The first node is always `documentTitle`, followed by one or more `block` nodes.
-- AI chat thread shape: The first node is always `documentTitle`, followed by one or more `aiChatThread` nodes.
+- Asset content shape: one or more `block` nodes, with no `documentTitle`.
+- Asset conversation/provenance shape: one or more `aiChatThread` nodes, with no `documentTitle`.
 - Thread shape: `aiChatThread` content is `(aiUserMessage | aiResponseMessage)+`. The thread is a pure conversation log with no inline composer.
 - AI response document steps are authored by the API against the submitted post-placeholder thread document. The browser applies them through `ProseMirrorAuthorityService`; media matrix steps target the matching `aiReasoningSection` inside the shared response when the API run metadata declares one.
 - **Multiple concurrent streams ARE supported**: Each thread can have independent AI streaming via `threadId` parameter. The plugin maintains a `Set<string>` of active `receivingThreadIds` to track concurrent streams across different threads.
@@ -459,7 +459,7 @@ flowchart LR
 
 ## File map
 
-- Svelte: `ProseMirror.svelte`
+- Workspace host: `components/WorkspaceCanvas.svelte` and `infographics/workspace/WorkspaceCanvas.ts`
 - Editor driver: `components/editor.ts`
 - Prompt composer wrapper: `aiPromptComposer.ts`
 - Shared schema package: `packages/lixpi/prosemirror`
@@ -491,8 +491,8 @@ flowchart LR
 
 **AI Chat Thread Document Structure**
 
-The document structure uses a single AI chat thread container:
-- Document starts with a title (`documentTitle`), then contains an `aiChatThread` node
+The active conversation Asset structure uses a single AI chat thread container:
+- The document contains one or more `aiChatThread` nodes and no `documentTitle`; `Asset.title` is authoritative metadata
 - Thread content expression: `(aiUserMessage | aiResponseMessage)+` — pure conversation log
 - `aiUserMessage` nodes represent sent user messages (injected by `AiPromptInputController`)
 - `aiResponseMessage` nodes contain AI responses (created during streaming)

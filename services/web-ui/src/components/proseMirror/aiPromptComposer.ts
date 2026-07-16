@@ -140,7 +140,6 @@ class AiPromptComposer implements AiPromptComposerInstance {
             documentType: 'aiPromptInput',
             threadId: config.threadId ?? null,
             onEditorChange: (value: object) => config.onContentChange?.(value),
-            onProjectTitleChange: () => {},
             onAiChatSubmit: () => {},
             onAiChatStop: () => {},
             onPromptSubmit: (data: AiPromptComposerSubmitData) => config.onSubmit(data),

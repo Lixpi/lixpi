@@ -8,6 +8,7 @@ import type { FeatureSampleRef, FeatureSampleCropRegion, SceneSubject, SceneRegi
 
 import { parseDataUrl, parseNatsObjectRef } from '../utils/attachments.ts'
 import type { ExtractionDeps, ExtractionState, StageLogger, ReferenceImage } from './types.ts'
+import BlobModel from '../../models/blob.ts'
 
 const MIN_CROP_AXIS_PX = 128
 const TARGET_CROP_AXIS_PX = 384
@@ -162,6 +163,7 @@ const planCompositionThumbnail = (
 const materializeCropsForReference = async (args: {
     extractionRunId: string
     workspaceId: string
+    organizationId?: string
     ref: ReferenceImage
     refIdx: number
     sceneEntry: { subjects: SceneSubject[]; regions: SceneRegion[] }
@@ -208,20 +210,20 @@ const materializeCropsForReference = async (args: {
                 pipeline = pipeline.resize({ width: 1024, height: 1024, fit: 'inside' })
             }
             const cropBuffer = await pipeline.png().toBuffer()
-            const stored = await args.deps.storeWorkspaceImage({
-                workspaceId: args.workspaceId,
-                buffer: cropBuffer,
-                originalName: `extraction-${args.extractionRunId}-${args.ref.imageRef}-${plan.region.label}.png`,
+            if (!args.organizationId) throw new Error('Organization context required for crop Blob storage')
+            const stored = await BlobModel.store({
+                organizationId: args.organizationId,
+                bytes: cropBuffer,
                 mimeType: 'image/png',
-                useContentHash: true,
+                description: `extraction-${args.extractionRunId}-${args.ref.imageRef}-${plan.region.label}.png`,
             })
             return {
                 idx: 0, // assigned after Promise.all settles based on stable order
                 subject: plan.region.label,
                 aspectRatio: `${plan.box.width}x${plan.box.height}`,
                 ext: 'png',
-                fileId: stored.fileId,
-                imageUrl: stored.url,
+                blobHash: stored.blobHash,
+                imageUrl: `data:image/png;base64,${cropBuffer.toString('base64')}`,
                 kind: 'source-crop',
                 cropRegion: plan.region,
                 rationale: `Sub-anatomical / content-free crop from ${args.ref.imageRef} at (${plan.box.left},${plan.box.top}) ${plan.box.width}x${plan.box.height} — ${plan.region.purpose}`,
@@ -248,6 +250,7 @@ export const materializeSourceCrops = async (state: ExtractionState, logger: Sta
                 const crops = await materializeCropsForReference({
                     extractionRunId: state.input.extractionRunId,
                     workspaceId: state.input.workspaceId,
+                    organizationId: state.input.organizationId,
                     ref,
                     refIdx: i,
                     sceneEntry,

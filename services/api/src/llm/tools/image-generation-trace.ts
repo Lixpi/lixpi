@@ -69,13 +69,18 @@ const getDecisionByNodeId = (
 }
 
 const getTraceSafeImageUrl = (imageUrl: string, candidate?: MediaBranchCandidateImage): string => {
-    if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
-        if (candidate?.workspaceId && candidate.fileId) {
-            return `nats-obj://workspace-${candidate.workspaceId}-files/${candidate.fileId}`
-        }
+    if (candidate?.assetId) {
+        const rendition = candidate.mediaKind === 'video' ? 'representativeFrame' : 'preview'
+        return `/api/assets/${encodeURIComponent(candidate.assetId)}/renditions/${rendition}`
+    }
+    if (!imageUrl.startsWith('/api/')) return ''
+    try {
+        const url = new URL(imageUrl, 'http://trace.local')
+        url.searchParams.delete('token')
+        return `${url.pathname}${url.search}`
+    } catch {
         return ''
     }
-    return imageUrl
 }
 
 const buildBranchReference = (args: {
@@ -93,8 +98,7 @@ const buildBranchReference = (args: {
         label: getCandidateLabel(args.candidate, fallback),
         role: args.decision?.role ?? 'base-context',
         nodeId: args.nodeId,
-        fileId: args.candidate?.fileId,
-        workspaceId: args.candidate?.workspaceId,
+        assetId: args.candidate?.assetId,
         branchId: args.candidate?.branchId,
         reason: args.decision?.reason,
     }
@@ -198,8 +202,7 @@ const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedR
             label: getCandidateLabel(candidate, nodeId),
             role: 'excluded',
             reason: decision?.reason ?? 'Excluded by image branch resolver.',
-            fileId: candidate?.fileId,
-            workspaceId: candidate?.workspaceId,
+            assetId: candidate?.assetId,
             branchId: candidate?.branchId,
         }
     })

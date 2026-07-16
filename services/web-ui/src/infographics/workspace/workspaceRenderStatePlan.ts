@@ -136,23 +136,7 @@ export function getCanvasVisualStructureKey(canvasState: CanvasStateVisualFields
 }
 
 function getNodeDescriptorSyncKey(node: CanvasNode): string {
-    const descriptor = (node as { descriptor?: {
-        status?: string
-        source?: string
-        summary?: string
-        entityTags?: string[]
-        styleTags?: string[]
-        version?: number
-    } }).descriptor
-    if (!descriptor) return ''
-    return [
-        descriptor.status ?? '',
-        descriptor.source ?? '',
-        descriptor.summary ?? '',
-        ...(descriptor.entityTags ?? []),
-        ...(descriptor.styleTags ?? []),
-        String(descriptor.version ?? ''),
-    ].join('\u001f')
+    return 'assetId' in node ? node.assetId : ''
 }
 
 export function getCanvasVisualSyncKey(canvasState: CanvasStateVisualFields | null): string {
@@ -165,8 +149,7 @@ export function getCanvasVisualSyncKey(canvasState: CanvasStateVisualFields | nu
         node.position.y,
         node.dimensions.width,
         node.dimensions.height,
-        node.type === 'image' ? node.fileId : '',
-        node.type === 'image' ? node.src : '',
+        'assetId' in node ? node.assetId : '',
         getNodeDescriptorSyncKey(node),
     ].join(':')).join('|')
     const edgeKey = canvasState.edges.map((edge: WorkspaceEdge) => [

@@ -135,15 +135,17 @@ await startNatsAuthCalloutService({
 For **regular users**, permissions come from subscription definitions:
 ```typescript
 {
-    subject: 'document.get',
+    subject: 'asset.get',
     permissions: {
-        pub: { allow: ['document.get'] },
-        sub: { allow: ['document.get'] }
+        pub: { allow: ['asset.get'] },
+        sub: { allow: ['asset.events.updated.{userIdToken}'] }
     }
 }
 ```
 
-The `{userId}` placeholder is replaced with the authenticated user's ID.
+The `{userIdToken}` placeholder is replaced with the authenticated user's
+subject-safe token; `{userId}` remains available for subjects that explicitly
+use the raw authenticated ID.
 When multiple subscription definitions need the same event or wildcard subject,
 the first occurrence in the API subscription list is kept and later duplicates
 are omitted. This preserves the explicit startup/group order without sorting the

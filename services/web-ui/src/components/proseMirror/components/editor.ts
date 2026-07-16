@@ -32,7 +32,6 @@ import { activeNodePlugin } from "$src/components/proseMirror/plugins/activeNode
 import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/index.ts'
 import { linkTooltipPlugin } from '$src/components/proseMirror/plugins/linkTooltipPlugin/linkTooltipPlugin.ts'
 import { slashCommandsMenuPlugin } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/index.ts'
-import { imageLifecyclePlugin } from '$src/components/proseMirror/plugins/imageLifecyclePlugin/index.ts'
 import { imageSelectionPlugin } from '$src/components/proseMirror/plugins/imageSelectionPlugin/index.ts'
 
 import {buildKeymap} from "$src/components/proseMirror/components/keyMap.js"
@@ -52,7 +51,6 @@ type ProseMirrorEditorConfig = {
     threadId?: string | null
     onEditorChange?: (value: any) => void
     onStreamingUpdate?: (value: any) => void
-    onProjectTitleChange?: (value: any) => void
     onAiChatSubmit?: (value: any) => void
     onAiChatStop?: (value: any) => void
     onPromptSubmit?: (value: any) => void
@@ -73,11 +71,10 @@ export class ProseMirrorEditor {
         content,
         initialVal = {},
         isDisabled,
-        documentType = DOCUMENT_TYPE.DOCUMENT,
+        documentType = DOCUMENT_TYPE.ASSET_CONTENT,
         threadId,
         onEditorChange,
         onStreamingUpdate,
-        onProjectTitleChange,
         onAiChatSubmit,
         onAiChatStop,
         onPromptSubmit,
@@ -89,7 +86,6 @@ export class ProseMirrorEditor {
     }: ProseMirrorEditorConfig) {
         this.onEditorChange = onEditorChange
         this.onStreamingUpdate = onStreamingUpdate
-        this.onProjectTitleChange = onProjectTitleChange
         this.onAiChatSubmit = onAiChatSubmit
         this.onAiChatStop = onAiChatStop
         this.onPromptSubmit = onPromptSubmit
@@ -98,7 +94,7 @@ export class ProseMirrorEditor {
         this.proseMirrorAuthorityOptions = proseMirrorAuthority
         this.proseMirrorAuthority = null
         this.isDisabled = isDisabled
-        this.readOnly = readOnly
+        this.readOnly = readOnly || Boolean(proseMirrorAuthority && !proseMirrorAuthority.receiveOnly)
         this.aiChatThreadRenderContext = {
             ...(aiChatThreadRenderContext ?? {}),
             readOnly,
@@ -118,10 +114,16 @@ export class ProseMirrorEditor {
         })
 
         if (this.proseMirrorAuthorityOptions) {
+            const onLeaseStateChange = this.proseMirrorAuthorityOptions.onLeaseStateChange
             this.proseMirrorAuthority = new ProseMirrorAuthorityService({
                 ...this.proseMirrorAuthorityOptions,
                 getView: () => this.editorView,
                 onRemoteDocumentChange: value => this.dispatchStreamingUpdate(value),
+                onLeaseStateChange: state => {
+                    this.readOnly = state.readOnly
+                    this.editorView.setProps({ editable: () => this.isEditorEditable() })
+                    onLeaseStateChange?.(state)
+                },
             })
         }
     }
@@ -151,7 +153,10 @@ export class ProseMirrorEditor {
             return this.editorSchema.nodes.doc.create(null, [inputNode])
         }
 
-        if (this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
+        if (
+            this.documentType === DOCUMENT_TYPE.ASSET_CONVERSATION
+            || this.documentType === DOCUMENT_TYPE.ASSET_PROVENANCE
+        ) {
             if (hasValidContent) {
                 try {
                     console.log('📝 [EDITOR] Attempting to parse initialVal as AI chat thread:', JSON.stringify(initialVal, null, 2).substring(0, 500))
@@ -167,10 +172,9 @@ export class ProseMirrorEditor {
             }
 
             console.log('📝 [EDITOR] Creating fresh AI chat thread document with threadId:', this.threadId)
-            const titleNode = this.editorSchema.nodes.documentTitle.createAndFill()
             const threadNode = this.editorSchema.nodes.aiChatThread.createAndFill({ threadId: this.threadId })
             console.log('📝 [EDITOR] Created threadNode:', threadNode?.toString())
-            return this.editorSchema.nodes.doc.create(null, [titleNode, threadNode])
+            return this.editorSchema.nodes.doc.create(null, [threadNode])
         }
 
         return hasValidContent
@@ -187,7 +191,6 @@ export class ProseMirrorEditor {
             statePlugin(
                 initialValue,
                 this.dispatchStateChange.bind(this),
-                this.onProjectTitleChange.bind(this),
                 this.dispatchStreamingUpdate.bind(this),
                 this.proseMirrorAuthorityOptions ? this.dispatchLocalTransaction.bind(this) : null
             ),
@@ -195,7 +198,6 @@ export class ProseMirrorEditor {
             bubbleMenuPlugin(),
             linkTooltipPlugin(),
             slashCommandsMenuPlugin(),
-            imageLifecyclePlugin(),
             imageSelectionPlugin(),
             buildInputRules(this.editorSchema),
             keymap(buildKeymap(this.editorSchema, this.documentType)),
@@ -211,15 +213,17 @@ export class ProseMirrorEditor {
         ]
 
         // Add aiChatThread-specific plugins only for AI chat thread documents
-        if (this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
+        if (
+            this.documentType === DOCUMENT_TYPE.ASSET_CONVERSATION
+            || this.documentType === DOCUMENT_TYPE.ASSET_PROVENANCE
+        ) {
             basePlugins.push(
                 createAiChatThreadPlugin({
-                    sendAiRequestHandler: val => this.onAiChatSubmit(val),
-                    stopAiRequestHandler: val => this.onAiChatStop(val),
-                    placeholders: {
-                        titlePlaceholder: 'New document',
-                        paragraphPlaceholder: 'I\'m your new document...'
+                    sendAiRequestHandler: async val => {
+                        await this.proseMirrorAuthority?.flushPendingSteps()
+                        await this.onAiChatSubmit(val)
                     },
+                    stopAiRequestHandler: val => this.onAiChatStop(val),
                     onReceivingStateChange: this.onReceivingStateChange,
                     renderContext: this.aiChatThreadRenderContext
                 })

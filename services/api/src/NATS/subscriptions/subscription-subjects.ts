@@ -21,7 +21,7 @@ export const subscriptionSubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.GET_PAYMENT_METHOD_SETUP_INTENT ] },
-            sub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.GET_PAYMENT_METHOD_SETUP_INTENT ] }
+            sub: { allow: [] }
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object
@@ -44,7 +44,7 @@ export const subscriptionSubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.GET_USER_PAYMENT_METHODS ] },
-            sub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.GET_USER_PAYMENT_METHODS ] }
+            sub: { allow: [] }
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object
@@ -80,7 +80,7 @@ export const subscriptionSubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.DELETE_USER_PAYMENT_METHOD ] },
-            sub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.DELETE_USER_PAYMENT_METHOD ] }
+            sub: { allow: [] }
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object
@@ -110,7 +110,7 @@ export const subscriptionSubjects = [
         payloadType: 'json',
         permissions: {
             pub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.TOP_UP_USER_BALANCE ] },
-            sub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.TOP_UP_USER_BALANCE ] }
+            sub: { allow: [] }
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object

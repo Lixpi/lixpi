@@ -1,6 +1,6 @@
 # AI Chat Thread Plugin
 
-`aiChatThreadPlugin` powers the ProseMirror editor for AI chat thread documents in the panel, provenance projections, and compatibility canvas-thread surfaces. The thread editor is a conversation log and streaming target. Composer UI is provided by `aiPromptInputPlugin`.
+`aiChatThreadPlugin` powers `assetConversation` editors in the panel and read-only `assetProvenance` projections. The thread node is a conversation log and streaming target whose `threadId` equals the conversation Asset ID. Composer UI is provided by `aiPromptInputPlugin`.
 
 ## Input Flow
 
@@ -23,16 +23,12 @@
 
 ## Runtime Wiring
 
-`ProseMirrorEditor` adds this plugin only for `documentType: 'aiChatThread'`.
+`ProseMirrorEditor` adds this plugin for `documentType: 'assetConversation'` and `documentType: 'assetProvenance'`. Provenance passes `readOnly: true` and never publishes client steps.
 
 ```ts
 createAiChatThreadPlugin({
     sendAiRequestHandler: val => this.onAiChatSubmit(val),
     stopAiRequestHandler: val => this.onAiChatStop(val),
-    placeholders: {
-        titlePlaceholder: 'New document',
-        paragraphPlaceholder: 'I\'m your new document...',
-    },
     onReceivingStateChange: this.onReceivingStateChange,
     renderContext: {
         readOnly: false,
@@ -60,7 +56,7 @@ sequenceDiagram
     Controller->>Thread: insert aiUserMessage + USE_AI_CHAT_META
     Thread->>Thread: extract thread messages
     Thread->>Service: sendAiRequestHandler(payload + post-placeholder doc JSON)
-    Authority->>Thread: DOC_RESUME + document step subscription
+    Authority->>Thread: asset.document.resume + Asset-role step subscription
     Authority->>Thread: START / STEP / END
     Authority->>Thread: apply Step.fromJSON(schema, step)
     Service->>Receiver: replayed/live pipeline side events
@@ -74,7 +70,7 @@ sequenceDiagram
 Container for the conversation log.
 
 - Spec content: `(aiUserMessage | aiResponseMessage)*`
-- Document mode: `doc -> documentTitle aiChatThread+`
+- Asset conversation/provenance mode: `doc -> aiChatThread+`
 - Main DOM: `div.ai-chat-thread-wrapper > div.ai-chat-thread-content`
 - The NodeView auto-fills a missing `threadId` by dispatching `setNodeMarkup`.
 - The NodeView ignores `style` attribute mutations so canvas-driven sizing avoids ProseMirror wrapper recreation.
@@ -162,7 +158,7 @@ Atom node for generated-video status and previews in the thread log.
 - Nodes keep the same lineage attrs as generated images; the provider badge row remains model/provider-only.
 - Generated media nodes share the same in-thread media width contract: full available width up to the chat media cap.
 - The canvas media info button is not rendered in chat history nodes.
-- Poster file ids can be reused as still-image context when the thread log is converted into a later request.
+- Poster or representative-frame Asset renditions can be reused as still-image context for a later request.
 - Carries the same run metadata shape as generated images.
 
 ### `aiCollapsibleBlock`
@@ -173,7 +169,7 @@ Inline generation trace block.
 - Attrs include `title`, `isOpen`, `isStreaming`, `imageGenerationTrace`, `imageGenerationTraceId`, `videoGenerationTrace`, and run metadata.
 - Used for image and video generation details.
 - Renders generation details as one continuous response block. Prompt, final prompt, references, and resolver audit are separated by subsection titles instead of collapsible chrome.
-- Trace rendering is shared through `imageGenerationTraceDetails.ts`; reference thumbnails resolve authenticated workspace/API URLs, retry the stored workspace file path when trace URLs fail, and render an unavailable state instead of browser broken-image chrome when a stored image cannot be loaded.
+- Trace rendering is shared through `imageGenerationTraceDetails.ts`; reference thumbnails resolve authenticated Asset rendition URLs and render an unavailable state instead of browser broken-image chrome when a rendition cannot be loaded.
 - Generated prompt text uses the same left-border output treatment as extraction-stage model output.
 - The NodeView accepts `traceDetailsOptions` from `renderContext`, which lets generated-media provenance previews resolve canvas-only reference sources while still rendering the real `aiCollapsibleBlock` node.
 
@@ -186,7 +182,7 @@ The request payload includes:
 - `messages`
 - `aiReasoningModels` (ordered model-id array; collapsed to the first entry when `useMultipleReasoningModels` is off)
 - `useMultipleReasoningModels` / `useMultipleImageModels` / `useMultipleVideoModels`
-- `threadId`
+- `conversationAssetId`
 - `imageOptions` (carries `aiImageModels`)
 - `videoOptions` (carries `aiVideoModels`)
 - `referencedFeatureIds`
@@ -195,13 +191,15 @@ Each section's selection is a single JSON-like model-id array parsed with `parse
 
 Media configuration group attrs are JSON strings parsed through `parseMediaGenerationConfigSelectionAttr()`. They come from the API-authored media generation config matrix and are forwarded to `mediaGenerationRequest.imageOptions.configGroups` / `videoOptions.configGroups`; thread code does not derive provider-specific controls from selected model metadata.
 
-`ContentExtractor.getActiveThreadContent()` extracts only `aiUserMessage` and `aiResponseMessage` blocks. It preserves code blocks with triple backticks, converts hard breaks to newlines, collects inline generated-image references, reuses generated-video posters as image context, and collects `feature_reference` ids.
+`ContentExtractor.getActiveThreadContent()` extracts only `aiUserMessage` and
+`aiResponseMessage` blocks. It preserves code blocks with triple backticks,
+converts hard breaks to newlines, and collects `feature_reference` ids. Generated
+media is resolved from the API-authorized Workspace Asset context rather than
+from browser-built Object Store coordinates.
 
-`ContentExtractor.toMessages()` maps `aiUserMessage` to `user`, `aiResponseMessage` to `assistant`, merges adjacent text-only messages with the same role, and emits multimodal message parts when image references are present:
-
-```ts
-{ type: 'image_url', image_url: { url: 'nats-obj://workspace-{workspaceId}-files/{fileId}' } }
-```
+`ContentExtractor.toMessages()` maps `aiUserMessage` to `user`,
+`aiResponseMessage` to `assistant`, and merges adjacent text-only messages with
+the same role. Browser payloads never contain `nats-obj://` coordinates.
 
 ## Streaming
 
@@ -223,14 +221,16 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 - `video_error`
 - `video_generation_trace`
 
+`video_pending` includes the API-persisted canvas projection for its placeholder. The canvas router forwards that geometry unchanged; browser code does not create or position a fallback video node.
+
 Single-writer text streams are applied by `ProseMirrorAuthorityService`, which
 subscribes to the document step subject and applies `STEP` events with
 `Step.fromJSON(view.state.schema, event.step)`. The plugin still owns the
 non-ProseMirror pipeline event families delivered through `SegmentsReceiver`.
 Raw `START_STREAM` / `STREAMING` / `END_STREAM` text events are not parsed in
 the browser. Generated-prompt collapsible blocks are authored by the API-side
-ProseMirror assembler; legacy collapsible segment handlers are compatibility
-code and are not the primary AI chat text path.
+ProseMirror assembler. Pipeline side-event handlers do not author the same text
+document in the browser.
 When a mounted editor receives a step that was authored against a different
 seed document, the authority service enters snapshot recovery instead of
 retrying the same structural failure. The final API-persisted snapshot is the
@@ -273,7 +273,6 @@ Plugin state:
 
 Decoration output:
 
-- title placeholder on empty `documentTitle`
 - receiving-state class on `aiChatThread` nodes while any run in that thread is active
 
 ## Registered NodeViews
@@ -292,7 +291,7 @@ Generated-image rendering is handled by `imageSelectionPlugin`.
 
 ## Read-Only Provenance Projections
 
-`readOnlyAiChatThreadRenderer.ts` mounts a `ProseMirrorEditor` with `documentType: 'aiChatThread'`, `readOnly: true`, and an optional trace-details render context. `@lixpi/prosemirror/shared/generated-media-turn-projection` builds a scoped `doc` JSON projection for generated image/video provenance by cloning the producing `aiUserMessage` and `aiResponseMessage` from `AiChatThread.content`. It returns no projection when the stored thread content or a matching response cannot be found. Matrix media responses keep only the matching `aiReasoningSection`, selected by `responseMessageId`, `reasoningRunId`, generated-media `mediaRunId` / `fileId`, or `reasoningModelId`. Per-image/per-video provenance can additionally prune generated-media atom nodes to the exact `mediaRunId`, `fileId`, and `variantIndex`; branch-fork provenance leaves sibling media visible.
+The read-only renderer mounts a conversation Asset snapshot with an optional trace-details context. `@lixpi/prosemirror/shared/generated-media-turn-projection` builds a scoped projection by cloning the producing user and response messages from the Asset's `conversation` document role. Matrix responses select the matching reasoning section by response, reasoning run, media run, Asset, or model identity. Per-media provenance can prune atom nodes to the exact `mediaRunId`, `assetId`, and `variantIndex`; branch-fork provenance leaves siblings visible.
 
 Lineage rendering is projection-scoped instead of panel-specific. `conversation` preserves the full live-thread view. `branch-origin`, `branch-fork`, and `media-run` projections materialize scope-local branch decisions as standalone `aiLineageEvent` nodes, then relocate them directly after the generation trace block that renders resolver audit details so they stay with the branch decision context instead of at the top of the reasoning section. Projection cloning filters materialized lineage-event siblings through the selected generated media's lineage ids and deduplicates repeated event ids, so a scoped panel renders one matching workflow marker instead of every sibling marker in the response. This keeps branch-root, branch-fork, and branch-line workflow nodes independently reconstructable from the same stored message pieces without copying ancestor events into child projections.
 

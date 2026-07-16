@@ -1,569 +1,315 @@
 'use strict'
 
-/**
- * DynamoDB Table Definitions for Pulumi Cloud Deployment
- *
- * This file defines all DynamoDB table schemas for AWS cloud infrastructure.
- * It exports getTableDefinitions() for reuse in local development.
- *
- * Why there are two DynamoDB files:
- * - DynamoDB-tables.ts (this file): Pulumi resources for AWS cloud deployment
- * - local-dynamodb-init.ts: AWS SDK script for DynamoDB Local (development)
- *
- * The table definitions are shared via getTableDefinitions() to eliminate duplication.
- * Pulumi-specific logic (streams, deletion protection, tags) stays in createDynamoDbTables().
- */
-
 import * as process from 'process'
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 
-import {
-    getDynamoDbTableStageName
-} from '@lixpi/constants'
+import { formatStageResourceName, getDynamoDbTableStageName } from '@lixpi/constants'
 
-const {
-    ORG_NAME,
-    STAGE,
-    ENVIRONMENT,
-} = process.env
+const { ORG_NAME, STAGE, ENVIRONMENT } = process.env
 
-// Export table definitions for reuse in local init script
-export const getTableDefinitions = () => [
-    {
-        name: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
-        attributes: [{ name: 'userId', type: 'S' as const }],
-        hashKey: 'userId',
-    },
-    {
-        name: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
-        attributes: [{ name: 'organizationId', type: 'S' as const }],
-        hashKey: 'organizationId',
-    },
-    {
-        name: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
+type TableAttribute = { name: string; type: 'S' | 'N' | 'B' }
+type SecondaryIndex = { name: string; rangeKey: string; projectionType: 'ALL' }
+type TableDefinition = {
+    name: string
+    attributes: TableAttribute[]
+    hashKey: string
+    rangeKey?: string
+    localSecondaryIndexes?: SecondaryIndex[]
+}
+
+type LegacyStorageRemovalStage = 'retain' | 'disable-protection' | 'remove'
+
+const table = (
+    resource: Parameters<typeof getDynamoDbTableStageName>[0],
+    attributes: TableAttribute[],
+    hashKey: string,
+    rangeKey?: string,
+    localSecondaryIndexes?: SecondaryIndex[],
+): TableDefinition => ({
+    name: getDynamoDbTableStageName(resource, ORG_NAME, STAGE),
+    attributes,
+    hashKey,
+    ...(rangeKey ? { rangeKey } : {}),
+    ...(localSecondaryIndexes ? { localSecondaryIndexes } : {}),
+})
+
+export const getTableDefinitions = () => ({
+    usersTable: table('USERS', [{ name: 'userId', type: 'S' }], 'userId'),
+    organizationsTable: table('ORGANIZATIONS', [{ name: 'organizationId', type: 'S' }], 'organizationId'),
+    organizationsAccessListTable: table(
+        'ORGANIZATIONS_ACCESS_LIST',
+        [
+            { name: 'userId', type: 'S' },
+            { name: 'organizationId', type: 'S' },
+            { name: 'createdAt', type: 'N' },
+        ],
+        'userId',
+        'organizationId',
+        [
+            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' },
+            { name: 'updatedAt', rangeKey: 'createdAt', projectionType: 'ALL' },
+        ],
+    ),
+    workspacesTable: table('WORKSPACES', [{ name: 'workspaceId', type: 'S' }], 'workspaceId'),
+    workspacesMetaTable: table('WORKSPACES_META', [{ name: 'workspaceId', type: 'S' }], 'workspaceId'),
+    workspacesAccessListTable: table(
+        'WORKSPACES_ACCESS_LIST',
+        [
+            { name: 'userId', type: 'S' },
+            { name: 'workspaceId', type: 'S' },
+            { name: 'createdAt', type: 'N' },
+            { name: 'updatedAt', type: 'N' },
+        ],
+        'userId',
+        'workspaceId',
+        [
+            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' },
+            { name: 'updatedAt', rangeKey: 'updatedAt', projectionType: 'ALL' },
+        ],
+    ),
+    aiTokensUsageTransactionsTable: table(
+        'AI_TOKENS_USAGE_TRANSACTIONS',
+        [
+            { name: 'userId', type: 'S' },
+            { name: 'transactionProcessedAt', type: 'N' },
+            { name: 'documentId', type: 'S' },
+            { name: 'aiModel', type: 'S' },
+            { name: 'organizationId', type: 'S' },
+            { name: 'transactionProcessedAtFormatted', type: 'S' },
+        ],
+        'userId',
+        'transactionProcessedAt',
+        [
+            { name: 'documentId', rangeKey: 'documentId', projectionType: 'ALL' },
+            { name: 'aiModel', rangeKey: 'aiModel', projectionType: 'ALL' },
+            { name: 'organizationId', rangeKey: 'organizationId', projectionType: 'ALL' },
+            { name: 'transactionProcessedAtFormatted', rangeKey: 'transactionProcessedAtFormatted', projectionType: 'ALL' },
+        ],
+    ),
+    financialTransactionsTable: table(
+        'FINANCIAL_TRANSACTIONS',
+        [
+            { name: 'userId', type: 'S' },
+            { name: 'transactionId', type: 'S' },
+            { name: 'status', type: 'S' },
+            { name: 'createdAt', type: 'N' },
+            { name: 'provider', type: 'S' },
+        ],
+        'userId',
+        'transactionId',
+        [
+            { name: 'status', rangeKey: 'status', projectionType: 'ALL' },
+            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' },
+            { name: 'provider', rangeKey: 'provider', projectionType: 'ALL' },
+        ],
+    ),
+    aiTokensUsageReportsTable: table(
+        'AI_TOKENS_USAGE_REPORTS',
+        [
+            { name: 'recordKey', type: 'S' },
+            { name: 'aiModel', type: 'S' },
+            { name: 'organizationId', type: 'S' },
+        ],
+        'recordKey',
+        'aiModel',
+        [{ name: 'organizationId', rangeKey: 'organizationId', projectionType: 'ALL' }],
+    ),
+    aiModelsListTable: table(
+        'AI_MODELS_LIST',
+        [{ name: 'provider', type: 'S' }, { name: 'model', type: 'S' }],
+        'provider',
+        'model',
+    ),
+    featuresTable: table(
+        'FEATURES',
+        [{ name: 'featureId', type: 'S' }, { name: 'version', type: 'N' }],
+        'featureId',
+        'version',
+    ),
+    featuresMetaTable: table(
+        'FEATURES_META',
+        [{ name: 'scopeAndOwner', type: 'S' }, { name: 'featureId', type: 'S' }],
+        'scopeAndOwner',
+        'featureId',
+    ),
+    featuresAccessListTable: table(
+        'FEATURES_ACCESS_LIST',
+        [
+            { name: 'userId', type: 'S' },
+            { name: 'featureId', type: 'S' },
+            { name: 'createdAt', type: 'N' },
+        ],
+        'userId',
+        'featureId',
+        [{ name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' }],
+    ),
+    extractionRunsTable: table(
+        'EXTRACTION_RUNS',
+        [{ name: 'extractionRunId', type: 'S' }, { name: 'workspaceId', type: 'S' }],
+        'extractionRunId',
+        'workspaceId',
+    ),
+    assetsTable: table('ASSETS', [{ name: 'assetId', type: 'S' }], 'assetId'),
+    assetsMetaTable: table(
+        'ASSETS_META',
+        [
+            { name: 'scopeAndOwner', type: 'S' },
+            { name: 'assetId', type: 'S' },
+            { name: 'updatedAt', type: 'N' },
+        ],
+        'scopeAndOwner',
+        'assetId',
+        [{ name: 'updatedAt', rangeKey: 'updatedAt', projectionType: 'ALL' }],
+    ),
+    assetsAccessListTable: table(
+        'ASSETS_ACCESS_LIST',
+        [{ name: 'assetId', type: 'S' }, { name: 'principalId', type: 'S' }],
+        'assetId',
+        'principalId',
+    ),
+    assetReferencesTable: table(
+        'ASSET_REFERENCES',
+        [{ name: 'assetId', type: 'S' }, { name: 'referenceKey', type: 'S' }],
+        'assetId',
+        'referenceKey',
+    ),
+    blobsTable: table('BLOBS', [{ name: 'blobKey', type: 'S' }], 'blobKey'),
+    blobReferencesTable: table(
+        'BLOB_REFERENCES',
+        [{ name: 'blobKey', type: 'S' }, { name: 'referenceKey', type: 'S' }],
+        'blobKey',
+        'referenceKey',
+    ),
+})
+
+const getLegacyStorageDefinitions = (): Record<string, TableDefinition> => ({
+    legacyDocumentsTable: {
+        name: formatStageResourceName('Documents', ORG_NAME, STAGE),
         attributes: [
-            { name: 'userId', type: 'S' as const },
-            { name: 'organizationId', type: 'S' as const },
-            { name: 'createdAt', type: 'N' as const },
-        ],
-        hashKey: 'userId',
-        rangeKey: 'organizationId',
-        localSecondaryIndexes: [
-            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
-            { name: 'updatedAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
-        ],
-        // Reverse lookup "members of an organization" (base key is per-user, so it
-        // can't answer that). Used by Organization.deleteOrganization to find and
-        // remove an org's access-list entries (query indexName: 'organizationId').
-        globalSecondaryIndexes: [
-            { name: 'organizationId', hashKey: 'organizationId', projectionType: 'ALL' as const },
-        ],
-    },
-    {
-        name: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
-        attributes: [{ name: 'workspaceId', type: 'S' as const }],
-        hashKey: 'workspaceId',
-    },
-    {
-        name: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
-        attributes: [{ name: 'workspaceId', type: 'S' as const }],
-        hashKey: 'workspaceId',
-    },
-    {
-        name: getDynamoDbTableStageName('WORKSPACES_ACCESS_LIST', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'userId', type: 'S' as const },
-            { name: 'workspaceId', type: 'S' as const },
-            { name: 'createdAt', type: 'N' as const },
-            { name: 'updatedAt', type: 'N' as const },
-        ],
-        hashKey: 'userId',
-        rangeKey: 'workspaceId',
-        localSecondaryIndexes: [
-            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
-            { name: 'updatedAt', rangeKey: 'updatedAt', projectionType: 'ALL' as const },
-        ],
-    },
-    {
-        name: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'workspaceId', type: 'S' as const },
-            { name: 'documentId', type: 'S' as const },
-            { name: 'createdAt', type: 'N' as const },
+            { name: 'workspaceId', type: 'S' },
+            { name: 'documentId', type: 'S' },
+            { name: 'createdAt', type: 'N' },
         ],
         hashKey: 'workspaceId',
         rangeKey: 'documentId',
         localSecondaryIndexes: [
-            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
-            { name: 'updatedAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
+            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' },
+            { name: 'updatedAt', rangeKey: 'createdAt', projectionType: 'ALL' },
         ],
     },
-    {
-        name: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
-        attributes: [{ name: 'documentId', type: 'S' as const }],
+    legacyDocumentsMetaTable: {
+        name: formatStageResourceName('Documents-Meta', ORG_NAME, STAGE),
+        attributes: [{ name: 'documentId', type: 'S' }],
         hashKey: 'documentId',
     },
-    {
-        name: getDynamoDbTableStageName('DOCUMENTS_ACCESS_LIST', ORG_NAME, STAGE),
+    legacyDocumentsAccessListTable: {
+        name: formatStageResourceName('Documents-Access-List', ORG_NAME, STAGE),
         attributes: [
-            { name: 'userId', type: 'S' as const },
-            { name: 'documentId', type: 'S' as const },
-            { name: 'createdAt', type: 'N' as const },
+            { name: 'userId', type: 'S' },
+            { name: 'documentId', type: 'S' },
+            { name: 'createdAt', type: 'N' },
         ],
         hashKey: 'userId',
         rangeKey: 'documentId',
         localSecondaryIndexes: [
-            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
-            { name: 'updatedAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
+            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' },
+            { name: 'updatedAt', rangeKey: 'createdAt', projectionType: 'ALL' },
         ],
     },
-    {
-        name: getDynamoDbTableStageName('AI_TOKENS_USAGE_TRANSACTIONS', ORG_NAME, STAGE),
+    legacyAiChatThreadsTable: {
+        name: formatStageResourceName('AI-Chat-Threads', ORG_NAME, STAGE),
         attributes: [
-            { name: 'userId', type: 'S' as const },
-            { name: 'transactionProcessedAt', type: 'N' as const },
-            { name: 'documentId', type: 'S' as const },
-            { name: 'aiModel', type: 'S' as const },
-            { name: 'organizationId', type: 'S' as const },
-            { name: 'transactionProcessedAtFormatted', type: 'S' as const },
-        ],
-        hashKey: 'userId',
-        rangeKey: 'transactionProcessedAt',
-        localSecondaryIndexes: [
-            { name: 'documentId', rangeKey: 'documentId', projectionType: 'ALL' as const },
-            { name: 'aiModel', rangeKey: 'aiModel', projectionType: 'ALL' as const },
-            { name: 'organizationId', rangeKey: 'organizationId', projectionType: 'ALL' as const },
-            { name: 'transactionProcessedAtFormatted', rangeKey: 'transactionProcessedAtFormatted', projectionType: 'ALL' as const },
-        ],
-    },
-    {
-        name: getDynamoDbTableStageName('FINANCIAL_TRANSACTIONS', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'userId', type: 'S' as const },
-            { name: 'transactionId', type: 'S' as const },
-            { name: 'status', type: 'S' as const },
-            { name: 'createdAt', type: 'N' as const },
-            { name: 'provider', type: 'S' as const },
-        ],
-        hashKey: 'userId',
-        rangeKey: 'transactionId',
-        localSecondaryIndexes: [
-            { name: 'status', rangeKey: 'status', projectionType: 'ALL' as const },
-            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
-            { name: 'provider', rangeKey: 'provider', projectionType: 'ALL' as const },
-        ],
-    },
-    {
-        name: getDynamoDbTableStageName('AI_TOKENS_USAGE_REPORTS', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'recordKey', type: 'S' as const },
-            { name: 'aiModel', type: 'S' as const },
-            { name: 'organizationId', type: 'S' as const },
-        ],
-        hashKey: 'recordKey',
-        rangeKey: 'aiModel',
-        localSecondaryIndexes: [
-            { name: 'organizationId', rangeKey: 'organizationId', projectionType: 'ALL' as const },
-        ],
-    },
-    {
-        name: getDynamoDbTableStageName('AI_MODELS_LIST', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'provider', type: 'S' as const },
-            { name: 'model', type: 'S' as const },
-        ],
-        hashKey: 'provider',
-        rangeKey: 'model',
-    },
-    {
-        name: getDynamoDbTableStageName('AI_CHAT_THREADS', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'workspaceId', type: 'S' as const },
-            { name: 'threadId', type: 'S' as const },
-            { name: 'createdAt', type: 'N' as const },
+            { name: 'workspaceId', type: 'S' },
+            { name: 'threadId', type: 'S' },
+            { name: 'createdAt', type: 'N' },
         ],
         hashKey: 'workspaceId',
         rangeKey: 'threadId',
-        localSecondaryIndexes: [
-            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
-        ],
+        localSecondaryIndexes: [{ name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' }],
     },
-    {
-        name: getDynamoDbTableStageName('MEDIA_LIBRARY_ITEMS', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'itemId', type: 'S' as const },
-            { name: 'version', type: 'N' as const },
-        ],
+    legacyMediaLibraryItemsTable: {
+        name: formatStageResourceName('Media-Library-Items', ORG_NAME, STAGE),
+        attributes: [{ name: 'itemId', type: 'S' }, { name: 'version', type: 'N' }],
         hashKey: 'itemId',
         rangeKey: 'version',
     },
-    {
-        name: getDynamoDbTableStageName('MEDIA_LIBRARY_ITEMS_META', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'scopeAndOwner', type: 'S' as const },
-            { name: 'itemId', type: 'S' as const },
-        ],
+    legacyMediaLibraryItemsMetaTable: {
+        name: formatStageResourceName('Media-Library-Items-Meta', ORG_NAME, STAGE),
+        attributes: [{ name: 'scopeAndOwner', type: 'S' }, { name: 'itemId', type: 'S' }],
         hashKey: 'scopeAndOwner',
         rangeKey: 'itemId',
     },
-    {
-        name: getDynamoDbTableStageName('MEDIA_LIBRARY_ITEMS_ACCESS_LIST', ORG_NAME, STAGE),
+    legacyMediaLibraryItemsAccessListTable: {
+        name: formatStageResourceName('Media-Library-Items-Access-List', ORG_NAME, STAGE),
         attributes: [
-            { name: 'principalId', type: 'S' as const },
-            { name: 'itemId', type: 'S' as const },
-            { name: 'updatedAt', type: 'N' as const },
+            { name: 'principalId', type: 'S' },
+            { name: 'itemId', type: 'S' },
+            { name: 'updatedAt', type: 'N' },
         ],
         hashKey: 'principalId',
         rangeKey: 'itemId',
-        localSecondaryIndexes: [
-            { name: 'updatedAt', rangeKey: 'updatedAt', projectionType: 'ALL' as const },
-        ],
+        localSecondaryIndexes: [{ name: 'updatedAt', rangeKey: 'updatedAt', projectionType: 'ALL' }],
     },
-    {
-        name: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'featureId', type: 'S' as const },
-            { name: 'version', type: 'N' as const },
-        ],
-        hashKey: 'featureId',
-        rangeKey: 'version',
-    },
-    {
-        name: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'scopeAndOwner', type: 'S' as const },
-            { name: 'featureId', type: 'S' as const },
-        ],
-        hashKey: 'scopeAndOwner',
-        rangeKey: 'featureId',
-    },
-    {
-        name: getDynamoDbTableStageName('FEATURES_ACCESS_LIST', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'userId', type: 'S' as const },
-            { name: 'featureId', type: 'S' as const },
-            { name: 'createdAt', type: 'N' as const },
-        ],
-        hashKey: 'userId',
-        rangeKey: 'featureId',
-        localSecondaryIndexes: [
-            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
-        ],
-    },
-    {
-        name: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE),
-        attributes: [
-            { name: 'extractionRunId', type: 'S' as const },
-            { name: 'workspaceId', type: 'S' as const },
-        ],
-        hashKey: 'extractionRunId',
-        rangeKey: 'workspaceId',
-    },
-]
+})
 
 export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) => {
-
     const resourceOpts: pulumi.CustomResourceOptions | undefined = opts?.provider ? { provider: opts.provider } : undefined
     const enableStreams = !opts?.provider
-    // Only enable deletion protection for real AWS (no custom local provider) AND production environment
     const enableDeletionProtection = !opts?.provider && ENVIRONMENT === 'production'
-
-    const tableDefs = getTableDefinitions()
-
-    const usersTable = new aws.dynamodb.Table(tableDefs[0].name, {
-        ...tableDefs[0],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[0].name },
-    }, resourceOpts)
-
-    const organizationsTable = new aws.dynamodb.Table(tableDefs[1].name, {
-        ...tableDefs[1],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[1].name },
-    }, resourceOpts)
-
-    const organizationsAccessListTable = new aws.dynamodb.Table(tableDefs[2].name, {
-        ...tableDefs[2],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[2].name },
-    }, resourceOpts)
-
-    const workspacesTable = new aws.dynamodb.Table(tableDefs[3].name, {
-        ...tableDefs[3],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[3].name },
-    }, resourceOpts)
-
-    const workspacesMetaTable = new aws.dynamodb.Table(tableDefs[4].name, {
-        ...tableDefs[4],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[4].name },
-    }, resourceOpts)
-
-    const workspacesAccessListTable = new aws.dynamodb.Table(tableDefs[5].name, {
-        ...tableDefs[5],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[5].name },
-    }, resourceOpts)
-
-    const documentsTable = new aws.dynamodb.Table(tableDefs[6].name, {
-        ...tableDefs[6],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[6].name },
-    }, resourceOpts)
-
-    const documentsMetaTable = new aws.dynamodb.Table(tableDefs[7].name, {
-        ...tableDefs[7],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[7].name },
-    }, resourceOpts)
-
-    const documentsAccessListTable = new aws.dynamodb.Table(tableDefs[8].name, {
-        ...tableDefs[8],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[8].name },
-    }, resourceOpts)
-
-    // Billing ----------------------------------------------------------------------
-    const aiTokensUsageTransactionsTable = new aws.dynamodb.Table(tableDefs[9].name, {
-        ...tableDefs[9],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        // tableClass: 'STANDARD_INFREQUENT_ACCESS'    // TODO, make sure to set infrequent access for this table when we reach 25GB storage (because the first 25GB is free for standard tables, but not for infrequent access tables)
-        tags: { Name: tableDefs[9].name },
-    }, resourceOpts)
-
-    const financialTransactionsTable = new aws.dynamodb.Table(tableDefs[10].name, {
-        ...tableDefs[10],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[10].name },
-    }, resourceOpts)
-
-    const aiTokensUsageReportsTable = new aws.dynamodb.Table(tableDefs[11].name, {
-        ...tableDefs[11],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[11].name },
-    }, resourceOpts)
-
-    const aiModelsListTable = new aws.dynamodb.Table(tableDefs[12].name, {
-        ...tableDefs[12],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[12].name },
-    }, resourceOpts)
-
-    const aiChatThreadsTable = new aws.dynamodb.Table(tableDefs[13].name, {
-        ...tableDefs[13],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[13].name },
-    }, resourceOpts)
-
-    const mediaLibraryItemsTable = new aws.dynamodb.Table(tableDefs[14].name, {
-        ...tableDefs[14],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[14].name },
-    }, resourceOpts)
-
-    const mediaLibraryItemsMetaTable = new aws.dynamodb.Table(tableDefs[15].name, {
-        ...tableDefs[15],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[15].name },
-    }, resourceOpts)
-
-    const mediaLibraryItemsAccessListTable = new aws.dynamodb.Table(tableDefs[16].name, {
-        ...tableDefs[16],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[16].name },
-    }, resourceOpts)
-    const featuresTable = new aws.dynamodb.Table(tableDefs[17].name, {
-        ...tableDefs[17],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[17].name },
-    }, resourceOpts)
-
-    const featuresMetaTable = new aws.dynamodb.Table(tableDefs[18].name, {
-        ...tableDefs[18],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[18].name },
-    }, resourceOpts)
-
-    const featuresAccessListTable = new aws.dynamodb.Table(tableDefs[19].name, {
-        ...tableDefs[19],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[19].name },
-    }, resourceOpts)
-
-    const extractionRunsTable = new aws.dynamodb.Table(tableDefs[20].name, {
-        ...tableDefs[20],
-        billingMode: 'PAY_PER_REQUEST',
-        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
-        ...(enableStreams && {
-            streamEnabled: true as const,
-            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
-        }),
-        tags: { Name: tableDefs[20].name },
-    }, resourceOpts)
-    // END Billing -------------------------------------------------------------------
-
-    // Create parameter outputs
-    const outputs: Record<string, pulumi.Output<string>> = {
-        usersTableName: usersTable.name,
-
-        organizationsTableName: organizationsTable.name,
-        organizationsAccessListTableName: organizationsAccessListTable.name,
-
-        workspacesTableName: workspacesTable.name,
-        workspacesMetaTableName: workspacesMetaTable.name,
-        workspacesAccessListTableName: workspacesAccessListTable.name,
-
-        documentsTableName: documentsTable.name,
-        documentsMetaTableName: documentsMetaTable.name,
-        documentsAccessListTableName: documentsAccessListTable.name,
-
-        aiChatThreadsTableName: aiChatThreadsTable.name,
-        mediaLibraryItemsTableName: mediaLibraryItemsTable.name,
-        mediaLibraryItemsMetaTableName: mediaLibraryItemsMetaTable.name,
-        mediaLibraryItemsAccessListTableName: mediaLibraryItemsAccessListTable.name,
-        featuresTableName: featuresTable.name,
-        featuresMetaTableName: featuresMetaTable.name,
-        featuresAccessListTableName: featuresAccessListTable.name,
-        extractionRunsTableName: extractionRunsTable.name,
-
-        aiTokensUsageTransactionsTableName: aiTokensUsageTransactionsTable.name,
-        aiTokensUsageReportsTableName: aiTokensUsageReportsTable.name,
-        aiModelsListTableName: aiModelsListTable.name,
-
-        financialTransactionsTableName: financialTransactionsTable.name,
+    const legacyStorageRemovalStage = (process.env.LEGACY_STORAGE_REMOVAL_STAGE ?? 'remove') as LegacyStorageRemovalStage
+    if (!['retain', 'disable-protection', 'remove'].includes(legacyStorageRemovalStage)) {
+        throw new Error(`Invalid LEGACY_STORAGE_REMOVAL_STAGE: ${legacyStorageRemovalStage}`)
     }
+    const definitions = getTableDefinitions()
 
-    return {
-        usersTable,
+    const create = (definition: TableDefinition): aws.dynamodb.Table => new aws.dynamodb.Table(
+        definition.name,
+        {
+            ...definition,
+            billingMode: 'PAY_PER_REQUEST',
+            ...(enableDeletionProtection ? { deletionProtectionEnabled: true } : {}),
+            ...(enableStreams ? {
+                streamEnabled: true,
+                streamViewType: 'NEW_AND_OLD_IMAGES',
+            } : {}),
+            tags: { Name: definition.name },
+        } as aws.dynamodb.TableArgs,
+        resourceOpts,
+    )
 
-        organizationsTable,
-        organizationsAccessListTable,
+    const tables = Object.fromEntries(
+        Object.entries(definitions).map(([logicalName, definition]) => [logicalName, create(definition)]),
+    ) as { [K in keyof typeof definitions]: aws.dynamodb.Table }
 
-        workspacesTable,
-        workspacesMetaTable,
-        workspacesAccessListTable,
+    // Production tables created by the pre-Asset model have deletion protection.
+    // Phase 11's completed default omits retired resources. On a protected
+    // production stack, deploy once with `disable-protection` so Pulumi updates
+    // those existing URNs in place, then deploy with `remove` (or unset) to
+    // delete them. Use `retain` only to hold a pre-removal stack deliberately.
+    // Local stacks never recreate these inert resources.
+    const legacyTables = !opts?.provider && legacyStorageRemovalStage !== 'remove'
+        ? Object.fromEntries(Object.entries(getLegacyStorageDefinitions()).map(([logicalName, definition]) => [
+            logicalName,
+            new aws.dynamodb.Table(definition.name, {
+                ...definition,
+                billingMode: 'PAY_PER_REQUEST',
+                deletionProtectionEnabled: enableDeletionProtection && legacyStorageRemovalStage === 'retain',
+                streamEnabled: true,
+                streamViewType: 'NEW_AND_OLD_IMAGES',
+                tags: { Name: definition.name },
+            } as aws.dynamodb.TableArgs),
+        ])) as Record<string, aws.dynamodb.Table>
+        : {}
 
-        documentsTable,
-        documentsMetaTable,
-        documentsAccessListTable,
+    const allTables = { ...tables, ...legacyTables }
 
-        aiChatThreadsTable,
-        mediaLibraryItemsTable,
-        mediaLibraryItemsMetaTable,
-        mediaLibraryItemsAccessListTable,
-        featuresTable,
-        featuresMetaTable,
-        featuresAccessListTable,
-        extractionRunsTable,
+    const outputs = Object.fromEntries(
+        Object.entries(allTables).map(([logicalName, resource]) => [
+            `${logicalName.replace(/Table$/, '')}TableName`,
+            resource.name,
+        ]),
+    ) as Record<string, pulumi.Output<string>>
 
-        aiTokensUsageTransactionsTable,
-        aiTokensUsageReportsTable,
-        aiModelsListTable,
-
-        financialTransactionsTable,
-
-        outputs,
-    }
+    return { ...allTables, outputs }
 }

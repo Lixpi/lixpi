@@ -2,9 +2,11 @@
 
 import { v4 as uuidv4 } from 'uuid'
 import {
+    getAiInteractionResponseSubject,
     NATS_SUBJECTS,
     STREAM_STATUS,
     type AiInteractionChatSendMessagePayload,
+    type AiInteractionMediaGenerationRequest,
     type ImageGenerationTrace,
     type ImageGenerationSize,
     type MediaBranchLineagePlan,
@@ -18,11 +20,10 @@ import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
-import { organizationStore } from '$src/stores/organizationStore.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 
-type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadId'> & {
+type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'conversationAssetId'> & {
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
@@ -34,11 +35,10 @@ type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadI
     videoResolution?: string
     videoDuration?: string
     videoConfigGroups?: MediaGenerationConfigSelectionGroup[]
-    proseMirrorInitialDoc?: object
-    proseMirrorBaseVersion?: number
-    // Workspace Object Store URI of an existing generated video that VEO should
-    // extend (continuation generation). Built by WorkspaceCanvas from the
-    // source VideoCanvasNode's fileId + workspaceId when the thread is rooted
+    regeneration?: NonNullable<AiInteractionMediaGenerationRequest['regeneration']>
+    // Asset ID of an existing generated video that VEO should extend. The API
+    // authorizes it and resolves the source Blob coordinate. Built by
+    // WorkspaceCanvas from the source VideoCanvasNode when the conversation is rooted
     // in an "Extend in new thread" action.
     videoSourceForExtension?: string
 }
@@ -56,23 +56,24 @@ type PipelineEventEnvelope = {
 type PipelineReplayResult = {
     error?: unknown
     events?: PipelineEventEnvelope[]
+    hasMore?: boolean
 }
 
 type StopAiChatMessageTarget = {
     workspaceId: string
-    aiChatThreadId: string
+    conversationAssetId: string
     generationRequestId?: string
 }
 
 export async function stopAiChatMessageForThread({
     workspaceId,
-    aiChatThreadId,
+    conversationAssetId,
     generationRequestId,
 }: StopAiChatMessageTarget): Promise<void> {
     const payload = {
         token: await AuthService.getTokenSilently(),
         workspaceId,
-        aiChatThreadId,
+        conversationAssetId,
         ...(generationRequestId ? { generationRequestId } : {}),
     }
 
@@ -85,16 +86,26 @@ export async function stopAiChatMessageForThread({
 
 export default class AiInteractionService {
     workspaceId: string
-    aiChatThreadId: string
+    conversationAssetId: string
+    organizationId: string
     segmentsReceiver: any
     currentAiProvider: string | null
     providersByRunKey: Map<string, string>
     pipelineEventIds: Set<string>
     pipelineLocalStreamSeq: number
 
-    constructor({ workspaceId, aiChatThreadId }: { workspaceId: string; aiChatThreadId: string }) {
+    constructor({
+        workspaceId,
+        conversationAssetId,
+        organizationId,
+    }: {
+        workspaceId: string
+        conversationAssetId: string
+        organizationId?: string
+    }) {
         this.workspaceId = workspaceId
-        this.aiChatThreadId = aiChatThreadId
+        this.conversationAssetId = conversationAssetId
+        this.organizationId = organizationId ?? ''
         this.segmentsReceiver = SegmentsReceiver
         this.currentAiProvider = null
         this.providersByRunKey = new Map()
@@ -105,7 +116,7 @@ export default class AiInteractionService {
     }
 
     getRunKey(generationRun?: MediaGenerationRunMeta): string {
-        return generationRun?.reasoningRunId || this.aiChatThreadId
+        return generationRun?.reasoningRunId || this.conversationAssetId
     }
 
     getGenerationRun(content: any): MediaGenerationRunMeta | undefined {
@@ -115,7 +126,11 @@ export default class AiInteractionService {
     }
 
     getChatResponseSubject(): string {
-        return `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
+        return getAiInteractionResponseSubject(
+            userStore.getData('userId') as string,
+            this.organizationId,
+            this.conversationAssetId,
+        )
     }
 
     updateRunProvider(runKey: string, aiProvider: string | undefined): string | null {
@@ -124,7 +139,7 @@ export default class AiInteractionService {
         }
 
         this.providersByRunKey.set(runKey, aiProvider)
-        if (runKey === this.aiChatThreadId) {
+        if (runKey === this.conversationAssetId) {
             this.currentAiProvider = aiProvider
         }
         return aiProvider
@@ -132,8 +147,8 @@ export default class AiInteractionService {
 
     async initNatsSubscriptions() {
         try {
-            if (!this.workspaceId || !this.aiChatThreadId)
-                throw new Error('AiInteractionService requires workspaceId and aiChatThreadId')
+            if (!this.workspaceId || !this.conversationAssetId || !this.organizationId)
+                throw new Error('AiInteractionService requires workspaceId, conversationAssetId, and organizationId')
 
             const subject = this.getChatResponseSubject()
 
@@ -177,25 +192,30 @@ export default class AiInteractionService {
 
     async resumePipelineEventStream(): Promise<void> {
         try {
-            const result = await servicesStore.getData('nats')!.request(
-                AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
-                {
-                    token: await AuthService.getTokenSilently(),
-                    workspaceId: this.workspaceId,
-                    aiChatThreadId: this.aiChatThreadId,
-                    localStreamSeq: this.pipelineLocalStreamSeq,
-                },
-            ) as PipelineReplayResult
-            if (result?.error) {
-                console.error('[AI_INTERACTION] CHAT_PIPELINE_RESUME failed:', result.error)
-                return
-            }
-            for (const event of result.events ?? []) {
-                this.onChatMessageResponse({
-                    ...event.payload,
-                    pipelineStreamSeq: event.streamSequence,
-                })
-            }
+            let hasMore = false
+            do {
+                const result = await servicesStore.getData('nats')!.request(
+                    AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
+                    {
+                        token: await AuthService.getTokenSilently(),
+                        workspaceId: this.workspaceId,
+                        conversationAssetId: this.conversationAssetId,
+                        localStreamSeq: this.pipelineLocalStreamSeq,
+                    },
+                ) as PipelineReplayResult
+                if (result?.error) {
+                    console.error('[AI_INTERACTION] CHAT_PIPELINE_RESUME failed:', result.error)
+                    return
+                }
+                const events = result.events ?? []
+                for (const event of events) {
+                    this.onChatMessageResponse({
+                        ...event.payload,
+                        pipelineStreamSeq: event.streamSequence,
+                    })
+                }
+                hasMore = result.hasMore === true && events.length > 0
+            } while (hasMore)
         } catch (error) {
             console.error('[AI_INTERACTION] CHAT_PIPELINE_RESUME failed:', error)
         }
@@ -207,7 +227,7 @@ export default class AiInteractionService {
             if (!this.shouldProcessPipelinePayload(data)) return
 
             if (data?.error) {
-                alert(`Failed to receive chat message: \n${JSON.stringify(data.error)}`)
+                console.error('[AI_INTERACTION] Failed to receive chat message:', data.error)
                 return
             }
 
@@ -223,7 +243,7 @@ export default class AiInteractionService {
             const aiProvider = this.updateRunProvider(runKey, content.aiProvider)
             const segmentBase = {
                 aiProvider,
-                aiChatThreadId: this.aiChatThreadId,
+                conversationAssetId: this.conversationAssetId,
                 usesServerProseMirror: true,
                 ...(generationRun ? { generationRun } : {}),
             }
@@ -274,7 +294,7 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'image_partial',
                     imageUrl: content.imageUrl,
-                    fileId: content.fileId,
+                    assetId: content.assetId,
                     workspaceId: this.workspaceId,
                     partialIndex: content.partialIndex,
                     ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
@@ -361,7 +381,7 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'image_complete',
                     imageUrl: content.imageUrl,
-                    fileId: content.fileId,
+                    assetId: content.assetId,
                     workspaceId: this.workspaceId,
                     responseId: content.responseId,
                     revisedPrompt: content.revisedPrompt,
@@ -371,7 +391,7 @@ export default class AiInteractionService {
                     imageModelId: content.imageModelId || '',
                     ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...(generationRun ? { generationRun } : {}),
-                    aiChatThreadId: this.aiChatThreadId
+                    conversationAssetId: this.conversationAssetId
                 })
                 return
             }
@@ -409,6 +429,7 @@ export default class AiInteractionService {
                 console.log('[AI_INTERACTION] VIDEO_PENDING received')
                 this.segmentsReceiver.receiveSegment({
                     type: 'video_pending',
+                    ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...segmentBase,
                 })
                 return
@@ -427,12 +448,9 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'video_complete',
                     videoUrl: content.videoUrl,
-                    fileId: content.fileId,
+                    assetId: content.assetId,
                     workspaceId: this.workspaceId,
                     posterUrl: content.posterUrl,
-                    posterFileId: content.posterFileId,
-                    frameUrl: content.frameUrl,
-                    frameFileId: content.frameFileId,
                     durationSeconds: content.durationSeconds,
                     aspectRatio: content.aspectRatio,
                     hasAudio: content.hasAudio,
@@ -483,15 +501,13 @@ export default class AiInteractionService {
         videoResolution,
         videoDuration,
         videoConfigGroups,
+        regeneration,
         videoSourceForExtension,
         referencedFeatureIds,
         mediaBranchCandidateSnapshot,
         workspaceContextSnapshot,
         canvasVisibleArea,
-        proseMirrorInitialDoc,
-        proseMirrorBaseVersion,
     }: SendChatMessageOptions) {
-        const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
 
         // When a section flag is omitted, infer multi-model mode from the model
@@ -509,10 +525,10 @@ export default class AiInteractionService {
         const payload: Record<string, any> = {
             token: await AuthService.getTokenSilently(),
             workspaceId: this.workspaceId,
-            aiChatThreadId: this.aiChatThreadId,
+            conversationAssetId: this.conversationAssetId,
             messages,
             aiReasoningModels: reasoningModelIds,
-            organizationId
+            organizationId: this.organizationId
         }
 
         if (referencedFeatureIds?.length) {
@@ -524,21 +540,13 @@ export default class AiInteractionService {
         }
 
         // Whole-workspace descriptors index for the API relevance stage. Sent on
-        // every turn (text-only included); the API consumes it in a later phase.
+        // every turn, including text-only turns.
         if (workspaceContextSnapshot) {
             payload.workspaceContextSnapshot = workspaceContextSnapshot
         }
 
         if (canvasVisibleArea) {
             payload.canvasVisibleArea = canvasVisibleArea
-        }
-
-        if (proseMirrorInitialDoc) {
-            payload.proseMirrorInitialDoc = proseMirrorInitialDoc
-        }
-
-        if (typeof proseMirrorBaseVersion === 'number') {
-            payload.proseMirrorBaseVersion = proseMirrorBaseVersion
         }
 
         // Add image model routing options if an image model is selected
@@ -560,11 +568,11 @@ export default class AiInteractionService {
 
         // The media-generation matrix is needed only when some section carries
         // more than one model; a single model per section runs the plain path.
-        const matrixVideoModelIds = videoModelsEnabled || Boolean(videoSourceForExtension) ? videoModelIds : []
+        const matrixVideoModelIds = regeneration || videoModelsEnabled || Boolean(videoSourceForExtension) ? videoModelIds : []
         const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, matrixVideoModelIds.length]
         const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
         const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
-        if (totalSelectedModelCount > sectionsWithSelection) {
+        if (regeneration || totalSelectedModelCount > sectionsWithSelection) {
             payload.mediaGenerationRequest = {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: uuidv4(),
@@ -585,12 +593,13 @@ export default class AiInteractionService {
                     ...(videoSourceForExtension ? { sourceForExtension: videoSourceForExtension } : {}),
                     ...(videoModelsEnabled && videoConfigGroups?.length ? { configGroups: videoConfigGroups } : {}),
                 } } : {}),
+                ...(regeneration ? { regeneration } : {}),
             }
         }
 
         console.log(`[AI_INTERACTION] Publishing message to ${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE}`, {
             workspaceId: this.workspaceId,
-            aiChatThreadId: this.aiChatThreadId,
+            conversationAssetId: this.conversationAssetId,
             reasoningModelCount: reasoningModelIds.length,
             messageCount: messages.length,
             imageModelCount: imageModelIds.length,
@@ -608,7 +617,7 @@ export default class AiInteractionService {
     async stopChatMessage(): Promise<void> {
         await stopAiChatMessageForThread({
             workspaceId: this.workspaceId,
-            aiChatThreadId: this.aiChatThreadId,
+            conversationAssetId: this.conversationAssetId,
         })
     }
 

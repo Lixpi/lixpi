@@ -1,172 +1,186 @@
 ---
 title: Data Storage
-description: How Lixpi persists workspaces and every item they surface — the DynamoDB table layout, the Main/Meta/Access-List triad, scope-partitioned keys, the transactional multi-table write rule, and where binary bytes live in the NATS JetStream Object Store.
+description: The revision-2 Asset and Blob storage model: DynamoDB tables, content-addressed organization Object Stores, references, leases, projections, and maintenance.
 ---
 
 # Data Storage
 
-This page explains where each kind of item a user sees inside a workspace lives, how those records are keyed, and how binary media is stored separately from structured metadata. It complements the [Workspace Model](../canvas/WORKSPACE-MODEL.md), [Feature Storage](../library/FEATURE-STORAGE.md), and [Media Library](../library/MEDIA-LIBRARY.md) pages, which each go deeper on one item type; this page is the cross-cutting view of the persistence layer.
+Lixpi stores every user-created document, standalone conversation, upload, and generated media result as an **Asset**. Immutable media bytes, Feature samples, and ProseMirror snapshots are content-addressed **Blobs** in one Object Store bucket per organization. Workspaces store local geometry and panel state; they never own media bytes or duplicate global Asset metadata.
 
-Fact-check anything here against the models in [`services/api/src/models/`](../../services/api/src/models), the shared access layer in [`packages/lixpi/dynamodb-service/`](../../packages/lixpi/dynamodb-service), and the table definitions in [`infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts`](../../infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts) before repeating it.
+The active runtime has no document table, chat-thread table, media-library table, workspace file registry, or workspace-specific Object Store bucket.
 
-## Two-Tier Storage
+## Ownership boundaries
 
-Every item splits into **structured metadata** and **binary bytes**, held in two different systems.
+| Record | Owns | Does not own |
+|---|---|---|
+| `Workspace` | Canvas viewport, node geometry, edges, panel tabs, local context chips | Titles, descriptors, bytes, document snapshots, Asset lifecycle |
+| `Asset` | Stable identity, global title, scope, owner, optional media/document/lineage components, states, revision, edit lease | Binary bytes and large JSON documents |
+| `Asset-Meta` | Compact list projection ordered by `updatedAt` | ACLs, references, full documents, rendition maps |
+| `Asset-Access-List` | Per-principal grants | Workspace membership |
+| `Asset-References` | Catalog membership and workspace placements/surfaces | Blob ownership |
+| `Blob` | Organization-scoped hash, object address, MIME, byte size, status, reference count | Product semantics |
+| `Blob-References` | Asset/Feature ownership of a Blob | Asset scope or ACL |
+| `Feature` | Feature definition and sample Blob hashes | Sample bytes |
 
-| Storage | Technology | What it holds |
-|---------|-----------|---------------|
-| **DynamoDB** | AWS DynamoDB (DynamoDB Local in development) | Structured records: workspaces, canvas state, documents, chat threads, features, extraction runs, and the file IDs that reference binary assets |
-| **Object Store** | NATS JetStream Object Store | Binary bytes: uploaded files, generated images and videos, posters, media-library assets |
+## DynamoDB tables
 
-DynamoDB records store only the **keys** that address objects in the object store (a canvas image node's `fileId`, a workspace's inline `files[]` registry, a feature's `sampleImages[].fileId`). The raw bytes are never stored in DynamoDB.
+The six revision-2 tables are defined in [`DynamoDB-tables.ts`](../../infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts).
 
-The DynamoDB access layer is a single shared class, [`DynamoDBService`](../../packages/lixpi/dynamodb-service/src/dynamodb-service.ts), used by every model through a global `dynamoDBService`. Physical table names are computed by `getDynamoDbTableStageName('LOGICAL_NAME', ORG_NAME, STAGE)`, which maps a logical key to a stage-scoped physical name such as `Workspaces-<org>-<stage>`. Tables use `PAY_PER_REQUEST` billing, and outside a custom local provider they enable DynamoDB Streams with `NEW_AND_OLD_IMAGES`.
+| Table | Partition key | Sort key | Indexes |
+|---|---|---|---|
+| `Assets` | `assetId` | — | none |
+| `Assets-Meta` | `scopeAndOwner` | `assetId` | LSI `updatedAt` only |
+| `Assets-Access-List` | `assetId` | `principalId` | none |
+| `Asset-References` | `assetId` | `referenceKey` | none |
+| `Blobs` | `blobKey = organizationId#sha256` | — | none |
+| `Blob-References` | `blobKey` | `referenceKey` | none |
 
-## Keying Rules
+There are no GSIs on these tables. Listing queries bounded `Assets-Meta` partitions. Authorization and ordinary maintenance use point reads or one Asset/Blob partition. Maintenance-only orphan collection scans staging Blob rows and organization IDs; request paths do not.
 
-Two rules govern how tables are keyed and written. They are the contract for any new item type.
+Existing Workspace, Feature, Extraction Run, organization, user, model, and billing tables remain. Workspaces include `organizationId`; every Asset or Feature created from a workspace uses that organization instead of selecting an arbitrary organization from the user account.
 
-### The Partition Key Is the Thing You List By
+## Asset aggregate
 
-If an access pattern lists items within a scope, the table serving that list is partitioned by that scope. Listing a workspace's documents is `Query(Documents, workspaceId = ...)`; listing an organization's media is `Query(Media-Library-Items-Meta, scopeAndOwner = ...)`. Every list read is a single-partition `Query` — never a full-table `Scan` (the one deliberate exception is `Extraction-Runs`, whose tiny volume suits a scan) and never a secondary index.
+`Asset` is component-based rather than type-discriminated:
 
-The canonical pattern is `AI-Chat-Threads`: PK `workspaceId`, SK `threadId`. Point operations address a row with the scope id plus the item id, both of which every caller carries.
-
-{% callout type="warning" %}
-Do not add DynamoDB Global Secondary Indexes. A GSI is a second physical copy of the table with its own write capacity, its own eventual-consistency lag, and its own failure mode — a write that lands in the base table but not yet in the index produces a stale list. If a list query seems to need a GSI, the base-table key is wrong: partition the table by the scope instead. Reach for a GSI only if it is absolutely essential and no key redesign can serve the access pattern — and treat that as a design escalation, not a default. Local Secondary Indexes are acceptable; they share the base table's partition key and carry none of the second-copy cost.
-{% /callout %}
-
-Range keys are immutable ids. Never put a mutable attribute (such as `updatedAt`) in a primary key — every update would become a delete-plus-put with a partial-failure window. Recency ordering is an in-memory sort over an already-small partition.
-
-### More Than One Table Modified Means One Transaction
-
-Any model method that writes to two or more tables issues exactly one `transactWrite` call — the typed transaction API on `DynamoDBService` that accepts the same operation shapes as `putItem` / `updateItem` / `deleteItems` and commits up to 100 actions atomically. Either every row of the Main / Meta / Access-List triad lands, or none does.
-
-Sequential awaits across tables, and compensating rollbacks that imitate atomicity, are both forbidden shapes; a reviewer can reject any diff that contains either. Single-table operations stay on the non-transactional methods — a transaction of one item buys nothing.
-
-Per-item conditions still work inside a transaction (canvas saves keep their optimistic-concurrency `conditionExpression`); a failed condition cancels the whole transaction and surfaces through `isTransactionConditionalCheckFailure`, which the retry loops check.
-
-## The Workspace Is a Peer, Not a Physical Container
-
-In the UI a workspace feels like a folder that holds documents, threads, and media. In storage it is not a nested container:
-
-- The **workspace record** is one DynamoDB item that embeds the canvas (`viewport`, `nodes[]`, `edges[]`) and a `files[]` reference registry inline.
-- **Documents, AI chat threads, and extraction runs** live in their own tables, scoped to their workspace.
-- **Media-library items and features** are **organization-scoped**. They record which workspace they originated from (`originWorkspaceId` / `workspaceId`) but are readable across every workspace in the owning organization.
-
-## Entity Relationships
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
-graph TB
-    subgraph OrgScope["Organization scope"]
-        Org["Organization"]
-        MediaLib["Media Library Items<br/>meta partitioned by scopeAndOwner"]
-        Features["Features<br/>meta partitioned by scopeAndOwner"]
-    end
-
-    subgraph WsScope["Workspace scope"]
-        WS["Workspace<br/>canvasState and files inline"]
-        Docs["Documents<br/>partitioned by workspaceId"]
-        Threads["AI Chat Threads<br/>key workspaceId + threadId"]
-        Runs["Extraction Runs<br/>scan-filtered by workspaceId"]
-    end
-
-    subgraph Bytes["Binary bytes"]
-        WSBucket[("workspace-id-files")]
-        MLBucket[("media-library-org-id-files")]
-    end
-
-    Org --> WS
-    Org --> MediaLib
-    Org --> Features
-    WS --> Docs
-    WS --> Threads
-    WS --> Runs
-    WS -.->|originWorkspaceId| MediaLib
-    WS -.->|workspaceId of origin| Features
-
-    WS -->|fileId references| WSBucket
-    MediaLib -->|asset keys| MLBucket
-    Features -.->|sample fileId| MLBucket
+```ts
+type Asset = {
+  assetId: string
+  organizationId: string
+  title: string
+  scope: 'workspace' | 'user' | 'organization'
+  scopeOwnerId: string
+  originWorkspaceId: string
+  ownerUserId: string
+  documents: Partial<Record<'content' | 'conversation' | 'provenance', AssetDocumentPointer>>
+  media?: AssetMedia
+  lineage?: AssetLineage
+  descriptor?: ContentDescriptor
+  states: AssetStates
+  referenceCount: number
+  revision: number
+  editLease?: AssetEditLease
+  createdAt: number
+  updatedAt: number
+}
 ```
 
-## The Main / Meta / Access-List Triad
+`primaryCategory` is computed in `Asset-Meta`: media kind wins; otherwise conversation wins over content; otherwise the Asset is a document. Invalid component combinations are rejected by the model.
 
-Most item types split across three tables so that listing a sidebar never reads a heavy body.
+All global mutations use the integer `revision` as their concurrency token. Timestamps are display/order data, not compare-and-swap tokens.
 
-| Table role | Suffix | Holds |
-|------------|--------|-------|
-| Main | (none) | The full heavy record — content, canvas state, instructions |
-| Meta | `-Meta` | A lightweight projection (name, title, timestamps, preview key) for list views |
-| Access list | `-Access-List` | Who can see the item, keyed by user or principal |
+## Scope, ACL, and list projections
 
-Creates fan out to all three tables in a single transaction: `createWorkspace` writes `Workspaces`, `Workspaces-Meta`, and `Workspaces-Access-List` as one `transactWrite`, and the media-library and feature creates do the same for their triads.
+`scopeAndOwner` is one of:
 
-Where a Meta table serves the org-scoped list, it is the table partitioned by the scope (`scopeAndOwner` = `${scope}#${scopeOwnerId}`), and it carries the projection fields list views and save-time dedup need — the Main table stays a pure point-access body store.
+- `workspace#<workspaceId>`
+- `user#<userId>`
+- `organization#<organizationId>`
+- `principal#<principalId>` for explicit-grant projections
 
-## Per-Item Storage
+The list API queries every scope partition available to the requester plus the requester’s principal partition, merges by `updatedAt`, removes duplicates, filters deleting rows, and returns an opaque multipart cursor.
 
-### Workspace
+Changing scope validates every workspace reference before moving the catalog and Meta projection. A scope cannot be narrowed when an existing reference would become inaccessible. Blob keys never change when scope changes.
 
-Defined in [`models/workspace.ts`](../../services/api/src/models/workspace.ts). Tables: `Workspaces` / `Workspaces-Meta` / `Workspaces-Access-List`.
+Grant/revoke operations update the ACL row, principal Meta projection, base/other projections, and Asset revision in one conditional transaction. They cannot overwrite the owner's permanent `owner` row or race a metadata update into a stale principal projection.
+The model caps total Meta projections at 90 so every Asset mutation remains below DynamoDB's 100-operation transaction limit; a grant beyond that bound is rejected before writing.
 
-- Key: `workspaceId` (hash only).
-- Embeds `canvasState` (`{ viewport, nodes[], edges[] }`) and a `files[]` array of `DocumentFile` references directly in the item.
-- Canvas writes use optimistic concurrency. A `canvasStateUpdatedAt` token guards every write through a DynamoDB `conditionExpression` inside the Main+Meta transaction; a stale token returns `STALE_CANVAS_STATE`. `mutateCanvasState` retries up to five times on a conditional-check failure.
-- `addFile` uses an atomic `list_append` so concurrent AI-generated images do not clobber each other. `removeFile` and `setFileCanonical` use read-modify-write with conditional retries. These are single-table writes and stay non-transactional.
-- `mergeApiLineageForFullCanvasSave` protects API-generated media nodes and branch-marker nodes from being dropped by a full client canvas save. See [API-Owned Media Lineage Planning](../knowledge/API-OWNED-MEDIA-LINEAGE-PLANNING.md).
+## References and deletion
 
-### Documents
+Reference keys are typed:
 
-Defined in [`models/document.ts`](../../services/api/src/models/document.ts). Tables: `Documents` / `Documents-Meta` / `Documents-Access-List`.
+- `catalog#<scope>#<scopeOwnerId>` keeps an Asset in a catalog.
+- `workspace#<workspaceId>` stores `nodeIds[]` and `surfaceIds[]` for that workspace.
 
-- Key: `workspaceId` (hash) + `documentId` (range) — one row per document. "All documents in this workspace" is one partition `Query` returning full bodies.
-- `Documents-Meta` stays keyed by `documentId` alone so tag operations, whose payloads carry only the document id, address it directly.
-- Delete removes the Main row and the Meta row in one transaction.
-- ProseMirror content is stored inline as `content`.
+One workspace row counts once regardless of how many canvas nodes or document/panel surfaces it contains. Attach/detach transactions update the Workspace canvas and Asset reference row together when a canvas node is involved. A normal full canvas save must preserve the exact `(assetId, nodeId)` membership signature; it may change geometry, edges, viewport, and panel metadata only.
 
-### AI Chat Threads
+When the last reference is removed, the same transaction sets lifecycle `deleting`. The durable maintenance worker then:
 
-Defined in [`models/ai-chat-thread.ts`](../../services/api/src/models/ai-chat-thread.ts). Table: `AI-Chat-Threads`.
+1. verifies that the Asset is still deleting with zero references;
+2. purges its Asset-document subjects;
+3. removes its Blob references idempotently;
+4. deletes zero-reference Blob objects;
+5. deletes Asset ACL, Meta, and aggregate rows under revision conditions.
 
-- Composite key `workspaceId` (hash) + `threadId` (range), so a workspace's threads are a single efficient query. No separate meta table.
-- Stores ProseMirror `content`, `aiModel`, and a `status` field.
+Workspace deletion removes every workspace reference and every catalog owned by that workspace before removing the Workspace triad. Only a Workspace owner can delete it.
 
-### Media Library Items
+## Content-addressed Blobs
 
-Defined in [`models/media-library-item.ts`](../../services/api/src/models/media-library-item.ts). Tables: `Media-Library-Items` / `Media-Library-Items-Meta` / `Media-Library-Items-Access-List`.
+Each organization owns one bucket:
 
-- Main key: `itemId` (hash) + `version` (range) — point access only.
-- Meta key: `scopeAndOwner` (hash, `organization#<orgId>`) + `itemId` (range). The meta partition serves both the library list and save-time dedup: the projection carries `sourceFileId`, so re-saving the same source file finds the existing meta row and point-reads the body instead of duplicating the item.
-- Records are kind-discriminated (`image`, `video`, `audio`, `document`) and carry `originWorkspaceId` for provenance. See [Media Library](../library/MEDIA-LIBRARY.md).
+```text
+blobs-<organizationId>-files
+```
 
-### Features
+Object keys are deterministic:
 
-Defined in [`models/feature.ts`](../../services/api/src/models/feature.ts). Tables: `Features` / `Features-Meta` / `Features-Access-List`.
+```text
+sha256/<first-two-hex>/<64-character-sha256>
+```
 
-- Main key: `featureId` (hash) + `version` (range) — point access only.
-- Meta key: `scopeAndOwner` (hash) + `featureId` (range). Listing an organization's features queries the meta partition and sorts by `updatedAt` in memory.
-- Records the origin `workspaceId` only; reads are allowed for any member of the owning organization. See [Feature Storage](../library/FEATURE-STORAGE.md).
+`BlobModel.store()` hashes the bytes, verifies any existing object at that key, creates a staging row if necessary, and returns the row. Product records activate Blobs by transactionally inserting a unique `Blob-References` row and incrementing the Blob counter. Duplicate bytes reuse one object and one Blob row.
 
-### Extraction Runs
+Object Store writes cannot participate in DynamoDB transactions. Recovery therefore uses:
 
-Defined in [`models/extraction-run.ts`](../../services/api/src/models/extraction-run.ts). Table: `Extraction-Runs`.
+- immutable hash keys;
+- `staging → active → deleting` states;
+- conditional reference counts;
+- a periodic collector for old zero-reference staging rows;
+- a daily sweep that removes aged hash-addressed objects with no Blob registry row, covering an Object Store success followed by a DynamoDB failure;
+- idempotent object and row deletion.
 
-- Key: `extractionRunId` (hash) + `workspaceId` (range). Listing a workspace's runs does a full table scan filtered in memory, which suits the run volume.
-- Accumulates streaming state through incremental updates: `transcriptJson`, `stageReasoning`, a `trace[]` event log, and the final `featureCard`.
+Feature sample references use `feature#<featureId>#sample#<index>`. Asset document and rendition references use `asset#<assetId>#document#<role>` and `asset#<assetId>#rendition#<name>`.
 
-## Where the Binary Bytes Live
+## Renditions
 
-Binary content is stored in NATS JetStream Object Store buckets, not in DynamoDB and not in S3.
+The API owns Asset state and Blob registration. NEX owns only heavy byte transformation. Jobs contain organization/Asset/Blob coordinates and request a versioned rendition set.
 
-| Bucket | Named by | Created |
-|--------|----------|---------|
-| `workspace-<workspaceId>-files` | `Workspace.getBucketName` | With the workspace lifecycle |
-| `media-library-<scope>-<scopeOwnerId>-files` | `getMediaLibraryBucketName` in [`services/media-library-storage.ts`](../../services/api/src/services/media-library-storage.ts) | Lazily, on the first save into an organization |
+| Kind | Required rendition parity |
+|---|---|
+| image | original, preview, thumbnail; canonical when needed |
+| video | original, preview, poster, thumbnail, representative frame; canonical when needed |
+| audio | original; canonical when needed |
+| document | original, poster, thumbnail; canonical PDF when needed |
 
-DynamoDB records store the file IDs that address objects in these buckets. Deleting a workspace tears down both its DynamoDB records and its object-store bucket.
+NEX writes immutable hash-addressed output objects and returns hashes, MIME types, sizes, dimensions, duration, page count, and per-rendition failures. It never writes Asset tables. The API reads and hashes returned objects before registering them and transactionally replacing rendition references.
 
-{% callout type="note" %}
-The object store is part of the NATS backbone. For how buckets are opened, created, and replicated, see [System Architecture](SYSTEM-ARCHITECTURE.md) and the storage sections of [Video Generation](../media-generation/VIDEO-GENERATION.md).
-{% /callout %}
+An Asset is `ready` only when required renditions are ready. It is `degraded` when a playable/model-safe source exists but a derived rendition failed. Bounded durable retries repair degraded Assets; repeated failure remains visible with stable error codes.
+
+Provenance rebuild failures use self-renewing durable maintenance messages with exponential backoff capped at five minutes. The pipeline log is not purged while an output Asset remains in `provenance: 'building'`, so a transient snapshot or event-log race cannot exhaust one short retry burst and lose the materialization source.
+
+## Asset documents and leases
+
+Asset document roles are `content`, `conversation`, and `provenance`. Each pointer references an immutable JSON Blob and records ProseMirror version/schema metadata. Titles exist only on the Asset.
+
+Live steps use the organization stream `ASSET_STEPS_<organizationId>` and subjects:
+
+```text
+asset.document.steps.<organizationId>.<assetId>.<role>
+```
+
+Client editing requires a 30-second workspace lease renewed every 10 seconds. Active holder records let multiple editors and API writers in the lease-owning workspace share it; releasing the last holder removes it immediately. Other workspaces mount read-only. Settlement replays accepted steps onto the latest snapshot, stores a new JSON Blob, and swaps the pointer/reference under both Asset revision and lease-token conditions. Provenance rejects client steps and is written only by the provenance materializer.
+
+## HTTP byte routes
+
+Authorized bytes are served from:
+
+```text
+GET /api/assets/:assetId/renditions/:renditionName
+```
+
+Audio/video responses support HTTP Range requests. `download=true` adds a content-disposition filename. Upload and public-URL import use:
+
+```text
+POST /api/assets/workspaces/:workspaceId
+POST /api/assets/workspaces/:workspaceId/import-url
+```
+
+The API validates workspace access, uses the workspace’s organization, sniffs bytes, stores the original Blob, creates the Asset, and starts rendition processing. The browser attaches the resulting `assetId` to a distinct canvas `nodeId` through the Asset attach transaction.
+
+## Revision-2 portability
+
+Workspace archives contain `manifest.json` plus `blobs/<sha256>`. The manifest includes workspace state, recursively referenced Assets, target-workspace references, lineage, document pointers, rendition maps, and one entry per unique Blob hash.
+
+Import validates the entire graph, every byte size, and every SHA-256 before writes. It generates new Asset IDs, remaps canvas/panel/lineage identities, rewrites and rehashes every ProseMirror snapshot containing Asset identities, assigns target-workspace ownership/scope, creates fresh owner ACL/catalog/reference rows, then replaces canvas state. Exported ACLs and external catalog grants are never imported.
+
+The only version-1 boundary is the offline converter documented in [Workspace Export & Import](../library/WORKSPACE-EXPORT-IMPORT.md).

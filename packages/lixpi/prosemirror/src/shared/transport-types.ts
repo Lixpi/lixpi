@@ -1,14 +1,14 @@
-import type { MediaGenerationRunMeta } from '@lixpi/constants'
+import { NATS_SUBJECTS, getNatsUserSubjectToken, type MediaGenerationRunMeta } from '@lixpi/constants'
 
-export type ProseMirrorDocType = 'document' | 'aiChatThread'
+export type AssetDocumentRole = 'content' | 'conversation' | 'provenance'
 
-export type DocCoordinate = {
-    workspaceId: string
-    docType: ProseMirrorDocType
-    docId: string
+export type AssetDocCoordinate = {
+    organizationId: string
+    assetId: string
+    role: AssetDocumentRole
 }
 
-export type StepEnvelope = DocCoordinate & {
+export type AssetStepEnvelope = AssetDocCoordinate & {
     kind: 'STEP'
     version: number
     subjectSeq: number
@@ -21,80 +21,85 @@ export type StepEnvelope = DocCoordinate & {
     origin: 'ai-stream' | 'client-edit'
 }
 
-export type SubmitStepsPayload = DocCoordinate & {
-    baseVersion: number
-    expectedVersion: number
-    steps: Array<{
-        step: object
-        msgId?: string
-        clientId?: string
-    }>
-    origin?: 'client-edit'
-}
-
-export type SubmitResult =
-    | { status: 'ACCEPTED'; version: number }
-    | { status: 'CONFLICT'; currentVersion: number }
-
-export type StreamControl =
-    | { kind: 'START'; docId: string; baseVersion: number; schemaVersion: string }
-    | { kind: 'END'; docId: string; finalVersion: number }
-    | { kind: 'ERROR'; docId: string; error: string }
-
-export type StepStreamControlEnvelope = DocCoordinate & StreamControl & {
+export type AssetStepControlEnvelope = AssetDocCoordinate & {
+    kind: 'START' | 'END' | 'ERROR'
     version: number
     subjectSeq: number
+    baseVersion?: number
+    finalVersion?: number
+    schemaVersion?: string
+    error?: string
     msgId?: string
     aiProvider?: string
     generationRun?: MediaGenerationRunMeta
     origin: 'ai-stream'
 }
 
-export type StepStreamEvent = StepEnvelope | StepStreamControlEnvelope
+export type AssetStepStreamEvent = AssetStepEnvelope | AssetStepControlEnvelope
 
-export type LoggedStepStreamEvent = StepStreamEvent & {
+export type LoggedAssetStepStreamEvent = AssetStepStreamEvent & {
     streamSequence: number
 }
 
-export type DocSnapshot = DocCoordinate & {
+export type AssetDocResumeResult = {
+    snapshot: AssetDocSnapshot | null
+    currentVersion: number
+    currentStreamSeq: number
+    streamName: string
+    subject: string
+    liveSubject?: string
+    events: LoggedAssetStepStreamEvent[]
+}
+
+export type AssetSubmitStepsPayload = AssetDocCoordinate & {
+    workspaceId: string
+    leaseId: string
+    holderId: string
+    baseVersion: number
+    expectedVersion: number
+    steps: Array<{ step: object; msgId?: string; clientId?: string }>
+    origin?: 'client-edit'
+}
+
+export type AssetDocSnapshot = AssetDocCoordinate & {
+    blobHash?: string
     version: number
     schemaVersion: string
     doc: object
 }
 
-export type DocResumePayload = DocCoordinate & {
-    baseVersion?: number
-    localVersion?: number
-    localStreamSeq?: number
+export const ASSET_PROSEMIRROR_STEP_SUBJECT_PREFIX = 'asset.document.steps'
+
+export function getOrganizationAssetStepStreamName(organizationId: string): string {
+    return `ASSET_STEPS_${sanitizeStreamToken(organizationId)}`
 }
 
-export type DocResumeResult = {
-    snapshot: DocSnapshot | null
-    currentVersion: number
-    currentStreamSeq: number
-    streamName: string
-    subject: string
-    events: LoggedStepStreamEvent[]
+export function getOrganizationAssetStepStreamSubject(organizationId: string): string {
+    return `${ASSET_PROSEMIRROR_STEP_SUBJECT_PREFIX}.${sanitizeSubjectToken(organizationId)}.>`
 }
 
-export const PROSEMIRROR_STEP_SUBJECT_PREFIX = 'document.steps'
-
-export function getWorkspaceStepStreamName(workspaceId: string): string {
-    return `PM_STEPS_${sanitizeStreamToken(workspaceId)}`
-}
-
-export function getWorkspaceStepStreamSubject(workspaceId: string): string {
-    return `${PROSEMIRROR_STEP_SUBJECT_PREFIX}.${sanitizeSubjectToken(workspaceId)}.>`
-}
-
-export function getDocumentStepSubject(coordinate: DocCoordinate): string {
+export function getAssetStepSubject(coordinate: AssetDocCoordinate): string {
     return [
-        PROSEMIRROR_STEP_SUBJECT_PREFIX,
-        sanitizeSubjectToken(coordinate.workspaceId),
-        sanitizeSubjectToken(coordinate.docType),
-        sanitizeSubjectToken(coordinate.docId),
+        ASSET_PROSEMIRROR_STEP_SUBJECT_PREFIX,
+        sanitizeSubjectToken(coordinate.organizationId),
+        sanitizeSubjectToken(coordinate.assetId),
+        sanitizeSubjectToken(coordinate.role),
     ].join('.')
 }
+
+export function getAssetDocumentEventSubject(userId: string, coordinate: AssetDocCoordinate): string {
+    return [
+        NATS_SUBJECTS.ASSET_SUBJECTS.DOCUMENT_EVENTS,
+        getNatsUserSubjectToken(userId),
+        sanitizeSubjectToken(coordinate.organizationId),
+        sanitizeSubjectToken(coordinate.assetId),
+        sanitizeSubjectToken(coordinate.role),
+    ].join('.')
+}
+
+export type SubmitResult =
+    | { status: 'ACCEPTED'; version: number }
+    | { status: 'CONFLICT'; currentVersion: number }
 
 function sanitizeStreamToken(value: string): string {
     return value.replace(/[^A-Za-z0-9_-]/g, '_')

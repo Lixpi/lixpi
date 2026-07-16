@@ -3,12 +3,7 @@ import type {
     CanvasViewport,
     ImageCanvasNode,
 } from '@lixpi/constants'
-import {
-    buildWorkspaceFilePath,
-    isApiEndpoint,
-    resolveMediaUrl,
-    stripAuthTokenFromUrl,
-} from '$src/utils/workspaceFileUrls.ts'
+import { isApiEndpoint, resolveMediaUrl, stripAuthTokenFromUrl } from '$src/utils/mediaUrls.ts'
 
 export type IndexedImage = {
     minX: number
@@ -76,16 +71,12 @@ export function isStoredImageSrc(src: string): boolean {
     return isApiEndpoint(stripped)
 }
 
-export function resolveStoredImagePath(node: ImageCanvasNode, workspaceId: string): string {
-    const strippedSrc = stripAuthTokenFromUrl(node.src)
-    return isStoredImageSrc(strippedSrc)
-        ? buildWorkspaceFilePath(workspaceId, node.fileId)
-        : resolveMediaUrl(strippedSrc)
+export function resolveStoredImagePath(node: ImageCanvasNode, _workspaceId: string): string {
+    return `/api/assets/${encodeURIComponent(node.assetId)}/renditions/preview`
 }
 
 export function isGeneratedImageNodeWaitingForFrame(node: ImageCanvasNode): boolean {
-    if (!node.generatedBy) return false
-    return !node.fileId?.trim() && !node.src?.trim()
+    return Boolean(node.generatedBy && !node.assetId)
 }
 
 export function getPixiLodTier(zoom: number): LodTier {
@@ -96,16 +87,8 @@ export function getPixiLodTier(zoom: number): LodTier {
 }
 
 export function addPixiLodSizeParam(url: string, tier: LodTier): string {
-    if (tier === 'full' || tier === 'color') return url
-    if (!url.includes('/api/files/')) return url
-
-    try {
-        const parsed = new URL(url, window.location.origin)
-        parsed.searchParams.set('size', tier === 'thumb-256' ? '256' : '1024')
-        return parsed.toString()
-    } catch {
-        return url
-    }
+    if (tier === 'color' || !url.includes('/api/assets/')) return url
+    return url.replace(/\/renditions\/[^/?]+/, tier === 'thumb-256' ? '/renditions/thumbnail' : '/renditions/preview')
 }
 
 export function makeIndexedImage(node: ImageCanvasNode, worldPosition: WorldPosition): IndexedImage {

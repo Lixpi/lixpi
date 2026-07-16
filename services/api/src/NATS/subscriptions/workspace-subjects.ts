@@ -1,14 +1,13 @@
 'use strict'
 
-import { info, err, warn } from '@lixpi/debug-tools'
-
-import NATS_Service from '@lixpi/nats-service'
-import Workspace from '../../models/workspace.ts'
-import Document from '../../models/document.ts'
-import AiChatThread from '../../models/ai-chat-thread.ts'
-import ExtractionRun from '../../models/extraction-run.ts'
-
+import { info, warn } from '@lixpi/debug-tools'
 import { NATS_SUBJECTS } from '@lixpi/constants'
+
+import Workspace from '../../models/workspace.ts'
+import AssetModel from '../../models/asset.ts'
+import ExtractionRun from '../../models/extraction-run.ts'
+import Organization from '../../models/organization.ts'
+import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 
 const { WORKSPACE_SUBJECTS } = NATS_SUBJECTS
 
@@ -17,197 +16,101 @@ export const workspaceSubjects = [
         subject: WORKSPACE_SUBJECTS.GET_WORKSPACE,
         type: 'reply',
         payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.GET_WORKSPACE] },
-            sub: { allow: [WORKSPACE_SUBJECTS.GET_WORKSPACE] }
-        },
-        handler: async (data: any, msg: any) => {
-            return await Workspace.getWorkspace({
-                userId: data.user.userId,
-                workspaceId: data.workspaceId
-            })
-        }
+        permissions: { pub: { allow: [WORKSPACE_SUBJECTS.GET_WORKSPACE] }, sub: { allow: [] } },
+        handler: async (data: any) => await Workspace.getWorkspace({ userId: data.user.userId, workspaceId: data.workspaceId }),
     },
-
     {
         subject: WORKSPACE_SUBJECTS.CREATE_WORKSPACE,
         type: 'reply',
         payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.CREATE_WORKSPACE] },
-            sub: { allow: [WORKSPACE_SUBJECTS.CREATE_WORKSPACE] }
-        },
-        handler: async (data: any, msg: any) => {
-            const {
-                user: { userId },
-                name
-            } = data
-
-            const workspace = await Workspace.createWorkspace({
-                name,
-                permissions: {
-                    userId,
-                    accessLevel: 'owner'
-                }
-            })
-
-            if (workspace && 'workspaceId' in workspace) {
-                const natsService = NATS_Service.getInstance()
-                const bucketName = Workspace.getBucketName(workspace.workspaceId)
-
-                if (!natsService) {
-                    err(`Failed to create Object Store bucket ${bucketName}: NATS service unavailable`)
-                    await Workspace.delete({ userId, workspaceId: workspace.workspaceId })
-                    return { error: 'STORAGE_SERVICE_UNAVAILABLE' }
-                }
-
-                try {
-                    // Replication factor is owned by NATS_Service (R3 by default).
-                    // Media Library buckets are org-scoped and created on demand at save time.
-                    await natsService.createObjectStore(bucketName, {
-                        description: `Files for workspace ${workspace.workspaceId}`
-                    })
-                    info(`Created Object Store bucket: ${bucketName}`)
-                } catch (bucketError: any) {
-                    err(`Failed to create Object Store bucket for workspace ${workspace.workspaceId}:`, bucketError)
-                    await natsService.deleteObjectStore(bucketName).catch(() => {})
-                    await Workspace.delete({ userId, workspaceId: workspace.workspaceId })
-                    return { error: 'FAILED_TO_CREATE_BUCKET' }
-                }
+        permissions: { pub: { allow: [WORKSPACE_SUBJECTS.CREATE_WORKSPACE] }, sub: { allow: [] } },
+        handler: async (data: any) => {
+            const organizations = await Organization.getUserOrganizations({ userId: data.user.userId })
+            if (data.organizationId && !organizations.some((entry) => entry.organizationId === data.organizationId)) {
+                return { error: 'ORGANIZATION_ACCESS_DENIED' }
             }
-
-            return workspace
-        }
+            const organizationId = data.organizationId ?? organizations[0]?.organizationId
+            if (!organizationId) return { error: 'ORGANIZATION_ACCESS_DENIED' }
+            return await Workspace.createWorkspace({
+                name: data.name,
+                organizationId,
+                permissions: { userId: data.user.userId, accessLevel: 'owner' },
+            })
+        },
     },
-
     {
         subject: WORKSPACE_SUBJECTS.GET_USER_WORKSPACES,
         type: 'reply',
         payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.GET_USER_WORKSPACES] },
-            sub: { allow: [WORKSPACE_SUBJECTS.GET_USER_WORKSPACES] }
-        },
-        handler: async (data: any, msg: any) => {
-            const userId = data.user.userId
-
-            if (!userId) {
-                err('NATS -> WORKSPACE_SUBJECTS.GET_USER_WORKSPACES', 'userId is not available in the request.')
-                return { error: 'UNAUTHORIZED' }
-            }
-
-            return await Workspace.getUserWorkspaces({ userId })
-        }
+        permissions: { pub: { allow: [WORKSPACE_SUBJECTS.GET_USER_WORKSPACES] }, sub: { allow: [] } },
+        handler: async (data: any) => data.user.userId
+            ? await Workspace.getUserWorkspaces({ userId: data.user.userId })
+            : { error: 'UNAUTHORIZED' },
     },
-
     {
         subject: WORKSPACE_SUBJECTS.UPDATE_WORKSPACE,
         type: 'reply',
         payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.UPDATE_WORKSPACE] },
-            sub: { allow: [WORKSPACE_SUBJECTS.UPDATE_WORKSPACE] }
-        },
-        handler: async (data: any, msg: any) => {
-            await Workspace.update({
-                userId: data.user.userId,
-                workspaceId: data.workspaceId,
-                name: data.name
-            })
-
-            return {
-                success: true,
-                workspaceId: data.workspaceId
+        permissions: { pub: { allow: [WORKSPACE_SUBJECTS.UPDATE_WORKSPACE] }, sub: { allow: [] } },
+        handler: async (data: any) => {
+            const workspace = await Workspace.getWorkspace({ userId: data.user.userId, workspaceId: data.workspaceId })
+            if ('error' in workspace) return workspace
+            if (workspace.deletingAt) return { error: 'WORKSPACE_DELETING' }
+            if (!workspace.accessList.some((entry) => entry.userId === data.user.userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor'))) {
+                return { error: 'PERMISSION_DENIED' }
             }
-        }
+            if (data.name !== undefined && (typeof data.name !== 'string' || !data.name.trim())) return { error: 'NAME_REQUIRED' }
+            await Workspace.update({ userId: data.user.userId, workspaceId: data.workspaceId, name: data.name })
+            return { success: true, workspaceId: data.workspaceId }
+        },
     },
-
     {
         subject: WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE,
         type: 'reply',
         payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE] },
-            sub: { allow: [WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE] }
-        },
-        handler: async (data: any, msg: any) => {
+        permissions: { pub: { allow: [WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE] }, sub: { allow: [] } },
+        handler: async (data: any) => {
+            const workspace = await Workspace.getWorkspace({ userId: data.user.userId, workspaceId: data.workspaceId })
+            if ('error' in workspace) return workspace
+            if (workspace.deletingAt) return { error: 'WORKSPACE_DELETING' }
+            if (!workspace.accessList.some((entry) => entry.userId === data.user.userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor'))) {
+                return { error: 'PERMISSION_DENIED' }
+            }
             return await Workspace.updateCanvasState({
                 userId: data.user.userId,
                 workspaceId: data.workspaceId,
                 canvasState: data.canvasState,
                 expectedCanvasStateUpdatedAt: data.expectedCanvasStateUpdatedAt,
                 expectedUpdatedAt: data.expectedUpdatedAt,
-                persistViewport: data.persistViewport === true
+                persistViewport: data.persistViewport === true,
             })
-        }
+        },
     },
-
     {
         subject: WORKSPACE_SUBJECTS.DELETE_WORKSPACE,
         type: 'reply',
         payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.DELETE_WORKSPACE] },
-            sub: { allow: [WORKSPACE_SUBJECTS.DELETE_WORKSPACE] }
-        },
-        handler: async (data: any, msg: any) => {
-            const { workspaceId } = data
-            const userId = data.user.userId
+        permissions: { pub: { allow: [WORKSPACE_SUBJECTS.DELETE_WORKSPACE] }, sub: { allow: [] } },
+        handler: async (data: any) => {
+            const userId = data.user.userId as string
+            const workspaceId = data.workspaceId as string
             const workspace = await Workspace.getWorkspace({ userId, workspaceId })
             if ('error' in workspace) return workspace
-
-            // Features and Media Library items are org-scoped and store their sample/asset
-            // bytes in durable, workspace-independent buckets at creation time. They have no
-            // tie to any workspace, so deleting a workspace does nothing to them.
-
+            if (!workspace.accessList.some((entry) => entry.userId === userId && entry.accessLevel === 'owner')) {
+                return { error: 'PERMISSION_DENIED' }
+            }
+            await Workspace.markDeleting({ workspaceId })
             try {
-                const deletedThreads = await AiChatThread.deleteWorkspaceAiChatThreads({ workspaceId })
+                const requester = await getAssetRequesterContext(userId)
+                const removedAssetReferences = await AssetModel.removeAllWorkspaceReferences({ workspaceId, requester })
                 const deletedExtractionRuns = await ExtractionRun.deleteWorkspaceRuns({ workspaceId })
-                info(`Deleted ${deletedThreads} AI chats and ${deletedExtractionRuns} extraction runs for ${workspaceId}`)
-            } catch (e: any) { warn(`Could not clean up AI chat history for workspace ${workspaceId}:`, e.message) }
-
-            try {
-                const natsService = NATS_Service.getInstance()
-                if (natsService) {
-                    const bucketName = Workspace.getBucketName(workspaceId)
-                    await natsService.deleteObjectStore(bucketName)
-                    info(`Deleted Object Store bucket: ${bucketName}`)
-                }
-            } catch (bucketError: any) {
-                warn(`Could not delete Object Store bucket for workspace ${workspaceId}:`, bucketError.message)
+                info(`Removed ${removedAssetReferences} Asset references and ${deletedExtractionRuns} extraction runs for ${workspaceId}`)
+            } catch (error) {
+                warn(`Workspace dependency cleanup failed for ${workspaceId}:`, error)
+                return { error: 'WORKSPACE_DEPENDENCY_CLEANUP_FAILED' }
             }
-
-            await Workspace.delete({
-                userId,
-                workspaceId
-            })
-
-            return {
-                success: true,
-                workspaceId
-            }
-        }
-    },
-
-    {
-        subject: WORKSPACE_SUBJECTS.GET_WORKSPACE_DOCUMENTS,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.GET_WORKSPACE_DOCUMENTS] },
-            sub: { allow: [WORKSPACE_SUBJECTS.GET_WORKSPACE_DOCUMENTS] }
+            await Workspace.delete({ userId, workspaceId })
+            return { success: true, workspaceId }
         },
-        handler: async (data: any, msg: any) => {
-            const { workspaceId } = data
-            const userId = data.user.userId
-
-            const workspace = await Workspace.getWorkspace({ userId, workspaceId })
-
-            if (!workspace || 'error' in workspace) {
-                return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
-            }
-
-            return await Document.getWorkspaceDocuments({ workspaceId })
-        }
-    }
+    },
 ]

@@ -172,7 +172,7 @@ The router stage classifies the work and scores every applicable axis on
 dominance; downstream extractors fan out in parallel and each owns one axis; the
 synthesis stage fuses the outputs into a single feature definition weighted by
 router scores; sample generation produces visual probes; persistence writes the
-feature record + emits live events.
+feature record + emits the feature card through the authorized extraction pipeline.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -194,7 +194,7 @@ graph LR
 | 3 | `materializeSourceCrops` | Deterministic sharp crops from router bounding boxes (no model) |
 | 4 | `synthesizeFeature` | Dominance-weighted fusion into a single `FeatureDraft` |
 | 5 | `generateSamples` | Palette boards / texture composites / model-rendered probes |
-| 6 | `persistFeature` | Write the feature + run trace, publish the create event, stream the card |
+| 6 | `persistFeature` | Write the Feature + run trace and stream the card on the authorized per-user extraction pipeline |
 
 ### Stage 1 — Scene assessment & router
 
@@ -256,8 +256,10 @@ bounding boxes:
 - For each background region: 1–2 content-free crops.
 - Composition-preserving full-image thumbnail at low res.
 
-Each crop is stored as a workspace image with full metadata
-(`kind: 'source-crop'`, `cropRegion`, `label`, `purpose`, `sourceImageRef`).
+Each crop is stored as an organization content-addressed Blob. Its
+`FeatureSampleRef` carries `kind: 'source-crop'`, the Blob hash, and the
+`cropRegion` label/purpose/source coordinate metadata. Feature persistence adds
+the durable Blob reference; abandoned staging crops are reclaimed by Blob GC.
 These crops are the pixel-grounded backbone of the anti-leakage strategy — see
 [Anti-Leakage](./ANTI-LEAKAGE.md).
 
@@ -481,8 +483,8 @@ potted plants and a window, warm window light, square painterly frame. This is
 the exact case the earlier monolithic extractor mislabeled as watercolor. The
 pipeline today classifies it correctly and captures the actual signature traits.
 
-1. **The artist uploads a digital chibi-cat illustration.** Bytes land in the
-   workspace's NATS Object Store bucket.
+1. **The artist uploads a digital chibi-cat illustration.** Bytes become an
+   Asset original in the organization's content-addressed Blob bucket.
 
 2. **They click the Ask AI wand.** Bubble menu appears, they click the leftmost
    wand icon.
@@ -555,8 +557,9 @@ pipeline today classifies it correctly and captures the actual signature traits.
    Stage 3 (source crops) runs in parallel: sharp deterministically extracts the
    kitten's eye region, fur close-up, marking close-up, body silhouette, the left
    background plant region, the right window-and-plant region, and a low-res
-   full-image composition thumbnail. Each crop stored as a workspace image with
-   `kind: 'source-crop'` and `cropRegion` metadata. `StageTraceEvent`:
+   full-image composition thumbnail. Each crop is stored as an organization
+   Blob with `kind: 'source-crop'` and `cropRegion` metadata in its sample
+   reference. `StageTraceEvent`:
    `stage=crops, modelName=sharp, durationMs=320, status=ok, outputSummary=7
    crops materialized (4 subject, 2 background, 1 composition)`.
 
@@ -645,7 +648,7 @@ pipeline today classifies it correctly and captures the actual signature traits.
 13. **Server resolves.** The `resolveFeatures` pre-stage fires (owned by
     [Feature Storage](./FEATURE-STORAGE.md)). The feature is fetched (ACL check
     passes). Source crops + applied-medium probes are downloaded from the
-    originating workspace bucket (downscaled to 512 px). A structured system block
+    organization Blob bucket (downscaled to 512 px). A structured system block
     is prepended with the feature brief, the source crops, and the applied-medium
     probes.
 
@@ -705,7 +708,7 @@ graph LR
     end
     subgraph "Storage"
         DDB[(DynamoDB<br/>FEATURES_*<br/>EXTRACTION_RUNS<br/>incl. trace)]
-        ObjStore[("NATS Object Store<br/>workspace-{ws}-files")]
+        ObjStore[("NATS Object Store<br/>blobs-{organizationId}-files")]
     end
     subgraph "NATS subjects"
         Subjects[workspace.feature.*<br/>ai.interaction.feature.extract.*<br/>StageTraceEvent stream]

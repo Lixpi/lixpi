@@ -137,7 +137,7 @@ export function applyMediaModelBadgeStyleProperties(host: HTMLElement, options: 
     const generatedMediaChromeStyles = settings.mediaNode.generatedMediaChrome.styles
     const scale = normalizeScale(options.scale)
     host.style.setProperty('--workspace-generated-media-chrome-icon-size', `${settings.mediaNode.generatedMediaChrome.iconSize * scale}px`)
-    host.style.setProperty('--workspace-generated-media-chrome-top-gap', `${settings.mediaNode.generatedMediaChrome.topGap * scale}px`)
+    host.style.setProperty('--workspace-generated-media-chrome-top-gap', `${settings.mediaNode.generatedMediaChrome.gap * scale}px`)
     host.style.setProperty('--workspace-media-model-badge-icon-gap', scaleCssLength(generatedMediaChromeStyles.modelBadgeIconGap, scale))
     host.style.setProperty('--workspace-media-model-badge-provider-color', generatedMediaChromeStyles.modelBadgeProviderColor)
     host.style.setProperty('--workspace-media-model-badge-model-color', generatedMediaChromeStyles.modelBadgeModelColor)

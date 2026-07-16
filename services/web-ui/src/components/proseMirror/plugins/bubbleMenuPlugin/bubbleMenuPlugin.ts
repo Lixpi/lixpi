@@ -3,11 +3,20 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { EditorView } from 'prosemirror-view'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildBubbleMenuItems, getSelectionContext, updateImageButtonStates, type MenuItemElement, type SelectionContext } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/bubbleMenuItems.ts'
-import { documentTitleNodeType } from '@lixpi/prosemirror'
 
 export const bubbleMenuPluginKey = new PluginKey('bubbleMenu')
 
 const isTouchDevice = (): boolean => 'ontouchstart' in window || navigator.maxTouchPoints > 0
+
+function resolvedPositionHasNodeType(
+    position: { depth: number; node: (depth: number) => ProseMirrorNode },
+    nodeType: string,
+): boolean {
+    for (let depth = position.depth; depth >= 0; depth -= 1) {
+        if (position.node(depth).type.name === nodeType) return true
+    }
+    return false
+}
 
 type BubbleMenuViewOptions = {
     view: EditorView
@@ -114,13 +123,15 @@ class BubbleMenuView {
         const { selection } = state
         const { $from, $to } = selection
 
+        const selectsDocumentTitle = selection instanceof NodeSelection
+            ? selection.node.type.name === 'documentTitle'
+            : resolvedPositionHasNodeType($from, 'documentTitle')
+                || resolvedPositionHasNodeType($to, 'documentTitle')
+        if (selectsDocumentTitle) return false
+
         // Don't show in code blocks
         const isCodeBlock = $from.parent.type.name === 'code_block' || $to.parent.type.name === 'code_block'
         if (isCodeBlock) return false
-
-        // Don't show in document title
-        const isDocumentTitle = $from.parent.type.name === documentTitleNodeType || $to.parent.type.name === documentTitleNodeType
-        if (isDocumentTitle) return false
 
         return true
     }

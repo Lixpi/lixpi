@@ -5,7 +5,7 @@ import { isIP } from 'node:net'
 
 // SSRF guards for importing remote URLs into workspace storage. Originally part
 // of the image-only import path; now the shared URL-safety layer behind the
-// unified remote-file-import.ts. Kept provider-agnostic — it validates that a
+// unified public-remote-file.ts path. Kept provider-agnostic — it validates that a
 // URL resolves to a public address, nothing image-specific.
 
 const isPrivateIPv4 = (address: string): boolean => {

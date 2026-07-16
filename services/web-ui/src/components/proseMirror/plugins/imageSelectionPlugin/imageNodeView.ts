@@ -4,7 +4,7 @@ import { NodeSelection } from 'prosemirror-state'
 import { imageResizeCornerIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
+import { resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 import { settings } from '$src/settings.ts'
 import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
@@ -70,7 +70,7 @@ export class ImageNodeView implements NodeView {
         this.updateImageSrc(getImageSrcAttr(node))
         if (node.attrs.alt) this.img.alt = node.attrs.alt
         if (node.attrs.title) this.img.title = node.attrs.title
-        if (node.attrs.fileId) this.img.dataset.fileId = node.attrs.fileId
+        if (node.attrs.assetId) this.img.dataset.assetId = node.attrs.assetId
         if (node.attrs.documentId) this.img.dataset.documentId = node.attrs.documentId
 
         if (this.resizeEnabled) {

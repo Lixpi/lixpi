@@ -1,8 +1,9 @@
 'use strict'
 
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { NATS_SUBJECTS, STREAM_STATUS, type CanvasFeatureExtractionState, type StageTraceEvent } from '@lixpi/constants'
+import { NATS_SUBJECTS, STREAM_STATUS, getAiInteractionResponseSubject, type CanvasFeatureExtractionState, type StageTraceEvent } from '@lixpi/constants'
 import { servicesStore } from '$src/stores/servicesStore.ts'
+import { userStore } from '$src/stores/userStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import {
     computeExtractionTimelineModel,
@@ -11,7 +12,7 @@ import {
     type SubstepView,
 } from '$src/infographics/workspace/extractionTimelineModel.ts'
 import { MarkdownStreamRenderer, renderMarkdownStatic } from '$src/utils/markdownStreamRenderer.ts'
-import { resolveMediaUrl } from '$src/utils/workspaceFileUrls.ts'
+import { resolveMediaUrl } from '$src/utils/mediaUrls.ts'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
@@ -48,6 +49,7 @@ type PipelineEventEnvelope = {
 type PipelineReplayResult = {
     error?: unknown
     events?: PipelineEventEnvelope[]
+    hasMore?: boolean
 }
 
 const VALID_EXTRACTION_STATUSES: Array<CanvasFeatureExtractionState['status']> = [
@@ -478,7 +480,7 @@ export async function submitExtractionRequest(
         return
     }
 
-    const subject = `${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${extractionRunId}`
+    const subject = getAiInteractionResponseSubject(userStore.getData('userId') as string, workspaceId, extractionRunId)
     const errorSubject = `ai.interaction.chat.error.${workspaceId}:${extractionRunId}`
     nats.getSubscriptions?.([subject, errorSubject])?.forEach((sub: any) => sub.unsubscribe())
     let featureCardBuffer = ''
@@ -581,22 +583,27 @@ export async function submitExtractionRequest(
     })
     const resumeExtractionPipeline = async (): Promise<void> => {
         try {
-            const result = await nats.request(NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME, {
-                token: await AuthService.getTokenSilently(),
-                workspaceId,
-                pipelineId: extractionRunId,
-                localStreamSeq: pipelineLocalStreamSeq,
-            }) as PipelineReplayResult
-            if (result?.error) {
-                console.error('[EXTRACTION] CHAT_PIPELINE_RESUME failed:', result.error)
-                return
-            }
-            for (const event of result.events ?? []) {
-                handleExtractionResponse({
-                    ...event.payload,
-                    pipelineStreamSeq: event.streamSequence,
-                })
-            }
+            let hasMore = false
+            do {
+                const result = await nats.request(NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME, {
+                    token: await AuthService.getTokenSilently(),
+                    workspaceId,
+                    pipelineId: extractionRunId,
+                    localStreamSeq: pipelineLocalStreamSeq,
+                }) as PipelineReplayResult
+                if (result?.error) {
+                    console.error('[EXTRACTION] CHAT_PIPELINE_RESUME failed:', result.error)
+                    return
+                }
+                const events = result.events ?? []
+                for (const event of events) {
+                    handleExtractionResponse({
+                        ...event.payload,
+                        pipelineStreamSeq: event.streamSequence,
+                    })
+                }
+                hasMore = result.hasMore === true && events.length > 0
+            } while (hasMore)
         } catch (error) {
             console.error('[EXTRACTION] CHAT_PIPELINE_RESUME failed:', error)
         }

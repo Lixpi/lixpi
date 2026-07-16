@@ -18,13 +18,13 @@ By treating all generated text, images, and video iterations as concrete "nodes"
 
 ## 2. Canvas Primitives
 
-The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using `@xyflow/system` for pan/zoom coordinate math. Text-bearing document nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The renderer draws document, image, video, branch origin, branch fork, and branch line nodes. Older canvas state can still contain `aiChatThread` node data, but active chat sessions render in the right-side AI Chat panel instead of as visible canvas nodes.
+The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using `@xyflow/system` for pan/zoom coordinate math. Text-bearing document nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The renderer draws document, image, video, branch origin, branch fork, and branch line nodes. Standalone conversation Assets render in the right-side AI Chat panel instead of as canvas nodes.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph TB
     subgraph "Canvas Node Types"
-        Doc[Document Node<br/>ProseMirror editor<br/>documentType: 'document']
+        Doc[Document Node<br/>ProseMirror editor<br/>documentType: 'assetContent']
         Img[Image Node<br/>Uploaded, imported, or AI-generated<br/>PIXI-rendered pixels]
         Vid[Video Node<br/>VEO-generated or library video<br/>DOM playback over PIXI poster]
         Branch[Branch Lineage Markers<br/>Origin · fork · line<br/>API-planned media topology]
@@ -57,19 +57,19 @@ graph TB
 
 | Node Type | Editor | Resize | Persistence |
 |-----------|--------|--------|-------------|
-| **Document** | ProseMirror (`documentType: 'document'`) | Free | DynamoDB Documents table |
-| **Image** | None (PIXI pixels + DOM chrome) | Aspect-ratio locked | NATS JetStream Object Store |
-| **Video** | None (PIXI poster + DOM `<video>` chrome) | Aspect-ratio locked | NATS JetStream Object Store |
-| **Audio** | DOM `<audio>` playback surface | Fixed strip | NATS JetStream Object Store |
-| **Uploaded Document Media** | None (PDF/text/document preview) | Aspect-ratio locked | NATS JetStream Object Store |
-| **Branch Origin / Fork / Line** | None | API-positioned topology markers | Workspace `canvasState` + media lineage metadata |
-| **AI Chat Thread** | Compatibility canvas node data; active sessions render as panel tabs | Free when drawn by legacy code | DynamoDB AI-Chat-Threads table |
+| **Document** | ProseMirror Asset `content` role | Free | Asset snapshot Blob + workspace node geometry |
+| **Image** | None (PIXI pixels + DOM chrome) | Aspect-ratio locked | Asset media renditions + workspace node geometry |
+| **Video** | None (PIXI poster + DOM `<video>` chrome) | Aspect-ratio locked | Asset media renditions + workspace node geometry |
+| **Audio** | DOM `<audio>` playback surface | Fixed strip | Asset original rendition + workspace node geometry |
+| **Uploaded Document Media** | None (PDF/text/document preview) | Aspect-ratio locked | Asset document-media renditions + workspace node geometry |
+| **Branch Origin / Fork / Line** | None | API-positioned topology markers | Workspace `canvasState`; conversation/output relationships use Asset IDs |
+| **Conversation** | ProseMirror Asset `conversation` role in the panel | Panel-owned | Asset snapshot Blob + workspace panel/surface reference |
 
 **Edges** are directional connections stored in `canvasState.edges`. Each edge records a context relationship between canvas nodes. Edges can be created by explicit handle drag or by **Proximity Connect**, which previews and commits a connection when a node is dragged within range of a target.
 
 **AI Chat Panel Composer** is a separate ProseMirror editor (`documentType: 'aiPromptInput'`) inside the right-side panel. It provides rich-text composition, model controls, image/video generation settings, and Cmd/Ctrl+Enter to submit. The composer is decoupled from durable sessions; the panel creates a standalone chat only on first submit.
 
-**Media Library** is a canvas-owned right-side panel for reusable media. It exposes existing extracted Features without changing their extraction persistence path, and lets a user explicitly save completed canvas images or videos as independent JetStream Object Store copies. Inserting saved media creates fresh workspace objects and fresh canvas nodes, so library media survives deletion of its source node.
+**Media Library** is the Asset catalog in the canvas-owned right-side panel. Reusing media attaches the same Asset under a fresh node ID; it never copies bytes. Scope/catalog/workspace references determine visibility and lifetime. Extracted Features remain separate records whose sample bytes use the shared Blob registry.
 
 **AI Chat Panel and Sessions** are workspace-owned UI and conversation state, not a canvas-node requirement. The right-side AI Chat launcher opens an empty panel without creating a chat record. A standalone chat is created only after the user submits its first prompt. Panel visibility, open tabs, active tab, panel width, prompt drafts, explicit context chips, and whether the Sessions list is expanded are persisted in the workspace. Sessions is collapsed by default; when expanded it can reopen closed sessions until they are explicitly deleted.
 
@@ -137,7 +137,7 @@ graph LR
     end
 ```
 
-**Progressive streaming**: An animated placeholder appears immediately when generation starts (`IMAGE_PARTIAL` with empty data). Up to 3 progressively sharper partial previews update the canvas node in real-time. The final high-resolution image replaces them (`IMAGE_COMPLETE`). Generated images are stored in NATS JetStream Object Store through the unified workspace file storage path with SHA-256 content-hash deduplication.
+**Progressive streaming**: An animated placeholder appears immediately when generation starts (`IMAGE_PARTIAL` with empty data). Up to three ephemeral partial previews update that pending run. The final bytes settle the preassigned output Asset, trigger content-addressed renditions, and attach the final node through the API-owned Asset/canvas transaction.
 
 **Placement**: Generated images appear as separate canvas nodes connected back to the source thread/response by an edge. The retired overlapping-thread placement prototype is archived in [ANCHORED-GENERATED-IMAGES.md](knowledge/archive/ANCHORED-GENERATED-IMAGES.md).
 
@@ -149,7 +149,7 @@ graph LR
 
 Video generation is powered by Google VEO through the same dual-model architecture as images. The user selects a text model and an explicit video model; the text model emits a `generate_video` tool call with a cinematic prompt, then the API's in-process LangGraph workflow routes that prompt to a transient VEO provider.
 
-VEO generation is asynchronous: the API submits a `generateVideos` operation, polls until completion, publishes keepalive events while no partial frames exist, downloads and validates the MP4, asks the NEX file-conversion workload to extract a frame-0 poster and representative mid-frame with `ffmpeg`, and stores the result in NATS Object Store. The completed clip becomes a `VideoCanvasNode`.
+VEO generation is asynchronous: the API submits a `generateVideos` operation, polls until completion, publishes keepalive events while no partial frames exist, downloads and validates the MP4, stores it as the output Asset original Blob, and asks NEX to produce preview, poster, thumbnail, and representative-frame renditions. The API validates/registers those immutable outputs and the completed Asset becomes a `VideoCanvasNode` through the membership transaction.
 
 On the canvas, PIXI renders the poster/placeholder for stable geometry, while a visible browser-composited `<video>` element owns actual playback, seeking, scrubbing, and fullscreen. Hovering the video reveals the shared SVG control bar. Prior video nodes can be piped into later AI threads as representative stills, or extended directly through VEO's video input using **Extend video in new thread**. See [Video Generation](media-generation/VIDEO-GENERATION.md) for the full architecture.
 
@@ -185,7 +185,7 @@ graph TB
     end
 
     subgraph "Storage"
-        DDB[(DynamoDB<br/>Documents · Threads · Users)]
+        DDB[(DynamoDB<br/>Assets · References · Blobs · Workspaces)]
     end
 
     UI <-->|WebSocket| NATS
@@ -202,20 +202,20 @@ graph TB
 | Service | Language | Role |
 |---------|----------|------|
 | **web-ui** | Svelte / TypeScript | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, context extraction |
-| **api** | Node.js / TypeScript | Gateway + in-process LangGraph workflow — JWT auth, CRUD operations, DynamoDB persistence, NATS bridge, file ingest routes, pipeline events, ProseMirror transcript steps, image generation, video generation |
-| **nats** | Go (3-node cluster) | Message bus — pub/sub, request/reply, JetStream replay streams, JetStream Object Store for workspace media storage |
+| **api** | Node.js / TypeScript | Gateway + in-process LangGraph workflow — Asset/Blob authority, JWT auth, DynamoDB persistence, pipeline events, Asset-document steps, generation and provenance |
+| **nats** | Go (3-node cluster) | Message bus — pub/sub, request/reply, JetStream replay/Asset-step streams, organization content-addressed Blob Object Stores |
 | **nex** | Node.js / TypeScript | NATS NEX workloads — AI-models sync and heavy file conversion/frame extraction |
 | **localauth0** | Rust (vendored `primait/localauth0`) | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 
 ### Key Architecture Decisions
 
-**NATS-native**: The entire system runs through NATS — auth, messaging, file storage (Object Store), live events, and replay logs. The browser connects via WebSocket directly to NATS. The API-hosted LLM workflow publishes pipeline events to per-thread subjects, records those events to short-lived JetStream replay logs, and mirrors AI chat transcript mutations into ProseMirror document step streams.
+**NATS-native**: The system uses NATS for auth, messaging, organization Blob Object Stores, live events, replay logs, and Asset-document step streams. The browser connects over WebSocket. The API remains the Asset/Blob authority and converts provider output into durable pipeline/provenance and document events.
 
 **Framework-agnostic canvas**: `WorkspaceCanvas.ts` is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks. Svelte is a thin binding layer. This insulates the canvas from framework churn.
 
 **Provider-agnostic AI**: Every AI request sends the full conversation history — no provider-specific session IDs. Users can start a conversation with Claude, switch to GPT-5, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`, which plugs into the shared LangGraph workflow.
 
-**Context extraction is client-side**: When a user sends a message, the browser-side `AiChatThreadService` traverses the edge graph, extracts content from connected nodes, and assembles the multimodal payload. Workspace media contributes Object Store references; videos use representative stills for model context unless the user explicitly starts a video-extension flow.
+**Context selection is split safely**: the browser supplies node/Asset IDs, descriptors, explicit chips, and edge hints. The API authorizes selected Assets and resolves model-safe Blobs. Videos contribute representative-frame renditions; full MP4 bytes are used only for explicit extension.
 
 ---
 
@@ -257,11 +257,11 @@ sequenceDiagram
         UI->>Ext: User hits 'Send' on Thread Node
         activate Ext
         Ext->>Ext: Recursively map incoming edges to this Thread
-        Ext->>Ext: Parse ProseMirror JSON blocks from connected Documents
-        Ext->>Ext: Resolve nats-obj:// identifiers for connected Images
+        Ext->>Ext: Collect connected Asset and placement IDs
         Ext->>Ext: Extract conversation history of upstream connected Threads
-        Ext->>API: Compile into unified Context Payload
+        Ext->>API: Send Asset-backed context snapshot
         deactivate Ext
+        API->>API: Authorize Assets and resolve snapshots/Blob coordinates
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -283,9 +283,13 @@ sequenceDiagram
 
 ### Execution Steps:
 1. **Graph Traversal**: `findConnectedNodes()` filters workspace edges targeting the active thread. Traversal depth is configurable: `'direct'` (one hop, default) or `'full'` (recursive with cycle detection).
-2. **Content Extraction**: `extractConnectedContext()` parses connected nodes — ProseMirror JSON → plain text for documents, `nats-obj://` URL references for images and video representative stills, full conversation history for upstream threads.
-3. **Message Assembly**: `buildContextMessage()` assembles everything into multimodal `input_text` + `input_image` blocks, prepended to the conversation history.
-4. **Media Resolution**: The API LLM module resolves `nats-obj://` URLs to base64 data URLs using magic-byte MIME detection, then converts to the target provider's format.
+2. **Context Snapshot**: `extractConnectedContext()` records connected node IDs,
+   Asset IDs, compact descriptors, and explicit context selections without
+   exposing Object Store coordinates.
+3. **Authority Resolution**: the API authorizes every referenced Asset, loads
+   current document/conversation snapshots, and selects ready media renditions.
+4. **Message Assembly**: internal Blob coordinates are resolved to provider-ready
+   text/image blocks; `nats-obj://` values never cross the browser boundary.
 
 ---
 
@@ -307,9 +311,9 @@ graph LR
     end
 
     subgraph "NATS"
-        Live["receiveMessage<br/>.{workspaceId}.{threadId}"]
-        Pipeline["pipelineEvents<br/>.{workspaceId}.{pipelineId}"]
-        Steps["document.steps<br/>.{workspaceId}.{docType}.{docId}"]
+        Live["receiveMessage<br/>.{organizationId}.{conversationAssetId}"]
+        Pipeline["pipelineEvents<br/>.{workspaceId}.{conversationAssetId}"]
+        Steps["asset.document.steps<br/>.{organizationId}.{assetId}.{role}"]
     end
 
     subgraph "Browser"
@@ -328,7 +332,7 @@ graph LR
     Asm -->|START / STEP / END| Steps
     Live -->|WebSocket| AIS
     Pipeline -.->|CHAT_PIPELINE_RESUME| AIS
-    Steps -->|live + DOC_RESUME replay| Auth
+    Steps -->|live + Asset document resume| Auth
     Auth -->|Step.fromJSON| DOM
     AIS --> Plug
     Plug --> Canvas

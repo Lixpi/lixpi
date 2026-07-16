@@ -1,7 +1,12 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import { MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH, CONTENT_DESCRIPTOR_TEXT_INPUT_MAX_LENGTH, type ProviderName } from '@lixpi/constants'
+import {
+    CONTENT_DESCRIPTOR_TEXT_INPUT_MAX_LENGTH,
+    MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH,
+    MEDIA_DESCRIPTOR_TITLE_MAX_WORDS,
+    type ProviderName,
+} from '@lixpi/constants'
 
 import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from './extraction/vlm-client.ts'
 import type { ChatMessage } from './graph/state.ts'
@@ -12,6 +17,7 @@ import type { ChatMessage } from './graph/state.ts'
 // representative still (mid-frame or poster), never the MP4 — so this is a
 // single-image call regardless of media kind.
 export type MediaDescriptorResult = {
+    title: string
     summary: string
     entityTags: string[]
     styleTags: string[]
@@ -34,18 +40,23 @@ type DescribeMediaStillArgs = {
 
 const SYSTEM_PROMPT = [
     'You describe a single media still for a visual canvas. Produce a compact, neutral description that lets a person or model tell this media apart from others at a glance.',
-    'Return: a one-to-two sentence summary naming the dominant subject(s) and overall look; a few entity tags (concrete subjects/objects); a few style tags (medium, palette, mood, lighting).',
+    'Return: a specific title of two or three words; a one-to-two sentence summary naming the dominant subject(s) and overall look; a few entity tags (concrete subjects/objects); a few style tags (medium, palette, mood, lighting).',
+    'The title must describe the visible media, use title case, contain no punctuation, and never exceed three words.',
     'Be specific and factual about what is visible. Do not speculate about intent, do not add commentary, and never invent text or watermarks that are not present.',
     `Keep the summary under ${MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH} characters.`,
 ].join(' ')
 
 export const buildMediaDescriptorSchema = (): VlmJsonSchema => ({
     name: 'describe_media',
-    description: 'Describe a single media still with a short summary and a few entity/style tags.',
+    description: 'Title and describe a single media still with a short summary and a few entity/style tags.',
     schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
+            title: {
+                type: 'string',
+                description: 'A specific two-to-three-word title in title case, with no punctuation.',
+            },
             summary: {
                 type: 'string',
                 description: `One to two sentences naming the dominant subjects and overall look. Under ${MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH} characters.`,
@@ -61,7 +72,7 @@ export const buildMediaDescriptorSchema = (): VlmJsonSchema => ({
                 description: 'A few style descriptors (medium, palette, mood, lighting — e.g. "cinematic", "warm", "night").',
             },
         },
-        required: ['summary', 'entityTags', 'styleTags'],
+        required: ['title', 'summary', 'entityTags', 'styleTags'],
     },
 })
 
@@ -91,6 +102,9 @@ const sanitizeTags = (tags: unknown): string[] => {
 const normalizeDescriptorResult = (parsed: MediaDescriptorResult | undefined): MediaDescriptorResult => {
     const safe = parsed ?? ({} as MediaDescriptorResult)
     return {
+        title: typeof safe.title === 'string'
+            ? safe.title.trim().split(/\s+/).filter(Boolean).slice(0, MEDIA_DESCRIPTOR_TITLE_MAX_WORDS).join(' ')
+            : '',
         summary: typeof safe.summary === 'string' ? safe.summary.trim().slice(0, MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH) : '',
         entityTags: sanitizeTags(safe.entityTags),
         styleTags: sanitizeTags(safe.styleTags),
@@ -98,8 +112,8 @@ const normalizeDescriptorResult = (parsed: MediaDescriptorResult | undefined): M
 }
 
 // Caption a single still (image file, or a video's representative frame/poster).
-// `imageUrl` is a `nats-obj://workspace-{ws}-files/{fileId}` URI that the VLM
-// client resolves to inline image bytes.
+// `imageUrl` is an organization Blob Object Store URI that the VLM client
+// resolves to inline image bytes.
 export const describeMediaStill = async (args: DescribeMediaStillArgs): Promise<MediaDescriptorResult> => {
     const callVlm = args.callVlm ?? ((vlmArgs: VlmCallArgs) => callStructuredVlm<MediaDescriptorResult>(vlmArgs))
 
@@ -138,7 +152,7 @@ type DescribeTextContentArgs = {
 
 const TEXT_SYSTEM_PROMPT = [
     'You summarize a text node (a document or an AI chat transcript) for a visual canvas. Produce a compact, neutral description that lets a person or model tell this node apart from others at a glance.',
-    'Return: a one-to-two sentence summary of what the text is about; a few entity tags (key subjects, names, or topics mentioned); a few style tags (the kind/format/tone — e.g. "notes", "spec", "transcript", "outline", "formal").',
+    'Return: a specific title of two or three words; a one-to-two sentence summary of what the text is about; a few entity tags (key subjects, names, or topics mentioned); a few style tags (the kind/format/tone — e.g. "notes", "spec", "transcript", "outline", "formal").',
     'Be specific and factual about the content. Do not speculate about intent, do not add commentary, and never invent topics that are not present.',
     `Keep the summary under ${MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH} characters.`,
 ].join(' ')
@@ -150,6 +164,10 @@ export const buildTextDescriptorSchema = (): VlmJsonSchema => ({
         type: 'object',
         additionalProperties: false,
         properties: {
+            title: {
+                type: 'string',
+                description: 'A specific two-to-three-word title in title case, with no punctuation.',
+            },
             summary: {
                 type: 'string',
                 description: `One to two sentences describing what the text is about. Under ${MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH} characters.`,
@@ -165,7 +183,7 @@ export const buildTextDescriptorSchema = (): VlmJsonSchema => ({
                 description: 'A few descriptors of the kind/format/tone (e.g. "notes", "spec", "transcript", "formal").',
             },
         },
-        required: ['summary', 'entityTags', 'styleTags'],
+        required: ['title', 'summary', 'entityTags', 'styleTags'],
     },
 })
 
@@ -185,7 +203,7 @@ const buildTextDescriptorMessages = (text: string, title?: string): ChatMessage[
 // there is nothing to summarize (caller treats that as "skip", not "failed").
 export const describeTextContent = async (args: DescribeTextContentArgs): Promise<MediaDescriptorResult> => {
     const text = args.text.trim().slice(0, CONTENT_DESCRIPTOR_TEXT_INPUT_MAX_LENGTH)
-    if (!text) return { summary: '', entityTags: [], styleTags: [] }
+    if (!text) return { title: '', summary: '', entityTags: [], styleTags: [] }
 
     const callVlm = args.callVlm ?? ((vlmArgs: VlmCallArgs) => callStructuredVlm<MediaDescriptorResult>(vlmArgs))
 

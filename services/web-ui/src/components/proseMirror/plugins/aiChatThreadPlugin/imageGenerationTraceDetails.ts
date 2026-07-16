@@ -7,7 +7,7 @@ import type {
 
 import AuthService from '$src/services/auth-service.ts'
 import { html } from '$src/utils/domTemplates.ts'
-import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
+import { resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 
 // Image and video generation traces share an identical reference/excluded/
 // resolver/prompt shape, so this renderer is reused verbatim for both media
@@ -86,19 +86,10 @@ export const formatTraceModelLabel = (modelId?: string | null): string => {
 }
 
 const getReferenceWorkspaceImagePath = (reference: ImageGenerationTraceReference): string | null => {
-    if (reference.fileId && reference.workspaceId) {
-        return `/api/files/${encodeURIComponent(reference.workspaceId)}/${encodeURIComponent(reference.fileId)}`
+    if (reference.assetId) {
+        return `/api/assets/${encodeURIComponent(reference.assetId)}/renditions/preview`
     }
     return null
-}
-
-const getNatsWorkspaceImagePath = (imageUrl: string): string | null => {
-    const match = /^nats-obj:\/\/workspace-(.+)-files\/(.+)$/.exec(imageUrl)
-    if (!match) return null
-
-    const [, workspaceId, objectKey] = match
-    if (!workspaceId || !objectKey || objectKey.includes('/')) return null
-    return `/api/files/${encodeURIComponent(workspaceId)}/${encodeURIComponent(objectKey)}`
 }
 
 const uniqueImageSources = (sources: string[]): string[] => {
@@ -122,9 +113,7 @@ const getReferenceImageSources = (
 }
 
 const resolveReferenceImageSrc = async (imageUrl: string): Promise<string> => {
-    const source = imageUrl.startsWith('nats-obj://')
-        ? getNatsWorkspaceImagePath(imageUrl) ?? ''
-        : imageUrl
+    const source = imageUrl.startsWith('nats-obj://') ? '' : imageUrl
 
     return resolveAuthenticatedMediaUrl(source, {
         apiBaseUrl: import.meta.env.VITE_API_URL || '',

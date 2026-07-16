@@ -5,7 +5,7 @@ import type { CanvasNode, CanvasState, DocumentMediaCanvasNode } from '@lixpi/co
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { decodeImageInWorker } from '$src/infographics/workspace/pixiImageDecoder.ts'
-import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
+import { buildAssetRenditionPath, resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 
 import type { MediaNodeHandler } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
 import type { WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
@@ -57,9 +57,9 @@ export function createDocumentNodeHandler(options: DocumentNodeHandlerOptions): 
     }
 
     const updatePoster = async (entry: DocumentEntry, node: DocumentMediaCanvasNode): Promise<void> => {
-        if (!node.posterSrc) return
+        if (!node.assetId) return
         try {
-            const posterSrc = await buildAuthenticatedUrl(node.posterSrc)
+            const posterSrc = await buildAuthenticatedUrl(buildAssetRenditionPath(node.assetId, 'poster'))
             const bitmap = await decodeImageInWorker(posterSrc)
             if (destroyed) return
             const posterTexture = Texture.from(bitmap)
@@ -134,7 +134,7 @@ export function createDocumentNodeHandler(options: DocumentNodeHandlerOptions): 
         applyTransform(entry, x, y, w, h)
         entry.colorRect.visible = true
 
-        const sourceKey = `${node.workspaceId}|${node.fileId}|${node.posterFileId}|${node.posterSrc}`
+        const sourceKey = node.assetId
         if (sourceKey !== entry.sourceKey) {
             entry.sourceKey = sourceKey
             updatePoster(entry, node).catch(() => {})

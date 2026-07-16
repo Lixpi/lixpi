@@ -163,7 +163,7 @@ const deleteTableAndWait = async (tableName: string): Promise<void> => {
 }
 
 async function createTables() {
-    const tableDefs = getTableDefinitions() as TableDef[]
+    const tableDefs = Object.values(getTableDefinitions()) as TableDef[]
 
     console.log(`Creating DynamoDB tables in ${DYNAMODB_ENDPOINT}...`)
     console.log(`Stage: ${process.env.STAGE}, Org: ${process.env.ORG_NAME}`)

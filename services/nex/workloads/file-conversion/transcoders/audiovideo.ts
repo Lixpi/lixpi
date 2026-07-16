@@ -86,6 +86,8 @@ export type MediaProbe = {
     durationSeconds: number | null
     aspectRatio: number | null
     hasAudio: boolean
+    width: number | null
+    height: number | null
 }
 
 export const probeMedia = async (buffer: Buffer): Promise<MediaProbe> => {
@@ -111,10 +113,28 @@ export const probeMedia = async (buffer: Buffer): Promise<MediaProbe> => {
                 durationSeconds: Number.isFinite(durationRaw) ? durationRaw : null,
                 aspectRatio: width && height ? width / height : null,
                 hasAudio,
+                width: width || null,
+                height: height || null,
             }
         })
     } catch (e: any) {
         warn(`probeMedia failed (proceeding without probe): ${e?.message ?? e}`)
-        return { durationSeconds: null, aspectRatio: null, hasAudio: false }
+        return { durationSeconds: null, aspectRatio: null, hasAudio: false, width: null, height: null }
     }
 }
+
+export const createVideoPreview = async (buffer: Buffer): Promise<Buffer> =>
+    withTempDir('av-preview-', async (dir) => {
+        const inPath = join(dir, 'in')
+        const outPath = join(dir, 'preview.mp4')
+        await writeFile(inPath, buffer)
+        await runProcess('ffmpeg', [
+            '-y', '-i', inPath,
+            '-vf', 'scale=w=min(1280\\,iw):h=-2',
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '26', '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            outPath,
+        ], { timeoutMs: 300_000 })
+        return readFile(outPath)
+    })

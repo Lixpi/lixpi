@@ -6,13 +6,15 @@ import {
     aiPromptInputNodeSpec,
     aiPromptInputNodeType,
     customNodeSpecs,
-    documentTitleNodeType,
 } from './node-specs.ts'
 
 export const DOCUMENT_TYPE = {
-    DOCUMENT: 'document',
-    AI_CHAT_THREAD: 'aiChatThread',
     AI_PROMPT_INPUT: 'aiPromptInput',
+    ASSET_CONTENT: 'assetContent',
+    ASSET_CONVERSATION: 'assetConversation',
+    ASSET_PROVENANCE: 'assetProvenance',
+    ASSET_TITLE: 'assetTitle',
+    ASSET_METADATA: 'assetMetadata',
 } as const
 
 export const PROSEMIRROR_SCHEMA_VERSION = 'prosemirror-schema-v1'
@@ -45,7 +47,7 @@ export function nodesBuilder(
     return extendedSchema
 }
 
-export function createProseMirrorSchema(documentType: ProseMirrorDocumentType | string = DOCUMENT_TYPE.DOCUMENT): Schema {
+export function createProseMirrorSchema(documentType: ProseMirrorDocumentType | string = DOCUMENT_TYPE.ASSET_CONTENT): Schema {
     return new Schema({
         nodes: nodesBuilder(schema, getSupportedNodes(documentType), documentType),
         marks: schema.spec.marks,
@@ -53,7 +55,10 @@ export function createProseMirrorSchema(documentType: ProseMirrorDocumentType | 
 }
 
 export function getSupportedNodes(documentType: ProseMirrorDocumentType | string): Record<string, NodeSpec> {
-    if (documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
+    if (
+        documentType === DOCUMENT_TYPE.ASSET_CONVERSATION
+        || documentType === DOCUMENT_TYPE.ASSET_PROVENANCE
+    ) {
         return {
             ...customNodeSpecs,
             ...aiChatNodeSpecs,
@@ -68,11 +73,14 @@ export function getSupportedNodes(documentType: ProseMirrorDocumentType | string
 }
 
 function getDocContent(documentType: ProseMirrorDocumentType | string): string {
-    if (documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
-        return `${documentTitleNodeType} ${aiChatThreadNodeType}+`
+    if (documentType === DOCUMENT_TYPE.ASSET_CONVERSATION || documentType === DOCUMENT_TYPE.ASSET_PROVENANCE) {
+        return `${aiChatThreadNodeType}+`
     }
+    if (documentType === DOCUMENT_TYPE.ASSET_CONTENT) return 'block+'
+    if (documentType === DOCUMENT_TYPE.ASSET_TITLE) return 'documentTitle'
+    if (documentType === DOCUMENT_TYPE.ASSET_METADATA) return 'documentTitle paragraph'
     if (documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
         return aiPromptInputNodeType
     }
-    return `${documentTitleNodeType} block+`
+    throw new Error(`Unsupported ProseMirror document type: ${documentType}`)
 }

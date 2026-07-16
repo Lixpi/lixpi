@@ -11,7 +11,6 @@
 		"CHAT_SEND_MESSAGE_RESPONSE": "ai.interaction.chat.receiveMessage",
 		"CHAT_PIPELINE_EVENTS": "ai.interaction.chat.pipelineEvents",
 		"CHAT_PIPELINE_RESUME": "ai.interaction.chat.pipelineResume",
-		"CHAT_STEPS": "ai.interaction.chat.steps",
 		"CHAT_STOP_MESSAGE": "ai.interaction.chat.stopMessage",
 		"CHAT_PROCESS": "ai.interaction.chat.process",
 		"CHAT_STOP": "ai.interaction.chat.stop",
@@ -19,16 +18,45 @@
 		"MEDIA_DESCRIBE": "ai.interaction.media.describe",
 		"FEATURE_EXTRACT": {
 			"START": "ai.interaction.feature.extract.start",
-			"STOP": "ai.interaction.feature.extract.stop",
 			"STATUS": "ai.interaction.feature.extract.status",
 			"LIST_BY_WORKSPACE": "ai.interaction.feature.extract.listByWorkspace",
 			"DELETE": "ai.interaction.feature.extract.delete"
 		}
 	},
-	"DOCUMENT_STEP_SUBJECTS": {
-		"DOC_STEPS": "document.steps",
-		"DOC_SUBMIT_STEPS": "document.submitSteps",
-		"DOC_RESUME": "document.resume"
+	"ASSET_SUBJECTS": {
+		"CREATE": "asset.create",
+		"GET": "asset.get",
+		"LIST": "asset.list",
+		"UPDATE_METADATA": "asset.metadata.update",
+		"CHANGE_SCOPE": "asset.scope.change",
+		"REVIEW_GENERATED_OUTPUT": "asset.generatedOutput.review",
+		"ATTACH": "asset.reference.attach",
+		"DETACH": "asset.reference.detach",
+		"ACQUIRE_LEASE": "asset.lease.acquire",
+		"RENEW_LEASE": "asset.lease.renew",
+		"RELEASE_LEASE": "asset.lease.release",
+		"DOCUMENT_SUBMIT_STEPS": "asset.document.submitSteps",
+		"DOCUMENT_RESUME": "asset.document.resume",
+		"DOCUMENT_STEPS": "asset.document.steps",
+		"DOCUMENT_EVENTS": "asset.document.events",
+		"EVENTS": {
+			"CREATED": "asset.events.created",
+			"UPDATED": "asset.events.updated",
+			"DELETED": "asset.events.deleted",
+			"RENDITION_UPDATED": "asset.events.renditionUpdated"
+		}
+	},
+	"BLOB_PROCESSING_SUBJECTS": {
+		"GENERATE_RENDITIONS": "blob.processing.generateRenditions"
+	},
+	"ASSET_MAINTENANCE_SUBJECTS": {
+		"DELETE_ASSET": "asset.maintenance.delete",
+		"DELETE_BLOB": "blob.maintenance.delete",
+		"RETRY_RENDITION": "asset.maintenance.retryRendition",
+		"REBUILD_PROVENANCE": "asset.maintenance.rebuildProvenance",
+		"REPAIR_PROJECTIONS": "asset.maintenance.repairProjections",
+		"CLEANUP_WORKSPACE_REFERENCE": "asset.maintenance.cleanupWorkspaceReference",
+		"CLEANUP_ASSET_SURFACE": "asset.maintenance.cleanupAssetSurface"
 	},
 	"WORKSPACE_SUBJECTS": {
 		"CREATE_WORKSPACE": "workspace.create",
@@ -37,62 +65,13 @@
 		"DELETE_WORKSPACE": "workspace.delete",
 		"GET_USER_WORKSPACES": "workspace.getUserWorkspaces",
 		"UPDATE_CANVAS_STATE": "workspace.updateCanvasState",
-		"GET_WORKSPACE_DOCUMENTS": "workspace.getDocuments",
-		"FILE_SUBJECTS": {
-			"CONVERT": "workspace.file.convert",
-			"CONVERT_RESPONSE": "workspace.file.convert.response",
-			"EXTRACT_FRAMES": "workspace.file.extractFrames"
-		},
-		"IMAGE_SUBJECTS": {
-			"DELETE_IMAGE": "workspace.image.delete"
-		},
-		"VIDEO_SUBJECTS": {
-			"DELETE_VIDEO": "workspace.video.delete"
-		},
-		"DOCUMENT_SUBJECTS": {
-			"CREATE_DOCUMENT": "workspace.document.create",
-			"GET_DOCUMENT": "workspace.document.get",
-			"UPDATE_DOCUMENT": "workspace.document.update",
-			"DELETE_DOCUMENT": "workspace.document.delete",
-			"ADD_TAG_TO_DOCUMENT": "workspace.document.addTag",
-			"REMOVE_TAG_FROM_DOCUMENT": "workspace.document.removeTag"
-		},
-		"AI_CHAT_THREAD_SUBJECTS": {
-			"CREATE_AI_CHAT_THREAD": "workspace.aiChatThread.create",
-			"GET_AI_CHAT_THREAD": "workspace.aiChatThread.get",
-			"UPDATE_AI_CHAT_THREAD": "workspace.aiChatThread.update",
-			"DELETE_AI_CHAT_THREAD": "workspace.aiChatThread.delete",
-			"GET_WORKSPACE_AI_CHAT_THREADS": "workspace.aiChatThread.getByWorkspace"
-		},
 		"FEATURE_SUBJECTS": {
 			"CREATE": "workspace.feature.create",
 			"GET": "workspace.feature.get",
 			"LIST_BY_SCOPE": "workspace.feature.listByScope",
 			"UPDATE": "workspace.feature.update",
-			"DELETE": "workspace.feature.delete",
-			"GET_SAMPLE_URL": "workspace.feature.getSampleUrl",
-			"EVENTS": {
-				"CREATED": "workspace.feature.events.created",
-				"UPDATED": "workspace.feature.events.updated",
-				"DELETED": "workspace.feature.events.deleted"
-			}
-		},
-		"MEDIA_LIBRARY_SUBJECTS": {
-			"CREATE_FROM_IMAGE": "workspace.mediaLibrary.image.createFromCanvas",
-			"CREATE_FROM_VIDEO": "workspace.mediaLibrary.video.createFromCanvas",
-			"GET": "workspace.mediaLibrary.get",
-			"LIST_AVAILABLE": "workspace.mediaLibrary.listAvailable",
-			"MATERIALIZE_IMAGE_TO_WORKSPACE": "workspace.mediaLibrary.image.materializeToWorkspace",
-			"MATERIALIZE_VIDEO_TO_WORKSPACE": "workspace.mediaLibrary.video.materializeToWorkspace",
-			"DELETE": "workspace.mediaLibrary.delete",
-			"EVENTS": {
-				"CREATED": "workspace.mediaLibrary.events.created",
-				"DELETED": "workspace.mediaLibrary.events.deleted"
-			}
+			"DELETE": "workspace.feature.delete"
 		}
-	},
-	"FEATURE_LIBRARY_SUBJECTS": {
-		"LIST_GLOBAL": "feature.listGlobal"
 	},
 	"ORGANIZATION_SUBJECTS": {
 		"GET_ORGANIZATION": "organization.get",

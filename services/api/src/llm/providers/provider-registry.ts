@@ -7,8 +7,6 @@ import type { BaseProvider, BaseProviderDeps } from './base-provider.ts'
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
-import type { StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
-import type { StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
 import type { MetricsClient } from '../../metrics/metrics-client.ts'
 
@@ -38,8 +36,6 @@ export class ProviderRegistry {
 
     constructor(
         private readonly natsService: NatsService,
-        private readonly storeWorkspaceImage: StoreWorkspaceImageFn,
-        private readonly storeWorkspaceVideo: StoreWorkspaceVideoFn,
         // Partial: not every ProviderName must have a registered constructor
         // (e.g. a video-only provider added before its class lands). Unregistered
         // providers throw "Unsupported provider" on lookup in getOrCreate/createTransient.
@@ -63,8 +59,6 @@ export class ProviderRegistry {
     private buildDeps(): BaseProviderDeps {
         return {
             natsService: this.natsService,
-            storeWorkspaceImage: this.storeWorkspaceImage,
-            storeWorkspaceVideo: this.storeWorkspaceVideo,
             usageReporter: this.usageReporter,
             runImageRouter: async (state: ProviderState, options?: MediaRouterOptions) => {
                 if (!this.imageRouter) {
