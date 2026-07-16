@@ -29,6 +29,7 @@
 		"LIST": "asset.list",
 		"UPDATE_METADATA": "asset.metadata.update",
 		"CHANGE_SCOPE": "asset.scope.change",
+		"REVIEW_GENERATED_OUTPUT": "asset.generatedOutput.review",
 		"ATTACH": "asset.reference.attach",
 		"DETACH": "asset.reference.detach",
 		"ACQUIRE_LEASE": "asset.lease.acquire",

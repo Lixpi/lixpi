@@ -458,6 +458,13 @@
             aiChatThreads,
             onViewportChange: handleViewportChange,
             onCanvasStateChange: persistCanvasState,
+            onAuthoritativeCanvasStateChange: ({ canvasState: nextCanvasState, layoutRevision }) => {
+                servicesStore.getData('workspaceService').adoptAuthoritativeCanvasState({
+                    workspaceId,
+                    canvasState: nextCanvasState,
+                    canvasStateUpdatedAt: layoutRevision,
+                })
+            },
             onDocumentContentChange: () => {},
             onAiChatThreadContentChange: () => {},
             onAssetDetach: async ({ assetId, nodeId, canvasState: nextCanvasState }) => {

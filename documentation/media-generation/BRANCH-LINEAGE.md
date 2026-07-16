@@ -101,9 +101,9 @@ Videos cost one still image in branch resolution. The MP4 is used only by the ex
 
 ## Canvas projection
 
-The browser may render transient pending media nodes, identified by a deterministic node ID derived from the run assignment. These nodes are not persisted through normal full canvas saves.
+The browser may render a transient preflight branch marker before the lineage plan arrives, but it never creates or positions generated media nodes. Pending image and video nodes use deterministic IDs derived from their run assignments and are persisted by the API before their partial/pending events are published.
 
-The API projection service persists marker topology when the lineage plan is announced. It uses shared marker text metrics and canvas-engine branch-tree/collision settings.
+The API projection service persists marker topology when the lineage plan is announced. It uses shared marker text metrics and canvas-engine branch-tree/collision settings. Every connected client applies the same revisioned node snapshots and coordinates.
 
 When a final image or video settles, the API:
 
@@ -120,7 +120,7 @@ Clients discard stale geometry revisions and ignore late upserts for locally can
 
 ## Partial image events
 
-Progressive image partials are ephemeral data URLs associated with the assignment’s `assetId`. They update the transient pending node only. Partial bytes are not registered as Asset renditions and are not persisted in Workspace state.
+Progressive image partials are ephemeral data URLs associated with the assignment’s `assetId`. They update the API-persisted pending node only. Partial bytes are not registered as Asset renditions and are not persisted in Workspace state.
 
 The final event contains the durable Asset original URL and API canvas geometry. The Asset rendition worker then produces preview and thumbnail asynchronously.
 
@@ -138,9 +138,19 @@ Sibling outputs can share reasoning while never receiving each other’s media p
 
 Provenance is an immutable JSON Blob and rejects client steps. Materialization failure queues a durable rebuild and prevents pipeline-log cleanup from silently discarding the source.
 
+## Candidate review and regeneration
+
+Every pending generated output Asset starts with `generatedOutputReview.status = candidate`. Candidate media remains attached to its API-planned branch marker and exposes two node-level actions: accept or replay the existing media prompt. Reasoning-prompt regeneration exists only on the branch marker.
+
+Accepting a media node changes its review status to `accepted`, preserves its sealed output provenance, removes its active branch topology fields and lineage edge from the Workspace projection, and leaves the media node as an independent canvas entity. Its user-message history control is rendered only in this accepted state. Accepting a branch marker applies the same transition to every candidate child. A marker is deleted when its last candidate child detaches; otherwise it remains connected to the candidates that have not been accepted.
+
+Existing-prompt regeneration marks the replaced candidate Assets as `superseded`, removes their canvas nodes, and preserves the selected lineage marker. The matrix request carries each output's sealed `finalPrompt`, reasoning/media model pair, and media parameters. The API lineage plan repeats the validated regeneration target explicitly, so clients cannot reinterpret the committed marker as temporary preflight geometry. Provider execution skips reasoning prompt generation, replays the prompt directly through the selected media provider, and attaches the replacement Asset to the preserved marker using API-persisted coordinates. Resolver-selected reference media remains provenance context but cannot become the replay's topology parent; the preserved marker is the only layout parent. This prevents one provider's replay from changing prompts used by sibling providers or attaching the replacement to an unrelated tree.
+
+Prompt regeneration is available only from a branch-lineage marker. It supersedes and removes every candidate child, removes the old marker when it becomes empty, and submits the entire former variant set through normal reasoning to produce a new prompt and new lineage. Media-node controls can accept one output or replay its existing sealed media prompt, but cannot regenerate the reasoning prompt. Orphaned old markers are pruned; markers with other candidate children remain.
+
 ## Completion, failure, and cancellation
 
-Successful settlement stores the original Blob, starts rendition generation, attaches canvas membership, materializes provenance, and publishes the final event with `assetId`.
+Successful settlement stores the original Blob, starts rendition generation, attaches canvas membership, publishes the final media content, flushes that content into the conversation snapshot, and materializes sealed provenance. Asset updates drive review-control enablement without waiting for a workspace reload.
 
 Provider failure or cancellation materializes terminal provenance for every unfinished planned Asset. Failed Assets use lifecycle/media `failed`; cancelled Assets use lifecycle `failed` and media/provenance `cancelled`. They remain addressable through their catalog/reference rows until explicitly removed.
 
@@ -154,6 +164,10 @@ Request settlement removes transient pending node IDs for unfinished assignments
 - Canvas topology fields always reference node IDs.
 - Asset lineage fields always reference Asset IDs.
 - One live conversation stream is shared; output provenance is materialized after settlement.
+- Candidate review state belongs to the output Asset; branch attachment belongs to the Workspace projection.
+- Accepted output Assets are immutable review decisions and retain sealed provenance after canvas detachment.
+- Existing-prompt replay never invokes a reasoning provider and never rewrites sibling media prompts.
+- Generated media topology and coordinates are persisted by the API before clients render them.
 - No generated output depends on a workspace Object Store key or a chat-thread table row.
 
 ## Relevant code

@@ -836,8 +836,11 @@ export class AiChatProseMirrorStreamAssembler {
                     isStreaming: false,
                     videoGenerationTrace: content.videoGenerationTrace,
                 }
-            const runAttrs = this.buildGeneratedRunAttrs(reasoningGenerationRun)
-            const collapsibleInfo = this.findCollapsibleNode(reasoningGenerationRun)
+            // A reasoning run can fan out into several media runs. Each media run
+            // owns a different final prompt and trace, so key the trace block by
+            // the full run instead of letting sibling variants overwrite it.
+            const runAttrs = this.buildGeneratedRunAttrs(generationRun)
+            const collapsibleInfo = this.findCollapsibleNode(generationRun)
 
             if (collapsibleInfo.found && collapsibleInfo.nodePos !== undefined) {
                 const collapsibleNodePos = transaction.mapping.map(collapsibleInfo.nodePos, 1)
@@ -1493,7 +1496,8 @@ export class AiChatProseMirrorStreamAssembler {
     }
 
     private findCollapsibleNode(generationRun: MediaGenerationRunMeta | undefined): TargetInfo {
-        let result: TargetInfo = { found: false }
+        let exactResult: TargetInfo | undefined
+        let templateResult: TargetInfo | undefined
         this.engine.state.doc.descendants((node: ProseMirrorNode, pos: number) => {
             if (node.type.name !== aiChatThreadNodeType || node.attrs?.threadId !== this.config.aiChatThreadId) return
 
@@ -1502,16 +1506,29 @@ export class AiChatProseMirrorStreamAssembler {
                 if (this.usesReasoningSection(generationRun) && child.attrs?.reasoningRunId !== generationRun.reasoningRunId) return
 
                 const nodePos = pos + relPos + 1
-                result = {
+                const result = {
                     found: true,
                     nodePos,
                     endOfNodePos: nodePos + child.nodeSize,
                     childCount: child.childCount,
                 }
+                if (!generationRun?.mediaRunId) {
+                    exactResult = result
+                    return
+                }
+                if (child.attrs?.mediaRunId === generationRun.mediaRunId) {
+                    exactResult = result
+                    return
+                }
+                if (!child.attrs?.mediaRunId
+                    && !child.attrs?.imageGenerationTrace
+                    && !child.attrs?.videoGenerationTrace) {
+                    templateResult = result
+                }
             })
             return false
         })
-        return result
+        return exactResult ?? templateResult ?? { found: false }
     }
 
     private updateContext(content: AiStreamContent): void {

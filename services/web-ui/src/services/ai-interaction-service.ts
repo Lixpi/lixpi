@@ -6,6 +6,7 @@ import {
     NATS_SUBJECTS,
     STREAM_STATUS,
     type AiInteractionChatSendMessagePayload,
+    type AiInteractionMediaGenerationRequest,
     type ImageGenerationTrace,
     type ImageGenerationSize,
     type MediaBranchLineagePlan,
@@ -34,6 +35,7 @@ type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'convers
     videoResolution?: string
     videoDuration?: string
     videoConfigGroups?: MediaGenerationConfigSelectionGroup[]
+    regeneration?: NonNullable<AiInteractionMediaGenerationRequest['regeneration']>
     // Asset ID of an existing generated video that VEO should extend. The API
     // authorizes it and resolves the source Blob coordinate. Built by
     // WorkspaceCanvas from the source VideoCanvasNode when the conversation is rooted
@@ -225,7 +227,7 @@ export default class AiInteractionService {
             if (!this.shouldProcessPipelinePayload(data)) return
 
             if (data?.error) {
-                alert(`Failed to receive chat message: \n${JSON.stringify(data.error)}`)
+                console.error('[AI_INTERACTION] Failed to receive chat message:', data.error)
                 return
             }
 
@@ -427,6 +429,7 @@ export default class AiInteractionService {
                 console.log('[AI_INTERACTION] VIDEO_PENDING received')
                 this.segmentsReceiver.receiveSegment({
                     type: 'video_pending',
+                    ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...segmentBase,
                 })
                 return
@@ -498,6 +501,7 @@ export default class AiInteractionService {
         videoResolution,
         videoDuration,
         videoConfigGroups,
+        regeneration,
         videoSourceForExtension,
         referencedFeatureIds,
         mediaBranchCandidateSnapshot,
@@ -564,11 +568,11 @@ export default class AiInteractionService {
 
         // The media-generation matrix is needed only when some section carries
         // more than one model; a single model per section runs the plain path.
-        const matrixVideoModelIds = videoModelsEnabled || Boolean(videoSourceForExtension) ? videoModelIds : []
+        const matrixVideoModelIds = regeneration || videoModelsEnabled || Boolean(videoSourceForExtension) ? videoModelIds : []
         const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, matrixVideoModelIds.length]
         const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
         const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
-        if (totalSelectedModelCount > sectionsWithSelection) {
+        if (regeneration || totalSelectedModelCount > sectionsWithSelection) {
             payload.mediaGenerationRequest = {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: uuidv4(),
@@ -589,6 +593,7 @@ export default class AiInteractionService {
                     ...(videoSourceForExtension ? { sourceForExtension: videoSourceForExtension } : {}),
                     ...(videoModelsEnabled && videoConfigGroups?.length ? { configGroups: videoConfigGroups } : {}),
                 } } : {}),
+                ...(regeneration ? { regeneration } : {}),
             }
         }
 

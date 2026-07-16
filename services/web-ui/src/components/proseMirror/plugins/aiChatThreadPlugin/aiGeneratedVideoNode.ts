@@ -40,6 +40,7 @@ export type AiGeneratedVideoCallbacks = {
     onVideoPendingToCanvas?: (data: {
         threadId: string
         aiProvider: string
+        canvasGeometry?: CanvasGeometryUpdate
         generationRun?: MediaGenerationRunMeta
     }) => void
     onVideoGeneratingToCanvas?: (data: {

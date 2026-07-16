@@ -139,7 +139,12 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
             return
 
         case 'video_pending':
-            videoCallbacks.onVideoPendingToCanvas?.({ threadId, aiProvider: event.aiProvider || '', generationRun })
+            videoCallbacks.onVideoPendingToCanvas?.({
+                threadId,
+                aiProvider: event.aiProvider || '',
+                ...(event.canvasGeometry ? { canvasGeometry: event.canvasGeometry } : {}),
+                generationRun,
+            })
             return
 
         case 'video_generating':

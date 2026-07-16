@@ -14,7 +14,7 @@ import { materializeAssetProvenance } from '../../services/asset-provenance-mate
 import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
 
 // Mirrors ImagePublisher but for the async VEO lifecycle. There are no partial
-// frames: the browser sees VIDEO_PENDING (placeholder + traveling outline), then
+// frames: the API projects VIDEO_PENDING (placeholder + traveling outline), then
 // periodic VIDEO_GENERATING keepalive pings during the poll loop, then a single
 // VIDEO_COMPLETE (or VIDEO_ERROR). NEX materializes poster/preview renditions on
 // the same Asset for low-cost initial paint and later visual grounding.
@@ -45,14 +45,27 @@ export class VideoPublisher {
         this.onProseMirrorContent?.(content)
     }
 
-    // Placeholder event: UI creates the pending video node + traveling outline.
-    pending(): void {
+    // Persist the placeholder before publishing it so every connected client
+    // receives the same node, edge, and coordinates.
+    async pending(): Promise<void> {
+        if (!this.generationRun) throw new Error('Video pending is missing generationRun')
+        const assetId = this.generationRun.lineageAssignment?.assetId
+        if (!assetId) throw new Error('Video pending is missing Asset assignment')
+        const canvasGeometry = await attachGeneratedAssetNode({
+            assetId,
+            workspaceId: this.workspaceId,
+            kind: 'video',
+            aspectRatio: 1,
+            generationRun: this.generationRun,
+            conversationAssetId: this.aiChatThreadId,
+        })
         this.publish({
             status: STREAM_STATUS.VIDEO_PENDING,
             videoUrl: '',
-            assetId: this.generationRun?.lineageAssignment?.assetId,
+            assetId,
             aiProvider: this.provider,
-            ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+            canvasGeometry,
+            generationRun: this.generationRun,
         })
     }
 
@@ -136,6 +149,7 @@ export class VideoPublisher {
             terminalStatus: 'completed' as const,
         }
         try {
+            await this.getProseMirrorSnapshot?.()
             await materializeAssetProvenance(provenancePayload)
         } catch (error) {
             if ((error as { message?: unknown })?.message !== 'PROVENANCE_PROJECTION_NOT_READY') {

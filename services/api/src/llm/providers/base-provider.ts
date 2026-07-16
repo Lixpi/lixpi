@@ -303,6 +303,7 @@ export abstract class BaseProvider {
             videoSourceForExtension: requestData.videoSourceForExtension,
             generationRun: requestData.generationRun,
             mediaFanoutPlan: requestData.mediaFanoutPlan,
+            replayMediaPrompts: requestData.replayMediaPrompts,
             preflightResolved: requestData.preflightResolved ?? false,
         }
 
@@ -429,6 +430,15 @@ export abstract class BaseProvider {
     protected async streamTokens(state: ProviderState): Promise<Partial<ProviderState>> {
         const update: Partial<ProviderState> = { streamActive: true }
         try {
+            if (state.replayMediaPrompts?.length) {
+                return {
+                    ...update,
+                    generatedImagePrompt: state.replayMediaPrompts.find(prompt => prompt.mediaType === 'image')?.finalPrompt,
+                    generatedVideoPrompt: state.replayMediaPrompts.find(prompt => prompt.mediaType === 'video')?.finalPrompt,
+                    streamActive: false,
+                    aiRequestFinishedAt: Date.now(),
+                }
+            }
             const implResult = await this.streamImpl(state)
             return {
                 ...update,
@@ -590,6 +600,21 @@ export abstract class BaseProvider {
     protected async executeMediaFanout(state: ProviderState): Promise<Partial<ProviderState>> {
         if (!state.generationRun || !state.mediaFanoutPlan) return {}
 
+        if (state.generatedVideoPrompt && state.generatedImagePrompt) {
+            const [imageResult, videoResult] = await Promise.all([
+                this.executeImageFanout(state),
+                this.executeVideoFanout(state),
+            ])
+            return {
+                ...imageResult,
+                ...videoResult,
+                generatedImages: imageResult.generatedImages,
+                generatedVideos: videoResult.generatedVideos,
+                error: imageResult.error ?? videoResult.error,
+                errorCode: imageResult.errorCode ?? videoResult.errorCode,
+                errorType: imageResult.errorType ?? videoResult.errorType,
+            }
+        }
         if (state.generatedVideoPrompt) {
             return this.executeVideoFanout(state)
         }
@@ -648,6 +673,11 @@ export abstract class BaseProvider {
                 imageSize: imageModelOptions?.imageSize ?? state.mediaFanoutPlan?.imageSize ?? state.imageSize,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
             }
+            const replayPrompt = state.mediaFanoutPlan?.replayPrompts?.find(prompt =>
+                prompt.mediaType === 'image'
+                && prompt.mediaModelId === catalogModelIdFor(imageModelMetaInfo)
+            )
+            if (replayPrompt) fanoutState.generatedImagePrompt = replayPrompt.finalPrompt
             const promptValidationPatch = await this.validateImageFanoutPrompt(fanoutState)
             fanoutState = { ...fanoutState, ...promptValidationPatch }
             if (fanoutState.error || !fanoutState.generatedImagePrompt) {
@@ -754,6 +784,10 @@ export abstract class BaseProvider {
                 videoModelOptions?.duration ?? state.mediaFanoutPlan?.videoDuration ?? state.mediaFanoutPlan?.videoDurationSeconds ?? state.videoDurationSeconds,
                 videoModelMetaInfo.videoDurations as Array<{ value?: string; label?: string }> | undefined,
             )
+            const replayPrompt = state.mediaFanoutPlan?.replayPrompts?.find(prompt =>
+                prompt.mediaType === 'video'
+                && prompt.mediaModelId === catalogModelIdFor(videoModelMetaInfo)
+            )
             const fanoutState: ProviderState = {
                 ...state,
                 generationRun,
@@ -765,6 +799,7 @@ export abstract class BaseProvider {
                 videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
                 videoSourceForExtension: state.mediaFanoutPlan?.videoSourceForExtension ?? state.videoSourceForExtension,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
+                ...(replayPrompt ? { generatedVideoPrompt: replayPrompt.finalPrompt } : {}),
             }
 
             const trace = buildVideoGenerationTrace(fanoutState)

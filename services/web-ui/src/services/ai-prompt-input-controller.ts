@@ -177,7 +177,7 @@ export class AiPromptInputController {
         }
 
         if (!aiReasoningModels[0]) {
-            alert('Please select an AI model from the dropdown before submitting.')
+            console.error('[AiPromptInputController] Cannot submit without a reasoning model.')
             return
         }
 

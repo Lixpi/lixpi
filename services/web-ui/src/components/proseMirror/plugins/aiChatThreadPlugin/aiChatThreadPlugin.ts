@@ -2399,21 +2399,21 @@ class AiChatThreadPluginClass {
         const effectiveVideoModel = videoModelIds[0] || ''
 
         if (reasoningModelsEnabled && reasoningModelIds.length === 0) {
-            alert('Please select at least 1 reasoning model.')
+            console.error('[AI_CHAT_THREAD] Cannot submit without at least one reasoning model.')
             return null
         }
 
         // Validate AI model selected
         if (!effectiveAiModel) {
-            alert('Please select an AI model from the dropdown before submitting.')
+            console.error('[AI_CHAT_THREAD] Cannot submit without a reasoning model.')
             return null
         }
         if (imageModelsEnabled && imageModelIds.length === 0) {
-            alert('Please select at least 1 image model.')
+            console.error('[AI_CHAT_THREAD] Image generation requires at least one image model.')
             return null
         }
         if (videoModelsEnabled && videoModelIds.length === 0) {
-            alert('Please select at least 1 video model.')
+            console.error('[AI_CHAT_THREAD] Video generation requires at least one video model.')
             return null
         }
 

@@ -57,6 +57,7 @@ services:
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/api/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/api/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/api/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
+            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/api/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/api/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/api/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/api/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -97,6 +98,7 @@ services:
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/web-ui/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/web-ui/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
+            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -129,6 +131,7 @@ services:
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/nex/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/nex/packages/lixpi/constants/nats-subjects.json:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/nex/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
+            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/nex/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/nex/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/nex/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/nex/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
@@ -164,6 +167,7 @@ services:
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/shared/constants/ai-interaction-constants.json:cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/shared/constants/nats-subjects.json:cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/shared/constants/ts/aws-resources.ts:cached
+            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/shared/constants/ts/asset-types.ts:cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/shared/constants/ts/index.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/shared/constants/ts/media-generation-layout-settings.ts:cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/shared/constants/ts/workspace-persistence-settings.ts:cached

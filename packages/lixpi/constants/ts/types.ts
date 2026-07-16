@@ -477,6 +477,11 @@ export type MediaBranchLineagePlan = {
     placementAnchorNodeId?: string
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
+    regenerationTarget?: {
+        branchId: string
+        lineageParentNodeId: string
+        lineageParentType: 'branchOrigin' | 'branchFork' | 'branchLine'
+    }
     branchOrigin?: BranchOriginLineagePlan
     branchForks: BranchForkLineagePlan[]
     branchLines: BranchLineLineagePlan[]
@@ -721,6 +726,38 @@ export type GeneratedMediaVariantMetadata = {
     branchForkNodeId?: string
     branchLineNodeId?: string
     lineageParentNodeId?: string
+}
+
+export type GeneratedOutputReviewScope = 'media-node' | 'branch-lineage'
+
+export type GeneratedOutputReviewAction = 'accept' | 'supersede'
+
+export type GeneratedOutputReviewRequest = {
+    workspaceId: string
+    scope: GeneratedOutputReviewScope
+    action: 'accept'
+    nodeId: string
+} | {
+    workspaceId: string
+    scope: 'media-node'
+    action: 'supersede'
+    nodeId: string
+    preserveLineage: true
+} | {
+    workspaceId: string
+    scope: 'branch-lineage'
+    action: 'supersede'
+    nodeId: string
+    preserveLineage: boolean
+}
+
+export type GeneratedOutputReviewResponse = {
+    success: true
+    workspaceId: string
+    affectedAssetIds: string[]
+    acceptedAssetIds: string[]
+    supersededAssetIds: string[]
+    canvasGeometry: CanvasGeometryUpdate
 }
 
 export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
@@ -1333,6 +1370,22 @@ export type AiInteractionMediaGenerationRequest = {
         sourceVideoNodeId?: string
         sourceForExtension?: string
         configGroups?: MediaGenerationConfigSelectionGroup[]
+    }
+    regeneration?: {
+        mode: 'existing-prompt'
+        branchId: string
+        lineageParentNodeId: string
+        lineageParentType: 'branchOrigin' | 'branchFork' | 'branchLine'
+        replayPrompts: Array<{
+            sourceAssetId: string
+            reasoningModelId: AiModelId
+            mediaModelId: AiModelId
+            mediaType: 'image' | 'video'
+            finalPrompt: string
+        }>
+    } | {
+        mode: 'regenerate-prompt'
+        forceFreshLineage: true
     }
 }
 

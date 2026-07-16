@@ -74,6 +74,7 @@ type NormalizedMatrixRequest = {
     videoDuration?: string | number
     videoSourceForExtension?: string
     videoConfigGroups: MediaGenerationConfigSelectionGroup[]
+    regeneration?: AiInteractionMediaGenerationRequest['regeneration']
 }
 
 type ResolvedMatrixRequest = NormalizedMatrixRequest & {
@@ -325,7 +326,17 @@ export class MediaGenerationMatrixOrchestrator {
                         ...(normalized.videoSourceForExtension ? { videoSourceForExtension: normalized.videoSourceForExtension } : {}),
                         imageConfigGroups: normalized.imageConfigGroups,
                         videoConfigGroups: normalized.videoConfigGroups,
+                        ...(normalized.regeneration?.mode === 'existing-prompt' ? {
+                            replayPrompts: normalized.regeneration.replayPrompts.filter(
+                                replayPrompt => replayPrompt.reasoningModelId === reasoningModel.modelId
+                            ),
+                        } : {}),
                     },
+                    ...(normalized.regeneration?.mode === 'existing-prompt' ? {
+                        replayMediaPrompts: normalized.regeneration.replayPrompts.filter(
+                            replayPrompt => replayPrompt.reasoningModelId === reasoningModel.modelId
+                        ),
+                    } : {}),
                     mediaGenerationRequest: {
                         requestVersion: 'media-generation-matrix-v1',
                         generationRequestId: normalized.generationRequestId,
@@ -346,6 +357,7 @@ export class MediaGenerationMatrixOrchestrator {
                             ...(normalized.videoSourceForExtension ? { sourceForExtension: normalized.videoSourceForExtension } : {}),
                             configGroups: normalized.videoConfigGroups,
                         },
+                        ...(normalized.regeneration ? { regeneration: normalized.regeneration } : {}),
                     },
                     generationRun,
                     eventMeta: this.runPlanner.buildEventMeta(requestData.eventMeta ?? {}, generationRun),
@@ -437,7 +449,7 @@ export class MediaGenerationMatrixOrchestrator {
         const hasExplicitVideoSource = Boolean(request?.videoOptions?.sourceForExtension ?? requestData.videoSourceForExtension)
         const useMultipleVideoModels = request?.useMultipleVideoModels ?? ((request?.videoModelIds?.length ?? 0) > 1)
         const includeVideoModels = request
-            ? useMultipleVideoModels || hasExplicitVideoSource
+            ? (request.videoModelIds?.length ?? 0) > 0 || hasExplicitVideoSource
             : (requestData.aiVideoModels?.length ?? 0) > 0
         const reasoningModelIds = normalizeModelIdsForMode(useMultipleReasoningModels, request?.reasoningModelIds, requestData.aiReasoningModels?.[0])
         const imageModelIds = normalizeModelIdsForMode(useMultipleImageModels, request?.imageModelIds, requestData.aiImageModels?.[0])
@@ -476,6 +488,7 @@ export class MediaGenerationMatrixOrchestrator {
             videoConfigGroups: useMultipleVideoModels
                 ? normalizeConfigGroupsForModels(request?.videoOptions?.configGroups, videoModelIds)
                 : [],
+            regeneration: request?.regeneration,
         }
     }
 
@@ -693,6 +706,15 @@ export class MediaGenerationMatrixOrchestrator {
             mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
             mediaBranchResolution: state.mediaBranchResolution,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
+            ...(normalized.regeneration?.mode === 'existing-prompt' ? {
+                regenerationTarget: {
+                    branchId: normalized.regeneration.branchId,
+                    lineageParentNodeId: normalized.regeneration.lineageParentNodeId,
+                    lineageParentType: normalized.regeneration.lineageParentType,
+                },
+            } : {}),
+            forceFreshLineage: normalized.regeneration?.mode === 'regenerate-prompt'
+                && normalized.regeneration.forceFreshLineage,
             createdAt: Date.now(),
         })
         const organizationId = requestData.eventMeta?.organizationId as string | undefined

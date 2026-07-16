@@ -364,7 +364,7 @@ export class ImageUploadModal {
                         this.close()
                         this.options.onComplete(result)
                     } catch (error) {
-                        alert(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                        console.error('[IMAGE_UPLOAD] Import failed:', error)
                     }
                 }
             },
@@ -382,12 +382,12 @@ export class ImageUploadModal {
 
     private async handleFileSelect(file: File): Promise<void> {
         if (!file.type.startsWith('image/')) {
-            alert('Please select an image file')
+            console.error('[IMAGE_UPLOAD] No image file selected.')
             return
         }
 
         if (file.size > MAX_UPLOAD_FILE_SIZE) {
-            alert('File size exceeds 1GB limit')
+            console.error('[IMAGE_UPLOAD] File size exceeds the 1GB limit.')
             return
         }
 
@@ -402,7 +402,7 @@ export class ImageUploadModal {
             console.error('Upload failed:', error)
             this.hideProgress()
             this.isUploading = false
-            alert(`Upload failed: ${error.message || 'Unknown error'}`)
+            console.error('[IMAGE_UPLOAD] Upload failed:', error)
         }
     }
 

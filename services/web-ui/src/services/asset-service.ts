@@ -6,6 +6,8 @@ import {
     type AssetMeta,
     type AssetPrimaryCategory,
     type AssetScope,
+    type GeneratedOutputReviewRequest,
+    type GeneratedOutputReviewResponse,
 } from '@lixpi/constants'
 
 import AuthService from '$src/services/auth-service.ts'
@@ -37,7 +39,7 @@ export class AssetService {
         if ('error' in asset) return asset
         assetsStore.upsert(asset)
         for (const role of Object.keys(asset.documents) as AssetDocumentRole[]) {
-            if (role === 'provenance' || assetDocumentsStore.get(asset.assetId, role)) continue
+            if (assetDocumentsStore.get(asset.assetId, role)) continue
             await this.resumeDocument({
                 organizationId: asset.organizationId,
                 assetId: asset.assetId,
@@ -136,7 +138,6 @@ export class AssetService {
             const assets = results.filter((result): result is Asset => !('error' in result))
             assetsStore.setAssets(workspaceId, Array.isArray(assets) ? assets : [])
             await Promise.all(assets.flatMap((asset) => (Object.keys(asset.documents) as AssetDocumentRole[])
-                .filter((role) => role !== 'provenance')
                 .map(async (role) => await this.resumeDocument({
                     organizationId: asset.organizationId,
                     assetId: asset.assetId,
@@ -221,6 +222,19 @@ export class AssetService {
     async changeScope(assetId: string, expectedRevision: number, scope: AssetScope, scopeOwnerId: string): Promise<Asset | { error: string }> {
         const result = await request<Asset | { error: string }>(ASSET_SUBJECTS.CHANGE_SCOPE, { assetId, expectedRevision, scope, scopeOwnerId })
         if (!('error' in result)) assetsStore.upsert(result)
+        return result
+    }
+
+    async reviewGeneratedOutput(
+        payload: GeneratedOutputReviewRequest,
+    ): Promise<GeneratedOutputReviewResponse | { error: string }> {
+        const result = await request<GeneratedOutputReviewResponse | { error: string }>(
+            ASSET_SUBJECTS.REVIEW_GENERATED_OUTPUT,
+            payload,
+        )
+        if (!('error' in result)) {
+            await Promise.all(result.affectedAssetIds.map(async (assetId) => await this.refresh(assetId)))
+        }
         return result
     }
 

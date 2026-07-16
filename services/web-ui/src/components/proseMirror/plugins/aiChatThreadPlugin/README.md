@@ -221,6 +221,8 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 - `video_error`
 - `video_generation_trace`
 
+`video_pending` includes the API-persisted canvas projection for its placeholder. The canvas router forwards that geometry unchanged; browser code does not create or position a fallback video node.
+
 Single-writer text streams are applied by `ProseMirrorAuthorityService`, which
 subscribes to the document step subject and applies `STEP` events with
 `Step.fromJSON(view.state.schema, event.step)`. The plugin still owns the

@@ -101,6 +101,7 @@ export const ensurePendingGeneratedAssets = async ({
                 ownerUserId,
                 documents: {},
                 lineage,
+                generatedOutputReview: { status: 'candidate' },
                 states: {
                     lifecycle: 'creating',
                     media: 'processing',

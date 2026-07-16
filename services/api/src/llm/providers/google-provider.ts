@@ -503,7 +503,7 @@ export class GoogleProvider extends BaseProvider {
         }, null, 0)}`)
 
         try {
-            this.videoPub.pending()
+            await this.videoPub.pending()
 
             const veoParams: Record<string, any> = {
                 model: modelVersion,

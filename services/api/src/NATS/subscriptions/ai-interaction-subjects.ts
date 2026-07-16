@@ -76,6 +76,65 @@ const normalizeModelOption = (
     return values[0]
 }
 
+type SealedMediaReplayTrace = {
+    traceVersion: 'image-generation-trace-v1' | 'video-generation-trace-v1'
+    finalPrompt: string
+    imageSize?: string
+    aspectRatio?: string
+    resolution?: string
+    durationSeconds?: number
+    generationRun?: {
+        reasoningRunId?: string
+        mediaRunId?: string
+        reasoningModelId?: string
+        mediaModelId?: string
+        mediaType?: 'image' | 'video'
+    }
+}
+
+const findSealedMediaReplayTrace = (
+    doc: object,
+    expected: {
+        reasoningRunId?: string
+        mediaRunId?: string
+        reasoningModelId: string
+        mediaModelId: string
+        mediaType: 'image' | 'video'
+    },
+): SealedMediaReplayTrace | undefined => {
+    const root = parseProseMirrorJsonContent(doc)
+    if (!root) return undefined
+    const traces: SealedMediaReplayTrace[] = []
+    const visit = (node: ProseMirrorJsonNode): void => {
+        const imageTrace = node.attrs?.imageGenerationTrace
+        const videoTrace = node.attrs?.videoGenerationTrace
+        const candidate = imageTrace ?? videoTrace
+        if (candidate && typeof candidate === 'object') {
+            traces.push(candidate as SealedMediaReplayTrace)
+        }
+        for (const child of node.content ?? []) visit(child)
+    }
+    visit(root)
+    const exactTrace = traces.find((trace) => {
+        const run = trace.generationRun
+        const mediaType = trace.traceVersion === 'image-generation-trace-v1' ? 'image' : 'video'
+        return mediaType === expected.mediaType
+            && run?.reasoningModelId === expected.reasoningModelId
+            && run.mediaModelId === expected.mediaModelId
+            && (!expected.reasoningRunId || run.reasoningRunId === expected.reasoningRunId)
+            && (!expected.mediaRunId || run.mediaRunId === expected.mediaRunId)
+    })
+    if (exactTrace) return exactTrace
+
+    // Older sealed per-Asset projections can contain one correctly scoped trace
+    // without embedded media-run metadata. The provenance document itself is
+    // already scoped to this source Asset, so that single trace is authoritative.
+    if (traces.length !== 1) return undefined
+    const onlyTrace = traces[0]!
+    const mediaType = onlyTrace.traceVersion === 'image-generation-trace-v1' ? 'image' : 'video'
+    return mediaType === expected.mediaType ? onlyTrace : undefined
+}
+
 const collectAuthoritativeMessageText = (node: ProseMirrorJsonNode): string => {
     let text = ''
     for (const child of node.content ?? []) {
@@ -367,6 +426,85 @@ export const aiInteractionSubjects = [
             const organizationId = conversationAsset.organizationId
             const aiChatThreadId = conversationAssetId
             const workspaceNodes = workspace.canvasState?.nodes ?? []
+            const regeneration = mediaGenerationRequest?.regeneration
+            let resolvedRegeneration = regeneration
+            if (regeneration
+                && regeneration.mode !== 'existing-prompt'
+                && regeneration.mode !== 'regenerate-prompt') {
+                return rejectSend('INVALID_REGENERATION_MODE')
+            }
+            if (regeneration?.mode === 'regenerate-prompt' && regeneration.forceFreshLineage !== true) {
+                return rejectSend('INVALID_REGENERATION_MODE')
+            }
+            if (regeneration?.mode === 'existing-prompt') {
+                const canonicalReplayPrompts: typeof regeneration.replayPrompts = []
+                const lineageNode = workspaceNodes.find(node => node.nodeId === regeneration.lineageParentNodeId)
+                if (!lineageNode
+                    || !['branchOrigin', 'branchFork', 'branchLine'].includes(lineageNode.type)
+                    || lineageNode.type !== regeneration.lineageParentType
+                    || !('branchId' in lineageNode)
+                    || lineageNode.branchId !== regeneration.branchId) {
+                    return rejectSend('REGENERATION_LINEAGE_NOT_FOUND')
+                }
+                if (!regeneration.replayPrompts.length
+                    || regeneration.replayPrompts.some(prompt =>
+                        !prompt.sourceAssetId
+                        || !mediaGenerationRequest.reasoningModelIds.includes(prompt.reasoningModelId)
+                        || (prompt.mediaType === 'image'
+                            ? !mediaGenerationRequest.imageModelIds.includes(prompt.mediaModelId)
+                            : !mediaGenerationRequest.videoModelIds.includes(prompt.mediaModelId)))) {
+                    return rejectSend('INVALID_REGENERATION_PROMPTS')
+                }
+                for (const replayPrompt of regeneration.replayPrompts) {
+                    const sourceAsset = await AssetModel.get({ assetId: replayPrompt.sourceAssetId, requester })
+                    if ('error' in sourceAsset
+                        || sourceAsset.organizationId !== organizationId
+                        || sourceAsset.generatedOutputReview?.status !== 'superseded'
+                        || sourceAsset.generatedOutputReview?.regenerationMode !== 'existing-prompt'
+                        || sourceAsset.states.provenance !== 'sealed'
+                        || sourceAsset.lineage?.reasoningModelId !== replayPrompt.reasoningModelId
+                        || sourceAsset.lineage?.mediaModelId !== replayPrompt.mediaModelId) {
+                        return rejectSend('REGENERATION_SOURCE_NOT_FOUND')
+                    }
+                    const provenance = await AssetDocumentService.loadCurrentSnapshot(sourceAsset, 'provenance')
+                    const trace = provenance ? findSealedMediaReplayTrace(provenance.doc, {
+                        reasoningRunId: sourceAsset.lineage?.reasoningRunId,
+                        mediaRunId: sourceAsset.lineage?.mediaRunId,
+                        reasoningModelId: replayPrompt.reasoningModelId,
+                        mediaModelId: replayPrompt.mediaModelId,
+                        mediaType: replayPrompt.mediaType,
+                    }) : undefined
+                    if (!trace || !trace.finalPrompt.trim() || trace.finalPrompt.length > 20_000) {
+                        return rejectSend('REGENERATION_PROVENANCE_MISMATCH')
+                    }
+                    if (replayPrompt.mediaType === 'image') {
+                        const requestedSize = mediaGenerationRequest.imageOptions?.configGroups
+                            ?.find(group => group.modelIds.includes(replayPrompt.mediaModelId))
+                            ?.values.imageSize
+                            ?? mediaGenerationRequest.imageOptions?.imageSize
+                        if (requestedSize !== trace.imageSize) return rejectSend('REGENERATION_PARAMETERS_MISMATCH')
+                    } else {
+                        const config = mediaGenerationRequest.videoOptions?.configGroups
+                            ?.find(group => group.modelIds.includes(replayPrompt.mediaModelId))
+                        const requestedAspectRatio = config?.values.aspectRatio ?? mediaGenerationRequest.videoOptions?.aspectRatio
+                        const requestedResolution = config?.values.resolution ?? mediaGenerationRequest.videoOptions?.resolution
+                        const requestedDuration = config?.values.duration ?? mediaGenerationRequest.videoOptions?.duration
+                        if (requestedAspectRatio !== trace.aspectRatio
+                            || requestedResolution !== trace.resolution
+                            || String(requestedDuration ?? '') !== String(trace.durationSeconds ?? '')) {
+                            return rejectSend('REGENERATION_PARAMETERS_MISMATCH')
+                        }
+                    }
+                    canonicalReplayPrompts.push({
+                        ...replayPrompt,
+                        finalPrompt: trace.finalPrompt,
+                    })
+                }
+                resolvedRegeneration = {
+                    ...regeneration,
+                    replayPrompts: canonicalReplayPrompts,
+                }
+            }
             let resolvedMediaBranchCandidateSnapshot = await resolveAuthorizedCandidateSnapshot({
                 snapshot: mediaBranchCandidateSnapshot,
                 requester,
@@ -495,6 +633,7 @@ export const aiInteractionSubjects = [
                             videoSourceForExtension: resolvedVideoSourceForExtension,
                             mediaGenerationRequest: {
                                 ...mediaGenerationRequest,
+                                ...(resolvedRegeneration ? { regeneration: resolvedRegeneration } : {}),
                                 ...(mediaGenerationRequest.videoOptions ? {
                                     videoOptions: {
                                         ...mediaGenerationRequest.videoOptions,

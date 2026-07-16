@@ -74,6 +74,14 @@ export type MediaFanoutPlan = {
     videoSourceForExtension?: string
     imageConfigGroups?: MediaGenerationConfigSelectionGroup[]
     videoConfigGroups?: MediaGenerationConfigSelectionGroup[]
+    replayPrompts?: ReplayMediaPrompt[]
+}
+
+export type ReplayMediaPrompt = {
+    reasoningModelId: string
+    mediaModelId: string
+    mediaType: 'image' | 'video'
+    finalPrompt: string
 }
 
 // Reference-image cap for the selected video model. VEO accepts 3, Seedance 9.
@@ -170,6 +178,7 @@ export type ProviderState = {
     // Multi-model media generation request-group metadata.
     generationRun?: MediaGenerationRunMeta | undefined
     mediaFanoutPlan?: MediaFanoutPlan | undefined
+    replayMediaPrompts?: ReplayMediaPrompt[] | undefined
     preflightResolved?: boolean | undefined
 }
 
@@ -233,5 +242,6 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     featureUsagePrompt: { reducer: keep },
     generationRun: { reducer: keep },
     mediaFanoutPlan: { reducer: keep },
+    replayMediaPrompts: { reducer: keep },
     preflightResolved: { reducer: keep, default: () => false },
 }

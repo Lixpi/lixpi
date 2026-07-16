@@ -5,6 +5,7 @@ import {
     NATS_SUBJECTS,
     type AssetPrimaryCategory,
     type AssetScope,
+    type GeneratedOutputReviewRequest,
 } from '@lixpi/constants'
 import { DOCUMENT_TYPE, HeadlessProseMirrorEngine, PROSEMIRROR_SCHEMA_VERSION } from '@lixpi/prosemirror'
 
@@ -19,8 +20,10 @@ import {
 } from '../../services/asset-event-relay.ts'
 import BlobModel from '../../models/blob.ts'
 import Workspace from '../../models/workspace.ts'
+import GeneratedOutputReviewService from '../../services/generated-output-review-service.ts'
 
 const { ASSET_SUBJECTS } = NATS_SUBJECTS
+const generatedOutputReviewService = new GeneratedOutputReviewService()
 
 export const getRequesterContext = async (userId: string) => {
     const requester = await getAssetRequesterContext(userId)
@@ -229,6 +232,35 @@ export const assetSubjects = [
                 expectedRevision: data.expectedRevision,
                 scope: data.scope,
                 scopeOwnerId: data.scopeOwnerId,
+            })
+        },
+    },
+    {
+        subject: ASSET_SUBJECTS.REVIEW_GENERATED_OUTPUT,
+        type: 'reply',
+        payloadType: 'json',
+        permissions: {
+            pub: { allow: [ASSET_SUBJECTS.REVIEW_GENERATED_OUTPUT] },
+            sub: { allow: [] },
+        },
+        handler: async (data: any) => {
+            if (!['media-node', 'branch-lineage'].includes(data.scope)) return { error: 'INVALID_REVIEW_SCOPE' }
+            if (!['accept', 'supersede'].includes(data.action)) return { error: 'INVALID_REVIEW_ACTION' }
+            if (data.action === 'supersede' && data.scope === 'media-node' && data.preserveLineage !== true) {
+                return { error: 'MEDIA_NODE_PROMPT_REGENERATION_NOT_SUPPORTED' }
+            }
+            if (typeof data.workspaceId !== 'string' || typeof data.nodeId !== 'string') {
+                return { error: 'INVALID_REVIEW_TARGET' }
+            }
+            return await generatedOutputReviewService.review({
+                request: {
+                    workspaceId: data.workspaceId,
+                    scope: data.scope,
+                    action: data.action,
+                    nodeId: data.nodeId,
+                    ...(data.action === 'supersede' ? { preserveLineage: data.preserveLineage === true } : {}),
+                } as GeneratedOutputReviewRequest,
+                requester: await getRequesterContext(data.user.userId),
             })
         },
     },

@@ -208,6 +208,7 @@ export class ImagePublisher {
             terminalStatus: 'completed' as const,
         }
         try {
+            await this.getProseMirrorSnapshot?.()
             await materializeAssetProvenance(provenancePayload)
         } catch (error) {
             if ((error as { message?: unknown })?.message !== 'PROVENANCE_PROJECTION_NOT_READY') {

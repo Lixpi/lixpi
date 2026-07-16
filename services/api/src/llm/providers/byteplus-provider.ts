@@ -109,7 +109,7 @@ export class BytePlusProvider extends BaseProvider {
             const taskId = created.id
             if (!taskId) throw new BytePlusModelArkError('ModelArk did not return a task id')
 
-            this.videoPub.pending()
+            await this.videoPub.pending()
 
             const task = await pollVideoGenerationTask(this.clientConfig, taskId, {
                 pollIntervalMs: BYTEPLUS_VIDEO_POLL_INTERVAL_MS,

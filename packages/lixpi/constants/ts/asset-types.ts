@@ -90,6 +90,20 @@ export type AssetStates = {
     provenance: AssetProvenanceStatus
 }
 
+export type GeneratedOutputReviewStatus = 'candidate' | 'accepted' | 'superseded'
+
+export type GeneratedOutputRegenerationMode = 'existing-prompt' | 'regenerate-prompt'
+
+export type GeneratedOutputReview = {
+    status: GeneratedOutputReviewStatus
+    acceptedAt?: number
+    acceptedBy?: string
+    supersededAt?: number
+    supersededByAssetId?: string
+    regeneratedFromAssetId?: string
+    regenerationMode?: GeneratedOutputRegenerationMode
+}
+
 export type Asset = {
     assetId: string
     organizationId: string
@@ -101,6 +115,7 @@ export type Asset = {
     documents: Partial<Record<AssetDocumentRole, AssetDocumentPointer>>
     media?: AssetMedia
     lineage?: AssetLineage
+    generatedOutputReview?: GeneratedOutputReview
     descriptor?: ContentDescriptor
     states: AssetStates
     referenceCount: number

@@ -1,6 +1,6 @@
 'use strict'
 
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getAiGeneratedImageCallbacks, setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 import { getAiGeneratedVideoCallbacks, setAiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
 import { routeSegmentEventToCanvas } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedMediaCanvasRouter.ts'
@@ -15,6 +15,7 @@ const createImageCallbacks = () => ({
     onMediaLineagePlannedToCanvas: vi.fn(),
     onWorkspaceContextResolvedToCanvas: vi.fn(),
     onMediaBranchResolutionErrorToCanvas: vi.fn(),
+    onCanvasGeometryResolvedToCanvas: vi.fn(),
     onImageErrorToCanvas: vi.fn(),
 })
 
@@ -27,11 +28,12 @@ const createVideoCallbacks = () => ({
     onVideoBranchResolvedToCanvas: vi.fn(),
 })
 
-function resetCallbacks(): void {
-    const imageCallbacks = createImageCallbacks()
-    const videoCallbacks = createVideoCallbacks()
-    setAiGeneratedImageCallbacks(imageCallbacks)
-    setAiGeneratedVideoCallbacks(videoCallbacks)
+const generationRun = { generationRequestId: 'request-1', mediaRunId: 'media-1' } as any
+const canvasGeometry = {
+    layoutRevision: 42,
+    nodes: [],
+    nodeSnapshots: [],
+    edgeSnapshots: [],
 }
 
 describe('routeSegmentEventToCanvas', () => {
@@ -39,471 +41,162 @@ describe('routeSegmentEventToCanvas', () => {
     let videoCallbacks: ReturnType<typeof createVideoCallbacks>
 
     beforeEach(() => {
-        resetCallbacks()
-        imageCallbacks = getAiGeneratedImageCallbacks() as ReturnType<typeof createImageCallbacks>
-        videoCallbacks = getAiGeneratedVideoCallbacks() as ReturnType<typeof createVideoCallbacks>
+        imageCallbacks = createImageCallbacks()
+        videoCallbacks = createVideoCallbacks()
+        setAiGeneratedImageCallbacks(imageCallbacks)
+        setAiGeneratedVideoCallbacks(videoCallbacks)
     })
 
-    it('ignores events that do not identify a thread', () => {
-        routeSegmentEventToCanvas({
-            type: 'image_partial',
-            imageUrl: 'https://cdn.example.com/image.png',
-        } as any)
+    it('ignores events without a conversation Asset id', () => {
+        routeSegmentEventToCanvas({ type: 'image_partial', assetId: 'asset-1' } as any)
 
         expect(imageCallbacks.onImagePartialToCanvas).not.toHaveBeenCalled()
         expect(videoCallbacks.onVideoPendingToCanvas).not.toHaveBeenCalled()
     })
 
-    it('maps image trace and partial events into image callbacks', () => {
+    it('uses conversationAssetId as the authoritative thread identity', () => {
         routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'image_generation_trace',
-            generationRun: { generationRequestId: 'gen-1' } as any,
-        }, {
-            responseMessageId: 'resp-1',
-        })
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
+            conversationAssetId: 'conversation-1',
+            threadId: 'legacy-thread-id',
             type: 'image_partial',
-            imageUrl: 'https://cdn.example.com/image-partial.png',
-            fileId: 'image-partial',
-            aiProvider: 'OpenAI',
-            workspaceId: 'workspace-1',
+            imageUrl: 'data:image/png;base64,abc',
+            assetId: 'asset-image-1',
             partialIndex: 2,
-            generationRun: { generationRequestId: 'gen-1' } as any,
-        }, {
-            responseMessageId: 'resp-1',
-        })
+            aiProvider: 'OpenAI',
+            canvasGeometry,
+            generationRun,
+        } as any)
 
-        expect(imageCallbacks.onImageGenerationTraceToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            generationRun: { generationRequestId: 'gen-1' } as any,
-        })
         expect(imageCallbacks.onImagePartialToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            imageUrl: 'https://cdn.example.com/image-partial.png',
-            fileId: 'image-partial',
-            workspaceId: 'workspace-1',
+            threadId: 'conversation-1',
+            imageUrl: 'data:image/png;base64,abc',
+            assetId: 'asset-image-1',
             partialIndex: 2,
             aiProvider: 'OpenAI',
-            generationRun: { generationRequestId: 'gen-1' } as any,
-        })
-    })
-
-    it('routes image complete events and injects caller-provided response ids', () => {
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'image_complete',
-            imageUrl: 'https://cdn.example.com/final.png',
-            fileId: 'image-final',
-            workspaceId: 'workspace-2',
-            responseId: 'response-77',
-            revisedPrompt: 'Final prompt',
-            aiProvider: 'Google',
-            imageModelProvider: 'Google',
-            imageModelId: 'gemini-2.5-flash',
-            generationRun: { generationRequestId: 'gen-2' } as any,
-        }, {
-            responseMessageId: 'response-message-id',
-        })
-
-        expect(imageCallbacks.onImageCompleteToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            imageUrl: 'https://cdn.example.com/final.png',
-            fileId: 'image-final',
-            workspaceId: 'workspace-2',
-            responseId: 'response-77',
-            revisedPrompt: 'Final prompt',
-            aiModel: 'Google',
-            imageModelProvider: 'Google',
-            imageModelId: 'gemini-2.5-flash',
-            responseMessageId: 'response-message-id',
-            generationRun: { generationRequestId: 'gen-2' } as any,
-        })
-    })
-
-    it('routes API geometry image completion even when imageUrl is absent', () => {
-        const canvasGeometry = {
-            layoutRevision: 123,
-            nodes: [],
-            nodeSnapshots: [],
-            edgeSnapshots: [],
-            removedNodeIds: [],
-        }
-
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'image_complete',
-            fileId: 'image-final',
-            workspaceId: 'workspace-2',
             canvasGeometry,
-            generationRun: { generationRequestId: 'gen-2' } as any,
-        } as any)
-
-        expect(imageCallbacks.onImageCompleteToCanvas).toHaveBeenCalledWith(expect.objectContaining({
-            threadId: 'thread-1',
-            imageUrl: '',
-            fileId: 'image-final',
-            workspaceId: 'workspace-2',
-            canvasGeometry,
-            generationRun: { generationRequestId: 'gen-2' },
-        }))
-    })
-
-    it('maps image lineage and context resolution events to dedicated callbacks', () => {
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'media_lineage_planned',
-            mediaBranchLineagePlan: { branchId: 'branch-1' },
-        } as any)
-
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'context_relevance_resolved',
-            workspaceContextResolution: {
-                branchNodeId: 'node-1',
-                references: ['a'],
-            } as any,
-        } as any)
-
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'image_branch_resolved',
-            mediaBranchResolution: { score: 0.9 } as any,
-        } as any)
-
-        expect(imageCallbacks.onMediaLineagePlannedToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            lineagePlan: { branchId: 'branch-1' },
-            generationRun: undefined,
-        })
-        expect(imageCallbacks.onWorkspaceContextResolvedToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            resolution: {
-                branchNodeId: 'node-1',
-                references: ['a'],
-            },
-            generationRun: undefined,
-        })
-        expect(imageCallbacks.onMediaBranchResolvedToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            resolution: { score: 0.9 },
-            generationRun: undefined,
+            generationRun,
         })
     })
 
-    it('routes image branch resolution errors as both resolution and error events', () => {
+    it('forwards API geometry for VIDEO_PENDING rather than asking the canvas to synthesize a placeholder', () => {
         routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'image_branch_resolution_error',
-            error: 'resolution failed',
-        } as any)
-
-        expect(imageCallbacks.onMediaBranchResolutionErrorToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            error: 'resolution failed',
-            generationRun: undefined,
-        })
-        expect(imageCallbacks.onImageErrorToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            error: 'resolution failed',
-            generationRun: undefined,
-        })
-    })
-
-    it('maps video state transitions to the correct canvas callbacks', () => {
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
+            conversationAssetId: 'conversation-1',
             type: 'video_pending',
-            aiProvider: 'OpenAI',
-        } as any)
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'video_generating',
-            aiProvider: 'OpenAI',
+            aiProvider: 'Google',
+            canvasGeometry,
+            generationRun,
         } as any)
 
         expect(videoCallbacks.onVideoPendingToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            aiProvider: 'OpenAI',
-            generationRun: undefined,
-        })
-        expect(videoCallbacks.onVideoGeneratingToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            aiProvider: 'OpenAI',
-            generationRun: undefined,
-        })
-    })
-
-    it('maps video complete payload and applies defaults for missing media metadata', () => {
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'video_complete',
-            videoUrl: '/api/videos/workspace-id/video-id',
-            fileId: 'video-id',
-            workspaceId: 'workspace-id',
-            responseId: 'video-response',
-            revisedPrompt: 'Video prompt',
-            videoModel: 'OpenAI:o4-mini',
-        } as any, {
-            responseMessageId: 'response-message-id',
-        })
-
-        expect(videoCallbacks.onVideoCompleteToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            videoUrl: '/api/videos/workspace-id/video-id',
-            fileId: 'video-id',
-            workspaceId: 'workspace-id',
-            posterUrl: '',
-            posterFileId: '',
-            frameUrl: '',
-            frameFileId: '',
-            durationSeconds: 0,
-            aspectRatio: 1.777,
-            hasAudio: true,
-            responseId: 'video-response',
-            revisedPrompt: 'Video prompt',
-            videoModel: 'OpenAI:o4-mini',
-            videoModelProvider: '',
-            responseMessageId: 'response-message-id',
-            generationRun: undefined,
-        })
-    })
-
-    it('uses aiChatThreadId when threadId is not provided', () => {
-        routeSegmentEventToCanvas({
-            aiChatThreadId: 'thread-id-fallback',
-            type: 'image_partial',
-            imageUrl: 'https://cdn.example.com/image-partial.png',
-            fileId: 'fallback-file',
-            workspaceId: 'workspace-fallback',
-            aiProvider: 'OpenAI',
-        } as any)
-        routeSegmentEventToCanvas({
-            aiChatThreadId: 'thread-id-fallback',
-            type: 'video_complete',
-            videoUrl: '/api/videos/workspace-id/fallback-video',
-            fileId: 'fallback-video',
-            workspaceId: 'workspace-id',
-            responseId: 'fallback-video-response',
-            revisedPrompt: 'Fallback prompt',
-            videoModel: 'OpenAI:o4-mini',
-        }, {
-            responseMessageId: 'response-message-id',
-        })
-
-        expect(imageCallbacks.onImagePartialToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-id-fallback',
-            imageUrl: 'https://cdn.example.com/image-partial.png',
-            fileId: 'fallback-file',
-            workspaceId: 'workspace-fallback',
-            partialIndex: 0,
-            aiProvider: 'OpenAI',
-            generationRun: undefined,
-        })
-        expect(videoCallbacks.onVideoCompleteToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-id-fallback',
-            videoUrl: '/api/videos/workspace-id/fallback-video',
-            fileId: 'fallback-video',
-            workspaceId: 'workspace-id',
-            posterUrl: '',
-            posterFileId: '',
-            frameUrl: '',
-            frameFileId: '',
-            durationSeconds: 0,
-            aspectRatio: 1.777,
-            hasAudio: true,
-            responseId: 'fallback-video-response',
-            revisedPrompt: 'Fallback prompt',
-            videoModel: 'OpenAI:o4-mini',
-            videoModelProvider: '',
-            responseMessageId: 'response-message-id',
-            generationRun: undefined,
-        })
-    })
-
-    it('does not emit callbacks for events without the payload fields that route requires', () => {
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'image_complete',
-        } as any)
-
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'image_branch_resolved',
-        } as any)
-
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'media_lineage_planned',
-        } as any)
-
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'context_relevance_resolved',
-        } as any)
-
-        expect(imageCallbacks.onImageCompleteToCanvas).not.toHaveBeenCalled()
-        expect(imageCallbacks.onMediaBranchResolvedToCanvas).not.toHaveBeenCalled()
-        expect(imageCallbacks.onMediaLineagePlannedToCanvas).not.toHaveBeenCalled()
-        expect(imageCallbacks.onWorkspaceContextResolvedToCanvas).not.toHaveBeenCalled()
-    })
-
-    it('defaults generationRequestId for skipped media generations', () => {
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'media_generation_skipped',
-        } as any)
-
-        expect(imageCallbacks.onMediaGenerationSkippedToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            generationRequestId: '',
-            generationRun: undefined,
-        })
-    })
-
-    it('is a no-op for unrecognized segment types', () => {
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'weird_event' as any,
-        } as any)
-
-        expect(Object.keys(imageCallbacks).every((key) => (imageCallbacks as any)[key].mock.calls.length === 0)).toBe(true)
-        expect(Object.keys(videoCallbacks).every((key) => (videoCallbacks as any)[key].mock.calls.length === 0)).toBe(true)
-    })
-
-    it('maps video trace and error callbacks', () => {
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'video_generation_trace',
-        } as any)
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'video_error',
-            error: 'video failed',
-        } as any)
-
-        expect(videoCallbacks.onVideoGenerationTraceToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            generationRun: undefined,
-        })
-        expect(videoCallbacks.onVideoErrorToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            error: 'video failed',
-            generationRun: undefined,
-        })
-    })
-
-    it('uses `threadId` over `aiChatThreadId` when both are present', () => {
-        routeSegmentEventToCanvas({
-            threadId: 'thread-primary',
-            aiChatThreadId: 'thread-fallback',
-            type: 'video_generating',
-            aiProvider: 'OpenAI',
-        } as any)
-
-        expect(videoCallbacks.onVideoGeneratingToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-primary',
-            aiProvider: 'OpenAI',
-            generationRun: undefined,
-        })
-    })
-
-    it('forwards generation metadata in media-complete callbacks', () => {
-        const generationRun = {
-            generationRequestId: 'gen-3',
-            reasoningRunId: 'reasoning-run',
-            mediaRunId: 'media-run',
-            mediaModelId: 'image-model',
-            mediaType: 'image',
-            variantIndex: 2,
-        } as any
-
-        routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'image_complete',
-            imageUrl: 'https://cdn.example.com/final.png',
-            fileId: 'image-final',
-            workspaceId: 'workspace-2',
-            responseId: 'response-77',
-            revisedPrompt: 'Final prompt',
+            threadId: 'conversation-1',
             aiProvider: 'Google',
-            imageModelProvider: 'Google',
-            imageModelId: 'gemini-2.5-flash',
+            canvasGeometry,
             generationRun,
-        }, {
-            responseMessageId: 'response-message-id',
         })
+    })
 
+    it('forwards final media Asset identity and authoritative geometry', () => {
         routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'video_complete',
-            videoUrl: '/api/videos/workspace-id/video-id',
-            fileId: 'video-id',
-            workspaceId: 'workspace-2',
-            responseId: 'video-response',
-            revisedPrompt: 'Video prompt',
-            videoModel: 'OpenAI:o4-mini',
+            conversationAssetId: 'conversation-1',
+            type: 'image_complete',
+            imageUrl: '/api/assets/asset-image-1/original',
+            assetId: 'asset-image-1',
+            responseId: 'response-1',
+            revisedPrompt: 'final image prompt',
+            aiProvider: 'OpenAI',
+            imageModelProvider: 'OpenAI',
+            imageModelId: 'gpt-image-1',
+            canvasGeometry,
             generationRun,
-        }, {
-            responseMessageId: 'response-message-id',
-        })
+        } as any, { responseMessageId: 'message-1' })
+        routeSegmentEventToCanvas({
+            conversationAssetId: 'conversation-1',
+            type: 'video_complete',
+            videoUrl: '/api/assets/asset-video-1/original',
+            assetId: 'asset-video-1',
+            durationSeconds: 8,
+            aspectRatio: 16 / 9,
+            hasAudio: true,
+            responseId: 'response-2',
+            revisedPrompt: 'final video prompt',
+            videoModel: 'veo-3.1',
+            videoModelProvider: 'Google',
+            canvasGeometry,
+            generationRun,
+        } as any, { responseMessageId: 'message-2' })
 
         expect(imageCallbacks.onImageCompleteToCanvas).toHaveBeenCalledWith(expect.objectContaining({
-            threadId: 'thread-1',
+            threadId: 'conversation-1',
+            assetId: 'asset-image-1',
+            canvasGeometry,
+            responseMessageId: 'message-1',
             generationRun,
         }))
         expect(videoCallbacks.onVideoCompleteToCanvas).toHaveBeenCalledWith(expect.objectContaining({
-            threadId: 'thread-1',
+            threadId: 'conversation-1',
+            assetId: 'asset-video-1',
+            canvasGeometry,
+            responseMessageId: 'message-2',
             generationRun,
         }))
     })
 
-    it('falls back to empty responseMessageId for image complete callbacks when not provided', () => {
+    it('forwards preserved-lineage plans unchanged to the canvas', () => {
+        const lineagePlan = {
+            generationRequestId: 'request-1',
+            regenerationTarget: {
+                branchId: 'branch-1',
+                lineageParentNodeId: 'branch-fork-1',
+                lineageParentType: 'branchFork',
+            },
+        }
+
         routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'image_complete',
-            imageUrl: 'https://cdn.example.com/final.png',
-            responseId: 'response-77',
-            aiProvider: 'OpenAI',
+            conversationAssetId: 'conversation-1',
+            type: 'media_lineage_planned',
+            mediaBranchLineagePlan: lineagePlan,
+            generationRun,
         } as any)
 
-        expect(imageCallbacks.onImageCompleteToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            imageUrl: 'https://cdn.example.com/final.png',
-            fileId: '',
-            workspaceId: '',
-            responseId: 'response-77',
-            revisedPrompt: '',
-            aiModel: 'OpenAI',
-            imageModelProvider: '',
-            imageModelId: '',
-            responseMessageId: '',
-            generationRun: undefined,
+        expect(imageCallbacks.onMediaLineagePlannedToCanvas).toHaveBeenCalledWith({
+            threadId: 'conversation-1',
+            lineagePlan,
+            generationRun,
         })
     })
 
-    it('forwards request-complete and skipped-generation metadata', () => {
+    it('routes standalone API geometry updates and terminal request events', () => {
         routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'media_generation_request_complete',
-            generationRequestId: 'request-complete',
+            conversationAssetId: 'conversation-1',
+            type: 'canvas_geometry_resolved',
+            canvasGeometry,
+            generationRun,
         } as any)
         routeSegmentEventToCanvas({
-            threadId: 'thread-1',
-            type: 'media_generation_skipped',
-            generationRequestId: 'request-skipped',
+            conversationAssetId: 'conversation-1',
+            type: 'media_generation_request_complete',
+            generationRequestId: 'request-1',
+            generationRun,
         } as any)
 
+        expect(imageCallbacks.onCanvasGeometryResolvedToCanvas).toHaveBeenCalledWith({
+            threadId: 'conversation-1',
+            canvasGeometry,
+            generationRun,
+        })
         expect(imageCallbacks.onMediaGenerationRequestCompleteToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            generationRequestId: 'request-complete',
-            generationRun: undefined,
+            threadId: 'conversation-1',
+            generationRequestId: 'request-1',
+            generationRun,
         })
-        expect(imageCallbacks.onMediaGenerationSkippedToCanvas).toHaveBeenCalledWith({
-            threadId: 'thread-1',
-            generationRequestId: 'request-skipped',
-            generationRun: undefined,
-        })
+    })
+
+    it('does not route an image completion without an Asset, URL, or geometry', () => {
+        routeSegmentEventToCanvas({
+            conversationAssetId: 'conversation-1',
+            type: 'image_complete',
+        } as any)
+
+        expect(imageCallbacks.onImageCompleteToCanvas).not.toHaveBeenCalled()
     })
 })

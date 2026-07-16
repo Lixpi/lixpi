@@ -448,6 +448,7 @@ type CreateAssetInput = Pick<
     | 'documents'
     | 'media'
     | 'lineage'
+    | 'generatedOutputReview'
     | 'descriptor'
     | 'states'
     | 'importedFromAssetId'
@@ -511,6 +512,7 @@ const assertAssetComponents = (asset: Asset): void => {
         ]
         if (lineageIds.some((lineageId) => lineageId === asset.assetId)) throw new Error('SELF_REFERENTIAL_ASSET_LINEAGE')
     }
+    if (asset.generatedOutputReview && !asset.lineage) throw new Error('GENERATED_OUTPUT_REVIEW_REQUIRES_LINEAGE')
     if (asset.descriptor && !isValidDescriptor(asset.descriptor)) throw new Error('INVALID_ASSET_DESCRIPTOR')
 }
 
@@ -526,6 +528,7 @@ const AssetModel = {
         documents = {},
         media,
         lineage,
+        generatedOutputReview,
         descriptor,
         states,
         importedFromAssetId,
@@ -609,6 +612,7 @@ const AssetModel = {
             documents: resolvedDocuments,
             ...(media ? { media } : {}),
             ...(lineage ? { lineage } : {}),
+            ...(generatedOutputReview ? { generatedOutputReview } : {}),
             ...(descriptor ? { descriptor } : {}),
             states: states ?? {
                 lifecycle: media ? 'creating' : 'active',
@@ -795,6 +799,74 @@ const AssetModel = {
                 ...await buildAssetProjectionOperations(next),
             ],
             origin: 'Asset.updateMetadata',
+        })
+        publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, next)
+        return next
+    },
+
+    updateGeneratedOutputReview: async ({
+        assetId,
+        requester,
+        status,
+        supersededByAssetId,
+        regenerationMode,
+    }: {
+        assetId: string
+        requester: AssetRequesterContext
+        status: 'accepted' | 'superseded'
+        supersededByAssetId?: string
+        regenerationMode?: 'existing-prompt' | 'regenerate-prompt'
+    }): Promise<Asset | { error: string }> => {
+        const authorized = await getAuthorizedAsset({ assetId, requester })
+        if ('error' in authorized) return authorized
+        if (!await canEditAssetMetadata(authorized, requester)) return { error: 'PERMISSION_DENIED' }
+        if (!authorized.lineage) return { error: 'NOT_GENERATED_OUTPUT' }
+        if (authorized.generatedOutputReview?.status === status) return authorized
+        if (authorized.generatedOutputReview?.status === 'accepted') return { error: 'ACCEPTED_OUTPUT_IMMUTABLE' }
+        if (status === 'accepted') {
+            if (authorized.media?.renditions.original?.status !== 'ready') return { error: 'GENERATED_OUTPUT_NOT_READY' }
+            if (!authorized.documents.provenance || authorized.states.provenance !== 'sealed') {
+                return { error: 'GENERATED_OUTPUT_PROVENANCE_NOT_READY' }
+            }
+        }
+
+        const now = Date.now()
+        const generatedOutputReview = status === 'accepted'
+            ? {
+                status,
+                acceptedAt: now,
+                acceptedBy: requester.userId,
+            } as const
+            : {
+                status,
+                supersededAt: now,
+                ...(supersededByAssetId ? { supersededByAssetId } : {}),
+                ...(regenerationMode ? { regenerationMode } : {}),
+            } as const
+        const next: Asset = {
+            ...authorized,
+            generatedOutputReview,
+            revision: authorized.revision + 1,
+            updatedAt: now,
+        }
+        await dynamoDBService.transactWrite({
+            operations: [
+                {
+                    type: 'update',
+                    tableName: assetsTableName(),
+                    key: { assetId },
+                    updates: {
+                        generatedOutputReview,
+                        revision: next.revision,
+                        updatedAt: now,
+                    },
+                    conditionExpression: '#revision = :expectedRevision',
+                    expressionAttributeNames: { '#revision': 'revision' },
+                    expressionAttributeValues: { ':expectedRevision': authorized.revision },
+                },
+                ...await buildAssetProjectionOperations(next),
+            ],
+            origin: 'Asset.updateGeneratedOutputReview',
         })
         publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, next)
         return next

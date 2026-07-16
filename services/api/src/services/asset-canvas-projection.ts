@@ -659,9 +659,12 @@ export const projectGeneratedAssetNode = ({
 }): { canvasState: CanvasState; nodeId: string; geometryNodes: CanvasNodeGeometry[] } => {
     const assignment = generationRun.lineageAssignment
     if (!assignment) throw new Error('Generated Asset canvas projection requires a lineage assignment')
+    const existingLineageParent = findNode(canvasState.nodes, assignment.lineageParentNodeId)
     const markerResult = ensureMarkers(
         canvasState,
-        markerNodesFromAssignment(assignment, conversationAssetId, canvasState),
+        existingLineageParent && isMarkerNode(existingLineageParent)
+            ? []
+            : markerNodesFromAssignment(assignment, conversationAssetId, canvasState),
     )
     const nodeId = getPendingGeneratedMediaNodeId(assignment)
     const existing = markerResult.state.nodes.find((node) => node.nodeId === nodeId) as GeneratedMediaNode | undefined
@@ -721,6 +724,161 @@ export const projectGeneratedAssetNode = ({
         pendingBeforeFirstFrame ? new Set([nodeId]) : new Set(),
     ).state
     return { canvasState: next, nodeId, geometryNodes: geometryDiff(canvasState, next) }
+}
+
+export const detachReviewedGeneratedOutputsFromCanvas = ({
+    canvasState,
+    scope,
+    nodeId,
+}: {
+    canvasState: CanvasState
+    scope: 'media-node' | 'branch-lineage'
+    nodeId: string
+}): {
+    canvasState: CanvasState
+    affectedNodes: GeneratedMediaNode[]
+    geometryNodes: CanvasNodeGeometry[]
+    removedNodeIds: string[]
+    removedEdgeIds: string[]
+} => {
+    const affectedNodes = canvasState.nodes.filter((candidate): candidate is GeneratedMediaNode => {
+        if (candidate.type !== 'image' && candidate.type !== 'video') return false
+        if (!candidate.generatedBy?.branchId) return false
+        if (scope === 'media-node') return candidate.nodeId === nodeId
+        return candidate.generatedBy.branchOriginNodeId === nodeId
+            || candidate.generatedBy.branchForkNodeId === nodeId
+            || candidate.generatedBy.branchLineNodeId === nodeId
+            || candidate.generatedBy.lineageParentNodeId === nodeId
+    })
+    if (affectedNodes.length === 0) {
+        return { canvasState, affectedNodes, geometryNodes: [], removedNodeIds: [], removedEdgeIds: [] }
+    }
+
+    const affectedNodeIds = new Set(affectedNodes.map(node => node.nodeId))
+    const detachedLineageParentIds = new Set(affectedNodes.flatMap((node) => [
+        node.generatedBy?.lineageParentNodeId,
+        node.generatedBy?.branchOriginNodeId,
+        node.generatedBy?.branchForkNodeId,
+        node.generatedBy?.branchLineNodeId,
+    ].filter((value): value is string => Boolean(value))))
+    const detachedNodes = canvasState.nodes.map((candidate): CanvasNode => {
+        if ((candidate.type !== 'image' && candidate.type !== 'video') || !affectedNodeIds.has(candidate.nodeId)) return candidate
+        const generatedBy = candidate.generatedBy
+        if (!generatedBy) return candidate
+        const {
+            branchId: _branchId,
+            parentMediaNodeId: _parentMediaNodeId,
+            parentImageNodeId: _parentImageNodeId,
+            branchOriginNodeId: _branchOriginNodeId,
+            branchForkNodeId: _branchForkNodeId,
+            branchLineNodeId: _branchLineNodeId,
+            lineageParentNodeId: _lineageParentNodeId,
+            ...provenanceLocator
+        } = generatedBy
+        return { ...candidate, generatedBy: provenanceLocator }
+    })
+    const edgesWithoutDetachedLineage = (canvasState.edges ?? []).filter((edge) =>
+        !(affectedNodeIds.has(edge.targetNodeId) && detachedLineageParentIds.has(edge.sourceNodeId))
+    )
+
+    const referencedOriginNodeIds = new Set<string>()
+    const referencedForkNodeIds = new Set<string>()
+    const referencedLineNodeIds = new Set<string>()
+    const markerTypeByNodeId = new Map(detachedNodes
+        .filter((node): node is MarkerNode => isMarkerNode(node))
+        .map(node => [node.nodeId, node.type]))
+    for (const candidate of detachedNodes) {
+        if (candidate.type !== 'image' && candidate.type !== 'video') continue
+        if (candidate.generatedBy?.branchOriginNodeId) referencedOriginNodeIds.add(candidate.generatedBy.branchOriginNodeId)
+        if (candidate.generatedBy?.branchForkNodeId) referencedForkNodeIds.add(candidate.generatedBy.branchForkNodeId)
+        if (candidate.generatedBy?.branchLineNodeId) referencedLineNodeIds.add(candidate.generatedBy.branchLineNodeId)
+        const lineageParentNodeId = candidate.generatedBy?.lineageParentNodeId
+        const lineageParentType = lineageParentNodeId ? markerTypeByNodeId.get(lineageParentNodeId) : undefined
+        if (lineageParentNodeId && lineageParentType === 'branchOrigin') referencedOriginNodeIds.add(lineageParentNodeId)
+        if (lineageParentNodeId && lineageParentType === 'branchFork') referencedForkNodeIds.add(lineageParentNodeId)
+        if (lineageParentNodeId && lineageParentType === 'branchLine') referencedLineNodeIds.add(lineageParentNodeId)
+    }
+    const removedMarkerNodeIds = new Set<string>()
+    const nodesWithoutOrphanMarkers = detachedNodes.filter((candidate) => {
+        const remove = (candidate.type === 'branchOrigin' && !referencedOriginNodeIds.has(candidate.nodeId))
+            || (candidate.type === 'branchFork' && !referencedForkNodeIds.has(candidate.nodeId))
+            || (candidate.type === 'branchLine' && !referencedLineNodeIds.has(candidate.nodeId))
+        if (remove) removedMarkerNodeIds.add(candidate.nodeId)
+        return !remove
+    })
+    const edgesWithoutOrphanMarkers = edgesWithoutDetachedLineage.filter((edge) =>
+        !removedMarkerNodeIds.has(edge.sourceNodeId) && !removedMarkerNodeIds.has(edge.targetNodeId)
+    )
+    const removedEdgeIds = (canvasState.edges ?? [])
+        .filter((edge) => !edgesWithoutOrphanMarkers.some((candidate) => candidate.edgeId === edge.edgeId))
+        .map(edge => edge.edgeId)
+    const next = rebalance({
+        ...canvasState,
+        nodes: nodesWithoutOrphanMarkers,
+        edges: edgesWithoutOrphanMarkers,
+    }).state
+    return {
+        canvasState: next,
+        affectedNodes,
+        geometryNodes: geometryDiff(canvasState, next),
+        removedNodeIds: [...removedMarkerNodeIds],
+        removedEdgeIds,
+    }
+}
+
+export const removeGeneratedOutputCandidateFromCanvas = ({
+    canvasState,
+    nodeId,
+    preserveLineageNodeIds = new Set<string>(),
+}: {
+    canvasState: CanvasState
+    nodeId: string
+    preserveLineageNodeIds?: ReadonlySet<string>
+}): {
+    canvasState: CanvasState
+    geometryNodes: CanvasNodeGeometry[]
+    removedNodeIds: string[]
+    removedEdgeIds: string[]
+} => {
+    const withoutCandidate = canvasState.nodes.filter(node => node.nodeId !== nodeId)
+    const referencedOriginNodeIds = new Set<string>(preserveLineageNodeIds)
+    const referencedForkNodeIds = new Set<string>(preserveLineageNodeIds)
+    const referencedLineNodeIds = new Set<string>(preserveLineageNodeIds)
+    const markerTypeByNodeId = new Map(withoutCandidate
+        .filter((node): node is MarkerNode => isMarkerNode(node))
+        .map(node => [node.nodeId, node.type]))
+    for (const candidate of withoutCandidate) {
+        if (candidate.type !== 'image' && candidate.type !== 'video') continue
+        if (candidate.generatedBy?.branchOriginNodeId) referencedOriginNodeIds.add(candidate.generatedBy.branchOriginNodeId)
+        if (candidate.generatedBy?.branchForkNodeId) referencedForkNodeIds.add(candidate.generatedBy.branchForkNodeId)
+        if (candidate.generatedBy?.branchLineNodeId) referencedLineNodeIds.add(candidate.generatedBy.branchLineNodeId)
+        const lineageParentNodeId = candidate.generatedBy?.lineageParentNodeId
+        const lineageParentType = lineageParentNodeId ? markerTypeByNodeId.get(lineageParentNodeId) : undefined
+        if (lineageParentNodeId && lineageParentType === 'branchOrigin') referencedOriginNodeIds.add(lineageParentNodeId)
+        if (lineageParentNodeId && lineageParentType === 'branchFork') referencedForkNodeIds.add(lineageParentNodeId)
+        if (lineageParentNodeId && lineageParentType === 'branchLine') referencedLineNodeIds.add(lineageParentNodeId)
+    }
+    const removedNodeIds = new Set<string>([nodeId])
+    const nodes = withoutCandidate.filter((candidate) => {
+        const remove = (candidate.type === 'branchOrigin' && !referencedOriginNodeIds.has(candidate.nodeId))
+            || (candidate.type === 'branchFork' && !referencedForkNodeIds.has(candidate.nodeId))
+            || (candidate.type === 'branchLine' && !referencedLineNodeIds.has(candidate.nodeId))
+        if (remove) removedNodeIds.add(candidate.nodeId)
+        return !remove
+    })
+    const edges = (canvasState.edges ?? []).filter((edge) =>
+        !removedNodeIds.has(edge.sourceNodeId) && !removedNodeIds.has(edge.targetNodeId)
+    )
+    const removedEdgeIds = (canvasState.edges ?? [])
+        .filter((edge) => !edges.some((candidate) => candidate.edgeId === edge.edgeId))
+        .map(edge => edge.edgeId)
+    const next = rebalance({ ...canvasState, nodes, edges }).state
+    return {
+        canvasState: next,
+        geometryNodes: geometryDiff(canvasState, next),
+        removedNodeIds: [...removedNodeIds],
+        removedEdgeIds,
+    }
 }
 
 export const logCanvasProjectionError = (context: string, error: unknown): void => {
