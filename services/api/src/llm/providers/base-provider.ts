@@ -1,10 +1,13 @@
 'use strict'
 
+import { v4 as uuid } from 'uuid'
 import { StateGraph, END, START } from '@langchain/langgraph'
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn, err } from '@lixpi/debug-tools'
-import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName, type StreamStatus } from '@lixpi/constants'
+import { STREAM_STATUS, type MediaGenerationRunMeta, type Modality, type ProviderName, type StreamStatus } from '@lixpi/constants'
+
+import type { MetricsClient } from '../../metrics/metrics-client.ts'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
@@ -21,6 +24,7 @@ import { buildVideoGenerationTrace } from '../tools/video-generation-trace.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
+import { tokenUsageConfirm, imageUsageConfirm, videoUsageConfirm } from '../usage/usage-event-mapper.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
@@ -30,6 +34,10 @@ export type BaseProviderDeps = {
     usageReporter: UsageReporter
     runImageRouter: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
     runVideoRouter: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
+    // Metrics (optional — absent/disabled = the open-source plug, i.e. today's
+    // behavior). The synchronous check/confirm run on the workflow path via this
+    // abstract metering client (see metrics/metrics-client.ts).
+    metrics?: MetricsClient
 }
 
 type FanoutRouterResult = Pick<ProviderState,
@@ -57,6 +65,10 @@ const LIVE_MIRRORED_MEDIA_STATUSES: ReadonlySet<StreamStatus> = new Set([
 
 const catalogModelIdFor = (model: AiModelMetaInfo): string =>
     `${model.provider}:${model.model}`
+
+// modalityForKind maps a workflow kind to the metering modality the check sends.
+const modalityForKind = (kind: string): Modality =>
+    kind === 'chat_video' ? 'video' : kind === 'chat_image' ? 'image' : 'tokens'
 
 const normalizeModelOption = (
     requested: string | number | undefined,
@@ -423,7 +435,50 @@ export abstract class BaseProvider {
         if (!state.messages?.length) throw new Error('messages list is required')
         if (!state.workspaceId) throw new Error('workspaceId is required')
         if (!state.aiChatThreadId) throw new Error('aiChatThreadId is required')
-        return {}
+        return this.metricsCheck(state)
+    }
+
+    // Synchronous spend check before the paid provider call: ask the metering port
+    // whether the balance covers this run. Fail-closed — a denied (or, per the
+    // client's policy, an unreachable) port stops the run before any provider spend.
+    // Disabled = the open-source plug, which always approves. On admission, mint the
+    // per-run workflowId so the confirm calls can be grouped.
+    private async metricsCheck(state: ProviderState): Promise<Partial<ProviderState>> {
+        const metrics = this.deps.metrics
+        if (!metrics?.enabled) return {}
+
+        const userId = state.eventMeta?.userId ?? ''
+        const orgId = (state.eventMeta?.organizationId as string) ?? ''
+        const workflowKind = this.deriveWorkflowKind(state)
+        const workflowId = uuid()
+
+        const res = await metrics.check({
+            orgId,
+            userId,
+            workspaceId: state.workspaceId,
+            workflowId,
+            model: state.modelVersion ?? '',
+            modality: modalityForKind(workflowKind),
+            // Best-effort upper bound; a real per-model estimate is a growth point
+            // (the metering backend prices conservatively from the model).
+            estimatedUnits: 0,
+            currency: 'USD',
+        })
+        if (!res.approved) {
+            const reason = res.reason ? `: ${res.reason}` : ''
+            throw new Error(`Metrics: balance does not cover this workflow (${workflowKind}${reason})`)
+        }
+        // Thread the operationId from the check into graph state so the confirm(s)
+        // can correlate back to this admission.
+        return { workflowId, workflowSeq: 0, metricsOperationId: res.operationId }
+    }
+
+    // The run's gate kind is its broadest enabled modality — gating conservatively
+    // so a run that may escalate to image/video is checked against that ceiling.
+    private deriveWorkflowKind(state: ProviderState): string {
+        if (state.enableVideoGeneration) return 'chat_video'
+        if (state.enableImageGeneration) return 'chat_image'
+        return 'chat_text'
     }
 
     // Subclasses implement streamImpl(state) and return partial-state updates (usage, response_id, etc.).
@@ -843,8 +898,16 @@ export abstract class BaseProvider {
 
     protected async calculateUsage(state: ProviderState): Promise<Partial<ProviderState>> {
         if (state.error) return {}
+
+        // Confirm one provider call per modality, each with a 1-based workflowSeq
+        // under the run's workflowId (for grouping/display). confirm is awaited but
+        // best-effort — the client logs failures rather than failing the completed
+        // request. workflowId is only set when the check admitted the run (enabled).
+        const metricsOn = !!(this.deps.metrics?.enabled && state.workflowId)
+        let seq = state.workflowSeq ?? 0
+
         if (state.usage) {
-            this.deps.usageReporter.reportTokensUsage({
+            const report = this.deps.usageReporter.reportTokensUsage({
                 eventMeta: state.eventMeta,
                 aiModelMetaInfo: state.aiModelMetaInfo,
                 aiVendorRequestId: state.aiVendorRequestId ?? 'unknown',
@@ -853,9 +916,12 @@ export abstract class BaseProvider {
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
+            if (metricsOn && report) {
+                await this.deps.metrics!.confirm({ ...tokenUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId })
+            }
         }
         if (state.imageUsage) {
-            this.deps.usageReporter.reportImageUsage({
+            const report = this.deps.usageReporter.reportImageUsage({
                 eventMeta: state.eventMeta,
                 aiModelMetaInfo: state.aiModelMetaInfo,
                 aiVendorRequestId: state.aiVendorRequestId ?? 'unknown',
@@ -864,9 +930,12 @@ export abstract class BaseProvider {
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
+            if (metricsOn && report) {
+                await this.deps.metrics!.confirm({ ...imageUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId })
+            }
         }
         if (state.videoUsage) {
-            this.deps.usageReporter.reportVideoUsage({
+            const report = this.deps.usageReporter.reportVideoUsage({
                 eventMeta: state.eventMeta,
                 aiModelMetaInfo: state.videoModelMetaInfo ?? state.aiModelMetaInfo,
                 aiVendorRequestId: state.aiVendorRequestId ?? 'unknown',
@@ -878,8 +947,11 @@ export abstract class BaseProvider {
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
+            if (metricsOn && report) {
+                await this.deps.metrics!.confirm({ ...videoUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId })
+            }
         }
-        return {}
+        return { workflowSeq: seq }
     }
 
     protected async cleanup(_state: ProviderState): Promise<Partial<ProviderState>> {

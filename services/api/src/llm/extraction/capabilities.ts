@@ -77,6 +77,15 @@ const OPENAI_NO_TEMPERATURE = [
     /^gpt-5-?(o[134]|reasoning)/i,
 ]
 
+// The modern OpenAI family — the whole GPT-5 lineup and all o-series. These
+// models have two chat/completions quirks vs GPT-4.x: they reject the legacy
+// `max_tokens` (require `max_completion_tokens`), and they reject a custom
+// `temperature` (only the default value 1 is allowed).
+const OPENAI_GPT5_OR_OSERIES = [
+    /^gpt-5/i,
+    /^o[0-9]/i,
+]
+
 // Google thinking-capable families.
 const GOOGLE_THINKING = [
     /^gemini-3\./i,

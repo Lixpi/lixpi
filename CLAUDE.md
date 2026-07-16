@@ -17,7 +17,7 @@ Shared TypeScript packages live in `packages/lixpi/`. Infrastructure-as-Code in 
 
 ## Code Style
 
-At the start of every implementation iteration, use the documentation index to find the current coding guidance for the files you are changing. Always read [`documentation/testing/USING-TESTING-GUIDES.md`](documentation/testing/USING-TESTING-GUIDES.md) before deciding whether any test writing or test execution is allowed. Read the guide that matches the language, styling layer, framework, or runtime surface before editing. For `services/web-ui` TypeScript UI, SVG, D3, Svelte-adjacent, canvas chrome, or component work, always read [`documentation/coding-style-guides/TYPESCRIPT.md`](documentation/coding-style-guides/TYPESCRIPT.md) and [`documentation/coding-style-guides/UI-COMPONENTS.md`](documentation/coding-style-guides/UI-COMPONENTS.md).
+At the start of every implementation iteration, read [`documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md`](documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md) and follow the guides it selects for the files you are changing. [`documentation/coding-style-guides/TYPESCRIPT.md`](documentation/coding-style-guides/TYPESCRIPT.md) is mandatory for **every** TypeScript file in the repository — `services/api`, `services/nex`, `packages/lixpi`, `infrastructure/pulumi`, and `services/web-ui` alike, not only UI code. For `services/web-ui` UI, SVG, D3, Svelte-adjacent, canvas chrome, or component work, also read [`documentation/coding-style-guides/UI-COMPONENTS.md`](documentation/coding-style-guides/UI-COMPONENTS.md). Always read [`documentation/testing/USING-TESTING-GUIDES.md`](documentation/testing/USING-TESTING-GUIDES.md) before deciding whether any test writing or test execution is allowed.
 
 ## Command Execution
 
@@ -40,3 +40,7 @@ Start at the documentation index, then read [Maintaining Documentation](document
 - Agents MUST NOT use a browser, browser automation, screenshots, or manual visual inspection to verify work in this repository. Use static review unless the user explicitly asks for permitted automated test commands.
 - Never use `cat` to edit files.
 - Never run large inline Python or JS code in the terminal.
+
+## Cross-repo metering contract
+
+The usage-metering wire contract — the `metrics.*` subjects in `packages/lixpi/constants/nats-subjects.json` (`METRICS_SUBJECTS`) and the check/confirm request/response shapes in `packages/lixpi/constants/ts/metrics-contracts.ts` (used by `services/api/src/metrics/metrics-client.ts`) — is served by a hosted metering backend in a separate repository. Do not change this contract surface without explicit user allowance. If the user does allow a change, it must be mirrored in that backend in the same change, and remind the user that both sides must be updated and released together — a one-sided change silently breaks the wire.

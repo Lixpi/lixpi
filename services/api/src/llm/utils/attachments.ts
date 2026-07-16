@@ -12,6 +12,8 @@ const MAX_IMAGE_DIMENSION = 2048
 
 const SAFE_MIMES = new Set(['image/png', 'image/jpeg', 'image/gif'])
 
+// 'OPENAI' targets the Responses API content shape (input_text / input_image),
+// used by both the main provider and the structured VLM client.
 export type AttachmentFormat = 'OPENAI' | 'ANTHROPIC' | 'GOOGLE'
 
 const detectImageMime = (data: Buffer): string => {

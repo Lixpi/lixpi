@@ -10,13 +10,18 @@ import { warn, info, err } from '@lixpi/debug-tools'
 
 import type { ProviderName } from '@lixpi/constants'
 import type { ChatMessage } from '../graph/state.ts'
-import { convertAttachmentsForProvider, resolveImageUrls } from '../utils/attachments.ts'
+import { convertAttachmentsForProvider, resolveImageUrls, type AttachmentFormat } from '../utils/attachments.ts'
 import { detectCapabilities, type ModelCapabilities } from './capabilities.ts'
 
 export type VlmJsonSchema = {
     name: string
     description: string
     schema: Record<string, any>
+    // OpenAI strict structured output requires `additionalProperties: false` on every
+    // nested object. Schemas that intentionally use open-ended objects (dynamic keys)
+    // must opt out with `strict: false`. Defaults to true. OpenAI-only; ignored by
+    // the Anthropic and Google paths.
+    strict?: boolean
 }
 
 export type VlmCallArgs = {
@@ -83,7 +88,7 @@ const getGoogle = (): GoogleGenAI => {
 const resolveAndConvert = async (
     messages: ChatMessage[],
     natsService: NatsService,
-    format: 'ANTHROPIC' | 'OPENAI' | 'GOOGLE',
+    format: AttachmentFormat,
 ): Promise<Array<{ role: string; content: any }>> => {
     const out: Array<{ role: string; content: any }> = []
     for (const msg of messages) {

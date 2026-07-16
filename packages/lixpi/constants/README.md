@@ -10,6 +10,8 @@ Shared runtime contracts for TypeScript services and the browser.
 
 `ts/aws-resources.ts` contains only active DynamoDB resource names, including the six revision-2 tables. `nats-subjects.json` contains only active Asset/Blob processing and maintenance subjects alongside unrelated current product subjects.
 
+`ts/metrics-contracts.ts` defines the usage-metering check/confirm request/response shapes served by the hosted metering backend over the `METRICS_SUBJECTS` subjects. Together with `METRICS_SUBJECTS` in `nats-subjects.json`, it is a cross-repo wire contract — do not change it without mirroring the metering backend in the same change.
+
 ## Main files
 
 ```text
@@ -19,6 +21,7 @@ packages/lixpi/constants/
     ├── asset-types.ts
     ├── aws-resources.ts
     ├── media-generation-layout-settings.ts
+    ├── metrics-contracts.ts
     ├── workspace-persistence-settings.ts
     ├── types.ts
     └── index.ts

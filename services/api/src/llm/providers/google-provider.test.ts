@@ -11,8 +11,11 @@ const debugTools = vi.hoisted(() => ({
 vi.mock('@lixpi/debug-tools', () => debugTools)
 
 import { type BaseProviderDeps } from './base-provider.ts'
-import { buildVeoReferenceImages, getGoogleImageResponseSummary } from './google-provider.ts'
-import { GoogleProvider } from './google-provider.ts'
+import {
+    buildVeoReferenceImages,
+    getGoogleImageResponseSummary,
+    GoogleProvider,
+} from './google-provider.ts'
 
 const { generateContent } = vi.hoisted(() => ({
     generateContent: vi.fn(),
@@ -349,7 +352,7 @@ describe('GoogleProvider internals', () => {
             },
             usage: {
                 promptTokens: 5,
-                completionTokens: 11,
+                completionTokens: 14, // candidates 11 + thoughts 3 (reasoning folded into completion)
                 promptCachedTokens: 2,
                 completionReasoningTokens: 3,
                 totalTokens: 16,
@@ -571,7 +574,7 @@ describe('GoogleProvider internals', () => {
         expect(update).toMatchObject({
             usage: {
                 promptTokens: 3,
-                completionTokens: 6,
+                completionTokens: 8, // candidates 6 + thoughts 2 (reasoning folded into completion)
                 promptCachedTokens: 1,
                 completionReasoningTokens: 2,
                 totalTokens: 12,
@@ -705,7 +708,7 @@ describe('GoogleProvider internals', () => {
             usage: {
                 promptTokens: 12,
                 promptCachedTokens: 1,
-                completionTokens: 7,
+                completionTokens: 9, // candidates 7 + thoughts 2 (reasoning folded into completion)
                 completionReasoningTokens: 2,
                 totalTokens: 21,
                 promptAudioTokens: 0,

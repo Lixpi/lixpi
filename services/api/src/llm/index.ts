@@ -15,6 +15,7 @@ import { ExtractionOrchestrator } from './extraction/orchestrator.ts'
 import { MediaGenerationMatrixOrchestrator, type MatrixRequestData } from './orchestration/media-generation-matrix.ts'
 
 import type { ExtractionInput, ExtractionResult } from './extraction/types.ts'
+import type { MetricsClient } from '../metrics/metrics-client.ts'
 
 export type LlmModule = {
     process: (instanceKey: string, providerName: ProviderName, requestData: Record<string, any>) => Promise<void>
@@ -30,6 +31,9 @@ export type LlmModule = {
 
 export type LlmModuleDeps = {
     natsService: NatsService
+    // Metrics integration (optional — absent/disabled = the open-source plug, i.e.
+    // today's behavior). Synchronous check/confirm run via this client.
+    metrics?: MetricsClient
 }
 
 export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
@@ -41,6 +45,9 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
             Google: GoogleProvider,
             Stability: StabilityProvider,
             BytePlus: BytePlusProvider,
+        },
+        {
+            metrics: deps.metrics,
         },
     )
 

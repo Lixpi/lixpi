@@ -95,5 +95,9 @@
 		"DELETE_CUSTOMER_PAYMENT_METHOD": "delete-customer-payment-method",
 		"TOP_UP_CUSTOMER_BALANCE": "top-up-customer-balance",
 		"GET_CUSTOMER": "get-customer"
+	},
+	"METRICS_SUBJECTS": {
+		"USAGE_CHECK": "metrics.usage.check",
+		"USAGE_CONFIRM": "metrics.usage.confirm"
 	}
 }

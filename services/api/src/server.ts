@@ -31,6 +31,8 @@ import featureRoutes from './routes/feature-routes.ts'
 import { createLlmModule } from './llm/index.ts'
 import { startAssetMaintenanceWorker } from './services/asset-maintenance-worker.ts'
 
+import { MetricsClient, metricsConfigFromEnv, type MetricsNats } from './metrics/metrics-client.ts'
+
 const env = process.env
 
 // Production safety check: Prevent LocalAuth0 from being used in non-local environments
@@ -221,10 +223,21 @@ await startNatsAuthCalloutService({
     serviceAuthConfigs,
 })
 
+// Metrics client. The spend guard is synchronous: check before a paid provider
+// call, confirm after. Requests use the raw NATS_Service.request so they bypass the
+// global JWT middleware — an internal metrics subject carries no user token. Off
+// (METRICS_ENABLED!=true) → the open-source plug (check approves, confirm no-ops).
+const metricsNatsConn = (await NATS_Service.getInstance())!
+const metricsNats: MetricsNats = {
+    request: (subject, data, timeoutMs) => metricsNatsConn.request(subject, data, timeoutMs),
+}
+const metrics = new MetricsClient(metricsNats, metricsConfigFromEnv())
+
 // Initialize the in-process LLM module. The LangGraph workflow that previously
 // ran in the standalone services/llm-api Python service now runs here directly.
 const llmModule = createLlmModule({
     natsService: await NATS_Service.getInstance(),
+    metrics,
 })
 setLlmModule(llmModule)
 setExtractionLlmModule(llmModule)

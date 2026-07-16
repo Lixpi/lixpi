@@ -8,6 +8,12 @@ import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
+import type { MetricsClient } from '../../metrics/metrics-client.ts'
+
+// Metrics dependencies threaded into every provider's graph deps.
+export type MetricsDeps = {
+    metrics?: MetricsClient
+}
 
 export type ProviderConstructor = new (
     instanceKey: string,
@@ -34,6 +40,7 @@ export class ProviderRegistry {
         // (e.g. a video-only provider added before its class lands). Unregistered
         // providers throw "Unsupported provider" on lookup in getOrCreate/createTransient.
         ctors: Partial<Record<ProviderName, ProviderConstructor>>,
+        private readonly metricsDeps: MetricsDeps = {},
     ) {
         this.providerCtors = new Map(Object.entries(ctors) as Array<[ProviderName, ProviderConstructor]>)
         this.usageReporter = new UsageReporter()
@@ -65,6 +72,7 @@ export class ProviderRegistry {
                 }
                 return this.videoRouter(state, options)
             },
+            metrics: this.metricsDeps.metrics,
         }
     }
 

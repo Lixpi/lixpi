@@ -376,6 +376,7 @@ describe('services/api server startup', () => {
             natsService: mocks.natsInstance,
             storeWorkspaceImage: mocks.storeWorkspaceImage,
             storeWorkspaceVideo: mocks.storeWorkspaceVideo,
+            metrics: expect.anything(),
         })
 
         expect(mocks.warn).toHaveBeenCalledWith(
@@ -416,7 +417,7 @@ describe('services/api server startup', () => {
 
         expect(mocks.setLlmModule).toHaveBeenCalledWith(mocks.getLlmModule())
         expect(mocks.setExtractionLlmModule).toHaveBeenCalledWith(mocks.getLlmModule())
-        expect(mocks.natsGetInstance).toHaveBeenCalledTimes(2)
+        expect(mocks.natsGetInstance).toHaveBeenCalledTimes(3)
 
         const sigint = processOnCalls.find((entry) => entry.event === 'SIGINT')
         const sigterm = processOnCalls.find((entry) => entry.event === 'SIGTERM')

@@ -29,7 +29,7 @@ Do not rely on tiny routing files or stale folder names. To find the right guida
 2. Use the generated docs-site sidebar for the complete current file list.
 3. Search by the concept you are changing, then read nearby pages before editing.
 4. For every implementation iteration, read [`Testing Guide Selection`](testing/USING-TESTING-GUIDES.md), then read the relevant coding and source README guidance that matches the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread.
-5. For `services/web-ui` TypeScript UI work, [`TypeScript Coding Style`](coding-style-guides/TYPESCRIPT.md) and [`UI Components Coding Style`](coding-style-guides/UI-COMPONENTS.md) are mandatory before editing.
+5. For any code change, read [`Coding Style Guide Selection`](coding-style-guides/USING-CODING-STYLE-GUIDES.md). [`TypeScript Coding Style`](coding-style-guides/TYPESCRIPT.md) is mandatory for every TypeScript file in the repository; [`UI Components Coding Style`](coding-style-guides/UI-COMPONENTS.md) is additionally mandatory for `services/web-ui` UI work.
 
 When the architecture changes, update this map and the affected domain pages together. Avoid creating new "using this folder" stubs; add useful guidance to a real page instead.
 
@@ -98,7 +98,9 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 | Page | What it covers |
 |------|----------------|
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | Documentation structure, migration workflow, Markdoc compatibility, link hygiene, and tone |
-| [TypeScript Coding Style](coding-style-guides/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules |
+| [Documentation Style Guide Selection](documentation-style-guides/USING-DOCUMENTATION-STYLE-GUIDES.md) | Which documentation style sources apply to a given docs change |
+| [Coding Style Guide Selection](coding-style-guides/USING-CODING-STYLE-GUIDES.md) | Which coding style guides apply to the files being changed — TypeScript rules bind repo-wide |
+| [TypeScript Coding Style](coding-style-guides/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules — mandatory for all TypeScript in the repo |
 | [UI Components Coding Style](coding-style-guides/UI-COMPONENTS.md) | Svelte, D3/SVG, canvas chrome, component ownership, layout, and event rules |
 | [Markdown Rendering](conventions/MARKDOWN-RENDERING.md) | The one-parser rule and the two renderers |
 | [API-Owned Media Lineage Planning](knowledge/API-OWNED-MEDIA-LINEAGE-PLANNING.md) | API/browser ownership boundary for media branch topology, lineage plans, marker provenance, and canvas application |

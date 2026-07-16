@@ -32,7 +32,7 @@ export type VideoUsage = {
     resolution: string
     aspectRatio: string
     // Vendor token usage for token-metered video providers (e.g. Seedance via
-    // ModelArk). Absent for per-second providers like VEO. Billing branches on
+    // ModelArk). Absent for per-second providers like VEO. Metrics branches on
     // pricing.video.measuringUnit (see usage-reporter.reportVideoUsage).
     completionTokens?: number
     totalTokens?: number
@@ -175,6 +175,14 @@ export type ProviderState = {
     referencedFeatureIds?: string[] | undefined
     featureUsagePrompt?: string | undefined
 
+    // Metrics — transient per-run identity. workflowId is minted in validateRequest
+    // and groups this run's calls; workflowSeq is a 1-based counter per confirmed
+    // provider call. metricsOperationId correlates the check to its confirm(s)
+    // (opaque; from the check response; empty when metrics is disabled).
+    workflowId?: string | undefined
+    workflowSeq?: number | undefined
+    metricsOperationId?: string | undefined
+
     // Multi-model media generation request-group metadata.
     generationRun?: MediaGenerationRunMeta | undefined
     mediaFanoutPlan?: MediaFanoutPlan | undefined
@@ -240,6 +248,10 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     previousResponseId: { reducer: keep },
     referencedFeatureIds: { reducer: keep },
     featureUsagePrompt: { reducer: keep },
+    workflowId: { reducer: keep },
+    workflowSeq: { reducer: keep },
+    metricsOperationId: { reducer: keep },
+
     generationRun: { reducer: keep },
     mediaFanoutPlan: { reducer: keep },
     replayMediaPrompts: { reducer: keep },

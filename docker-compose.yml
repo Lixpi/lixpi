@@ -362,7 +362,11 @@ services:
             - ./services/web-ui/jsconfig.json:/usr/src/service/jsconfig.json:cached
             - ./services/web-ui/package.json:/usr/src/service/package.json:cached
 
-            - ./services/web-ui/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
+            # NOT mounted: pnpm@11 rewrites pnpm-workspace.yaml during install (write-temp + atomic
+            # rename), which fails EBUSY against a single-file bind mount on Docker Desktop/Windows.
+            # The image bakes this file (services/web-ui/Dockerfile), so the container uses the baked
+            # copy and pnpm's rewrite lands in the writable layer. Rebuild the image to pick up edits.
+            # - ./services/web-ui/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
             - ./services/web-ui/postcss.config.js:/usr/src/service/postcss.config.js:cached    # Tailwind 4 doesn't require postcss, but fucking shadcn DOES :( :( :(
 
             - ./services/web-ui/public:/usr/src/service/public:cached
@@ -408,8 +412,11 @@ services:
         # making sure we install the packages before running the dev server
         # command: >
         #     pnpm run build-and-serve
+        # --config.confirm-modules-purge=false: let pnpm purge+reinstall a stale node_modules
+        # non-interactively (no TTY in the container) instead of aborting. Narrower than CI=true,
+        # which would also force --frozen-lockfile.
         command: >
-            sh -c "pnpm i
+            sh -c "pnpm i --config.confirm-modules-purge=false
             && pnpm run dev"
         stop_signal: SIGTERM
         ports:
@@ -484,11 +491,18 @@ services:
             LLM_TIMEOUT_SECONDS: 1200
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: ${SAVE_LLM_RESPONSES_TO_DEBUG_DIR}
 
+            METRICS_ENABLED: "true"
+            METRICS_GATE_DEFAULT_ALLOW: "true"   # cold start: no allowance projected yet
+
         volumes:
             - aws-config:/root/.aws:cached    # AWS SSO credentials
             - ./.aws/config:/root/.aws/config:cached    # AWS SSO credentials
             - ./services/api/package.json:/usr/src/service/package.json:cached
-            - ./services/api/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
+            # NOT mounted: pnpm@11 rewrites pnpm-workspace.yaml during install (write-temp + atomic
+            # rename), which fails EBUSY against a single-file bind mount on Docker Desktop/Windows.
+            # The image bakes this file (services/api/Dockerfile), so the container uses the baked
+            # copy and pnpm's rewrite lands in the writable layer. Rebuild the image to pick up edits.
+            # - ./services/api/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
             - ./services/api/nodemon.json:/usr/src/service/nodemon.json:cached
 
             # tsconfig.json is needed for the IDE to understand the project structure, but NOT used by default by Node.js
@@ -526,8 +540,11 @@ services:
 
         working_dir: /usr/src/service
         # making sure we install the packages before running the dev server
+        # --config.confirm-modules-purge=false: let pnpm purge+reinstall a stale node_modules
+        # non-interactively (no TTY in the container) instead of aborting. Narrower than CI=true,
+        # which would also force --frozen-lockfile.
         command: >
-            sh -c "pnpm i
+            sh -c "pnpm i --config.confirm-modules-purge=false
             && pnpm run dev"
         # command: >
         #     pnpm run dev
