@@ -58,18 +58,6 @@ export type MediaKind = 'image' | 'video' | 'audio' | 'document'
 // The stored-file record. `kind`/`modelSafe` are recorded on every uploaded or
 // generated file; `canonical*` is present iff the original was not model-safe
 // and a transcoded derivative was produced.
-export type DocumentFile = {
-    id: string
-    name: string
-    mimeType: string            // SNIFFED mime of the stored original
-    size: number
-    uploadedAt: number
-    kind: MediaKind             // detected media kind
-    modelSafe: boolean          // is `mimeType` directly model-consumable?
-    canonicalFileId?: string    // object key of the model-safe derivative
-    canonicalMimeType?: string  // mime of that derivative
-}
-
 // One row of the ingest policy. Absence from MEDIA_POLICY == not allowed.
 export type MediaPolicyEntry = {
     kind: MediaKind
@@ -130,78 +118,7 @@ export const UPLOAD_DENYLIST_MIME: readonly string[] = [
 // API route, remote-URL import, and the web-ui uploader.
 export const MAX_UPLOAD_FILE_SIZE = 1024 * 1024 * 1024
 
-// Async file-conversion contract. The API stores the uploaded original, then
-// hands the heavy transcode off to the NEX file-conversion workload over NATS
-// request/reply (WORKSPACE_SUBJECTS.FILE_SUBJECTS.CONVERT). The workload reads
-// the original from the workspace Object Store bucket, transcodes it, writes the
-// canonical (+ poster) back, and replies with these hints — never carrying the
-// bytes themselves over NATS. No heavy processing ever runs on the API.
-export type ConvertFileRequest = {
-    workspaceId: string
-    fileId: string              // Object Store key of the stored original
-    originalName: string
-    mimeType: string            // sniffed mime of the original
-    kind: MediaKind
-    modelSafe: boolean          // when true the workload SKIPS transcode and only
-                                // probes the original for hints (poster/duration/
-                                // pageCount) — e.g. a model-safe mp4 still needs a
-                                // poster frame, but no re-encode.
-    canonicalMime: string       // transcode target from MEDIA_POLICY
-}
-
-export type ConvertFileResult =
-    | {
-          success: true
-          // Present only when a transcode produced a derivative (non-model-safe
-          // input). Absent when the original is already model-safe.
-          canonicalFileId?: string
-          canonicalMimeType?: string
-          aspectRatio?: number
-          durationSeconds?: number
-          hasAudio?: boolean
-          posterFileId?: string
-          pageCount?: number
-      }
-    | {
-          success: false
-          error: string          // user-facing failure reason for the placeholder
-      }
-
-// Frame-extraction contract. The AI video-generation providers (VEO / Seedance)
-// must not run ffmpeg on the API either — they stage the freshly generated video
-// to a temp Object Store key in the workspace bucket and ask the file-conversion
-// workload (WORKSPACE_SUBJECTS.FILE_SUBJECTS.EXTRACT_FRAMES) to extract the poster
-// and the representative (image-to-video anchor) frame. The workload writes those
-// frames back to temp keys and returns them; the provider reads them, then
-// deletes all three temp objects.
-export type ExtractFramesRequest = {
-    workspaceId: string
-    videoFileId: string         // temp Object Store key of the staged video
-    atSeconds?: number          // representative-frame seek target (clip midpoint)
-}
-
-export type ExtractFramesResult =
-    | {
-          success: true
-          posterFileId?: string   // temp Object Store key of the poster PNG
-          frameFileId?: string    // temp Object Store key of the representative PNG
-      }
-    | {
-          success: false
-          error: string
-      }
-
-// Pushed to the browser on WORKSPACE_SUBJECTS.FILE_SUBJECTS.CONVERT_RESPONSE
-// .<workspaceId>.<conversionId> once conversion settles, so the canvas can
-// replace or fail the upload placeholder. `conversionId` correlates with the
-// value the upload route returned.
-export type ConvertFileNotification = {
-    conversionId: string
-    workspaceId: string
-    fileId: string
-} & ConvertFileResult
-
-// NOTE: 'document' is the thread/text node (server-authoritative ProseMirror).
+// NOTE: 'document' is an editable content-Asset node (server-authoritative ProseMirror).
 // Uploaded documents use the distinct 'mediaDocument' type to avoid colliding
 // with it. 'audio' is the uploaded-audio node.
 export type CanvasNodeType = 'document' | 'mediaDocument' | 'image' | 'video' | 'audio' | 'uploadPlaceholder' | 'branchOrigin' | 'branchFork' | 'branchLine'
@@ -230,11 +147,9 @@ export type CanvasNodeParentingFields = {
 export type DocumentCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'document'
-    referenceId: string
+    assetId: string
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
-    // Text summary of the document's content for the workspace relevance engine.
-    descriptor?: ContentDescriptor
 }
 
 export type ImageGenerationSize =
@@ -324,8 +239,7 @@ export type MediaBranchCandidateRoleHint =
 
 export type MediaBranchCandidateImage = {
     nodeId: string
-    fileId?: string
-    workspaceId?: string
+    assetId: string
     imageUrl: string
     // Whether `imageUrl` points at a still image or at a video's representative
     // frame. Videos are grounded by a single extracted frame — never the MP4 —
@@ -349,7 +263,7 @@ export type MediaBranchCandidateImage = {
 
 export type MediaBranchCandidateSnapshot = {
     resolverVersion: string
-    threadId: string
+    conversationAssetId: string
     regionNodeId: string
     activeTargetNodeId?: string
     // Media node ids the user explicitly attached as context (chips / reference
@@ -365,22 +279,20 @@ export type MediaBranchCandidateSnapshot = {
 
 // One compact, descriptors-only entry per context-bearing canvas node. The
 // browser builds these for the whole workspace each chat turn so the API
-// relevance stage can rank on text alone (no pixels) — `imageUrl`/`fileId` are
-// nats-obj references the API resolves only for the narrowed, selected set.
+// relevance stage can rank on text alone. The API resolves Asset renditions
+// only for the narrowed, selected set.
 export type WorkspaceContextNode = {
     nodeId: string
     type: CanvasNodeType
-    referenceId?: string
+    assetId?: string
     descriptorStatus?: ContentDescriptorStatus
     title?: string
     descriptorSummary?: string
     entityTags?: string[]
     styleTags?: string[]
-    fileId?: string
-    imageUrl?: string
     branchId?: string
-    sourceThreadId?: string
-    isCurrentThreadGenerated?: boolean
+    sourceConversationAssetId?: string
+    isCurrentConversationGenerated?: boolean
     isExplicitChip: boolean
     isEdgeForced: boolean
 }
@@ -388,7 +300,7 @@ export type WorkspaceContextNode = {
 export type WorkspaceContextSnapshot = {
     resolverVersion: string
     workspaceId: string
-    threadId: string
+    conversationAssetId: string
     promptText: string
     nodes: WorkspaceContextNode[]
 }
@@ -529,6 +441,7 @@ export type BranchLineLineagePlan = {
 }
 
 export type MediaRunLineageAssignment = {
+    assetId: string
     generationRequestId: string
     reasoningRunId?: string
     mediaRunId?: string
@@ -564,6 +477,11 @@ export type MediaBranchLineagePlan = {
     placementAnchorNodeId?: string
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
+    regenerationTarget?: {
+        branchId: string
+        lineageParentNodeId: string
+        lineageParentType: 'branchOrigin' | 'branchFork' | 'branchLine'
+    }
     branchOrigin?: BranchOriginLineagePlan
     branchForks: BranchForkLineagePlan[]
     branchLines: BranchLineLineagePlan[]
@@ -681,8 +599,7 @@ export type ImageGenerationTraceReference = {
     label: string
     role: ImageGenerationTraceReferenceRole
     nodeId?: string
-    fileId?: string
-    workspaceId?: string
+    assetId?: string
     branchId?: string
     reason?: string
 }
@@ -692,8 +609,7 @@ export type ImageGenerationTraceExcludedReference = {
     label: string
     role: 'excluded'
     reason: string
-    fileId?: string
-    workspaceId?: string
+    assetId?: string
     branchId?: string
 }
 
@@ -812,8 +728,40 @@ export type GeneratedMediaVariantMetadata = {
     lineageParentNodeId?: string
 }
 
+export type GeneratedOutputReviewScope = 'media-node' | 'branch-lineage'
+
+export type GeneratedOutputReviewAction = 'accept' | 'supersede'
+
+export type GeneratedOutputReviewRequest = {
+    workspaceId: string
+    scope: GeneratedOutputReviewScope
+    action: 'accept'
+    nodeId: string
+} | {
+    workspaceId: string
+    scope: 'media-node'
+    action: 'supersede'
+    nodeId: string
+    preserveLineage: true
+} | {
+    workspaceId: string
+    scope: 'branch-lineage'
+    action: 'supersede'
+    nodeId: string
+    preserveLineage: boolean
+}
+
+export type GeneratedOutputReviewResponse = {
+    success: true
+    workspaceId: string
+    affectedAssetIds: string[]
+    acceptedAssetIds: string[]
+    supersededAssetIds: string[]
+    canvasGeometry: CanvasGeometryUpdate
+}
+
 export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
-    aiChatThreadId: string
+    conversationAssetId: string
     responseId: string
     aiModel: AiModelId
     imageModelProvider?: string
@@ -845,9 +793,9 @@ export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
 }
 
 // A compact, model-friendly description of a single context-bearing canvas node
-// (image, video, document, or aiChatThread) stored on the node so any feature can
+// (image, video, or document) stored on the node so any feature can
 // read it without re-deriving it. Media descriptors come from a VLM pass over the
-// actual still/final frame; document/thread descriptors are a text summary of the
+// actual still/final frame; document descriptors are a text summary of the
 // node's content (no pixels).
 // Deliberately short so it can be fed into model context (e.g. the branch-resolver
 // transcript, the workspace relevance snapshot) without bloat.
@@ -858,36 +806,30 @@ export type ContentDescriptor = {
     summary: string
     entityTags: string[]
     styleTags: string[]
-    // 'analysis' = a VLM caption (media) or a text summary (document/thread).
-    // 'generation' is a legacy persisted value and must not be written by new code.
-    source: 'generation' | 'analysis'
+    // VLM caption (media) or text summary (document/conversation).
+    source: 'analysis'
     version: string
     updatedAt: number
 }
 
-// Back-compat aliases: media kept the MediaDescriptor name before descriptors were
-// generalized to all node types. Identical shape — the media path is unchanged.
+// Domain aliases keep media-focused call sites readable while sharing one shape.
 export type MediaDescriptorStatus = ContentDescriptorStatus
 export type MediaDescriptor = ContentDescriptor
 
 export type ImageCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'image'
-    fileId: string
-    workspaceId: string
-    src: string
-    aspectRatio: number
+    assetId: string
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     generatedBy?: ImageGeneratedByMetadata
-    descriptor?: MediaDescriptor
 }
 
 // Provenance + lineage for an AI-generated video node. Mirrors
 // ImageGeneratedByMetadata and reuses the same branch-lineage audit field
 // names so the structured VLM resolver output maps over without translation.
 export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
-    aiChatThreadId: string
+    conversationAssetId: string
     responseId: string
     videoModel: AiModelId
     videoModelProvider?: string
@@ -926,61 +868,29 @@ export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     createdAt?: number
 }
 
-// AI-generated (or otherwise stored) video node. The MP4 lives in the workspace
-// Object Store under `fileId`; `posterFileId` is an ffmpeg frame-0 image used by
-// the PIXI media layer for the poster/placeholder behind the DOM video surface.
 export type VideoCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'video'
-    fileId: string                // MP4 object key in workspace-{workspaceId}-files
-    posterFileId: string          // ffmpeg frame-0 poster (an image object)
-    frameFileId?: string          // ffmpeg representative mid-frame used to ground the video to the VLM and as VEO's image-to-video anchor
-    workspaceId: string
-    src: string                   // tokenized MP4 URL (Range-capable video route)
-    posterSrc: string             // tokenized poster image URL (PIXI low-LoD)
-    aspectRatio: number           // width / height
-    durationSeconds: number       // 4 | 6 | 8
-    hasAudio: boolean
+    assetId: string
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     generatedBy?: VideoGeneratedByMetadata
-    descriptor?: MediaDescriptor
 }
 
-// Uploaded-audio node. Mirrors VideoCanvasNode minus poster geometry — the
-// canonical audio (MP3/WAV) lives in the workspace Object Store under `fileId`
-// and is played through a DOM <audio> surface, the audio analogue of the DOM
-// <video> surface used by VideoCanvasNode.
 export type AudioCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'audio'
-    fileId: string                // audio object key in workspace-{workspaceId}-files
-    workspaceId: string
-    src: string                   // tokenized audio URL (Range-capable file route)
-    durationSeconds: number
-    hasAudio: true
+    assetId: string
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
-    descriptor?: MediaDescriptor
 }
 
-// Uploaded-document node (PDF or office doc converted to PDF, or plain
-// text/Markdown). `posterFileId` is a first-page PNG render used by the PIXI
-// media layer; `pageCount` drives the page badge. Distinct from the
-// thread/text 'document' node (see CanvasNodeType note).
 export type DocumentMediaCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'mediaDocument'
-    fileId: string                // document object key in workspace-{workspaceId}-files
-    workspaceId: string
-    src: string                   // tokenized document URL (file route)
-    posterFileId?: string         // first-page poster (an image object), if rendered
-    posterSrc?: string            // tokenized poster image URL (PIXI low-LoD)
-    pageCount?: number
-    aspectRatio: number           // poster width / height (default to page ratio)
+    assetId: string
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
-    descriptor?: ContentDescriptor
 }
 
 export type UploadPlaceholderCanvasNode = CanvasNodeParentingFields & {
@@ -989,11 +899,7 @@ export type UploadPlaceholderCanvasNode = CanvasNodeParentingFields & {
     fileName: string
     status: 'converting' | 'failed'
     message?: string
-    // Set while status === 'converting' so the canvas can re-attach to the async
-    // file-conversion completion subject (CONVERT_RESPONSE.<workspaceId>.<conversionId>)
-    // after a reload. `fileId`/`kind` let the re-attach build the real node.
-    conversionId?: string
-    fileId?: string
+    assetId?: string
     kind?: MediaKind
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
@@ -1006,7 +912,7 @@ export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     type: 'branchOrigin'
     branchId: string
     generationRequestId: string
-    aiChatThreadId?: string
+    conversationAssetId?: string
     promptFingerprint?: string
     provenance?: BranchOriginProvenance
     pendingState?: BranchMarkerPendingState
@@ -1020,7 +926,7 @@ export type BranchForkCanvasNode = CanvasNodeParentingFields & {
     type: 'branchFork'
     branchId: string
     generationRequestId: string
-    aiChatThreadId?: string
+    conversationAssetId?: string
     reasoningRunId?: string
     reasoningModelId?: AiModelId
     reasoningIndex?: number
@@ -1038,7 +944,7 @@ export type BranchLineCanvasNode = CanvasNodeParentingFields & {
     type: 'branchLine'
     branchId: string
     generationRequestId: string
-    aiChatThreadId?: string
+    conversationAssetId?: string
     reasoningRunId?: string
     reasoningModelId?: AiModelId
     reasoningIndex?: number
@@ -1072,12 +978,12 @@ export type WorkspaceEdge = {
     targetHandle?: string
     sourceT?: number  // Position along source side (0=start, 1=end, 0.5=center). Default: 0.5
     targetT?: number  // Position along target side (0=start, 1=end, 0.5=center). Default: 0.5
-    sourceMessageId?: string  // Links edge to a specific aiResponseMessage (by its id attr) within the source AI chat thread
+    sourceMessageId?: string  // Links generated-media lineage to the originating aiResponseMessage in its conversation Asset
     pathType?: WorkspaceEdgePathType
 }
 
-// Feature library access scopes. Intentionally distinct from MEDIA_LIBRARY_SCOPE:
-// features are org-wide (accessible across every workspace in the organization).
+// Feature access scopes are separate from Asset scopes: Features are org-wide
+// and accessible across every workspace in the organization.
 // 'shared' (external/cross-org sharing) is reserved for a future release and has
 // no UI or code path yet.
 export type FeatureScope = 'organization' | 'shared'
@@ -1107,7 +1013,7 @@ export type FeatureSampleRef = {
     rationale?: string
     aspectRatio?: string
     ext: string
-    fileId?: string
+    blobHash: string
     imageUrl?: string
     kind?: FeatureSampleKind
     cropRegion?: FeatureSampleCropRegion
@@ -1231,7 +1137,7 @@ export type FeatureSourceContext = {
     sourceWorkspaceId: string
     sourceImages?: Array<{
         idx: number
-        imageUrl: string
+        assetId: string
         role: 'source-reference'
     }>
 }
@@ -1290,264 +1196,6 @@ export type FeatureReferenceMessageBlock = {
     sampleImages: Array<{ idx: number; subject: string; base64: string }>
 }
 
-// Media library access scopes mirror the feature library: items are org-wide
-// (accessible across every workspace in the organization). 'shared' (sharing with
-// external/global users) is reserved for a future release and has no UI or code path yet.
-export const MEDIA_LIBRARY_SCOPE = {
-    ORGANIZATION: 'organization',
-    SHARED: 'shared',
-} as const
-export type MediaLibraryScope = typeof MEDIA_LIBRARY_SCOPE[keyof typeof MEDIA_LIBRARY_SCOPE]
-
-// Features retain their existing persistence path and are adapted into the library UI.
-export const MEDIA_LIBRARY_ITEM_KIND = {
-    IMAGE: 'image',
-    VIDEO: 'video',
-    AUDIO: 'audio',
-    DOCUMENT: 'document',
-} as const
-export type MediaLibraryItemKind = typeof MEDIA_LIBRARY_ITEM_KIND[keyof typeof MEDIA_LIBRARY_ITEM_KIND]
-
-export const MEDIA_LIBRARY_ITEM_STATUS = {
-    ACTIVE: 'active',
-    DELETED: 'deleted',
-} as const
-export type MediaLibraryItemStatus = typeof MEDIA_LIBRARY_ITEM_STATUS[keyof typeof MEDIA_LIBRARY_ITEM_STATUS]
-
-// Top-level browsing categories in the Media Library panel.
-export const MEDIA_LIBRARY_CATEGORY = {
-    FEATURES: 'features',
-    IMAGES: 'images',
-    VIDEOS: 'videos',
-    AUDIO: 'audio',
-    DOCUMENTS: 'documents',
-} as const
-export type MediaLibraryCategory = typeof MEDIA_LIBRARY_CATEGORY[keyof typeof MEDIA_LIBRARY_CATEGORY]
-
-// Browse-filter sentinel meaning "all readable scopes" rather than a single scope.
-export const MEDIA_LIBRARY_BROWSE_ALL = 'all'
-
-export type MediaLibraryAssetRef = {
-    bucketName: string
-    objectKey: string
-    mimeType: string
-    byteSize: number
-    originalName: string
-}
-
-export type MediaLibraryImageData = {
-    width: number
-    height: number
-    aspectRatio: number
-}
-
-export type MediaLibraryImageItem = {
-    itemId: string
-    version: 1
-    kind: 'image'
-    displayName: string
-    ownerUserId: string
-    originWorkspaceId: string
-    sourceFileId: string
-    scope: MediaLibraryScope
-    scopeOwnerId: string
-    scopeAndOwner: string
-    status: MediaLibraryItemStatus
-    asset: MediaLibraryAssetRef
-    image: MediaLibraryImageData
-    // Copied from the source canvas node so the saved item is self-contained: the
-    // description/tags travel with the media and are restored when it is re-added,
-    // instead of being re-analyzed from scratch in the destination workspace.
-    descriptor?: MediaDescriptor
-    createdAt: number
-    updatedAt: number
-}
-
-export type MediaLibraryImageMeta = {
-    itemId: string
-    kind: 'image'
-    displayName: string
-    ownerUserId: string
-    originWorkspaceId: string
-    sourceFileId?: string         // source object key — lets save-time dedup query the meta partition
-    scope: MediaLibraryScope
-    scopeOwnerId: string
-    scopeAndOwner: string
-    status: MediaLibraryItemStatus
-    mimeType: string
-    byteSize: number
-    width: number
-    height: number
-    aspectRatio: number
-    previewUrl: string
-    createdAt: number
-    updatedAt: number
-}
-
-// Video items reuse the same scope/access model as images. The MP4 lives in
-// the library asset bucket with the same `MediaLibraryAssetRef` shape; the
-// `poster` field is a fully separate asset reference to a frame-0 PNG (or
-// JPEG) so the panel can render a still preview without decoding the MP4.
-export type MediaLibraryVideoData = {
-    durationSeconds: number
-    aspectRatio: number  // width / height
-    hasAudio: boolean
-    width?: number
-    height?: number
-}
-
-export type MediaLibraryVideoItem = {
-    itemId: string
-    version: 1
-    kind: 'video'
-    displayName: string
-    ownerUserId: string
-    originWorkspaceId: string
-    sourceFileId: string          // workspace-{ws}-files MP4 object key the item was saved from
-    sourcePosterFileId?: string   // workspace-{ws}-files poster object key (may be missing if ffmpeg failed)
-    scope: MediaLibraryScope
-    scopeOwnerId: string
-    scopeAndOwner: string
-    status: MediaLibraryItemStatus
-    asset: MediaLibraryAssetRef         // MP4 in library bucket
-    poster?: MediaLibraryAssetRef       // PNG/JPEG poster in library bucket
-    video: MediaLibraryVideoData
-    // Self-contained description/tags copied from the source canvas node (see image item).
-    descriptor?: MediaDescriptor
-    createdAt: number
-    updatedAt: number
-}
-
-export type MediaLibraryVideoMeta = {
-    itemId: string
-    kind: 'video'
-    displayName: string
-    ownerUserId: string
-    originWorkspaceId: string
-    sourceFileId?: string         // source object key — lets save-time dedup query the meta partition
-    scope: MediaLibraryScope
-    scopeOwnerId: string
-    scopeAndOwner: string
-    status: MediaLibraryItemStatus
-    mimeType: string
-    byteSize: number
-    durationSeconds: number
-    aspectRatio: number
-    hasAudio: boolean
-    width?: number
-    height?: number
-    previewUrl: string          // MP4 content route (Range-capable)
-    posterPreviewUrl?: string   // poster image route (PNG/JPEG)
-    createdAt: number
-    updatedAt: number
-}
-
-// Audio items reuse the same scope/access model. The canonical audio (MP3/WAV)
-// lives in the library asset bucket; there is no poster (audio has no still
-// frame). Duration drives the panel's playback chip.
-export type MediaLibraryAudioData = {
-    durationSeconds: number
-    hasAudio: true
-}
-
-export type MediaLibraryAudioItem = {
-    itemId: string
-    version: 1
-    kind: 'audio'
-    displayName: string
-    ownerUserId: string
-    originWorkspaceId: string
-    sourceFileId: string          // workspace-{ws}-files audio object key the item was saved from
-    scope: MediaLibraryScope
-    scopeOwnerId: string
-    scopeAndOwner: string
-    status: MediaLibraryItemStatus
-    asset: MediaLibraryAssetRef         // audio in library bucket
-    audio: MediaLibraryAudioData
-    descriptor?: MediaDescriptor
-    createdAt: number
-    updatedAt: number
-}
-
-export type MediaLibraryAudioMeta = {
-    itemId: string
-    kind: 'audio'
-    displayName: string
-    ownerUserId: string
-    originWorkspaceId: string
-    scope: MediaLibraryScope
-    scopeOwnerId: string
-    scopeAndOwner: string
-    status: MediaLibraryItemStatus
-    mimeType: string
-    byteSize: number
-    durationSeconds: number
-    previewUrl: string          // audio content route (Range-capable)
-    createdAt: number
-    updatedAt: number
-}
-
-// Document items reuse the same scope/access model. The canonical document (PDF
-// or model-safe text) lives in the library asset bucket; `poster` is a separate
-// first-page PNG so the panel can render a thumbnail without rendering the PDF.
-export type MediaLibraryDocumentData = {
-    pageCount?: number
-    aspectRatio: number  // poster width / height
-}
-
-export type MediaLibraryDocumentItem = {
-    itemId: string
-    version: 1
-    kind: 'document'
-    displayName: string
-    ownerUserId: string
-    originWorkspaceId: string
-    sourceFileId: string          // workspace-{ws}-files document object key the item was saved from
-    sourcePosterFileId?: string   // workspace-{ws}-files poster object key (may be missing)
-    scope: MediaLibraryScope
-    scopeOwnerId: string
-    scopeAndOwner: string
-    status: MediaLibraryItemStatus
-    asset: MediaLibraryAssetRef         // document in library bucket
-    poster?: MediaLibraryAssetRef       // first-page PNG poster in library bucket
-    document: MediaLibraryDocumentData
-    descriptor?: ContentDescriptor
-    createdAt: number
-    updatedAt: number
-}
-
-export type MediaLibraryDocumentMeta = {
-    itemId: string
-    kind: 'document'
-    displayName: string
-    ownerUserId: string
-    originWorkspaceId: string
-    scope: MediaLibraryScope
-    scopeOwnerId: string
-    scopeAndOwner: string
-    status: MediaLibraryItemStatus
-    mimeType: string
-    byteSize: number
-    pageCount?: number
-    aspectRatio: number
-    previewUrl: string          // document content route
-    posterPreviewUrl?: string   // poster image route (PNG/JPEG)
-    createdAt: number
-    updatedAt: number
-}
-
-// Unions for call-sites that switch on `kind`.
-export type MediaLibraryItem = MediaLibraryImageItem | MediaLibraryVideoItem | MediaLibraryAudioItem | MediaLibraryDocumentItem
-export type MediaLibraryMeta = MediaLibraryImageMeta | MediaLibraryVideoMeta | MediaLibraryAudioMeta | MediaLibraryDocumentMeta
-
-export type MediaLibraryAccessList = {
-    itemId: string
-    principalId: string
-    accessLevel: AccessLevel
-    createdAt: number
-    updatedAt: number
-}
-
 export type ExtractionRunStatus =
     | 'pending'
     | 'analyzing'
@@ -1589,8 +1237,8 @@ export type CanvasAiChatSidebarTab = {
     title: string
 }
 
-// Right side panel top-level surface: the feature-extraction library, saved
-// media (images + videos colocated), or the AI chat threads.
+// Right side panel top-level surface: the Feature library, the unified Asset
+// library, or conversation Assets.
 export type CanvasRightSidePanelMode = 'features' | 'media' | 'aiThreads'
 
 export type CanvasAiChatPanelState = {
@@ -1600,9 +1248,9 @@ export type CanvasAiChatPanelState = {
     topLevelMode: CanvasRightSidePanelMode
     tabs: CanvasAiChatSidebarTab[]
     activeTabId?: string
-    // Explicit force-included canvas node ids, fed to the bottom-center composer
-    // as context chips. The workspace relevance engine (later phases) unions
-    // these with its automatic picks — it may add, never drop them.
+    // Explicit canvas node ids fed to the bottom-center composer as context
+    // chips. When any chip is present, the API uses exactly that chip set and
+    // skips automatic relevance expansion.
     contextChips: string[]
     width?: number
 }
@@ -1630,36 +1278,33 @@ export type CanvasFeatureExtractionState = {
 }
 
 export type CanvasState = {
-    sourceContext: FeatureSourceContext
+    viewport: CanvasViewport
+    sourceContext?: FeatureSourceContext
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
-    lastActiveAiChatThreadId?: string
-    aiChatSidebarTabs?: CanvasAiChatSidebarTab[]
-    activeAiChatSidebarTabId?: string
+    lastActiveConversationAssetId?: string
     aiChatPanel?: CanvasAiChatPanelState
-    // Legacy workspace-state field. Current feature extraction state is owned by
-    // API ExtractionRun records; clients may read this only to prune old pending
-    // placeholders from saved workspaces.
-    featureExtractionRuns?: Record<string, CanvasFeatureExtractionState>
 }
 
 export type Workspace = {
     workspaceId: string
+    organizationId: string
     name: string
     accessType: 'private' | 'public'
     accessList: {
         userId: string
         accessLevel: AccessLevel
     }[]
-    files?: DocumentFile[]
     canvasState: CanvasState
     createdAt: number
     canvasStateUpdatedAt?: number
+    deletingAt?: number
     updatedAt: number
 }
 
 export type WorkspaceMeta = {
     workspaceId: string
+    organizationId: string
     name: string
     createdAt: number
     updatedAt: number
@@ -1668,32 +1313,6 @@ export type WorkspaceMeta = {
 export type WorkspaceAccessList = {
     userId: string
     workspaceId: string
-    accessLevel: AccessLevel
-    createdAt: number
-    updatedAt: number
-}
-
-export type Document = {
-    documentId: string        // SK — immutable id within the workspace partition
-    workspaceId: string       // PK — the scope the document is listed by
-    title: string
-    content: string
-    proseMirrorVersion?: number
-    createdAt: number
-    updatedAt: number
-}
-
-export type DocumentMeta = {
-    documentId: string
-    title: string
-    tags: string[]
-    createdAt: number
-    updatedAt: number
-}
-
-export type DocumentAccessList = {
-    userId: string
-    documentId: string
     accessLevel: AccessLevel
     createdAt: number
     updatedAt: number
@@ -1714,16 +1333,16 @@ export type MessageContent = string | MessageContentBlock[]
 
 export type AiInteractionChatSendMessagePayload = {
     messages: Array<{ role: string; content: MessageContent }>
-    // Ordered reasoning-model selection (length 1 = singular). The legacy
-    // single-model API path reads index 0; the matrix path reads the full list
+    // Ordered reasoning-model selection (length 1 = singular). The scalar
+    // provider path reads index 0; the matrix path reads the full list
     // via `mediaGenerationRequest.reasoningModelIds`.
     aiReasoningModels: AiModelId[]
-    threadId: string
+    conversationAssetId: string
     referencedFeatureIds?: string[]
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
     mediaGenerationRequest?: AiInteractionMediaGenerationRequest
-    // Whole-workspace, descriptors-only index sent each turn; consumed by the
-    // API `resolveWorkspaceContext` relevance stage (later phase).
+    // Whole-workspace, descriptors-only index sent each turn and consumed by
+    // the API `resolveWorkspaceContext` relevance stage.
     workspaceContextSnapshot?: WorkspaceContextSnapshot
     canvasVisibleArea?: {
         width: number
@@ -1752,6 +1371,22 @@ export type AiInteractionMediaGenerationRequest = {
         sourceForExtension?: string
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
+    regeneration?: {
+        mode: 'existing-prompt'
+        branchId: string
+        lineageParentNodeId: string
+        lineageParentType: 'branchOrigin' | 'branchFork' | 'branchLine'
+        replayPrompts: Array<{
+            sourceAssetId: string
+            reasoningModelId: AiModelId
+            mediaModelId: AiModelId
+            mediaType: 'image' | 'video'
+            finalPrompt: string
+        }>
+    } | {
+        mode: 'regenerate-prompt'
+        forceFreshLineage: true
+    }
 }
 
 export type AiInteractionChatSendMessagePayloadV2 = AiInteractionChatSendMessagePayload & {
@@ -1765,7 +1400,7 @@ export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePa
 }
 
 export type AiInteractionChatStopMessagePayload = {
-    threadId: string
+    conversationAssetId: string
     generationRequestId?: string
 }
 
@@ -1921,21 +1556,4 @@ export type FinancialTransaction = {
     status: string
     rawEvent: Record<string, any>
     createdAt: number
-}
-
-export type AiChatThreadStatus = 'active' | 'paused' | 'completed'
-
-export type AiChatThreadOwner = { type: 'standalone' }
-
-export type AiChatThread = {
-    workspaceId: string
-    threadId: string
-    content: object
-    proseMirrorVersion?: number
-    aiModel: string
-    title?: string
-    owner?: AiChatThreadOwner
-    status: AiChatThreadStatus
-    createdAt: number
-    updatedAt: number
 }

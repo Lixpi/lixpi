@@ -5,44 +5,54 @@ description: How AI generation events move from the in-process API workflow to t
 
 # Streaming and Events
 
-Lixpi uses NATS for the live AI generation path and JetStream for resumability. The in-process LangGraph workflow publishes live chat pipeline events onto a per-thread subject, writes the same pipeline events to a workspace JetStream log before live publish, and mirrors AI chat document mutations into a per-document ProseMirror step log. A refreshed browser can therefore recover both pieces of state it needs:
+Lixpi uses NATS for the live AI generation path and JetStream for resumability. The in-process LangGraph workflow publishes live chat pipeline events onto an internal per-pipeline subject, writes the same pipeline events to a workspace JetStream log before live publish, and mirrors AI chat document mutations into the conversation Asset's organization-scoped ProseMirror step log. Authorized API relays copy canonical live traffic to per-user browser subjects. A refreshed browser can therefore recover both pieces of state it needs:
 
 - non-ProseMirror pipeline events such as branch resolution, lineage planning, image/video progress, traces, and errors through `CHAT_PIPELINE_RESUME`
-- rendered AI chat text and generated-media transcript nodes through `DOC_RESUME` plus the document step subject
+- rendered AI chat text and generated-media transcript nodes through `asset.document.resume` plus a per-user Asset-document event relay
 
-There is no polling loop and no separate streaming server. Live latency is still the direct NATS WebSocket path; durability is provided by short-lived JetStream streams that can replay missed events after a refresh or second-tab mount.
+The AI live path has no polling loop and no separate streaming server. Live latency is still the direct NATS WebSocket path; durability is provided by bounded JetStream streams that can replay missed events after a refresh or second-tab mount. Asset metadata/rendition cache synchronization uses tokenized Asset events plus a low-frequency reconciliation poll because those mutation notifications are invalidations, not a durable replay log.
 
 This page documents the wire shape: live subjects, replay subjects, event statuses, and browser render paths. For which workflow nodes emit these events and why the lifecycle is shaped this way, see [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md). For the system-wide messaging picture, see [System Architecture](./SYSTEM-ARCHITECTURE.md).
 
 ## Subject Families
 
-AI generation uses one request subject, one live per-thread subject, one durable pipeline-event subject family, and the shared ProseMirror document-step subject family:
+AI generation uses one request subject, internal canonical live subjects, authorized per-user live relays, one durable pipeline-event subject family, and the shared Asset-role ProseMirror step subject family:
 
 ```text
 ai.interaction.chat.sendMessage
-ai.interaction.chat.receiveMessage.{workspaceId}.{threadId}
+ai.interaction.chat.receiveMessage.{scopeId}.{pipelineId}
+ai.interaction.chat.receiveMessage.{userIdToken}.{scopeId}.{pipelineId}
 ai.interaction.chat.pipelineResume
 ai.interaction.chat.pipelineEvents.{workspaceId}.{pipelineId}
-document.resume
-document.steps.{workspaceId}.{docType}.{docId}
+asset.document.resume
+asset.document.steps.{organizationId}.{assetId}.{role}
+asset.document.events.{userIdToken}.{organizationId}.{assetId}.{role}
+asset.events.{created|updated|deleted|renditionUpdated}
+asset.events.{created|updated|deleted|renditionUpdated}.{userIdToken}
 ```
 
 | Direction | Subject | Side |
 |-----------|---------|------|
 | Request | `ai.interaction.chat.sendMessage` | Browser publishes; the API AI-interaction handler subscribes in the `aiInteraction` queue group. |
-| Live pipeline events | `ai.interaction.chat.receiveMessage.{workspaceId}.{threadId}` | `StreamPublisher` publishes; each mounted `AiInteractionService` subscribes to its own thread. |
+| Canonical live pipeline events | `ai.interaction.chat.receiveMessage.{scopeId}.{pipelineId}` | API publishers write to this internal-only subject. Chat uses organization scope; extraction uses Workspace scope. |
+| Browser live pipeline events | `ai.interaction.chat.receiveMessage.{userIdToken}.{scopeId}.{pipelineId}` | An API relay is activated only after the user is authorized for the conversation Asset or Workspace. `AiInteractionService` subscribes under its own tokenized prefix. |
 | Pipeline replay request | `ai.interaction.chat.pipelineResume` | Browser requests missed pipeline events after `pipelineLocalStreamSeq`; API reads JetStream and replies. |
-| Durable pipeline log | `ai.interaction.chat.pipelineEvents.{workspaceId}.{pipelineId}` | `PipelineEventLog` stores events before live publish. `pipelineId` is the AI chat thread id for chat requests. |
-| Document replay request | `document.resume` | `ProseMirrorAuthorityService` requests the persisted snapshot plus missed document stream events. |
-| Durable/live document steps | `document.steps.{workspaceId}.{docType}.{docId}` | API publishes ProseMirror `START` / `STEP` / `END` / `ERROR` events; browser authority services subscribe and replay. |
+| Durable pipeline log | `ai.interaction.chat.pipelineEvents.{workspaceId}.{pipelineId}` | `PipelineEventLog` stores events before live publish. `pipelineId` is the conversation Asset ID for chat requests. |
+| Asset-role replay request | `asset.document.resume` | `ProseMirrorAuthorityService` requests the persisted Blob snapshot plus missed Asset-role stream events. |
+| Canonical Asset-role steps | `asset.document.steps.{organizationId}.{assetId}.{role}` | API publishes durable ProseMirror `START` / `STEP` / `END` / `ERROR` events. Browsers cannot subscribe directly. |
+| Browser live Asset-role events | `asset.document.events.{userIdToken}.{organizationId}.{assetId}.{role}` | `asset.document.resume` authorizes the Asset and, when `activateLiveRelay: true`, activates a per-user relay before returning replay state and the exact live subject. The relay point-checks Asset/ACL access for every event and refreshes workspace/organization membership at most five seconds after it changes. Snapshot-only loads do not create relays. |
+| Canonical Asset invalidations | `asset.events.{created|updated|deleted|renditionUpdated}` | API Asset/maintenance/rendition writers publish organization-tagged invalidations. Browsers cannot subscribe directly. |
+| Browser Asset invalidations | `asset.events.{created|updated|deleted|renditionUpdated}.{userIdToken}` | Every active API replica re-evaluates current organization, scope/reference, and ACL authorization before relaying. Previously authorized IDs are remembered so revocation/deletion can remove cache entries; duplicate/out-of-order refreshes are revision-guarded. |
 
 Subject names live in [`nats-subjects.json`](../../packages/lixpi/constants/nats-subjects.json). AI stream status values live in [`ai-interaction-constants.json`](../../packages/lixpi/constants/ai-interaction-constants.json) (`STREAM_STATUS`).
+
+Browser user JWTs grant publish permission for command subjects and subscribe permission for `_INBOX.>` plus tokenized live-event prefixes. They never grant subscribe permission on command subjects, canonical AI/document/Asset subjects, or cross-tenant Feature events; request payloads contain bearer tokens and must not be observable by another NATS client.
 
 ## Durable Logs
 
 ### Pipeline Event Log
 
-`StreamPublisher` writes every chat pipeline event through [`PipelineEventLog`](../../services/api/src/llm/graph/pipeline-event-log.ts) before publishing the live `receiveMessage` event. The stream is per workspace (`PIPELINE_EVENTS_{workspaceId}`), uses file storage, `allow_direct`, limits retention, and one subject per pipeline/thread.
+`StreamPublisher` writes every chat pipeline event through [`PipelineEventLog`](../../services/api/src/llm/graph/pipeline-event-log.ts) before publishing the canonical live `receiveMessage` event. The stream is per workspace (`PIPELINE_EVENTS_{workspaceId}`), uses file storage, `allow_direct`, limits retention, and one subject per pipeline. Normal cleanup purges a completed pipeline only after every planned output has `sealed`, `failed`, or `cancelled` provenance. The seven-day maximum age is a crash/orphan backstop that preserves the authoritative log across long media jobs and API restarts; it is not the normal completion lifetime. The browser never receives permission for the canonical subject; an API relay copies events to the authorized user-token subject.
 
 Response publishing uses separate in-process queues for media runs. Events without a concrete `generationRun.mediaRunId` publish through the main response queue. Media trace, partial, complete, and error events with a `mediaRunId` publish through that run's queue, which preserves ordering for one generated image/video while allowing sibling variants to publish independently. A final `IMAGE_COMPLETE` for a run waits behind that run's earlier partials; it does not wait behind another run's partial upload or JetStream acknowledgement.
 
@@ -60,16 +70,16 @@ type PipelineEventEnvelope = {
 }
 ```
 
-`AiInteractionService` tracks `pipelineEventId` for dedupe and `pipelineLocalStreamSeq` as its replay cursor. On mount it calls `CHAT_PIPELINE_RESUME`; the API returns events after that stream sequence by reading direct JetStream messages with `last_by_subj` and `next_by_subj`.
+`AiInteractionService` tracks `pipelineEventId` for dedupe and `pipelineLocalStreamSeq` as its replay cursor. On mount it calls `CHAT_PIPELINE_RESUME`; the API returns events after that stream sequence by reading direct JetStream messages with `last_by_subj` and `next_by_subj`. Replay pages expose `hasMore`, and the browser continues from its last applied stream sequence until the bounded subject is caught up.
 
 ### ProseMirror Step Log
 
-AI chat text and generated-media transcript nodes are not reconstructed from raw token events in the browser. The API owns the headless ProseMirror state for the AI stream through [`AiChatProseMirrorStreamAssembler`](../../services/api/src/prosemirror/ai-chat-stream-assembler.ts). It runs `@lixpi/markdown-stream-parser`, applies the shared assembly rules from `@lixpi/prosemirror`, and publishes document events through [`ProseMirrorStepTransport`](../../services/api/src/prosemirror/prosemirror-step-transport.ts).
+AI chat text and generated-media transcript nodes are not reconstructed from raw token events in the browser. The API owns the headless ProseMirror state for the AI stream through [`AiChatProseMirrorStreamAssembler`](../../services/api/src/prosemirror/ai-chat-stream-assembler.ts). It runs `@lixpi/markdown-stream-parser`, applies the shared assembly rules from `@lixpi/prosemirror`, and publishes Asset-role events through [`AssetProseMirrorStepTransport`](../../services/api/src/prosemirror/asset-prosemirror-step-transport.ts).
 
-The ProseMirror stream is per workspace (`PM_STEPS_{workspaceId}`), uses file storage, `allow_direct`, `allow_rollup_hdrs`, and one subject per document:
+The ProseMirror stream is per organization (`ASSET_STEPS_<organizationId>`), uses file storage, `allow_direct`, `allow_rollup_hdrs`, and one subject per Asset document role:
 
 ```text
-document.steps.{workspaceId}.{docType}.{docId}
+asset.document.steps.{organizationId}.{assetId}.{role}
 ```
 
 Events carry two cursors with different meanings:
@@ -79,10 +89,12 @@ Events carry two cursors with different meanings:
 | `version` / `finalVersion` | ProseMirror document version after applying document-changing steps. Browser freshness is based on this value. |
 | `streamSequence` | JetStream stream sequence for replay. Browser resume uses this to avoid missing control messages that do not increment document version. |
 
-`DOC_RESUME` returns a persisted snapshot when one is newer than the browser document, the latest document version, the latest stream sequence, and missed events after `localStreamSeq`. `ProseMirrorAuthorityService` applies snapshots first, then applies `STEP` events with `Step.fromJSON(view.state.schema, event.step)`, buffers gaps, and holds `END` until the local document version has caught up to `finalVersion`.
+`asset.document.resume` authorizes the Asset/Workspace/role and returns a persisted Blob-backed snapshot when one is newer than the browser document, the latest document version, the latest stream sequence, and missed events after `localStreamSeq`. Mounted authorities request `activateLiveRelay: true`; the API then activates the user relay and returns its exact live subject. Snapshot-only Asset loads omit the flag and create no relay. `ProseMirrorAuthorityService` subscribes to its predicted tokenized subject before resume to close the live/replay race and verifies the returned subject. With no pending local steps it can apply a newer snapshot directly; otherwise it replays `STEP` events with `Step.fromJSON(view.state.schema, event.step)` and rebases pending local steps. Settled history has a five-minute replay grace before purge through the incorporated sequence. Mutable roles require the current workspace lease; provenance is sealed and never accepts client steps.
+
+JetStream publish CAS uses the last JetStream stream sequence returned for that document subject. The envelope's logical `subjectSeq` is ordering metadata and must never be passed as `lastSubjectSequence`; organization streams interleave many Asset subjects, so those values are intentionally different.
 
 {% callout type="note" %}
-The live `START_STREAM` / `STREAMING` / `END_STREAM` payloads still exist as pipeline lifecycle events. They are useful for receiving state, compatibility, and durable event ordering, but AI chat text rendering uses the ProseMirror document step stream.
+The live `START_STREAM` / `STREAMING` / `END_STREAM` payloads are pipeline lifecycle events used for receiving state and durable event ordering. AI chat text rendering uses the Asset-role ProseMirror step stream.
 {% /callout %}
 
 ## Stream-Event Catalog
@@ -101,12 +113,12 @@ Every live pipeline message carries a `status` from `STREAM_STATUS` inside `cont
 | `MEDIA_LINEAGE_PLANNED` | `{ lineagePlan, generationRun }` | Canvas: apply API-declared branch origin/fork IDs, lineage parent, marker provenance, and run assignments | API-owned media lineage topology for media-enabled requests. Forwarded as a `media_lineage_planned` segment. |
 | `MEDIA_BRANCH_RESOLUTION_ERROR` | `{ error }` | Surface branch failure; clear pending placement | Branch resolution failed (e.g. missing candidate snapshot). |
 | `IMAGE_GENERATION_TRACE` | `{ imageGenerationTrace }` | `image_generation_trace` segment | Audit trace: image tool prompt + selected/excluded references, published before the transient image provider runs. |
-| `IMAGE_PARTIAL` | `{ imageUrl, fileId, partialIndex }` | Canvas media layer (bypasses markdown) | Empty `imageUrl`/`fileId` triggers the PIXI animated-border placeholder; non-empty partials have already been stored in the workspace Object Store and replace the same preview sprite in place. |
-| `IMAGE_COMPLETE` | `{ imageUrl, fileId, responseId, revisedPrompt, imageModelId, imageModelProvider }` | Canvas media layer | The finished image; PIXI renders it from the stored URL and clears the traveling outline. |
+| `IMAGE_PARTIAL` | `{ imageUrl, assetId, partialIndex }` | Canvas media layer (bypasses markdown) | Empty `imageUrl` triggers the placeholder; non-empty provider partials are transient data URLs that update the deterministic pending Asset node without becoming durable Blobs. |
+| `IMAGE_COMPLETE` | `{ imageUrl, assetId, responseId, revisedPrompt, imageModelId, imageModelProvider, canvasGeometry }` | Canvas media layer | Final bytes settle the preassigned Asset, and the API-authored canvas projection finalizes the node. |
 | `VIDEO_GENERATION_TRACE` | `{ videoGenerationTrace }` | `video_generation_trace` segment | Audit trace: video tool prompt + selected/excluded references, published before VEO runs (so the trace survives a later VEO failure). |
 | `VIDEO_PENDING` | — | `video_pending` segment + placeholder node | Create the placeholder `VideoCanvasNode` and start the traveling outline. |
 | `VIDEO_GENERATING` | — | `video_generating` segment | Keepalive ping during the VEO poll loop, so the browser never looks frozen. |
-| `VIDEO_COMPLETE` | `{ videoUrl, fileId, posterUrl, posterFileId, frameUrl, frameFileId, durationSeconds, aspectRatio, hasAudio, responseId, revisedPrompt, videoModelId, videoModelProvider }` | `video_complete` segment | Finalize the node: PIXI renders the poster behind the browser-composited `<video>`; `frameFileId` enables cheap re-grounding of later edits. |
+| `VIDEO_COMPLETE` | `{ videoUrl, assetId, durationSeconds, aspectRatio, hasAudio, responseId, revisedPrompt, videoModelId, videoModelProvider, canvasGeometry }` | `video_complete` segment | Final bytes settle the preassigned Asset. The API projection finalizes the node; playback and grounding resolve named renditions from that Asset. |
 | `VIDEO_ERROR` | `{ error }` | `video_error` segment | Surface VEO failure and clean up the placeholder. |
 | `COLLAPSIBLE_START` | `{ collapsibleTitle }` | ProseMirror assembler creates or updates the trace block | Open a generated-prompt trace block around `<image_prompt>...</image_prompt>` or `<video_prompt>...</video_prompt>`. |
 | `COLLAPSIBLE_END` | — | ProseMirror assembler finalizes the trace block | Close the generated-prompt trace block. |
@@ -134,13 +146,15 @@ graph LR
         Pub[StreamPublisher]
         Asm[AiChatProseMirrorStreamAssembler]
         PLog[PipelineEventLog]
-        PMLog[ProseMirrorStepTransport]
+        PMLog[AssetProseMirrorStepTransport]
     end
 
     subgraph NATSBus["NATS"]
-        Live["receiveMessage<br/>.{workspaceId}.{threadId}"]
+        CanonicalLive["receiveMessage<br/>.{scopeId}.{pipelineId}"]
+        UserLive["receiveMessage<br/>.{userIdToken}.{scopeId}.{pipelineId}"]
         Replay["pipelineEvents<br/>.{workspaceId}.{pipelineId}"]
-        Steps["document.steps<br/>.{workspaceId}.{docType}.{docId}"]
+        Steps["asset.document.steps<br/>.{organizationId}.{assetId}.{role}"]
+        UserSteps["asset.document.events<br/>.{userIdToken}.{organizationId}.{assetId}.{role}"]
     end
 
     subgraph BrowserSide["Browser"]
@@ -157,11 +171,14 @@ graph LR
     Pub -->|text + transcript media| Asm
     Asm --> PMLog
     PLog --> Replay
-    Pub -->|live payloads| Live
+    Pub -->|canonical live payloads| CanonicalLive
     PMLog --> Steps
-    Live -->|WebSocket| AIS
+    CanonicalLive -->|authorized API relay| UserLive
+    Steps -->|authorized API relay| UserSteps
+    UserLive -->|WebSocket| AIS
     Replay -.->|CHAT_PIPELINE_RESUME| AIS
-    Steps -->|live + DOC_RESUME replay| Auth
+    UserSteps -->|live| Auth
+    Steps -.->|Asset document resume replay| Auth
     Auth -->|Step.fromJSON| DOM
     AIS -->|media / branch / relevance segments| Plug
     Plug --> Media
@@ -170,9 +187,9 @@ graph LR
 | Stage | Responsibility |
 |-------|----------------|
 | `AiChatProseMirrorStreamAssembler` | Parses provider text with `@lixpi/markdown-stream-parser`, applies shared assembly rules, inserts trace/media transcript nodes, persists the final AI chat snapshot, and publishes ProseMirror stream events. |
-| `ProseMirrorStepTransport` | Ensures the workspace JetStream stream, publishes events with per-subject expectations, exposes current subject state, and replays events by direct subject reads. |
-| `ProseMirrorAuthorityService` | Subscribes to document steps, calls `DOC_RESUME`, applies snapshots and `STEP` events, rebases pending local document edits, and toggles AI receiving state on `START` / `END` / `ERROR`. |
-| `AiInteractionService` | Subscribes to the live receive subject, calls `CHAT_PIPELINE_RESUME`, dedupes by `pipelineEventId`, and forwards side-effect event families to `SegmentsReceiver`. |
+| `AssetProseMirrorStepTransport` | Ensures the organization JetStream stream, publishes events with per-subject expectations, exposes current subject state, and replays events by direct subject reads. |
+| `ProseMirrorAuthorityService` | Acquires and renews the workspace edit lease, subscribes to its per-user Asset-document event subject, calls `asset.document.resume`, verifies the returned live subject, applies snapshots and `STEP` events, rebases pending local document edits, and toggles AI receiving state on `START` / `END` / `ERROR`. |
+| `AiInteractionService` | Subscribes to its per-user live receive subject, calls `CHAT_PIPELINE_RESUME` to authorize/activate relay and replay, dedupes by `pipelineEventId`, and forwards side-effect event families to `SegmentsReceiver`. |
 | `aiChatThreadPlugin` | Owns chat NodeViews, request construction, receiving decorations, and media/canvas callback surfaces. Text document mutations come from the authority service. |
 
 The markdown-to-ProseMirror assembly rules are covered in [Markdown Rendering](../conventions/MARKDOWN-RENDERING.md).

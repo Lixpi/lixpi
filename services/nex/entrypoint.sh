@@ -187,7 +187,7 @@ DYNAMODB_ENDPOINT OPENAI_API_KEY ANTHROPIC_API_KEY GOOGLE_API_KEY \
 STABLE_DIFFUSION_API_KEY ARK_API_KEY LIXPI_SYNC_INTERVAL_MS"
 
 # file-conversion: connects to NATS as the AUTH-account regular_user (not the
-# NEX-account creds) so it can read/write the workspace Object Store buckets.
+# NEX-account creds) so it can read/write organization Blob Object Store buckets.
 FILE_CONVERSION_ENTRY="${SERVICE_DIR}/workloads/file-conversion/index.ts"
 FILE_CONVERSION_KEYS="NATS_SERVERS NATS_REGULAR_USER_PASSWORD"
 

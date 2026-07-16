@@ -96,7 +96,7 @@ The editable AI chat path is server-authored:
 2. The assembler owns a headless `EditorState` through `HeadlessProseMirrorEngine`.
 3. `MarkdownStreamParser` emits segments.
 4. `applyStreamingSegmentToTransaction()` from `@lixpi/prosemirror` converts each segment into ProseMirror transaction steps.
-5. `ProseMirrorStepTransport` publishes `STEP` events to `document.steps.{workspaceId}.aiChatThread.{threadId}`.
+5. `AssetProseMirrorStepTransport` publishes `STEP` events to `asset.document.steps.{organizationId}.{conversationAssetId}.conversation`.
 6. `ProseMirrorAuthorityService` applies each step in the browser with `Step.fromJSON(view.state.schema, event.step)`.
 
 The browser does not run a separate markdown-to-ProseMirror parser for AI chat text. It renders the document produced by the API, while `aiChatThreadPlugin` still owns NodeViews, decorations, request construction, and non-ProseMirror pipeline side effects.

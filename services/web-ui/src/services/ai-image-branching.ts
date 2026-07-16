@@ -19,6 +19,8 @@ import {
     collectProseMirrorText,
     parseProseMirrorJsonContent,
 } from '@lixpi/prosemirror/shared/thread-doc'
+import { assetsStore } from '$src/stores/assetsStore.ts'
+import { buildAssetRenditionPath } from '$src/utils/mediaUrls.ts'
 
 const RESOLVER_VERSION = 'image-branch-vlm-v1'
 
@@ -30,7 +32,7 @@ type WorkspaceContextCanvasNode = MediaCanvasNode | DocumentCanvasNode
 
 type BuildMediaBranchCandidateSnapshotParams = {
     regionNodeId: string
-    threadId: string
+    conversationAssetId: string
     activeTargetNodeId?: string
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
@@ -52,8 +54,8 @@ function isWorkspaceContextCanvasNode(node: CanvasNode): node is WorkspaceContex
     return node.type === 'image' || node.type === 'video' || node.type === 'document'
 }
 
-function isGeneratedMediaForThread(node: CanvasNode, threadId: string): node is MediaCanvasNode {
-    return isMediaCanvasNode(node) && node.generatedBy?.aiChatThreadId === threadId
+function isGeneratedMediaForConversation(node: CanvasNode, conversationAssetId: string): node is MediaCanvasNode {
+    return isMediaCanvasNode(node) && node.generatedBy?.conversationAssetId === conversationAssetId
 }
 
 export function getPromptTextFromMessages(messages: ChatMessageLike[]): string {
@@ -138,8 +140,8 @@ function getContextMediaNodes(nodes: CanvasNode[], sourceContextNodeIds: string[
     return nodes.filter((node): node is MediaCanvasNode => isMediaCanvasNode(node) && sourceContextNodeIdSet.has(node.nodeId))
 }
 
-function getGeneratedMediaForThread(nodes: CanvasNode[], threadId: string): MediaCanvasNode[] {
-    return nodes.filter((node): node is MediaCanvasNode => isGeneratedMediaForThread(node, threadId))
+function getGeneratedMediaForConversation(nodes: CanvasNode[], conversationAssetId: string): MediaCanvasNode[] {
+    return nodes.filter((node): node is MediaCanvasNode => isGeneratedMediaForConversation(node, conversationAssetId))
 }
 
 function getLeafGeneratedMedia(media: MediaCanvasNode[], edges: WorkspaceEdge[]): MediaCanvasNode[] {
@@ -205,13 +207,7 @@ function getBranchIdForMedia(selectedMedia: MediaCanvasNode, ancestorNodeIds: st
 // representative mid-frame (falling back to the frame-0 poster); the MP4 itself
 // is never sent to the VLM — only the explicit "extend video" action ships it.
 function getMediaUrl(node: MediaCanvasNode): string {
-    if (node.type === 'video') {
-        const frameFileId = node.frameFileId || node.posterFileId
-        if (frameFileId && node.workspaceId) return `nats-obj://workspace-${node.workspaceId}-files/${frameFileId}`
-        return node.posterSrc || node.src
-    }
-    if (node.fileId && node.workspaceId) return `nats-obj://workspace-${node.workspaceId}-files/${node.fileId}`
-    return node.src
+    return buildAssetRenditionPath(node.assetId, node.type === 'video' ? 'representativeFrame' : 'preview')
 }
 
 function getMediaPromptText(node: MediaCanvasNode, generatedMediaTextByNodeId: Record<string, string> = {}): string {
@@ -224,7 +220,7 @@ function getMediaPromptText(node: MediaCanvasNode, generatedMediaTextByNodeId: R
         generatedBy?.entitySummary,
         // Descriptor summaries come from the media pixels and help distinguish
         // media from prompt/provenance text.
-        node.descriptor?.summary,
+        assetsStore.get(node.assetId)?.descriptor?.summary,
         generatedMediaTextByNodeId[node.nodeId],
     ].filter((text): text is string => Boolean(text?.trim())).join('\n')
 }
@@ -247,7 +243,7 @@ function getBranchPromptText(
 export function getGeneratedImageTextByNodeIdFromThreadContent(
     threadContent: unknown,
     nodes: CanvasNode[],
-    threadId: string
+    conversationAssetId: string
 ): Record<string, string> {
     const root = parseProseMirrorJsonContent(threadContent)
     if (!root) return {}
@@ -255,7 +251,7 @@ export function getGeneratedImageTextByNodeIdFromThreadContent(
     const responseTextById = collectResponseTextById(root)
     const textByNodeId: Record<string, string> = {}
     for (const node of nodes) {
-        if (!isGeneratedMediaForThread(node, threadId)) continue
+        if (!isGeneratedMediaForConversation(node, conversationAssetId)) continue
         const responseMessageId = node.generatedBy?.responseMessageId
         if (!responseMessageId) continue
         const text = responseTextById[responseMessageId]
@@ -287,13 +283,6 @@ function addActiveTargetHint(roleHints: MediaBranchCandidateRoleHint[], imageNod
     return uniqueRoleHints(imageNodeId === activeTargetNodeId ? [...roleHints, 'active-target'] : roleHints)
 }
 
-// The candidate fileId tracks the still the resolver grounds against, so for a
-// video it is the representative frame (or poster) rather than the MP4 object.
-function getCandidateStillFileId(node: MediaCanvasNode): string | undefined {
-    if (node.type === 'video') return node.frameFileId || node.posterFileId || undefined
-    return node.fileId
-}
-
 function createBaseContextCandidate(media: MediaCanvasNode, activeTargetNodeId: string | undefined): MediaBranchCandidateImage {
     const generatedBy = media.generatedBy
     const parentMediaNodeId = generatedBy?.parentMediaNodeId ?? generatedBy?.parentImageNodeId
@@ -302,8 +291,7 @@ function createBaseContextCandidate(media: MediaCanvasNode, activeTargetNodeId: 
 
     return {
         nodeId: media.nodeId,
-        fileId: getCandidateStillFileId(media),
-        workspaceId: media.workspaceId,
+        assetId: media.assetId,
         imageUrl: getMediaUrl(media),
         mediaKind: media.type,
         roleHints: addActiveTargetHint(roleHints, media.nodeId, activeTargetNodeId),
@@ -316,8 +304,8 @@ function createBaseContextCandidate(media: MediaCanvasNode, activeTargetNodeId: 
         promptText: getMediaPromptText(media),
         visualEntitySummary: generatedBy?.visualEntitySummary ?? generatedBy?.entitySummary,
         visualStyleSummary: generatedBy?.visualStyleSummary,
-        entityTags: generatedBy?.entityTags ?? media.descriptor?.entityTags ?? [],
-        styleTags: generatedBy?.styleTags ?? media.descriptor?.styleTags ?? [],
+        entityTags: generatedBy?.entityTags ?? assetsStore.get(media.assetId)?.descriptor?.entityTags ?? [],
+        styleTags: generatedBy?.styleTags ?? assetsStore.get(media.assetId)?.descriptor?.styleTags ?? [],
         createdAt: generatedBy?.createdAt,
     }
 }
@@ -340,8 +328,7 @@ function createGeneratedCandidate(args: {
 
     return {
         nodeId: args.media.nodeId,
-        fileId: getCandidateStillFileId(args.media),
-        workspaceId: args.media.workspaceId,
+        assetId: args.media.assetId,
         imageUrl: getMediaUrl(args.media),
         mediaKind: args.media.type,
         roleHints: addActiveTargetHint(roleHints, args.media.nodeId, args.activeTargetNodeId),
@@ -354,8 +341,8 @@ function createGeneratedCandidate(args: {
         promptText: getBranchPromptText(args.media, args.mediaById, args.edges, args.regionNodeId, args.generatedMediaTextByNodeId),
         visualEntitySummary: generatedBy?.visualEntitySummary ?? generatedBy?.entitySummary,
         visualStyleSummary: generatedBy?.visualStyleSummary,
-        entityTags: generatedBy?.entityTags ?? args.media.descriptor?.entityTags ?? [],
-        styleTags: generatedBy?.styleTags ?? args.media.descriptor?.styleTags ?? [],
+        entityTags: generatedBy?.entityTags ?? assetsStore.get(args.media.assetId)?.descriptor?.entityTags ?? [],
+        styleTags: generatedBy?.styleTags ?? assetsStore.get(args.media.assetId)?.descriptor?.styleTags ?? [],
         createdAt: generatedBy?.createdAt,
     }
 }
@@ -381,7 +368,7 @@ function buildTranscriptContext(candidates: MediaBranchCandidateImage[], prompt:
 
 export function buildMediaBranchCandidateSnapshot({
     regionNodeId,
-    threadId,
+    conversationAssetId,
     activeTargetNodeId,
     nodes,
     edges,
@@ -394,7 +381,7 @@ export function buildMediaBranchCandidateSnapshot({
         ...contextMediaNodeIds,
     ])
     const contextMedia = getContextMediaNodes(nodes, sourceContextNodeIds)
-    const generatedMedia = getGeneratedMediaForThread(nodes, threadId)
+    const generatedMedia = getGeneratedMediaForConversation(nodes, conversationAssetId)
     const generatedMediaById = new Map(generatedMedia.map((node) => [node.nodeId, node]))
     const leafNodeIds = new Set(getLeafGeneratedMedia(generatedMedia, edges).map((node) => node.nodeId))
     const candidatesById = new Map<string, MediaBranchCandidateImage>()
@@ -419,7 +406,7 @@ export function buildMediaBranchCandidateSnapshot({
     const candidates = Array.from(candidatesById.values())
     return {
         resolverVersion: RESOLVER_VERSION,
-        threadId,
+        conversationAssetId,
         regionNodeId,
         ...(activeTargetNodeId ? { activeTargetNodeId } : {}),
         // Explicit refs are carried as data only — the candidate list stays
@@ -464,7 +451,7 @@ export function buildCanvasWideCandidateSnapshot({
     const candidates = Array.from(candidatesById.values())
     return {
         resolverVersion: RESOLVER_VERSION,
-        threadId: generationRunId,
+        conversationAssetId: generationRunId,
         // `standalone:`-prefixed so the API planner treats this as a rootless
         // generation (no real source node) and plans a branchOrigin marker — a
         // thread-less canvas run has no chat/source node to root on.
@@ -484,7 +471,7 @@ const WORKSPACE_CONTEXT_RESOLVER_VERSION = 'workspace-context-v1'
 
 type BuildWorkspaceContextSnapshotParams = {
     workspaceId: string
-    threadId: string
+    conversationAssetId: string
     prompt: string
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
@@ -498,7 +485,7 @@ type BuildWorkspaceContextSnapshotParams = {
 
 function toWorkspaceContextNode(
     node: WorkspaceContextCanvasNode,
-    threadId: string,
+    conversationAssetId: string,
     chipNodeIds: Set<string>,
     edgeForcedNodeIds: Set<string>,
     titlesByNodeId: Record<string, string>
@@ -506,18 +493,15 @@ function toWorkspaceContextNode(
     const contextNode: WorkspaceContextNode = {
         nodeId: node.nodeId,
         type: node.type,
+        assetId: node.assetId,
         isExplicitChip: chipNodeIds.has(node.nodeId),
         isEdgeForced: edgeForcedNodeIds.has(node.nodeId),
-    }
-
-    if (node.type === 'document') {
-        contextNode.referenceId = node.referenceId
     }
 
     const title = titlesByNodeId[node.nodeId]?.trim()
     if (title) contextNode.title = title
 
-    const descriptor = node.descriptor
+    const descriptor = assetsStore.get(node.assetId)?.descriptor
     if (descriptor) {
         contextNode.descriptorStatus = descriptor.status
         const summary = descriptor.summary?.trim()
@@ -526,20 +510,15 @@ function toWorkspaceContextNode(
         if (descriptor.styleTags?.length) contextNode.styleTags = descriptor.styleTags
     }
 
-    // Media carry a still reference (an image file, or a video's representative
-    // frame — never the MP4) + branch lineage so the API can resolve the
-    // narrowed set's pixels later; the snapshot itself stays descriptors-only.
+    // The snapshot carries Asset identity only. The API authorizes the Asset and
+    // resolves its canonical/representative-frame Blob.
     if (isMediaCanvasNode(node)) {
-        const fileId = getCandidateStillFileId(node)
-        if (fileId) contextNode.fileId = fileId
-        const imageUrl = getMediaUrl(node)
-        if (imageUrl) contextNode.imageUrl = imageUrl
         const generatedBy = node.generatedBy
         const branchId = generatedBy?.branchId
         if (branchId) contextNode.branchId = branchId
-        if (generatedBy?.aiChatThreadId) {
-            contextNode.sourceThreadId = generatedBy.aiChatThreadId
-            if (generatedBy.aiChatThreadId === threadId) contextNode.isCurrentThreadGenerated = true
+        if (generatedBy?.conversationAssetId) {
+            contextNode.sourceConversationAssetId = generatedBy.conversationAssetId
+            if (generatedBy.conversationAssetId === conversationAssetId) contextNode.isCurrentConversationGenerated = true
         }
     }
 
@@ -552,7 +531,7 @@ function toWorkspaceContextNode(
 // edge-forced nodes so the API relevance stage can force-include them.
 export function buildWorkspaceContextSnapshot({
     workspaceId,
-    threadId,
+    conversationAssetId,
     prompt,
     nodes,
     edges,
@@ -568,10 +547,10 @@ export function buildWorkspaceContextSnapshot({
     return {
         resolverVersion: WORKSPACE_CONTEXT_RESOLVER_VERSION,
         workspaceId,
-        threadId,
+        conversationAssetId,
         promptText: prompt,
         nodes: nodes
             .filter(isWorkspaceContextCanvasNode)
-            .map((node) => toWorkspaceContextNode(node, threadId, chipNodeIds, edgeForcedNodeIds, titlesByNodeId)),
+            .map((node) => toWorkspaceContextNode(node, conversationAssetId, chipNodeIds, edgeForcedNodeIds, titlesByNodeId)),
     }
 }

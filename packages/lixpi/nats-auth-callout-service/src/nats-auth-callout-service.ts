@@ -5,6 +5,7 @@ import { fromPublic, fromSeed } from '@nats-io/nkeys'
 import { encodeUser, encodeAuthorizationResponse } from '@nats-io/jwt'
 
 import type { NatsService } from '@lixpi/nats-service'
+import { getNatsUserSubjectToken } from '@lixpi/constants'
 import { info, err as logError } from '@lixpi/debug-tools'
 import {
     createJwtVerifier,
@@ -75,7 +76,9 @@ const appendUniquePermissionSubjects = ({
     userId: string
 }): void => {
     for (const subjectPattern of subjectPatterns) {
-        const subject = subjectPattern.replace('{userId}', userId)
+        const subject = subjectPattern
+            .replaceAll('{userIdToken}', getNatsUserSubjectToken(userId))
+            .replaceAll('{userId}', userId)
         if (seen.has(subject)) continue
         seen.add(subject)
         target.push(subject)

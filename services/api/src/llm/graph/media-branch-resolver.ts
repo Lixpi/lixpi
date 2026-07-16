@@ -256,7 +256,7 @@ const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
         text: [
             `User prompt: ${snapshot.promptText}`,
             `Prompt fingerprint: ${snapshot.promptFingerprint}`,
-            `Thread ID: ${snapshot.threadId}`,
+            `Conversation Asset ID: ${snapshot.conversationAssetId}`,
             `Region node ID: ${snapshot.regionNodeId}`,
             snapshot.activeTargetNodeId ? `Active target node ID: ${snapshot.activeTargetNodeId}` : undefined,
             '',

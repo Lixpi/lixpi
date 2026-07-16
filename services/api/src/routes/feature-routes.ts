@@ -33,12 +33,17 @@ router.get('/:featureId/samples/:sampleIndex', authenticateRequest, async (req: 
     try {
         const workspace = workspaceId ? await Workspace.getWorkspace({ userId, workspaceId }) : undefined
         const organization = organizationId ? await Organization.getOrganization({ userId, organizationId }) : undefined
+        const resolvedOrganizationId = workspace && !('error' in workspace)
+            ? workspace.organizationId
+            : organization && !('error' in organization)
+                ? organizationId
+                : undefined
         const featureOrError = await Feature.getFeature({
             featureId,
             requesterContext: {
                 userId,
                 workspaceId: workspace && !('error' in workspace) ? workspaceId : undefined,
-                organizationId: organization && !('error' in organization) ? organizationId : undefined,
+                organizationId: resolvedOrganizationId,
             },
         })
         if ('error' in featureOrError) return res.status(featureOrError.error === 'NOT_FOUND' ? 404 : 403).json({ error: featureOrError.error })
@@ -51,7 +56,7 @@ router.get('/:featureId/samples/:sampleIndex', authenticateRequest, async (req: 
         if (!data) return res.status(404).json({ error: 'Sample not found' })
         res.setHeader('Content-Type', sampleRef.ext === 'png' ? 'image/png' : 'image/jpeg')
         res.setHeader('Content-Length', data.length)
-        res.setHeader('Cache-Control', 'public, max-age=3600')
+        res.setHeader('Cache-Control', 'private, max-age=3600')
         res.send(Buffer.from(data))
     } catch (e: any) {
         err(`Feature sample retrieval failed ${featureId}[${idx}]:`, e)

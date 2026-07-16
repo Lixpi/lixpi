@@ -71,6 +71,7 @@ describe('MediaBranchLineagePlanner', () => {
         const plan = planner.buildPlan({
             generationRequestId: 'request-1',
             reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1'],
             mediaBranchCandidateSnapshot: snapshot,
             mediaBranchResolution: resolution,
             createdAt: 1700000000000,
@@ -88,7 +89,7 @@ describe('MediaBranchLineagePlanner', () => {
         expect(plan.branchLines).toHaveLength(1)
         const branchLine = plan.branchLines[0]
         expect(branchLine).toMatchObject({
-            nodeId: 'branch-line-request-1-reasoning-0',
+            nodeId: 'branch-line-request-1-r0-image-0',
             parentBranchNodeId: 'person-generated',
             branchId: 'branch-person',
         })
@@ -105,8 +106,8 @@ describe('MediaBranchLineagePlanner', () => {
             branchId: 'branch-person',
             parentMediaNodeId: 'person-generated',
             parentImageNodeId: 'person-generated',
-            branchLineNodeId: 'branch-line-request-1-reasoning-0',
-            lineageParentNodeId: 'branch-line-request-1-reasoning-0',
+            branchLineNodeId: 'branch-line-request-1-r0-image-0',
+            lineageParentNodeId: 'branch-line-request-1-r0-image-0',
             referenceNodeIds: ['person-generated'],
             sourceContextNodeIds: ['parent-person'],
             operationKind: 'edit_existing',
@@ -132,6 +133,7 @@ describe('MediaBranchLineagePlanner', () => {
         const plan = planner.buildPlan({
             generationRequestId: 'request-2',
             reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1'],
             mediaBranchCandidateSnapshot: snapshot,
             createdAt: 1700000001000,
         })
@@ -198,6 +200,7 @@ describe('MediaBranchLineagePlanner', () => {
                 'Anthropic:claude-sonnet-4-6',
                 'Anthropic:claude-opus-4-1',
             ],
+            imageModelIds: ['OpenAI:gpt-image-1'],
             mediaBranchCandidateSnapshot: snapshot,
             mediaBranchResolution: resolution,
             createdAt: 1700000002000,
@@ -269,6 +272,7 @@ describe('MediaBranchLineagePlanner', () => {
         const plan = planner.buildPlan({
             generationRequestId: 'request-4',
             reasoningModelIds: ['Anthropic:claude-sonnet-4-6', 'Anthropic:claude-opus-4-1'],
+            imageModelIds: ['OpenAI:gpt-image-1'],
             mediaBranchCandidateSnapshot: snapshot,
             mediaBranchResolution: {
                 ...(resolutionForCandidate(snapshot) as any),
@@ -387,6 +391,7 @@ describe('MediaBranchLineagePlanner', () => {
         const plan = planner.buildPlan({
             generationRequestId: 'request-6',
             reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1'],
             mediaBranchCandidateSnapshot: snapshot,
             mediaBranchResolution: resolution,
             createdAt: 1700000006000,
@@ -397,6 +402,63 @@ describe('MediaBranchLineagePlanner', () => {
         expect(plan.referenceNodeIds).toEqual(['reference-b', 'reference-a'])
         expect(plan.runAssignments).toHaveLength(1)
         expect(plan.runAssignments[0]?.lineageParentNodeId).toBe(plan.branchOrigin?.nodeId)
+    })
+
+    it('declares the preserved API lineage target for existing-prompt regeneration without creating temporary markers', () => {
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-replay-1',
+            reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1', 'Google:gemini-2.5-flash-image'],
+            mediaBranchResolution: {
+                resolverKind: 'structured-vlm',
+                resolverVersion: 'image-branch-vlm-v1',
+                resolverModelProvider: 'OpenAI',
+                resolverModelId: 'gpt-4.1',
+                mode: 'edit-active-branch',
+                operationKind: 'edit_existing',
+                targetImageNodeId: 'resolver-selected-media',
+                parentImageNodeId: 'resolver-selected-parent',
+                branchId: 'resolver-selected-branch',
+                includeGeneratedNodeIds: [],
+                referenceImageNodeIds: ['resolver-selected-media'],
+                sourceContextNodeIds: [],
+                styleReferenceNodeIds: [],
+                excludedNodeIds: [],
+                visualEntitySummary: 'ignored topology candidate',
+                entityTags: [],
+                styleTags: [],
+                confidence: 1,
+                rationale: 'irrelevant to replay parentage',
+                decisions: [],
+                visualStyleSummary: '',
+            },
+            regenerationTarget: {
+                branchId: 'branch-preserved',
+                lineageParentNodeId: 'branch-fork-preserved',
+                lineageParentType: 'branchFork',
+            },
+            createdAt: 1700000007000,
+        })
+
+        expect(plan).toMatchObject({
+            branchId: 'branch-preserved',
+            regenerationTarget: {
+                branchId: 'branch-preserved',
+                lineageParentNodeId: 'branch-fork-preserved',
+                lineageParentType: 'branchFork',
+            },
+            branchForks: [],
+            branchLines: [],
+        })
+        expect(plan.branchOrigin).toBeUndefined()
+        expect(plan.runAssignments).toHaveLength(2)
+        expect(plan.runAssignments).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                branchId: 'branch-preserved',
+                branchForkNodeId: 'branch-fork-preserved',
+                lineageParentNodeId: 'branch-fork-preserved',
+            }),
+        ]))
     })
 })
 

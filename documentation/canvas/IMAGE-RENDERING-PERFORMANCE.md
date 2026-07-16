@@ -117,27 +117,21 @@ The PIXI media layer has gone through several rounds of perf hardening. The curr
 
 These are the issues a future round of work should tackle. Listed in priority order — biggest gains first.
 
-### 1. The API does not actually serve resized thumbnails
+### 1. Rendition selection must remain aligned with LoD
 
 {% callout type="warning" %}
-**This is the biggest unrealized win in the entire LoD system.**
+**Canvas image URLs must name real Asset renditions, not cosmetic size parameters.**
 {% /callout %}
 
-`pixiMediaLayerLogic.addPixiLodSizeParam()` appends `?size=256` or `?size=1024` to the image URL. The API handler at [`services/api/src/routes/file-routes.ts`](../../services/api/src/routes/file-routes.ts) (`GET /:workspaceId/:fileId`) **ignores those query params completely** and serves the full-resolution object back from NATS Object Store. The `?size=` value only changes the URL string, not the bytes.
+The canvas resolves an Asset rendition URL under `GET /api/assets/:assetId/renditions/:renditionName`. The API reads the rendition's content-addressed Blob. NEX materializes `thumbnail`, `preview`, `poster`, `representativeFrame`, `canonical`, and other matrix-selected renditions before their status becomes `ready`.
 
 Consequences:
 
-- **`thumb-256` and `thumb-1024` requests download the same bytes as `full`.** The progressive `thumb-256`-first strategy currently doesn't make first-paint faster on the network side; it only helps because the GPU upload is smaller after decode (since `createImageBitmap` decodes the original size).
-- **Browser cache is fragmented by URL.** A `thumb-256` and a `full` request for the same image are two separate cache entries with the same bytes. Effective cache hit rate for stored images is much lower than it should be.
-- **Idle prefetch downloads full-size payloads.** Caching the entire workspace at "thumb-256" is, today, caching the workspace at full resolution.
+- `thumbnail` and `preview` are distinct Blob-backed payloads when the rendition matrix requires them.
+- Rendition names create stable cache keys without tying byte identity to Workspace identity.
+- Idle prefetch requests only the selected low-resolution rendition.
 
-**Fix options, in increasing complexity:**
-
-1. **Resize on the API.** Add a `?size=` aware handler that pipes the NATS object through `sharp` (or equivalent) into a 256 / 1024 resized buffer. Store resized variants in a small in-memory or on-disk cache keyed by `(fileId, size)`. This is a small backend change with very large frontend impact.
-2. **Server-side proxies generated at upload time.** When an image is uploaded, also store `fileId.thumb-256.webp` and `fileId.thumb-1024.webp` in NATS Object Store. The GET handler picks the right key based on the size param. No on-request resize cost.
-3. **Client-side resize on first decode.** After decoding the full bitmap, downscale to the tier dimensions inside the decode worker and only upload the smaller texture to the GPU. Saves GPU memory and PCIe upload bandwidth, but doesn't save network or main-thread decode CPU.
-
-**Recommended: option 2.** Generate `thumb-256.webp` and `thumb-1024.webp` at upload time, both in NATS Object Store. Adds at most ~20 % storage but gives instant LoD payloads for every viewport size. WebP at 75 % quality for a 256 × 256 image is typically ~10 KB, so the entire workspace cache fits comfortably in RAM.
+When adding a LoD tier, extend the shared rendition matrix and NEX workload first, then teach the canvas to select that named rendition. Do not add a query parameter that aliases the original bytes.
 
 ### 2. `getComputedStyle` on every edge render
 
@@ -161,7 +155,7 @@ Consequences:
 
 When the user switches workspaces, every PIXI sprite + `Graphics` is destroyed and re-created. For users moving between two image-heavy workspaces back-to-back, this flushes both texture and sprite caches.
 
-**Fix:** key the texture cache by `(workspaceId, fileId, tier)` (it already is, via `acquireTexture(url)` URLs) but **don't** call `destroy()` on every sprite during workspace switch — keep them parked in a pool keyed by `nodeId`, and reuse the pool when the user comes back. A LRU on the pool prevents unbounded memory.
+**Fix:** key the texture cache by `(assetId, rendition)` (the rendition URL already does this), but **don't** call `destroy()` on every sprite during workspace switch — keep them parked in a pool keyed by `nodeId`, and reuse the pool when the user comes back. A LRU on the pool prevents unbounded memory.
 
 This is a bigger refactor (multi-workspace sprite lifecycle) and only worth doing if profiling shows the pattern is common.
 

@@ -276,7 +276,7 @@ Notes:
 
 ## External stores inside NodeViews
 
-NodeViews can subscribe to app stores (e.g., a Svelte `documentStore`) to update text/icon labels. Keep it safe:
+NodeViews can subscribe to focused projection stores to update text/icon labels. Keep it safe:
 
 - Subscribe in the NodeView when you construct the DOM, update only local DOM refs (no ProseMirror transactions for visual text changes).
 - Unsubscribe in `destroy()` and remove any global event listeners you attached (like `window.click`).
@@ -285,7 +285,7 @@ Example sketch:
 
 ```ts
 const titleEl = dom.querySelector('.title')
-const unsub = documentStore.subscribe(({ data }) => {
+const unsub = projectionStore.subscribe(({ data }) => {
 	titleEl.textContent = computeTitle(data.aiModel)
 })
 

@@ -68,7 +68,7 @@
         } else {
             // TODO: dev only, remove before going live!!!!!!!!!!!
             console.log('$subscriptionStore.data?.paymentMethods', $subscriptionStore.data?.paymentMethods)
-            alert(`No payment methods found \n\n${JSON.stringify($subscriptionStore.data?.paymentMethods)}`)
+            console.error('[PAYMENT_DETAILS] No payment methods found:', $subscriptionStore.data?.paymentMethods)
         }
     })
 

@@ -65,3 +65,27 @@ export const getImageAspectRatio = async (buffer: Buffer): Promise<number | null
         return null
     }
 }
+
+export const createImageRendition = async ({
+    buffer,
+    maxWidth,
+    maxHeight,
+    quality,
+}: {
+    buffer: Buffer
+    maxWidth: number
+    maxHeight: number
+    quality: number
+}): Promise<{ data: Buffer; width: number; height: number }> => {
+    const { data, info } = await sharp(buffer, { failOn: 'none' })
+        .rotate()
+        .resize({
+            width: maxWidth,
+            height: maxHeight,
+            fit: 'inside',
+            withoutEnlargement: true,
+        })
+        .webp({ quality })
+        .toBuffer({ resolveWithObject: true })
+    return { data, width: info.width, height: info.height }
+}

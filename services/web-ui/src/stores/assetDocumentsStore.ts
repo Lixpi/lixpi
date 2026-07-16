@@ -1,0 +1,30 @@
+'use strict'
+
+import { writable } from 'svelte/store'
+import type { AssetDocumentRole } from '@lixpi/constants'
+
+type AssetDocumentSnapshot = {
+    assetId: string
+    role: AssetDocumentRole
+    version: number
+    doc: object
+}
+
+const store = writable(new Map<string, AssetDocumentSnapshot>())
+const key = (assetId: string, role: AssetDocumentRole): string => `${assetId}#${role}`
+
+export const assetDocumentsStore = {
+    ...store,
+    set: (snapshot: AssetDocumentSnapshot): void => store.update((items) => {
+        const next = new Map(items)
+        next.set(key(snapshot.assetId, snapshot.role), snapshot)
+        return next
+    }),
+    get: (assetId: string, role: AssetDocumentRole): AssetDocumentSnapshot | undefined => {
+        let result: AssetDocumentSnapshot | undefined
+        const unsubscribe = store.subscribe((items) => { result = items.get(key(assetId, role)) })
+        unsubscribe()
+        return result
+    },
+    reset: (): void => store.set(new Map()),
+}

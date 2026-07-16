@@ -8,7 +8,10 @@ import {
     type Feature,
     type FeatureMeta,
     type FeatureScope,
+    type BlobRecord,
+    type BlobReference,
 } from '@lixpi/constants'
+import BlobModel, { buildBlobReferenceBatchOperations } from './blob.ts'
 
 const { ORG_NAME, STAGE } = process.env
 
@@ -16,7 +19,7 @@ const buildScopeAndOwnerKey = (scope: FeatureScope, scopeOwnerId: string): strin
     `${scope}#${scopeOwnerId}`
 
 const buildSampleKey = (featureId: string, sample: Feature['sampleImages'][number] | undefined): string | undefined =>
-    sample ? sample.fileId ?? `features/${featureId}/sample-${sample.idx}.${sample.ext}` : undefined
+    sample?.blobHash
 
 const getSampleUrl = (sample: Feature['sampleImages'][number] | undefined): string | undefined =>
     sample?.imageUrl
@@ -66,6 +69,25 @@ const FeatureModel = {
         }
 
         try {
+            const additions: Array<{ blob: BlobRecord; reference: BlobReference }> = []
+            for (const sample of feature.sampleImages) {
+                if (!sample.blobHash) throw new Error(`FEATURE_SAMPLE_BLOB_REQUIRED:${sample.idx}`)
+                const blob = await BlobModel.get({ organizationId: scopeOwnerId, blobHash: sample.blobHash })
+                if (!blob) throw new Error(`FEATURE_SAMPLE_BLOB_NOT_FOUND:${sample.blobHash}`)
+                additions.push({
+                    blob,
+                    reference: {
+                        blobKey: blob.blobKey,
+                        blobHash: blob.blobHash,
+                        organizationId: blob.organizationId,
+                        referenceKey: `feature#${featureId}#sample#${sample.idx}`,
+                        ownerType: 'feature',
+                        ownerId: featureId,
+                        createdAt: now,
+                    },
+                })
+            }
+            const blobReferenceOperations = buildBlobReferenceBatchOperations({ additions, now }).operations
             await dynamoDBService.transactWrite({
                 operations: [
                     {
@@ -86,6 +108,7 @@ const FeatureModel = {
                             updatedAt: now,
                         } as FeatureMeta,
                     },
+                    ...blobReferenceOperations,
                 ],
                 origin: 'Feature.createFeature',
             })
@@ -103,6 +126,7 @@ const FeatureModel = {
         })
         if (!item || Object.keys(item).length === 0) return { error: 'NOT_FOUND' }
         const feature = item as Feature
+        if (feature.status !== 'active') return { error: 'NOT_FOUND' }
         if (!canRead(requesterContext.userId, feature, requesterContext.workspaceId, requesterContext.organizationId)) return { error: 'PERMISSION_DENIED' }
         return feature
     },
@@ -150,7 +174,7 @@ const FeatureModel = {
 
     updateFeature: async ({ featureId, ownerUserId, updates }: {
         featureId: string; ownerUserId: string
-        updates: Partial<Pick<Feature, 'summary' | 'tags' | 'instructions' | 'parameters' | 'sampleImages'>>
+        updates: Partial<Pick<Feature, 'summary' | 'tags' | 'instructions' | 'parameters'>>
     }): Promise<{ error: string } | undefined> => {
         const feature = await FeatureModel.getOwnedFeature({ featureId, ownerUserId })
         if ('error' in feature) return feature
@@ -187,6 +211,39 @@ const FeatureModel = {
         })
         if (!item || Object.keys(item).length === 0) return
         const feature = item as Feature
+        if (feature.status !== 'removed') {
+            await dynamoDBService.transactWrite({
+                operations: [
+                    {
+                        type: 'update',
+                        tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
+                        key: { featureId, version: 1 },
+                        updates: { status: 'removed', updatedAt: Date.now() },
+                    },
+                    {
+                        type: 'update',
+                        tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE),
+                        key: { scopeAndOwner: buildScopeAndOwnerKey(feature.scope, feature.scopeOwnerId), featureId },
+                        updates: { status: 'removed', updatedAt: Date.now() },
+                    },
+                ],
+                origin: 'Feature.markRemoved',
+            })
+        }
+        for (const sample of feature.sampleImages) {
+            if (!sample.blobHash) continue
+            const removal = await BlobModel.removeReference({
+                organizationId: feature.scopeOwnerId,
+                blobHash: sample.blobHash,
+                referenceKey: `feature#${feature.featureId}#sample#${sample.idx}`,
+            })
+            if (removal.deletionRequired) {
+                await BlobModel.deleteZeroReferenceBlob({
+                    organizationId: feature.scopeOwnerId,
+                    blobHash: sample.blobHash,
+                })
+            }
+        }
         await dynamoDBService.transactWrite({
             operations: [
                 {

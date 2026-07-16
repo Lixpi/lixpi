@@ -45,8 +45,7 @@ const createImageCommand = (): SlashCommand['execute'] => {
                         src: result.src,
                         alt: '',
                         title: '',
-                        fileId: result.fileId || null,
-                        workspaceId: result.fileId ? workspaceId : null,
+                        assetId: result.assetId || null,
                     }
 
                     const image = imageType.create(attrs)
@@ -70,7 +69,7 @@ const createTableCommand = (): SlashCommand['execute'] => {
         // TODO: Phase 2 - Implement table insertion
         // Table node type needs to be added to schema first
         console.warn('[slashCommandsMenu] Table insertion not yet implemented - table node type required in schema')
-        window.alert('Table insertion coming soon')
+        console.error('[SLASH_COMMANDS] Table insertion is not implemented.')
         return false
     }
 }
@@ -79,7 +78,7 @@ const createFileCommand = (): SlashCommand['execute'] => {
     return (view: EditorView) => {
         // TODO: Phase 2 - Implement file attachment/upload
         console.warn('[slashCommandsMenu] File attachment not yet implemented')
-        window.alert('File attachment coming soon')
+        console.error('[SLASH_COMMANDS] File attachment is not implemented.')
         return false
     }
 }

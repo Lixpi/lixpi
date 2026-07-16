@@ -21,8 +21,7 @@ export type Services = {
     projectService: any
     organizationService: any
     workspaceService: any
-    documentService: any
-    aiChatThreadService: any
+    assetService: any
 }
 
 type NatsStore = {
@@ -42,8 +41,7 @@ const nats: ReadonlyDeep<NatsStore> = deepFreeze({
         projectService: null,
         organizationService: null,
         workspaceService: null,
-        documentService: null,
-        aiChatThreadService: null,
+        assetService: null,
     }
 })
 
@@ -62,7 +60,7 @@ export const servicesStore = {
         return returnValue
     },
 
-    getData: (key: keyof NATS | null = null): any => {
+    getData: (key: keyof Services | null = null): any => {
         let returnValue: any
         const unsubscribe = store.subscribe(store => {
             returnValue = key ? store.data[key] : store.data
@@ -80,7 +78,7 @@ export const servicesStore = {
         }
     })),
 
-    setDataValues: (values: Partial<NATS> = {}): void => store.update(state => ({
+    setDataValues: (values: Partial<Services> = {}): void => store.update(state => ({
         ...state,
         data: {
             ...state.data,

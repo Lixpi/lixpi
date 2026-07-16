@@ -20,6 +20,7 @@ type CanvasSaveQueue = {
     inFlight: boolean
     pendingRequest: CanvasStateSaveRequest | null
     staleRetryCount: number
+    authoritativeEpoch: number
 }
 
 type CanvasStateSaveRequest = {
@@ -184,22 +185,53 @@ class WorkspaceService {
         }
     }
 
+    public adoptAuthoritativeCanvasState({
+        workspaceId,
+        canvasState,
+        canvasStateUpdatedAt,
+    }: {
+        workspaceId: string
+        canvasState: CanvasState
+        canvasStateUpdatedAt: number
+    }): void {
+        const currentCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+        if (typeof currentCanvasStateUpdatedAt === 'number'
+            && currentCanvasStateUpdatedAt > canvasStateUpdatedAt) return
+
+        const queue = this.canvasSaveQueues.get(workspaceId)
+        if (queue) {
+            queue.authoritativeEpoch += 1
+            queue.pendingRequest = null
+            queue.staleRetryCount = 0
+        }
+
+        workspaceStore.updateCanvasState(canvasState)
+        workspaceStore.setDataValues({
+            canvasStateUpdatedAt,
+            updatedAt: canvasStateUpdatedAt,
+        })
+        workspaceStore.setMetaValues({ requiresSave: false })
+        workspacesStore.updateWorkspace(workspaceId, { updatedAt: canvasStateUpdatedAt })
+    }
+
     private getCanvasSaveQueue(workspaceId: string): CanvasSaveQueue {
         const existing = this.canvasSaveQueues.get(workspaceId)
         if (existing) return existing
 
-        const queue = { inFlight: false, pendingRequest: null, staleRetryCount: 0 }
+        const queue = { inFlight: false, pendingRequest: null, staleRetryCount: 0, authoritativeEpoch: 0 }
         this.canvasSaveQueues.set(workspaceId, queue)
         return queue
     }
 
     private async flushCanvasStateSaveQueue(workspaceId: string, queue: CanvasSaveQueue): Promise<void> {
         queue.inFlight = true
+        let activeRequestEpoch = queue.authoritativeEpoch
 
         try {
             while (queue.pendingRequest) {
                 const request = queue.pendingRequest
                 queue.pendingRequest = null
+                activeRequestEpoch = queue.authoritativeEpoch
                 const storedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
                 const expectedCanvasStateUpdatedAt = Number.isFinite(storedCanvasStateUpdatedAt)
                     ? storedCanvasStateUpdatedAt
@@ -212,6 +244,8 @@ class WorkspaceService {
                     ...(request.persistViewport ? { persistViewport: true } : {}),
                     ...(Number.isFinite(expectedCanvasStateUpdatedAt) ? { expectedCanvasStateUpdatedAt } : {}),
                 })
+
+                if (activeRequestEpoch !== queue.authoritativeEpoch) continue
 
                 if (result.error === 'STALE_CANVAS_STATE') {
                     const routeStillOwnsWorkspace = RouterService.getRouteParams().workspaceId === workspaceId
@@ -264,6 +298,7 @@ class WorkspaceService {
                 }
             }
         } catch (error) {
+            if (activeRequestEpoch !== queue.authoritativeEpoch) return
             console.error('Failed to update canvas state:', error)
             workspaceStore.setMetaValues({ requiresSave: true })
         } finally {

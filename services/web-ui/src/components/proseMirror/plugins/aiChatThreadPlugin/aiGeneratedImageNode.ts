@@ -1,6 +1,6 @@
 import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
+import { buildAssetRenditionPath, resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
@@ -20,7 +20,7 @@ export {
 export type AiGeneratedImageCallbacks = {
     onAddToCanvas?: (data: {
         imageUrl: string
-        fileId: string
+        assetId: string
         responseId: string
         revisedPrompt: string
         aiModel: string
@@ -28,8 +28,7 @@ export type AiGeneratedImageCallbacks = {
     onImagePartialToCanvas?: (data: {
         threadId: string
         imageUrl: string
-        fileId: string
-        workspaceId: string
+        assetId: string
         partialIndex: number
         aiProvider: string
         canvasGeometry?: CanvasGeometryUpdate
@@ -38,8 +37,7 @@ export type AiGeneratedImageCallbacks = {
     onImageCompleteToCanvas?: (data: {
         threadId: string
         imageUrl: string
-        fileId: string
-        workspaceId: string
+        assetId: string
         responseId: string
         revisedPrompt: string
         aiModel: string
@@ -154,9 +152,10 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     }
 
     const updateDisplay = async () => {
-        const { imageData, isPartial } = node.attrs
+        const { imageData, assetId, isPartial } = node.attrs
 
-        if (!imageData) {
+        const imageSource = imageData || (assetId ? buildAssetRenditionPath(assetId, 'preview') : '')
+        if (!imageSource) {
             titleElement.hidden = true
             spinnerElement.classList.add('is-active')
             imageElement.classList.remove('is-visible')
@@ -167,7 +166,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         spinnerElement.classList.remove('is-active')
         imageElement.classList.add('is-visible')
 
-        const imageSrc = await resolveAuthenticatedMediaUrl(imageData, {
+        const imageSrc = await resolveAuthenticatedMediaUrl(imageSource, {
             apiBaseUrl: import.meta.env.VITE_API_URL || '',
             base64MimeType: 'image/png',
             getAuthToken: () => AuthService.getTokenSilently(),

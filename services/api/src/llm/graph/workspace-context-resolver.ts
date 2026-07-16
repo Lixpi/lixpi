@@ -6,9 +6,8 @@ import type NatsService from '@lixpi/nats-service'
 import { info } from '@lixpi/debug-tools'
 import {
     MEDIA_DESCRIPTOR_VERSION as DESCRIPTOR_VERSION,
-    type AiChatThread,
+    type Asset,
     type ContentDescriptor,
-    type Document,
     type MediaBranchCandidateImage,
     type MediaBranchCandidateSnapshot,
     type ProviderName,
@@ -18,9 +17,10 @@ import {
     type WorkspaceContextSnapshot,
 } from '@lixpi/constants'
 
-import WorkspaceModel from '../../models/workspace.ts'
-import DocumentModel from '../../models/document.ts'
-import AiChatThreadModel from '../../models/ai-chat-thread.ts'
+import AssetModel from '../../models/asset.ts'
+import BlobModel from '../../models/blob.ts'
+import AssetDocumentService from '../../services/asset-document-service.ts'
+import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 import {
     describeMediaStill as defaultDescribeMediaStill,
     describeTextContent as defaultDescribeTextContent,
@@ -47,11 +47,9 @@ type ResolveWorkspaceContextDeps = {
     publisher: Pick<StreamPublisher, 'contextRelevanceResolved' | 'contextRelevanceError'>
     abortSignal?: AbortSignal
     callLlm?: (args: VlmCallArgs) => Promise<VlmCallResult<WorkspaceContextRawResolution>>
-    getDocument?: typeof DocumentModel.getDocument
-    getAiChatThread?: typeof AiChatThreadModel.getAiChatThread
+    getAsset?: (assetId: string) => Promise<Asset | { error: string }>
     describeMediaStill?: typeof defaultDescribeMediaStill
     describeTextContent?: typeof defaultDescribeTextContent
-    patchCanvasNodeDescriptor?: typeof WorkspaceModel.patchCanvasNodeDescriptor
 }
 
 type ProseMirrorNode = {
@@ -108,7 +106,7 @@ const SYSTEM_PROMPT = [
     'You are Lixpi\'s workspace context relevance resolver.',
     'Rank workspace nodes for the next AI chat turn using compact text descriptors only. Never assume pixels or full document content beyond the metadata provided.',
     'Edge-forced nodes are sacred force-includes. You may include them in your selections when relevant, but the system will force-include them regardless.',
-    'Generated media whose isCurrentThreadGenerated flag is true belongs to this chat turn\'s active thread. For deictic follow-ups like "it", "this", "that", "now make it", or "make this", prefer current-thread generated media over generated media from other threads unless the prompt explicitly names the other content or the node is a forced chip/edge.',
+    'Generated media whose isCurrentConversationGenerated flag is true belongs to this chat turn\'s active conversation Asset. For deictic follow-ups like "it", "this", "that", "now make it", or "make this", prefer media from the current conversation over media from other conversations unless the prompt explicitly names the other content or the node is a forced chip/edge.',
     'Select only nodes that materially help answer or generate the user request. Exclude unrelated distractors aggressively.',
     'Mark needsBetterDescriptor=true when a promising node has a missing, failed, analyzing, one-word, or ambiguous descriptor.',
     'Return strict JSON using the tool schema. Use nodeId values exactly as given.',
@@ -139,9 +137,9 @@ const compactNodeForPrompt = (node: WorkspaceContextNode): Record<string, unknow
     entityTags: node.entityTags ?? [],
     styleTags: node.styleTags ?? [],
     branchId: node.branchId ?? '',
-    sourceThreadId: node.sourceThreadId ?? '',
-    isCurrentThreadGenerated: node.isCurrentThreadGenerated === true,
-    hasMediaReference: Boolean(node.imageUrl || node.fileId),
+    sourceConversationAssetId: node.sourceConversationAssetId ?? '',
+    isCurrentConversationGenerated: node.isCurrentConversationGenerated === true,
+    hasMediaReference: Boolean(node.assetId),
     isExplicitChip: node.isExplicitChip,
     isEdgeForced: node.isEdgeForced,
 })
@@ -155,7 +153,7 @@ const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
         content: [
             `User prompt: ${snapshot.promptText}`,
             `Workspace ID: ${snapshot.workspaceId}`,
-            `Thread ID: ${snapshot.threadId}`,
+            `Conversation Asset ID: ${snapshot.conversationAssetId}`,
             '',
             'Workspace node descriptor JSON:',
             JSON.stringify(snapshot.nodes.map(compactNodeForPrompt), null, 2),
@@ -358,54 +356,74 @@ const hasModelError = (value: unknown): value is { error: string } =>
 const getFallbackText = (node: WorkspaceContextNode): string =>
     [node.title, node.descriptorSummary].filter((part): part is string => Boolean(part?.trim())).join('\n')
 
+const resolveContextAsset = async (
+    assetId: string,
+    state: ProviderState,
+    deps: ResolveWorkspaceContextDeps,
+): Promise<Asset | { error: string }> => {
+    const asset = deps.getAsset
+        ? await deps.getAsset(assetId)
+        : state.eventMeta?.userId
+            ? await AssetModel.get({
+                assetId,
+                requester: await getAssetRequesterContext(state.eventMeta.userId),
+            })
+            : { error: 'USER_ID_REQUIRED' }
+    if ('error' in asset) return asset
+    const organizationId = state.eventMeta?.organizationId
+    if (!organizationId || asset.organizationId !== organizationId) {
+        return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
+    }
+    return asset
+}
+
+const loadAssetDocumentText = async (
+    asset: Asset,
+    role: 'content',
+): Promise<string> => {
+    if (!asset.documents[role]) return ''
+    const snapshot = await AssetDocumentService.loadCurrentSnapshot(asset, role)
+    return extractTextFromProseMirror(snapshot?.doc)
+}
+
+const resolveAssetMediaUrl = async (
+    asset: Asset,
+): Promise<string | undefined> => {
+    if (!asset.media) return undefined
+    const names = asset.media.kind === 'image'
+        ? ['preview', 'original'] as const
+        : asset.media.kind === 'video'
+            ? ['representativeFrame', 'poster', 'thumbnail'] as const
+            : asset.media.kind === 'document'
+                ? ['poster', 'thumbnail'] as const
+                : [] as const
+    const rendition = names
+        .map((name) => asset.media!.renditions[name])
+        .find((candidate) => candidate?.status === 'ready' && candidate.blobHash)
+    if (rendition?.status !== 'ready' || !rendition.blobHash) return undefined
+    const blob = await BlobModel.get({ organizationId: asset.organizationId, blobHash: rendition.blobHash })
+    return blob ? `nats-obj://${blob.bucketName}/${blob.objectKey}` : undefined
+}
+
 const resolveDocumentText = async (
     node: WorkspaceContextNode,
     state: ProviderState,
     deps: ResolveWorkspaceContextDeps,
 ): Promise<{ title?: string; text: string } | undefined> => {
-    const referenceId = node.referenceId
-    if (!referenceId) {
+    const assetId = node.assetId
+    if (!assetId) {
         const text = getFallbackText(node)
         return text ? { title: node.title, text } : undefined
     }
 
-    const document = await (deps.getDocument ?? DocumentModel.getDocument)({
-        workspaceId: state.workspaceId,
-        documentId: referenceId,
-    } as any)
-    if (hasModelError(document)) {
+    const asset = await resolveContextAsset(assetId, state, deps)
+    if (hasModelError(asset)) {
         const text = getFallbackText(node)
         return text ? { title: node.title, text } : undefined
     }
 
-    const doc = document as Document
-    const text = extractTextFromProseMirror(doc.content) || getFallbackText(node)
-    return text ? { title: doc.title || node.title, text } : undefined
-}
-
-const resolveThreadText = async (
-    node: WorkspaceContextNode,
-    state: ProviderState,
-    deps: ResolveWorkspaceContextDeps,
-): Promise<{ title?: string; text: string } | undefined> => {
-    const referenceId = node.referenceId
-    if (!referenceId) {
-        const text = getFallbackText(node)
-        return text ? { title: node.title, text } : undefined
-    }
-
-    const thread = await (deps.getAiChatThread ?? AiChatThreadModel.getAiChatThread)({
-        workspaceId: state.workspaceId,
-        threadId: referenceId,
-    } as any)
-    if (hasModelError(thread)) {
-        const text = getFallbackText(node)
-        return text ? { title: node.title, text } : undefined
-    }
-
-    const chatThread = thread as AiChatThread
-    const text = extractTextFromProseMirror(chatThread.content) || getFallbackText(node)
-    return text ? { title: chatThread.title || node.title, text } : undefined
+    const text = await loadAssetDocumentText(asset, 'content') || getFallbackText(node)
+    return text ? { title: asset.title || node.title, text } : undefined
 }
 
 const improveDescriptorForNode = async (
@@ -416,12 +434,16 @@ const improveDescriptorForNode = async (
 ): Promise<ContentDescriptor | undefined> => {
     const now = Date.now()
     if (node.type === 'image' || node.type === 'video') {
-        if (!node.imageUrl) return undefined
+        if (!node.assetId) return undefined
+        const asset = await resolveContextAsset(node.assetId, state, deps)
+        if (hasModelError(asset)) return undefined
+        const imageUrl = await resolveAssetMediaUrl(asset)
+        if (!imageUrl) return undefined
         const describeMediaStill = deps.describeMediaStill ?? defaultDescribeMediaStill
         const result = await describeMediaStill({
             provider: resolverModel.provider,
             modelVersion: resolverModel.modelVersion,
-            imageUrl: node.imageUrl,
+            imageUrl,
             natsService: deps.natsService,
             abortSignal: deps.abortSignal,
         })
@@ -430,21 +452,6 @@ const improveDescriptorForNode = async (
 
     if (node.type === 'document') {
         const resolved = await resolveDocumentText(node, state, deps)
-        if (!resolved?.text) return undefined
-        const describeTextContent = deps.describeTextContent ?? defaultDescribeTextContent
-        const result = await describeTextContent({
-            provider: resolverModel.provider,
-            modelVersion: resolverModel.modelVersion,
-            text: resolved.text,
-            title: resolved.title,
-            natsService: deps.natsService,
-            abortSignal: deps.abortSignal,
-        })
-        return toContentDescriptor(result, now)
-    }
-
-    if (node.type === 'aiChatThread') {
-        const resolved = await resolveThreadText(node, state, deps)
         if (!resolved?.text) return undefined
         const describeTextContent = deps.describeTextContent ?? defaultDescribeTextContent
         const result = await describeTextContent({
@@ -473,11 +480,26 @@ const improveDescriptors = async (
             const descriptor = await improveDescriptorForNode(node, state, deps, resolverModel)
             if (!descriptor) continue
             improvedDescriptors[node.nodeId] = descriptor
-            await (deps.patchCanvasNodeDescriptor ?? WorkspaceModel.patchCanvasNodeDescriptor)({
-                workspaceId: state.workspaceId,
-                nodeId: node.nodeId,
-                descriptor,
-            })
+            if (node.assetId) {
+                const asset = await resolveContextAsset(node.assetId, state, deps)
+                if (!hasModelError(asset)) {
+                    const userId = state.eventMeta?.userId
+                    if (userId) {
+                        const requester = await getAssetRequesterContext(userId)
+                        for (let attempt = 0; attempt < 5; attempt += 1) {
+                            const current = attempt === 0 ? asset : await AssetModel.get({ assetId: asset.assetId, requester })
+                            if ('error' in current) break
+                            const persisted = await AssetModel.updateMetadata({
+                                assetId: current.assetId,
+                                requester,
+                                expectedRevision: current.revision,
+                                descriptor,
+                            })
+                            if (!('error' in persisted) || persisted.error !== 'REVISION_CONFLICT') break
+                        }
+                    }
+                }
+            }
         } catch (error) {
             console.error(`Failed to self-heal descriptor for ${node.nodeId}:`, error)
         }
@@ -517,17 +539,6 @@ const buildSelectedContextMessage = async (
             }
             if (resolved.title) payload.title = resolved.title
             blocks.push({ type: 'input_text', text: JSON.stringify(payload) })
-        } else if (node.type === 'aiChatThread') {
-            const resolved = await resolveThreadText(node, state, deps)
-            if (!resolved) continue
-            const payload: Record<string, string> = {
-                type: 'workspace_ai_chat_thread',
-                nodeId: node.nodeId,
-                role: selection.role,
-                content: resolved.text,
-            }
-            if (resolved.title) payload.title = resolved.title
-            blocks.push({ type: 'input_text', text: JSON.stringify(payload) })
         } else if (node.type === 'image' || node.type === 'video') {
             blocks.push({
                 type: 'input_text',
@@ -540,12 +551,16 @@ const buildSelectedContextMessage = async (
                     entityTags: node.entityTags ?? [],
                     styleTags: node.styleTags ?? [],
                     branchId: node.branchId ?? '',
-                    sourceThreadId: node.sourceThreadId ?? '',
-                    isCurrentThreadGenerated: node.isCurrentThreadGenerated === true,
+                    sourceConversationAssetId: node.sourceConversationAssetId ?? '',
+                    isCurrentConversationGenerated: node.isCurrentConversationGenerated === true,
                 }),
             })
-            if (node.imageUrl) {
-                blocks.push({ type: 'input_image', image_url: node.imageUrl, detail: 'auto' })
+            if (node.assetId) {
+                const asset = await resolveContextAsset(node.assetId, state, deps)
+                if (!hasModelError(asset)) {
+                    const imageUrl = await resolveAssetMediaUrl(asset)
+                    if (imageUrl) blocks.push({ type: 'input_image', image_url: imageUrl, detail: 'auto' })
+                }
             }
         }
     }
@@ -599,21 +614,25 @@ const filterAutoMediaOutsideExistingBranchSnapshot = (
     }
 }
 
-const buildCandidateFromWorkspaceNode = (
+const buildCandidateFromWorkspaceNode = async (
     node: WorkspaceContextNode,
-    workspaceId: string,
-): MediaBranchCandidateImage | undefined => {
+    state: ProviderState,
+    deps: ResolveWorkspaceContextDeps,
+): Promise<MediaBranchCandidateImage | undefined> => {
     if (node.type !== 'image' && node.type !== 'video') return undefined
-    if (!node.imageUrl) return undefined
+    if (!node.assetId) return undefined
+    const asset = await resolveContextAsset(node.assetId, state, deps)
+    if (hasModelError(asset)) return undefined
+    const imageUrl = await resolveAssetMediaUrl(asset)
+    if (!imageUrl) return undefined
     const roleHints: MediaBranchCandidateImage['roleHints'] = node.branchId
         ? ['base-context', 'generated-variant', 'branch-leaf']
         : ['base-context']
 
     return {
         nodeId: node.nodeId,
-        fileId: node.fileId,
-        workspaceId,
-        imageUrl: node.imageUrl,
+        assetId: node.assetId,
+        imageUrl,
         mediaKind: node.type === 'video' ? 'video' : 'image',
         roleHints,
         branchId: node.branchId,
@@ -626,10 +645,11 @@ const buildCandidateFromWorkspaceNode = (
     }
 }
 
-const buildNarrowedMediaBranchSnapshot = (
+const buildNarrowedMediaBranchSnapshot = async (
     state: ProviderState,
     resolution: WorkspaceContextResolution,
-): MediaBranchCandidateSnapshot | undefined => {
+    deps: ResolveWorkspaceContextDeps,
+): Promise<MediaBranchCandidateSnapshot | undefined> => {
     const snapshot = state.workspaceContextSnapshot
     const existingSnapshot = restrictSnapshotToExplicitRefs(state.mediaBranchCandidateSnapshot)
     if (!snapshot) return existingSnapshot
@@ -643,10 +663,6 @@ const buildNarrowedMediaBranchSnapshot = (
 
     for (const selection of selectedMediaSelections) {
         const existing = existingByNodeId.get(selection.nodeId)
-        if (existing) {
-            candidates.push(existing)
-            continue
-        }
         // When a browser-built branch snapshot already exists, only explicit
         // chips and edge-forced media are allowed to expand it. Plain automatic
         // workspace-relevance picks are descriptor-selected context, not visual
@@ -654,8 +670,8 @@ const buildNarrowedMediaBranchSnapshot = (
         // media leak into the branch VLM.
         if (existingSnapshot && selection.role !== 'forced-chip' && selection.role !== 'forced-edge') continue
         const node = nodeById.get(selection.nodeId)
-        const candidate = node ? buildCandidateFromWorkspaceNode(node, state.workspaceId) : undefined
-        if (candidate) candidates.push(candidate)
+        const candidate = node ? await buildCandidateFromWorkspaceNode(node, state, deps) : undefined
+        if (candidate) candidates.push({ ...existing, ...candidate })
     }
 
     // With explicit chips the context is exclusive: never fall back to the full
@@ -671,11 +687,11 @@ const buildNarrowedMediaBranchSnapshot = (
 
     return {
         resolverVersion: existingSnapshot?.resolverVersion ?? snapshot.resolverVersion,
-        threadId: existingSnapshot?.threadId ?? snapshot.threadId,
-        regionNodeId: existingSnapshot?.regionNodeId ?? snapshot.threadId,
+        conversationAssetId: existingSnapshot?.conversationAssetId ?? snapshot.conversationAssetId,
+        regionNodeId: existingSnapshot?.regionNodeId ?? snapshot.conversationAssetId,
         ...(activeTargetNodeId ? { activeTargetNodeId } : {}),
         promptText,
-        promptFingerprint: existingSnapshot?.promptFingerprint ?? `workspace-context:${snapshot.threadId}:${snapshot.promptText}:${selectedMediaSelections.map((selection) => selection.nodeId).join(',')}`,
+        promptFingerprint: existingSnapshot?.promptFingerprint ?? `workspace-context:${snapshot.conversationAssetId}:${snapshot.promptText}:${selectedMediaSelections.map((selection) => selection.nodeId).join(',')}`,
         candidates,
         transcriptContext: buildCandidateTranscriptContext(candidates, promptText, activeTargetNodeId),
     }
@@ -712,7 +728,7 @@ export const resolveWorkspaceContext = async (
         if (snapshot.nodes.some((node) => node.isExplicitChip)) {
             const resolution = buildChipsOnlyResolution(snapshot)
             const contextMessage = await buildSelectedContextMessage(state, deps, resolution)
-            const mediaBranchCandidateSnapshot = buildNarrowedMediaBranchSnapshot(state, resolution)
+            const mediaBranchCandidateSnapshot = await buildNarrowedMediaBranchSnapshot(state, resolution, deps)
 
             deps.publisher.contextRelevanceResolved(resolution)
             info(`[WorkspaceContextResolver] resolved (explicit chips, no LLM) ${JSON.stringify({
@@ -777,7 +793,7 @@ export const resolveWorkspaceContext = async (
 
         resolution = filterAutoMediaOutsideExistingBranchSnapshot(effectiveState, resolution)
         const contextMessage = await buildSelectedContextMessage(effectiveState, deps, resolution)
-        const mediaBranchCandidateSnapshot = buildNarrowedMediaBranchSnapshot(effectiveState, resolution)
+        const mediaBranchCandidateSnapshot = await buildNarrowedMediaBranchSnapshot(effectiveState, resolution, deps)
 
         deps.publisher.contextRelevanceResolved(resolution)
         info(`[WorkspaceContextResolver] resolved ${JSON.stringify({

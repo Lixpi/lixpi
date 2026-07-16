@@ -23,7 +23,7 @@ function isParentContainerNode(_node: CanvasNode | undefined): boolean {
 }
 
 function isGeneratedOutputImageNode(node: CanvasNode | undefined): boolean {
-    return node?.type === 'image' && Boolean(node.generatedBy?.aiChatThreadId)
+    return node?.type === 'image' && Boolean(node.generatedBy?.conversationAssetId)
 }
 
 function includeParentContainerDescendants(nodeIds: string[], nodes: CanvasNode[]): string[] {

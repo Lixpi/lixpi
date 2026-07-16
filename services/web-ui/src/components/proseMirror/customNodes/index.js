@@ -2,14 +2,11 @@ import {
     codeBlockNodeSpec,
     codeBlockNodeType,
     customNodeSpecs,
-    documentTitleNodeSpec,
-    documentTitleNodeType,
     taskRowNodeSpec,
     taskRowNodeType,
 } from '@lixpi/prosemirror'
 
 export const nodeTypes = {
-    documentTitleNodeType,
     taskRowNodeType,
     codeBlockNodeType
 }

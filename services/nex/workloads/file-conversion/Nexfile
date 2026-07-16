@@ -11,7 +11,7 @@
 #
 # Unlike ai-models-sync (which connects with the NEX-account creds the native
 # nexlet mints), this workload connects to NATS as the AUTH-account `regular_user`
-# so it can read/write the workspace Object Store buckets that live in AUTH. The
+# so it can read/write organization Blob Object Store buckets that live in AUTH. The
 # NEX node only supervises this process.
 #
 # No `tags:` — the single Lixpi node bids on the untagged request.

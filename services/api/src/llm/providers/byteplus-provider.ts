@@ -7,7 +7,6 @@ import type { ProviderName } from '@lixpi/constants'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
 import type { ProviderState, VideoUsage } from '../graph/state.ts'
-import { extractVideoFramesViaWorkload } from '../../services/video-frame-extraction.ts'
 import { BYTEPLUS_ARK_BASE_URL, BYTEPLUS_VIDEO_POLL_INTERVAL_MS } from '../config.ts'
 import {
     BytePlusModelArkError,
@@ -110,7 +109,7 @@ export class BytePlusProvider extends BaseProvider {
             const taskId = created.id
             if (!taskId) throw new BytePlusModelArkError('ModelArk did not return a task id')
 
-            this.videoPub.pending()
+            await this.videoPub.pending()
 
             const task = await pollVideoGenerationTask(this.clientConfig, taskId, {
                 pollIntervalMs: BYTEPLUS_VIDEO_POLL_INTERVAL_MS,
@@ -141,18 +140,10 @@ export class BytePlusProvider extends BaseProvider {
             const resolution = task.resolution ?? state.videoResolution ?? ''
             const hasAudio = payload.generate_audio ?? true
 
-            // Heavy ffmpeg frame extraction runs on the NEX file-conversion
-            // workload, never on the API.
-            const { posterBuffer, frameBuffer } = await extractVideoFramesViaWorkload({
-                workspaceId: state.workspaceId,
-                videoBuffer,
-                atSeconds: durationSeconds > 0 ? durationSeconds / 2 : undefined,
-            })
-
             await this.videoPub.complete({
                 videoBuffer,
-                posterBuffer,
-                frameBuffer,
+                posterBuffer: null,
+                frameBuffer: null,
                 durationSeconds,
                 aspectRatio,
                 hasAudio,

@@ -9,8 +9,8 @@ import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName, type Str
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
 import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
-import { ImagePublisher, type StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
-import { VideoPublisher, type StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
+import { ImagePublisher } from '../graph/image-publisher.ts'
+import { VideoPublisher } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
 import {
     getImagePromptMaxChars,
@@ -23,11 +23,10 @@ import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
+import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
 
 export type BaseProviderDeps = {
     natsService: NatsService
-    storeWorkspaceImage: StoreWorkspaceImageFn
-    storeWorkspaceVideo: StoreWorkspaceVideoFn
     usageReporter: UsageReporter
     runImageRouter: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
     runVideoRouter: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
@@ -227,6 +226,9 @@ export abstract class BaseProvider {
             this.providerName,
             requestData.generationRun,
             {
+                organizationId: requestData.organizationId,
+                assetLeaseId: requestData.assetLeaseId,
+                assetLeaseHolderId: requestData.assetLeaseHolderId,
                 enableProseMirrorStream: ownsServerProseMirrorStream,
                 proseMirrorBaseVersion: requestData.proseMirrorBaseVersion,
                 proseMirrorInitialDoc: requestData.proseMirrorInitialDoc,
@@ -237,7 +239,7 @@ export abstract class BaseProvider {
         )
         this.imagePublisher = new ImagePublisher(
             this.deps.natsService,
-            this.deps.storeWorkspaceImage,
+            requestData.organizationId,
             requestData.workspaceId,
             requestData.aiChatThreadId,
             this.providerName,
@@ -249,8 +251,7 @@ export abstract class BaseProvider {
         )
         this.videoPublisher = new VideoPublisher(
             this.deps.natsService,
-            this.deps.storeWorkspaceVideo,
-            this.deps.storeWorkspaceImage,
+            requestData.organizationId,
             requestData.workspaceId,
             requestData.aiChatThreadId,
             this.providerName,
@@ -302,6 +303,7 @@ export abstract class BaseProvider {
             videoSourceForExtension: requestData.videoSourceForExtension,
             generationRun: requestData.generationRun,
             mediaFanoutPlan: requestData.mediaFanoutPlan,
+            replayMediaPrompts: requestData.replayMediaPrompts,
             preflightResolved: requestData.preflightResolved ?? false,
         }
 
@@ -383,6 +385,21 @@ export abstract class BaseProvider {
             ...(lineageAssignment ? { lineageAssignment } : {}),
         }
 
+        const organizationId = state.eventMeta.organizationId as string | undefined
+        const ownerUserId = state.eventMeta.userId as string | undefined
+        if (!organizationId || !ownerUserId) {
+            throw new Error('Asset media generation requires organization and user context')
+        }
+        await ensurePendingGeneratedAssets({
+            lineagePlan,
+            workspaceId: state.workspaceId,
+            conversationAssetId: state.aiChatThreadId,
+            organizationId,
+            ownerUserId,
+            mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
+            workspaceContextSnapshot: state.workspaceContextSnapshot,
+        })
+
         this.streamPublisher?.mediaLineagePlanned(lineagePlan, nextGenerationRun)
         info(`[BaseProvider] media branch lineage planned ${JSON.stringify({
             workspaceId: state.workspaceId,
@@ -413,6 +430,15 @@ export abstract class BaseProvider {
     protected async streamTokens(state: ProviderState): Promise<Partial<ProviderState>> {
         const update: Partial<ProviderState> = { streamActive: true }
         try {
+            if (state.replayMediaPrompts?.length) {
+                return {
+                    ...update,
+                    generatedImagePrompt: state.replayMediaPrompts.find(prompt => prompt.mediaType === 'image')?.finalPrompt,
+                    generatedVideoPrompt: state.replayMediaPrompts.find(prompt => prompt.mediaType === 'video')?.finalPrompt,
+                    streamActive: false,
+                    aiRequestFinishedAt: Date.now(),
+                }
+            }
             const implResult = await this.streamImpl(state)
             return {
                 ...update,
@@ -574,6 +600,21 @@ export abstract class BaseProvider {
     protected async executeMediaFanout(state: ProviderState): Promise<Partial<ProviderState>> {
         if (!state.generationRun || !state.mediaFanoutPlan) return {}
 
+        if (state.generatedVideoPrompt && state.generatedImagePrompt) {
+            const [imageResult, videoResult] = await Promise.all([
+                this.executeImageFanout(state),
+                this.executeVideoFanout(state),
+            ])
+            return {
+                ...imageResult,
+                ...videoResult,
+                generatedImages: imageResult.generatedImages,
+                generatedVideos: videoResult.generatedVideos,
+                error: imageResult.error ?? videoResult.error,
+                errorCode: imageResult.errorCode ?? videoResult.errorCode,
+                errorType: imageResult.errorType ?? videoResult.errorType,
+            }
+        }
         if (state.generatedVideoPrompt) {
             return this.executeVideoFanout(state)
         }
@@ -632,6 +673,11 @@ export abstract class BaseProvider {
                 imageSize: imageModelOptions?.imageSize ?? state.mediaFanoutPlan?.imageSize ?? state.imageSize,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
             }
+            const replayPrompt = state.mediaFanoutPlan?.replayPrompts?.find(prompt =>
+                prompt.mediaType === 'image'
+                && prompt.mediaModelId === catalogModelIdFor(imageModelMetaInfo)
+            )
+            if (replayPrompt) fanoutState.generatedImagePrompt = replayPrompt.finalPrompt
             const promptValidationPatch = await this.validateImageFanoutPrompt(fanoutState)
             fanoutState = { ...fanoutState, ...promptValidationPatch }
             if (fanoutState.error || !fanoutState.generatedImagePrompt) {
@@ -738,6 +784,10 @@ export abstract class BaseProvider {
                 videoModelOptions?.duration ?? state.mediaFanoutPlan?.videoDuration ?? state.mediaFanoutPlan?.videoDurationSeconds ?? state.videoDurationSeconds,
                 videoModelMetaInfo.videoDurations as Array<{ value?: string; label?: string }> | undefined,
             )
+            const replayPrompt = state.mediaFanoutPlan?.replayPrompts?.find(prompt =>
+                prompt.mediaType === 'video'
+                && prompt.mediaModelId === catalogModelIdFor(videoModelMetaInfo)
+            )
             const fanoutState: ProviderState = {
                 ...state,
                 generationRun,
@@ -749,6 +799,7 @@ export abstract class BaseProvider {
                 videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
                 videoSourceForExtension: state.mediaFanoutPlan?.videoSourceForExtension ?? state.videoSourceForExtension,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
+                ...(replayPrompt ? { generatedVideoPrompt: replayPrompt.finalPrompt } : {}),
             }
 
             const trace = buildVideoGenerationTrace(fanoutState)

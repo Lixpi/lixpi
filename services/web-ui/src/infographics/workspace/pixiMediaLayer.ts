@@ -15,6 +15,7 @@ import type {
 
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
+import { assetsStore } from '$src/stores/assetsStore.ts'
 import { decodeImageInWorker, destroyPixiImageDecoder } from '$src/infographics/workspace/pixiImageDecoder.ts'
 import {
     addPixiLodSizeParam,
@@ -52,7 +53,7 @@ type PixiImageEntry = {
     spriteMask: Graphics
     colorRect: Graphics
     nodeRef: ImageCanvasNode
-    // Identity of the SOURCE image (workspace + fileId + src). When this
+    // Stable Asset identity used to invalidate loaded rendition state. When this
     // changes (e.g. user replaces the image), all loaded state is reset.
     sourceKey: string
     // Tier of the texture currently rendered on the sprite. `null` means no
@@ -88,7 +89,7 @@ type TextureEntry = {
 
 type PixiMediaDebugImageSnapshot = {
     nodeId: string
-    fileId: string
+    assetId: string
     src: string
     sourceKey: string
     loadedTier: LodTier | null
@@ -194,6 +195,7 @@ export type GeneratingMediaOutlineDirection = PixiTravelingOutlineDirection
 export type GeneratingMediaOutlineOptions = {
     direction?: GeneratingMediaOutlineDirection
     shape?: 'node' | 'preFrameCircle'
+    sourceRendition?: 'original'
 }
 
 type SelectionOverlayOptions = {
@@ -306,9 +308,9 @@ function getSharedToken(): Promise<string | false> {
     return tokenPromise
 }
 
-async function resolveImageSrc(node: ImageCanvasNode, workspaceId: string): Promise<string> {
+async function resolveImageSrc(node: ImageCanvasNode, workspaceId: string, storedImagePath?: string): Promise<string> {
     const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-    const resolvedSrc = resolveStoredImagePath(node, workspaceId)
+    const resolvedSrc = storedImagePath ?? resolveStoredImagePath(node, workspaceId)
     const token = await getSharedToken()
     return buildPixiImageSrc(resolvedSrc, API_BASE_URL, token)
 }
@@ -452,8 +454,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     function getDebugEntrySnapshot(entry: PixiImageEntry): PixiMediaDebugImageSnapshot {
         return {
             nodeId: entry.nodeRef.nodeId,
-            fileId: entry.nodeRef.fileId,
-            src: cleanDebugUrl(entry.nodeRef.src),
+            assetId: entry.nodeRef.assetId,
+            src: cleanDebugUrl(resolveStoredImagePath(entry.nodeRef, getWorkspaceId())),
             sourceKey: cleanDebugUrl(entry.sourceKey),
             loadedTier: entry.loadedTier,
             requestedTier: entry.requestedTier,
@@ -487,7 +489,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     function getDebugEntrySummary(entry: PixiImageEntry): Record<string, unknown> {
         return {
             nodeId: entry.nodeRef.nodeId,
-            fileId: entry.nodeRef.fileId,
+            assetId: entry.nodeRef.assetId,
             loadedTier: entry.loadedTier,
             requestedTier: entry.requestedTier,
             requestId: entry.requestId,
@@ -501,7 +503,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function isFinalGeneratedImageNode(node: ImageCanvasNode): boolean {
-        return Boolean(node.generatedBy && node.fileId)
+        return Boolean(node.generatedBy && node.assetId)
     }
 
     function logFinalGeneratedImageLifecycle(event: string, details: Record<string, unknown>): void {
@@ -849,8 +851,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             imageNodes: verbose
                 ? imageNodes.map((node) => ({
                     nodeId: node.nodeId,
-                    fileId: node.fileId,
-                    src: cleanDebugUrl(node.src),
+                    assetId: node.assetId,
+                    src: cleanDebugUrl(resolveStoredImagePath(node, getWorkspaceId())),
                     dimensions: node.dimensions,
                     position: node.position,
                     sourceKey: makeSourceKey(node),
@@ -1256,11 +1258,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function makeSourceKey(node: ImageCanvasNode): string {
-        return `${getWorkspaceId()}|${node.fileId}|${node.src}`
+        return node.assetId
     }
 
     function shouldPromoteGeneratedFinalFrameDirectly(previousNode: ImageCanvasNode, nextNode: ImageCanvasNode): boolean {
-        return Boolean(nextNode.generatedBy?.aiChatThreadId && !previousNode.fileId && nextNode.fileId)
+        return Boolean(nextNode.generatedBy?.conversationAssetId && previousNode.assetId !== nextNode.assetId)
     }
 
     function getMediaNodeBorderRadius(width: number, height: number): number {
@@ -1480,8 +1482,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         if (!entry) {
             debugLog('entry-create-start', {
                 nodeId: node.nodeId,
-                fileId: node.fileId,
-                src: cleanDebugUrl(node.src),
+                assetId: node.assetId,
+                src: cleanDebugUrl(resolveStoredImagePath(node, getWorkspaceId())),
                 sourceKey: newSourceKey,
                 worldPosition,
                 dimensions: node.dimensions,
@@ -1489,8 +1491,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             if (isFinalGeneratedImageNode(node)) {
                 logFinalGeneratedImageLifecycle('final-generated-entry-create-start', {
                     nodeId: node.nodeId,
-                    fileId: node.fileId,
-                    src: cleanDebugUrl(node.src),
+                    assetId: node.assetId,
+                    src: cleanDebugUrl(resolveStoredImagePath(node, getWorkspaceId())),
                     sourceKey: cleanDebugUrl(newSourceKey),
                     worldPosition,
                     dimensions: node.dimensions,
@@ -1545,8 +1547,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 newSourceKey: cleanDebugUrl(newSourceKey),
                 before: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
                 nextNode: {
-                    fileId: node.fileId,
-                    src: cleanDebugUrl(node.src),
+                    assetId: node.assetId,
+                    src: cleanDebugUrl(resolveStoredImagePath(node, getWorkspaceId())),
                     dimensions: node.dimensions,
                     position: node.position,
                 },
@@ -1685,6 +1687,17 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         return isPreFrameCircleGeneratingNode(entry.nodeRef.nodeId) || isGeneratedImageNodeWaitingForFrame(entry.nodeRef)
     }
 
+    function resolveRenderableImagePath(node: ImageCanvasNode): string {
+        const forcedRendition = generatingImageNodeOutlines.get(node.nodeId)?.sourceRendition
+        if (forcedRendition) return `/api/assets/${encodeURIComponent(node.assetId)}/renditions/${forcedRendition}`
+        const renditions = assetsStore.get(node.assetId)?.media?.renditions
+        if (renditions?.preview?.status === 'ready') return resolveStoredImagePath(node, getWorkspaceId())
+        if (renditions?.original?.status === 'ready') {
+            return `/api/assets/${encodeURIComponent(node.assetId)}/renditions/original`
+        }
+        return resolveStoredImagePath(node, getWorkspaceId())
+    }
+
     // Idempotent texture-quality guarantor. Ensures the entry has at least
     // `desiredTier`-quality pixels loaded. Three cardinal rules:
     //   1) If a higher-or-equal tier is already on the sprite, do NOTHING —
@@ -1696,13 +1709,14 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     //      then schedule a background upgrade to the desired tier in idle time.
     function ensureTextureForEntry(entry: PixiImageEntry, desiredTier: LodTier): void {
         const isPreFramePending = shouldTreatImageEntryAsFramePending(entry)
+        const forcedSourceRendition = generatingImageNodeOutlines.get(entry.nodeRef.nodeId)?.sourceRendition
         debugLog('ensure-texture-start', (verbose) => ({
             nodeId: entry.nodeRef.nodeId,
             desiredTier,
             isPreFramePending,
             entry: verbose ? getDebugEntrySnapshot(entry) : getDebugEntrySummary(entry),
         }))
-        if (isPreFramePending) {
+        if (isPreFramePending && !forcedSourceRendition) {
             entry.sprite.visible = false
             entry.colorRect.visible = false
             debugLog('ensure-texture-skip-frame-pending', (verbose) => ({
@@ -1765,8 +1779,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         // 256px PNGs are tiny (~10–30KB) so the entire workspace can paint a
         // recognizable preview in well under a second, then upgrade in idle
         // time. This is the single most impactful change for first-paint.
-        const shouldFetchProgressivePreview = entry.loadedTier === null && desiredTier !== 'thumb-256'
-        const fetchTier: LodTier = entry.forceFullOnNextLoad
+        const shouldFetchProgressivePreview = !forcedSourceRendition
+            && entry.loadedTier === null
+            && desiredTier !== 'thumb-256'
+        const fetchTier: LodTier = forcedSourceRendition || entry.forceFullOnNextLoad
             ? 'full'
             : shouldFetchProgressivePreview
                 ? 'thumb-256'
@@ -1785,8 +1801,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         const node = entry.nodeRef
         debugLog('texture-request-start', (verbose) => ({
             nodeId: node.nodeId,
-            fileId: node.fileId,
-            src: cleanDebugUrl(node.src),
+            assetId: node.assetId,
+            src: cleanDebugUrl(resolveStoredImagePath(node, getWorkspaceId())),
             desiredTier,
             fetchTier,
             requestId,
@@ -1796,8 +1812,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         if (isFinalGeneratedImageNode(node)) {
             logFinalGeneratedImageLifecycle('final-generated-texture-request-start', {
                 nodeId: node.nodeId,
-                fileId: node.fileId,
-                src: cleanDebugUrl(node.src),
+                assetId: node.assetId,
+                src: cleanDebugUrl(resolveStoredImagePath(node, getWorkspaceId())),
                 desiredTier,
                 fetchTier,
                 requestId,
@@ -1809,8 +1825,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         void (async () => {
             let acquiredKey: string | null = null
             try {
-                const url = await resolveImageSrc(node, getWorkspaceId())
-                const resolved = addPixiLodSizeParam(url, fetchTier)
+                const url = await resolveImageSrc(node, getWorkspaceId(), resolveRenderableImagePath(node))
+                const resolved = forcedSourceRendition ? url : addPixiLodSizeParam(url, fetchTier)
                 debugLog('texture-request-resolved-url', {
                     nodeId: node.nodeId,
                     requestId,
@@ -1875,7 +1891,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 if (isFinalGeneratedImageNode(node)) {
                     logFinalGeneratedImageLifecycle('final-generated-texture-request-loaded', {
                         nodeId: node.nodeId,
-                        fileId: node.fileId,
+                        assetId: node.assetId,
                         requestId,
                         fetchTier,
                         desiredTier,
@@ -1912,7 +1928,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 if (isFinalGeneratedImageNode(node)) {
                     logFinalGeneratedImageLifecycle('final-generated-texture-request-error', {
                         nodeId: node.nodeId,
-                        fileId: node.fileId,
+                        assetId: node.assetId,
                         requestId,
                         fetchTier,
                         desiredTier,

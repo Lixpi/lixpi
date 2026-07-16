@@ -14,7 +14,7 @@ This page documents the Lixpi deployment and operation of that node. For how NEX
 | Workload | Type · lifecycle | What it does |
 |----------|------------------|--------------|
 | `ai-models-sync` | `native` · `service` | Runs `AiModelsSync.synchronizeModels()` at boot and every hour, writing the `AI_MODELS_LIST` DynamoDB table. |
-| `file-conversion` | `native` · `service` | Responds on `workspace.file.convert` and `workspace.file.extractFrames`, running sharp/ffmpeg/libreoffice/poppler outside the API. It reads stored originals from workspace Object Store buckets, writes canonical/poster/frame objects, and replies with canvas hints. |
+| `file-conversion` | `native` · `service` | Responds on active `blob.processing.generateRenditions`. It runs sharp/ffmpeg/libreoffice/poppler outside the API, reads organization Blob coordinates, and writes immutable canonical/preview/thumbnail/poster/representative-frame objects without DynamoDB access. |
 | `system-reporter` | `native` · `service` | A trivial smoke-test workload (echoes uptime every 30s). Deployed by hand to prove the substrate. |
 
 The API reads the catalog straight from DynamoDB on each request ([`getAvailableAiModels`](../../../services/api/src/models/ai-model.ts) scans `AI_MODELS_LIST`), so the hourly write reaches the UI on its next fetch with no restart. After each run the workload also publishes a completion event the API subscribes to (see [Completion event](#completion-event)).
@@ -24,7 +24,7 @@ The API reads the catalog straight from DynamoDB on each request ([`getAvailable
 graph TB
     subgraph Cluster["NATS Cluster"]
         NEXBUS["NEX account<br/>$NEX.> control plane · feeds"]
-        AUTHBUS["AUTH account<br/>workspace.file.* · Object Store"]
+        AUTHBUS["AUTH account<br/>blob.processing.* · organization Blob Object Stores"]
     end
     subgraph Node["services/nex node"]
         N["nex node up"]
@@ -71,10 +71,11 @@ The workload wrapper ([`workloads/ai-models-synchronization/index.ts`](../../../
 
 The file-conversion workload ([`workloads/file-conversion/index.ts`](../../../services/nex/workloads/file-conversion/index.ts)) is a NATS responder. It subscribes to:
 
-- `workspace.file.convert` — reads an uploaded original, transcodes non-model-safe inputs, probes model-safe media for canvas hints, writes canonical/poster objects, and returns `ConvertFileResult`.
-- `workspace.file.extractFrames` — reads a staged generated MP4, extracts frame-0 poster and representative-frame PNGs, writes temporary objects, and returns their ids to the API.
+- `blob.processing.generateRenditions` verifies tenant bucket/source SHA-256 coordinates, reads and writes only organization Blob-bucket objects, produces the complete per-media rendition matrix, and returns per-rendition success or stable failure codes through the requester's NATS reply inbox.
 
-The workload connects as the AUTH-account `regular_user`, not with the NEX-account workload credentials, because workspace Object Store buckets live in the AUTH account. The NEX node still supervises the process; the file bytes never cross the NEX control account.
+NEX has no Asset DynamoDB authority. The API re-reads and hashes every returned object, registers Blob rows/references, and updates Asset state transactionally.
+
+The workload connects as the AUTH-account `regular_user`, not with the NEX-account workload credentials, because organization Blob Object Store buckets live in the AUTH account. The NEX node still supervises the process; the file bytes never cross the NEX control account.
 
 ## The NEX account and credentials
 
@@ -134,7 +135,7 @@ Because the API runs in the `AUTH` account and NATS subjects are account-scoped,
 docker logs -f lixpi-nex-1     # node registration + "✅ ai-models sync done"
 ```
 
-The fastest confirmation that model sync ran is the `AI_MODELS_LIST` table being populated; set `LIXPI_SYNC_INTERVAL_MS` low to watch the loop tick. The fastest confirmation that file conversion is live is a successful upload that needs conversion or probing: the API returns `processing`, then the canvas receives `workspace.file.convert.response.<workspaceId>.<conversionId>` and replaces the upload placeholder. Operator commands (`nex node list`, `nex workload list`, the NEX feed subjects) are in the [`services/nex` README](../../../services/nex/README.md).
+The fastest confirmation that model sync ran is the `AI_MODELS_LIST` table being populated; set `LIXPI_SYNC_INTERVAL_MS` low to watch the loop tick. The fastest confirmation that rendition processing is live is a processing Asset whose `blob.processing.generateRenditions` request/reply advances it to ready or degraded with validated rendition hashes. Operator commands are in the [`services/nex` README](../../../services/nex/README.md).
 
 ## On AWS
 

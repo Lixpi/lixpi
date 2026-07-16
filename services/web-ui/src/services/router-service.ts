@@ -29,11 +29,8 @@ export const routes: RouteDefinition[] = [
 ]
 
 export async function loadWorkspaceRouteData(workspaceId: string): Promise<void> {
-    await Promise.all([
-        servicesStore.getData('workspaceService').getWorkspace({ workspaceId }),
-        servicesStore.getData('documentService').getWorkspaceDocuments({ workspaceId }),
-        servicesStore.getData('aiChatThreadService').getWorkspaceAiChatThreads({ workspaceId }),
-    ])
+    await servicesStore.getData('workspaceService').getWorkspace({ workspaceId })
+    await servicesStore.getData('assetService').loadWorkspaceAssets(workspaceId)
 }
 
 export type Router = {

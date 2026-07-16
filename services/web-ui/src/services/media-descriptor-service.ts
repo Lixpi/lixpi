@@ -8,6 +8,7 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 const { MEDIA_DESCRIBE } = NATS_SUBJECTS.AI_INTERACTION_SUBJECTS
 
 export type DescribeMediaResult = {
+    title?: string
     summary?: string
     entityTags?: string[]
     styleTags?: string[]
@@ -17,48 +18,23 @@ export type DescribeMediaResult = {
 // Requests a compact VLM description of a single media still (an image's own
 // file/final frame, or a video's representative frame/poster). Generated and
 // uploaded media use the same path. The MP4 is never sent — the caller resolves
-// the still fileId. The API owns the media descriptor VLM choice.
+// the Asset ID. The API owns rendition selection and the descriptor VLM choice.
 export const describeMedia = async ({
-    workspaceId,
-    fileId,
+    assetId,
     aiModel,
 }: {
-    workspaceId: string
-    fileId: string
+    assetId: string
     aiModel?: string
 }): Promise<DescribeMediaResult> => {
     const nats = servicesStore.getData('nats')
     if (!nats) return { error: 'OFFLINE' }
     return nats.request(MEDIA_DESCRIBE, {
         token: await AuthService.getTokenSilently(),
-        workspaceId,
-        fileId,
+        assetId,
         ...(aiModel ? { aiModel } : {}),
     }) as Promise<DescribeMediaResult>
 }
 
-// Requests a compact summary of a text node (a document or chat-thread node).
-// The caller passes the node's already-flattened plain text (+ optional title) —
-// no pixels. Shares the MEDIA_DESCRIBE subject and result shape with describeMedia;
-// the server branches on `text` vs `fileId`.
-export const describeText = async ({
-    workspaceId,
-    text,
-    title,
-    aiModel,
-}: {
-    workspaceId: string
-    text: string
-    title?: string
-    aiModel: string
-}): Promise<DescribeMediaResult> => {
-    const nats = servicesStore.getData('nats')
-    if (!nats) return { error: 'OFFLINE' }
-    return nats.request(MEDIA_DESCRIBE, {
-        token: await AuthService.getTokenSilently(),
-        workspaceId,
-        text,
-        title,
-        aiModel,
-    }) as Promise<DescribeMediaResult>
-}
+// Text Assets use the same subject. The API loads the authorized current Asset
+// document and selects the requested text model; no document text crosses from
+// canvas state or browser-maintained metadata.

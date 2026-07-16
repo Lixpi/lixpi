@@ -88,10 +88,8 @@ trade-offs come up.
   through "Open in Features → Re-extract."
 - **Versioning / revision history** of features. The `version` field is
   reserved but only `1` is written today.
-- **A search index for public features.** A simple GSI scan covers the current
-  implementation; OpenSearch/Algolia-class search is deferred.
-- **Admin moderation UI.** Reports flag features into a `'reported'` status that
-  excludes them from public lists; restoration is a manual DB operation today.
+- **External or public Feature sharing.** `shared` is reserved in the type
+  contract, but no runtime, discovery, moderation, or UI path exists yet.
 - **Multi-step autonomous-planning agent behavior** (DeepAgents-style
   `write_todos` planning, dynamic subagent spawning, virtual filesystem for
   cross-step reasoning). The pipeline is multi-stage and runs many parallel VLM
@@ -119,10 +117,10 @@ Every feature contains the following fields.
 | `tags` | Short string tags derived from dominant axes. Tags reflect the actual extracted traits, not generic medium tropes (a digital illustration is not tagged `watercolor` unless the router and `MediumSignatureExtractor` both confirm it is). |
 | `instructions` | A markdown body — the rich how-to-apply guide the LLM consumes when the feature is invoked. Written by the synthesis stage. Sections are weighted by axis dominance: ≥ 0.8 axes get dedicated top-level sections; 0.5–0.8 axes get short sections; 0.3–0.5 axes are mentioned briefly; < 0.3 axes are absent. Always opens with a "DO NOT" section enumerating training-prior tropes the synthesis explicitly rejected (e.g. "this is digital — DO NOT add paper tooth, dry-brush, deckle edges, or wash bleeds"). Anywhere from 200 to 3500 words. This is the workhorse field. |
 | `parameters` | Nested per-axis structured JSON. Top-level fields include `axisDominance` (the router's 0–1 scores per axis), and one nested block per axis that was extracted (e.g. `parameters.palette`, `parameters.lighting`, `parameters.characterDesign`, `parameters.mediumSignature`, etc.). Every axis block has the same envelope: `{ dominance: number, fields: {...axis-specific schema}, rationale: string }`. The full Stage 1 `sceneAssessment` is also nested at `parameters.sceneAssessment` for downstream consumers. Filterable on any nested path. |
-| `sampleImages` | A mixed list of three sample kinds, agent-decided with category-specific minimums. Each entry has a `kind` discriminator: (a) `source-crop` — a deterministic content-free crop of the original source image (paper-edge, background corner, fur-detail, deckle-edge, etc.), extracted by sharp from agent-specified bounding boxes; (b) `texture-specimen` — for `surface-texture`, a 2×2 composite of source crops built deterministically by the backend (no procedural synthesis); (c) `applied-medium-probe` — a model-rendered neutral subject (sphere on a plank, cube + cloth) that the image router generates with the source crops attached as visual style references plus strict anti-leakage instructions. `color-palette` always has a palette-board sample first. All samples stored as workspace image objects via `storeWorkspaceImage`. |
-| `scope` | One of `workspace` / `user` / `organization` / `public`. Default `workspace`. |
+| `sampleImages` | A mixed list of source crops, texture specimens, and applied-medium probes with stable indexes and audit metadata. Each sample stores a Feature-owned Blob hash in the Workspace organization's Blob bucket; Feature references protect those Blobs independently of canvas Assets. |
+| `scope` | `organization` for every active Feature. `shared` is reserved and unavailable. |
 | `status` | `'active'`, `'reported'` (auto-flipped past report threshold), `'removed'`. |
-| `sourceContext` | Provenance: which `extractionRunId` produced it, which workspace it was born in. |
+| `sourceContext` | Provenance: which `extractionRunId` produced it, which workspace it was born in, and the authorized source Asset IDs. Object Store coordinates and tokenized URLs are never persisted here. |
 | `version` | Schema version, currently `1`. Reserved for future revisions. |
 
 {% callout type="note" %}
@@ -258,13 +256,14 @@ input is non-visual).
 
 ## Inputs are not limited to images
 
-The extraction tool accepts whatever the existing context-extraction layer
-produces — see
-[`extractConnectedContext`](../../services/web-ui/src/services/ai-chat-thread-service.ts)
-and the existing multimodal context flow. That includes:
+The extraction tool accepts the Asset-backed context snapshot assembled by
+[`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts)
+and resolved by
+[`workspace-context-resolver.ts`](../../services/api/src/llm/graph/workspace-context-resolver.ts).
+That includes:
 
-- Image canvas nodes (resolved to `nats-obj://` URLs → base64 in
-  [`attachments.ts`](../../services/api/src/llm/utils/attachments.ts))
+- Image canvas nodes (submitted as `asset://<assetId>`, authorized by the API,
+  then resolved to internal Blob coordinates for model input)
 - Document canvas nodes (ProseMirror JSON → plain text)
 - Upstream AI chat thread canvas nodes (full conversation history)
 - Mixed combinations of the above

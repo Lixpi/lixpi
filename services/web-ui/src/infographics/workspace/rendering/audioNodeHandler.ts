@@ -5,7 +5,7 @@ import type { CanvasNode, CanvasState, AudioCanvasNode } from '@lixpi/constants'
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { resolveAuthenticatedMediaUrl } from '$src/utils/workspaceFileUrls.ts'
+import { buildAssetRenditionPath, resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 
 import type { MediaNodeHandler } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
 import type { WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
@@ -86,9 +86,9 @@ export function createAudioNodeHandler(options: AudioNodeHandlerOptions): AudioN
     }
 
     const updateSource = async (entry: AudioEntry, node: AudioCanvasNode): Promise<void> => {
-        if (!node.src) return
+        if (!node.assetId) return
         try {
-            const audioSrc = await buildAuthenticatedUrl(node.src)
+            const audioSrc = await buildAuthenticatedUrl(buildAssetRenditionPath(node.assetId, 'original'))
             if (destroyed) return
             if (entry.audioElement.src !== audioSrc) {
                 entry.audioElement.src = audioSrc
@@ -149,7 +149,7 @@ export function createAudioNodeHandler(options: AudioNodeHandlerOptions): AudioN
         entry.colorRect.visible = true
         entry.worldRect = { x, y, width: w, height: h }
 
-        const sourceKey = `${node.workspaceId}|${node.fileId}|${node.src}`
+        const sourceKey = node.assetId
         if (sourceKey !== entry.sourceKey) {
             entry.sourceKey = sourceKey
             updateSource(entry, node).catch(() => {})

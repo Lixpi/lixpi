@@ -347,7 +347,7 @@ export type MediaNodeSettings = {
     }
     generatedMediaChrome: {
         iconSize: number
-        topGap: number
+        gap: number
         chatScale: number
         modelBadgeSeparator: string
         zoomScaling: BoundedZoomScalingSettings
@@ -367,7 +367,6 @@ export type MediaNodeSettings = {
         minWidth: number
         maxWidth: number | null
         horizontalOffset: number
-        mediaTopOffset: number
         branchMarkerTopOffset: number
         layerZIndex: number
         styles: {
@@ -1153,8 +1152,8 @@ export const settings: Settings = {
         generatedMediaChrome: {
             // Base screen-pixel icon/button size at 100% and higher zoom. Shared with the API collision boxes via @lixpi/constants.
             iconSize: mediaGenerationLayoutSettings.generatedMediaChrome.iconSize,
-            // Base screen-pixel gap at 100% and higher zoom between the media node's bottom edge and the chrome strip. Shared with the API collision boxes via @lixpi/constants.
-            topGap: mediaGenerationLayoutSettings.generatedMediaChrome.topGap,
+            // Base screen-pixel gap at 100% and higher zoom on both sides of the icon strip: media-to-icons and icons-to-info-panel. Shared with the API collision boxes via @lixpi/constants.
+            gap: mediaGenerationLayoutSettings.generatedMediaChrome.topGap,
             // Scale applied to generated-media badges rendered inside AI chat history cards.
             chatScale: 0.72,
             // Separator between the provider brand and model title in the model badge, e.g. "OpenAI : GPT Image 2". Includes its own surrounding spacing so it can be tuned freely (" : ", " — ", " / ", …).
@@ -1190,8 +1189,6 @@ export const settings: Settings = {
             maxWidth: null,
             // Canvas-unit horizontal offset from the anchor's left edge.
             horizontalOffset: 0,
-            // Additional screen-pixel vertical offset below the generated-media icon strip.
-            mediaTopOffset: 0,
             // Canvas-unit vertical offset below a branch-lineage marker.
             branchMarkerTopOffset: 10,
             // Stacking level for the viewport-transformed info panel layer.

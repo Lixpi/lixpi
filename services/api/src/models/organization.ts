@@ -64,6 +64,7 @@ const OrganizationModel = {
             limit: 25,
             fetchAllItems: true,
             scanIndexForward: false,
+            consistentRead: true,
             origin: 'model::Organization->getUserOrganizations()',
         })
 

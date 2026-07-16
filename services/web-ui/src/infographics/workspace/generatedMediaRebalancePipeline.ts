@@ -367,17 +367,14 @@ export class GeneratedMediaRebalancePipeline {
         return {
             nodeId: proxyNodeId,
             type: 'image',
-            fileId: proxyNodeId,
-            workspaceId: this.config.workspaceId,
-            src: '',
-            aspectRatio: 1,
+            assetId: proxyNodeId,
             position: {
                 x: futureMediaPosition.x,
                 y: futureMediaPosition.y,
             },
             dimensions: mediaDimensions,
             generatedBy: {
-                aiChatThreadId: markerNode.aiChatThreadId ?? '',
+                conversationAssetId: markerNode.conversationAssetId ?? '',
                 responseId: '',
                 aiModel: reasoningModelId,
                 revisedPrompt: promptText ?? '',

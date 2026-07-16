@@ -16,7 +16,8 @@ import type {
 
 import AiModelModel from '../../models/ai-model.ts'
 import { settlePersistedAiChatGenerationRequest } from '../../prosemirror/ai-chat-stream-assembler.ts'
-import { settleMediaGenerationRequestOnCanvas } from '../../services/media-generation-canvas-projection.ts'
+import { settleMediaGenerationRequestOnCanvas } from '../../services/asset-canvas-projection.ts'
+import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
@@ -73,6 +74,7 @@ type NormalizedMatrixRequest = {
     videoDuration?: string | number
     videoSourceForExtension?: string
     videoConfigGroups: MediaGenerationConfigSelectionGroup[]
+    regeneration?: AiInteractionMediaGenerationRequest['regeneration']
 }
 
 type ResolvedMatrixRequest = NormalizedMatrixRequest & {
@@ -324,7 +326,17 @@ export class MediaGenerationMatrixOrchestrator {
                         ...(normalized.videoSourceForExtension ? { videoSourceForExtension: normalized.videoSourceForExtension } : {}),
                         imageConfigGroups: normalized.imageConfigGroups,
                         videoConfigGroups: normalized.videoConfigGroups,
+                        ...(normalized.regeneration?.mode === 'existing-prompt' ? {
+                            replayPrompts: normalized.regeneration.replayPrompts.filter(
+                                replayPrompt => replayPrompt.reasoningModelId === reasoningModel.modelId
+                            ),
+                        } : {}),
                     },
+                    ...(normalized.regeneration?.mode === 'existing-prompt' ? {
+                        replayMediaPrompts: normalized.regeneration.replayPrompts.filter(
+                            replayPrompt => replayPrompt.reasoningModelId === reasoningModel.modelId
+                        ),
+                    } : {}),
                     mediaGenerationRequest: {
                         requestVersion: 'media-generation-matrix-v1',
                         generationRequestId: normalized.generationRequestId,
@@ -345,6 +357,7 @@ export class MediaGenerationMatrixOrchestrator {
                             ...(normalized.videoSourceForExtension ? { sourceForExtension: normalized.videoSourceForExtension } : {}),
                             configGroups: normalized.videoConfigGroups,
                         },
+                        ...(normalized.regeneration ? { regeneration: normalized.regeneration } : {}),
                     },
                     generationRun,
                     eventMeta: this.runPlanner.buildEventMeta(requestData.eventMeta ?? {}, generationRun),
@@ -382,7 +395,6 @@ export class MediaGenerationMatrixOrchestrator {
                 const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
                     workspaceId,
                     generationRequestId,
-                    aiChatThreadId,
                     removeProjectedPendingNodes: true,
                 })
                 info('[MEDIA_MATRIX] Persisted cancellation without a live request publisher', {
@@ -437,7 +449,7 @@ export class MediaGenerationMatrixOrchestrator {
         const hasExplicitVideoSource = Boolean(request?.videoOptions?.sourceForExtension ?? requestData.videoSourceForExtension)
         const useMultipleVideoModels = request?.useMultipleVideoModels ?? ((request?.videoModelIds?.length ?? 0) > 1)
         const includeVideoModels = request
-            ? useMultipleVideoModels || hasExplicitVideoSource
+            ? (request.videoModelIds?.length ?? 0) > 0 || hasExplicitVideoSource
             : (requestData.aiVideoModels?.length ?? 0) > 0
         const reasoningModelIds = normalizeModelIdsForMode(useMultipleReasoningModels, request?.reasoningModelIds, requestData.aiReasoningModels?.[0])
         const imageModelIds = normalizeModelIdsForMode(useMultipleImageModels, request?.imageModelIds, requestData.aiImageModels?.[0])
@@ -476,6 +488,7 @@ export class MediaGenerationMatrixOrchestrator {
             videoConfigGroups: useMultipleVideoModels
                 ? normalizeConfigGroupsForModels(request?.videoOptions?.configGroups, videoModelIds)
                 : [],
+            regeneration: request?.regeneration,
         }
     }
 
@@ -603,6 +616,9 @@ export class MediaGenerationMatrixOrchestrator {
             reasoningModel.provider,
             generationRun,
             {
+                organizationId: requestData.organizationId,
+                assetLeaseId: requestData.assetLeaseId,
+                assetLeaseHolderId: requestData.assetLeaseHolderId,
                 enableProseMirrorStream: Boolean(requestData.proseMirrorInitialDoc),
                 proseMirrorBaseVersion: requestData.proseMirrorBaseVersion,
                 proseMirrorInitialDoc: requestData.proseMirrorInitialDoc,
@@ -690,7 +706,30 @@ export class MediaGenerationMatrixOrchestrator {
             mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
             mediaBranchResolution: state.mediaBranchResolution,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
+            ...(normalized.regeneration?.mode === 'existing-prompt' ? {
+                regenerationTarget: {
+                    branchId: normalized.regeneration.branchId,
+                    lineageParentNodeId: normalized.regeneration.lineageParentNodeId,
+                    lineageParentType: normalized.regeneration.lineageParentType,
+                },
+            } : {}),
+            forceFreshLineage: normalized.regeneration?.mode === 'regenerate-prompt'
+                && normalized.regeneration.forceFreshLineage,
             createdAt: Date.now(),
+        })
+        const organizationId = requestData.eventMeta?.organizationId as string | undefined
+        const ownerUserId = requestData.eventMeta?.userId as string | undefined
+        if (!organizationId || !ownerUserId) {
+            throw new Error('Asset media generation requires organization and user context')
+        }
+        await ensurePendingGeneratedAssets({
+            lineagePlan: mediaBranchLineagePlan,
+            workspaceId: requestData.workspaceId,
+            conversationAssetId: requestData.aiChatThreadId,
+            organizationId,
+            ownerUserId,
+            mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
+            workspaceContextSnapshot: state.workspaceContextSnapshot,
         })
         const firstLineageAssignment = this.getRunLineageAssignment(mediaBranchLineagePlan, generationRun.reasoningRunId)
         const lineageGenerationRun = firstLineageAssignment

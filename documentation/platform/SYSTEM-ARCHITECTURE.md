@@ -5,9 +5,9 @@ description: The conceptual overview of Lixpi's NATS-first, message-driven servi
 
 # System Architecture
 
-Lixpi is a message-driven system built around [NATS](https://nats.io/). The browser uses NATS over WebSocket for normal app commands, workspace CRUD, canvas-state saves, document/thread operations, live AI pipeline events, and ProseMirror step streams. The API service handles those subjects, persists data in DynamoDB, and hosts the LangGraph workflow in-process. JetStream backs media Object Store buckets plus short-lived durable replay logs for AI pipeline events and ProseMirror document steps.
+Lixpi is a message-driven system built around [NATS](https://nats.io/). The browser uses NATS over WebSocket for normal app commands, Workspace and Asset CRUD, canvas-state saves, live AI pipeline events, and Asset-role ProseMirror step streams. The API service handles those subjects, persists bounded records in DynamoDB, and hosts the LangGraph workflow in-process. JetStream backs one content-addressed Blob Object Store bucket per organization plus short-lived durable replay logs for AI pipeline events and Asset document steps.
 
-There are still HTTP routes where HTTP is the right tool: file upload/download, Range-capable audio/video playback, Media Library previews, feature sample previews, health checks, and workspace export/import archives. Those routes move browser-friendly bytes or ZIP files; they are not the primary app command path.
+There are still HTTP routes where HTTP is the right tool: Asset upload/import and authenticated rendition download, Range-capable audio/video playback, Feature sample previews, health checks, and Workspace export/import archives. Those routes move browser-friendly bytes or ZIP files; they are not the primary app command path.
 
 This page maps how the running system fits together: which services exist, how they talk, the design decisions that shaped them, and how the system scales.
 
@@ -23,10 +23,10 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 |---------|----------|------|------|
 | **web-ui** | Svelte / TypeScript | `services/web-ui/` | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, and client-side context extraction |
 | **api** | Node.js / TypeScript | `services/api/` | API service — JWT auth, CRUD, DynamoDB persistence, NATS bridge, **and the in-process LangGraph LLM workflow** at `services/api/src/llm/` (pipeline events, ProseMirror transcript steps, image generation, video generation, usage tracking) |
-| **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, JetStream Object Store for workspace media storage, and JetStream replay logs for pipeline/document events |
+| **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, organization Blob Object Store, and JetStream replay logs for pipeline/Asset-document events |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 | **nex** | Node.js / TypeScript | `services/nex/` | NATS NEX execution-engine node — runs background workloads on the bus: the hourly AI-models catalog sync and heavy file conversion/frame extraction. See [NEX Execution Engine](./deployment/NEX-EXECUTION-ENGINE.md) |
-| **DynamoDB** | AWS (local via Docker) | — | Document storage, user data, AI chat threads, AI model metadata |
+| **DynamoDB** | AWS (local via Docker) | — | Asset/Blob metadata and references, Workspaces, Features, Extraction Runs, users, and AI model metadata |
 
 {% callout type="note" %}
 **Historical note.** LLM orchestration used to live in a separate Python `services/llm-api/` Fargate task using the Python LangGraph package. It was absorbed into `services/api` once the TypeScript LangGraph package covered Lixpi's workflow needs. The in-process LangGraph workflow now runs alongside the gateway logic in the `api` container. For the internal-service NATS auth pattern that the former Python service used — and that a future split would reuse — see [Internal Service NATS Auth Pattern](../knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md).
@@ -61,7 +61,7 @@ graph TB
     end
 
     subgraph Storage["Storage & Providers"]
-        DDB[("DynamoDB<br/>Documents · Threads · Users")]
+        DDB[("DynamoDB<br/>Assets · Blobs · Workspaces · Features · Users")]
         Provider(("AI Providers<br/>OpenAI · Anthropic · Google"))
     end
 
@@ -72,7 +72,6 @@ graph TB
     API --> DDB
     API <-->|Object Store + JetStream stream API| NATS
     NEX <-->|NATS request/reply + Object Store| NATS
-    NEX --> DDB
     LLM -->|Pipeline events + ProseMirror steps| NATS
     LLM <-->|Vendor SDK calls| Provider
     API -.->|JWT verify| Auth
@@ -81,12 +80,12 @@ graph TB
 | Tier | Component | Responsibility |
 |------|-----------|----------------|
 | Client | Web UI | Renders the canvas, hosts ProseMirror editors, extracts context from the node graph, and connects to NATS over WebSocket |
-| Broker | NATS Cluster | Carries app commands, auth callouts, CRUD requests, AI pipeline events, replay logs, ProseMirror document steps, and file-conversion requests; stores media in JetStream Object Store |
+| Broker | NATS Cluster | Carries app commands, auth callouts, CRUD requests, AI pipeline events, replay logs, Asset-role ProseMirror steps, and rendition requests; stores immutable Blob objects in organization Object Store buckets |
 | API | api service | Validates tokens, performs CRUD against DynamoDB, hosts byte-oriented HTTP routes, and bridges browser requests to the in-process workflow |
 | API | LangGraph workflow | Resolves features, streams the text model, routes image/video tool calls, and publishes pipeline events plus ProseMirror transcript steps to NATS |
 | Workers | NEX workloads | Run long-lived background services on NATS, including file conversion/probing and AI-model catalog synchronization |
 | Identity | Auth0 / LocalAuth0 | Issues RS256 user JWTs and exposes a JWKS endpoint for verification |
-| Storage | DynamoDB | Persists documents, AI chat threads, users, and AI model metadata |
+| Storage | DynamoDB | Persists Asset/Blob registries and references, Workspaces, Features, Extraction Runs, users, and AI model metadata |
 | Storage | AI Providers | External text, image, and video models invoked through vendor SDKs |
 
 ## NATS as the Backbone
@@ -103,9 +102,9 @@ HTTP remains in the system for payloads that are better served as HTTP responses
 
 | HTTP route family | Why it is HTTP |
 |-------------------|----------------|
-| `/api/files/*` | Browser upload, download, audio/video Range requests, and media playback need ordinary HTTP semantics. The bytes are stored in NATS Object Store, while heavy conversion/probing is handed off over NATS. |
+| `/api/assets/*` | Browser Asset upload/import, authenticated rendition download, audio/video Range requests, and media playback need ordinary HTTP semantics. Blob bytes are stored in organization-scoped NATS Object Store buckets; rendition work is handed off over NATS. |
 | `/api/workspaces/:workspaceId/export` and `/api/workspaces/:workspaceId/import` | Workspace portability uses ZIP archives and multipart uploads. Normal workspace reads, writes, canvas-state updates, and deletion are still NATS subjects. |
-| `/api/features/*` and `/api/media-library/*` previews | Authenticated thumbnail/asset previews are browser media requests, while feature and library metadata flows over NATS subjects. |
+| `/api/features/*` | Authenticated Feature sample previews are browser media requests, while Feature metadata flows over NATS subjects. |
 | `/health-check` | ECS needs a simple health endpoint. |
 
 For the AI event path from provider output to rendered DOM, and the catalog of stream event types, see [Streaming & Events](./STREAMING-AND-EVENTS.md).
@@ -121,13 +120,15 @@ domain.entity.action[.qualifier]
 | Example subject | Pattern | Meaning |
 |-----------------|---------|---------|
 | `user.get` | `domain.action` | Request: get user data |
-| `workspace.document.create` | `domain.entity.action` | Request: create a document |
+| `asset.create` | `domain.action` | Request: create an Asset with a content or conversation role |
 | `ai.interaction.chat.sendMessage` | `domain.entity.action.action` | Publish: browser → API |
-| `ai.interaction.chat.receiveMessage.{workspaceId}.{threadId}` | `…action.qualifier.qualifier` | Subscribe: LLM workflow → browser (per-thread, direct) |
+| `ai.interaction.chat.receiveMessage.{scopeId}.{pipelineId}` | `…action.qualifier.qualifier` | Internal canonical live pipeline output; not browser-subscribable |
+| `ai.interaction.chat.receiveMessage.{userIdToken}.{scopeId}.{pipelineId}` | `…action.qualifier.qualifier.qualifier` | Authorized API relay → one browser identity |
 | `ai.interaction.chat.pipelineEvents.{workspaceId}.{pipelineId}` | `…action.qualifier.qualifier` | JetStream subject: durable replay of chat pipeline side events |
-| `document.steps.{workspaceId}.{docType}.{docId}` | `domain.entity.qualifier.qualifier.qualifier` | JetStream subject: durable ProseMirror control/step events |
+| `asset.document.steps.{organizationId}.{assetId}.{role}` | `domain.entity.action.qualifier.qualifier.qualifier` | Internal JetStream subject: durable Asset-role ProseMirror control/step events |
+| `asset.document.events.{userIdToken}.{organizationId}.{assetId}.{role}` | `domain.entity.action.qualifier.qualifier.qualifier.qualifier` | Authorized live Asset-role relay for one browser identity |
 
-The trailing qualifiers are what scope live subscriptions and JetStream replay subjects to one workspace, thread, pipeline, or document. Live chat events still reach the one browser subscription that needs them; JetStream subjects give reconnecting clients a cursor-addressable replay window.
+The trailing qualifiers scope live subscriptions and JetStream replay subjects to one user, workspace/organization scope, pipeline, or Asset document role. Canonical live and JetStream subjects remain API-internal; tokenized relays reach only the browser identity authorized by the corresponding resume/start request.
 
 {% callout type="important" %}
 Subjects are **not** ad-hoc strings scattered across the codebase. They are defined in `packages/lixpi/constants/nats-subjects.json` and consumed by both the browser and the API through `@lixpi/constants`. Adding or renaming a subject means editing that file, which keeps every producer and consumer in sync.
@@ -139,7 +140,7 @@ Four decisions define the shape of the system. Each is intentional and each is w
 
 ### NATS-First
 
-App commands, auth callouts, workspace/document/thread CRUD, canvas-state saves, file storage, AI pipeline events, and ProseMirror document-step transport all center on NATS. The browser connects to NATS via WebSocket. Because the LLM workflow publishes live pipeline events directly onto the per-thread subjects the browser is already subscribed to, there is no extra HTTP hop between provider output and browser updates. JetStream sits beside that live path for replay and storage, not as a polling layer.
+App commands, auth callouts, Workspace and Asset mutations, canvas-state saves, Blob storage, AI pipeline events, and Asset-role ProseMirror transport all center on NATS. The browser connects to NATS via WebSocket. Because the LLM workflow publishes live pipeline events directly onto the conversation Asset subjects the browser is already subscribed to, there is no extra HTTP hop between provider output and browser updates. JetStream sits beside that live path for replay and storage, not as a polling layer.
 
 The exception is byte transport: media upload/download, video range reads, authenticated previews, and workspace import/export use HTTP because browsers and archives already speak HTTP well.
 
@@ -153,7 +154,7 @@ Every AI request sends the full conversation history — no provider-specific se
 
 ### Client-Side Context Extraction
 
-When a user sends a message, the browser-side `AiChatThreadService` traverses the canvas edge graph, extracts content from connected nodes (documents, images, upstream threads), and assembles the multimodal payload. The API service forwards it without needing to understand the graph structure — the topology lives in the client. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md).
+When a user sends a message, the canvas integration builds explicit context previews and a descriptor-only workspace snapshot from Asset-backed nodes. The API authorizes and resolves selected Asset renditions, applies relevance selection, and assembles provider inputs while preserving canvas node IDs separately from Asset IDs. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md).
 
 ## Scalability & Load Balancing
 

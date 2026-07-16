@@ -2,7 +2,6 @@ import { Plugin, PluginKey, type Transaction } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
 import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
 import { SLASH_COMMANDS, filterCommands, type SlashCommand } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/commandRegistry.ts'
-import { documentTitleNodeType } from '@lixpi/prosemirror'
 
 export const slashCommandsMenuPluginKey = new PluginKey('slashCommandsMenu')
 
@@ -63,9 +62,6 @@ class SlashCommandsMenuView {
         const { $from } = selection
         const isCodeBlock = $from.parent.type.name === 'code_block'
         if (isCodeBlock) return false
-
-        const isDocumentTitle = $from.parent.type.name === documentTitleNodeType
-        if (isDocumentTitle) return false
 
         return true
     }
@@ -375,9 +371,6 @@ export function slashCommandsMenuPlugin(): Plugin<SlashCommandsPluginState> {
                 // Check exclusion zones
                 const isCodeBlock = $from.parent.type.name === 'code_block'
                 if (isCodeBlock) return false
-
-                const isDocumentTitle = $from.parent.type.name === documentTitleNodeType
-                if (isDocumentTitle) return false
 
                 // Check if at start of line or after whitespace
                 const isStartOfLine = $from.parentOffset === 0
