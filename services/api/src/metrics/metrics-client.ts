@@ -12,8 +12,6 @@ import type { CheckRequest, CheckResponse, ConfirmRequest, ConfirmResponse } fro
 const METRICS_SUBJECTS = (NATS_SUBJECTS as any).METRICS_SUBJECTS as {
     USAGE_CHECK: string
     USAGE_CONFIRM: string
-    BALANCE_GET: string
-    BALANCE_CHANGED: string
 }
 
 // MetricsNats is the minimal slice of the NATS service the client needs: a
