@@ -5,10 +5,9 @@ import { StateGraph, END, START } from '@langchain/langgraph'
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn, err } from '@lixpi/debug-tools'
-import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName, type StreamStatus } from '@lixpi/constants'
+import { STREAM_STATUS, type MediaGenerationRunMeta, type Modality, type ProviderName, type StreamStatus } from '@lixpi/constants'
 
 import type { MetricsClient } from '../../metrics/metrics-client.ts'
-import type { Modality } from '../../metrics/contracts.ts'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'

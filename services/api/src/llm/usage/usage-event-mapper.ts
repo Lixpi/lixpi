@@ -1,11 +1,12 @@
 'use strict'
 
-import type { ConfirmRequest } from '../../metrics/contracts.ts'
+import type { ConfirmRequest } from '@lixpi/constants'
 import type { UsageReport, ImageUsageReport, VideoUsageReport } from './usage-reporter.ts'
 
 // Maps the usage reporter's per-call reports to metrics ConfirmRequests. One
 // confirm per provider call, carrying the measured unit count only — the metering
-// backend owns pricing, so no cost crosses the wire (see metrics/contracts.ts).
+// backend owns pricing, so no cost crosses the wire (see
+// packages/lixpi/constants/ts/metrics-contracts.ts).
 
 type ReportHead = {
     eventMeta: { organizationId?: string; userId?: string; workspaceId?: string; [k: string]: unknown }

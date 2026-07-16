@@ -1,14 +1,19 @@
 'use strict'
 
-import { NATS_SUBJECTS } from '@lixpi/constants'
+import {
+    NATS_SUBJECTS,
+    type CheckRequest,
+    type CheckResponse,
+    type ConfirmRequest,
+    type ConfirmResponse,
+} from '@lixpi/constants'
 import { warn } from '@lixpi/debug-tools'
 
-import type { CheckRequest, CheckResponse, ConfirmRequest, ConfirmResponse } from './contracts.ts'
 
 // CROSS-REPO WIRE CONTRACT — the metrics.* subjects and check/confirm shapes are
 // shared with the hosted metering backend (a separate service, out of this repo).
 // Do NOT change without explicit user allowance, and mirror any change on both
-// sides (see ./contracts.ts). A one-sided change breaks the wire.
+// sides (see packages/lixpi/constants/ts/metrics-contracts.ts). A one-sided change breaks the wire.
 const METRICS_SUBJECTS = (NATS_SUBJECTS as any).METRICS_SUBJECTS as {
     USAGE_CHECK: string
     USAGE_CONFIRM: string

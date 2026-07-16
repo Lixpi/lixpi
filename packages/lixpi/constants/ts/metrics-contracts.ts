@@ -13,9 +13,10 @@
 // ============================================================================
 
 // Metrics contract types for the abstract usage-metering port. Lixpi calls this
-// port (check before a paid provider call, confirm after); the port is served by a
-// hosted metering backend over the metrics.usage.* subjects. In the open-source
-// build the port is a no-op plug.
+// port (check before a paid provider call, confirm after) via
+// services/api/src/metrics/metrics-client.ts; the port is served by a hosted
+// metering backend over the metrics.usage.* subjects. In the open-source build
+// the port is a no-op plug.
 //
 // Lixpi sends unit counts, never money — the hosted backend owns pricing.
 
