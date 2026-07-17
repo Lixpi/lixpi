@@ -155,7 +155,7 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(gemini.pricing.video).toBeUndefined()
     })
 
-    it('no longer blacklists veo in the Google contains list (so fetchGoogleModels can surface it)', () => {
+    it('allows veo models through the Google contains blacklist', () => {
         const containsBlacklist = (AiModelsSync as any).MODELS_BLACKLIST.Google.contains
         expect(containsBlacklist).not.toContain('veo')
         // Unrelated entries must remain blacklisted.
@@ -237,13 +237,8 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
 })
 
 // =============================================================================
-// ANTHROPIC MODEL FETCH — no more silent static-Haiku fallback
+// ANTHROPIC MODEL FETCH FAILURE MODES
 // =============================================================================
-//
-// fetchAnthropicModels used to swallow a missing API key or a failed/absent
-// models.list() call and substitute a static Haiku entry. That masked real
-// sync failures. It must now throw so the workload fails loudly instead of
-// silently projecting a fabricated catalog entry.
 
 describe('AiModelsSync — Anthropic model fetch failure modes', () => {
     const originalAnthropicApiKey = process.env.ANTHROPIC_API_KEY
@@ -258,7 +253,7 @@ describe('AiModelsSync — Anthropic model fetch failure modes', () => {
         else process.env.ANTHROPIC_API_KEY = originalAnthropicApiKey
     })
 
-    it('throws instead of returning the static Haiku fallback when no API key is configured', async () => {
+    it('requires an Anthropic API key', async () => {
         delete process.env.ANTHROPIC_API_KEY
         const sync: any = new AiModelsSync({
             dynamoDBService: {} as any,
@@ -270,7 +265,7 @@ describe('AiModelsSync — Anthropic model fetch failure modes', () => {
         await expect(sync.fetchAnthropicModels()).rejects.toThrow('Anthropic API key is required but not provided')
     })
 
-    it('propagates an error from models.list() instead of swallowing it into a fallback', async () => {
+    it('propagates errors from models.list()', async () => {
         const sync: any = new AiModelsSync({
             dynamoDBService: {} as any,
             openaiApiKey: 'test-key',
