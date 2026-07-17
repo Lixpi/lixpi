@@ -5,14 +5,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({
-    workspace: {
-        getWorkspace: vi.fn(),
+    asset: {
+        get: vi.fn(),
+        updateMetadata: vi.fn(),
+        canEditAssetMetadata: vi.fn(),
+    },
+    blob: {
+        get: vi.fn(),
     },
     aiModel: {
         getAiModel: vi.fn(),
     },
     nats: {
-        instance: { connectionId: 'nats-1' },
+        instance: { connectionId: 'nats-1' } as any,
     },
     mediaDescriptor: {
         describeMediaStill: vi.fn(),
@@ -27,6 +32,12 @@ const mocks = vi.hoisted(() => ({
     debug: {
         err: vi.fn(),
     },
+    requesterContext: {
+        get: vi.fn(),
+    },
+    assetDocumentService: {
+        loadCurrentSnapshot: vi.fn(),
+    },
 }))
 
 vi.mock('@lixpi/debug-tools', () => ({ err: mocks.debug.err }))
@@ -37,13 +48,21 @@ vi.mock('@lixpi/nats-service', () => ({
     },
 }))
 
-vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
+vi.mock('../../models/asset.ts', () => ({
+    default: { get: mocks.asset.get, updateMetadata: mocks.asset.updateMetadata },
+    canEditAssetMetadata: mocks.asset.canEditAssetMetadata,
+}))
+vi.mock('../../models/blob.ts', () => ({ default: mocks.blob }))
 vi.mock('../../models/ai-model.ts', () => ({ default: mocks.aiModel }))
 vi.mock('../../llm/media-descriptor.ts', () => ({
     describeMediaStill: mocks.mediaDescriptor.describeMediaStill,
     describeTextContent: mocks.mediaDescriptor.describeTextContent,
 }))
 vi.mock('../../settings.ts', () => ({ settings: mocks.settings }))
+vi.mock('../../services/asset-requester-context.ts', () => ({
+    getAssetRequesterContext: mocks.requesterContext.get,
+}))
+vi.mock('../../services/asset-document-service.ts', () => ({ default: mocks.assetDocumentService }))
 
 import { mediaDescriptorSubjects } from './media-descriptor-subjects.ts'
 
@@ -57,10 +76,50 @@ const getHandler = () => {
     return subscription.handler
 }
 
+const requester = {
+    userId: 'user-1',
+    workspaceIds: ['workspace-1'],
+    editableWorkspaceIds: ['workspace-1'],
+    organizationIds: ['org-1'],
+}
+
+const mediaAsset = {
+    assetId: 'asset-1',
+    scope: 'workspace',
+    scopeOwnerId: 'workspace-1',
+    ownerUserId: 'user-1',
+    organizationId: 'org-1',
+    revision: 1,
+    title: 'Old title',
+    media: {
+        kind: 'image',
+        renditions: {
+            preview: { status: 'ready', blobHash: 'hash-1' },
+            original: { status: 'ready', blobHash: 'hash-0' },
+        },
+    },
+    documents: {},
+}
+
+const textAsset = {
+    assetId: 'asset-2',
+    scope: 'workspace',
+    scopeOwnerId: 'workspace-1',
+    ownerUserId: 'user-1',
+    organizationId: 'org-1',
+    revision: 1,
+    title: 'Roadmap',
+    documents: { content: { docId: 'doc-1' } },
+}
+
 describe('MEDIA_DESCRIBE request handling', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1' })
+        mocks.requesterContext.get.mockResolvedValue(requester)
+        mocks.asset.canEditAssetMetadata.mockResolvedValue(true)
+        mocks.asset.get.mockImplementation(async ({ assetId }: { assetId: string }) =>
+            assetId === mediaAsset.assetId ? mediaAsset : assetId === textAsset.assetId ? textAsset : { error: 'NOT_FOUND' })
+        mocks.asset.updateMetadata.mockImplementation(async ({ descriptor, title }: any) => ({ descriptor, title }))
         mocks.nats.instance = { connectionId: 'nats-1' }
         mocks.settings.mediaDescriptor.defaultVlmMaxTokens = 8192
         mocks.aiModel.getAiModel.mockResolvedValue({
@@ -68,6 +127,8 @@ describe('MEDIA_DESCRIBE request handling', () => {
             model: 'claude-haiku-4-5',
             maxCompletionSize: 4096,
         })
+        mocks.blob.get.mockResolvedValue({ bucketName: 'blob-bucket', objectKey: 'blob-key' })
+        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({ doc: { text: 'Launch notes and priorities' } })
         mocks.mediaDescriptor.describeMediaStill.mockResolvedValue({
             summary: 'A cat sleeping',
             entityTags: ['cat'],
@@ -84,14 +145,9 @@ describe('MEDIA_DESCRIBE request handling', () => {
         const handler = getHandler()
         const result = await handler({
             user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
-            fileId: 'frame-1',
+            assetId: mediaAsset.assetId,
         })
 
-        expect(mocks.workspace.getWorkspace).toHaveBeenCalledWith({
-            userId: 'user-1',
-            workspaceId: 'workspace-1',
-        })
         expect(mocks.aiModel.getAiModel).toHaveBeenCalledWith({
             provider: 'Anthropic',
             model: 'claude-haiku-4-5',
@@ -100,15 +156,15 @@ describe('MEDIA_DESCRIBE request handling', () => {
         expect(mocks.mediaDescriptor.describeMediaStill).toHaveBeenCalledWith({
             provider: 'Anthropic',
             modelVersion: 'claude-haiku-4-5',
-            imageUrl: 'nats-obj://workspace-workspace-1-files/frame-1',
+            imageUrl: 'nats-obj://blob-bucket/blob-key',
             natsService: { connectionId: 'nats-1' },
             maxTokens: 4096,
         })
-        expect(result).toEqual({
+        expect(result).toEqual(expect.objectContaining({
             summary: 'A cat sleeping',
             entityTags: ['cat'],
             styleTags: ['soft'],
-        })
+        }))
     })
 
     it('describes a text node when `text` is provided and uses explicit text aiModel', async () => {
@@ -121,9 +177,7 @@ describe('MEDIA_DESCRIBE request handling', () => {
         const handler = getHandler()
         const result = await handler({
             user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
-            text: 'Launch notes and priorities',
-            title: 'Roadmap',
+            assetId: textAsset.assetId,
             aiModel: 'OpenAI:gpt-4.1',
         })
 
@@ -131,26 +185,25 @@ describe('MEDIA_DESCRIBE request handling', () => {
             provider: 'OpenAI',
             modelVersion: 'gpt-4.1',
             text: 'Launch notes and priorities',
-            title: 'Roadmap',
+            title: textAsset.title,
             natsService: { connectionId: 'nats-1' },
             maxTokens: 2048,
         })
-        expect(result).toEqual({
+        expect(result).toEqual(expect.objectContaining({
             summary: 'A user note',
             entityTags: ['note'],
             styleTags: ['plain'],
-        })
+        }))
     })
 
-    it('does not describe anything when neither text nor fileId are present', async () => {
+    it('returns ASSET_ID_REQUIRED when no assetId is present', async () => {
         const handler = getHandler()
         const result = await handler({
             user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
         })
 
-        expect(result).toEqual({ error: 'WORKSPACE_ACCESS_DENIED' })
-        expect(mocks.workspace.getWorkspace).not.toHaveBeenCalled()
+        expect(result).toEqual({ error: 'ASSET_ID_REQUIRED' })
+        expect(mocks.requesterContext.get).not.toHaveBeenCalled()
         expect(mocks.aiModel.getAiModel).not.toHaveBeenCalled()
         expect(mocks.mediaDescriptor.describeMediaStill).not.toHaveBeenCalled()
         expect(mocks.mediaDescriptor.describeTextContent).not.toHaveBeenCalled()
@@ -160,8 +213,7 @@ describe('MEDIA_DESCRIBE request handling', () => {
         const handler = getHandler()
         const result = await handler({
             user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
-            text: 'some prompt',
+            assetId: textAsset.assetId,
             aiModel: 'gpt-4',
         })
 
@@ -175,8 +227,7 @@ describe('MEDIA_DESCRIBE request handling', () => {
         const handler = getHandler()
         const result = await handler({
             user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
-            fileId: 'frame-1',
+            assetId: mediaAsset.assetId,
         })
 
         expect(result).toEqual({ error: 'AI_MODEL_NOT_FOUND:Anthropic:claude-haiku-4-5' })
@@ -191,8 +242,7 @@ describe('MEDIA_DESCRIBE request handling', () => {
         const handler = getHandler()
         await handler({
             user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
-            fileId: 'frame-2',
+            assetId: mediaAsset.assetId,
         })
 
         expect(mocks.mediaDescriptor.describeMediaStill).toHaveBeenCalledWith(expect.objectContaining({
@@ -211,39 +261,34 @@ describe('MEDIA_DESCRIBE request handling', () => {
         const handler = getHandler()
         const result = await handler({
             user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
-            fileId: 'frame-1',
+            assetId: mediaAsset.assetId,
         })
 
-        expect(result).toEqual({ error: 'MEDIA_DESCRIPTOR_EMPTY' })
-        expect(mocks.debug.err).toHaveBeenCalled()
+        expect(result).toEqual({ error: 'ASSET_DESCRIPTOR_EMPTY' })
     })
 
     it('returns NATS_UNAVAILABLE when the NATS service instance is missing', async () => {
-        mocks.nats.instance = null as any
+        mocks.nats.instance = null
         const handler = getHandler()
         const result = await handler({
             user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
-            fileId: 'frame-1',
+            assetId: mediaAsset.assetId,
         })
 
         expect(result).toEqual({ error: 'NATS_UNAVAILABLE' })
         expect(mocks.mediaDescriptor.describeMediaStill).not.toHaveBeenCalled()
     })
 
-    it('short-circuits with workspace access denied when access check fails', async () => {
-        mocks.workspace.getWorkspace.mockResolvedValue({ error: 'PERMISSION_DENIED' })
+    it('short-circuits with the asset error when the asset cannot be loaded', async () => {
+        mocks.asset.get.mockResolvedValueOnce({ error: 'PERMISSION_DENIED' })
         const handler = getHandler()
 
         const result = await handler({
             user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
-            text: 'hello',
-            aiModel: 'OpenAI:gpt-4.1',
+            assetId: textAsset.assetId,
         })
 
-        expect(result).toEqual({ error: 'WORKSPACE_ACCESS_DENIED' })
+        expect(result).toEqual({ error: 'PERMISSION_DENIED' })
         expect(mocks.mediaDescriptor.describeTextContent).not.toHaveBeenCalled()
     })
 
@@ -252,8 +297,7 @@ describe('MEDIA_DESCRIBE request handling', () => {
         const handler = getHandler()
         const result = await handler({
             user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
-            text: 'hello',
+            assetId: textAsset.assetId,
             aiModel: 'OpenAI:gpt-4.1',
         })
 

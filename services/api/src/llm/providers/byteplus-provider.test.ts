@@ -18,10 +18,6 @@ const byteplusMocks = vi.hoisted(() => ({
     downloadVideo: vi.fn(),
 }))
 
-const frameMocks = vi.hoisted(() => ({
-    extractVideoFramesViaWorkload: vi.fn(),
-}))
-
 const noopDeps = {} as any
 
 vi.mock('./byteplus-video-types.ts', async () => {
@@ -34,16 +30,10 @@ vi.mock('./byteplus-video-types.ts', async () => {
     }
 })
 
-vi.mock('../../services/video-frame-extraction.ts', () => ({
-    extractVideoFramesViaWorkload: frameMocks.extractVideoFramesViaWorkload,
-}))
-
 const makeDeps = (): BaseProviderDeps => ({
     natsService: {
         publish: vi.fn(),
     } as any,
-    storeWorkspaceImage: vi.fn(),
-    storeWorkspaceVideo: vi.fn(),
     usageReporter: {} as any,
     runImageRouter: vi.fn(),
     runVideoRouter: vi.fn(),
@@ -86,7 +76,6 @@ describe('BytePlusProvider', () => {
         byteplusMocks.createVideoGenerationTask.mockReset()
         byteplusMocks.pollVideoGenerationTask.mockReset()
         byteplusMocks.downloadVideo.mockReset()
-        frameMocks.extractVideoFramesViaWorkload.mockReset()
     })
 
     afterEach(() => {
@@ -129,10 +118,6 @@ describe('BytePlusProvider', () => {
             ratio: '16:9',
         })
         byteplusMocks.downloadVideo.mockResolvedValueOnce(mp4Buffer)
-        frameMocks.extractVideoFramesViaWorkload.mockResolvedValueOnce({
-            posterBuffer: Buffer.from('poster-bytes'),
-            frameBuffer: Buffer.from('frame-bytes'),
-        })
 
         const result = await (provider as any).streamImpl(makeState())
 
@@ -149,10 +134,10 @@ describe('BytePlusProvider', () => {
             revisedPrompt: 'A cat riding a motorcycle through a city at night.',
             videoModelId: 'seedance-2.0',
         })
-        expect(frameMocks.extractVideoFramesViaWorkload).toHaveBeenCalledWith({
-            workspaceId: 'ws-1',
+        expect(completeArgs).toMatchObject({
             videoBuffer: mp4Buffer,
-            atSeconds: 3,
+            posterBuffer: null,
+            frameBuffer: null,
         })
         expect(result).toEqual(expect.objectContaining({
             generatedVideos: ['seedance-complete'],
@@ -270,7 +255,6 @@ describe('BytePlusProvider', () => {
         await expect((provider as any).streamImpl(makeState())).rejects.toThrow(
             'Seedance: empty video bytes after download',
         )
-        expect(frameMocks.extractVideoFramesViaWorkload).not.toHaveBeenCalled()
         expect(publisherState.error).toHaveBeenCalledWith('Seedance: empty video bytes after download')
         expect(debugTools.err).toHaveBeenCalledWith(
             '[BytePlus:ws-1:thread-1:video] Seedance failed: Seedance: empty video bytes after download',

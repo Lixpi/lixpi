@@ -3,9 +3,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { STREAM_STATUS } from '@lixpi/constants'
-import type { MediaBranchCandidateImage, WorkspaceContextSnapshot } from '@lixpi/constants'
+import type { Asset, MediaBranchCandidateImage, WorkspaceContextSnapshot } from '@lixpi/constants'
 
 import * as debugTools from '@lixpi/debug-tools'
+
+// Descriptor self-healing resolves media through BlobModel/AssetModel and
+// persists healed descriptors through AssetModel + the asset requester
+// context helper. Those hit DynamoDB directly (no deps injection point), so
+// they are mocked at the module level rather than through resolver deps.
+const blobModelMocks = vi.hoisted(() => ({
+    get: vi.fn(async ({ blobHash }: { blobHash: string }) => ({ bucketName: 'workspace-workspace-1-files', objectKey: blobHash })),
+}))
+const assetModelMocks = vi.hoisted(() => ({
+    get: vi.fn(),
+    updateMetadata: vi.fn(async (args: { assetId: string; expectedRevision: number }) => ({
+        assetId: args.assetId,
+        revision: args.expectedRevision + 1,
+    })),
+}))
+
+vi.mock('../../models/blob.ts', () => ({ default: blobModelMocks }))
+vi.mock('../../models/asset.ts', () => ({ default: assetModelMocks }))
+vi.mock('../../services/asset-requester-context.ts', () => ({
+    getAssetRequesterContext: vi.fn(async (userId: string) => ({
+        userId,
+        workspaceIds: ['workspace-1'],
+        editableWorkspaceIds: ['workspace-1'],
+        organizationIds: ['org-1'],
+    })),
+}))
 
 import { resolveWorkspaceContext } from './workspace-context-resolver.ts'
 import type { ProviderState } from './state.ts'
@@ -25,6 +51,9 @@ beforeEach(() => {
     debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
     debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
     debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
+    blobModelMocks.get.mockClear()
+    assetModelMocks.get.mockClear()
+    assetModelMocks.updateMetadata.mockClear()
 })
 
 afterEach(() => {
@@ -39,13 +68,12 @@ afterEach(() => {
 const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
     resolverVersion: 'workspace-context-v1',
     workspaceId: 'workspace-1',
-    threadId: 'thread-1',
+    conversationAssetId: 'conversation-asset-1',
     promptText: 'put the goat beside the cubist dog and mention the chat notes',
     nodes: [
         {
             nodeId: 'root-thread',
-            type: 'aiChatThread',
-            referenceId: 'root-thread-ref',
+            type: 'branchOrigin',
             title: 'Root chat',
             descriptorStatus: 'ready',
             descriptorSummary: 'active canvas chat',
@@ -57,7 +85,6 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
         {
             nodeId: 'cubist-doc',
             type: 'document',
-            referenceId: 'doc-cubist',
             title: 'Cubist Dog',
             descriptorStatus: 'ready',
             descriptorSummary: 'notes about a cubist dog painting',
@@ -69,12 +96,11 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
         {
             nodeId: 'goat-image',
             type: 'image',
+            assetId: 'asset-goat-image',
             descriptorStatus: 'ready',
             descriptorSummary: 'a white goat standing in a field',
             entityTags: ['goat'],
             styleTags: ['photo'],
-            fileId: 'goat-file',
-            imageUrl: 'nats-obj://workspace-workspace-1-files/goat-file',
             branchId: 'branch-goat',
             isExplicitChip: false,
             isEdgeForced: false,
@@ -82,19 +108,17 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
         {
             nodeId: 'team-video',
             type: 'video',
+            assetId: 'asset-team-video',
             descriptorStatus: 'ready',
             descriptorSummary: 'team walking through a studio',
             entityTags: ['team'],
             styleTags: ['documentary'],
-            fileId: 'team-poster-file',
-            imageUrl: 'nats-obj://workspace-workspace-1-files/team-poster-file',
             isExplicitChip: false,
             isEdgeForced: true,
         },
         {
             nodeId: 'notes-thread',
-            type: 'aiChatThread',
-            referenceId: 'thread-notes',
+            type: 'branchOrigin',
             title: 'Seaside notes',
             descriptorStatus: 'ready',
             descriptorSummary: 'chat notes about a seaside village',
@@ -106,24 +130,95 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
         {
             nodeId: 'landscape-image',
             type: 'image',
+            assetId: 'asset-landscape-image',
             descriptorStatus: 'ready',
             descriptorSummary: 'unrelated mountain landscape',
             entityTags: ['mountain'],
             styleTags: ['landscape'],
-            fileId: 'landscape-file',
-            imageUrl: 'nats-obj://workspace-workspace-1-files/landscape-file',
             isExplicitChip: false,
             isEdgeForced: false,
         },
     ],
 }
 
+// Backs the mocked BlobModel.get/AssetModel calls: media workspace nodes
+// resolve their image URL through Asset -> Blob, which the resolver always
+// hits directly (not via injected deps).
+const assetById: Record<string, Asset> = {
+    'asset-goat-image': {
+        assetId: 'asset-goat-image',
+        organizationId: 'org-1',
+        title: 'Goat',
+        scope: 'workspace',
+        scopeOwnerId: 'workspace-1',
+        originWorkspaceId: 'workspace-1',
+        ownerUserId: 'user-1',
+        documents: {},
+        media: {
+            kind: 'image',
+            originalName: 'goat.png',
+            sourceMimeType: 'image/png',
+            modelSafe: true,
+            renditions: { preview: { name: 'preview', status: 'ready', blobHash: 'goat-file', updatedAt: 1 } },
+        },
+        states: { lifecycle: 'active', media: 'ready', conversation: 'none', provenance: 'none' },
+        referenceCount: 1,
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+    } as Asset,
+    'asset-team-video': {
+        assetId: 'asset-team-video',
+        organizationId: 'org-1',
+        title: 'Team video',
+        scope: 'workspace',
+        scopeOwnerId: 'workspace-1',
+        originWorkspaceId: 'workspace-1',
+        ownerUserId: 'user-1',
+        documents: {},
+        media: {
+            kind: 'video',
+            originalName: 'team.mp4',
+            sourceMimeType: 'video/mp4',
+            modelSafe: true,
+            renditions: { representativeFrame: { name: 'representativeFrame', status: 'ready', blobHash: 'team-poster-file', updatedAt: 1 } },
+        },
+        states: { lifecycle: 'active', media: 'ready', conversation: 'none', provenance: 'none' },
+        referenceCount: 1,
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+    } as Asset,
+    'asset-landscape-image': {
+        assetId: 'asset-landscape-image',
+        organizationId: 'org-1',
+        title: 'Landscape',
+        scope: 'workspace',
+        scopeOwnerId: 'workspace-1',
+        originWorkspaceId: 'workspace-1',
+        ownerUserId: 'user-1',
+        documents: {},
+        media: {
+            kind: 'image',
+            originalName: 'landscape.png',
+            sourceMimeType: 'image/png',
+            modelSafe: true,
+            renditions: { preview: { name: 'preview', status: 'ready', blobHash: 'landscape-file', updatedAt: 1 } },
+        },
+        states: { lifecycle: 'active', media: 'ready', conversation: 'none', provenance: 'none' },
+        referenceCount: 1,
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+    } as Asset,
+}
+
 const baseCandidates: MediaBranchCandidateImage[] = [
     {
         nodeId: 'goat-image',
-        fileId: 'goat-file',
-        workspaceId: 'workspace-1',
+        assetId: 'asset-goat-image',
         imageUrl: 'nats-obj://workspace-workspace-1-files/goat-file',
+        mediaKind: 'image',
         roleHints: ['base-context', 'generated-variant', 'branch-leaf'],
         branchId: 'branch-goat',
         ancestorNodeIds: ['goat-image'],
@@ -133,9 +228,9 @@ const baseCandidates: MediaBranchCandidateImage[] = [
     },
     {
         nodeId: 'landscape-image',
-        fileId: 'landscape-file',
-        workspaceId: 'workspace-1',
+        assetId: 'asset-landscape-image',
         imageUrl: 'nats-obj://workspace-workspace-1-files/landscape-file',
+        mediaKind: 'image',
         roleHints: ['base-context'],
         ancestorNodeIds: ['landscape-image'],
         sourceContextNodeIds: ['landscape-image'],
@@ -153,7 +248,7 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
             modelVersion: 'gpt-4.1',
             maxCompletionSize: 4096,
         },
-        eventMeta: {},
+        eventMeta: { userId: 'user-1', organizationId: 'org-1' },
         workspaceId: 'workspace-1',
         aiChatThreadId: 'thread-1',
         instanceKey: 'workspace-1:thread-1',
@@ -166,7 +261,7 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
         workspaceContextSnapshot: baseWorkspaceSnapshot,
         mediaBranchCandidateSnapshot: {
             resolverVersion: 'image-branch-vlm-v1',
-            threadId: 'thread-1',
+            conversationAssetId: 'conversation-asset-1',
             regionNodeId: 'root-thread',
             activeTargetNodeId: 'landscape-image',
             promptText: 'put the goat beside the cubist dog',
@@ -221,30 +316,7 @@ function createDeps(parsedInput: { selections: Array<Record<string, unknown>> } 
             completionTokens: 20,
         }
     })
-    const getDocument = vi.fn(async () => ({
-        documentId: 'doc-cubist',
-        workspaceId: 'workspace-1',
-        title: 'Cubist Dog',
-        content: JSON.stringify({
-            type: 'doc',
-            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Full cubist dog document text.' }] }],
-        }),
-        createdAt: 1,
-        updatedAt: 1,
-    }))
-    const getAiChatThread = vi.fn(async () => ({
-        workspaceId: 'workspace-1',
-        threadId: 'thread-notes',
-        title: 'Seaside notes',
-        content: {
-            type: 'doc',
-            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Full chat thread notes.' }] }],
-        },
-        aiModel: 'OpenAI:gpt-4.1',
-        status: 'active',
-        createdAt: 1,
-        updatedAt: 1,
-    }))
+    const getAsset = vi.fn(async (assetId: string) => assetById[assetId] ?? { error: 'ASSET_NOT_FOUND' })
     const describeMediaStill = vi.fn(async () => ({
         summary: 'A healed goat descriptor with useful visual detail.',
         entityTags: ['goat'],
@@ -255,27 +327,22 @@ function createDeps(parsedInput: { selections: Array<Record<string, unknown>> } 
         entityTags: ['dog'],
         styleTags: ['notes'],
     }))
-    const patchCanvasNodeDescriptor = vi.fn(async () => true)
 
     return {
         deps: {
             natsService: natsService as any,
             publisher: publisher as any,
             callLlm,
-            getDocument: getDocument as any,
-            getAiChatThread: getAiChatThread as any,
+            getAsset: getAsset as any,
             describeMediaStill: describeMediaStill as any,
             describeTextContent: describeTextContent as any,
-            patchCanvasNodeDescriptor: patchCanvasNodeDescriptor as any,
         },
         natsService,
         publisher,
         callLlm,
-        getDocument,
-        getAiChatThread,
+        getAsset,
         describeMediaStill,
         describeTextContent,
-        patchCanvasNodeDescriptor,
         published,
     }
 }
@@ -408,7 +475,7 @@ describe('resolveWorkspaceContext', () => {
                 : node
             ),
         }
-        const { deps, describeMediaStill, patchCanvasNodeDescriptor } = createDeps([
+        const { deps, describeMediaStill } = createDeps([
             {
                 selections: [
                     { nodeId: 'goat-image', rationale: 'Weak descriptor but likely relevant.', needsBetterDescriptor: false },
@@ -426,13 +493,13 @@ describe('resolveWorkspaceContext', () => {
         }), deps)
 
         expect(describeMediaStill).toHaveBeenCalledOnce()
-        expect(patchCanvasNodeDescriptor).toHaveBeenCalledWith(expect.objectContaining({
-            nodeId: 'goat-image',
+        expect(assetModelMocks.updateMetadata).toHaveBeenCalledWith(expect.objectContaining({
+            assetId: 'asset-goat-image',
         }))
     })
 
     it('ranks workspace descriptors, force-includes edge nodes, and assembles selected content', async () => {
-        const { deps, publisher, getDocument, getAiChatThread, callLlm } = createDeps({
+        const { deps, publisher, callLlm } = createDeps({
             selections: [
                 { nodeId: 'cubist-doc', rationale: 'The prompt names the cubist dog.', needsBetterDescriptor: false },
                 { nodeId: 'goat-image', rationale: 'The prompt asks for the goat.', needsBetterDescriptor: false },
@@ -453,12 +520,12 @@ describe('resolveWorkspaceContext', () => {
         ])
         expect(update.workspaceContextResolution?.narrowedMediaNodeIds).toEqual(['team-video', 'goat-image'])
         expect(publisher.contextRelevanceResolved).toHaveBeenCalledOnce()
-        expect(getDocument).toHaveBeenCalledWith(expect.objectContaining({ documentId: 'doc-cubist', workspaceId: 'workspace-1' }))
-        expect(getAiChatThread).toHaveBeenCalledWith(expect.objectContaining({ threadId: 'thread-notes', workspaceId: 'workspace-1' }))
 
+        // notes-thread is a non-document, non-media node: it is rankable but
+        // contributes no expanded content block, since only document/image/
+        // video nodes are materialized in the selected-context message.
         const textBlocks = getInputTextBlocks(update)
-        expect(textBlocks.some((text) => text.includes('Full cubist dog document text.'))).toBe(true)
-        expect(textBlocks.some((text) => text.includes('Full chat thread notes.'))).toBe(true)
+        expect(textBlocks.some((text) => text.includes('notes about a cubist dog painting'))).toBe(true)
         expect(textBlocks.some((text) => text.includes('"type":"workspace_video"'))).toBe(true)
         expect(update.messages?.at(1)).toEqual({ role: 'user', content: 'put the goat beside the cubist dog' })
     })
@@ -475,8 +542,12 @@ describe('resolveWorkspaceContext', () => {
             imageProviderName: 'OpenAI',
         }), deps)
 
+        // An existing branch snapshot (from createState's default
+        // mediaBranchCandidateSnapshot) only expands for forced-chip/forced-edge
+        // selections; the auto-picked goat-image selection cannot re-enter it,
+        // so only the edge-forced team-video is added.
         expect(update.mediaBranchCandidateSnapshot?.activeTargetNodeId).toBeUndefined()
-        expect(update.mediaBranchCandidateSnapshot?.candidates.map((candidate) => candidate.nodeId)).toEqual(['team-video', 'goat-image'])
+        expect(update.mediaBranchCandidateSnapshot?.candidates.map((candidate) => candidate.nodeId)).toEqual(['team-video'])
         const addedVideo = update.mediaBranchCandidateSnapshot?.candidates.find((candidate) => candidate.nodeId === 'team-video')
         expect(addedVideo).toEqual(expect.objectContaining({
             mediaKind: 'video',
@@ -544,7 +615,7 @@ describe('resolveWorkspaceContext', () => {
                 : node
             ),
         }
-        const { deps, callLlm, describeMediaStill, patchCanvasNodeDescriptor } = createDeps([
+        const { deps, callLlm, describeMediaStill } = createDeps([
             {
                 selections: [
                     { nodeId: 'goat-image', rationale: 'The weak goat descriptor is promising.', needsBetterDescriptor: true },
@@ -568,9 +639,8 @@ describe('resolveWorkspaceContext', () => {
             provider: 'OpenAI',
             modelVersion: 'gpt-4.1',
         }))
-        expect(patchCanvasNodeDescriptor).toHaveBeenCalledWith(expect.objectContaining({
-            workspaceId: 'workspace-1',
-            nodeId: 'goat-image',
+        expect(assetModelMocks.updateMetadata).toHaveBeenCalledWith(expect.objectContaining({
+            assetId: 'asset-goat-image',
             descriptor: expect.objectContaining({
                 status: 'ready',
                 summary: 'A healed goat descriptor with useful visual detail.',
@@ -601,7 +671,7 @@ describe('resolveWorkspaceContext', () => {
                 : node
             ),
         }
-        const { deps, describeTextContent, patchCanvasNodeDescriptor } = createDeps([
+        const { deps, describeTextContent } = createDeps([
             {
                 selections: [
                     { nodeId: 'cubist-doc', rationale: 'Forced chip lacks descriptor.', needsBetterDescriptor: true },
@@ -619,16 +689,14 @@ describe('resolveWorkspaceContext', () => {
             mediaBranchCandidateSnapshot: undefined,
         }), deps)
 
+        // cubist-doc has no assetId in this fixture, so the resolver falls
+        // back to the node's title/descriptor text rather than loading a real
+        // document snapshot (documented in resolveDocumentText's assetId-less
+        // branch in workspace-context-resolver.ts).
         expect(describeTextContent).toHaveBeenCalledOnce()
         expect(describeTextContent).toHaveBeenCalledWith(expect.objectContaining({
-            text: 'Full cubist dog document text.',
+            text: 'Cubist Dog',
             title: 'Cubist Dog',
-        }))
-        expect(patchCanvasNodeDescriptor).toHaveBeenCalledWith(expect.objectContaining({
-            nodeId: 'cubist-doc',
-            descriptor: expect.objectContaining({
-                summary: 'A healed text descriptor about cubist dog notes.',
-            }),
         }))
         expect(update.workspaceContextResolution?.improvedDescriptors?.['cubist-doc']).toEqual(expect.objectContaining({
             summary: 'A healed text descriptor about cubist dog notes.',

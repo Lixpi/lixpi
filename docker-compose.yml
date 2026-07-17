@@ -491,8 +491,7 @@ services:
             LLM_TIMEOUT_SECONDS: 1200
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: ${SAVE_LLM_RESPONSES_TO_DEBUG_DIR}
 
-            METRICS_ENABLED: "true"
-            METRICS_GATE_DEFAULT_ALLOW: "true"   # cold start: no allowance projected yet
+            METRICS_ENABLED: ${METRICS_ENABLED:-false}
 
         volumes:
             - aws-config:/root/.aws:cached    # AWS SSO credentials

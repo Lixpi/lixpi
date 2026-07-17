@@ -90,6 +90,7 @@ Complete environment configuration including:
 - NATS servers, keys, and passwords
 - Auth0 configuration
 - API keys
+- Metrics admission (`METRICS_ENABLED=false` by default)
 
 ### `.aws/config` (Optional)
 

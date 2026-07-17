@@ -25,67 +25,75 @@ function expectSourceNotToContain(source: string, snippet: string, label = 'sour
 // =============================================================================
 
 describe('API storage bucket contract', () => {
-    it('workspace import does not wipe the workspace bucket before writing archive objects', () => {
-        const source = readSource('../routes/workspace-export-routes.ts')
+    it('Blob storage is organization-scoped, content-addressed, and created on demand', () => {
+        const source = readSource('./blob-storage.ts')
 
-        expectSourceNotToContain(source, 'ensureObjectStore', 'workspace export/import route')
-        const putImageIndex = source.indexOf('await natsService.putObject(bucketName, image.fileId')
-        const deleteBucketIndex = source.indexOf('await natsService.deleteObjectStore(bucketName)')
-        const missingArchiveCheckIndex = source.indexOf('missingArchiveFileIds.length > 0')
-        const deleteDocumentsIndex = source.indexOf('Document.deleteWorkspaceDocuments({ workspaceId })')
-
-        expect(putImageIndex, 'workspace import should write image objects').toBeGreaterThan(-1)
-        expect(deleteBucketIndex, 'workspace import should not destroy the bucket').toBe(-1)
-        expect(missingArchiveCheckIndex, 'workspace import should validate archive object completeness').toBeGreaterThan(-1)
-        expect(deleteDocumentsIndex, 'workspace import should delete documents after validation').toBeGreaterThan(-1)
-        expect(missingArchiveCheckIndex, 'workspace import should validate before document deletion')
-            .toBeLessThan(deleteDocumentsIndex)
-    })
-
-    it('workspace creation provisions only the workspace file bucket (media buckets are org-scoped)', () => {
-        const source = readSource('../NATS/subscriptions/workspace-subjects.ts')
-
+        expectSourceToContain(
+            source,
+            'export const getOrganizationBlobBucketName = (organizationId: string): string =>',
+            'blob-storage bucket naming'
+        )
+        expectSourceToContain(
+            source,
+            '`blobs-${organizationId}-files`',
+            'organization-scoped blob bucket name'
+        )
+        expectSourceToContain(
+            source,
+            'export const ensureOrganizationAssetStorage',
+            'on-demand bucket creation'
+        )
         expectSourceToContain(
             source,
             'await natsService.createObjectStore(bucketName',
-            'workspace create handler'
+            'blob bucket creation'
         )
-        expectSourceToContain(
-            source,
-            'await natsService.deleteObjectStore(bucketName).catch(() => {})',
-            'workspace create rollback'
-        )
-        // No per-workspace media-library bucket is provisioned anymore.
+        // No per-workspace or per-media-library bucket helpers remain — every
+        // Blob lives in one org-scoped, content-addressed bucket.
         expectSourceNotToContain(
             source,
             'getMediaLibraryWorkspaceBucketName',
-            'workspace create handler'
+            'blob-storage'
         )
         expectSourceNotToContain(
             source,
-            'createObjectStore(mediaLibraryBucketName',
-            'workspace create handler'
+            'workspace-${workspaceId}-files',
+            'blob-storage'
         )
     })
 
-    it('media-library buckets are org-scoped and created on demand at save time', () => {
-        const source = readSource('./media-library-storage.ts')
+    it('deleting a content-addressed Blob only removes its own object, never the shared bucket', () => {
+        const source = readSource('./blob-storage.ts')
 
         expectSourceToContain(
             source,
-            '`media-library-${scope}-${scopeOwnerId}-files`',
-            'media-library bucket name'
+            'export const deleteContentAddressedBlob = async (blob: BlobRecord): Promise<void> => {',
+            'blob deletion'
         )
         expectSourceToContain(
             source,
-            'const ensureMediaLibraryBucket',
-            'on-demand bucket creation'
+            'await natsService.deleteObject(blob.bucketName, blob.objectKey)',
+            'blob deletion'
         )
-        // The per-workspace media bucket helpers were removed with org-wide scoping.
         expectSourceNotToContain(
             source,
-            'getMediaLibraryWorkspaceBucketName',
-            'media-library storage'
+            'await natsService.deleteObjectStore(',
+            'blob-storage'
+        )
+    })
+
+    it('workspace creation does not provision a per-workspace Object Store bucket', () => {
+        const source = readSource('../NATS/subscriptions/workspace-subjects.ts')
+
+        expectSourceNotToContain(
+            source,
+            'createObjectStore',
+            'workspace create handler'
+        )
+        expectSourceNotToContain(
+            source,
+            'ObjectStore',
+            'workspace subjects handlers'
         )
     })
 })

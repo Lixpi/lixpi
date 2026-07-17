@@ -41,9 +41,10 @@ const mocks = vi.hoisted(() => {
 
     const natsInstance = {
         drain: vi.fn(async () => undefined),
+        request: vi.fn(async () => undefined),
     }
 
-    const natsInit = vi.fn(async () => undefined)
+    const natsInit = vi.fn(async () => natsInstance)
     const natsGetInstance = vi.fn(() => natsInstance)
 
     const jwtAuthMiddleware = vi.fn(() => 'jwt-auth-middleware')
@@ -54,20 +55,14 @@ const mocks = vi.hoisted(() => {
     const extractionSubjects = ['extraction-subject']
     const mediaDescriptorSubjects = ['media-descriptor-subject']
     const workspaceSubjects = ['workspace-subject']
-    const documentSubjects = ['document-subject']
-    const aiChatThreadSubjects = ['ai-chat-thread-subject']
-    const imageSubjects = ['image-subject']
-    const videoSubjects = ['video-subject']
-    const fileConversionSubjects = ['file-conversion-subject']
+    const assetSubjects = ['asset-subject']
     const featureSubjects = ['feature-subject']
-    const mediaLibrarySubjects = ['media-library-subject']
 
     const startNatsAuthCalloutService = vi.fn(async () => undefined)
 
-    const fileRoutes = {}
+    const assetRoutes = {}
     const workspaceExportRoutes = {}
     const featureRoutes = {}
-    const mediaLibraryRoutes = {}
 
     const createLlmModule = vi.fn()
     let llmModule: { shutdown: ReturnType<typeof vi.fn> } | null = null
@@ -75,8 +70,10 @@ const mocks = vi.hoisted(() => {
     const setLlmModule = vi.fn()
     const setExtractionLlmModule = vi.fn()
 
-    const storeWorkspaceImage = vi.fn()
-    const storeWorkspaceVideo = vi.fn()
+    const startAssetMaintenanceWorker = vi.fn(async () => undefined)
+
+    const metricsConfigFromEnv = vi.fn(() => ({}))
+    const MetricsClient = vi.fn()
 
     const log = vi.fn()
     const info = vi.fn()
@@ -113,18 +110,12 @@ const mocks = vi.hoisted(() => {
         extractionSubjects,
         mediaDescriptorSubjects,
         workspaceSubjects,
-        documentSubjects,
-        aiChatThreadSubjects,
-        imageSubjects,
-        videoSubjects,
-        fileConversionSubjects,
+        assetSubjects,
         featureSubjects,
-        mediaLibrarySubjects,
         startNatsAuthCalloutService,
-        fileRoutes,
+        assetRoutes,
         workspaceExportRoutes,
         featureRoutes,
-        mediaLibraryRoutes,
         createLlmModule: createLlmModule.mockImplementation(() => {
             const module = { shutdown: vi.fn() }
             llmModule = module
@@ -133,8 +124,9 @@ const mocks = vi.hoisted(() => {
         getLlmModule: () => llmModule,
         setLlmModule,
         setExtractionLlmModule,
-        storeWorkspaceImage,
-        storeWorkspaceVideo,
+        startAssetMaintenanceWorker,
+        metricsConfigFromEnv,
+        MetricsClient,
         log,
         info,
         infoStr,
@@ -180,11 +172,6 @@ vi.mock('@lixpi/dynamodb-service', () => ({
     default: mocks.DynamoDBService,
 }))
 
-// @lixpi/ssm-service package removed — commented out pending re-enable
-// vi.mock('@lixpi/ssm-service', () => ({
-//     default: class {},
-// }))
-
 vi.mock('@lixpi/nats-service', () => ({
     default: {
         init: mocks.natsInit,
@@ -212,16 +199,11 @@ vi.mock('./NATS/subscriptions/extraction-subjects.ts', () => ({
 }))
 vi.mock('./NATS/subscriptions/media-descriptor-subjects.ts', () => ({ mediaDescriptorSubjects: mocks.mediaDescriptorSubjects }))
 vi.mock('./NATS/subscriptions/workspace-subjects.ts', () => ({ workspaceSubjects: mocks.workspaceSubjects }))
-vi.mock('./NATS/subscriptions/document-subjects.ts', () => ({ documentSubjects: mocks.documentSubjects }))
-vi.mock('./NATS/subscriptions/ai-chat-thread-subjects.ts', () => ({ aiChatThreadSubjects: mocks.aiChatThreadSubjects }))
-vi.mock('./NATS/subscriptions/image-subjects.ts', () => ({ imageSubjects: mocks.imageSubjects }))
-vi.mock('./NATS/subscriptions/video-subjects.ts', () => ({ videoSubjects: mocks.videoSubjects }))
-vi.mock('./NATS/subscriptions/file-conversion-subjects.ts', () => ({ fileConversionSubjects: mocks.fileConversionSubjects }))
+vi.mock('./NATS/subscriptions/asset-subjects.ts', () => ({ assetSubjects: mocks.assetSubjects }))
 vi.mock('./NATS/subscriptions/feature-subjects.ts', () => ({ featureSubjects: mocks.featureSubjects }))
-vi.mock('./NATS/subscriptions/media-library-subjects.ts', () => ({ mediaLibrarySubjects: mocks.mediaLibrarySubjects }))
 
-vi.mock('./routes/file-routes.ts', () => ({
-    default: mocks.fileRoutes,
+vi.mock('./routes/asset-routes.ts', () => ({
+    default: mocks.assetRoutes,
 }))
 vi.mock('./routes/workspace-export-routes.ts', () => ({
     default: mocks.workspaceExportRoutes,
@@ -229,19 +211,18 @@ vi.mock('./routes/workspace-export-routes.ts', () => ({
 vi.mock('./routes/feature-routes.ts', () => ({
     default: mocks.featureRoutes,
 }))
-vi.mock('./routes/media-library-routes.ts', () => ({
-    default: mocks.mediaLibraryRoutes,
-}))
 
 vi.mock('./llm/index.ts', () => ({
     createLlmModule: mocks.createLlmModule,
-    setLlmModule: mocks.setLlmModule,
-    setExtractionLlmModule: mocks.setExtractionLlmModule,
 }))
 
-vi.mock('./services/store-media-adapters.ts', () => ({
-    storeWorkspaceImage: mocks.storeWorkspaceImage,
-    storeWorkspaceVideo: mocks.storeWorkspaceVideo,
+vi.mock('./services/asset-maintenance-worker.ts', () => ({
+    startAssetMaintenanceWorker: mocks.startAssetMaintenanceWorker,
+}))
+
+vi.mock('./metrics/metrics-client.ts', () => ({
+    MetricsClient: mocks.MetricsClient,
+    metricsConfigFromEnv: mocks.metricsConfigFromEnv,
 }))
 
 async function loadServer(): Promise<void> {
@@ -290,12 +271,14 @@ function resetMockState(): void {
     mocks.natsInit.mockClear()
     mocks.natsGetInstance.mockClear()
     mocks.natsInstance.drain.mockClear()
+    mocks.natsInstance.request.mockClear()
     mocks.startNatsAuthCalloutService.mockClear()
     mocks.createLlmModule.mockClear()
     mocks.setLlmModule.mockClear()
     mocks.setExtractionLlmModule.mockClear()
-    mocks.storeWorkspaceImage.mockClear()
-    mocks.storeWorkspaceVideo.mockClear()
+    mocks.startAssetMaintenanceWorker.mockClear()
+    mocks.metricsConfigFromEnv.mockClear()
+    mocks.MetricsClient.mockClear()
     mocks.log.mockClear()
     mocks.info.mockClear()
     mocks.infoStr.mockClear()
@@ -318,13 +301,8 @@ describe('services/api server startup', () => {
         ...mocks.extractionSubjects,
         ...mocks.mediaDescriptorSubjects,
         ...mocks.workspaceSubjects,
-        ...mocks.documentSubjects,
-        ...mocks.aiChatThreadSubjects,
-        ...mocks.imageSubjects,
-        ...mocks.videoSubjects,
-        ...mocks.fileConversionSubjects,
+        ...mocks.assetSubjects,
         ...mocks.featureSubjects,
-        ...mocks.mediaLibrarySubjects,
     ]
 
     beforeEach(() => {
@@ -358,6 +336,9 @@ describe('services/api server startup', () => {
             subscriptions: expectedSubscriptionOrder,
         })
 
+        expect(mocks.startAssetMaintenanceWorker).toHaveBeenCalledTimes(1)
+        expect(mocks.startAssetMaintenanceWorker.mock.calls[0]?.[0]).toBe(mocks.natsInstance)
+
         expect(mocks.startNatsAuthCalloutService).toHaveBeenCalledTimes(1)
         expect(mocks.startNatsAuthCalloutService.mock.calls[0]?.[0]).toMatchObject({
             serviceAuthConfigs: [],
@@ -374,8 +355,6 @@ describe('services/api server startup', () => {
         })
         expect(mocks.createLlmModule).toHaveBeenCalledWith({
             natsService: mocks.natsInstance,
-            storeWorkspaceImage: mocks.storeWorkspaceImage,
-            storeWorkspaceVideo: mocks.storeWorkspaceVideo,
             metrics: expect.anything(),
         })
 
@@ -383,16 +362,15 @@ describe('services/api server startup', () => {
             'NATS_NEX_NODE_NKEY_PUBLIC is not configured; NEX clients cannot authenticate through auth callout',
         )
 
-        expect(mocks.app.use).toHaveBeenCalledTimes(8)
+        expect(mocks.app.use).toHaveBeenCalledTimes(7)
         expect(mocks.expressJson).toHaveBeenCalledWith({ limit: '100mb' })
         expect(mocks.expressUrlencoded).toHaveBeenCalledWith({ limit: '100mb', extended: true })
         expect(mocks.cors).toHaveBeenCalledWith({ origin: 'https://api.example.test', credentials: true })
         expect(mocks.cookieParser).toHaveBeenCalledWith()
 
-        expect(routeForPath('/api/files')).toBe(mocks.fileRoutes)
+        expect(routeForPath('/api/assets')).toBe(mocks.assetRoutes)
         expect(routeForPath('/api/workspaces')).toBe(mocks.workspaceExportRoutes)
         expect(routeForPath('/api/features')).toBe(mocks.featureRoutes)
-        expect(routeForPath('/api/media-library')).toBe(mocks.mediaLibraryRoutes)
 
         const healthRoute = mocks.appGetCalls.find((call) => call.path === '/health-check')
         expect(healthRoute).toBeDefined()
@@ -417,7 +395,6 @@ describe('services/api server startup', () => {
 
         expect(mocks.setLlmModule).toHaveBeenCalledWith(mocks.getLlmModule())
         expect(mocks.setExtractionLlmModule).toHaveBeenCalledWith(mocks.getLlmModule())
-        expect(mocks.natsGetInstance).toHaveBeenCalledTimes(3)
 
         const sigint = processOnCalls.find((entry) => entry.event === 'SIGINT')
         const sigterm = processOnCalls.find((entry) => entry.event === 'SIGTERM')

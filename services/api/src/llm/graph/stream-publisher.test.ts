@@ -10,7 +10,7 @@ const canvasProjectionMocks = vi.hoisted(() => ({
     logCanvasProjectionError: vi.fn(),
 }))
 
-vi.mock('../../services/media-generation-canvas-projection.ts', () => canvasProjectionMocks)
+vi.mock('../../services/asset-canvas-projection.ts', () => canvasProjectionMocks)
 
 import { StreamPublisher, TagAwareStream } from './stream-publisher.ts'
 
@@ -373,7 +373,7 @@ describe('StreamPublisher extraction progress', () => {
         expect(nats.published[0]).toMatchObject({
             subject: 'ai.interaction.chat.receiveMessage.ws1.thread1',
             payload: {
-                aiChatThreadId: 'thread1',
+                conversationAssetId: 'thread1',
                 pipelineEventId: expect.any(String),
                 pipelineStreamSeq: 1,
                 content: expect.objectContaining({
@@ -575,7 +575,7 @@ describe('StreamPublisher extraction progress', () => {
         expect(canvasProjectionMocks.settleMediaGenerationRequestOnCanvas).toHaveBeenCalledWith({
             workspaceId: 'ws1',
             generationRequestId: 'request-1',
-            aiChatThreadId: 'thread1',
+            lineagePlan: { generationRequestId: 'request-1' },
         })
         const completionWrites = nats.published.filter(
             (entry) => entry.payload?.content?.status === STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
@@ -585,7 +585,7 @@ describe('StreamPublisher extraction progress', () => {
             expect.objectContaining({
                 subject: 'ai.interaction.chat.receiveMessage.ws1.thread1',
                 payload: {
-                    aiChatThreadId: 'thread1',
+                    conversationAssetId: 'thread1',
                     content: expect.objectContaining({
                         status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
                         generationRequestId: 'request-1',
@@ -744,7 +744,7 @@ describe('StreamPublisher trace payloads', () => {
         })
         expect(canvasProjectionMocks.upsertMediaLineagePlanToCanvas).toHaveBeenCalledWith({
             workspaceId: 'ws1',
-            aiChatThreadId: 'thread1',
+            conversationAssetId: 'thread1',
             lineagePlan: { lineage: 'plan' },
         })
     })
@@ -779,7 +779,6 @@ describe('StreamPublisher trace payloads', () => {
 
         expect(canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry).toHaveBeenCalledWith({
             workspaceId: 'ws1',
-            aiChatThreadId: 'thread1',
             generationRequestId: 'request-1',
             proseMirrorThreadContent: { type: 'doc', content: [] },
         })

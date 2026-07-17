@@ -95,7 +95,7 @@ const normalizeModelOption = (
 // chat stream owns it.
 //
 // Topology:
-//   START → resolveWorkspaceContext → resolveFeatures → resolveMediaBranch → planMediaBranchLineage → validateRequest → streamTokens → [conditional]
+//   START → validateRequest → resolveWorkspaceContext → resolveFeatures → resolveMediaBranch → planMediaBranchLineage → streamTokens → [conditional]
 //     generate_image: validateImagePrompt → [conditional]
 //       generate_image: executeImageGeneration → calculateUsage → cleanup → END
 //       skip:                                    calculateUsage → cleanup → END
@@ -163,6 +163,7 @@ export abstract class BaseProvider {
         // forced text-to-video. Single (non-matrix) requests leave the flag
         // `false`, so these nodes run in-graph and feed the same state directly.
         const graph = new StateGraph<ProviderState>({ channels: channels as any })
+            .addNode('validateRequest', async (s: ProviderState) => this.validateRequest(s))
             .addNode('resolveWorkspaceContext', async (s: ProviderState) => s.preflightResolved ? {} : resolveWorkspaceContext(s, {
                 natsService: this.nats,
                 publisher: this.publisher,
@@ -175,7 +176,6 @@ export abstract class BaseProvider {
                 abortSignal: this.signal,
             }))
             .addNode('planMediaBranchLineage', async (s: ProviderState) => s.preflightResolved ? {} : this.planMediaBranchLineage(s))
-            .addNode('validateRequest', async (s: ProviderState) => this.validateRequest(s))
             .addNode('streamTokens', async (s: ProviderState) => this.streamTokens(s))
             .addNode('validateImagePrompt', async (s: ProviderState) => this.validateImagePromptNode(s))
             .addNode('executeImageGeneration', async (s: ProviderState) => this.executeImageGeneration(s))
@@ -183,12 +183,12 @@ export abstract class BaseProvider {
             .addNode('calculateUsage', async (s: ProviderState) => this.calculateUsage(s))
             .addNode('cleanup', async (s: ProviderState) => this.cleanup(s))
 
-        graph.addEdge(START, 'resolveWorkspaceContext' as any)
+        graph.addEdge(START, 'validateRequest' as any)
+        graph.addEdge('validateRequest' as any, 'resolveWorkspaceContext' as any)
         graph.addEdge('resolveWorkspaceContext' as any, 'resolveFeatures' as any)
         graph.addEdge('resolveFeatures' as any, 'resolveMediaBranch' as any)
         graph.addEdge('resolveMediaBranch' as any, 'planMediaBranchLineage' as any)
-        graph.addEdge('planMediaBranchLineage' as any, 'validateRequest' as any)
-        graph.addEdge('validateRequest' as any, 'streamTokens' as any)
+        graph.addEdge('planMediaBranchLineage' as any, 'streamTokens' as any)
         graph.addConditionalEdges(
             'streamTokens' as any,
             (s: ProviderState) => this.routeAfterStream(s),
@@ -313,6 +313,10 @@ export abstract class BaseProvider {
             videoFirstFrameImage: requestData.videoFirstFrameImage,
             videoReferenceImages: requestData.videoReferenceImages,
             videoSourceForExtension: requestData.videoSourceForExtension,
+            workflowId: requestData.workflowId,
+            workflowSeq: requestData.workflowSeq,
+            metricsOperationId: requestData.metricsOperationId,
+            metricsAdmissionApproved: requestData.metricsAdmissionApproved,
             generationRun: requestData.generationRun,
             mediaFanoutPlan: requestData.mediaFanoutPlan,
             replayMediaPrompts: requestData.replayMediaPrompts,
@@ -435,7 +439,18 @@ export abstract class BaseProvider {
         if (!state.messages?.length) throw new Error('messages list is required')
         if (!state.workspaceId) throw new Error('workspaceId is required')
         if (!state.aiChatThreadId) throw new Error('aiChatThreadId is required')
+        if (state.metricsAdmissionApproved) return {}
         return this.metricsCheck(state)
+    }
+
+    // The matrix orchestrator calls this before resolving or persisting shared
+    // lineage. Its result is forwarded to the child run, which skips a duplicate
+    // admission check while retaining the operation identity for usage confirms.
+    async preflightAdmission(state: ProviderState): Promise<Partial<ProviderState>> {
+        return {
+            ...await this.validateRequest(state),
+            metricsAdmissionApproved: true,
+        }
     }
 
     // Synchronous spend check before the paid provider call: ask the metering port

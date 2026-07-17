@@ -16,6 +16,8 @@ import {
 } from '@lixpi/constants'
 import type { Omit, Pick } from 'type-fest'
 
+import { settings } from '../settings.ts'
+
 const {
     ORG_NAME,
     STAGE
@@ -26,6 +28,28 @@ const modelHasGenerationModality = (model: Omit<AiModel, 'pricing'>, modality: '
 
 const modelIdFor = (model: Pick<AiModel, 'provider' | 'model'>): AiModelId =>
     `${model.provider}:${model.model}` as AiModelId
+
+const findConfiguredCatalogModel = (
+    models: Array<Omit<AiModel, 'pricing'>>,
+    configuredModelId: AiModelId,
+    matchesCapability: (model: Omit<AiModel, 'pricing'>) => boolean,
+): Omit<AiModel, 'pricing'> | undefined => {
+    const exactModel = models.find(model => modelIdFor(model) === configuredModelId && matchesCapability(model))
+    if (exactModel) return exactModel
+
+    const separatorIndex = configuredModelId.indexOf(':')
+    const configuredProvider = configuredModelId.slice(0, separatorIndex)
+    const configuredModelAlias = configuredModelId.slice(separatorIndex + 1)
+    const snapshotPrefix = `${configuredModelAlias}-`
+
+    return models
+        .filter(model => {
+            if (model.provider !== configuredProvider || !matchesCapability(model)) return false
+            if (!model.model.startsWith(snapshotPrefix)) return false
+            return /^\d{8}$/.test(model.model.slice(snapshotPrefix.length))
+        })
+        .sort((left, right) => right.model.localeCompare(left.model))[0]
+}
 
 const normalizeOptions = (options: ImageSizeOption[] | undefined, fallback: ImageSizeOption[]): ImageSizeOption[] => {
     const normalized = (options ?? [])
@@ -184,24 +208,42 @@ const appendMatrixGroup = (
     })
 }
 
-// Derive the default model id per capability from the catalog. The configured
-// default (flagged via isDefaultFor by ai-models-synchronization) wins; when no
-// catalog model is flagged for a capability it falls back to the first available
-// model with the matching modality so the projected default is always selectable.
+// Derive the default model id per capability from the catalog. API-configured
+// defaults win when available, followed by synchronization flags and then
+// the first model matching the requested capability.
 const resolveDefaultModels = (models: Array<Omit<AiModel, 'pricing'>>): DefaultAiModelSelection => {
     const isReasoningModel = (model: Omit<AiModel, 'pricing'>): boolean =>
         !modelHasGenerationModality(model, 'image_generation') && !modelHasGenerationModality(model, 'video_generation')
 
-    const resolve = (capability: DefaultAiModelCapability, matches: (model: Omit<AiModel, 'pricing'>) => boolean): AiModelId => {
+    const resolve = (
+        capability: DefaultAiModelCapability,
+        matches: (model: Omit<AiModel, 'pricing'>) => boolean,
+        configuredModelId?: AiModelId,
+    ): AiModelId => {
+        const configured = configuredModelId
+            ? findConfiguredCatalogModel(models, configuredModelId, matches)
+            : undefined
         const flagged = models.find(model => model.isDefaultFor?.includes(capability))
-        const resolved = flagged ?? models.find(matches)
+        const resolved = configured ?? flagged ?? models.find(matches)
         return resolved ? modelIdFor(resolved) : ('' as AiModelId)
     }
 
     return {
-        reasoning: resolve('reasoning', isReasoningModel),
-        image: resolve('image', model => modelHasGenerationModality(model, 'image_generation')),
-        video: resolve('video', model => modelHasGenerationModality(model, 'video_generation')),
+        reasoning: resolve(
+            'reasoning',
+            isReasoningModel,
+            settings.aiModels.defaultReasoningModelId,
+        ),
+        image: resolve(
+            'image',
+            model => modelHasGenerationModality(model, 'image_generation'),
+            settings.aiModels.defaultImageModelId,
+        ),
+        video: resolve(
+            'video',
+            model => modelHasGenerationModality(model, 'video_generation'),
+            settings.aiModels.defaultVideoModelId,
+        ),
     }
 }
 

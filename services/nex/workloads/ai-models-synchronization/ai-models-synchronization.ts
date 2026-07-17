@@ -112,12 +112,6 @@ type AnthropicModel = {
     type?: string
 }
 
-// Anthropic's models list endpoint is not reliable in every environment, but
-// media descriptions depend on this low-latency vision-capable Haiku alias.
-const STATIC_ANTHROPIC_MODELS: AnthropicModel[] = [
-    { id: 'claude-haiku-4-5', display_name: 'Claude Haiku 4.5', type: 'model' },
-]
-
 type GoogleModel = {
     name: string
     displayName?: string
@@ -882,27 +876,14 @@ export class AiModelsSync {
         }
     }
 
-    private addStaticAnthropicModels(models: AnthropicModel[]): AnthropicModel[] {
-        const modelsById = new Map<string, AnthropicModel>()
-        for (const model of STATIC_ANTHROPIC_MODELS) modelsById.set(model.id, model)
-        for (const model of models) modelsById.set(model.id, model)
-        return Array.from(modelsById.values())
-    }
-
     // Fetch available models from Anthropic API using SDK
     private async fetchAnthropicModels(): Promise<AnthropicModel[]> {
         const apiKey = this.anthropic.apiKey
         if (!apiKey) {
-            warn('Anthropic API key not provided, skipping Anthropic models synchronization')
-            return this.addStaticAnthropicModels([])
+            throw new Error('Anthropic API key is required but not provided')
         }
 
         try {
-            // Note: Anthropic doesn't have a public models list endpoint yet
-            // This is a placeholder implementation that returns an empty array
-            // In the future, when Anthropic provides such an endpoint, we can implement it here
-
-            // Temporary: attempt to call the list method if it exists
             if (typeof this.anthropic.models?.list === 'function') {
                 const page = await this.anthropic.models.list({
                     limit: 100,
@@ -939,17 +920,15 @@ export class AiModelsSync {
 
                         return true
                     })
-                    return this.addStaticAnthropicModels(filteredModels)
+                    return filteredModels
                 }
             }
 
-            // Use the static Haiku fallback when the list endpoint is unavailable.
-            info('Anthropic models list endpoint not available yet, using static model fallback')
-            return this.addStaticAnthropicModels([])
+            throw new Error('Anthropic models list endpoint returned no models')
 
         } catch (error) {
-            warn('Failed to fetch Anthropic models (expected, as endpoint may not exist yet):', error)
-            return this.addStaticAnthropicModels([])
+            warn('Failed to fetch Anthropic models:', error)
+            throw error
         }
     }
 

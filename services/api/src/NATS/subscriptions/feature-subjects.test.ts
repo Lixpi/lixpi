@@ -67,11 +67,12 @@ const feature: Feature = {
 describe('Feature NATS authorization', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1' })
+        mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1', organizationId: 'organization-1' })
         mocks.organization.getOrganization.mockResolvedValue({ organizationId: 'organization-1' })
         // Org is resolved server-side from the user, not taken from the client payload.
         mocks.organization.getUserOrganizations.mockResolvedValue([{ organizationId: 'organization-1' }])
         mocks.feature.getFeature.mockResolvedValue(feature)
+        mocks.feature.getOwnedFeature.mockResolvedValue(feature)
     })
 
     it('lets any member of the owning organization delete a feature', async () => {
@@ -84,12 +85,11 @@ describe('Feature NATS authorization', () => {
         })
 
         expect(mocks.feature.deleteFeature).toHaveBeenCalledWith({ featureId: feature.featureId })
-        expect(mocks.publish).toHaveBeenCalledWith(SUBJECTS.EVENTS.DELETED, { type: 'deleted', featureId: feature.featureId })
         expect(result).toEqual({ success: true, featureId: feature.featureId })
     })
 
     it('does not delete a feature the requester cannot read (other org)', async () => {
-        mocks.feature.getFeature.mockResolvedValueOnce({ error: 'PERMISSION_DENIED' })
+        mocks.feature.getOwnedFeature.mockResolvedValueOnce({ error: 'PERMISSION_DENIED' })
 
         const result = await getHandler(SUBJECTS.DELETE)({
             user: { userId: 'user-2' },

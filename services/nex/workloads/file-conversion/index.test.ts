@@ -4,10 +4,9 @@ import process from 'process'
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-import { NATS_SUBJECTS, type ConvertFileRequest, type ExtractFramesRequest } from '@lixpi/constants'
+import { NATS_SUBJECTS, type GenerateRenditionsRequest } from '@lixpi/constants'
 
-const convertWorkspaceFileMock = vi.fn()
-const extractVideoFramesMock = vi.fn()
+const generateAssetRenditionsMock = vi.fn()
 
 const initMock = vi.fn()
 const getInstanceMock = vi.fn()
@@ -16,9 +15,8 @@ const infoMock = vi.fn()
 const warnMock = vi.fn()
 const errMock = vi.fn()
 
-vi.mock('./file-conversion.ts', () => ({
-    convertWorkspaceFile: (...args: Parameters<typeof convertWorkspaceFileMock>) => convertWorkspaceFileMock(...args),
-    extractVideoFrames: (...args: Parameters<typeof extractVideoFramesMock>) => extractVideoFramesMock(...args),
+vi.mock('./asset-renditions.ts', () => ({
+    generateAssetRenditions: (...args: Parameters<typeof generateAssetRenditionsMock>) => generateAssetRenditionsMock(...args),
 }))
 
 vi.mock('@lixpi/nats-service', () => ({
@@ -70,75 +68,89 @@ describe('file-conversion index responder', () => {
         exitSpy.mockRestore()
     })
 
-    it('registers both conversion handlers and delegates requests', async () => {
-        const fileConvertSubject = NATS_SUBJECTS.WORKSPACE_SUBJECTS.FILE_SUBJECTS.CONVERT
-        const extractFramesSubject = NATS_SUBJECTS.WORKSPACE_SUBJECTS.FILE_SUBJECTS.EXTRACT_FRAMES
+    it('registers the rendition-generation handler and delegates requests', async () => {
+        const generateRenditionsSubject = NATS_SUBJECTS.BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS
         const storage = {}
+        const request: GenerateRenditionsRequest = {
+            jobId: 'job-1',
+            jobKey: 'job-key-1',
+            organizationId: 'org-1',
+            assetId: 'asset-1',
+            sourceBlobHash: 'sha256:abc',
+            requestedRenditions: ['thumbnail'],
+        }
 
         getInstanceMock.mockReturnValue(storage)
-        convertWorkspaceFileMock.mockResolvedValue({ success: true, canonicalFileId: 'canonical' })
-        extractVideoFramesMock.mockResolvedValue({ success: true, posterFileId: 'poster' })
+        generateAssetRenditionsMock.mockResolvedValue({
+            jobId: 'job-1',
+            jobKey: 'job-key-1',
+            organizationId: 'org-1',
+            assetId: 'asset-1',
+            sourceBlobHash: 'sha256:abc',
+            renditions: [{ name: 'thumbnail', status: 'ready', blobHash: 'sha256:def' }],
+        })
 
         await loadResponder()
 
         const options = initMock.mock.calls[0][0]
-        const convertSubscription = options.subscriptions.find((sub: any) => sub.subject === fileConvertSubject)
-        const extractSubscription = options.subscriptions.find((sub: any) => sub.subject === extractFramesSubject)
-        expect(convertSubscription).toBeTruthy()
-        expect(extractSubscription).toBeTruthy()
+        const subscription = options.subscriptions.find((sub: any) => sub.subject === generateRenditionsSubject)
+        expect(subscription).toBeTruthy()
 
-        const convertReq: ConvertFileRequest = {
-            workspaceId: 'ws-1',
-            fileId: 'f-1',
-            originalName: 'photo.png',
-            mimeType: 'image/png',
-            kind: 'image',
-            modelSafe: true,
-            canonicalMime: 'image/png',
-        }
-        const extractReq: ExtractFramesRequest = {
-            workspaceId: 'ws-1',
-            videoFileId: 'v-1',
-            atSeconds: 1.5,
-        }
-
-        const convertResult = await convertSubscription.handler(convertReq)
-        expect(convertResult).toEqual({ success: true, canonicalFileId: 'canonical' })
-        expect(convertWorkspaceFileMock).toHaveBeenCalledWith(convertReq, storage)
-
-        const extractResult = await extractSubscription.handler(extractReq)
-        expect(extractResult).toEqual({ success: true, posterFileId: 'poster' })
-        expect(extractVideoFramesMock).toHaveBeenCalledWith(extractReq, storage)
-
-        getInstanceMock.mockReturnValue(null)
-        const unavailableResult = await convertSubscription.handler(convertReq)
-        expect(unavailableResult).toEqual({ success: false, error: 'Conversion service storage unavailable.' })
+        const result = await subscription.handler(request)
+        expect(result).toEqual({
+            jobId: 'job-1',
+            jobKey: 'job-key-1',
+            organizationId: 'org-1',
+            assetId: 'asset-1',
+            sourceBlobHash: 'sha256:abc',
+            renditions: [{ name: 'thumbnail', status: 'ready', blobHash: 'sha256:def' }],
+        })
+        expect(generateAssetRenditionsMock).toHaveBeenCalledWith(request, storage)
     })
 
-    it('returns failure payloads when handlers throw', async () => {
-        getInstanceMock.mockReturnValue({})
-        convertWorkspaceFileMock.mockRejectedValue(new Error('convert failed'))
-        extractVideoFramesMock.mockRejectedValue(new Error('extract failed'))
+    it('throws before attempting a conversion when the storage instance is unavailable', async () => {
+        getInstanceMock.mockReturnValue(null)
+        const generateRenditionsSubject = NATS_SUBJECTS.BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS
+        const request: GenerateRenditionsRequest = {
+            jobId: 'job-1',
+            jobKey: 'job-key-1',
+            organizationId: 'org-1',
+            assetId: 'asset-1',
+            sourceBlobHash: 'sha256:abc',
+            requestedRenditions: ['thumbnail', 'preview'],
+        }
 
         await loadResponder()
 
-        const fileConvertSubject = NATS_SUBJECTS.WORKSPACE_SUBJECTS.FILE_SUBJECTS.CONVERT
-        const extractFramesSubject = NATS_SUBJECTS.WORKSPACE_SUBJECTS.FILE_SUBJECTS.EXTRACT_FRAMES
         const options = initMock.mock.calls[0][0]
-        const convertSubscription = options.subscriptions.find((sub: any) => sub.subject === fileConvertSubject)
-        const extractSubscription = options.subscriptions.find((sub: any) => sub.subject === extractFramesSubject)
+        const subscription = options.subscriptions.find((sub: any) => sub.subject === generateRenditionsSubject)
 
-        const convertResult = await convertSubscription.handler({} as ConvertFileRequest)
-        expect(convertResult.success).toBe(false)
-        if (!convertResult.success) {
-            expect(convertResult.error).toBe('convert failed')
+        await expect(subscription.handler(request)).rejects.toThrow('Conversion service storage unavailable.')
+        expect(generateAssetRenditionsMock).not.toHaveBeenCalled()
+    })
+
+    it('returns failed rendition payloads when generateAssetRenditions throws', async () => {
+        getInstanceMock.mockReturnValue({})
+        generateAssetRenditionsMock.mockRejectedValue(new Error('conversion failed'))
+        const generateRenditionsSubject = NATS_SUBJECTS.BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS
+        const request: GenerateRenditionsRequest = {
+            jobId: 'job-1',
+            jobKey: 'job-key-1',
+            organizationId: 'org-1',
+            assetId: 'asset-1',
+            sourceBlobHash: 'sha256:abc',
+            requestedRenditions: ['thumbnail'],
         }
 
-        const extractResult = await extractSubscription.handler({} as ExtractFramesRequest)
-        expect(extractResult.success).toBe(false)
-        if (!extractResult.success) {
-            expect(extractResult.error).toBe('extract failed')
-        }
+        await loadResponder()
+
+        const options = initMock.mock.calls[0][0]
+        const subscription = options.subscriptions.find((sub: any) => sub.subject === generateRenditionsSubject)
+
+        const result = await subscription.handler(request)
+        expect(result.renditions).toEqual([
+            { name: 'thumbnail', status: 'failed', errorCode: 'CONVERSION_FAILED' },
+        ])
     })
 
     it('shuts down gracefully on SIGINT and closes service', async () => {

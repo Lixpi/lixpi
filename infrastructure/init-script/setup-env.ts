@@ -736,6 +736,7 @@ function generateEnvFileContent(config: EnvConfig): string {
         '{{MOCK_AUTH0_DOMAIN}}': config.useLocalAuth0Mock ? 'localhost:3000' : '',
         '{{MOCK_AUTH0_JWKS_URI}}': config.useLocalAuth0Mock ? 'http://lixpi-localauth0:3000/.well-known/jwks.json' : '',
         '{{SAVE_LLM_RESPONSES_TO_DEBUG_DIR}}': String(isLocal),
+        '{{METRICS_ENABLED}}': 'false',
         '{{OPENAI_API_KEY}}': config.openaiApiKey,
         '{{ANTHROPIC_API_KEY}}': config.anthropicApiKey,
         '{{GOOGLE_API_KEY}}': config.googleApiKey,

@@ -9,14 +9,28 @@ const mocks = vi.hoisted(() => ({
         getInstance: vi.fn(),
         publish: vi.fn(),
     },
-    organization: {
-        getUserOrganizations: vi.fn(),
-    },
     aiModel: {
         getAiModel: vi.fn(),
     },
     workspace: {
         getWorkspace: vi.fn(),
+    },
+    asset: {
+        get: vi.fn(),
+        acquireLease: vi.fn(),
+        releaseLease: vi.fn(),
+        renewLease: vi.fn(),
+        claimConversationReceivingSystem: vi.fn(),
+        updateConversationStateSystem: vi.fn(),
+    },
+    assetDocumentService: {
+        loadCurrentSnapshot: vi.fn(),
+    },
+    requesterContext: {
+        get: vi.fn(),
+    },
+    eventRelay: {
+        ensure: vi.fn(),
     },
     pipelineEventLog: {
         replayPipelineEvents: vi.fn(),
@@ -51,9 +65,13 @@ vi.mock('@lixpi/nats-service', () => ({
     },
 }))
 
-vi.mock('../../models/organization.ts', () => ({ default: mocks.organization }))
 vi.mock('../../models/ai-model.ts', () => ({ default: mocks.aiModel }))
 vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
+vi.mock('../../models/asset.ts', () => ({ default: mocks.asset }))
+vi.mock('../../models/blob.ts', () => ({ default: {} }))
+vi.mock('../../services/asset-requester-context.ts', () => ({ getAssetRequesterContext: mocks.requesterContext.get }))
+vi.mock('../../services/asset-document-service.ts', () => ({ default: mocks.assetDocumentService }))
+vi.mock('../../services/ai-interaction-event-relay.ts', () => ({ ensureAiInteractionEventRelay: mocks.eventRelay.ensure }))
 vi.mock('../../llm/graph/pipeline-event-log.ts', () => ({
     PipelineEventLog: {
         fromSingleton: () => mocks.pipelineEventLog,
@@ -70,6 +88,42 @@ const flushPromises = (): Promise<void> => new Promise((resolve) => {
     setTimeout(resolve, 0)
 })
 
+const requester = {
+    userId: 'user-1',
+    workspaceIds: ['workspace-1'],
+    editableWorkspaceIds: ['workspace-1'],
+    organizationIds: ['org-1'],
+}
+
+const conversationDoc = {
+    type: 'doc',
+    content: [
+        {
+            type: 'aiChatThread',
+            attrs: { threadId: 'conv-1' },
+            content: [
+                {
+                    type: 'aiUserMessage',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }],
+                },
+            ],
+        },
+    ],
+}
+
+const conversationAsset = {
+    assetId: 'conv-1',
+    organizationId: 'org-1',
+    documents: { conversation: { docId: 'doc-1' } },
+}
+
+const workspace = {
+    workspaceId: 'workspace-1',
+    organizationId: 'org-1',
+    accessList: [{ userId: 'user-1', accessLevel: 'owner' }],
+    canvasState: { nodes: [] },
+}
+
 const baseMessageData = {
     user: { userId: 'user-1', stripeCustomerId: 'stripe-1' },
     messages: [{ role: 'user', content: 'Hello' }],
@@ -77,18 +131,12 @@ const baseMessageData = {
     aiImageModels: ['google:imagen3'],
     aiVideoModels: ['openai:gpt-4o-video'],
     workspaceId: 'workspace-1',
-    aiChatThreadId: 'thread-1',
+    conversationAssetId: 'conv-1',
     enableImageGeneration: true,
     imageSize: '1:1',
     videoAspectRatio: '16:9',
     videoResolution: '1080p',
     videoDuration: '30',
-    videoSourceForExtension: 'webp',
-    referencedFeatureIds: ['feature-1'],
-    mediaBranchCandidateSnapshot: { nodes: [] },
-    workspaceContextSnapshot: { summary: 'context' },
-    proseMirrorInitialDoc: { type: 'doc', content: [] },
-    proseMirrorBaseVersion: 12,
 }
 
 const makeModule = () => ({
@@ -103,12 +151,20 @@ describe('AI interaction message routing', () => {
         vi.clearAllMocks()
         mocks.nats.getInstance.mockReturnValue(undefined)
         mocks.nats.publish.mockClear()
-        mocks.organization.getUserOrganizations.mockResolvedValue([{ organizationId: 'org-1' }])
+        mocks.requesterContext.get.mockResolvedValue(requester)
+        mocks.asset.get.mockResolvedValue(conversationAsset)
+        mocks.asset.acquireLease.mockResolvedValue({ leaseId: 'lease-1' })
+        mocks.asset.releaseLease.mockResolvedValue(undefined)
+        mocks.asset.renewLease.mockResolvedValue(undefined)
+        mocks.asset.claimConversationReceivingSystem.mockResolvedValue({ assetId: 'conv-1' })
+        mocks.asset.updateConversationStateSystem.mockResolvedValue(undefined)
+        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({ doc: conversationDoc, version: 5 })
+        mocks.eventRelay.ensure.mockReturnValue('live-subject')
         mocks.aiModel.getAiModel.mockResolvedValue({ modelVersion: '1' })
-        mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1' })
+        mocks.workspace.getWorkspace.mockResolvedValue(workspace)
         mocks.pipelineEventLog.replayPipelineEvents.mockResolvedValue({
             streamName: 'PIPELINE_EVENTS_workspace-1',
-            subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.thread-1`,
+            subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.conv-1`,
             events: [],
         })
         mocks.llmModule.process.mockResolvedValue(undefined)
@@ -121,39 +177,29 @@ describe('AI interaction message routing', () => {
     it('invokes the media generation matrix path when generation request metadata exists', async () => {
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
-            mediaGenerationRequest: { generationRequestId: 'request-1', reasoningModelIds: ['openai:gpt-4'] },
+            mediaGenerationRequest: {
+                generationRequestId: 'request-1',
+                reasoningModelIds: ['openai:gpt-4'],
+                imageModelIds: [],
+                videoModelIds: [],
+            },
         })
         await flushPromises()
 
-        expect(mocks.organization.getUserOrganizations).toHaveBeenCalledWith({ userId: 'user-1' })
         expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledWith(expect.objectContaining({
-            mediaGenerationRequest: { generationRequestId: 'request-1', reasoningModelIds: ['openai:gpt-4'] },
             organizationId: 'org-1',
-            aiChatThreadId: 'thread-1',
+            aiChatThreadId: 'conv-1',
+            workspaceId: 'workspace-1',
             eventMeta: {
                 userId: 'user-1',
                 stripeCustomerId: 'stripe-1',
                 organizationId: 'org-1',
                 workspaceId: 'workspace-1',
-                aiChatThreadId: 'thread-1',
+                aiChatThreadId: 'conv-1',
             },
         }))
         expect(mocks.llmModule.process).not.toHaveBeenCalled()
         expect(mocks.nats.publish).not.toHaveBeenCalled()
-    })
-
-    it('does not attempt organization resolution when no feature ids are provided', async () => {
-        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
-            ...baseMessageData,
-            referencedFeatureIds: [],
-            mediaGenerationRequest: { generationRequestId: 'request-2', reasoningModelIds: [] },
-        })
-        await flushPromises()
-
-        expect(mocks.organization.getUserOrganizations).not.toHaveBeenCalled()
-        expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledWith(expect.objectContaining({
-            organizationId: undefined,
-        }))
     })
 
     it('skips ai model lookup entirely when media generation request path is taken', async () => {
@@ -162,6 +208,8 @@ describe('AI interaction message routing', () => {
             mediaGenerationRequest: {
                 generationRequestId: 'request-5',
                 reasoningModelIds: ['openai:gpt-4'],
+                imageModelIds: [],
+                videoModelIds: [],
             },
         })
         await flushPromises()
@@ -171,26 +219,22 @@ describe('AI interaction message routing', () => {
         expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledTimes(1)
     })
 
-    it('falls back to no organization when organization lookup fails and still runs matrix processing', async () => {
-        mocks.organization.getUserOrganizations.mockRejectedValueOnce(new Error('org service unavailable'))
-        mocks.llmModule.processMediaGenerationMatrix.mockResolvedValue(undefined)
-
+    it('rejects the send with AI_MODEL_REQUIRED when no reasoning model and no media generation request are given', async () => {
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
-            mediaGenerationRequest: {
-                generationRequestId: 'request-3',
-                reasoningModelIds: ['openai:gpt-4'],
-            },
+            aiReasoningModels: [],
+            mediaGenerationRequest: undefined,
         })
         await flushPromises()
 
-        expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledWith(expect.objectContaining({
-            organizationId: undefined,
-            eventMeta: expect.objectContaining({ organizationId: undefined }),
-        }))
+        expect(mocks.nats.publish).toHaveBeenCalledWith(
+            expect.stringContaining(`${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.`),
+            { error: 'AI_MODEL_REQUIRED' },
+        )
+        expect(mocks.llmModule.process).not.toHaveBeenCalled()
     })
 
-    it('publishes an error when media generation matrix fails', async () => {
+    it('publishes an error to the canonical subject when media generation matrix fails', async () => {
         mocks.llmModule.processMediaGenerationMatrix.mockRejectedValueOnce(new Error('matrix failed'))
 
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
@@ -198,12 +242,14 @@ describe('AI interaction message routing', () => {
             mediaGenerationRequest: {
                 generationRequestId: 'request-4',
                 reasoningModelIds: ['openai:gpt-4'],
+                imageModelIds: [],
+                videoModelIds: [],
             },
         })
         await flushPromises()
 
         expect(mocks.nats.publish).toHaveBeenCalledWith(
-            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.workspace-1.thread-1`,
+            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.org-1.conv-1`,
             { error: 'matrix failed' },
         )
     })
@@ -216,6 +262,7 @@ describe('AI interaction message routing', () => {
             mediaGenerationRequest: undefined,
             aiReasoningModels: ['openai:missing'],
         })
+        await flushPromises()
 
         expect(mocks.aiModel.getAiModel).toHaveBeenCalledWith({
             provider: 'openai',
@@ -223,7 +270,7 @@ describe('AI interaction message routing', () => {
             omitPricing: false,
         })
         expect(mocks.nats.publish).toHaveBeenCalledWith(
-            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.workspace-1.thread-1`,
+            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.org-1.conv-1`,
             { error: 'AI model not found: openai:missing' },
         )
         expect(mocks.llmModule.process).not.toHaveBeenCalled()
@@ -240,7 +287,7 @@ describe('AI interaction message routing', () => {
         await flushPromises()
 
         expect(mocks.nats.publish).toHaveBeenCalledWith(
-            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.workspace-1.thread-1`,
+            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.org-1.conv-1`,
             { error: 'AI model not found: openai:gpt-4' },
         )
     })
@@ -259,6 +306,7 @@ describe('AI interaction message routing', () => {
 
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
+            mediaGenerationRequest: undefined,
             videoAspectRatio: '3:2',
             videoResolution: '2k',
             videoDuration: '60',
@@ -293,6 +341,7 @@ describe('AI interaction message routing', () => {
 
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
+            mediaGenerationRequest: undefined,
             videoDuration: 30 as unknown as string,
             videoAspectRatio: undefined,
             videoResolution: undefined,
@@ -317,12 +366,13 @@ describe('AI interaction message routing', () => {
 
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
+            mediaGenerationRequest: undefined,
             aiImageModels: ['google:missing-image'],
             aiVideoModels: ['openai:missing-video'],
         })
         await flushPromises()
 
-        expect(mocks.llmModule.process).toHaveBeenCalledWith('workspace-1:thread-1', expect.anything(), expect.objectContaining({
+        expect(mocks.llmModule.process).toHaveBeenCalledWith('workspace-1:conv-1', expect.anything(), expect.objectContaining({
             imageModelMetaInfo: null,
             videoModelMetaInfo: null,
         }))
@@ -341,7 +391,7 @@ describe('AI interaction message routing', () => {
         await flushPromises()
 
         expect(mocks.nats.publish).toHaveBeenCalledWith(
-            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.workspace-1.thread-1`,
+            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.org-1.conv-1`,
             { error: 'process failed' },
         )
     })
@@ -358,31 +408,32 @@ describe('AI interaction message routing', () => {
         await flushPromises()
 
         expect(mocks.nats.publish).toHaveBeenCalledWith(
-            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.workspace-1.thread-1`,
+            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.org-1.conv-1`,
             { error: 'LLM module not initialized' },
         )
     })
 
     it('forwards stop for both LLM chat and media-generation workflows', async () => {
-        await getHandler(SUBJECTS.CHAT_STOP_MESSAGE)({
+        const result = await getHandler(SUBJECTS.CHAT_STOP_MESSAGE)({
             user: { userId: 'user-1' },
             workspaceId: 'workspace-1',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'conv-1',
             generationRequestId: 'request-stop',
         })
 
-        expect(mocks.llmModule.stop).toHaveBeenCalledWith('workspace-1:thread-1')
+        expect(mocks.llmModule.stop).toHaveBeenCalledWith('workspace-1:conv-1')
         expect(mocks.llmModule.stopMediaGenerationMatrix).toHaveBeenCalledWith({
             workspaceId: 'workspace-1',
-            aiChatThreadId: 'thread-1',
+            aiChatThreadId: 'conv-1',
             generationRequestId: 'request-stop',
         })
+        expect(result).toEqual({ status: 'stopped', generationRequestId: 'request-stop' })
     })
 
     it('replays persisted pipeline events from the next stream sequence', async () => {
         mocks.pipelineEventLog.replayPipelineEvents.mockResolvedValueOnce({
             streamName: 'PIPELINE_EVENTS_workspace-1',
-            subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.thread-1`,
+            subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.pipeline-1`,
             events: [
                 { eventId: 'old', streamSequence: 4, payload: { content: { status: 'old' } } },
                 { eventId: 'next', streamSequence: 6, payload: { content: { status: 'new' } } },
@@ -392,7 +443,7 @@ describe('AI interaction message routing', () => {
         const result = await getHandler(SUBJECTS.CHAT_PIPELINE_RESUME)({
             user: { userId: 'user-1' },
             workspaceId: 'workspace-1',
-            aiChatThreadId: 'thread-1',
+            pipelineId: 'pipeline-1',
             localStreamSeq: 4,
             maxMessages: 25,
         })
@@ -403,13 +454,14 @@ describe('AI interaction message routing', () => {
         })
         expect(mocks.pipelineEventLog.replayPipelineEvents).toHaveBeenCalledWith({
             workspaceId: 'workspace-1',
-            pipelineId: 'thread-1',
+            pipelineId: 'pipeline-1',
             startStreamSeq: 5,
             maxMessages: 25,
         })
         expect(result).toEqual({
             streamName: 'PIPELINE_EVENTS_workspace-1',
-            subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.thread-1`,
+            subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.pipeline-1`,
+            liveSubject: 'live-subject',
             events: [
                 { eventId: 'next', streamSequence: 6, payload: { content: { status: 'new' } } },
             ],

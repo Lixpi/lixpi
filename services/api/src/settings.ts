@@ -11,6 +11,11 @@ import {
 } from '@lixpi/constants'
 
 export type ApiSettings = {
+    aiModels: {
+        defaultReasoningModelId: AiModelId
+        defaultImageModelId: AiModelId
+        defaultVideoModelId: AiModelId
+    }
     // API-owned media descriptor settings for image and video summaries shown on the canvas.
     mediaDescriptor: {
         // Vision model used by the MEDIA_DESCRIBE endpoint for image files and video still frames.
@@ -33,6 +38,11 @@ export type ApiSettings = {
 }
 
 export const settings: ApiSettings = {
+    aiModels: {
+        defaultReasoningModelId: 'Anthropic:claude-haiku-4-5',
+        defaultImageModelId: 'Stability:sd3.5-large',
+        defaultVideoModelId: 'Google:veo-3.1-lite-generate-preview',
+    },
     mediaDescriptor: {
         // Claude Haiku is the default VLM for reusable media descriptions.
         // Keep this id present in the synchronized AI model catalog and out of exclusion lists.

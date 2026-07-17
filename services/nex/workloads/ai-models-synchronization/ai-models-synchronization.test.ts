@@ -1,6 +1,6 @@
 'use strict'
 
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterEach } from 'vitest'
 
 import { PROVIDER_NAMES } from '@lixpi/constants'
 
@@ -155,7 +155,7 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(gemini.pricing.video).toBeUndefined()
     })
 
-    it('no longer blacklists veo in the Google contains list (so fetchGoogleModels can surface it)', () => {
+    it('allows veo models through the Google contains blacklist', () => {
         const containsBlacklist = (AiModelsSync as any).MODELS_BLACKLIST.Google.contains
         expect(containsBlacklist).not.toContain('veo')
         // Unrelated entries must remain blacklisted.
@@ -233,5 +233,61 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
         expect(model.videoMaxReferenceImages).toBe(9)
         expect(model.title).toBe('Seedance 2.0 Fast')
         expect(model.shortTitle).toBe('Seedance 2.0 Fast')
+    })
+})
+
+// =============================================================================
+// ANTHROPIC MODEL FETCH FAILURE MODES
+// =============================================================================
+
+describe('AiModelsSync — Anthropic model fetch failure modes', () => {
+    const originalAnthropicApiKey = process.env.ANTHROPIC_API_KEY
+
+    beforeAll(() => {
+        process.env.ORG_NAME = process.env.ORG_NAME || 'test-org'
+        process.env.STAGE = process.env.STAGE || 'test'
+    })
+
+    afterEach(() => {
+        if (originalAnthropicApiKey === undefined) delete process.env.ANTHROPIC_API_KEY
+        else process.env.ANTHROPIC_API_KEY = originalAnthropicApiKey
+    })
+
+    it('requires an Anthropic API key', async () => {
+        delete process.env.ANTHROPIC_API_KEY
+        const sync: any = new AiModelsSync({
+            dynamoDBService: {} as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: '',
+            googleApiKey: 'test-key',
+        })
+
+        await expect(sync.fetchAnthropicModels()).rejects.toThrow('Anthropic API key is required but not provided')
+    })
+
+    it('propagates errors from models.list()', async () => {
+        const sync: any = new AiModelsSync({
+            dynamoDBService: {} as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: 'test-key',
+            googleApiKey: 'test-key',
+        })
+        sync.anthropic.models = {
+            list: async () => { throw new Error('upstream unavailable') },
+        }
+
+        await expect(sync.fetchAnthropicModels()).rejects.toThrow('upstream unavailable')
+    })
+
+    it('throws when the models.list() method is unavailable on the SDK client', async () => {
+        const sync: any = new AiModelsSync({
+            dynamoDBService: {} as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: 'test-key',
+            googleApiKey: 'test-key',
+        })
+        sync.anthropic.models = undefined
+
+        await expect(sync.fetchAnthropicModels()).rejects.toThrow('Anthropic models list endpoint returned no models')
     })
 })

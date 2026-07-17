@@ -50,6 +50,8 @@ set-env.bat
 
 Safe to re-run whenever you want to switch environments; it only ever replaces a symlink it created itself, never a real file.
 
+The generated local environment sets `METRICS_ENABLED=false`. Enable it only when the deployed stack includes a responder for `metrics.usage.check`; otherwise the API rejects generation before it calls a model.
+
 ### 3. Initialize infrastructure
 
 Set up TLS certificates and DynamoDB tables. This is required before starting the application for the first time:

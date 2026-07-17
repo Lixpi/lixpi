@@ -5,25 +5,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({
-    nats: {
-        getInstance: vi.fn(),
-        createObjectStore: vi.fn(),
-        deleteObjectStore: vi.fn(),
-    },
     workspace: {
         createWorkspace: vi.fn(),
         delete: vi.fn(),
+        markDeleting: vi.fn(),
         getWorkspace: vi.fn(),
         getUserWorkspaces: vi.fn(),
-        getBucketName: vi.fn((workspaceId: string) => `workspace-${workspaceId}-files`),
         update: vi.fn(),
         updateCanvasState: vi.fn(),
     },
-    document: {
-        getWorkspaceDocuments: vi.fn(),
+    organization: {
+        getUserOrganizations: vi.fn(),
     },
-    aiChatThread: {
-        deleteWorkspaceAiChatThreads: vi.fn(),
+    asset: {
+        removeAllWorkspaceReferences: vi.fn(),
     },
     extractionRun: {
         deleteWorkspaceRuns: vi.fn(),
@@ -31,14 +26,9 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@lixpi/debug-tools', () => ({ info: vi.fn(), err: vi.fn(), warn: vi.fn() }))
-vi.mock('@lixpi/nats-service', () => ({
-    default: {
-        getInstance: mocks.nats.getInstance,
-    },
-}))
 vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
-vi.mock('../../models/document.ts', () => ({ default: mocks.document }))
-vi.mock('../../models/ai-chat-thread.ts', () => ({ default: mocks.aiChatThread }))
+vi.mock('../../models/organization.ts', () => ({ default: mocks.organization }))
+vi.mock('../../models/asset.ts', () => ({ default: mocks.asset }))
 vi.mock('../../models/extraction-run.ts', () => ({ default: mocks.extractionRun }))
 
 import { workspaceSubjects } from './workspace-subjects.ts'
@@ -51,24 +41,22 @@ const { WORKSPACE_SUBJECTS } = NATS_SUBJECTS
 describe('Workspace subject handlers', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        mocks.nats.getInstance.mockReturnValue({
-            createObjectStore: mocks.nats.createObjectStore,
-            deleteObjectStore: mocks.nats.deleteObjectStore,
-        })
         mocks.workspace.createWorkspace.mockResolvedValue({
             workspaceId: 'ws-1',
             name: 'Workspace',
         })
-        mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'ws-1' })
+        mocks.workspace.getWorkspace.mockResolvedValue({
+            workspaceId: 'ws-1',
+            accessList: [{ userId: 'user-1', accessLevel: 'owner' }],
+        })
         mocks.workspace.delete.mockResolvedValue({ status: 'deleted', workspaceId: 'ws-1' })
+        mocks.workspace.markDeleting.mockResolvedValue(undefined)
         mocks.workspace.getUserWorkspaces.mockResolvedValue([{ workspaceId: 'ws-1' }])
         mocks.workspace.update.mockResolvedValue({ status: 'ok' })
         mocks.workspace.updateCanvasState.mockResolvedValue({ status: 'canvas-saved' })
-        mocks.document.getWorkspaceDocuments.mockResolvedValue([{ documentId: 'doc-1' }])
-        mocks.aiChatThread.deleteWorkspaceAiChatThreads.mockResolvedValue(2)
+        mocks.organization.getUserOrganizations.mockResolvedValue([{ organizationId: 'organization-1' }])
+        mocks.asset.removeAllWorkspaceReferences.mockResolvedValue(2)
         mocks.extractionRun.deleteWorkspaceRuns.mockResolvedValue(1)
-        mocks.nats.createObjectStore.mockResolvedValue({})
-        mocks.nats.deleteObjectStore.mockResolvedValue(true)
     })
 
     // =========================================================================
@@ -81,7 +69,7 @@ describe('Workspace subject handlers', () => {
             workspaceId: 'ws-1',
         })
 
-        expect(result).toEqual({ workspaceId: 'ws-1' })
+        expect(result).toEqual(expect.objectContaining({ workspaceId: 'ws-1' }))
         expect(mocks.workspace.getWorkspace).toHaveBeenCalledWith({
             userId: 'user-1',
             workspaceId: 'ws-1',
@@ -110,9 +98,7 @@ describe('Workspace subject handlers', () => {
     // WRITE / COMMAND HANDLERS
     // =========================================================================
 
-    it('rolls back workspace creation when storage service is unavailable', async () => {
-        mocks.nats.getInstance.mockReturnValueOnce(null as any)
-
+    it('creates a workspace under the resolved default organization', async () => {
         const result = await getHandler(WORKSPACE_SUBJECTS.CREATE_WORKSPACE)({
             user: { userId: 'user-1' },
             name: 'New Workspace',
@@ -120,49 +106,24 @@ describe('Workspace subject handlers', () => {
 
         expect(mocks.workspace.createWorkspace).toHaveBeenCalledWith({
             name: 'New Workspace',
+            organizationId: 'organization-1',
             permissions: {
                 userId: 'user-1',
                 accessLevel: 'owner',
             },
         })
-        expect(mocks.workspace.delete).toHaveBeenCalledWith({
-            userId: 'user-1',
-            workspaceId: 'ws-1',
-        })
-        expect(result).toEqual({ error: 'STORAGE_SERVICE_UNAVAILABLE' })
-    })
-
-    it('rolls back workspace creation when object store creation fails', async () => {
-        mocks.nats.createObjectStore.mockRejectedValueOnce(new Error('object store failed'))
-
-        const result = await getHandler(WORKSPACE_SUBJECTS.CREATE_WORKSPACE)({
-            user: { userId: 'user-1' },
-            name: 'New Workspace',
-        })
-
-        expect(mocks.nats.deleteObjectStore).toHaveBeenCalledWith('workspace-ws-1-files')
-        expect(mocks.workspace.delete).toHaveBeenCalledWith({
-            userId: 'user-1',
-            workspaceId: 'ws-1',
-        })
-        expect(result).toEqual({ error: 'FAILED_TO_CREATE_BUCKET' })
-    })
-
-    it('creates an object store and returns created workspace metadata when storage service is healthy', async () => {
-        const result = await getHandler(WORKSPACE_SUBJECTS.CREATE_WORKSPACE)({
-            user: { userId: 'user-1' },
-            name: 'New Workspace',
-        })
-
-        expect(mocks.nats.createObjectStore).toHaveBeenCalledWith(
-            'workspace-ws-1-files',
-            {
-                description: 'Files for workspace ws-1',
-            },
-        )
-        expect(mocks.nats.deleteObjectStore).not.toHaveBeenCalled()
-        expect(mocks.workspace.delete).not.toHaveBeenCalled()
         expect(result).toEqual({ workspaceId: 'ws-1', name: 'Workspace' })
+    })
+
+    it('denies workspace creation for an organization the user does not belong to', async () => {
+        const result = await getHandler(WORKSPACE_SUBJECTS.CREATE_WORKSPACE)({
+            user: { userId: 'user-1' },
+            name: 'New Workspace',
+            organizationId: 'organization-2',
+        })
+
+        expect(mocks.workspace.createWorkspace).not.toHaveBeenCalled()
+        expect(result).toEqual({ error: 'ORGANIZATION_ACCESS_DENIED' })
     })
 
     it('updates workspace metadata', async () => {
@@ -204,42 +165,37 @@ describe('Workspace subject handlers', () => {
     // CLEANUP / DELETION
     // =========================================================================
 
-    it('continues deleting the workspace record when object store cleanup fails', async () => {
-        mocks.nats.deleteObjectStore.mockRejectedValueOnce(new Error('bucket delete failed'))
+    it('deletes the workspace after cleaning up asset references and extraction runs', async () => {
+        const result = await getHandler(WORKSPACE_SUBJECTS.DELETE_WORKSPACE)({
+            user: { userId: 'user-1' },
+            workspaceId: 'ws-1',
+        })
+
+        expect(mocks.workspace.markDeleting).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
+        expect(mocks.asset.removeAllWorkspaceReferences).toHaveBeenCalledWith({
+            workspaceId: 'ws-1',
+            requester: expect.objectContaining({ userId: 'user-1' }),
+        })
+        expect(mocks.extractionRun.deleteWorkspaceRuns).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
+        expect(mocks.workspace.delete).toHaveBeenCalledWith({
+            userId: 'user-1',
+            workspaceId: 'ws-1',
+        })
+        expect(result).toEqual({ success: true, workspaceId: 'ws-1' })
+    })
+
+    it('denies deletion for a non-owner accessor', async () => {
+        mocks.workspace.getWorkspace.mockResolvedValueOnce({
+            workspaceId: 'ws-1',
+            accessList: [{ userId: 'user-1', accessLevel: 'editor' }],
+        })
 
         const result = await getHandler(WORKSPACE_SUBJECTS.DELETE_WORKSPACE)({
             user: { userId: 'user-1' },
             workspaceId: 'ws-1',
         })
 
-        expect(mocks.workspace.delete).toHaveBeenCalledWith({
-            userId: 'user-1',
-            workspaceId: 'ws-1',
-        })
-        expect(mocks.aiChatThread.deleteWorkspaceAiChatThreads).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
-        expect(mocks.extractionRun.deleteWorkspaceRuns).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
-        expect(result).toEqual({ success: true, workspaceId: 'ws-1' })
-    })
-
-    it('returns the workspace documents for authorized requests', async () => {
-        const result = await getHandler(WORKSPACE_SUBJECTS.GET_WORKSPACE_DOCUMENTS)({
-            user: { userId: 'user-1' },
-            workspaceId: 'ws-1',
-        })
-
-        expect(mocks.document.getWorkspaceDocuments).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
-        expect(result).toEqual([{ documentId: 'doc-1' }])
-    })
-
-    it('does not query documents when workspace access fails', async () => {
-        mocks.workspace.getWorkspace.mockResolvedValueOnce({ error: 'WORKSPACE_NOT_FOUND' })
-
-        const result = await getHandler(WORKSPACE_SUBJECTS.GET_WORKSPACE_DOCUMENTS)({
-            user: { userId: 'user-1' },
-            workspaceId: 'ws-1',
-        })
-
-        expect(result).toEqual({ error: 'WORKSPACE_NOT_FOUND' })
-        expect(mocks.document.getWorkspaceDocuments).not.toHaveBeenCalled()
+        expect(result).toEqual({ error: 'PERMISSION_DENIED' })
+        expect(mocks.workspace.delete).not.toHaveBeenCalled()
     })
 })
