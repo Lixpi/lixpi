@@ -12,7 +12,7 @@ describe('buildMediaDescriptorSchema', () => {
     it('requires a summary plus entity and style tags', () => {
         const schema = buildMediaDescriptorSchema()
         expect(schema.name).toBe('describe_media')
-        expect(schema.schema.required).toEqual(['summary', 'entityTags', 'styleTags'])
+        expect(schema.schema.required).toEqual(['title', 'summary', 'entityTags', 'styleTags'])
     })
 })
 
@@ -51,7 +51,7 @@ describe('describeMediaStill', () => {
     it('returns empty fields when the model yields nothing usable', async () => {
         const callVlm = vi.fn(async () => ({ parsed: {} as any, rawText: '', modelName: 'gpt-4.1' }))
         const result = await describeMediaStill({ ...baseArgs, callVlm })
-        expect(result).toEqual({ summary: '', entityTags: [], styleTags: [] })
+        expect(result).toEqual({ title: '', summary: '', entityTags: [], styleTags: [] })
     })
 })
 
@@ -63,7 +63,7 @@ describe('buildTextDescriptorSchema', () => {
     it('requires a summary plus entity and style tags', () => {
         const schema = buildTextDescriptorSchema()
         expect(schema.name).toBe('describe_text')
-        expect(schema.schema.required).toEqual(['summary', 'entityTags', 'styleTags'])
+        expect(schema.schema.required).toEqual(['title', 'summary', 'entityTags', 'styleTags'])
     })
 })
 
@@ -110,12 +110,12 @@ describe('describeTextContent', () => {
         const callVlm = vi.fn(async () => ({ parsed: {} as any, rawText: '', modelName: 'gpt-4.1' }))
         const result = await describeTextContent({ ...baseArgs, text: '   \n  ', callVlm })
         expect(callVlm).not.toHaveBeenCalled()
-        expect(result).toEqual({ summary: '', entityTags: [], styleTags: [] })
+        expect(result).toEqual({ title: '', summary: '', entityTags: [], styleTags: [] })
     })
 
     it('returns empty fields when the model yields nothing usable', async () => {
         const callVlm = vi.fn(async () => ({ parsed: {} as any, rawText: '', modelName: 'gpt-4.1' }))
         const result = await describeTextContent({ ...baseArgs, text: 'some content', callVlm })
-        expect(result).toEqual({ summary: '', entityTags: [], styleTags: [] })
+        expect(result).toEqual({ title: '', summary: '', entityTags: [], styleTags: [] })
     })
 })

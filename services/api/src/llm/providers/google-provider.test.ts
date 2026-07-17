@@ -595,11 +595,6 @@ describe('GoogleProvider internals', () => {
                 ],
             },
         })
-        extractFramesMock.extractVideoFramesViaWorkload.mockResolvedValueOnce({
-            posterBuffer: Buffer.from('poster'),
-            frameBuffer: Buffer.from('frame'),
-        })
-
         const provider = new GoogleProvider('ws-1:thread-1', createProviderDeps())
         const { videoPublisher } = configureProviderInternals(provider)
 
@@ -628,6 +623,8 @@ describe('GoogleProvider internals', () => {
             responseId: 'operations/veo-123',
             revisedPrompt: 'make a cinematic shot',
             videoModelId: 'veo-3.1-generate-preview',
+            posterBuffer: null,
+            frameBuffer: null,
         })
         expect(update).toEqual(expect.objectContaining({
             generatedVideos: ['veo-complete'],
@@ -637,11 +634,6 @@ describe('GoogleProvider internals', () => {
                 aspectRatio: '16:9',
             },
         }))
-        expect(extractFramesMock.extractVideoFramesViaWorkload).toHaveBeenCalledWith({
-            workspaceId: 'ws-1',
-            videoBuffer: Buffer.from('AAAA', 'base64'),
-            atSeconds: 4,
-        })
     })
 
     it('captures VEO operation failures as stream errors', async () => {

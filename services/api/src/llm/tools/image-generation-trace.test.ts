@@ -56,8 +56,7 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
             candidates: [
                 {
                     nodeId: 'person-generated',
-                    fileId: 'person-file',
-                    workspaceId: 'workspace-1',
+                    assetId: 'person-file',
                     imageUrl: 'data:image/png;base64,branch-inline',
                     roleHints: ['generated-variant', 'branch-leaf'],
                     branchId: 'branch-person',
@@ -67,8 +66,7 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
                 },
                 {
                     nodeId: 'goat-generated',
-                    fileId: 'goat-file',
-                    workspaceId: 'workspace-1',
+                    assetId: 'goat-file',
                     imageUrl: 'data:image/png;base64,goat-inline',
                     roleHints: ['generated-variant', 'branch-leaf'],
                     branchId: 'branch-goat',
@@ -148,7 +146,7 @@ describe('buildImageGenerationTrace', () => {
         expect(trace?.referenceImages[0]).toMatchObject({
             id: 'branch:person-generated',
             source: 'branch-candidate',
-            imageUrl: 'nats-obj://workspace-workspace-1-files/person-file',
+            imageUrl: '/api/assets/person-file/renditions/preview',
             label: 'expressive painted portrait of the man',
             role: 'target',
             nodeId: 'person-generated',

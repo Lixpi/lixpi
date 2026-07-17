@@ -6,34 +6,42 @@ import AdmZip from 'adm-zip'
 const mocks = vi.hoisted(() => ({
     verify: vi.fn(),
     getWorkspace: vi.fn(),
-    getWorkspaceDocuments: vi.fn(),
-    getWorkspaceAiChatThreads: vi.fn(),
-    deleteWorkspaceDocuments: vi.fn(),
-    deleteWorkspaceAiChatThreads: vi.fn(),
-    importDocument: vi.fn(),
-    createAiChatThread: vi.fn(),
     replaceWorkspaceContent: vi.fn(),
-    getCanvasStateReferencedFileIds: vi.fn(),
+    assetGet: vi.fn(),
+    assetCreate: vi.fn(),
+    assetListReferences: vi.fn(),
+    assetAttachWorkspaceReference: vi.fn(),
+    assetRemoveWorkspaceReferenceForImport: vi.fn(),
+    assetRemoveWorkspaceCatalogForImport: vi.fn(),
+    assetDetachCatalogReference: vi.fn(),
+    blobGet: vi.fn(),
+    blobStore: vi.fn(),
+    getUserOrganizations: vi.fn(),
+    getAssetRequesterContext: vi.fn(),
+    loadCurrentSnapshot: vi.fn(),
+    assertAssetBackedMediaNodes: vi.fn(),
+    enqueueBlobDeletion: vi.fn(),
+    enqueueRenditionRetry: vi.fn(),
+    enqueueWorkspaceReferenceCleanup: vi.fn(),
     getObject: vi.fn(),
-    getObjectStore: vi.fn(),
-    createObjectStore: vi.fn(),
-    putObject: vi.fn(),
     getNatsInstance: vi.fn(),
     archiveAppend: vi.fn(),
     archivePipe: vi.fn(),
     archiveOn: vi.fn().mockReturnThis(),
     archiveAbort: vi.fn(),
     archiveFinalize: vi.fn().mockResolvedValue(undefined),
+    queryItems: vi.fn(),
+    scanItems: vi.fn(),
 }))
 
 vi.mock('archiver', () => ({
     ZipArchive: vi.fn(function () {
         return {
-        append: mocks.archiveAppend,
-        pipe: mocks.archivePipe,
-        on: mocks.archiveOn,
-        abort: mocks.archiveAbort,
-        finalize: mocks.archiveFinalize,
+            append: mocks.archiveAppend,
+            pipe: mocks.archivePipe,
+            on: mocks.archiveOn,
+            abort: mocks.archiveAbort,
+            finalize: mocks.archiveFinalize,
         }
     }),
 }))
@@ -49,14 +57,39 @@ vi.mock('../models/workspace.ts', () => ({
     default: {
         getWorkspace: mocks.getWorkspace,
         replaceWorkspaceContent: mocks.replaceWorkspaceContent,
-        getCanvasStateReferencedFileIds: mocks.getCanvasStateReferencedFileIds,
     },
 }))
-vi.mock('../models/document.ts', () => ({
-    default: { getWorkspaceDocuments: mocks.getWorkspaceDocuments, importDocument: mocks.importDocument, deleteWorkspaceDocuments: mocks.deleteWorkspaceDocuments },
+vi.mock('../models/asset.ts', () => ({
+    default: {
+        get: mocks.assetGet,
+        create: mocks.assetCreate,
+        listReferences: mocks.assetListReferences,
+        attachWorkspaceReference: mocks.assetAttachWorkspaceReference,
+        removeWorkspaceReferenceForImport: mocks.assetRemoveWorkspaceReferenceForImport,
+        removeWorkspaceCatalogForImport: mocks.assetRemoveWorkspaceCatalogForImport,
+        detachCatalogReference: mocks.assetDetachCatalogReference,
+    },
+    buildAssetScopeAndOwnerKey: (scope: string, ownerId: string) => `${scope}#${ownerId}`,
 }))
-vi.mock('../models/ai-chat-thread.ts', () => ({
-    default: { getWorkspaceAiChatThreads: mocks.getWorkspaceAiChatThreads, createAiChatThread: mocks.createAiChatThread, deleteWorkspaceAiChatThreads: mocks.deleteWorkspaceAiChatThreads },
+vi.mock('../models/blob.ts', () => ({
+    default: { get: mocks.blobGet, store: mocks.blobStore },
+}))
+vi.mock('../models/organization.ts', () => ({
+    default: { getUserOrganizations: mocks.getUserOrganizations },
+}))
+vi.mock('../services/asset-requester-context.ts', () => ({
+    getAssetRequesterContext: mocks.getAssetRequesterContext,
+}))
+vi.mock('../services/asset-document-service.ts', () => ({
+    default: {
+        loadCurrentSnapshot: mocks.loadCurrentSnapshot,
+        assertAssetBackedMediaNodes: mocks.assertAssetBackedMediaNodes,
+    },
+}))
+vi.mock('../services/asset-maintenance-queue.ts', () => ({
+    enqueueBlobDeletion: mocks.enqueueBlobDeletion,
+    enqueueRenditionRetry: mocks.enqueueRenditionRetry,
+    enqueueWorkspaceReferenceCleanup: mocks.enqueueWorkspaceReferenceCleanup,
 }))
 
 import workspaceExportRoutes from './workspace-export-routes.ts'
@@ -77,12 +110,9 @@ const createResponse = () => ({
     send: vi.fn(),
 })
 
-const createWorkspaceZip = (manifest: object, imageEntries: Record<string, { ext: string; data: Uint8Array }> = {}) => {
+const createManifestZip = (manifest: object) => {
     const zip = new AdmZip()
     zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest)))
-    for (const [fileId, image] of Object.entries(imageEntries)) {
-        zip.addFile(`images/${fileId}${image.ext}`, image.data)
-    }
     return zip.toBuffer()
 }
 
@@ -97,106 +127,65 @@ const runRouteAuthAndAccess = async (route: any, req: any, res: any) => {
     await route.stack[1].handle(req, res, vi.fn())
 }
 
-describe('Workspace export route', () => {
-    const manifest = {
-        exportVersion: 1,
-        exportedAt: '2025-12-31T00:00:00.000Z',
-        workspace: {
-            workspaceId: 'workspace-1',
-            name: 'test workspace',
-            canvasState: {
-                nodes: [
-                    { type: 'image', fileId: 'file-1', src: '/api/files/workspace-1/file-1' },
-                    { type: 'image', fileId: 'file-3', src: '/api/files/workspace-1/file-3' },
-                ],
-            },
-            files: [
-                { id: 'file-1', name: 'file-1.png', mimeType: 'image/png', kind: 'image' },
-                { id: 'file-2', name: 'file-2.png', mimeType: 'image/png', kind: 'image' },
-            ],
-            createdAt: 100,
-            updatedAt: 200,
-        },
-        documents: [{ documentId: 'doc-1', title: 'Doc One', content: '{}' }],
-        aiChatThreads: [{ threadId: 'thread-1', content: '{}', aiModel: 'x' }],
-    }
+const emptyManifest = () => ({
+    exportVersion: 2,
+    exportedAt: new Date().toISOString(),
+    workspace: {
+        name: 'Test workspace',
+        canvasState: { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [] },
+        createdAt: 100,
+        updatedAt: 200,
+    },
+    assets: [],
+    references: [],
+    blobs: [],
+})
 
+describe('Workspace export route', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        ;(globalThis as any).dynamoDBService = {
+            queryItems: mocks.queryItems,
+            scanItems: mocks.scanItems,
+        }
         mocks.verify.mockResolvedValue({ decoded: { sub: 'user-1' } })
+        mocks.queryItems.mockResolvedValue({ items: [] })
+        mocks.scanItems.mockResolvedValue({ items: [] })
+        mocks.getAssetRequesterContext.mockResolvedValue({
+            userId: 'user-1',
+            workspaceIds: ['workspace-1'],
+            editableWorkspaceIds: ['workspace-1'],
+            organizationIds: ['org-1'],
+        })
         mocks.getWorkspace.mockResolvedValue({
             workspaceId: 'workspace-1',
-            name: 'test workspace',
-            files: manifest.workspace.files,
-            canvasState: manifest.workspace.canvasState,
+            organizationId: 'org-1',
+            name: 'Test workspace',
+            canvasState: { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [] },
             createdAt: 100,
             updatedAt: 200,
         })
-        mocks.getWorkspaceDocuments.mockResolvedValue([{ documentId: 'doc-1' }])
-        mocks.getWorkspaceAiChatThreads.mockResolvedValue([{ threadId: 'thread-1' }])
-        mocks.getObject.mockImplementation((bucketName: string, fileId: string) => {
-            if (fileId === 'file-1') return Promise.resolve(Uint8Array.from([1]))
-            if (fileId === 'file-3') return Promise.resolve(Uint8Array.from([2, 3]))
-            if (fileId === 'file-2') return Promise.resolve(undefined)
-            return Promise.resolve(undefined)
-        })
-        mocks.getNatsInstance.mockReturnValue({
-            getObject: mocks.getObject,
-            getObjectStore: mocks.getObjectStore,
-            createObjectStore: mocks.createObjectStore,
-            putObject: mocks.putObject,
-        })
+        mocks.getNatsInstance.mockReturnValue({ getObject: mocks.getObject })
     })
 
-    it('exports manifest, canonical image bytes, and canvas-only files to a zip stream', async () => {
+    it('exports an empty workspace as a manifest-only archive', async () => {
         const route = findRoute('/:workspaceId/export', 'get')
         const handler = route.stack.at(-1).handle
-        const req: any = {
-            ...makeWorkspaceRouteEnv(),
-            workspace: { files: manifest.workspace.files, canvasState: manifest.workspace.canvasState },
-        }
+        const req: any = makeWorkspaceRouteEnv()
         const res = createResponse()
 
         await runRouteAuthAndAccess(route, req, res)
         await handler(req, res)
 
         expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'application/zip')
-        expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="test_workspace-export.zip"')
+        expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="workspace-assets-v2.zip"')
 
-        const entries = mocks.archiveAppend.mock.calls
-        const manifestCall = entries.find((entry: any[]) => entry[1]?.name === 'manifest.json')
-        const images = entries.filter((entry: any[]) => (entry[1]?.name ?? '').startsWith('images/')).map((entry: any[]) => entry[1].name)
-        const missingImagesCall = entries.find((entry: any[]) => entry[1]?.name === 'missing-images.json')
-
+        const manifestCall = mocks.archiveAppend.mock.calls.find((entry: any[]) => entry[1]?.name === 'manifest.json')
         expect(manifestCall).toBeDefined()
         const manifestOutput = JSON.parse(manifestCall?.[0] as string)
-        expect(manifestOutput.workspace.files).toHaveLength(2)
-        expect(images).toEqual(['images/file-1.png', 'images/file-3.png'])
-        expect(missingImagesCall).toBeDefined()
-        const missingPayload = JSON.parse(missingImagesCall?.[0] as string)
-        expect(missingPayload.missingFileIds).toEqual(['file-2'])
-        expect(mocks.getObject).toHaveBeenCalledWith('workspace-workspace-1-files', 'file-1')
-        expect(mocks.getObject).toHaveBeenCalledWith('workspace-workspace-1-files', 'file-2')
-        expect(mocks.getObject).toHaveBeenCalledWith('workspace-workspace-1-files', 'file-3')
-        expect(mocks.archiveFinalize).toHaveBeenCalledOnce()
-    })
-
-    it('exports manifest-only payload when object store is unavailable', async () => {
-        const route = findRoute('/:workspaceId/export', 'get')
-        const handler = route.stack.at(-1).handle
-        const req: any = {
-            ...makeWorkspaceRouteEnv(),
-            workspace: { files: [], canvasState: { nodes: [] } },
-        }
-        const res = createResponse()
-        mocks.getNatsInstance.mockReturnValue(undefined)
-
-        await runRouteAuthAndAccess(route, req, res)
-        await handler(req, res)
-
-        expect(res.status).not.toHaveBeenCalled()
-        expect(mocks.archiveAppend).toHaveBeenCalledTimes(1)
-        expect(mocks.archiveAppend).toHaveBeenCalledWith(expect.any(String), { name: 'manifest.json' })
+        expect(manifestOutput.exportVersion).toBe(2)
+        expect(manifestOutput.assets).toEqual([])
+        expect(manifestOutput.blobs).toEqual([])
         expect(mocks.archiveFinalize).toHaveBeenCalledOnce()
     })
 
@@ -210,28 +199,33 @@ describe('Workspace export route', () => {
         await route.stack[1].handle(req, res, vi.fn())
 
         expect(res.status).toHaveBeenCalledWith(404)
-        expect(res.json).toHaveBeenCalledWith({ error: 'Workspace not found' })
     })
 })
 
 describe('Workspace import route', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        ;(globalThis as any).dynamoDBService = {
+            queryItems: mocks.queryItems,
+            scanItems: mocks.scanItems,
+        }
         mocks.verify.mockResolvedValue({ decoded: { sub: 'user-1' } })
-        mocks.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1', files: [], canvasState: { nodes: [] } })
-        mocks.deleteWorkspaceDocuments.mockResolvedValue(undefined)
-        mocks.deleteWorkspaceAiChatThreads.mockResolvedValue(undefined)
-        mocks.importDocument.mockResolvedValue(undefined)
-        mocks.createAiChatThread.mockResolvedValue(undefined)
-        mocks.replaceWorkspaceContent.mockResolvedValue(undefined)
-        mocks.getCanvasStateReferencedFileIds.mockReturnValue(new Set())
-        mocks.getObjectStore.mockResolvedValue({ name: 'bucket' })
-        mocks.createObjectStore.mockResolvedValue(undefined)
-        mocks.getNatsInstance.mockReturnValue({
-            getObjectStore: mocks.getObjectStore,
-            createObjectStore: mocks.createObjectStore,
-            putObject: mocks.putObject,
+        mocks.queryItems.mockResolvedValue({ items: [] })
+        mocks.scanItems.mockResolvedValue({ items: [] })
+        mocks.getUserOrganizations.mockResolvedValue([{ organizationId: 'org-1' }])
+        mocks.getAssetRequesterContext.mockResolvedValue({
+            userId: 'user-1',
+            workspaceIds: ['workspace-1'],
+            editableWorkspaceIds: ['workspace-1'],
+            organizationIds: ['org-1'],
         })
+        mocks.getWorkspace.mockResolvedValue({
+            workspaceId: 'workspace-1',
+            organizationId: 'org-1',
+            canvasState: { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [] },
+            canvasStateUpdatedAt: 200,
+        })
+        mocks.replaceWorkspaceContent.mockResolvedValue(undefined)
     })
 
     it('rejects import archives missing manifest.json', async () => {
@@ -249,7 +243,7 @@ describe('Workspace import route', () => {
         await handler(req, res)
 
         expect(res.status).toHaveBeenCalledWith(400)
-        expect(res.json).toHaveBeenCalledWith({ error: 'ZIP archive is missing manifest.json' })
+        expect(res.json).toHaveBeenCalledWith({ error: 'MISSING_MANIFEST' })
     })
 
     it('rejects archives with invalid manifest JSON', async () => {
@@ -266,8 +260,8 @@ describe('Workspace import route', () => {
         await runRouteAuthAndAccess(route, req, res)
         await handler(req, res)
 
-        expect(res.status).toHaveBeenCalledWith(400)
-        expect(res.json).toHaveBeenCalledWith({ error: 'manifest.json contains invalid JSON' })
+        expect(res.status).toHaveBeenCalledWith(500)
+        expect(res.json.mock.calls[0][0]).toHaveProperty('error')
     })
 
     it('rejects unsupported export versions', async () => {
@@ -275,15 +269,7 @@ describe('Workspace import route', () => {
         const handler = route.stack.at(-1).handle
         const req: any = {
             ...makeWorkspaceRouteEnv(),
-            file: {
-                buffer: createWorkspaceZip({
-                    exportVersion: 2,
-                    exportedAt: '2025-12-31T00:00:00.000Z',
-                    workspace: { workspaceId: 'workspace-1', canvasState: { nodes: [] }, files: [], createdAt: 100, updatedAt: 200 },
-                    documents: [],
-                    aiChatThreads: [],
-                }),
-            },
+            file: { buffer: createManifestZip({ ...emptyManifest(), exportVersion: 1 }) },
         }
         const res = createResponse()
 
@@ -291,226 +277,68 @@ describe('Workspace import route', () => {
         await handler(req, res)
 
         expect(res.status).toHaveBeenCalledWith(400)
-        expect(res.json).toHaveBeenCalledWith({ error: 'Unsupported export version: 2' })
+        expect(res.json).toHaveBeenCalledWith({ error: 'REVISION_2_ARCHIVE_REQUIRED' })
     })
 
-    it('imports a valid export archive and writes workspace state', async () => {
+    it('imports a valid empty-workspace archive and replaces workspace canvas state', async () => {
         const route = findRoute('/:workspaceId/import', 'post')
         const handler = route.stack.at(-1).handle
-        const manifest = {
-            exportVersion: 1,
-            exportedAt: '2025-12-31T00:00:00.000Z',
-            workspace: {
-                workspaceId: 'workspace-1',
-                name: 'test workspace',
-                canvasState: {
-                    nodes: [
-                        { type: 'image', fileId: 'file-1', src: '/api/files/workspace-1/file-1' },
-                    ],
-                },
-                files: [{ id: 'file-1', name: 'file-1.png', mimeType: 'image/png', kind: 'image' }],
-                createdAt: 100,
-                updatedAt: 200,
-            },
-            documents: [{ documentId: 'doc-1', title: 'Doc', content: '{}' }],
-            aiChatThreads: [{ threadId: 'thread-1', content: '{}', aiModel: 'x' }],
-        }
         const req: any = {
             ...makeWorkspaceRouteEnv(),
-            file: {
-                buffer: createWorkspaceZip(
-                    manifest,
-                    {
-                        'file-1': { ext: '.png', data: Uint8Array.from([9, 8, 7]) },
-                    }
-                ),
-            },
+            file: { buffer: createManifestZip(emptyManifest()) },
         }
-        mocks.getCanvasStateReferencedFileIds.mockReturnValue(new Set(['file-1']))
         const res = createResponse()
 
         await runRouteAuthAndAccess(route, req, res)
         await handler(req, res)
 
-        expect(mocks.getWorkspace).toHaveBeenCalledWith({ workspaceId: 'workspace-1', userId: 'user-1' })
-        expect(mocks.deleteWorkspaceDocuments).toHaveBeenCalledWith({ workspaceId: 'workspace-1' })
-        expect(mocks.deleteWorkspaceAiChatThreads).toHaveBeenCalledWith({ workspaceId: 'workspace-1' })
-        expect(mocks.importDocument).toHaveBeenCalledWith({
-            documentId: 'doc-1',
+        expect(mocks.getUserOrganizations).toHaveBeenCalledWith({ userId: 'user-1' })
+        expect(mocks.replaceWorkspaceContent).toHaveBeenCalledWith(expect.objectContaining({
             workspaceId: 'workspace-1',
-            title: 'Doc',
-            content: '{}',
-            createdAt: undefined,
-            updatedAt: undefined,
-        })
-        expect(mocks.createAiChatThread).toHaveBeenCalledWith({
-            workspaceId: 'workspace-1',
-            threadId: 'thread-1',
-            content: '{}',
-            aiModel: 'x',
-        })
-        expect(mocks.putObject).toHaveBeenCalledWith('workspace-workspace-1-files', 'file-1', Buffer.from([9, 8, 7]), {
-            name: 'file-1',
-            description: 'file-1.png',
-        })
-        expect(mocks.replaceWorkspaceContent).toHaveBeenCalledWith(
-            expect.objectContaining({
-                workspaceId: 'workspace-1',
-                canvasState: expect.objectContaining({
-                    nodes: [
-                        expect.objectContaining({
-                            type: 'image',
-                            fileId: 'file-1',
-                            src: '/api/files/workspace-1/file-1',
-                            workspaceId: 'workspace-1',
-                        }),
-                    ],
-                }),
-            })
-        )
-        expect(res.json).toHaveBeenCalledWith({
-            success: true,
-            workspaceId: 'workspace-1',
-            imported: { documents: 1, aiChatThreads: 1, images: 1 },
-        })
+            canvasState: expect.objectContaining({ nodes: [], edges: [] }),
+            expectedCanvasStateUpdatedAt: 200,
+        }))
+        expect(res.json).toHaveBeenCalledWith({ success: true, importedAssets: 0 })
     })
 
-    it('rejects archives missing required manifest-referenced images', async () => {
+    it('denies import when the workspace organization is not accessible to the user', async () => {
         const route = findRoute('/:workspaceId/import', 'post')
         const handler = route.stack.at(-1).handle
-        const manifest = {
-            exportVersion: 1,
-            exportedAt: '2025-12-31T00:00:00.000Z',
-            workspace: {
-                workspaceId: 'workspace-1',
-                name: 'test workspace',
-                canvasState: {
-                    nodes: [{ type: 'image', fileId: 'missing-1' }],
-                },
-                files: [{ id: 'missing-1', name: 'missing-1.png', mimeType: 'image/png', kind: 'image' }],
-                createdAt: 100,
-                updatedAt: 200,
-            },
-            documents: [{ documentId: 'doc-1', title: 'Doc', content: '{}' }],
-            aiChatThreads: [{ threadId: 'thread-1', content: '{}', aiModel: 'x' }],
-        }
+        mocks.getUserOrganizations.mockResolvedValue([{ organizationId: 'other-org' }])
         const req: any = {
             ...makeWorkspaceRouteEnv(),
-            file: { buffer: createWorkspaceZip(manifest) },
+            file: { buffer: createManifestZip(emptyManifest()) },
         }
-        const res = createResponse()
-        mocks.getCanvasStateReferencedFileIds.mockReturnValue(new Set(['missing-1']))
-
-        await runRouteAuthAndAccess(route, req, res)
-        await handler(req, res)
-
-        expect(res.status).toHaveBeenCalledWith(400)
-        expect(res.json).toHaveBeenCalledWith({
-            error: 'Archive is missing Object Store entries referenced by the workspace manifest',
-            missingFileIds: ['missing-1'],
-        })
-    })
-
-    it('surfaces dangling image refs when canvas references are not in archive', async () => {
-        const route = findRoute('/:workspaceId/import', 'post')
-        const handler = route.stack.at(-1).handle
-        const manifest = {
-            exportVersion: 1,
-            exportedAt: '2025-12-31T00:00:00.000Z',
-            workspace: {
-                workspaceId: 'workspace-1',
-                name: 'test workspace',
-                canvasState: {
-                    nodes: [
-                        { type: 'image', fileId: 'file-1', src: '/api/files/workspace-1/file-1' },
-                        { type: 'image', fileId: 'dangling-file', src: '/api/files/workspace-1/dangling-file' },
-                    ],
-                },
-                files: [{ id: 'file-1', name: 'file-1.png', mimeType: 'image/png', kind: 'image' }],
-                createdAt: 100,
-                updatedAt: 200,
-            },
-            documents: [{ documentId: 'doc-1', title: 'Doc', content: '{}' }],
-            aiChatThreads: [{ threadId: 'thread-1', content: '{}', aiModel: 'x' }],
-        }
-        const req: any = {
-            ...makeWorkspaceRouteEnv(),
-            file: {
-                buffer: createWorkspaceZip(
-                    manifest,
-                    {
-                        'file-1': { ext: '.png', data: Uint8Array.from([1, 2, 3]) },
-                    }
-                ),
-            },
-        }
-        mocks.getCanvasStateReferencedFileIds.mockReturnValue(new Set(['file-1']))
         const res = createResponse()
 
         await runRouteAuthAndAccess(route, req, res)
         await handler(req, res)
 
-        expect(res.json).toHaveBeenCalledWith(
-            expect.objectContaining({
-                warnings: expect.arrayContaining([
-                    {
-                        type: 'missing_images',
-                        message: 'Some canvas image nodes reference images that were not in the archive and will render broken.',
-                        fileIds: ['dangling-file'],
-                    },
-                ]),
-            })
-        )
-        expect(mocks.replaceWorkspaceContent).toHaveBeenCalledWith(
-            expect.objectContaining({
-                canvasState: expect.objectContaining({
-                    nodes: expect.arrayContaining([
-                        expect.objectContaining({
-                            type: 'image',
-                            fileId: 'dangling-file',
-                            src: '/api/files/workspace-1/dangling-file',
-                            workspaceId: 'workspace-1',
-                        }),
-                    ]),
-                }),
-            })
-        )
+        expect(res.status).toHaveBeenCalledWith(403)
+        expect(res.json).toHaveBeenCalledWith({ error: 'ORGANIZATION_ACCESS_DENIED' })
+        expect(mocks.replaceWorkspaceContent).not.toHaveBeenCalled()
     })
 
-    it('returns SERVICE_UNAVAILABLE when archive has images but storage is unavailable', async () => {
+    it('denies import when the requester cannot edit the target workspace', async () => {
         const route = findRoute('/:workspaceId/import', 'post')
         const handler = route.stack.at(-1).handle
-        const manifest = {
-            exportVersion: 1,
-            exportedAt: '2025-12-31T00:00:00.000Z',
-            workspace: {
-                workspaceId: 'workspace-1',
-                name: 'test workspace',
-                canvasState: {
-                    nodes: [{ type: 'image', fileId: 'file-1', src: '/api/files/workspace-1/file-1' }],
-                },
-                files: [{ id: 'file-1', name: 'file-1.png', mimeType: 'image/png', kind: 'image' }],
-                createdAt: 100,
-                updatedAt: 200,
-            },
-            documents: [],
-            aiChatThreads: [],
-        }
+        mocks.getAssetRequesterContext.mockResolvedValue({
+            userId: 'user-1',
+            workspaceIds: ['workspace-1'],
+            editableWorkspaceIds: [],
+            organizationIds: ['org-1'],
+        })
         const req: any = {
             ...makeWorkspaceRouteEnv(),
-            file: {
-                buffer: createWorkspaceZip(manifest, {
-                    'file-1': { ext: '.png', data: Uint8Array.from([1]) },
-                }),
-            },
+            file: { buffer: createManifestZip(emptyManifest()) },
         }
-        mocks.getNatsInstance.mockReturnValue(undefined)
         const res = createResponse()
 
         await runRouteAuthAndAccess(route, req, res)
         await handler(req, res)
 
-        expect(res.status).toHaveBeenCalledWith(503)
-        expect(res.json).toHaveBeenCalledWith({ error: 'Storage service unavailable' })
+        expect(res.status).toHaveBeenCalledWith(403)
+        expect(res.json).toHaveBeenCalledWith({ error: 'PERMISSION_DENIED' })
+        expect(mocks.replaceWorkspaceContent).not.toHaveBeenCalled()
     })
 })

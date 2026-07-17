@@ -14,6 +14,26 @@ const debugTools = vi.hoisted(() => ({
 
 vi.mock('@lixpi/debug-tools', () => debugTools)
 
+const assetStorage = vi.hoisted(() => ({
+    attachGeneratedAssetNode: vi.fn(async () => ({
+        layoutRevision: 1,
+        nodes: [],
+    })),
+    settleGeneratedAssetOriginal: vi.fn(async () => ({
+        assetId: 'asset-1',
+        organizationId: 'org-1',
+        url: '/api/images/ws-1/asset-1',
+    })),
+}))
+
+vi.mock('../../services/generated-asset-storage.ts', () => assetStorage)
+vi.mock('../../services/asset-provenance-materializer.ts', () => ({
+    materializeAssetProvenance: vi.fn(async () => undefined),
+}))
+vi.mock('../../services/asset-maintenance-queue.ts', () => ({
+    enqueueProvenanceRebuild: vi.fn(async () => undefined),
+}))
+
 const MAX_STABILITY_REFERENCE_PIXELS = 9_437_184
 const OVERSIZED_WIDTH = 5000
 const OVERSIZED_HEIGHT = 3500
@@ -70,14 +90,6 @@ const makeDeps = (): BaseProviderDeps => ({
     natsService: {
         publish: vi.fn(),
     } as any,
-    storeWorkspaceImage: vi.fn(async () => ({
-        fileId: 'file-1',
-        url: '/api/images/ws-1/file-1',
-        isDuplicate: false,
-        size: 1,
-        mimeType: 'image/png',
-    })),
-    storeWorkspaceVideo: vi.fn(),
     usageReporter: {
         reportTokensUsage: vi.fn(),
         reportImageUsage: vi.fn(),
@@ -111,6 +123,16 @@ const processWithMessages = async (overrides: Record<string, any> = {}): Promise
             modelVersion: 'sd3.5-large',
         },
         messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
+        generationRun: {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            reasoningModelId: 'Stability:sd3.5-large',
+            reasoningIndex: 0,
+            lineageAssignment: {
+                assetId: 'asset-1',
+                generationRequestId: 'request-1',
+            },
+        },
         ...overrides,
     })
 
@@ -304,6 +326,16 @@ describe('StabilityProvider stream validation', () => {
             enableImageGeneration: true,
             aiModelMetaInfo: { provider: 'Stability', model: 'unsupported', modelVersion: 'unsupported' },
             messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
+            generationRun: {
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                reasoningModelId: 'Stability:sd3.5-large',
+                reasoningIndex: 0,
+                lineageAssignment: {
+                    assetId: 'asset-1',
+                    generationRequestId: 'request-1',
+                },
+            },
         })
 
         expect(result.error).toBe('Unknown Stability model: unsupported')
@@ -338,6 +370,16 @@ describe('StabilityProvider stream validation', () => {
             enableImageGeneration: true,
             aiModelMetaInfo: { provider: 'Stability', model: 'sd3.5-large', modelVersion: 'sd3.5-large' },
             messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
+            generationRun: {
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                reasoningModelId: 'Stability:sd3.5-large',
+                reasoningIndex: 0,
+                lineageAssignment: {
+                    assetId: 'asset-1',
+                    generationRequestId: 'request-1',
+                },
+            },
         })
 
         expect(result.error).toBe('Stability API error (invalid_request): Missing prompt field')
@@ -358,6 +400,16 @@ describe('StabilityProvider stream validation', () => {
             preflightResolved: true,
             aiModelMetaInfo: { provider: 'Stability', model: 'sd3.5-large', modelVersion: 'sd3.5-large' },
             messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
+            generationRun: {
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                reasoningModelId: 'Stability:sd3.5-large',
+                reasoningIndex: 0,
+                lineageAssignment: {
+                    assetId: 'asset-1',
+                    generationRequestId: 'request-1',
+                },
+            },
         })
 
         expect(result.error).toBe(
@@ -380,6 +432,16 @@ describe('StabilityProvider stream validation', () => {
             preflightResolved: true,
             aiModelMetaInfo: { provider: 'Stability', model: 'sd3.5-large', modelVersion: 'sd3.5-large' },
             messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
+            generationRun: {
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                reasoningModelId: 'Stability:sd3.5-large',
+                reasoningIndex: 0,
+                lineageAssignment: {
+                    assetId: 'asset-1',
+                    generationRequestId: 'request-1',
+                },
+            },
         })
 
         expect(result.error).toBe('Stability API returned empty image data')

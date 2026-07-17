@@ -8,10 +8,14 @@ const mocks = vi.hoisted(() => ({
     workspace: {
         getWorkspace: vi.fn(),
         delete: vi.fn(),
-        getBucketName: vi.fn(() => 'workspace-ws-1-files'),
+        markDeleting: vi.fn(),
+        getUserWorkspaces: vi.fn(),
     },
-    aiChatThread: {
-        deleteWorkspaceAiChatThreads: vi.fn(),
+    organization: {
+        getUserOrganizations: vi.fn(),
+    },
+    asset: {
+        removeAllWorkspaceReferences: vi.fn(),
     },
     extractionRun: {
         deleteWorkspaceRuns: vi.fn(),
@@ -19,10 +23,9 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@lixpi/debug-tools', () => ({ info: vi.fn(), err: vi.fn(), warn: vi.fn() }))
-vi.mock('@lixpi/nats-service', () => ({ default: { getInstance: vi.fn(() => null) } }))
 vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
-vi.mock('../../models/document.ts', () => ({ default: {} }))
-vi.mock('../../models/ai-chat-thread.ts', () => ({ default: mocks.aiChatThread }))
+vi.mock('../../models/organization.ts', () => ({ default: mocks.organization }))
+vi.mock('../../models/asset.ts', () => ({ default: mocks.asset }))
 vi.mock('../../models/extraction-run.ts', () => ({ default: mocks.extractionRun }))
 
 import { workspaceSubjects } from './workspace-subjects.ts'
@@ -33,9 +36,15 @@ const getHandler = (subject: string) =>
 describe('Workspace deletion cleans up chat and extraction history', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'ws-1' })
+        mocks.workspace.getWorkspace.mockResolvedValue({
+            workspaceId: 'ws-1',
+            accessList: [{ userId: 'user-1', accessLevel: 'owner' }],
+        })
         mocks.workspace.delete.mockResolvedValue({ status: 'deleted', workspaceId: 'ws-1' })
-        mocks.aiChatThread.deleteWorkspaceAiChatThreads.mockResolvedValue(2)
+        mocks.workspace.markDeleting.mockResolvedValue(undefined)
+        mocks.workspace.getUserWorkspaces.mockResolvedValue([{ workspaceId: 'ws-1' }])
+        mocks.organization.getUserOrganizations.mockResolvedValue([{ organizationId: 'organization-1' }])
+        mocks.asset.removeAllWorkspaceReferences.mockResolvedValue(2)
         mocks.extractionRun.deleteWorkspaceRuns.mockResolvedValue(1)
     })
 
@@ -45,22 +54,26 @@ describe('Workspace deletion cleans up chat and extraction history', () => {
             workspaceId: 'ws-1',
         })
 
-        expect(mocks.aiChatThread.deleteWorkspaceAiChatThreads).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
+        expect(mocks.workspace.markDeleting).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
+        expect(mocks.asset.removeAllWorkspaceReferences).toHaveBeenCalledWith({
+            workspaceId: 'ws-1',
+            requester: expect.objectContaining({ userId: 'user-1' }),
+        })
         expect(mocks.extractionRun.deleteWorkspaceRuns).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
         expect(mocks.workspace.delete).toHaveBeenCalledWith({ userId: 'user-1', workspaceId: 'ws-1' })
         expect(result).toEqual({ success: true, workspaceId: 'ws-1' })
     })
 
-    it('still removes the workspace when chat/run cleanup throws', async () => {
-        mocks.aiChatThread.deleteWorkspaceAiChatThreads.mockRejectedValueOnce(new Error('throttled'))
+    it('returns a cleanup-failure error and does not remove the workspace when dependency cleanup throws', async () => {
+        mocks.asset.removeAllWorkspaceReferences.mockRejectedValueOnce(new Error('throttled'))
 
         const result = await getHandler(NATS_SUBJECTS.WORKSPACE_SUBJECTS.DELETE_WORKSPACE)({
             user: { userId: 'user-1' },
             workspaceId: 'ws-1',
         })
 
-        expect(mocks.workspace.delete).toHaveBeenCalledWith({ userId: 'user-1', workspaceId: 'ws-1' })
-        expect(result).toEqual({ success: true, workspaceId: 'ws-1' })
+        expect(mocks.workspace.delete).not.toHaveBeenCalled()
+        expect(result).toEqual({ error: 'WORKSPACE_DEPENDENCY_CLEANUP_FAILED' })
     })
 
     it('does not touch history when the workspace is inaccessible', async () => {
@@ -72,7 +85,7 @@ describe('Workspace deletion cleans up chat and extraction history', () => {
         })
 
         expect(result).toEqual({ error: 'PERMISSION_DENIED' })
-        expect(mocks.aiChatThread.deleteWorkspaceAiChatThreads).not.toHaveBeenCalled()
+        expect(mocks.asset.removeAllWorkspaceReferences).not.toHaveBeenCalled()
         expect(mocks.extractionRun.deleteWorkspaceRuns).not.toHaveBeenCalled()
         expect(mocks.workspace.delete).not.toHaveBeenCalled()
     })

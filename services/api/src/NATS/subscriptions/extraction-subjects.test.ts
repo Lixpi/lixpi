@@ -10,9 +10,6 @@ const mocks = vi.hoisted(() => ({
     workspace: {
         getWorkspace: vi.fn(),
     },
-    organization: {
-        getUserOrganizations: vi.fn(),
-    },
     extractionRun: {
         createRun: vi.fn(),
         updateStatus: vi.fn(),
@@ -32,9 +29,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@lixpi/debug-tools', () => ({ info: vi.fn(), err: vi.fn() }))
 vi.mock('@lixpi/nats-service', () => ({ default: { getInstance: vi.fn(() => ({ publish })) } }))
 vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
-vi.mock('../../models/organization.ts', () => ({ default: mocks.organization }))
 vi.mock('../../models/extraction-run.ts', () => ({ default: mocks.extractionRun }))
 vi.mock('../../models/ai-model.ts', () => ({ default: mocks.aiModel }))
+vi.mock('../../models/asset.ts', () => ({ default: {} }))
+vi.mock('../../models/blob.ts', () => ({ default: {} }))
+vi.mock('../../services/ai-interaction-event-relay.ts', () => ({ ensureAiInteractionEventRelay: vi.fn(() => 'live-subject') }))
+vi.mock('../../services/asset-requester-context.ts', () => ({ getAssetRequesterContext: vi.fn(async () => ({ userId: 'user-1', workspaceIds: [], editableWorkspaceIds: [], organizationIds: [] })) }))
 
 import { extractionSubjects, setExtractionLlmModule } from './extraction-subjects.ts'
 
@@ -45,8 +45,13 @@ const getHandler = (subject: string) =>
 
 beforeEach(() => {
     vi.clearAllMocks()
-    mocks.workspace.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1' })
-    mocks.organization.getUserOrganizations.mockResolvedValue([{ organizationId: 'org-1' }])
+    // organizationId is resolved server-side from the workspace record, not from the client payload.
+    mocks.workspace.getWorkspace.mockResolvedValue({
+        workspaceId: 'workspace-1',
+        organizationId: 'org-1',
+        accessList: [{ userId: 'user-1', accessLevel: 'owner' }],
+    })
+    mocks.extractionRun.markFailed.mockResolvedValue(undefined)
     setExtractionLlmModule(mocks.llmModule as any)
 })
 
@@ -80,13 +85,13 @@ describe('Feature extraction START', () => {
         expect(mocks.llmModule.processExtraction).toHaveBeenCalledWith(expect.objectContaining({
             extractionRunId: 'run-1',
             workspaceId: 'workspace-1',
-            // organizationId is resolved server-side from the user, not taken from the client.
+            // organizationId is resolved server-side from the workspace, not taken from the client.
             organizationId: 'org-1',
             intent: 'extract the palette',
         }))
     })
 
-    it('ignores any client-supplied organizationId and resolves it server-side', async () => {
+    it('ignores any client-supplied organizationId and resolves it server-side from the workspace', async () => {
         mocks.aiModel.getAiModel.mockResolvedValue({ model: 'gpt-test' })
         mocks.llmModule.processExtraction.mockResolvedValue({ success: true })
 
@@ -98,10 +103,8 @@ describe('Feature extraction START', () => {
         }))
     })
 
-    it('fails the run when the user has no associated organization', async () => {
-        mocks.organization.getUserOrganizations.mockResolvedValueOnce([])
-
-        await getHandler(SUBJECTS.START)(baseData)
+    it('fails the run and publishes an error when the analysis model id is missing', async () => {
+        await getHandler(SUBJECTS.START)({ ...baseData, aiModel: undefined })
 
         expect(mocks.extractionRun.markFailed).toHaveBeenCalledWith(expect.objectContaining({ extractionRunId: 'run-1' }))
         expect(mocks.llmModule.processExtraction).not.toHaveBeenCalled()
@@ -127,9 +130,11 @@ describe('Feature extraction START', () => {
 
         expect(mocks.extractionRun.createRun).not.toHaveBeenCalled()
         expect(publish).toHaveBeenCalledWith(
-            expect.stringContaining(`${RESPONSE}.workspace-1.run-1`),
+            expect.stringContaining(`${RESPONSE}.`),
             expect.objectContaining({ error: 'PERMISSION_DENIED' }),
         )
+        const [subjectArg] = publish.mock.calls[0]!
+        expect(subjectArg.endsWith('.workspace-1.run-1')).toBe(true)
     })
 })
 

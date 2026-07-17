@@ -3,99 +3,153 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { STREAM_STATUS } from '@lixpi/constants'
 
-const projectionMocks = vi.hoisted(() => ({
-    upsertGeneratedImageToCanvas: vi.fn(async () => undefined),
-    logCanvasProjectionError: vi.fn(),
+const generatedAssetStorageMocks = vi.hoisted(() => ({
+    attachGeneratedAssetNode: vi.fn(async () => ({ layoutRevision: 1, nodes: [] })),
+    settleGeneratedAssetOriginal: vi.fn(async (input: any) => ({
+        assetId: input.generationRun.lineageAssignment.assetId,
+        organizationId: 'org-1',
+        url: `/api/assets/${input.generationRun.lineageAssignment.assetId}/renditions/original`,
+    })),
+}))
+const assetProvenanceMaterializerMocks = vi.hoisted(() => ({
+    materializeAssetProvenance: vi.fn(async () => undefined),
+}))
+const assetMaintenanceQueueMocks = vi.hoisted(() => ({
+    enqueueProvenanceRebuild: vi.fn(async () => undefined),
 }))
 
-vi.mock('../../services/media-generation-canvas-projection.ts', () => projectionMocks)
+vi.mock('../../services/generated-asset-storage.ts', () => generatedAssetStorageMocks)
+vi.mock('../../services/asset-provenance-materializer.ts', () => assetProvenanceMaterializerMocks)
+vi.mock('../../services/asset-maintenance-queue.ts', () => assetMaintenanceQueueMocks)
 
 import { ImagePublisher, readImageIntrinsicSize } from './image-publisher.ts'
 
 type Published = { subject: string, payload: any }
 
-const makePublisher = () => {
+const baseGenerationRun = {
+    generationRequestId: 'request-1',
+    reasoningRunId: 'reasoning-1',
+    mediaRunId: 'media-1',
+    reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+    mediaModelId: 'Google:gemini-2.5-flash-image',
+    mediaType: 'image',
+    reasoningIndex: 0,
+    mediaIndex: 0,
+    variantIndex: 0,
+    lineageAssignment: {
+        assetId: 'asset-1',
+        generationRequestId: 'request-1',
+        reasoningRunId: 'reasoning-1',
+        mediaRunId: 'media-1',
+        reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+        mediaModelId: 'Google:gemini-2.5-flash-image',
+        mediaType: 'image',
+        branchId: 'branch-1',
+        branchForkNodeId: 'fork-1',
+        lineageParentNodeId: 'fork-1',
+        referenceNodeIds: [],
+        sourceContextNodeIds: [],
+        promptText: 'draw it',
+        createdAt: 1,
+    },
+} as const
+
+const makePublisher = (generationRun: any = baseGenerationRun, ...rest: any[]) => {
     const published: Published[] = []
     const nats = {
         publish: (subject: string, payload: any) => {
             published.push({ subject, payload })
         },
     } as any
-    const storeImage = vi.fn(async (input: any) => ({
-        fileId: 'file-1',
-        url: '/api/images/ws-1/file-1',
-        isDuplicate: false,
-        size: input.buffer.length,
-        mimeType: input.mimeType,
-    }))
-    const publisher = new ImagePublisher(nats, storeImage, 'ws-1', 'thread-1', 'Google')
-    return { publisher, published, storeImage }
+    const publisher = new ImagePublisher(nats, 'org-1', 'ws-1', 'thread-1', 'Google', generationRun, ...rest)
+    return { publisher, published }
+}
+
+const makePublisherWithoutGenerationRun = () => {
+    const published: Published[] = []
+    const nats = {
+        publish: (subject: string, payload: any) => {
+            published.push({ subject, payload })
+        },
+    } as any
+    const publisher = new ImagePublisher(nats, 'org-1', 'ws-1', 'thread-1', 'Google')
+    return { publisher, published }
 }
 
 describe('ImagePublisher', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        projectionMocks.upsertGeneratedImageToCanvas.mockResolvedValue(undefined)
+        generatedAssetStorageMocks.attachGeneratedAssetNode.mockResolvedValue({ layoutRevision: 1, nodes: [] })
+        generatedAssetStorageMocks.settleGeneratedAssetOriginal.mockImplementation(async (input: any) => ({
+            assetId: input.generationRun.lineageAssignment.assetId,
+            organizationId: 'org-1',
+            url: `/api/assets/${input.generationRun.lineageAssignment.assetId}/renditions/original`,
+        }))
+        assetProvenanceMaterializerMocks.materializeAssetProvenance.mockResolvedValue(undefined)
+        assetMaintenanceQueueMocks.enqueueProvenanceRebuild.mockResolvedValue(undefined)
     })
 
     it('publishes a placeholder for partial stream images with an empty base64 payload', async () => {
-        const { publisher, published, storeImage } = makePublisher()
+        const { publisher, published } = makePublisher()
 
         await publisher.partial('', 2)
 
-        expect(storeImage).not.toHaveBeenCalled()
+        expect(generatedAssetStorageMocks.attachGeneratedAssetNode).toHaveBeenCalledWith(expect.objectContaining({
+            assetId: 'asset-1',
+            workspaceId: 'ws-1',
+            kind: 'image',
+        }))
         expect(published).toHaveLength(1)
-        expect(published[0]?.subject).toBe('ai.interaction.chat.receiveMessage.ws-1.thread-1')
+        expect(published[0]?.subject).toBe('ai.interaction.chat.receiveMessage.org-1.thread-1')
         expect(published[0]?.payload.content).toEqual(expect.objectContaining({
             status: STREAM_STATUS.IMAGE_PARTIAL,
             imageUrl: '',
-            fileId: '',
+            assetId: 'asset-1',
             partialIndex: 2,
             aiProvider: 'Google',
         }))
     })
 
-    it('stores partial images as objects and publishes image metadata', async () => {
-        const { publisher, published, storeImage } = makePublisher()
+    it('publishes partial image metadata for non-empty base64 payloads', async () => {
+        const { publisher, published } = makePublisher()
         const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
 
         await publisher.partial(pngBase64, 1)
 
-        expect(storeImage).toHaveBeenCalledWith(expect.objectContaining({
-            workspaceId: 'ws-1',
-            originalName: 'generated-image.png',
-            mimeType: 'image/png',
-        }))
         expect(published).toHaveLength(1)
         expect(published[0]?.payload.content).toMatchObject({
             status: STREAM_STATUS.IMAGE_PARTIAL,
-            imageUrl: '/api/images/ws-1/file-1',
-            fileId: 'file-1',
+            imageUrl: `data:image/png;base64,${pngBase64}`,
+            assetId: 'asset-1',
             partialIndex: 1,
             aiProvider: 'Google',
         })
     })
 
-    it('silently skips partial upload failures', async () => {
-        const published: { subject: string, payload: any }[] = []
-        const nats = {
-            publish: (subject: string, payload: any) => {
-                published.push({ subject, payload })
-            },
-        } as any
-        const storeImage = vi.fn(async () => {
-            throw new Error('storage temporarily unavailable')
-        })
+    it('throws when partial is called without a generationRun', async () => {
+        const { publisher } = makePublisherWithoutGenerationRun()
 
-        const publisher = new ImagePublisher(nats, storeImage, 'ws-1', 'thread-1', 'Google')
+        await expect(publisher.partial('', 0)).rejects.toThrow('Image partial is missing generationRun')
+    })
 
-        await expect(publisher.partial('aW1hZ2UtdmFsaWQ=', 0)).resolves.toBeUndefined()
-        expect(storeImage).toHaveBeenCalledOnce()
+    it('throws when partial is called without a lineageAssignment assetId', async () => {
+        const generationRun = { ...baseGenerationRun, lineageAssignment: undefined } as any
+        const { publisher } = makePublisher(generationRun)
+
+        await expect(publisher.partial('', 0)).rejects.toThrow('Image partial is missing Asset assignment')
+    })
+
+    it('silently skips partial publish failures', async () => {
+        const { publisher, published } = makePublisher()
+        const nats = { publish: () => { throw new Error('publish temporarily unavailable') } } as any
+        const publisher2 = new ImagePublisher(nats, 'org-1', 'ws-1', 'thread-1', 'Google', baseGenerationRun)
+
+        await expect(publisher2.partial('aW1hZ2UtdmFsaWQ=', 0)).resolves.toBeUndefined()
         expect(published).toHaveLength(0)
     })
 
     it('rejects empty final image bytes', async () => {
-        const { publisher, published, storeImage } = makePublisher()
+        const { publisher, published } = makePublisher()
 
         await expect(publisher.complete({
             imageBase64: '',
@@ -104,12 +158,12 @@ describe('ImagePublisher', () => {
             imageModelId: 'gemini-2.5-flash-image',
         })).rejects.toThrow('no final image bytes')
 
-        expect(storeImage).not.toHaveBeenCalled()
+        expect(generatedAssetStorageMocks.settleGeneratedAssetOriginal).not.toHaveBeenCalled()
         expect(published).toHaveLength(0)
     })
 
     it('rejects non-image final bytes', async () => {
-        const { publisher, published, storeImage } = makePublisher()
+        const { publisher, published } = makePublisher()
 
         await expect(publisher.complete({
             imageBase64: Buffer.from('not an image').toString('base64'),
@@ -118,12 +172,12 @@ describe('ImagePublisher', () => {
             imageModelId: 'gemini-2.5-flash-image',
         })).rejects.toThrow('not a PNG or JPEG image')
 
-        expect(storeImage).not.toHaveBeenCalled()
+        expect(generatedAssetStorageMocks.settleGeneratedAssetOriginal).not.toHaveBeenCalled()
         expect(published).toHaveLength(0)
     })
 
     it('rejects truncated PNG headers that are not full valid images', async () => {
-        const { publisher, published, storeImage } = makePublisher()
+        const { publisher, published } = makePublisher()
         const shortPng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d]).toString('base64')
 
         await expect(publisher.complete({
@@ -133,12 +187,24 @@ describe('ImagePublisher', () => {
             imageModelId: 'gemini-2.5-flash-image',
         })).rejects.toThrow('Image completion failed: provider returned bytes that are not a PNG or JPEG image')
 
-        expect(storeImage).not.toHaveBeenCalled()
+        expect(generatedAssetStorageMocks.settleGeneratedAssetOriginal).not.toHaveBeenCalled()
         expect(published).toHaveLength(0)
     })
 
+    it('throws when complete is called without a generationRun', async () => {
+        const { publisher } = makePublisherWithoutGenerationRun()
+        const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
+
+        await expect(publisher.complete({
+            imageBase64: pngBase64,
+            responseId: 'resp-1',
+            revisedPrompt: 'cat',
+            imageModelId: 'gemini-2.5-flash-image',
+        })).rejects.toThrow('Image completion is missing generationRun')
+    })
+
     it('stores JPEG final bytes with the JPEG MIME type', async () => {
-        const { publisher, published, storeImage } = makePublisher()
+        const { publisher, published } = makePublisher()
         const jpegBase64 = Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64')
 
         await publisher.complete({
@@ -148,7 +214,7 @@ describe('ImagePublisher', () => {
             imageModelId: 'gemini-2.5-flash-image',
         })
 
-        expect(storeImage).toHaveBeenCalledWith(expect.objectContaining({
+        expect(generatedAssetStorageMocks.settleGeneratedAssetOriginal).toHaveBeenCalledWith(expect.objectContaining({
             originalName: 'generated-image.jpg',
             mimeType: 'image/jpeg',
         }))
@@ -156,21 +222,12 @@ describe('ImagePublisher', () => {
     })
 
     it('propagates storage errors from IMAGE_COMPLETE', async () => {
+        generatedAssetStorageMocks.settleGeneratedAssetOriginal.mockRejectedValueOnce(new Error('temporary object store write failure'))
         const { publisher, published } = makePublisher()
-        const storeImage = vi.fn(async () => {
-            throw new Error('temporary object store write failure')
-        })
-        const failingPublisher = new ImagePublisher(
-            { publish: () => {} } as any,
-            storeImage,
-            'ws-1',
-            'thread-1',
-            'Google',
-        )
         const jpegBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]).toString('base64')
 
         await expect(
-            failingPublisher.complete({
+            publisher.complete({
                 imageBase64: jpegBase64,
                 responseId: 'resp-1',
                 revisedPrompt: 'cat',
@@ -181,39 +238,8 @@ describe('ImagePublisher', () => {
     })
 
     it('passes generation-run metadata through partial and complete image events', async () => {
-        const generationRun = {
-            generationRequestId: 'request-1',
-            reasoningRunId: 'reasoning-1',
-            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
-            mediaModelId: 'Google:gemini-2.5-flash-image',
-            mediaType: 'image',
-            reasoningIndex: 0,
-            mediaIndex: 0,
-            variantIndex: 0,
-        } as const
         const onProseMirrorContent = vi.fn()
-        const storeImage = vi.fn(async (input: any) => ({
-            fileId: 'file-1',
-            url: '/api/images/ws-1/file-1',
-            isDuplicate: false,
-            size: input.buffer.length,
-            mimeType: input.mimeType,
-        }))
-        const published: { subject: string, payload: any }[] = []
-        const nats = {
-            publish: (subject: string, payload: any) => {
-                published.push({ subject, payload })
-            },
-        } as any
-        const publisher = new ImagePublisher(
-            nats,
-            storeImage,
-            'ws-1',
-            'thread-1',
-            'Google',
-            generationRun,
-            onProseMirrorContent,
-        )
+        const { publisher, published } = makePublisher(baseGenerationRun, onProseMirrorContent)
 
         const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
         await publisher.partial(pngBase64, 2)
@@ -227,73 +253,27 @@ describe('ImagePublisher', () => {
         expect(published[0]?.payload.content).toMatchObject({
             status: STREAM_STATUS.IMAGE_PARTIAL,
             partialIndex: 2,
-            generationRun,
+            generationRun: baseGenerationRun,
         })
         expect(published[1]?.payload.content).toMatchObject({
             status: STREAM_STATUS.IMAGE_COMPLETE,
             responseId: 'resp-1',
             revisedPrompt: 'cat prompt',
-            generationRun,
+            generationRun: baseGenerationRun,
         })
         expect(onProseMirrorContent).toHaveBeenCalledTimes(2)
         expect(onProseMirrorContent.mock.calls[0]?.[0]).toMatchObject({
             status: STREAM_STATUS.IMAGE_PARTIAL,
-            generationRun,
+            generationRun: baseGenerationRun,
         })
         expect(onProseMirrorContent.mock.calls[1]?.[0]).toMatchObject({
             status: STREAM_STATUS.IMAGE_COMPLETE,
-            generationRun,
+            generationRun: baseGenerationRun,
         })
     })
 
-    it('persists final generated images to API-owned canvas projection before publishing completion', async () => {
-        const generationRun = {
-            generationRequestId: 'request-1',
-            reasoningRunId: 'reasoning-1',
-            mediaRunId: 'media-1',
-            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
-            mediaModelId: 'Google:gemini-2.5-flash-image',
-            mediaType: 'image',
-            reasoningIndex: 0,
-            mediaIndex: 0,
-            variantIndex: 0,
-            lineageAssignment: {
-                generationRequestId: 'request-1',
-                reasoningRunId: 'reasoning-1',
-                mediaRunId: 'media-1',
-                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
-                mediaModelId: 'Google:gemini-2.5-flash-image',
-                mediaType: 'image',
-                branchId: 'branch-1',
-                branchForkNodeId: 'fork-1',
-                lineageParentNodeId: 'fork-1',
-                referenceNodeIds: [],
-                sourceContextNodeIds: [],
-                promptText: 'draw it',
-                createdAt: 1,
-            },
-        } as const
-        const published: Published[] = []
-        const nats = {
-            publish: (subject: string, payload: any) => {
-                published.push({ subject, payload })
-            },
-        } as any
-        const storeImage = vi.fn(async (input: any) => ({
-            fileId: 'file-1',
-            url: '/api/images/ws-1/file-1',
-            isDuplicate: false,
-            size: input.buffer.length,
-            mimeType: input.mimeType,
-        }))
-        const publisher = new ImagePublisher(
-            nats,
-            storeImage,
-            'ws-1',
-            'thread-1',
-            'Google',
-            generationRun,
-        )
+    it('settles the generated Asset and attaches canvas geometry before publishing completion', async () => {
+        const { publisher, published } = makePublisher()
         const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
 
         await publisher.complete({
@@ -303,65 +283,34 @@ describe('ImagePublisher', () => {
             imageModelId: 'gemini-2.5-flash-image',
         })
 
-        expect(projectionMocks.upsertGeneratedImageToCanvas).toHaveBeenCalledWith({
+        expect(generatedAssetStorageMocks.settleGeneratedAssetOriginal).toHaveBeenCalledWith(expect.objectContaining({
+            generationRun: baseGenerationRun,
             workspaceId: 'ws-1',
-            aiChatThreadId: 'thread-1',
-            imageUrl: '/api/images/ws-1/file-1',
-            fileId: 'file-1',
+            originalName: 'generated-image.png',
+            mimeType: 'image/png',
+            kind: 'image',
+        }))
+        expect(generatedAssetStorageMocks.attachGeneratedAssetNode).toHaveBeenCalledWith(expect.objectContaining({
+            assetId: 'asset-1',
+            workspaceId: 'ws-1',
+            kind: 'image',
+            generationRun: baseGenerationRun,
+            conversationAssetId: 'thread-1',
+        }))
+        expect(published[0]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.IMAGE_COMPLETE,
+            imageUrl: '/api/assets/asset-1/renditions/original',
+            assetId: 'asset-1',
             responseId: 'resp-1',
             revisedPrompt: 'draw it clearly',
             aiProvider: 'Google',
             imageModelProvider: 'Google',
             imageModelId: 'gemini-2.5-flash-image',
-            generationRun,
         })
-        expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.IMAGE_COMPLETE)
     })
 
-    it('still publishes final image completion when canvas projection fails', async () => {
-        projectionMocks.upsertGeneratedImageToCanvas.mockRejectedValueOnce(new Error('canvas write failed'))
-        const generationRun = {
-            generationRequestId: 'request-1',
-            reasoningRunId: 'reasoning-1',
-            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
-            mediaModelId: 'Google:gemini-2.5-flash-image',
-            mediaType: 'image',
-            reasoningIndex: 0,
-            lineageAssignment: {
-                generationRequestId: 'request-1',
-                reasoningRunId: 'reasoning-1',
-                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
-                mediaModelId: 'Google:gemini-2.5-flash-image',
-                mediaType: 'image',
-                branchId: 'branch-1',
-                branchForkNodeId: 'fork-1',
-                lineageParentNodeId: 'fork-1',
-                referenceNodeIds: [],
-                sourceContextNodeIds: [],
-                promptText: 'draw it',
-                createdAt: 1,
-            },
-        } as const
-        const published: Published[] = []
-        const nats = {
-            publish: (subject: string, payload: any) => {
-                published.push({ subject, payload })
-            },
-        } as any
-        const publisher = new ImagePublisher(
-            nats,
-            vi.fn(async (input: any) => ({
-                fileId: 'file-1',
-                url: '/api/images/ws-1/file-1',
-                isDuplicate: false,
-                size: input.buffer.length,
-                mimeType: input.mimeType,
-            })),
-            'ws-1',
-            'thread-1',
-            'Google',
-            generationRun,
-        )
+    it('materializes Asset provenance after publishing completion', async () => {
+        const { publisher } = makePublisher()
         const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
 
         await publisher.complete({
@@ -371,68 +320,37 @@ describe('ImagePublisher', () => {
             imageModelId: 'gemini-2.5-flash-image',
         })
 
-        expect(projectionMocks.logCanvasProjectionError).toHaveBeenCalledWith(
-            'failed to persist generated image to canvas',
-            expect.any(Error),
-        )
-        expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.IMAGE_COMPLETE)
-    })
-
-    it('attempts canvas projection during completion even when generationRun requestKind is media-generation-matrix', async () => {
-        const generationRun = {
-            requestKind: 'media-generation-matrix',
-            generationRequestId: 'request-1',
-            reasoningRunId: 'reasoning-1',
-            mediaRunId: 'media-1',
-            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
-            mediaModelId: 'Google:gemini-2.5-flash-image',
-            mediaType: 'image',
-            reasoningIndex: 0,
-            mediaIndex: 0,
-            variantIndex: 0,
-        } as const
-        const published: Published[] = []
-        const nats = {
-            publish: (subject: string, payload: any) => {
-                published.push({ subject, payload })
-            },
-        } as any
-        const storeImage = vi.fn(async (input: any) => ({
-            fileId: 'file-1',
-            url: '/api/images/ws-1/file-1',
-            isDuplicate: false,
-            size: input.buffer.length,
-            mimeType: input.mimeType,
-        }))
-        const publisher = new ImagePublisher(
-            nats,
-            storeImage,
-            'ws-1',
-            'thread-1',
-            'Google',
-            generationRun,
-        )
-        const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
-
-        await publisher.complete({
-            imageBase64: pngBase64,
-            responseId: 'resp-1',
-            revisedPrompt: 'draw it clearly',
-            imageModelId: 'gemini-2.5-flash-image',
-        })
-
-        expect(projectionMocks.upsertGeneratedImageToCanvas).toHaveBeenCalledWith(expect.objectContaining({
+        expect(assetProvenanceMaterializerMocks.materializeAssetProvenance).toHaveBeenCalledWith({
+            assetId: 'asset-1',
+            organizationId: 'org-1',
             workspaceId: 'ws-1',
-            aiChatThreadId: 'thread-1',
-            imageUrl: '/api/images/ws-1/file-1',
-            fileId: 'file-1',
+            conversationAssetId: 'thread-1',
+            generationRun: baseGenerationRun,
+            terminalStatus: 'completed',
+        })
+        expect(assetMaintenanceQueueMocks.enqueueProvenanceRebuild).not.toHaveBeenCalled()
+    })
+
+    it('enqueues a provenance rebuild when materialization fails', async () => {
+        assetProvenanceMaterializerMocks.materializeAssetProvenance.mockRejectedValueOnce(new Error('provenance write failed'))
+        const { publisher, published } = makePublisher()
+        const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
+
+        await publisher.complete({
+            imageBase64: pngBase64,
             responseId: 'resp-1',
             revisedPrompt: 'draw it clearly',
-            aiProvider: 'Google',
-            imageModelProvider: 'Google',
             imageModelId: 'gemini-2.5-flash-image',
-            generationRun,
-        }))
+        })
+
+        expect(assetMaintenanceQueueMocks.enqueueProvenanceRebuild).toHaveBeenCalledWith({
+            assetId: 'asset-1',
+            organizationId: 'org-1',
+            workspaceId: 'ws-1',
+            conversationAssetId: 'thread-1',
+            generationRun: baseGenerationRun,
+            terminalStatus: 'completed',
+        })
         expect(published[0]?.payload.content.status).toBe(STREAM_STATUS.IMAGE_COMPLETE)
     })
 
@@ -443,22 +361,15 @@ describe('ImagePublisher', () => {
                 published.push({ subject, payload })
             },
         } as any
-        const storeImage = vi.fn(async (input: any) => ({
-            fileId: 'file-1',
-            url: '/api/images/ws-1/file-1',
-            isDuplicate: false,
-            size: input.buffer.length,
-            mimeType: input.mimeType,
-        }))
         const onProseMirrorContent = vi.fn()
         const onPipelineContent = vi.fn()
         const publisher = new ImagePublisher(
             nats,
-            storeImage,
+            'org-1',
             'ws-1',
             'thread-1',
             'Google',
-            undefined,
+            baseGenerationRun,
             onProseMirrorContent,
             onPipelineContent,
         )
@@ -470,7 +381,7 @@ describe('ImagePublisher', () => {
         expect(onProseMirrorContent).not.toHaveBeenCalled()
         expect(onPipelineContent).toHaveBeenCalledWith(expect.objectContaining({
             status: STREAM_STATUS.IMAGE_PARTIAL,
-            fileId: 'file-1',
+            assetId: 'asset-1',
             partialIndex: 3,
             aiProvider: 'Google',
         }))
@@ -507,14 +418,19 @@ describe('readImageIntrinsicSize', () => {
 describe('ImagePublisher canvas geometry', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        generatedAssetStorageMocks.settleGeneratedAssetOriginal.mockImplementation(async (input: any) => ({
+            assetId: input.generationRun.lineageAssignment.assetId,
+            organizationId: 'org-1',
+            url: `/api/assets/${input.generationRun.lineageAssignment.assetId}/renditions/original`,
+        }))
     })
 
-    it('threads the API-resolved canvasGeometry onto the IMAGE_COMPLETE event', async () => {
+    it('threads the resolved canvasGeometry onto the IMAGE_COMPLETE event', async () => {
         const canvasGeometry = {
             layoutRevision: 99,
-            nodes: [{ nodeId: 'node-file-1', position: { x: 1, y: 2 }, dimensions: { width: 3, height: 4 } }],
+            nodes: [{ nodeId: 'node-asset-1', position: { x: 1, y: 2 }, dimensions: { width: 3, height: 4 } }],
         }
-        projectionMocks.upsertGeneratedImageToCanvas.mockResolvedValueOnce(canvasGeometry as any)
+        generatedAssetStorageMocks.attachGeneratedAssetNode.mockResolvedValueOnce(canvasGeometry as any)
         const { publisher, published } = makePublisher()
 
         await publisher.complete({

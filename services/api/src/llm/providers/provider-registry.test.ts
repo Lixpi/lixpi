@@ -64,7 +64,7 @@ describe('ProviderRegistry', () => {
     it('creates and reuses providers by instance key, but refuses unknown providers', async () => {
         const { natsService } = makeDeps() as any
         const { ctor } = createFakeProvider()
-        const registry = new ProviderRegistry(natsService, vi.fn(), vi.fn(), { Anthropic: ctor as any })
+        const registry = new ProviderRegistry(natsService, { Anthropic: ctor as any })
         const create = ctor
 
         const first = registry.getOrCreate('ws-1:thread-1', 'Anthropic')
@@ -81,7 +81,7 @@ describe('ProviderRegistry', () => {
         const { process, stop, ctor } = createFakeProvider(resolver)
         const create = ctor
         const deps = makeDeps()
-        const registry = new ProviderRegistry(deps.natsService, deps.storeWorkspaceImage, deps.storeWorkspaceVideo, { Anthropic: create as any })
+        const registry = new ProviderRegistry(deps.natsService, { Anthropic: create as any })
 
         const first = registry.process('ws-1:thread-1', 'Anthropic', createState())
         const second = registry.process('ws-1:thread-1', 'Anthropic', createState())
@@ -101,15 +101,16 @@ describe('ProviderRegistry', () => {
         const { process, stop, ctor } = createFakeProvider(resolver)
         const create = ctor
         const deps = makeDeps()
-        const registry = new ProviderRegistry(deps.natsService, deps.storeWorkspaceImage, deps.storeWorkspaceVideo, { Anthropic: create as any })
+        const registry = new ProviderRegistry(deps.natsService, { Anthropic: create as any })
 
         const processPromise = registry.process('ws-1:thread-1', 'Anthropic', createState(), {
             requestGroupKey: 'ws-1:thread-1:group-1',
         })
-        await registry.stopGroup('ws-1:thread-1:group-1')
+        const stopGroupPromise = registry.stopGroup('ws-1:thread-1:group-1')
+        resolver.release()
+        await stopGroupPromise
 
         expect(stop).toHaveBeenCalledOnce()
-        resolver.release()
         await processPromise
         expect(process).toHaveBeenCalledOnce()
     })
@@ -128,7 +129,7 @@ describe('ProviderRegistry', () => {
                 return { process: providerB.process, stop: providerB.stop, providerName: providerB.providerName }
             })
         const deps = makeDeps()
-        const registry = new ProviderRegistry(deps.natsService, deps.storeWorkspaceImage, deps.storeWorkspaceVideo, { Anthropic: create as any })
+        const registry = new ProviderRegistry(deps.natsService, { Anthropic: create as any })
 
         registry.createTransient('ws:thread:image', 'Anthropic')
         registry.createTransient('ws:thread:video', 'Anthropic')
@@ -144,7 +145,7 @@ describe('ProviderRegistry', () => {
         const resolver = { release: () => undefined as void }
         const { stop, ctor } = createFakeProvider(resolver)
         const deps = makeDeps()
-        const registry = new ProviderRegistry(deps.natsService, deps.storeWorkspaceImage, deps.storeWorkspaceVideo, { Anthropic: ctor as any })
+        const registry = new ProviderRegistry(deps.natsService, { Anthropic: ctor as any })
 
         registry.createTransient('ws-1:thread-1:reasoning:alpha', 'Anthropic')
         await registry.stopGroupsWithPrefix('ws-1:thread-1')
@@ -154,7 +155,7 @@ describe('ProviderRegistry', () => {
 
     it('does not stop unknown groups, and no-op is safe', async () => {
         const deps = makeDeps()
-        const registry = new ProviderRegistry(deps.natsService, deps.storeWorkspaceImage, deps.storeWorkspaceVideo, {})
+        const registry = new ProviderRegistry(deps.natsService, {})
         await expect(registry.stopGroup('missing-group')).resolves.toBeUndefined()
         await expect(registry.stopGroupsWithPrefix('never-present')).resolves.toBeUndefined()
     })
