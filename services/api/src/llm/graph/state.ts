@@ -182,6 +182,7 @@ export type ProviderState = {
     workflowId?: string | undefined
     workflowSeq?: number | undefined
     metricsOperationId?: string | undefined
+    metricsAdmissionApproved?: boolean | undefined
 
     // Multi-model media generation request-group metadata.
     generationRun?: MediaGenerationRunMeta | undefined
@@ -251,6 +252,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     workflowId: { reducer: keep },
     workflowSeq: { reducer: keep },
     metricsOperationId: { reducer: keep },
+    metricsAdmissionApproved: { reducer: keep },
 
     generationRun: { reducer: keep },
     mediaFanoutPlan: { reducer: keep },

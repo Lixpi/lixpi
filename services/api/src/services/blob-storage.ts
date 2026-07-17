@@ -69,7 +69,9 @@ export const putContentAddressedBlob = async ({
 
     await ensureOrganizationAssetStorage(organizationId)
     const existing = await natsService.getObjectInfo(bucketName, objectKey)
-    if (!existing) {
+    // NATS Object Store keeps tombstone metadata after deletion. A tombstone has
+    // no readable bytes and must be replaced, not validated as a live object.
+    if (!existing || existing.deleted) {
         await natsService.putObject(bucketName, objectKey, bytes, {
             name: objectKey,
             description: description ?? `sha256:${blobHash}`,

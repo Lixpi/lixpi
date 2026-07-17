@@ -290,6 +290,34 @@ describe('BaseProvider image fanout errors', () => {
 })
 
 describe('BaseProvider request validation', () => {
+    it('denies metrics admission before resolving or persisting media lineage', async () => {
+        const nats = makeFakeNats()
+        const metricsCheck = vi.fn().mockResolvedValue({ approved: false, reason: 'metrics_unreachable' })
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: nats.fake,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+            metrics: { enabled: true, check: metricsCheck },
+        } as BaseProviderDeps)
+        const planMediaBranchLineage = vi.spyOn(provider as any, 'planMediaBranchLineage')
+        const streamTokens = vi.spyOn(provider as any, 'streamTokens')
+
+        const result = await provider.process({
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
+            messages: [{ role: 'user', content: 'make a picture' }],
+            enableImageGeneration: true,
+            eventMeta: { userId: 'user-1', organizationId: 'organization-1' },
+        })
+
+        expect(metricsCheck).toHaveBeenCalledOnce()
+        expect(planMediaBranchLineage).not.toHaveBeenCalled()
+        expect(streamTokens).not.toHaveBeenCalled()
+        expect(result.error).toContain('metrics_unreachable')
+    })
+
     it('validates required model and thread identity fields', async () => {
         const deps = {
             natsService: { publish: vi.fn() } as any,
@@ -599,13 +627,13 @@ describe('BaseProvider fanout', () => {
         expect((deps.runVideoRouter as any)).not.toHaveBeenCalled()
     })
 
-    it('routes to video fanout when both image and video prompts are present', async () => {
+    it('fans out to both selected media modalities when both prompts are present', async () => {
         const deps = {
             natsService: { publish: vi.fn() } as any,
             storeWorkspaceImage: vi.fn(),
             storeWorkspaceVideo: vi.fn(),
             usageReporter: {} as any,
-            runImageRouter: vi.fn(async () => ({ generatedImages: ['should-not-run'] })),
+            runImageRouter: vi.fn(async () => ({ generatedImages: ['image-result'] })),
             runVideoRouter: vi.fn(async () => ({ generatedVideos: ['only-video'] })),
         } as BaseProviderDeps
         const provider = new TestProvider('ws1:thread1', deps)
@@ -615,9 +643,15 @@ describe('BaseProvider fanout', () => {
             generatedImagePrompt: 'Paint this reference.',
         }))
 
-        expect(result).toEqual({ generatedVideos: ['only-video', 'only-video'] })
+        expect(result).toEqual({
+            generatedImages: ['image-result', 'image-result'],
+            generatedVideos: ['only-video', 'only-video'],
+            error: undefined,
+            errorCode: undefined,
+            errorType: undefined,
+        })
         expect((deps.runVideoRouter as any)).toHaveBeenCalledTimes(2)
-        expect((deps.runImageRouter as any)).not.toHaveBeenCalled()
+        expect((deps.runImageRouter as any)).toHaveBeenCalledTimes(2)
     })
 })
 

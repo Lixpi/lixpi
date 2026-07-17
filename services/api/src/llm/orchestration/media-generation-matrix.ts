@@ -225,6 +225,32 @@ export class MediaGenerationMatrixOrchestrator {
         const primaryVideoModel = normalized.videoModels[0]
         const primaryImageOptions = primaryImageModel ? normalized.imageModelOptions[primaryImageModel.modelId] : undefined
         const primaryVideoOptions = primaryVideoModel ? normalized.videoModelOptions[primaryVideoModel.modelId] : undefined
+        const admissionInstanceKeys = normalized.reasoningModels.map((_reasoningModel, reasoningIndex) => (
+            buildReasoningInstanceKey(normalized.requestGroupKey, reasoningIndex)
+        ))
+        let admissions: Partial<ProviderState>[]
+        try {
+            admissions = await Promise.all(normalized.reasoningModels.map(async (reasoningModel, reasoningIndex) => {
+                const instanceKey = buildReasoningInstanceKey(normalized.requestGroupKey, reasoningIndex)
+                const provider = this.registry.getOrCreate(instanceKey, reasoningModel.provider)
+                return provider.preflightAdmission({
+                    ...requestData,
+                    workspaceId: requestData.workspaceId,
+                    aiChatThreadId: requestData.aiChatThreadId,
+                    instanceKey,
+                    provider: reasoningModel.provider,
+                    modelVersion: reasoningModel.meta.modelVersion,
+                    aiModelMetaInfo: reasoningModel.meta,
+                    messages: requestData.messages ?? [],
+                    eventMeta: requestData.eventMeta ?? {},
+                    enableImageGeneration: normalized.imageModels.length > 0,
+                    enableVideoGeneration: normalized.videoModels.length > 0,
+                } as ProviderState)
+            }))
+        } catch (error) {
+            admissionInstanceKeys.forEach(instanceKey => this.registry.remove(instanceKey))
+            throw error
+        }
         info('[MEDIA_MATRIX] Normalized media generation request', {
             generationRequestId: normalized.generationRequestId,
             aiChatThreadId: requestData.aiChatThreadId,
@@ -275,6 +301,7 @@ export class MediaGenerationMatrixOrchestrator {
                 })
                 return this.registry.process(instanceKey, reasoningModel.provider, {
                     ...requestData,
+                    ...admissions[reasoningIndex],
 
                     // ── Shared-preflight → fanout propagation (CRITICAL INVARIANT) ──
                     // `runSharedPreflight()` resolves workspace context, `/use`

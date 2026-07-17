@@ -166,6 +166,86 @@ describe('AiModel.getAvailableAiModels', () => {
     })
 })
 
+describe('AiModel.getAvailableAiModels — settings-configured defaults', () => {
+    it('prefers the API-configured default model id over an isDefaultFor flag on a different model', async () => {
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [
+                {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet',
+                    modelVersion: 'claude-sonnet',
+                    sortingPosition: 1,
+                    modalities: [{ modality: 'text' }],
+                    isDefaultFor: ['reasoning'],
+                    pricing: {},
+                },
+                {
+                    // Matches settings.aiModels.defaultReasoningModelId exactly.
+                    provider: 'Anthropic',
+                    model: 'claude-haiku-4-5',
+                    modelVersion: 'claude-haiku-4-5',
+                    sortingPosition: 2,
+                    modalities: [{ modality: 'text' }],
+                    pricing: {},
+                },
+            ],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+
+        expect(result.defaultModels.reasoning).toBe('Anthropic:claude-haiku-4-5')
+    })
+
+    it('matches a dated snapshot alias against the configured default when no exact id is in the catalog', async () => {
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [
+                {
+                    // No exact "Anthropic:claude-haiku-4-5" entry, but a dated snapshot of it exists.
+                    provider: 'Anthropic',
+                    model: 'claude-haiku-4-5-20250815',
+                    modelVersion: 'claude-haiku-4-5-20250815',
+                    sortingPosition: 1,
+                    modalities: [{ modality: 'text' }],
+                    pricing: {},
+                },
+                {
+                    provider: 'Anthropic',
+                    model: 'claude-haiku-4-5-20250601',
+                    modelVersion: 'claude-haiku-4-5-20250601',
+                    sortingPosition: 2,
+                    modalities: [{ modality: 'text' }],
+                    pricing: {},
+                },
+            ],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+
+        // Picks the most recent dated snapshot, not just any match.
+        expect(result.defaultModels.reasoning).toBe('Anthropic:claude-haiku-4-5-20250815')
+    })
+
+    it('falls back to the isDefaultFor flag when the configured default id is absent from the catalog', async () => {
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [
+                {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet',
+                    modelVersion: 'claude-sonnet',
+                    sortingPosition: 1,
+                    modalities: [{ modality: 'text' }],
+                    isDefaultFor: ['reasoning'],
+                    pricing: {},
+                },
+            ],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+
+        expect(result.defaultModels.reasoning).toBe('Anthropic:claude-sonnet')
+    })
+})
+
 describe('AiModel.getAiModel', () => {
     it('omits pricing metadata by default and preserves request contract fields', async () => {
         const modelRecord = {

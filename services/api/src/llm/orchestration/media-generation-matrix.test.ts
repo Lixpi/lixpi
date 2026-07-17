@@ -10,20 +10,42 @@ import * as mediaBranchResolver from '../graph/media-branch-resolver.ts'
 import * as workspaceContextResolver from '../graph/workspace-context-resolver.ts'
 import { buildMediaGenerationRequestGroupKey, buildMediaGenerationThreadGroupPrefix, MediaGenerationMatrixOrchestrator, type MatrixRequestData } from './media-generation-matrix.ts'
 
+const generatedAssetStorageMocks = vi.hoisted(() => ({
+    ensurePendingGeneratedAssets: vi.fn(),
+}))
+const canvasProjectionMocks = vi.hoisted(() => ({
+    settleMediaGenerationRequestOnCanvas: vi.fn(),
+}))
+const aiChatStreamAssemblerMocks = vi.hoisted(() => ({
+    settlePersistedAiChatGenerationRequest: vi.fn(),
+}))
+
+vi.mock('../../services/generated-asset-storage.ts', () => generatedAssetStorageMocks)
+vi.mock('../../services/asset-canvas-projection.ts', () => canvasProjectionMocks)
+vi.mock('../../prosemirror/ai-chat-stream-assembler.ts', () => aiChatStreamAssemblerMocks)
+
 const natsService = { publish: vi.fn() } as any
 
 const createRegistry = () => {
     const process = vi.fn(async () => ({ }))
+    const preflightAdmission = vi.fn(async () => ({ metricsAdmissionApproved: true }))
+    const getOrCreate = vi.fn(() => ({ preflightAdmission }))
+    const remove = vi.fn()
     const stopGroup = vi.fn(async () => undefined)
     const stopGroupsWithPrefix = vi.fn(async () => undefined)
     const shutdown = vi.fn(async () => undefined)
     return {
         process,
+        preflightAdmission,
+        getOrCreate,
+        remove,
         stopGroup,
         stopGroupsWithPrefix,
         shutdown,
         asRegistry: {
             process,
+            getOrCreate,
+            remove,
             stopGroup,
             stopGroupsWithPrefix,
             shutdown,
@@ -37,6 +59,7 @@ const createRequest = (overrides: Partial<MatrixRequestData> = {}): MatrixReques
     aiReasoningModels: ['Anthropic:claude-sonnet-4-6'],
     aiImageModels: ['Google:gemini-2.5-flash-image'],
     aiVideoModels: ['Google:veo-3.1-generate-preview'],
+    eventMeta: { organizationId: 'organization-1', userId: 'user-1' },
     imageSize: '1024x1024',
     videoAspectRatio: '16:9',
     videoResolution: '720p',
@@ -50,6 +73,12 @@ let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
 let consoleInfoSpy: ReturnType<typeof vi.spyOn> | null = null
 
 beforeEach(() => {
+    generatedAssetStorageMocks.ensurePendingGeneratedAssets.mockClear()
+    canvasProjectionMocks.settleMediaGenerationRequestOnCanvas.mockClear()
+    aiChatStreamAssemblerMocks.settlePersistedAiChatGenerationRequest.mockClear()
+    generatedAssetStorageMocks.ensurePendingGeneratedAssets.mockResolvedValue(undefined)
+    canvasProjectionMocks.settleMediaGenerationRequestOnCanvas.mockResolvedValue(null)
+    aiChatStreamAssemblerMocks.settlePersistedAiChatGenerationRequest.mockResolvedValue({})
     debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
     debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
     debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
@@ -150,6 +179,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         const state1 = registry.process.mock.calls[1]?.[2] as any
 
         expect(state0.preflightResolved).toBe(true)
+        expect(state0.metricsAdmissionApproved).toBe(true)
         expect(state0.mediaFanoutPlan.imageModels).toHaveLength(1)
         expect(state0.mediaFanoutPlan.videoModels).toHaveLength(0)
         expect(state0.generationRun.reasoningRunId).toBe('request-2:reasoning:0')
@@ -175,6 +205,14 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                     modalities: [{ modality: 'text' }],
                 } as any
             }
+            if (model === 'veo-3.1-generate-preview') {
+                return {
+                    provider: 'Google',
+                    model,
+                    modelVersion: model,
+                    modalities: [{ modality: 'video_generation' }],
+                } as any
+            }
             return {
                 provider: 'Google',
                 model,
@@ -196,7 +234,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                 generationRequestId: 'request-image-only',
                 reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
                 imageModelIds: ['Google:image-a', 'Google:image-b'],
-                videoModelIds: ['Google:veo-3.1-generate-preview'],
+                videoModelIds: [],
                 useMultipleImageModels: true,
                 useMultipleVideoModels: false,
                 imageOptions: { imageSize: '1024x1024' },
@@ -583,6 +621,31 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         expect(resolveFeaturesSpy).not.toHaveBeenCalled()
         expect(resolveMediaBranchSpy).not.toHaveBeenCalled()
         expect(registry.process).not.toHaveBeenCalled()
+    })
+
+    it('rejects metrics admission before shared preflight persists pending media lineage', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
+        const workspaceContextSpy = vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext')
+
+        getAiModel.mockImplementation(async ({ model }: { provider: string; model: string }) => {
+            if (model === 'claude-sonnet-4-6') {
+                return { provider: 'Anthropic', model, modelVersion: model, modalities: [{ modality: 'text' }] } as any
+            }
+            if (model === 'gemini-2.5-flash-image') {
+                return { provider: 'Google', model, modelVersion: model, modalities: [{ modality: 'image_generation' }] } as any
+            }
+            return { provider: 'Google', model, modelVersion: model, modalities: [{ modality: 'video_generation' }] } as any
+        })
+        registry.preflightAdmission.mockRejectedValueOnce(new Error('Metrics: balance does not cover this workflow'))
+
+        await expect(orchestrator.process(createRequest())).rejects.toThrow('Metrics: balance does not cover this workflow')
+
+        expect(workspaceContextSpy).not.toHaveBeenCalled()
+        expect(generatedAssetStorageMocks.ensurePendingGeneratedAssets).not.toHaveBeenCalled()
+        expect(registry.process).not.toHaveBeenCalled()
+        expect(registry.remove).toHaveBeenCalledOnce()
     })
 
     it('propagates every preflight-resolved field — including a future media field — to every fanout child', async () => {
