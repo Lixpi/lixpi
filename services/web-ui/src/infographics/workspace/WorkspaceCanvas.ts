@@ -165,7 +165,7 @@ import {
     updatePendingCanvasVisualCommitViewport,
     type PendingCanvasVisualCommit,
 } from '$src/infographics/workspace/workspaceRenderStatePlan.ts'
-import { shouldPreserveLiveViewportForViewportOnlyRender } from '$src/infographics/workspace/workspaceViewportStatePlan.ts'
+import { shouldPreserveLiveViewportForSameWorkspaceRender } from '$src/infographics/workspace/workspaceViewportStatePlan.ts'
 import { planWorkspaceRenderTransition } from '$src/infographics/workspace/workspaceRenderTransitionPlan.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
@@ -14548,12 +14548,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
             }
             const liveViewport = getLiveViewport()
-            const shouldPreserveLiveViewport = shouldPreserveLiveViewportForViewportOnlyRender({
+            const shouldPreserveLiveViewport = shouldPreserveLiveViewportForSameWorkspaceRender({
                 incomingViewport: effectiveCanvasState?.viewport,
                 liveViewport,
-                viewportChanged,
-                visualStateChanged,
-                needsRerender,
                 workspaceChanged,
             })
 

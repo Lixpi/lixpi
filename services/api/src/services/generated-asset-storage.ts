@@ -30,6 +30,11 @@ import { enqueueRenditionRetry } from './asset-maintenance-queue.ts'
 
 const { ORG_NAME, STAGE } = process.env
 
+const isRetryableCanvasAttachmentConflict = (error: unknown): boolean => {
+    return isTransactionConditionalCheckFailure(error)
+        || (error instanceof Error && error.message === 'STALE_CANVAS_STATE')
+}
+
 export const ensurePendingGeneratedAssets = async ({
     lineagePlan,
     workspaceId,
@@ -301,7 +306,7 @@ export const attachGeneratedAssetNode = async ({
             })
         } catch (error) {
             lastError = error
-            if (isTransactionConditionalCheckFailure(error)) continue
+            if (isRetryableCanvasAttachmentConflict(error)) continue
             throw error
         }
     }

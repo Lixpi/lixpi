@@ -102,7 +102,7 @@ const canvasState: CanvasState = {
 
 beforeEach(() => {
     vi.useRealTimers()
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     mocks.getWorkspace.mockResolvedValue({
         workspaceId: 'workspace-1',
         updatedAt: 100,
@@ -204,6 +204,85 @@ describe('attachGeneratedAssetNode', () => {
         expect(mocks.projectGeneratedAssetNode).toHaveBeenCalledTimes(2)
         expect(mocks.attachWorkspaceReference).toHaveBeenCalledTimes(2)
         expect(geometry.layoutRevision).toBe(102)
+    })
+
+    it('re-reads and reprojects when the workspace mutation rejects a stale pre-transaction snapshot', async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(100)
+        mocks.getAssetRecord.mockResolvedValue(asset(false))
+        mocks.getWorkspace
+            .mockResolvedValueOnce({
+                workspaceId: 'workspace-1',
+                updatedAt: 100,
+                canvasStateUpdatedAt: 100,
+                canvasState,
+            })
+            .mockResolvedValueOnce({
+                workspaceId: 'workspace-1',
+                updatedAt: 101,
+                canvasStateUpdatedAt: 101,
+                canvasState,
+            })
+        mocks.attachWorkspaceReference
+            .mockRejectedValueOnce(new Error('STALE_CANVAS_STATE'))
+            .mockResolvedValueOnce({
+                assetId: 'asset-1',
+                referenceKey: 'workspace#workspace-1',
+                type: 'workspace',
+                nodeIds: ['pending-image-media-1'],
+                createdAt: 1,
+                updatedAt: 102,
+            })
+
+        const geometry = await attachGeneratedAssetNode({
+            assetId: 'asset-1',
+            workspaceId: 'workspace-1',
+            kind: 'image',
+            aspectRatio: 1,
+            generationRun,
+            conversationAssetId: 'thread-1',
+        })
+
+        expect(mocks.getWorkspace).toHaveBeenCalledTimes(2)
+        expect(mocks.projectGeneratedAssetNode).toHaveBeenCalledTimes(2)
+        expect(mocks.attachWorkspaceReference).toHaveBeenCalledTimes(2)
+        expect(geometry.layoutRevision).toBe(102)
+    })
+
+    it('bounds repeated stale pre-transaction snapshots to five attachment attempts', async () => {
+        mocks.getAssetRecord.mockResolvedValue(asset(false))
+        mocks.attachWorkspaceReference.mockRejectedValue(new Error('STALE_CANVAS_STATE'))
+
+        await expect(attachGeneratedAssetNode({
+            assetId: 'asset-1',
+            workspaceId: 'workspace-1',
+            kind: 'image',
+            aspectRatio: 1,
+            generationRun,
+            conversationAssetId: 'thread-1',
+        })).rejects.toThrow('STALE_CANVAS_STATE')
+
+        expect(mocks.getWorkspace).toHaveBeenCalledTimes(5)
+        expect(mocks.projectGeneratedAssetNode).toHaveBeenCalledTimes(5)
+        expect(mocks.attachWorkspaceReference).toHaveBeenCalledTimes(5)
+    })
+
+    it('does not retry an unrelated workspace attachment error', async () => {
+        mocks.getAssetRecord.mockResolvedValue(asset(false))
+        mocks.attachWorkspaceReference.mockRejectedValueOnce(new Error('WORKSPACE_ACCESS_DENIED'))
+
+        await expect(attachGeneratedAssetNode({
+            assetId: 'asset-1',
+            workspaceId: 'workspace-1',
+            kind: 'image',
+            aspectRatio: 1,
+            generationRun,
+            conversationAssetId: 'thread-1',
+        })).rejects.toThrow('WORKSPACE_ACCESS_DENIED')
+
+        expect(mocks.getWorkspace).toHaveBeenCalledTimes(1)
+        expect(mocks.projectGeneratedAssetNode).toHaveBeenCalledTimes(1)
+        expect(mocks.attachWorkspaceReference).toHaveBeenCalledTimes(1)
     })
 
     it('uses the wall clock for a legacy workspace with no persisted canvas revision', async () => {

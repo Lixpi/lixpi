@@ -399,7 +399,7 @@ Single-target canvas UI stays single-target:
 
 Selection colors (marquee border/background, overlay border/background, thread-input outline) are configurable via `settings.selection.styles` and applied as CSS custom properties on the pane element. Clicking outside the selected range clears the selection.
 
-Note: viewport transforms are only re-applied when the saved viewport actually changes. This prevents temporary zoom/pan flashes when unrelated canvas updates (for example, image onload corrections) occur. Workspace saves mark viewport writes explicitly; ordinary metadata, node, edge, descriptor, and panel-state saves preserve the existing database viewport even if they carry a stale client viewport.
+Note: once a workspace is mounted, its live renderer owns the viewport. Same-workspace store renders preserve the current pan and zoom even when generated nodes, edges, documents, or other visual state require synchronization or a full DOM rebuild. Persisted viewport state is applied only when loading or switching workspaces; matching save acknowledgements are inert. Workspace saves mark viewport writes explicitly, and ordinary metadata, node, edge, descriptor, and panel-state saves preserve the existing database viewport even if they carry a stale client viewport.
 
 Rendering note: full re-renders are triggered when node structure or document load state changes; position/dimension updates are handled directly in the DOM during drag/resize to avoid unnecessary work.
 
