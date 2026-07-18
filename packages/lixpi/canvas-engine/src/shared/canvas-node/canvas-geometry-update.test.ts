@@ -99,8 +99,8 @@ const canvasState = (nodes: CanvasNode[], edges: WorkspaceEdge[] = []): CanvasSt
 describe('applyCanvasGeometryUpdateToState', () => {
     it('adds missing API-owned node snapshots before applying authoritative geometry', () => {
         const fork = makeForkNode('fork-1')
-        const image0 = makeImageNode('pending-image-0')
-        const image1 = makeImageNode('pending-image-1')
+        const image0 = makeImageNode('pending-image-0', '', { mediaGenerationPhase: 'pending-before-first-frame' })
+        const image1 = makeImageNode('pending-image-1', '', { mediaGenerationPhase: 'pending-before-first-frame' })
         const video0 = makeVideoNode('pending-video-0')
 
         const result = applyCanvasGeometryUpdateToState(canvasState([fork]), {
@@ -128,7 +128,11 @@ describe('applyCanvasGeometryUpdateToState', () => {
         expect(result.fullyApplied).toBe(true)
         expect(result.state.nodes).toEqual(expect.arrayContaining([
             expect.objectContaining({ nodeId: 'fork-1', position: { x: 100, y: 300 }, dimensions: { width: 298, height: 64 } }),
-            expect.objectContaining({ nodeId: 'pending-image-0', position: { x: 650, y: -700 } }),
+            expect.objectContaining({
+                nodeId: 'pending-image-0',
+                position: { x: 650, y: -700 },
+                mediaGenerationPhase: 'pending-before-first-frame',
+            }),
             expect.objectContaining({ nodeId: 'pending-video-0', position: { x: 650, y: 1100 } }),
         ]))
         expect(result.state.edges).toEqual([

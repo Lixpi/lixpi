@@ -46,6 +46,11 @@ const getCanvasStateUpdatedAt = (workspace: WorkspaceWithCanvasToken | null | un
     return undefined
 }
 
+const getNextCanvasStateUpdatedAt = (workspace: WorkspaceWithCanvasToken | null | undefined): number => {
+    const persistedRevision = getCanvasStateUpdatedAt(workspace)
+    return Math.max(Date.now(), persistedRevision === undefined ? 0 : persistedRevision + 1)
+}
+
 const getCanvasStateWriteCondition = (hasExpectedCanvasStateUpdatedAt: boolean): string => {
     if (!hasExpectedCanvasStateUpdatedAt) {
         return '(attribute_not_exists(#canvasStateUpdatedAt) AND attribute_not_exists(#updatedAt)) AND attribute_not_exists(#deletingAt)'
@@ -323,7 +328,6 @@ export default {
         expectedUpdatedAt?: number
         persistViewport?: boolean
     }): Promise<UpdateCanvasStateResult> => {
-        const currentDate = new Date().getTime()
         const canvasStateSaveToken = expectedCanvasStateUpdatedAt ?? expectedUpdatedAt
         const hasExpectedCanvasStateUpdatedAt = canvasStateSaveToken !== undefined
 
@@ -336,6 +340,7 @@ export default {
             })
             const currentCanvasState = normalizeCanvasState(currentWorkspace?.canvasState)
             const incomingCanvasState = normalizeCanvasState(canvasState)
+            const currentDate = getNextCanvasStateUpdatedAt(currentWorkspace)
             assertRevision2CanvasStorage(incomingCanvasState)
             if (getAssetMembershipSignature(currentCanvasState) !== getAssetMembershipSignature(incomingCanvasState)) {
                 throw new Error('CANVAS_ASSET_MEMBERSHIP_MUTATION_REJECTED')
@@ -439,7 +444,7 @@ export default {
                 throw new Error('CANVAS_ASSET_MEMBERSHIP_MUTATION_REJECTED')
             }
 
-            const currentDate = new Date().getTime()
+            const currentDate = getNextCanvasStateUpdatedAt(workspace)
             try {
                 const expectedCanvasStateUpdatedAt = getCanvasStateUpdatedAt(workspace)
                 const hasExpectedCanvasStateUpdatedAt = expectedCanvasStateUpdatedAt !== undefined
@@ -551,7 +556,7 @@ export default {
         expectedCanvasStateUpdatedAt
     }: { workspaceId: string; canvasState: CanvasState; expectedCanvasStateUpdatedAt: number }): Promise<void> => {
         assertRevision2CanvasStorage(canvasState)
-        const currentDate = new Date().getTime()
+        const currentDate = Math.max(Date.now(), expectedCanvasStateUpdatedAt + 1)
 
         try {
             await dynamoDBService.transactWrite({

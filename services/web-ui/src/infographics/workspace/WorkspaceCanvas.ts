@@ -3990,6 +3990,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function isGeneratedMediaCanvasNodeWaitingForFrame(node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode {
         if (node.type !== 'image' && node.type !== 'video') return false
         if (node.type === 'image' && decodedGeneratedImageNodeIds.has(node.nodeId)) return false
+        if (node.mediaGenerationPhase) return node.mediaGenerationPhase === 'pending-before-first-frame'
         const asset = assetsStore.get(node.assetId)
         return Boolean(node.generatedBy) && asset?.media?.renditions.original?.status !== 'ready'
     }

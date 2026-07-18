@@ -605,6 +605,8 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'appendImageNodeToDOM(completedImageNode)')
 		expectSourceToContain(ts, 'appendVideoNodeToDOM(completedVideoNode)')
 		expectSourceToContain(ts, 'applyApiCanvasGeometry(data.canvasGeometry)')
+		expectSourceToContain(ts, "if (node.mediaGenerationPhase) return node.mediaGenerationPhase === 'pending-before-first-frame'")
+		expectSourceToContain(ts, "return Boolean(node.generatedBy) && asset?.media?.renditions.original?.status !== 'ready'")
 	})
 
 	it('keeps in-progress generated media aligned with API-owned lineage identity', () => {

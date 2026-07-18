@@ -123,6 +123,18 @@ const upsertNode = (nodes: CanvasNode[], next: CanvasNode): { nodes: CanvasNode[
     return { nodes: nodes.map((node, nodeIndex) => nodeIndex === index ? merged : node), changed: true }
 }
 
+const upsertGeneratedMediaNode = (
+    nodes: CanvasNode[],
+    next: GeneratedMediaNode,
+): { nodes: CanvasNode[]; changed: boolean } => {
+    const index = nodes.findIndex((node) => node.nodeId === next.nodeId)
+    if (index < 0) return { nodes: [...nodes, next], changed: true }
+    const existing = nodes[index]!
+    const merged = { ...existing, ...next } as GeneratedMediaNode
+    if (JSON.stringify(existing) === JSON.stringify(merged)) return { nodes, changed: false }
+    return { nodes: nodes.map((node, nodeIndex) => nodeIndex === index ? merged : node), changed: true }
+}
+
 const addEdge = (edges: WorkspaceEdge[], sourceNodeId: string | undefined, targetNodeId: string): {
     edges: WorkspaceEdge[]
     changed: boolean
@@ -316,7 +328,6 @@ const getPendingMediaLayoutRect = (
 const rebalance = (
     state: CanvasState,
     context: ProjectionContext = {},
-    pendingMediaNodeIds: ReadonlySet<string> = new Set(),
 ): { state: CanvasState; changed: boolean } => {
     const resizedNodes = state.nodes.map((node): CanvasNode => {
         if (!isMarkerNode(node)) return node
@@ -325,6 +336,12 @@ const rebalance = (
             ? node
             : { ...node, dimensions }
     })
+    const pendingMediaNodeIds = new Set(resizedNodes.flatMap((node): string[] =>
+        (node.type === 'image' || node.type === 'video')
+            && node.mediaGenerationPhase === 'pending-before-first-frame'
+            ? [node.nodeId]
+            : []
+    ))
     const nodes = rebalanceBranchTreesAndResolve(resizedNodes, state.edges ?? [], {
         depthGap: layout.mediaToMediaGap,
         branchOriginDepthGap: layout.branchOriginToFirstMediaGap,
@@ -508,7 +525,12 @@ export const settleMediaGenerationRequestOnCanvas = async (params: {
         mutate: (canvasState) => {
             const persistedPendingIds = new Set(candidateRemovedNodeIds)
             removedNodeIds = canvasState.nodes
-                .filter((node) => persistedPendingIds.has(node.nodeId) && !('assetId' in node && node.assetId))
+                .filter((node) => {
+                    if (!persistedPendingIds.has(node.nodeId)) return false
+                    if (node.type !== 'image' && node.type !== 'video') return !('assetId' in node && node.assetId)
+                    if (node.mediaGenerationPhase) return node.mediaGenerationPhase === 'pending-before-first-frame'
+                    return !node.assetId
+                })
                 .map((node) => node.nodeId)
             const removableIds = new Set(removedNodeIds)
             const stateWithoutPending = removableIds.size
@@ -689,6 +711,7 @@ export const projectGeneratedAssetNode = ({
             nodeId,
             type: 'image',
             assetId,
+            mediaGenerationPhase: pendingBeforeFirstFrame ? 'pending-before-first-frame' : 'ready',
             position,
             dimensions,
             generatedBy: {
@@ -703,6 +726,7 @@ export const projectGeneratedAssetNode = ({
             nodeId,
             type: 'video',
             assetId,
+            mediaGenerationPhase: pendingBeforeFirstFrame ? 'pending-before-first-frame' : 'ready',
             position,
             dimensions,
             generatedBy: {
@@ -716,13 +740,9 @@ export const projectGeneratedAssetNode = ({
     const withoutSameAsset = markerResult.state.nodes.filter((candidate) =>
         candidate.nodeId === nodeId || !('assetId' in candidate) || candidate.assetId !== assetId
     )
-    const nodeResult = upsertNode(withoutSameAsset, node)
+    const nodeResult = upsertGeneratedMediaNode(withoutSameAsset, node)
     const edgeResult = addEdge(markerResult.state.edges ?? [], lineageParentNodeId, nodeId)
-    const next = rebalance(
-        { ...markerResult.state, nodes: nodeResult.nodes, edges: edgeResult.edges },
-        {},
-        pendingBeforeFirstFrame ? new Set([nodeId]) : new Set(),
-    ).state
+    const next = rebalance({ ...markerResult.state, nodes: nodeResult.nodes, edges: edgeResult.edges }).state
     return { canvasState: next, nodeId, geometryNodes: geometryDiff(canvasState, next) }
 }
 

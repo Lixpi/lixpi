@@ -1407,11 +1407,24 @@ const AssetModel = {
         const existing = await getReference(assetId, referenceKey)
         const nextNodeIds = [...new Set([...(existing?.nodeIds ?? []), ...(nodeId ? [nodeId] : [])])]
         const nextSurfaceIds = [...new Set([...(existing?.surfaceIds ?? []), ...(surfaceId ? [surfaceId] : [])])]
-        if (
+        const referenceUnchanged = Boolean(
             existing
             && nextNodeIds.length === (existing.nodeIds ?? []).length
             && nextSurfaceIds.length === (existing.surfaceIds ?? []).length
-        ) {
+        )
+        if (existing && referenceUnchanged) {
+            if (!nodeId || !workspaceMutation) return existing
+            const workspaceOperations = await getWorkspaceMutationOperations({
+                workspaceId,
+                mutation: workspaceMutation,
+                assetId,
+                nodeId,
+                operation: 'attach',
+            })
+            await dynamoDBService.transactWrite({
+                operations: workspaceOperations,
+                origin: 'Asset.attachWorkspaceReference.canvasMutation',
+            })
             return existing
         }
 

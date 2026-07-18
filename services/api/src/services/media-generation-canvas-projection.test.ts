@@ -1,7 +1,13 @@
 'use strict'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CanvasState, MediaBranchLineagePlan, MediaGenerationRunMeta } from '@lixpi/constants'
+import type {
+    CanvasNode,
+    CanvasState,
+    MediaBranchLineagePlan,
+    MediaGenerationRunMeta,
+    MediaRunLineageAssignment,
+} from '@lixpi/constants'
 import { getPendingGeneratedMediaNodeId } from '@lixpi/canvas-engine'
 
 const workspaceMutateCanvasState = vi.hoisted(() => vi.fn())
@@ -26,6 +32,7 @@ const emptyCanvasState = (): CanvasState => ({
 })
 
 const assignment = {
+    assetId: 'asset-1',
     generationRequestId: 'request-1',
     reasoningRunId: 'reasoning-1',
     mediaRunId: 'media-1',
@@ -44,6 +51,13 @@ const assignment = {
     promptText: 'draw a goat',
     createdAt: 1,
 } as const
+
+const assignmentFor = (mediaIndex: number): MediaRunLineageAssignment => ({
+    ...assignment,
+    assetId: `asset-${mediaIndex + 1}`,
+    mediaRunId: `media-${mediaIndex + 1}`,
+    mediaIndex,
+})
 
 const lineagePlan = (): MediaBranchLineagePlan => ({
     planVersion: 'media-branch-lineage-v1',
@@ -86,6 +100,80 @@ const generationRun = (): MediaGenerationRunMeta => ({
     variantIndex: 0,
     lineageAssignment: assignment,
 })
+
+const generationRunFor = (mediaIndex: number): MediaGenerationRunMeta => {
+    const lineageAssignment = assignmentFor(mediaIndex)
+    return {
+        ...generationRun(),
+        mediaRunId: lineageAssignment.mediaRunId,
+        mediaIndex,
+        variantIndex: mediaIndex,
+        lineageAssignment,
+    }
+}
+
+const videoGenerationRun = (): MediaGenerationRunMeta => {
+    const lineageAssignment: MediaRunLineageAssignment = {
+        ...assignmentFor(0),
+        assetId: 'asset-video-1',
+        mediaRunId: 'video-media-1',
+        mediaModelId: 'Google:veo-3',
+        mediaType: 'video',
+    }
+    return {
+        ...generationRun(),
+        mediaRunId: lineageAssignment.mediaRunId,
+        mediaModelId: lineageAssignment.mediaModelId,
+        mediaType: 'video',
+        lineageAssignment,
+    }
+}
+
+const projectMedia = (
+    canvasState: CanvasState,
+    mediaIndex: number,
+    pendingBeforeFirstFrame: boolean,
+    aspectRatio = 1,
+): CanvasState => projectGeneratedAssetNode({
+    canvasState,
+    assetId: `asset-${mediaIndex + 1}`,
+    kind: 'image',
+    aspectRatio,
+    generationRun: generationRunFor(mediaIndex),
+    conversationAssetId: 'thread-1',
+    pendingBeforeFirstFrame,
+}).canvasState
+
+const projectVideo = (
+    canvasState: CanvasState,
+    pendingBeforeFirstFrame: boolean,
+    aspectRatio = 1,
+): CanvasState => projectGeneratedAssetNode({
+    canvasState,
+    assetId: 'asset-video-1',
+    kind: 'video',
+    aspectRatio,
+    generationRun: videoGenerationRun(),
+    conversationAssetId: 'thread-1',
+    pendingBeforeFirstFrame,
+}).canvasState
+
+const canonicalGenerationTree = (canvasState: CanvasState): unknown[] => canvasState.nodes
+    .filter((node) => node.type === 'branchOrigin'
+        || node.type === 'branchFork'
+        || ((node.type === 'image' || node.type === 'video') && node.generatedBy?.generationRequestId === 'request-1'))
+    .sort((left, right) => left.nodeId.localeCompare(right.nodeId))
+    .map((node) => ({
+        nodeId: node.nodeId,
+        type: node.type,
+        position: node.position,
+        dimensions: node.dimensions,
+        ...((node.type === 'image' || node.type === 'video')
+            ? { mediaGenerationPhase: node.mediaGenerationPhase }
+            : {}),
+    }))
+
+const nodeCenterY = (node: CanvasNode): number => node.position.y + node.dimensions.height / 2
 
 describe('asset canvas projection', () => {
     let storedState: CanvasState
@@ -162,6 +250,73 @@ describe('asset canvas projection', () => {
         expect(planned.geometryNodes.map(node => node.nodeId)).toContain(planned.nodeId)
     })
 
+    it('produces identical balanced pending trees regardless of sibling stream arrival order', () => {
+        const forward = projectMedia(projectMedia(emptyCanvasState(), 0, true), 1, true)
+        const reverse = projectMedia(projectMedia(emptyCanvasState(), 1, true), 0, true)
+
+        expect(canonicalGenerationTree(reverse)).toEqual(canonicalGenerationTree(forward))
+        expect(forward.nodes).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                nodeId: getPendingGeneratedMediaNodeId(assignmentFor(0)),
+                mediaGenerationPhase: 'pending-before-first-frame',
+            }),
+            expect.objectContaining({
+                nodeId: getPendingGeneratedMediaNodeId(assignmentFor(1)),
+                mediaGenerationPhase: 'pending-before-first-frame',
+            }),
+        ]))
+    })
+
+    it('keeps the parent centered while one sibling is ready and the other is still pending', () => {
+        const bothPending = projectMedia(projectMedia(emptyCanvasState(), 0, true), 1, true)
+        const mixed = projectMedia(bothPending, 0, false, 16 / 9)
+        const fork = mixed.nodes.find((node) => node.nodeId === 'fork-1')!
+        const first = mixed.nodes.find((node) => node.nodeId === getPendingGeneratedMediaNodeId(assignmentFor(0)))!
+        const second = mixed.nodes.find((node) => node.nodeId === getPendingGeneratedMediaNodeId(assignmentFor(1)))!
+
+        expect(first).toMatchObject({
+            dimensions: { width: 800, height: 450 },
+            mediaGenerationPhase: 'ready',
+        })
+        expect(second).toMatchObject({
+            dimensions: { width: 800, height: 800 },
+            mediaGenerationPhase: 'pending-before-first-frame',
+        })
+        expect(nodeCenterY(fork)).toBeCloseTo((nodeCenterY(first) + nodeCenterY(second)) / 2, 6)
+    })
+
+    it('converges on one final tree regardless of both arrival and completion order', () => {
+        let forward = projectMedia(projectMedia(emptyCanvasState(), 0, true), 1, true)
+        forward = projectMedia(forward, 0, false, 16 / 9)
+        forward = projectMedia(forward, 1, false, 4 / 3)
+
+        let reverse = projectMedia(projectMedia(emptyCanvasState(), 1, true), 0, true)
+        reverse = projectMedia(reverse, 1, false, 4 / 3)
+        reverse = projectMedia(reverse, 0, false, 16 / 9)
+
+        expect(canonicalGenerationTree(reverse)).toEqual(canonicalGenerationTree(forward))
+        expect(forward.nodes).toEqual(expect.arrayContaining([
+            expect.objectContaining({ dimensions: { width: 800, height: 450 }, mediaGenerationPhase: 'ready' }),
+            expect.objectContaining({ dimensions: { width: 800, height: 600 }, mediaGenerationPhase: 'ready' }),
+        ]))
+    })
+
+    it('balances heterogeneous image and video siblings deterministically', () => {
+        let imageFirst = projectVideo(projectMedia(emptyCanvasState(), 0, true), true)
+        imageFirst = projectMedia(imageFirst, 0, false, 4 / 3)
+        imageFirst = projectVideo(imageFirst, false, 16 / 9)
+
+        let videoFirst = projectMedia(projectVideo(emptyCanvasState(), true), 0, true)
+        videoFirst = projectVideo(videoFirst, false, 16 / 9)
+        videoFirst = projectMedia(videoFirst, 0, false, 4 / 3)
+
+        expect(canonicalGenerationTree(videoFirst)).toEqual(canonicalGenerationTree(imageFirst))
+        expect(imageFirst.nodes).toEqual(expect.arrayContaining([
+            expect.objectContaining({ type: 'image', dimensions: { width: 800, height: 600 } }),
+            expect.objectContaining({ type: 'video', dimensions: { width: 800, height: 450 } }),
+        ]))
+    })
+
     it('does not emit a geometry update when a refresh has no server-side change', async () => {
         await upsertMediaLineagePlanToCanvas({ workspaceId: 'workspace-1', conversationAssetId: 'thread-1', lineagePlan: lineagePlan() })
 
@@ -194,6 +349,47 @@ describe('asset canvas projection', () => {
         })
 
         expect(storedState.nodes).toEqual([])
+        expect(geometry).toMatchObject({ removedNodeIds: [pendingNodeId] })
+    })
+
+    it('removes failed Asset-backed pending nodes without deleting ready siblings', async () => {
+        const pendingNodeId = getPendingGeneratedMediaNodeId(assignmentFor(0))
+        const readyNodeId = getPendingGeneratedMediaNodeId(assignmentFor(1))
+        storedState = {
+            ...emptyCanvasState(),
+            nodes: [
+                {
+                    nodeId: pendingNodeId,
+                    type: 'image',
+                    assetId: 'asset-1',
+                    mediaGenerationPhase: 'pending-before-first-frame',
+                    position: { x: 0, y: 0 },
+                    dimensions: { width: 800, height: 800 },
+                    generatedBy: { generationRequestId: 'request-1' },
+                },
+                {
+                    nodeId: readyNodeId,
+                    type: 'image',
+                    assetId: 'asset-2',
+                    mediaGenerationPhase: 'ready',
+                    position: { x: 1000, y: 0 },
+                    dimensions: { width: 800, height: 600 },
+                    generatedBy: { generationRequestId: 'request-1' },
+                },
+            ],
+            edges: [],
+        } as CanvasState
+        const plan = lineagePlan()
+        plan.runAssignments = [assignmentFor(0), assignmentFor(1)]
+
+        const geometry = await settleMediaGenerationRequestOnCanvas({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'request-1',
+            removeProjectedPendingNodes: true,
+            lineagePlan: plan,
+        })
+
+        expect(storedState.nodes.map((node) => node.nodeId)).toEqual([readyNodeId])
         expect(geometry).toMatchObject({ removedNodeIds: [pendingNodeId] })
     })
 

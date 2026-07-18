@@ -103,7 +103,9 @@ Videos cost one still image in branch resolution. The MP4 is used only by the ex
 
 The browser may render a transient preflight branch marker before the lineage plan arrives, but it never creates or positions generated media nodes. Pending image and video nodes use deterministic IDs derived from their run assignments and are persisted by the API before their partial/pending events are published.
 
-The API projection service persists marker topology when the lineage plan is announced. It uses shared marker text metrics and canvas-engine branch-tree/collision settings. Every connected client applies the same revisioned node snapshots and coordinates.
+The API projection service persists marker topology when the lineage plan is announced. It uses shared marker text metrics and canvas-engine branch-tree/collision settings. Canvas revisions are strictly greater than the persisted revision, including when several provider events commit in the same millisecond. Every connected client can therefore apply the same ordered node snapshots and coordinates.
+
+Generated media nodes persist `mediaGenerationPhase` with their geometry. Before the original rendition is ready, the phase is `pending-before-first-frame` and every API rebalance uses the configured pending-circle footprint for all pending nodes in the branch forest. Final projection changes the phase to `ready`, replaces placeholder dimensions with the fitted final aspect ratio while preserving the node center, then rebalances with the full media dimensions. This keeps incremental sibling placement independent of provider completion order. Clients consume the persisted phase and use local event or Asset state only as a fallback for workspace data created without it.
 
 When a final image or video settles, the API:
 
@@ -114,7 +116,9 @@ When a final image or video settles, the API:
 5. attaches the Asset reference and Workspace canvas in one transaction;
 6. publishes `CanvasGeometryUpdate` with node snapshots, edge snapshots, removals, and `layoutRevision`.
 
-The node ID is stable across pending/final state and remains independent of the Asset ID. Asset media readiness is resolved from `assetsStore`, not duplicated on the node.
+If the pending projection already attached the Asset reference, final settlement still commits the Workspace canvas mutation under the expected canvas revision. Reference idempotency skips only the unchanged Asset reference write; it never skips final geometry persistence.
+
+The node ID is stable across pending/final state and remains independent of the Asset ID. `mediaGenerationPhase` controls the layout footprint only. Asset lifecycle and rendition readiness still come from `assetsStore`.
 
 Clients discard stale geometry revisions and ignore late upserts for locally cancelled request IDs. If completion geometry is absent because the attach failed, the completion is not considered durable; publisher failure propagates instead of fabricating local topology.
 

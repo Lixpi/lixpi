@@ -728,6 +728,8 @@ export type GeneratedMediaVariantMetadata = {
     lineageParentNodeId?: string
 }
 
+export type MediaGenerationCanvasPhase = 'pending-before-first-frame' | 'ready'
+
 export type GeneratedOutputReviewScope = 'media-node' | 'branch-lineage'
 
 export type GeneratedOutputReviewAction = 'accept' | 'supersede'
@@ -820,6 +822,8 @@ export type ImageCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'image'
     assetId: string
+    // API-persisted layout footprint. Asset remains authoritative for media lifecycle and renditions.
+    mediaGenerationPhase?: MediaGenerationCanvasPhase
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     generatedBy?: ImageGeneratedByMetadata
@@ -872,6 +876,8 @@ export type VideoCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'video'
     assetId: string
+    // API-persisted layout footprint. Asset remains authoritative for media lifecycle and renditions.
+    mediaGenerationPhase?: MediaGenerationCanvasPhase
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     generatedBy?: VideoGeneratedByMetadata
