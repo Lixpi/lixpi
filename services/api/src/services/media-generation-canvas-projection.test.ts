@@ -8,7 +8,11 @@ import type {
     MediaGenerationRunMeta,
     MediaRunLineageAssignment,
 } from '@lixpi/constants'
-import { getPendingGeneratedMediaNodeId } from '@lixpi/canvas-engine'
+import { mediaGenerationLayoutSettings } from '@lixpi/constants'
+import {
+    estimateBranchMarkerDimensions,
+    getPendingGeneratedMediaNodeId,
+} from '@lixpi/canvas-engine'
 
 const workspaceMutateCanvasState = vi.hoisted(() => vi.fn())
 
@@ -225,6 +229,33 @@ const canonicalGenerationTree = (canvasState: CanvasState): unknown[] => canvasS
 
 const nodeCenterY = (node: CanvasNode): number => node.position.y + node.dimensions.height / 2
 
+const completedThreadContent = (responseText: string): unknown => ({
+    type: 'doc',
+    content: [{
+        type: 'aiChatThread',
+        attrs: { threadId: 'thread-1' },
+        content: [
+            {
+                type: 'aiUserMessage',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'make it happy' }] }],
+            },
+            {
+                type: 'aiResponseMessage',
+                attrs: { generationRequestId: 'request-1' },
+                content: [{
+                    type: 'aiReasoningSection',
+                    attrs: {
+                        generationRequestId: 'request-1',
+                        reasoningRunId: 'reasoning-1',
+                        branchLineNodeId: 'line-1',
+                    },
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: responseText }] }],
+                }],
+            },
+        ],
+    }],
+})
+
 describe('asset canvas projection', () => {
     let storedState: CanvasState
     let revision: number
@@ -337,6 +368,16 @@ describe('asset canvas projection', () => {
             pending.reduce((sum, node) => sum + nodeCenterY(node), 0) / pending.length,
             6,
         )
+        const pendingCircleScale = mediaGenerationLayoutSettings.preFrameCircleScale
+        const pendingCircleInset = pending[0]!.dimensions.width * (1 - pendingCircleScale) / 2
+        const expectedCircleLeft = selectedMediaFanoutPlan().runAssignments.length > 1
+            ? 100 + 800
+                + mediaGenerationLayoutSettings.mediaToMediaGap
+                + mediaGenerationLayoutSettings.branchFanoutExtraGap
+            : 100 + 800 + mediaGenerationLayoutSettings.mediaToMediaGap
+        for (const node of pending) {
+            expect(node.position.x + pendingCircleInset).toBeCloseTo(expectedCircleLeft, 6)
+        }
         expect(geometry?.nodeSnapshots).toEqual(expect.arrayContaining([
             expect.objectContaining({ nodeId: 'selected-media-fork' }),
             ...pending.map(node => expect.objectContaining({ nodeId: node.nodeId })),
@@ -476,6 +517,73 @@ describe('asset canvas projection', () => {
         })
 
         expect(geometry).toBeNull()
+    })
+
+    it('keeps a childless continuation connector straight when streamed response text grows the marker', async () => {
+        const markerDimensions = estimateBranchMarkerDimensions('make it happy')
+        const parentCenterY = 600
+        storedState = {
+            ...emptyCanvasState(),
+            nodes: [
+                {
+                    nodeId: 'parent-media',
+                    type: 'image',
+                    assetId: 'parent-asset',
+                    mediaGenerationPhase: 'ready',
+                    position: { x: 0, y: 200 },
+                    dimensions: { width: 800, height: 800 },
+                    generatedBy: {
+                        conversationAssetId: 'previous-thread',
+                        responseId: '',
+                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        revisedPrompt: 'parent',
+                        branchId: 'branch-1',
+                    },
+                },
+                {
+                    nodeId: 'line-1',
+                    type: 'branchLine',
+                    branchId: 'branch-1',
+                    generationRequestId: 'request-1',
+                    conversationAssetId: 'thread-1',
+                    parentBranchNodeId: 'parent-media',
+                    reasoningRunId: 'reasoning-1',
+                    reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                    reasoningIndex: 0,
+                    position: {
+                        x: 1200,
+                        y: parentCenterY - markerDimensions.height / 2,
+                    },
+                    dimensions: markerDimensions,
+                    provenance: {
+                        kind: 'reasoning-run',
+                        promptText: 'make it happy',
+                        referenceNodeIds: [],
+                        sourceContextNodeIds: [],
+                        reasoningRunId: 'reasoning-1',
+                        reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                        reasoningIndex: 0,
+                    },
+                },
+            ] as CanvasNode[],
+            edges: [{
+                edgeId: 'edge-parent-line',
+                sourceNodeId: 'parent-media',
+                targetNodeId: 'line-1',
+                sourceHandle: 'right',
+                targetHandle: 'left',
+            }],
+        }
+
+        await refreshMediaGenerationRequestCanvasGeometry({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'request-1',
+            proseMirrorThreadContent: completedThreadContent('I will make the character cheerful.'),
+        })
+
+        const marker = storedState.nodes.find((node) => node.nodeId === 'line-1')!
+        expect(marker.dimensions.height).toBeGreaterThan(markerDimensions.height)
+        expect(nodeCenterY(marker)).toBe(parentCenterY)
     })
 
     it('removes only persisted unresolved candidates when a request settles', async () => {

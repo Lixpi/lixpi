@@ -5,6 +5,7 @@ import {
     getGeneratedMediaChromeCollisionHeight,
     getPendingGeneratedMediaNodeId,
     rebalanceBranchTreesAndResolve,
+    resizeBranchMarkerToDimensions,
 } from '@lixpi/canvas-engine'
 import type {
     AiModelId,
@@ -332,9 +333,7 @@ const rebalance = (
     const resizedNodes = state.nodes.map((node): CanvasNode => {
         if (!isMarkerNode(node)) return node
         const dimensions = markerDimensions(node, context)
-        return dimensions.width === node.dimensions.width && dimensions.height === node.dimensions.height
-            ? node
-            : { ...node, dimensions }
+        return resizeBranchMarkerToDimensions(node, dimensions)
     })
     const pendingMediaNodeIds = new Set(resizedNodes.flatMap((node): string[] =>
         (node.type === 'image' || node.type === 'video')
@@ -348,10 +347,6 @@ const rebalance = (
         rootMarkerDepthGap: layout.rootToFirstMediaGap,
         siblingGap: layout.branchRowGap,
         branchFanoutExtraGap: layout.branchFanoutExtraGap,
-        getBranchFanoutExtraGap: (_parentNode, childNodes) =>
-            childNodes.length > 0 && childNodes.every((node) => pendingMediaNodeIds.has(node.nodeId))
-                ? 0
-                : layout.branchFanoutExtraGap,
         branchOriginMarkerStackGap: layout.nodeGap,
         collisionIterations: Math.max(...Object.values(collision.nodeTypes).map((entry) => entry.iterations)),
         collisionMargin: 0,

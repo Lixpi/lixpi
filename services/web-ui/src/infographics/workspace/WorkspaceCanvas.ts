@@ -103,6 +103,7 @@ import {
     getPendingGeneratedMediaNodeId,
     getResizeHandleScaledSizes,
     resolveCollisions,
+    resizeBranchMarkerToDimensions,
     scaleCanvasChromeToScreenForZoom,
     scaleCanvasChromeWorldSizeForZoom,
 } from '@lixpi/canvas-engine'
@@ -400,23 +401,7 @@ function resizeBranchMarkerNodeToDimensions<T extends BranchMarkerNode>(
     node: T,
     dimensions: { width: number; height: number },
 ): T {
-    if (node.dimensions.width === dimensions.width && node.dimensions.height === dimensions.height) return node
-    const widthDelta = dimensions.width - node.dimensions.width
-    const heightDelta = dimensions.height - node.dimensions.height
-    const position = node.type === 'branchOrigin'
-        ? {
-            x: node.position.x,
-            y: node.position.y - heightDelta / 2,
-        }
-        : {
-            x: node.position.x - widthDelta / 2,
-            y: node.position.y - heightDelta / 2,
-        }
-    return {
-        ...node,
-        position,
-        dimensions,
-    } as T
+    return resizeBranchMarkerToDimensions(node, dimensions)
 }
 
 function resizeBranchMarkerNodeToContent<T extends BranchMarkerNode>(
