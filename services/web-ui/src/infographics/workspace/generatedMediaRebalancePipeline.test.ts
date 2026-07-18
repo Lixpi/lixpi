@@ -259,6 +259,44 @@ describe('GeneratedMediaRebalancePipeline', () => {
         expect(result.startedMarkerNodeIds).toEqual(new Set(['line']))
     })
 
+    it('applies the configured sibling-count fanout gap before pending frames arrive', () => {
+        const parent = image({
+            nodeId: 'parent',
+            position: { x: 0, y: 0 },
+            dimensions: { width: 100, height: 100 },
+            generatedBy: { createdAt: 1 },
+        })
+        const marker = branchFork({
+            nodeId: 'fork',
+            parentBranchNodeId: 'parent',
+            position: { x: 500, y: 500 },
+            dimensions: { width: 50, height: 20 },
+        })
+        const pending = [0, 1].map(index => image({
+            nodeId: `pending-${index}`,
+            fileId: '',
+            src: '',
+            position: { x: 1000, y: 1000 },
+            dimensions: { width: 100, height: 100 },
+            generatedBy: {
+                parentMediaNodeId: 'parent',
+                branchForkNodeId: 'fork',
+                mediaIndex: index,
+                createdAt: index + 2,
+            },
+        }))
+        const pipeline = new GeneratedMediaRebalancePipeline(config({ branchFanoutExtraGap: 40 }))
+
+        const result = pipeline.rebalance([parent, marker, ...pending], [])
+        const out = nodesById(result.nodes)
+        const expectedCircleLeft = parent.position.x + parent.dimensions.width + 50 + 40
+
+        for (const node of pending) {
+            const resolved = out.get(node.nodeId)!
+            expect(collisionRect(resolved, resolved.position, 1 / 3).x).toBeCloseTo(expectedCircleLeft, 6)
+        }
+    })
+
     it('uses planned media proxies to place not-yet-started sibling markers and removes proxy nodes afterward', () => {
         const origin = branchOrigin({
             nodeId: 'origin',

@@ -75,6 +75,38 @@ describe('Workspace.getWorkspace', () => {
 // =============================================================================
 
 describe('Workspace.mutateCanvasState', () => {
+    it('increments the persisted revision when multiple writes happen in the same millisecond', async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(1_000)
+        dynamo.getItem.mockResolvedValue({
+            updatedAt: 1_000,
+            canvasStateUpdatedAt: 1_000,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [],
+                edges: [],
+            },
+        })
+        dynamo.transactWrite.mockResolvedValue(undefined)
+
+        const result = await Workspace.mutateCanvasState({
+            workspaceId: 'workspace-1',
+            mutate: (canvasState) => ({
+                changed: true,
+                canvasState: {
+                    ...canvasState,
+                    nodes: [{ nodeId: 'node-1', type: 'branchOrigin' } as any],
+                },
+            }),
+        })
+
+        expect(result.canvasStateUpdatedAt).toBe(1_001)
+        expect(dynamo.transactWrite.mock.calls[0][0].operations[0].expressionAttributeValues).toMatchObject({
+            ':expectedCanvasStateUpdatedAt': 1_000,
+            ':canvasStateUpdatedAt': 1_001,
+        })
+    })
+
     it('writes the mutator result with a canvasStateUpdatedAt condition and updates workspace meta', async () => {
         dynamo.getItem.mockResolvedValue({
             updatedAt: 10,
@@ -301,6 +333,36 @@ describe('Workspace.mutateCanvasState', () => {
 // =============================================================================
 
 describe('Workspace.updateCanvasState', () => {
+    it('returns a strictly newer revision when the wall clock has not advanced', async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(1_000)
+        dynamo.getItem.mockResolvedValueOnce({
+            updatedAt: 1_000,
+            canvasStateUpdatedAt: 1_000,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [],
+                edges: [],
+            },
+        })
+        dynamo.transactWrite.mockResolvedValue(undefined)
+
+        const result = await Workspace.updateCanvasState({
+            userId: 'user-1',
+            workspaceId: 'workspace-1',
+            expectedCanvasStateUpdatedAt: 1_000,
+            canvasState: {
+                viewport: { x: 0, y: 0, zoom: 1 },
+                nodes: [],
+                edges: [],
+            },
+        })
+
+        expect(result).toMatchObject({ updatedAt: 1_001, canvasStateUpdatedAt: 1_001 })
+        expect(dynamo.transactWrite.mock.calls[0][0].operations[0].expressionAttributeValues)
+            .toMatchObject({ ':canvasStateUpdatedAt': 1_001 })
+    })
+
     it('writes full canvas state with a canvasStateUpdatedAt condition when the client supplies a save token', async () => {
         dynamo.getItem.mockResolvedValueOnce({
             updatedAt: 10,

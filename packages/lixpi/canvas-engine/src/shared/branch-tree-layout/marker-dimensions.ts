@@ -6,11 +6,41 @@
 // server-resolved layout reserves exactly the space the client paints.
 
 import { mediaGenerationLayoutSettings } from '@lixpi/constants'
+import type {
+    BranchForkCanvasNode,
+    BranchLineCanvasNode,
+    BranchOriginCanvasNode,
+} from '@lixpi/constants'
+
+type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 
 export type BranchMarkerDimensionOptions = {
     responseLine?: boolean
     responseText?: string
     screenFixed?: boolean
+}
+
+// Marker text can grow while reasoning streams. Preserve the connector's
+// vertical center across that resize; fork/line markers also preserve their
+// horizontal center because they sit at the midpoint of a connector. A root
+// branchOrigin keeps its left anchor stable while its output side expands.
+export function resizeBranchMarkerToDimensions<T extends BranchMarkerNode>(
+    node: T,
+    dimensions: { width: number; height: number },
+): T {
+    if (node.dimensions.width === dimensions.width && node.dimensions.height === dimensions.height) return node
+    const widthDelta = dimensions.width - node.dimensions.width
+    const heightDelta = dimensions.height - node.dimensions.height
+    return {
+        ...node,
+        position: {
+            x: node.type === 'branchOrigin'
+                ? node.position.x
+                : node.position.x - widthDelta / 2,
+            y: node.position.y - heightDelta / 2,
+        },
+        dimensions,
+    } as T
 }
 
 const marker = mediaGenerationLayoutSettings.marker

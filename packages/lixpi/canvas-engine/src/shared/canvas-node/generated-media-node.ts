@@ -8,11 +8,29 @@ export function isGeneratedMediaCanvasNode(node: CanvasNode): node is GeneratedM
     return (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy)
 }
 
-export function isPendingGeneratedMediaCanvasNode(_node: CanvasNode): boolean {
-    // Asset lifecycle is authoritative and is intentionally not duplicated on
-    // canvas nodes. Callers that need pending/ready state must resolve node.assetId
-    // through the Asset store.
-    return false
+export function isPendingGeneratedMediaCanvasNode(node: CanvasNode): boolean {
+    if (!isGeneratedMediaCanvasNode(node)) return false
+    if (node.mediaGenerationPhase) return node.mediaGenerationPhase === 'pending-before-first-frame'
+
+    // Compatibility for transient pre-Asset client snapshots. Revision-2 API
+    // snapshots use mediaGenerationPhase; old client snapshots carried media
+    // readiness in file/src fields that must still be protected from stale
+    // geometry updates while they are in flight.
+    const legacyNode = node as CanvasNode & {
+        fileId?: string
+        src?: string
+        posterFileId?: string
+        posterSrc?: string
+    }
+    const hasLegacyReadinessFields = 'fileId' in legacyNode
+        || 'src' in legacyNode
+        || 'posterFileId' in legacyNode
+        || 'posterSrc' in legacyNode
+    if (!hasLegacyReadinessFields) return false
+    return !legacyNode.fileId?.trim()
+        && !legacyNode.src?.trim()
+        && !legacyNode.posterFileId?.trim()
+        && !legacyNode.posterSrc?.trim()
 }
 
 export function isCompletedGeneratedMediaCanvasNode(node: CanvasNode): boolean {

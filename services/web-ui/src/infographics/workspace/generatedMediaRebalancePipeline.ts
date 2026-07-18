@@ -273,10 +273,6 @@ export class GeneratedMediaRebalancePipeline {
             rootMarkerDepthGap: this.config.rootMarkerDepthGap,
             siblingGap: this.config.siblingGap,
             branchFanoutExtraGap: this.config.branchFanoutExtraGap,
-            getBranchFanoutExtraGap: (_parentNode, childNodes) =>
-                childNodes.length > 0 && childNodes.every(node => this.isPendingPreFrameLayoutNode(node))
-                    ? 0
-                    : this.config.branchFanoutExtraGap,
             branchOriginMarkerStackGap: this.config.branchOriginMarkerStackGap,
             collisionIterations: this.config.collisionIterations,
             collisionMargin: this.config.collisionMargin,
@@ -290,11 +286,6 @@ export class GeneratedMediaRebalancePipeline {
             nodes: restoredNodes,
             startedMarkerNodeIds: getStartedLineageMarkerState(restoredNodes).markerIdsWithGeneratedChildren,
         }
-    }
-
-    private isPendingPreFrameLayoutNode(node: CanvasNode): boolean {
-        if (this.config.isPendingGeneratedMediaBeforeFrame(node)) return true
-        return node.type === 'image' && node.nodeId.includes(PLANNED_MEDIA_LAYOUT_PROXY_NODE_ID_SUFFIX)
     }
 
     // Layout boxes must equal rendered boxes. Pending media use the compact

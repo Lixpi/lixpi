@@ -409,7 +409,7 @@ describe('applyBranchTreeLayout', () => {
         expect(bVisual.y - (aVisual.y + pendingVisualSize)).toBe(OPTS.siblingGap)
     })
 
-    it('does not add fanout depth while every child is a pending visual box', () => {
+    it('keeps the configured fanout depth while every child is a pending visual box', () => {
         const parent = genMedia('R', 0, 0, { createdAt: 1 })
         const pendingIds = new Set(['A', 'B', 'C'])
         const children = [
@@ -421,10 +421,6 @@ describe('applyBranchTreeLayout', () => {
         const pendingVisualInset = (SIZE - pendingVisualSize) / 2
         const out = applyBranchTreeLayout([parent, ...children], [], {
             ...FANOUT_OPTS,
-            getBranchFanoutExtraGap: (_parentNode, childNodes) =>
-                childNodes.every(child => pendingIds.has(child.nodeId))
-                    ? 0
-                    : FANOUT_OPTS.branchFanoutExtraGap,
             getNodeCollisionRect: (node, worldPosition) => pendingIds.has(node.nodeId)
                 ? {
                     x: worldPosition.x + pendingVisualInset,
@@ -443,7 +439,12 @@ describe('applyBranchTreeLayout', () => {
         for (const child of children) {
             const resolved = out.find(node => node.nodeId === child.nodeId)!
             expect(resolved.position.x + pendingVisualInset)
-                .toBe(parent.position.x + parent.dimensions.width + FANOUT_OPTS.depthGap)
+                .toBe(
+                    parent.position.x
+                    + parent.dimensions.width
+                    + FANOUT_OPTS.depthGap
+                    + FANOUT_OPTS.branchFanoutExtraGap * (children.length - 1),
+                )
         }
     })
 

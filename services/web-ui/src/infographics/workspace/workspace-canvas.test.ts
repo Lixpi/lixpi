@@ -605,6 +605,8 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'appendImageNodeToDOM(completedImageNode)')
 		expectSourceToContain(ts, 'appendVideoNodeToDOM(completedVideoNode)')
 		expectSourceToContain(ts, 'applyApiCanvasGeometry(data.canvasGeometry)')
+		expectSourceToContain(ts, "if (node.mediaGenerationPhase) return node.mediaGenerationPhase === 'pending-before-first-frame'")
+		expectSourceToContain(ts, "return Boolean(node.generatedBy) && asset?.media?.renditions.original?.status !== 'ready'")
 	})
 
 	it('keeps in-progress generated media aligned with API-owned lineage identity', () => {
@@ -1233,17 +1235,14 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 	const ts = loadTs()
 	const svelte = loadWorkspaceCanvasSvelte()
 
-	it('routes viewport-only render decisions through the stale viewport planner', () => {
-		expectSourceToContain(ts, 'shouldPreserveLiveViewportForViewportOnlyRender({')
+	it('routes same-workspace render decisions through the stale viewport planner', () => {
+		expectSourceToContain(ts, 'shouldPreserveLiveViewportForSameWorkspaceRender({')
 		expectSourceToContain(ts, 'incomingViewport: effectiveCanvasState?.viewport,')
 		expectSourceToContain(ts, 'liveViewport,')
-		expectSourceToContain(ts, 'viewportChanged,')
-		expectSourceToContain(ts, 'visualStateChanged,')
-		expectSourceToContain(ts, 'needsRerender,')
 		expectSourceToContain(ts, 'workspaceChanged,')
 	})
 
-	it('keeps viewport-only stale renders from applying a transform jump', () => {
+	it('keeps stale same-workspace renders from applying a transform jump', () => {
 		expectSourceToContain(ts, 'const liveViewport = getLiveViewport()')
 		expectSourceToContain(ts, 'currentCanvasState = shouldPreserveLiveViewport && effectiveCanvasState')
 		expectSourceToContain(ts, 'panZoom?.syncViewport(liveViewport)')

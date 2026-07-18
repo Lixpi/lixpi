@@ -103,6 +103,7 @@ import {
     getPendingGeneratedMediaNodeId,
     getResizeHandleScaledSizes,
     resolveCollisions,
+    resizeBranchMarkerToDimensions,
     scaleCanvasChromeToScreenForZoom,
     scaleCanvasChromeWorldSizeForZoom,
 } from '@lixpi/canvas-engine'
@@ -165,7 +166,7 @@ import {
     updatePendingCanvasVisualCommitViewport,
     type PendingCanvasVisualCommit,
 } from '$src/infographics/workspace/workspaceRenderStatePlan.ts'
-import { shouldPreserveLiveViewportForViewportOnlyRender } from '$src/infographics/workspace/workspaceViewportStatePlan.ts'
+import { shouldPreserveLiveViewportForSameWorkspaceRender } from '$src/infographics/workspace/workspaceViewportStatePlan.ts'
 import { planWorkspaceRenderTransition } from '$src/infographics/workspace/workspaceRenderTransitionPlan.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
@@ -400,23 +401,7 @@ function resizeBranchMarkerNodeToDimensions<T extends BranchMarkerNode>(
     node: T,
     dimensions: { width: number; height: number },
 ): T {
-    if (node.dimensions.width === dimensions.width && node.dimensions.height === dimensions.height) return node
-    const widthDelta = dimensions.width - node.dimensions.width
-    const heightDelta = dimensions.height - node.dimensions.height
-    const position = node.type === 'branchOrigin'
-        ? {
-            x: node.position.x,
-            y: node.position.y - heightDelta / 2,
-        }
-        : {
-            x: node.position.x - widthDelta / 2,
-            y: node.position.y - heightDelta / 2,
-        }
-    return {
-        ...node,
-        position,
-        dimensions,
-    } as T
+    return resizeBranchMarkerToDimensions(node, dimensions)
 }
 
 function resizeBranchMarkerNodeToContent<T extends BranchMarkerNode>(
@@ -3990,6 +3975,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function isGeneratedMediaCanvasNodeWaitingForFrame(node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode {
         if (node.type !== 'image' && node.type !== 'video') return false
         if (node.type === 'image' && decodedGeneratedImageNodeIds.has(node.nodeId)) return false
+        if (node.mediaGenerationPhase) return node.mediaGenerationPhase === 'pending-before-first-frame'
         const asset = assetsStore.get(node.assetId)
         return Boolean(node.generatedBy) && asset?.media?.renditions.original?.status !== 'ready'
     }
@@ -7982,7 +7968,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             for (const nodeEl of [...pendingBranchMarkerOverlayEl.querySelectorAll('[data-node-id]')] as HTMLElement[]) {
                 const nodeId = nodeEl.dataset.nodeId ?? ''
                 const branchMarker = branchMarkersById.get(nodeId)
-                if (!branchMarker || branchMarker.pendingState?.phase === 'preflight') continue
+                if (!branchMarker) {
+                    cleanupBranchMarkerArtifacts([nodeId])
+                    continue
+                }
+                if (branchMarker.pendingState?.phase === 'preflight') continue
                 if (shouldDeferPlannedBranchMarkerViewportRender(branchMarker)) continue
 
                 const viewportNodeEl = viewportEl.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
@@ -8570,6 +8560,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         previousRecord: PendingBranchMarkerRecord,
         plannedNodeId: string,
     ): void {
+        if (previousRecord.nodeId !== plannedNodeId) {
+            deletePendingBranchMarkerAliasesForNodeId(previousRecord.nodeId)
+        }
         const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
         const reasoningModelId = previousRecord.reasoningModelId ?? generationRun?.reasoningModelId
         const reasoningIndex = previousRecord.reasoningIndex ?? generationRun?.reasoningIndex
@@ -8946,6 +8939,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             nodes,
         })
         syncBranchMarkerNodeContent(updatedMarker)
+        syncPendingBranchMarkerScreenPlacements()
         refreshBranchMarkersForAiChatThread(threadId)
     }
 
@@ -14547,12 +14541,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
             }
             const liveViewport = getLiveViewport()
-            const shouldPreserveLiveViewport = shouldPreserveLiveViewportForViewportOnlyRender({
+            const shouldPreserveLiveViewport = shouldPreserveLiveViewportForSameWorkspaceRender({
                 incomingViewport: effectiveCanvasState?.viewport,
                 liveViewport,
-                viewportChanged,
-                visualStateChanged,
-                needsRerender,
                 workspaceChanged,
             })
 

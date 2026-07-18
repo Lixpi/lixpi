@@ -74,10 +74,6 @@ export type BranchTreeLayoutOptions = {
     rootMarkerDepthGap?: number       // LR horizontal gap from a parentless branch root marker to its first generated media node
     siblingGap: number                // LR vertical gap — mediaBranchLineage.branchRowGap
     branchFanoutExtraGap?: number     // LR extra depth gap for forked generated media nodes
-    getBranchFanoutExtraGap?: (
-        parentNode: CanvasNode,
-        childNodes: CanvasNode[],
-    ) => number
     branchOriginMarkerStackGap?: number // Vertical gap between a branchOrigin and child fork/line markers
     collisionMargin?: number          // resolver breathing room; defaults to the resolver's own 20
     collisionIterations?: number      // resolver iteration limit; defaults to the resolver's own 50
@@ -543,16 +539,6 @@ export function applyBranchTreeLayout(
             depthGap: options.depthGap,
             siblingGap: options.siblingGap,
             branchFanoutDepthGap: options.branchFanoutExtraGap,
-            getBranchFanoutDepthGap: options.getBranchFanoutExtraGap
-                ? (node: TreeLayoutNode, children: TreeLayoutNode[]): number => {
-                    const parentNode = nodesById.get(node.id)
-                    if (!parentNode || !isBranchTreeMember(parentNode)) return options.branchFanoutExtraGap ?? 0
-                    const childNodes = children
-                        .map((child: TreeLayoutNode) => nodesById.get(child.id))
-                        .filter((child): child is BranchTreeMemberNode => Boolean(child) && isBranchTreeMember(child))
-                    return options.getBranchFanoutExtraGap!(parentNode, childNodes)
-                }
-                : undefined,
         })
 
         // Anchor the relative layout (root at 0,0) onto the root's current world

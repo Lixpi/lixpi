@@ -5,6 +5,7 @@ import {
     getGeneratedMediaChromeCollisionHeight,
     getPendingGeneratedMediaNodeId,
     rebalanceBranchTreesAndResolve,
+    resizeBranchMarkerToDimensions,
 } from '@lixpi/canvas-engine'
 import type {
     AiModelId,
@@ -119,6 +120,18 @@ const upsertNode = (nodes: CanvasNode[], next: CanvasNode): { nodes: CanvasNode[
         position: existing.position,
         dimensions: existing.dimensions,
     } as CanvasNode
+    if (JSON.stringify(existing) === JSON.stringify(merged)) return { nodes, changed: false }
+    return { nodes: nodes.map((node, nodeIndex) => nodeIndex === index ? merged : node), changed: true }
+}
+
+const upsertGeneratedMediaNode = (
+    nodes: CanvasNode[],
+    next: GeneratedMediaNode,
+): { nodes: CanvasNode[]; changed: boolean } => {
+    const index = nodes.findIndex((node) => node.nodeId === next.nodeId)
+    if (index < 0) return { nodes: [...nodes, next], changed: true }
+    const existing = nodes[index]!
+    const merged = { ...existing, ...next } as GeneratedMediaNode
     if (JSON.stringify(existing) === JSON.stringify(merged)) return { nodes, changed: false }
     return { nodes: nodes.map((node, nodeIndex) => nodeIndex === index ? merged : node), changed: true }
 }
@@ -316,25 +329,24 @@ const getPendingMediaLayoutRect = (
 const rebalance = (
     state: CanvasState,
     context: ProjectionContext = {},
-    pendingMediaNodeIds: ReadonlySet<string> = new Set(),
 ): { state: CanvasState; changed: boolean } => {
     const resizedNodes = state.nodes.map((node): CanvasNode => {
         if (!isMarkerNode(node)) return node
         const dimensions = markerDimensions(node, context)
-        return dimensions.width === node.dimensions.width && dimensions.height === node.dimensions.height
-            ? node
-            : { ...node, dimensions }
+        return resizeBranchMarkerToDimensions(node, dimensions)
     })
+    const pendingMediaNodeIds = new Set(resizedNodes.flatMap((node): string[] =>
+        (node.type === 'image' || node.type === 'video')
+            && node.mediaGenerationPhase === 'pending-before-first-frame'
+            ? [node.nodeId]
+            : []
+    ))
     const nodes = rebalanceBranchTreesAndResolve(resizedNodes, state.edges ?? [], {
         depthGap: layout.mediaToMediaGap,
         branchOriginDepthGap: layout.branchOriginToFirstMediaGap,
         rootMarkerDepthGap: layout.rootToFirstMediaGap,
         siblingGap: layout.branchRowGap,
         branchFanoutExtraGap: layout.branchFanoutExtraGap,
-        getBranchFanoutExtraGap: (_parentNode, childNodes) =>
-            childNodes.length > 0 && childNodes.every((node) => pendingMediaNodeIds.has(node.nodeId))
-                ? 0
-                : layout.branchFanoutExtraGap,
         branchOriginMarkerStackGap: layout.nodeGap,
         collisionIterations: Math.max(...Object.values(collision.nodeTypes).map((entry) => entry.iterations)),
         collisionMargin: 0,
@@ -449,9 +461,17 @@ export const upsertMediaLineagePlanToCanvas = async (params: {
                 params.canvasVisibleArea,
             )
             const markerResult = ensureMarkers(canvasState, markers)
-            const balanced = rebalance(markerResult.state, { proseMirrorThreadContent: params.proseMirrorThreadContent })
+            const plannedMediaResult = projectPlannedMediaSlots(
+                markerResult.state,
+                params.lineagePlan,
+                params.conversationAssetId,
+            )
+            const balanced = rebalance(plannedMediaResult.state, { proseMirrorThreadContent: params.proseMirrorThreadContent })
             geometryNodes = geometryDiff(canvasState, balanced.state)
-            return { canvasState: balanced.state, changed: markerResult.changed || balanced.changed }
+            return {
+                canvasState: balanced.state,
+                changed: markerResult.changed || plannedMediaResult.changed || balanced.changed,
+            }
         },
     })
     if (!result.canvasState || result.canvasStateUpdatedAt === null) return null
@@ -508,7 +528,12 @@ export const settleMediaGenerationRequestOnCanvas = async (params: {
         mutate: (canvasState) => {
             const persistedPendingIds = new Set(candidateRemovedNodeIds)
             removedNodeIds = canvasState.nodes
-                .filter((node) => persistedPendingIds.has(node.nodeId) && !('assetId' in node && node.assetId))
+                .filter((node) => {
+                    if (!persistedPendingIds.has(node.nodeId)) return false
+                    if (node.type !== 'image' && node.type !== 'video') return !('assetId' in node && node.assetId)
+                    if (node.mediaGenerationPhase) return node.mediaGenerationPhase === 'pending-before-first-frame'
+                    return !node.assetId
+                })
                 .map((node) => node.nodeId)
             const removableIds = new Set(removedNodeIds)
             const stateWithoutPending = removableIds.size
@@ -689,6 +714,7 @@ export const projectGeneratedAssetNode = ({
             nodeId,
             type: 'image',
             assetId,
+            mediaGenerationPhase: pendingBeforeFirstFrame ? 'pending-before-first-frame' : 'ready',
             position,
             dimensions,
             generatedBy: {
@@ -703,6 +729,7 @@ export const projectGeneratedAssetNode = ({
             nodeId,
             type: 'video',
             assetId,
+            mediaGenerationPhase: pendingBeforeFirstFrame ? 'pending-before-first-frame' : 'ready',
             position,
             dimensions,
             generatedBy: {
@@ -716,14 +743,50 @@ export const projectGeneratedAssetNode = ({
     const withoutSameAsset = markerResult.state.nodes.filter((candidate) =>
         candidate.nodeId === nodeId || !('assetId' in candidate) || candidate.assetId !== assetId
     )
-    const nodeResult = upsertNode(withoutSameAsset, node)
+    const nodeResult = upsertGeneratedMediaNode(withoutSameAsset, node)
     const edgeResult = addEdge(markerResult.state.edges ?? [], lineageParentNodeId, nodeId)
-    const next = rebalance(
-        { ...markerResult.state, nodes: nodeResult.nodes, edges: edgeResult.edges },
-        {},
-        pendingBeforeFirstFrame ? new Set([nodeId]) : new Set(),
-    ).state
+    const next = rebalance({ ...markerResult.state, nodes: nodeResult.nodes, edges: edgeResult.edges }).state
     return { canvasState: next, nodeId, geometryNodes: geometryDiff(canvasState, next) }
+}
+
+function projectPlannedMediaSlots(
+    canvasState: CanvasState,
+    lineagePlan: MediaBranchLineagePlan,
+    conversationAssetId: string,
+): { state: CanvasState; changed: boolean } {
+    let state = canvasState
+    for (const assignment of lineagePlan.runAssignments) {
+        if (
+            !assignment.assetId
+            || !assignment.mediaType
+            || !assignment.reasoningRunId
+            || !assignment.reasoningModelId
+        ) continue
+        state = projectGeneratedAssetNode({
+            canvasState: state,
+            assetId: assignment.assetId,
+            kind: assignment.mediaType,
+            aspectRatio: 1,
+            generationRun: {
+                requestKind: 'media-generation-matrix',
+                generationRequestId: assignment.generationRequestId,
+                reasoningRunId: assignment.reasoningRunId,
+                ...(assignment.mediaRunId ? { mediaRunId: assignment.mediaRunId } : {}),
+                reasoningModelId: assignment.reasoningModelId,
+                ...(assignment.mediaModelId ? { mediaModelId: assignment.mediaModelId } : {}),
+                mediaType: assignment.mediaType,
+                reasoningIndex: assignment.reasoningIndex ?? 0,
+                ...(assignment.mediaIndex == null ? {} : {
+                    mediaIndex: assignment.mediaIndex,
+                    variantIndex: assignment.mediaIndex,
+                }),
+                lineageAssignment: assignment,
+            },
+            conversationAssetId,
+            pendingBeforeFirstFrame: true,
+        }).canvasState
+    }
+    return { state, changed: JSON.stringify(state) !== JSON.stringify(canvasState) }
 }
 
 export const detachReviewedGeneratedOutputsFromCanvas = ({

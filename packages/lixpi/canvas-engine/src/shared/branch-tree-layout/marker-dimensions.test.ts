@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { mediaGenerationLayoutSettings } from '@lixpi/constants'
+import type { BranchLineCanvasNode } from '@lixpi/constants'
 
 import {
     estimateBranchMarkerDimensions,
@@ -10,6 +11,7 @@ import {
     getBranchMarkerPromptPreview,
     getBranchMarkerResponsePreview,
     getBranchMarkerScreenFixedMinWidth,
+    resizeBranchMarkerToDimensions,
 } from './marker-dimensions.ts'
 
 const marker = mediaGenerationLayoutSettings.marker
@@ -48,6 +50,26 @@ describe('estimateBranchMarkerDimensions', () => {
     it('is deterministic — identical inputs give identical dimensions on API and client', () => {
         expect(estimateBranchMarkerDimensions('draw a watercolor', { responseLine: true }))
             .toEqual(estimateBranchMarkerDimensions('draw a watercolor', { responseLine: true }))
+    })
+})
+
+describe('resizeBranchMarkerToDimensions', () => {
+    it('preserves a continuation marker connector center while response text grows it', () => {
+        const node = {
+            nodeId: 'line-1',
+            type: 'branchLine',
+            branchId: 'branch-1',
+            generationRequestId: 'request-1',
+            position: { x: 100, y: 200 },
+            dimensions: { width: 280, height: 64 },
+            provenance: {},
+        } as BranchLineCanvasNode
+
+        const resized = resizeBranchMarkerToDimensions(node, { width: 340, height: 94 })
+
+        expect(resized.position).toEqual({ x: 70, y: 185 })
+        expect(resized.position.x + resized.dimensions.width / 2).toBe(240)
+        expect(resized.position.y + resized.dimensions.height / 2).toBe(232)
     })
 })
 

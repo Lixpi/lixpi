@@ -30,6 +30,11 @@ import { enqueueRenditionRetry } from './asset-maintenance-queue.ts'
 
 const { ORG_NAME, STAGE } = process.env
 
+const isRetryableCanvasAttachmentConflict = (error: unknown): boolean => {
+    return isTransactionConditionalCheckFailure(error)
+        || (error instanceof Error && error.message === 'STALE_CANVAS_STATE')
+}
+
 export const ensurePendingGeneratedAssets = async ({
     lineagePlan,
     workspaceId,
@@ -272,7 +277,8 @@ export const attachGeneratedAssetNode = async ({
             conversationAssetId,
             pendingBeforeFirstFrame: asset.media?.renditions.original?.status !== 'ready',
         })
-        const canvasStateUpdatedAt = Date.now()
+        const persistedCanvasRevision = workspace.canvasStateUpdatedAt ?? workspace.updatedAt ?? 0
+        const canvasStateUpdatedAt = Math.max(Date.now(), persistedCanvasRevision + 1)
 
         try {
             const attached = await AssetModel.attachWorkspaceReference({
@@ -292,18 +298,15 @@ export const attachGeneratedAssetNode = async ({
                 },
             })
             if ('error' in attached) throw new Error(attached.error)
-            const committedLayoutRevision = attached.updatedAt === canvasStateUpdatedAt
-                ? canvasStateUpdatedAt
-                : workspace.canvasStateUpdatedAt ?? workspace.updatedAt
             return buildAssetCanvasGeometryUpdate({
                 state: projection.canvasState,
-                layoutRevision: committedLayoutRevision,
+                layoutRevision: canvasStateUpdatedAt,
                 generationRequestId: generationRun.generationRequestId,
                 geometryNodes: projection.geometryNodes,
             })
         } catch (error) {
             lastError = error
-            if (isTransactionConditionalCheckFailure(error)) continue
+            if (isRetryableCanvasAttachmentConflict(error)) continue
             throw error
         }
     }
