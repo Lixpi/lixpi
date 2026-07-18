@@ -59,6 +59,11 @@ const assignmentFor = (mediaIndex: number): MediaRunLineageAssignment => ({
     mediaIndex,
 })
 
+const twoImageModelAssignments = (): MediaRunLineageAssignment[] => [
+    { ...assignmentFor(0), mediaModelId: 'Stability:sd3.5-large' },
+    { ...assignmentFor(1), mediaModelId: 'Google:gemini-2.5-flash-image' },
+]
+
 const lineagePlan = (): MediaBranchLineagePlan => ({
     planVersion: 'media-branch-lineage-v1',
     generationRequestId: 'request-1',
@@ -86,6 +91,51 @@ const lineagePlan = (): MediaBranchLineagePlan => ({
     runAssignments: [assignment],
     createdAt: 1,
 })
+
+const selectedMediaFanoutPlan = (): MediaBranchLineagePlan => {
+    const runAssignments = twoImageModelAssignments().map((entry) => ({
+        ...entry,
+        branchOriginNodeId: undefined,
+        branchForkNodeId: 'selected-media-fork',
+        lineageParentNodeId: 'selected-media-fork',
+        parentMediaNodeId: 'selected-media',
+        parentImageNodeId: 'selected-media',
+        referenceNodeIds: ['selected-media'],
+        sourceContextNodeIds: ['selected-media'],
+        operationKind: 'edit_existing' as const,
+    }))
+    return {
+        planVersion: 'media-branch-lineage-v1',
+        generationRequestId: 'request-1',
+        branchId: 'existing-branch',
+        promptText: 'make it a mountain omelet',
+        sourceNodeId: 'selected-media',
+        placementAnchorNodeId: 'selected-media',
+        referenceNodeIds: ['selected-media'],
+        sourceContextNodeIds: ['selected-media'],
+        branchForks: [{
+            nodeId: 'selected-media-fork',
+            generationRequestId: 'request-1',
+            branchId: 'existing-branch',
+            parentBranchNodeId: 'selected-media',
+            reasoningRunId: 'reasoning-1',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            reasoningIndex: 0,
+            provenance: {
+                kind: 'reasoning-run',
+                promptText: 'make it a mountain omelet',
+                referenceNodeIds: ['selected-media'],
+                sourceContextNodeIds: ['selected-media'],
+                reasoningRunId: 'reasoning-1',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                reasoningIndex: 0,
+            },
+        }],
+        branchLines: [],
+        runAssignments,
+        createdAt: 1,
+    }
+}
 
 const generationRun = (): MediaGenerationRunMeta => ({
     requestKind: 'media-generation-matrix',
@@ -193,28 +243,128 @@ describe('asset canvas projection', () => {
         })
     })
 
-    it('persists only API-planned lineage markers; it never creates client-style pending media nodes', async () => {
+    it('persists every API-planned media slot with the lineage markers before providers start', async () => {
+        const plan = lineagePlan()
+        plan.runAssignments = twoImageModelAssignments()
         const geometry = await upsertMediaLineagePlanToCanvas({
             workspaceId: 'workspace-1',
             conversationAssetId: 'thread-1',
-            lineagePlan: lineagePlan(),
+            lineagePlan: plan,
         })
 
         expect(workspaceMutateCanvasState).toHaveBeenCalledWith(expect.objectContaining({
             origin: 'upsertAssetMediaLineagePlanToCanvas',
         }))
-        expect(storedState.nodes.map(node => node.nodeId)).toEqual(['origin-1', 'fork-1'])
-        expect(storedState.nodes).not.toContainEqual(expect.objectContaining({
-            nodeId: getPendingGeneratedMediaNodeId(assignment),
-        }))
+        expect(storedState.nodes).toEqual(expect.arrayContaining([
+            expect.objectContaining({ nodeId: 'origin-1' }),
+            expect.objectContaining({ nodeId: 'fork-1' }),
+            expect.objectContaining({
+                nodeId: getPendingGeneratedMediaNodeId(assignmentFor(0)),
+                assetId: 'asset-1',
+                mediaGenerationPhase: 'pending-before-first-frame',
+            }),
+            expect.objectContaining({
+                nodeId: getPendingGeneratedMediaNodeId(assignmentFor(1)),
+                assetId: 'asset-2',
+                mediaGenerationPhase: 'pending-before-first-frame',
+            }),
+        ]))
+        expect(storedState.edges).toEqual(expect.arrayContaining([
+            expect.objectContaining({ sourceNodeId: 'fork-1', targetNodeId: getPendingGeneratedMediaNodeId(assignmentFor(0)) }),
+            expect.objectContaining({ sourceNodeId: 'fork-1', targetNodeId: getPendingGeneratedMediaNodeId(assignmentFor(1)) }),
+        ]))
         expect(geometry).toMatchObject({
             generationRequestId: 'request-1',
             layoutRevision: 101,
             nodeSnapshots: expect.arrayContaining([
                 expect.objectContaining({ nodeId: 'origin-1' }),
                 expect.objectContaining({ nodeId: 'fork-1' }),
+                expect.objectContaining({ nodeId: getPendingGeneratedMediaNodeId(assignmentFor(0)) }),
+                expect.objectContaining({ nodeId: getPendingGeneratedMediaNodeId(assignmentFor(1)) }),
             ]),
         })
+    })
+
+    it('projects a selected generated-media continuation as one balanced fork with every model slot', async () => {
+        storedState = {
+            ...emptyCanvasState(),
+            nodes: [{
+                nodeId: 'selected-media',
+                type: 'image',
+                assetId: 'selected-asset',
+                mediaGenerationPhase: 'ready',
+                position: { x: 100, y: 200 },
+                dimensions: { width: 800, height: 800 },
+                generatedBy: {
+                    conversationAssetId: 'previous-thread',
+                    responseId: '',
+                    aiModel: 'Anthropic:claude-sonnet-4-6',
+                    revisedPrompt: 'happy cookie',
+                    generationRequestId: 'previous-request',
+                    reasoningRunId: 'previous-reasoning',
+                    mediaRunId: 'previous-media',
+                    branchId: 'existing-branch',
+                    promptText: 'happy cookie',
+                },
+            }],
+            edges: [],
+        } as CanvasState
+        const plan = selectedMediaFanoutPlan()
+
+        const geometry = await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            conversationAssetId: 'thread-1',
+            lineagePlan: plan,
+        })
+
+        const forks = storedState.nodes.filter(node => node.type === 'branchFork' && node.generationRequestId === 'request-1')
+        const pending = storedState.nodes.filter(node =>
+            (node.type === 'image' || node.type === 'video')
+            && node.generatedBy?.generationRequestId === 'request-1'
+        )
+        expect(forks).toHaveLength(1)
+        expect(pending).toHaveLength(2)
+        expect(pending.map(node => node.generatedBy?.mediaModelId).sort()).toEqual([
+            'Google:gemini-2.5-flash-image',
+            'Stability:sd3.5-large',
+        ])
+        expect(storedState.nodes.some(node => node.type === 'branchOrigin' && node.generationRequestId === 'request-1')).toBe(false)
+        expect(storedState.edges).toEqual(expect.arrayContaining([
+            expect.objectContaining({ sourceNodeId: 'selected-media', targetNodeId: 'selected-media-fork' }),
+            ...pending.map(node => expect.objectContaining({ sourceNodeId: 'selected-media-fork', targetNodeId: node.nodeId })),
+        ]))
+        expect(nodeCenterY(forks[0]!)).toBeCloseTo(
+            pending.reduce((sum, node) => sum + nodeCenterY(node), 0) / pending.length,
+            6,
+        )
+        expect(geometry?.nodeSnapshots).toEqual(expect.arrayContaining([
+            expect.objectContaining({ nodeId: 'selected-media-fork' }),
+            ...pending.map(node => expect.objectContaining({ nodeId: node.nodeId })),
+        ]))
+    })
+
+    it('replays a selected-media lineage plan without duplicating its fork or model slots', async () => {
+        storedState = {
+            ...emptyCanvasState(),
+            nodes: [{
+                nodeId: 'selected-media',
+                type: 'image',
+                assetId: 'selected-asset',
+                mediaGenerationPhase: 'ready',
+                position: { x: 100, y: 200 },
+                dimensions: { width: 800, height: 800 },
+            }],
+        } as CanvasState
+        const plan = selectedMediaFanoutPlan()
+
+        await upsertMediaLineagePlanToCanvas({ workspaceId: 'workspace-1', conversationAssetId: 'thread-1', lineagePlan: plan })
+        await upsertMediaLineagePlanToCanvas({ workspaceId: 'workspace-1', conversationAssetId: 'thread-1', lineagePlan: plan })
+
+        expect(storedState.nodes.filter(node => node.nodeId === 'selected-media-fork')).toHaveLength(1)
+        for (const run of plan.runAssignments) {
+            expect(storedState.nodes.filter(node => node.nodeId === getPendingGeneratedMediaNodeId(run))).toHaveLength(1)
+        }
+        expect(new Set(storedState.edges.map(edge => edge.edgeId)).size).toBe(storedState.edges.length)
     })
 
     it('attaches a generated asset to the server-owned lineage parent and returns the complete geometry', () => {

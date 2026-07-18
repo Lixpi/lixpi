@@ -466,9 +466,17 @@ export const upsertMediaLineagePlanToCanvas = async (params: {
                 params.canvasVisibleArea,
             )
             const markerResult = ensureMarkers(canvasState, markers)
-            const balanced = rebalance(markerResult.state, { proseMirrorThreadContent: params.proseMirrorThreadContent })
+            const plannedMediaResult = projectPlannedMediaSlots(
+                markerResult.state,
+                params.lineagePlan,
+                params.conversationAssetId,
+            )
+            const balanced = rebalance(plannedMediaResult.state, { proseMirrorThreadContent: params.proseMirrorThreadContent })
             geometryNodes = geometryDiff(canvasState, balanced.state)
-            return { canvasState: balanced.state, changed: markerResult.changed || balanced.changed }
+            return {
+                canvasState: balanced.state,
+                changed: markerResult.changed || plannedMediaResult.changed || balanced.changed,
+            }
         },
     })
     if (!result.canvasState || result.canvasStateUpdatedAt === null) return null
@@ -744,6 +752,46 @@ export const projectGeneratedAssetNode = ({
     const edgeResult = addEdge(markerResult.state.edges ?? [], lineageParentNodeId, nodeId)
     const next = rebalance({ ...markerResult.state, nodes: nodeResult.nodes, edges: edgeResult.edges }).state
     return { canvasState: next, nodeId, geometryNodes: geometryDiff(canvasState, next) }
+}
+
+function projectPlannedMediaSlots(
+    canvasState: CanvasState,
+    lineagePlan: MediaBranchLineagePlan,
+    conversationAssetId: string,
+): { state: CanvasState; changed: boolean } {
+    let state = canvasState
+    for (const assignment of lineagePlan.runAssignments) {
+        if (
+            !assignment.assetId
+            || !assignment.mediaType
+            || !assignment.reasoningRunId
+            || !assignment.reasoningModelId
+        ) continue
+        state = projectGeneratedAssetNode({
+            canvasState: state,
+            assetId: assignment.assetId,
+            kind: assignment.mediaType,
+            aspectRatio: 1,
+            generationRun: {
+                requestKind: 'media-generation-matrix',
+                generationRequestId: assignment.generationRequestId,
+                reasoningRunId: assignment.reasoningRunId,
+                ...(assignment.mediaRunId ? { mediaRunId: assignment.mediaRunId } : {}),
+                reasoningModelId: assignment.reasoningModelId,
+                ...(assignment.mediaModelId ? { mediaModelId: assignment.mediaModelId } : {}),
+                mediaType: assignment.mediaType,
+                reasoningIndex: assignment.reasoningIndex ?? 0,
+                ...(assignment.mediaIndex == null ? {} : {
+                    mediaIndex: assignment.mediaIndex,
+                    variantIndex: assignment.mediaIndex,
+                }),
+                lineageAssignment: assignment,
+            },
+            conversationAssetId,
+            pendingBeforeFirstFrame: true,
+        }).canvasState
+    }
+    return { state, changed: JSON.stringify(state) !== JSON.stringify(canvasState) }
 }
 
 export const detachReviewedGeneratedOutputsFromCanvas = ({

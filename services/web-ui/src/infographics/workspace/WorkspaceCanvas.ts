@@ -7983,7 +7983,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             for (const nodeEl of [...pendingBranchMarkerOverlayEl.querySelectorAll('[data-node-id]')] as HTMLElement[]) {
                 const nodeId = nodeEl.dataset.nodeId ?? ''
                 const branchMarker = branchMarkersById.get(nodeId)
-                if (!branchMarker || branchMarker.pendingState?.phase === 'preflight') continue
+                if (!branchMarker) {
+                    cleanupBranchMarkerArtifacts([nodeId])
+                    continue
+                }
+                if (branchMarker.pendingState?.phase === 'preflight') continue
                 if (shouldDeferPlannedBranchMarkerViewportRender(branchMarker)) continue
 
                 const viewportNodeEl = viewportEl.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
@@ -8571,6 +8575,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         previousRecord: PendingBranchMarkerRecord,
         plannedNodeId: string,
     ): void {
+        if (previousRecord.nodeId !== plannedNodeId) {
+            deletePendingBranchMarkerAliasesForNodeId(previousRecord.nodeId)
+        }
         const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
         const reasoningModelId = previousRecord.reasoningModelId ?? generationRun?.reasoningModelId
         const reasoningIndex = previousRecord.reasoningIndex ?? generationRun?.reasoningIndex
@@ -8947,6 +8954,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             nodes,
         })
         syncBranchMarkerNodeContent(updatedMarker)
+        syncPendingBranchMarkerScreenPlacements()
         refreshBranchMarkersForAiChatThread(threadId)
     }
 
