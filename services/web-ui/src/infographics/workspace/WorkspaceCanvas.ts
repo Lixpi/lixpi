@@ -112,7 +112,21 @@ import {
 } from '$src/components/proseMirror/readOnlyAiChatThreadRenderer.ts'
 import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
 import AiInteractionService, { stopAiChatMessageForThread } from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, atomIcon, imageIcon, videoPlayGlyphIcon, promptIcon, aiChatPanelCollapseIcon, pauseIcon } from '$src/svgIcons/index.ts'
+import {
+    aiChatPanelCollapseIcon,
+    aiChatPanelToggleHistoryIcon,
+    atomIcon,
+    checkMarkIcon,
+    imageIcon,
+    imageResizeCornerIcon,
+    infoLetterIcon,
+    pauseIcon,
+    promptIcon,
+    refreshIcon,
+    trashBinIcon,
+    videoPlayGlyphIcon,
+    xCircleIcon,
+} from '$src/svgIcons/index.ts'
 import type {
     AssetDocumentView as Document,
     ConversationAssetView as AiChatThread,
@@ -915,7 +929,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-branch-marker-message-line-height', `${branchMarkerText.messageLineHeight}`)
     paneEl.style.setProperty('--workspace-branch-marker-response-font-size', `${branchMarkerText.responseFontSize}px`)
     paneEl.style.setProperty('--workspace-branch-marker-response-line-height', `${branchMarkerText.responseLineHeight}`)
-
     const normalizedInitialCanvasState: CanvasState | null = options.canvasState
         ? normalizeBranchMarkerDimensions(options.canvasState)
         : options.canvasState
@@ -970,6 +983,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const generatedMediaInfoRenderers: Map<string, ReadOnlyAiChatThreadRendererInstance> = new Map()
     const generatedMediaAssetEditors: Map<string, ProseMirrorEditor> = new Map()
     const generatedMediaAssetDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
+    const branchMarkerReviewDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const RESET_GENERATED_MEDIA_CHROME_SYNC_KEY = '\u0000reset-generated-media-chrome'
     let generatedMediaChromeSyncKey = RESET_GENERATED_MEDIA_CHROME_SYNC_KEY
@@ -2822,7 +2836,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 aria-expanded=${String(isExpanded)}
                 title=${title}
             >
-                <span innerHTML=${infoCircleFilledIcon}></span>
+                <span innerHTML=${infoLetterIcon}></span>
             </button>
         ` as HTMLButtonElement
         button.addEventListener('click', (event: MouseEvent) => {
@@ -3134,7 +3148,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 aria-label="Accept generated output"
                 title=${disabled ? 'Generation history is still being sealed' : 'Accept generated output'}
                 onclick=${handleClick}
-            >Accept</button>
+            >
+                <span className="media-review-action-icon" innerHTML=${checkMarkIcon} aria-hidden="true"></span>
+            </button>
         ` as HTMLButtonElement
         button.disabled = disabled
         return button
@@ -3163,7 +3179,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     title="Generate another result with the existing media prompt"
                     aria-label="Regenerate with existing media prompt"
                     onclick=${regenerate}
-                >Again</button>
+                >
+                    <span className="media-review-action-icon" innerHTML=${refreshIcon} aria-hidden="true"></span>
+                </button>
             </div>
         ` as HTMLDivElement
         for (const button of controls.querySelectorAll('button')) button.disabled = disabled
@@ -3244,15 +3262,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const modelId = getGeneratedMediaModelId(node)
         const modelProvider = getGeneratedMediaModelProvider(node, modelId)
         const modelBadge = createMediaModelBadge({ modelId, modelProvider })
+        const acceptButton = createMediaAcceptButton(node)
+        const regenerationControls = createMediaRegenerationControls(node)
         const chromeEl = html`
             <div className="workspace-generated-media-chrome" data=${{ mediaChromeNodeId: node.nodeId }}>
                 <div className="workspace-generated-media-title canvas-asset-metadata-editor is-node nopan"></div>
                 <div className="workspace-generated-media-actions">
                     ${createMediaInfoButton(node)}
-                    ${modelBadge ? html`<div className="media-info-model-separator" aria-hidden="true"></div>` : null}
+                    ${modelBadge ? html`<div className="media-info-model-separator media-review-action-separator" aria-hidden="true"></div>` : null}
                     ${modelBadge}
-                    ${createMediaAcceptButton(node)}
-                    ${createMediaRegenerationControls(node)}
+                    ${acceptButton}
+                    ${acceptButton && regenerationControls ? html`<div className="media-info-model-separator media-review-action-separator" aria-hidden="true"></div>` : null}
+                    ${regenerationControls}
                     ${createMediaHistoryButton(node)}
                 </div>
             </div>
@@ -12072,6 +12093,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             syncPendingBranchMarkerScreenPlacements()
             updateGeneratedMediaChromeLayout()
             if (zoomChanged) {
+                updateBranchMarkerReviewControlsZoom(vp.zoom)
                 if (settings.mediaNode.useZoomCompensatedResizeHandleScaling) {
                     pendingHandleZoom = vp.zoom
                 }
@@ -13457,6 +13479,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function createBranchMarkerReviewControls(node: BranchMarkerNode): HTMLDivElement | null {
+        branchMarkerReviewDropdowns.get(node.nodeId)?.destroy()
+        branchMarkerReviewDropdowns.delete(node.nodeId)
         const mediaNodes = getBranchMarkerGeneratedMediaNodes(node)
             .filter(mediaNode => !isGeneratedOutputAccepted(mediaNode))
         if (mediaNodes.length === 0 || isBranchMarkerGenerationGroupActive(node)) return null
@@ -13470,9 +13494,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             event.stopPropagation()
             void acceptGeneratedOutput('branch-lineage', node.nodeId)
         }
-        const regenerate = (mode: 'existing-prompt' | 'regenerate-prompt') => (event: MouseEvent): void => {
-            event.preventDefault()
-            event.stopPropagation()
+        const regenerate = (mode: 'existing-prompt' | 'regenerate-prompt'): void => {
             void regenerateGeneratedOutputs({
                 scope: 'branch-lineage',
                 mode,
@@ -13493,27 +13515,69 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     title=${canAcceptAll ? 'Accept all generated variants' : 'Wait for every variant history to finish sealing'}
                     onpointerdown=${stopPointerEvent}
                     onclick=${handleAcceptAll}
-                >Accept all</button>
-                <button
-                    type="button"
-                    className="workspace-branch-marker-review-action is-regenerate"
-                    aria-label="Regenerate every variant with its existing media prompt"
-                    title="Regenerate every variant with its existing media prompt"
-                    onpointerdown=${stopPointerEvent}
-                    onclick=${regenerate('existing-prompt')}
-                >Regenerate variants</button>
-                <button
-                    type="button"
-                    className="workspace-branch-marker-review-action is-new-prompt"
-                    aria-label="Regenerate the prompt and replace every variant"
-                    title="Regenerate the prompt and replace every variant"
-                    onpointerdown=${stopPointerEvent}
-                    onclick=${regenerate('regenerate-prompt')}
-                >Regenerate prompt</button>
+                >
+                    <span className="workspace-branch-marker-review-action-icon" innerHTML=${checkMarkIcon} aria-hidden="true"></span>
+                </button>
+                <div className="media-info-model-separator media-review-action-separator" aria-hidden="true"></div>
             </div>
         ` as HTMLDivElement
-        for (const button of controls.querySelectorAll('button')) button.disabled = !canAcceptAll
+        const acceptButton = controls.querySelector('.workspace-branch-marker-review-action') as HTMLButtonElement
+        acceptButton.disabled = !canAcceptAll
+        const regenerationOptions = [
+            {
+                title: 'Regenerate variants',
+                mode: 'existing-prompt' as const,
+            },
+            {
+                title: 'Regenerate prompt',
+                mode: 'regenerate-prompt' as const,
+            },
+        ]
+        const regenerationSelection = { title: '' }
+        let regenerationDropdown: ReturnType<typeof createPureDropdown>
+        regenerationDropdown = createPureDropdown({
+            id: `branch-regeneration-${node.nodeId}`,
+            selectedValue: regenerationSelection,
+            options: regenerationOptions,
+            buttonIcon: refreshIcon,
+            theme: 'dark',
+            renderIconForSelectedValue: false,
+            renderIconForOptions: false,
+            renderTitleForSelectedValue: false,
+            mountToBody: true,
+            disableTriggerHover: true,
+            onSelect: option => {
+                regenerationDropdown.update(regenerationSelection)
+                regenerate(option.mode)
+            },
+        })
+        regenerationDropdown.dom.classList.add('workspace-branch-marker-regeneration-dropdown')
+        const regenerationButton = regenerationDropdown.dom.querySelector('button') as HTMLButtonElement
+        regenerationButton.disabled = !canAcceptAll
+        regenerationButton.setAttribute('aria-label', 'Regenerate branch outputs')
+        regenerationButton.title = canAcceptAll
+            ? 'Choose how to regenerate branch outputs'
+            : 'Wait for every variant history to finish sealing'
+        controls.appendChild(regenerationDropdown.dom)
+        applyBranchMarkerReviewControlsZoom(controls, getCurrentViewportZoom())
+        branchMarkerReviewDropdowns.set(node.nodeId, regenerationDropdown)
         return controls
+    }
+
+    function applyBranchMarkerReviewControlsZoom(controls: HTMLElement, zoom: number): void {
+        const worldScale = scaleCanvasChromeWorldSizeForZoom(
+            1,
+            zoom,
+            getAdaptiveBoundedZoomScalingOptions(settings.mediaNode.generatedMediaChrome.zoomScaling),
+        )
+        controls.style.setProperty('--workspace-branch-marker-review-zoom-scale', String(worldScale))
+    }
+
+    function updateBranchMarkerReviewControlsZoom(zoom: number): void {
+        if (!viewportEl) return
+        for (const controls of viewportEl.querySelectorAll<HTMLElement>('.workspace-branch-marker-review-controls')) {
+            applyBranchMarkerReviewControlsZoom(controls, zoom)
+        }
     }
 
     function syncBranchMarkerReviewControls(node: BranchMarkerNode, nodeEl: HTMLElement): void {
@@ -14620,6 +14684,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             destroyGeneratedMediaInfoRenderers()
             resetGeneratedMediaChromeSyncKey()
             destroyBranchMarkerReasoningTooltips()
+            for (const dropdown of branchMarkerReviewDropdowns.values()) dropdown.destroy()
+            branchMarkerReviewDropdowns.clear()
             destroyVideoControlInstances()
             mediaChromeViewportEl?.remove()
             mediaChromeViewportEl = null

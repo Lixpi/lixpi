@@ -58,6 +58,8 @@ Animations in `dropdown.scss`:
 - `md3MenuSurfaceOpen`: Container scales in from 0.6 → 1 (200ms, EMPHASIZED easing)
 - `md3MenuItemFadeIn`: Items fade in with -4px → 0 translateY, staggered 30ms per item
 
+Trigger, option, and filter-chip hover transitions use the shared `hoverTransition(...)` Sass helper and `settings.hover.transitionDurationMs`.
+
 ## Why not document nodes?
 
 Previously, dropdowns were ProseMirror document nodes. Problems:

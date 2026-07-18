@@ -124,7 +124,7 @@ The workspace AI Chat panel no longer uses this component. The old `Include Upst
 
 ## Implementation Notes
 
-- Checkmark uses the global `checkMarkIcon` SVG, parsed and scaled to fit within knob
+- Checkmark uses the global `checkMarkIcon` SVG and scales from its declared viewBox to fit within the knob
 - All positioning uses D3 attributes (not CSS)
 - Event handlers are re-attached when disabled state changes
 - Supports multiple instances with unique IDs via `data-toggle-switch-id` attribute

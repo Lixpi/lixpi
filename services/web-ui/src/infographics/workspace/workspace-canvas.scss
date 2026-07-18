@@ -3,6 +3,7 @@
 @import '$src/sass/components/animations';
 @import '$src/components/bubbleMenu/bubbleMenu.scss';
 @import '$src/components/contextPreview/context-preview.scss';
+@import '$src/components/dropdown/dropdown.scss';
 
 :root {
     --workspace-canvas-padding-top: 32px;
@@ -85,7 +86,7 @@
     border-radius: 50%;
     background: transparent;
     cursor: pointer;
-    transition: background 0.15s ease;
+    transition: hoverTransition(background, $defaultHoverTransitionDuration);
     -webkit-tap-highlight-color: transparent;
 
     svg {
@@ -127,7 +128,10 @@
     pointer-events: none;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+    transition:
+        hoverTransition(opacity, $defaultHoverTransitionDuration),
+        hoverTransition(transform, $defaultHoverTransitionDuration),
+        hoverTransition(visibility, $defaultHoverTransitionDuration);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
@@ -171,7 +175,7 @@
     font-size: 13px;
     color: $nightBlue;
     text-align: left;
-    transition: background 0.12s ease;
+    transition: hoverTransition(background, $defaultHoverTransitionDuration);
 
     &:hover {
         background: #f0f0f0;
@@ -210,7 +214,7 @@
     border-radius: 6px;
     font-size: 12px;
     cursor: pointer;
-    transition: background 0.12s ease;
+    transition: hoverTransition(background, $defaultHoverTransitionDuration);
 }
 
 .workspace-image-submenu-url-back {
@@ -490,7 +494,7 @@
 .workspace-generated-media-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     width: 100%;
     pointer-events: auto;
 }
@@ -539,6 +543,10 @@
     justify-content: center;
 }
 
+.media-model-badge-icon .stability-icon {
+    transform: scale(1.0833);
+}
+
 .media-model-badge-name {
     min-width: 0;
     overflow: hidden;
@@ -564,13 +572,12 @@
     flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
     background: transparent;
     border: none;
-    border-radius: 50%;
+    border-radius: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    // Slightly muted by default; brightens to the full color on hover and while active.
-    color: var(--workspace-media-info-button-color, #6b757e);
-    transition: hoverTransition(color, 150ms);
+    color: var(--workspace-media-info-button-color, #4d5963);
+    transition: hoverTransition(color, $defaultHoverTransitionDuration);
     padding: 0;
     outline: none;
     cursor: pointer;
@@ -585,20 +592,18 @@
     }
 
     svg {
-        // Provider icons use a 24px viewBox with a 20px visual circle. Scale the
-        // info glyph to that same 5/6 visual diameter while keeping equal boxes.
-        width: 83.3333%;
-        height: 83.3333%;
+        width: 79.5918%;
+        height: 79.5918%;
         fill: currentColor;
     }
 
     &:hover {
-        color: var(--workspace-media-info-button-hover-color, #4d5963);
+        color: var(--workspace-media-info-button-hover-color, #181e23);
         background: transparent;
     }
 
     &.is-active {
-        color: var(--workspace-media-info-button-hover-color, #4d5963);
+        color: var(--workspace-media-info-button-hover-color, #181e23);
         background: transparent;
     }
 
@@ -625,13 +630,13 @@
     &::before {
         --media-info-model-separator-mask: linear-gradient(
             90deg,
-            transparent 0%,
-            transparent 16%,
-            rgba(0, 0, 0, 0.18) 32%,
-            #000 44%,
-            #000 56%,
-            rgba(0, 0, 0, 0.18) 68%,
-            transparent 84%,
+            transparent 0,
+            transparent 5px,
+            rgba(0, 0, 0, 0.18) 10px,
+            #000 14px,
+            #000 calc(100% - 14px),
+            rgba(0, 0, 0, 0.18) calc(100% - 10px),
+            transparent calc(100% - 5px),
             transparent 100%
         );
 
@@ -639,7 +644,7 @@
         position: absolute;
         top: 50%;
         left: 50%;
-        width: calc(var(--workspace-generated-media-chrome-icon-size, 34px) - 6px);
+        width: var(--workspace-generated-media-chrome-icon-size, 34px);
         height: 1px;
         background: var(
             --workspace-branch-marker-separator-gradient,
@@ -653,6 +658,11 @@
         transform: translate(-50%, -50%) rotate(90deg);
         transform-origin: center;
     }
+}
+
+.media-review-action-separator {
+    margin-right: 1px;
+    margin-left: -1px;
 }
 
 .media-history-button {
@@ -677,7 +687,7 @@
     white-space: nowrap;
     cursor: pointer;
     pointer-events: auto;
-    transition: hoverTransition(filter, 150ms);
+    transition: hoverTransition(filter, $defaultHoverTransitionDuration);
 
     &:hover,
     &.is-active {
@@ -695,21 +705,23 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: var(--workspace-generated-media-chrome-icon-size, 34px);
     height: var(--workspace-generated-media-chrome-icon-size, 34px);
-    padding: 0 14px;
-    border: 1px solid var(--workspace-branch-origin-border-color);
-    border-radius: 9999px;
-    background: var(--workspace-branch-origin-background-color);
-    box-shadow: var(--workspace-branch-origin-box-shadow);
-    color: var(--workspace-branch-origin-icon-color);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--workspace-media-info-button-color, #4d5963);
     font: inherit;
     line-height: 1;
-    white-space: nowrap;
     cursor: pointer;
     pointer-events: auto;
+    transition: hoverTransition(color, $defaultHoverTransitionDuration);
 
     &:hover:not(:disabled) {
-        filter: brightness(0.94);
+        color: var(--workspace-media-info-button-hover-color, #181e23);
+        background: transparent;
     }
 
     &:disabled {
@@ -718,9 +730,39 @@
     }
 
     &:focus-visible {
-        outline: 2px solid currentColor;
+        outline: 1px solid currentColor;
         outline-offset: 2px;
     }
+}
+
+.media-review-action-icon,
+.workspace-branch-marker-review-action-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 85.7143%;
+    height: 85.7143%;
+    pointer-events: none;
+
+    svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+    }
+}
+
+.media-review-accept .media-review-action-icon,
+.workspace-branch-marker-review-action.is-accept .workspace-branch-marker-review-action-icon {
+    width: 88%;
+    height: 88%;
+}
+
+.workspace-generated-media-actions .media-info-button > span,
+.workspace-generated-media-actions .media-model-badge-icon,
+.workspace-generated-media-actions .media-review-action-icon {
+    transform: scale(0.8823529);
+    transform-origin: center;
 }
 
 .media-regeneration-controls {
@@ -1465,8 +1507,8 @@
     opacity: 0;
     box-shadow: var(--workspace-ai-chat-panel-context-chip-remove-box-shadow, 0 0 4px rgba(0, 0, 0, 0.32));
     transition:
-        opacity 120ms ease,
-        color 120ms ease;
+        hoverTransition(opacity, $defaultHoverTransitionDuration),
+        hoverTransition(color, $defaultHoverTransitionDuration);
     z-index: 2;
 }
 
@@ -1504,7 +1546,9 @@
     background: transparent;
     color: var(--workspace-ai-chat-panel-session-control-color, #697388);
     cursor: pointer;
-    transition: hoverTransition(background, 150ms), hoverTransition(color, 150ms);
+    transition:
+        hoverTransition(background, $defaultHoverTransitionDuration),
+        hoverTransition(color, $defaultHoverTransitionDuration);
 }
 
 .workspace-ai-chat-panel-history-toggle:hover,
@@ -1553,7 +1597,7 @@
     min-height: 58px;
     padding: 7px 8px;
     border-radius: 8px;
-    transition: hoverTransition(background, 150ms);
+    transition: hoverTransition(background, $defaultHoverTransitionDuration);
 }
 
 .workspace-ai-chat-panel-session:hover,
@@ -1649,7 +1693,7 @@
     background: transparent;
     color: var(--workspace-ai-chat-panel-session-delete-color, #7a8497);
     cursor: pointer;
-    transition: hoverTransition(color, 150ms);
+    transition: hoverTransition(color, $defaultHoverTransitionDuration);
 }
 
 .workspace-ai-chat-panel-session-delete::before {
@@ -1662,7 +1706,7 @@
     border-radius: 50%;
     background: transparent;
     transform: translate(-50%, -50%);
-    transition: hoverTransition(background, 150ms);
+    transition: hoverTransition(background, $defaultHoverTransitionDuration);
 }
 
 .workspace-ai-chat-panel-session-delete:hover,
@@ -1943,7 +1987,9 @@
     color: #991b1b;
     cursor: pointer;
     pointer-events: auto;
-    transition: background 0.12s ease, color 0.12s ease;
+    transition:
+        hoverTransition(background, $defaultHoverTransitionDuration),
+        hoverTransition(color, $defaultHoverTransitionDuration);
 
     &:hover {
         background: rgba(127, 29, 29, 0.16);
@@ -2192,7 +2238,7 @@
     width: 100%;
     height: 100%;
     pointer-events: none;
-    transition: transform 120ms ease;
+    transition: hoverTransition(transform, $defaultHoverTransitionDuration);
 
     svg {
         display: block;
@@ -2225,18 +2271,72 @@
     position: absolute;
     z-index: 20;
     top: calc(100% + 8px);
-    left: 50%;
+    right: 0;
     display: flex;
     align-items: center;
     gap: 6px;
     pointer-events: auto;
-    transform: translateX(-50%);
+    transform: scale(var(--workspace-branch-marker-review-zoom-scale, 1));
+    transform-origin: top right;
 }
 
 .workspace-branch-marker-review-action {
+    width: 30px;
     height: 30px;
-    padding: 0 12px;
-    font-size: 13px;
+}
+
+.workspace-branch-marker-regeneration-dropdown {
+    width: 30px;
+    height: 30px;
+    color: var(--workspace-media-info-button-color, #4d5963);
+    transition: hoverTransition(color, $defaultHoverTransitionDuration);
+}
+
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .dots-dropdown-menu,
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .dots-dropdown-menu > button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+}
+
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .dots-dropdown-menu > button {
+    padding: 0;
+    border-radius: 0;
+    color: inherit;
+    background: transparent;
+}
+
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .selected-option-icon,
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .title {
+    display: none;
+}
+
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .dots-dropdown-menu > button .state-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 85.7143%;
+    height: 85.7143%;
+    margin-left: 0;
+    pointer-events: none;
+}
+
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .dots-dropdown-menu > button .state-indicator svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.workspace-branch-marker-regeneration-dropdown:hover:not(:has(button:disabled)) {
+    color: var(--workspace-media-info-button-hover-color, #181e23);
+}
+
+.workspace-branch-marker-regeneration-dropdown:has(button:disabled) {
+    cursor: wait;
+    opacity: 0.5;
 }
 
 @keyframes workspace-branch-marker-spin {
@@ -2645,7 +2745,7 @@
     /* size is set dynamically via JS based on zoom */
     opacity: 0;
     pointer-events: auto;
-    transition: opacity 0.2s ease;
+    transition: hoverTransition(opacity, $defaultHoverTransitionDuration);
     z-index: 20;
     display: flex;
     align-items: center;
@@ -2659,7 +2759,7 @@
         width: 100%;
         height: 100%;
         fill: $nightBlue !important;
-        transition: transform 0.15s ease;
+        transition: hoverTransition(transform, $defaultHoverTransitionDuration);
         display: block;
     }
 
@@ -2781,7 +2881,9 @@
     opacity: 0;
     pointer-events: none;
     z-index: 18;
-    transition: opacity 0.15s ease-out;
+    transition:
+        hoverTransition(opacity, $defaultHoverTransitionDuration),
+        hoverTransition(transform, $defaultHoverTransitionDuration);
 
     &:hover {
         transform: translate(-50%, -50%) scale(1.2);

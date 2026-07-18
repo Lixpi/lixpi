@@ -1,7 +1,9 @@
+$defaultHoverTransitionDuration: var(--default-hover-transition-duration, 150ms) !default;
+
 @function pupOutTransition($property, $duration) {
     @return #{$property} #{$duration} cubic-bezier(0.319, 1, 0.01, 1);
 }
 
-@function hoverTransition($property, $duration) {
+@function hoverTransition($property, $duration: $defaultHoverTransitionDuration) {
     @return #{$property} #{$duration} cubic-bezier(0.19, 1, 0.22, 1);
 }
