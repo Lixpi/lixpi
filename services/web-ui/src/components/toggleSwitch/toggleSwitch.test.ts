@@ -128,6 +128,15 @@ describe('createToggleSwitch', () => {
         expect(track.getAttribute('fill')).toBe('#5f8fcf')
     })
 
+    it('scales the checkmark from its SVG viewBox instead of assuming a 24px icon', () => {
+        const { svg } = mountToggle({ size: 20, checked: true })
+        const checkmarkPath = svg.querySelector('.toggle-checkmark path') as SVGPathElement
+        const scale = Number(checkmarkPath.getAttribute('transform')?.match(/scale\(([^)]+)\)/)?.[1])
+
+        expect(scale).toBeCloseTo((20 * 0.7 * 0.6) / 520)
+        expect(scale).toBeLessThan(0.1)
+    })
+
     it('re-enables click handling after setDisabled(false)', () => {
         const { toggle, onChange, group } = mountToggle({ checked: false, disabled: true })
 

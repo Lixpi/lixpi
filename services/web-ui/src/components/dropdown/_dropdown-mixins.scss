@@ -34,8 +34,7 @@
         fontWeight: 500,
         iconMargin: 0 6px 0 0,
         iconSize: 16px,
-        hoverDuration: 120ms,
-        hoverEasing: cubic-bezier(0.2, 0, 0, 1)
+        hoverDuration: $defaultHoverTransitionDuration
     );
     $s: map-merge($defaults, $config);
 
@@ -66,8 +65,8 @@
             position: relative;
             overflow: hidden;
             transition:
-                background map-get($s, hoverDuration) map-get($s, hoverEasing),
-                color map-get($s, hoverDuration) map-get($s, hoverEasing);
+                hoverTransition(background, map-get($s, hoverDuration)),
+                hoverTransition(color, map-get($s, hoverDuration));
 
             // State layer (M3 ripple underlay)
             &:before {
@@ -77,7 +76,7 @@
                 inset: 0;
                 border-radius: map-get($s, triggerRadius);
                 opacity: 0;
-                transition: opacity map-get($s, hoverDuration) map-get($s, hoverEasing);
+                transition: hoverTransition(opacity, map-get($s, hoverDuration));
             }
 
             span {
@@ -103,8 +102,8 @@
                         margin: 0;
                         padding: 0;
                         transition:
-                            fill map-get($s, hoverDuration) map-get($s, hoverEasing),
-                            transform 200ms cubic-bezier(0.2, 0, 0, 1);
+                            hoverTransition(fill, map-get($s, hoverDuration)),
+                            pupOutTransition(transform, 200ms);
                         position: relative;
                         z-index: 1;
                     }
@@ -162,7 +161,7 @@
         itemFontWeight: 400,
         itemIconSize: 20px,
         itemIconMargin: 0 12px 0 0,
-        itemTransition: background 100ms cubic-bezier(0.2, 0, 0, 1),
+        hoverDuration: $defaultHoverTransitionDuration,
         itemGap: 0
     );
     $s: map-merge($defaults, $config);
@@ -190,7 +189,7 @@
                 cursor: pointer;
                 position: relative;
                 overflow: hidden;
-                transition: map-get($s, itemTransition);
+                transition: hoverTransition(background, map-get($s, hoverDuration));
                 border-radius: 12px;
                 background: transparent;
 
@@ -208,7 +207,7 @@
                     position: absolute;
                     inset: 0;
                     opacity: 0;
-                    transition: opacity 100ms cubic-bezier(0.2, 0, 0, 1);
+                    transition: hoverTransition(opacity, map-get($s, hoverDuration));
                     pointer-events: none;
                 }
 
@@ -413,7 +412,10 @@
                     border: 1px solid rgba(map-get($s, surfaceFg), 0.28);
                     border-radius: 8px; // M3 chip radius
                     cursor: pointer;
-                    transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1), border-color 150ms cubic-bezier(0.2, 0, 0, 1), color 150ms cubic-bezier(0.2, 0, 0, 1);
+                    transition:
+                        hoverTransition(background-color, $defaultHoverTransitionDuration),
+                        hoverTransition(border-color, $defaultHoverTransitionDuration),
+                        hoverTransition(color, $defaultHoverTransitionDuration);
                     opacity: 1;
                     color: map-get($s, surfaceFg);
                     background: transparent;

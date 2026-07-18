@@ -6,6 +6,7 @@ import { select } from 'd3-selection'
 import 'd3-transition'
 // @ts-ignore - runtime import
 import { easeCubicOut } from 'd3-ease'
+import { extractSvgPathIcon } from '$src/components/svgIconPaths.ts'
 import { checkMarkIcon } from '$src/svgIcons/index.ts'
 
 type ToggleSwitchConfig = {
@@ -126,25 +127,30 @@ export function createToggleSwitch(
         .attr('stroke-width', 1)
 
     // Checkmark icon inside knob (only visible when checked)
-    // Parse the SVG icon and extract the path
-    const parser = new DOMParser()
-    const svgDoc = parser.parseFromString(checkMarkIcon, 'image/svg+xml')
-    const pathElement = svgDoc.querySelector('path')
-    const checkmarkPath = pathElement ? pathElement.getAttribute('d') : ''
-
+    const checkmarkIcon = extractSvgPathIcon(checkMarkIcon)
     const checkmarkIconSize = knobSize * 0.6  // Icon is 60% of knob size
-    const checkmarkScale = checkmarkIconSize / 24  // checkMarkIcon is 24x24
-    const checkmarkOffsetX = (knobSize - checkmarkIconSize) / 2
-    const checkmarkOffsetY = (knobSize - checkmarkIconSize) / 2
+    const checkmarkScale = checkmarkIconSize / Math.max(checkmarkIcon.width, checkmarkIcon.height)
+    const checkmarkWidth = checkmarkIcon.width * checkmarkScale
+    const checkmarkHeight = checkmarkIcon.height * checkmarkScale
+    const checkmarkOffsetX = (knobSize - checkmarkWidth) / 2
+    const checkmarkOffsetY = (knobSize - checkmarkHeight) / 2
+
+    function getCheckmarkTransform(targetX: number): string {
+        const x = targetX - knobRadius + checkmarkOffsetX
+        const y = knobCenterY - knobRadius + checkmarkOffsetY
+        return `translate(${x}, ${y}) scale(${checkmarkScale}) translate(${-checkmarkIcon.minX}, ${-checkmarkIcon.minY})`
+    }
 
     const checkmark = toggleGroup.append('g')
         .attr('class', 'toggle-checkmark')
         .attr('opacity', state.checked ? 1 : 0)
 
-    checkmark.append('path')
-        .attr('d', checkmarkPath)
-        .attr('fill', COLORS.active.fill)
-        .attr('transform', `translate(${(state.checked ? knobCheckedX : knobUncheckedX) - knobRadius + checkmarkOffsetX}, ${knobCenterY - knobRadius + checkmarkOffsetY}) scale(${checkmarkScale})`)
+    for (const pathData of checkmarkIcon.pathData) {
+        checkmark.append('path')
+            .attr('d', pathData)
+            .attr('fill', COLORS.active.fill)
+            .attr('transform', getCheckmarkTransform(state.checked ? knobCheckedX : knobUncheckedX))
+    }
 
     // Click handler
     if (!state.disabled && onChange) {
@@ -182,11 +188,11 @@ export function createToggleSwitch(
             .ease(easeCubicOut)
             .attr('opacity', state.checked ? 1 : 0)
 
-        checkmark.select('path')
+        checkmark.selectAll('path')
             .transition()
             .duration(duration)
             .ease(easeCubicOut)
-            .attr('transform', `translate(${targetX - knobRadius + checkmarkOffsetX}, ${knobCenterY - knobRadius + checkmarkOffsetY}) scale(${checkmarkScale})`)
+            .attr('transform', getCheckmarkTransform(targetX))
 
         toggleGroup
             .style('cursor', state.disabled ? 'not-allowed' : 'pointer')

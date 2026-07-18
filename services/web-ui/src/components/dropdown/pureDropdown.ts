@@ -255,7 +255,6 @@ export function createPureDropdown(config: PureDropdownConfig) {
             </span>
         </div>
     ` as HTMLElement
-
     // Get button reference to use as anchor
     const button = dom.querySelector('button') as HTMLElement
     const dotsMenu = dom.querySelector('.dots-dropdown-menu') as HTMLElement

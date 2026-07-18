@@ -67,6 +67,10 @@ export type HelpTooltipSettings = {
     interactiveHideDelayMs: number
 }
 
+export type HoverSettings = {
+    transitionDurationMs: number
+}
+
 export type BoundedZoomScalingSettings = {
     // Lower zoom breakpoint where inverse world-size compensation stops.
     minZoom: number
@@ -610,6 +614,8 @@ export type Settings = {
 
     helpTooltip: HelpTooltipSettings
 
+    hover: HoverSettings
+
     canvasBubbleMenu: CanvasBubbleMenuSettings
 
     canvasChrome: CanvasChromeSettings
@@ -674,6 +680,11 @@ export const settings: Settings = {
     helpTooltip: {
         // Delay before an interactive tooltip closes after the pointer leaves its trigger/content.
         interactiveHideDelayMs: 80,
+    },
+
+    // Shared hover-state motion used by interactive Web UI controls.
+    hover: {
+        transitionDurationMs: 150,
     },
 
     // Canvas bubble menu zoom scaling settings.
@@ -1173,9 +1184,9 @@ export const settings: Settings = {
                 modelBadgeNameFontSize: '15px',
                 modelBadgeNameFontWeight: 400,
                 modelBadgeNameLineHeight: 1.5,
-                // Info button: muted by default, full color on hover.
-                infoButtonColor: '#81878d',
-                infoButtonHoverColor: '#4d5963',
+                // Interactive chrome icons match the provider icon at rest and darken on hover.
+                infoButtonColor: '#4d5963',
+                infoButtonHoverColor: '#181e23',
             },
         },
 

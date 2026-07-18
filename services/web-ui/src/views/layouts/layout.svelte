@@ -18,6 +18,7 @@
     import { userStore } from '$src/stores/userStore.ts'
     import { subscriptionStore } from '$src/stores/subscriptionStore.ts'
     import { userInfoPanelStore } from '$src/stores/navigationSidePanelStore.ts'
+    import { settings } from '$src/settings.ts'
 
 
     // import UserMenu from '$src/components/user-menu.svelte'
@@ -61,13 +62,21 @@
 
     let navigationSidePanelPaneEl: HTMLDivElement
     let navigationSidePanel: ReturnType<typeof createNavigationSidePanel> | null = null
+    let previousDefaultHoverTransitionDuration = ''
 
     onMount(() => {
+        previousDefaultHoverTransitionDuration = document.documentElement.style.getPropertyValue('--default-hover-transition-duration')
+        document.documentElement.style.setProperty('--default-hover-transition-duration', `${settings.hover.transitionDurationMs}ms`)
         navigationSidePanel = createNavigationSidePanel({ paneEl: navigationSidePanelPaneEl })
     })
 
     onDestroy(() => {
         navigationSidePanel?.destroy()
+        if (previousDefaultHoverTransitionDuration) {
+            document.documentElement.style.setProperty('--default-hover-transition-duration', previousDefaultHoverTransitionDuration)
+        } else {
+            document.documentElement.style.removeProperty('--default-hover-transition-duration')
+        }
     })
 
     const triggerAddFundsDialogOpen = () => {
