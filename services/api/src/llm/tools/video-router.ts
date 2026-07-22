@@ -42,7 +42,7 @@ const buildRoutedVideoReferenceImages = (state: ProviderState): string[] | undef
     const max = getVideoMaxReferenceImages(state.videoModelMetaInfo)
     const referenceImages = addUniqueReferenceImages([], state.videoReferenceImages ?? [], max)
     if (!state.videoSourceForExtension && !state.videoFirstFrameImage) {
-        addUniqueReferenceImages(referenceImages, state.featureReferenceImages ?? [], max)
+        addUniqueReferenceImages(referenceImages, state.capabilityReferenceImages ?? [], max)
     }
     return referenceImages.length > 0 ? referenceImages : undefined
 }
@@ -89,8 +89,8 @@ export class VideoRouter {
             ? `${workspaceId}:${aiChatThreadId}:${generationRun.mediaRunId}`
             : `${workspaceId}:${aiChatThreadId}:video`
         const videoReferenceImages = buildRoutedVideoReferenceImages(state)
-        const featureReferenceImages = state.featureReferenceImages ?? []
-        const featureUsagePrompt = state.featureUsagePrompt?.trim()
+        const capabilityReferenceImages = state.capabilityReferenceImages ?? []
+        const capabilityUsagePrompt = state.capabilityUsagePrompt?.trim()
         const referenceCount = videoReferenceImages?.length ?? 0
 
         info(`[VideoRouter] invocation chain ${JSON.stringify({
@@ -108,14 +108,14 @@ export class VideoRouter {
             hasFirstFrame: !!state.videoFirstFrameImage,
             referenceCount,
             referenceImageFingerprints: (videoReferenceImages ?? []).map(fingerprintRef),
-            featureReferenceImagesCount: featureReferenceImages.length,
-            featureBriefLen: featureUsagePrompt?.length ?? 0,
+            capabilityReferenceImagesCount: capabilityReferenceImages.length,
+            capabilityBriefLen: capabilityUsagePrompt?.length ?? 0,
             hasSourceVideo: !!state.videoSourceForExtension,
             instanceKey,
         }, null, 0)}`)
 
-        if (featureReferenceImages.length > 0 && (state.videoSourceForExtension || state.videoFirstFrameImage)) {
-            warn(`[VideoRouter] Feature reference images are represented in the prompt only for ${instanceKey}; VEO extension/first-frame inputs are mutually exclusive with referenceImages.`)
+        if (capabilityReferenceImages.length > 0 && (state.videoSourceForExtension || state.videoFirstFrameImage)) {
+            warn(`[VideoRouter] Capability reference images are represented in the prompt only for ${instanceKey}; VEO extension/first-frame inputs are mutually exclusive with referenceImages.`)
         }
 
         try {
@@ -124,6 +124,7 @@ export class VideoRouter {
             const requestData = {
                 messages: [{ role: 'user', content: videoModelPrompt }],
                 aiModelMetaInfo: { ...videoMeta, modelVersion: videoModel },
+                organizationId: state.eventMeta.organizationId,
                 workspaceId,
                 aiChatThreadId,
                 enableVideoGeneration: true,

@@ -32,6 +32,8 @@ const fingerprintRef = (url: string): string => {
 type ImageRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
     getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
+    signal?: AbortSignal
+    captureOnly?: boolean
 }
 
 // Routes a generate_image tool call from a text model to the configured image-model provider.
@@ -73,10 +75,9 @@ export class ImageRouter {
         const instanceKey = generationRun?.mediaRunId
             ? `${workspaceId}:${aiChatThreadId}:${generationRun.mediaRunId}`
             : `${workspaceId}:${aiChatThreadId}:image`
-        const referenceImages = state.referenceImages ?? []
-        const featureReferenceImages = state.featureReferenceImages ?? []
-        const hasFeatureReferences = featureReferenceImages.length > 0
-        const featureUsagePrompt = state.featureUsagePrompt?.trim()
+        const capabilityReferenceImages = state.capabilityReferenceImages ?? []
+        const referenceImages = [...capabilityReferenceImages, ...(state.referenceImages ?? [])]
+        const capabilityUsagePrompt = state.capabilityUsagePrompt?.trim()
         const imageModelPrompt = buildImageModelPrompt(state)
 
         // Structured log of the FULL invocation chain so we can verify exactly
@@ -96,8 +97,8 @@ export class ImageRouter {
             routedPromptLen: imageModelPrompt.length,
             referenceImagesCount: referenceImages.length,
             referenceImageFingerprints: referenceImages.map(fingerprintRef),
-            featureReferenceImagesCount: featureReferenceImages.length,
-            featureBriefLen: featureUsagePrompt?.length ?? 0,
+            capabilityReferenceImagesCount: capabilityReferenceImages.length,
+            capabilityBriefLen: capabilityUsagePrompt?.length ?? 0,
             instanceKey,
         }, null, 0)}`)
 
@@ -106,7 +107,10 @@ export class ImageRouter {
         }
 
         try {
+            if (options.signal?.aborted) throw options.signal.reason ?? new DOMException('Aborted', 'AbortError')
             const provider = this.registry.createTransient(instanceKey, imageProvider)
+            const stopForAbort = (): void => { void this.registry.stop(instanceKey) }
+            options.signal?.addEventListener('abort', stopForAbort, { once: true })
 
             // Build a fresh request: just the prompt + reference images, with
             // enableImageGeneration=true so the provider takes the image path
@@ -128,6 +132,7 @@ export class ImageRouter {
             const requestData = {
                 messages,
                 aiModelMetaInfo: { ...imageMeta, modelVersion: imageModel },
+                organizationId: state.eventMeta.organizationId,
                 workspaceId,
                 aiChatThreadId,
                 enableImageGeneration: true,
@@ -136,9 +141,12 @@ export class ImageRouter {
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
                 proseMirrorContentHandler: options.onProseMirrorContent,
                 proseMirrorSnapshotProvider: options.getProseMirrorSnapshot,
+                captureOnlyImageGeneration: options.captureOnly ?? false,
             }
 
-            const finalState = await provider.process(requestData)
+            const finalState = await provider.process(requestData).finally(() => {
+                options.signal?.removeEventListener('abort', stopForAbort)
+            })
             if (finalState.error) {
                 err(`[ImageRouter] Image generation failed: ${finalState.error}`)
                 return {

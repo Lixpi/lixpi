@@ -90,9 +90,19 @@ describe('ImageRouter', () => {
         })
     })
 
+    it('requests capture-only generation without media persistence when configured', async () => {
+        const { router, process } = createRouter()
+
+        await router.execute(createState(), { captureOnly: true })
+
+        expect(process.mock.calls[0]?.[0]).toMatchObject({
+            captureOnlyImageGeneration: true,
+        })
+    })
+
     it('routes image generation and applies provider mapping defaults', async () => {
         const { router, createTransient, process } = createRouter()
-        const state = createState()
+        const state = createState({ eventMeta: { organizationId: 'organization-1' } })
 
         const result = await router.execute(state)
 
@@ -106,6 +116,7 @@ describe('ImageRouter', () => {
             imageSize: '1:1',
             generationRun: undefined,
             eventMeta: state.eventMeta,
+            organizationId: 'organization-1',
         })
         expect(requestData.aiModelMetaInfo).toMatchObject({
             provider: 'Google',
@@ -206,5 +217,29 @@ describe('ImageRouter', () => {
         expect(process).toHaveBeenCalledOnce()
         expect(result.error).toBe('image provider crash')
         expect(remove).toHaveBeenCalledWith('workspace-1:thread-1:image')
+    })
+
+    it('stops an active transient provider when the caller aborts', async () => {
+        const controller = new AbortController()
+        const stop = vi.fn(async () => undefined)
+        let completeProcessing: ((state: ProviderState) => void) | undefined
+        const process = vi.fn(() => new Promise<ProviderState>((resolve) => {
+            completeProcessing = resolve
+        }))
+        const createTransient = vi.fn(() => ({ process }))
+        const router = new ImageRouter({ createTransient, stop } as any)
+
+        const execution = router.execute(createState(), { signal: controller.signal })
+        await vi.waitFor(() => expect(process).toHaveBeenCalledOnce())
+
+        controller.abort()
+        await vi.waitFor(() => {
+            expect(stop).toHaveBeenCalledWith('workspace-1:thread-1:image')
+        })
+        completeProcessing?.(createState({
+            generatedImages: ['nats-obj://workspace-workspace-1-files/cat.png'],
+        }))
+
+        await execution
     })
 })

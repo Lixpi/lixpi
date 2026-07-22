@@ -6,6 +6,7 @@ import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@
 import * as debugTools from '@lixpi/debug-tools'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
+import { ImagePublisher } from '../graph/image-publisher.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
 import type { AiModelMetaInfo, ProviderState } from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
@@ -290,6 +291,41 @@ describe('BaseProvider image fanout errors', () => {
 })
 
 describe('BaseProvider request validation', () => {
+    it('requires an organization before constructing media publishers', async () => {
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: makeFakeNats().fake,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+
+        await expect(provider.process({})).rejects.toThrow('Provider request is missing organizationId')
+    })
+
+    it('clears transient media in the provider terminal cleanup path', async () => {
+        const nats = makeFakeNats()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: nats.fake,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        const clearTransientMedia = vi.spyOn(ImagePublisher.prototype, 'clearTransientMedia').mockResolvedValue(undefined)
+        ;(provider as any).app = {
+            invoke: vi.fn(async (initialState: ProviderState) => initialState),
+        }
+
+        await provider.process({
+            organizationId: 'organization-1',
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
+            messages: [],
+        })
+
+        expect(clearTransientMedia).toHaveBeenCalledOnce()
+    })
+
     it('denies metrics admission before resolving or persisting media lineage', async () => {
         const nats = makeFakeNats()
         const metricsCheck = vi.fn().mockResolvedValue({ approved: false, reason: 'metrics_unreachable' })
@@ -371,6 +407,7 @@ describe('BaseProvider request validation', () => {
 
         const provider = new TestProvider('ws-1:thread-1', deps)
         const result = await provider.process({
+            organizationId: 'organization-1',
             workspaceId: 'ws-1',
             aiChatThreadId: '',
             aiModelMetaInfo: { provider: 'Anthropic', model: 'Claude', modelVersion: 'claude' },
@@ -906,6 +943,7 @@ describe('BaseProvider process failure path', () => {
             } as BaseProviderDeps)
 
             const result = await provider.process({
+                organizationId: 'organization-1',
                 workspaceId: 'ws1',
                 aiChatThreadId: 'thread1',
                 aiModelMetaInfo: { provider: 'Anthropic', model: 'claude' },

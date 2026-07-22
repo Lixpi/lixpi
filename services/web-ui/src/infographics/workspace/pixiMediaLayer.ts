@@ -61,6 +61,9 @@ type PixiImageEntry = {
     loadedTier: LodTier | null
     // Tier of the in-flight texture request, or `null` when idle.
     requestedTier: LodTier | null
+    // A newer source is waiting to replace the currently displayed texture.
+    // The old texture remains visible until the replacement has decoded.
+    sourceReloadPending: boolean
     // Bumped on every new request so stale completions can be ignored.
     requestId: number
     // URL of the texture currently bound to the sprite, or `null` when none.
@@ -94,6 +97,7 @@ type PixiMediaDebugImageSnapshot = {
     sourceKey: string
     loadedTier: LodTier | null
     requestedTier: LodTier | null
+    sourceReloadPending: boolean
     requestId: number
     textureKey: string | null
     isVisible: boolean
@@ -210,6 +214,8 @@ export type PixiMediaLayer = {
     sync: (canvasState: CanvasState | null) => void
     // Updates animated generation/reference outlines for image-like media nodes.
     setGeneratingImageNodes: (nodeTargets: GeneratingMediaOutlineTargets) => void
+    // Uses a run-scoped media reference while a generated Asset is still unsettled.
+    setTransientImageSource: (nodeId: string, sourceUrl: string | null) => void
     // Applies the current pan/zoom transform and schedules culling/prefetch.
     setViewport: (viewport: CanvasViewport) => void
     // Applies drag/resize geometry before persisted canvas state catches up.
@@ -250,7 +256,12 @@ type PixiMediaLayerOptions = {
     // Selection colors are supplied by the canvas host theme/settings.
     selectionColors: SelectionColors
     // Reports natural image size corrections back to canvas state.
-    onImageIntrinsicSize?: (size: { nodeId: string; width: number; height: number }) => void
+    onImageIntrinsicSize?: (size: {
+        nodeId: string
+        width: number
+        height: number
+        preserveNodeGeometry?: boolean
+    }) => void
     // Lets the Svelte host react to Pixi health transitions.
     onHealthChange?: (health: PixiRendererHealth) => void
 }
@@ -317,6 +328,7 @@ async function resolveImageSrc(node: ImageCanvasNode, workspaceId: string, store
 
 export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaLayer {
     const { paneEl, viewportEl, getWorkspaceId, selectionColors, onImageIntrinsicSize, onHealthChange } = options
+    const transientImageSources = new Map<string, string>()
 
     const hostStyle = {
         position: 'absolute' as const,
@@ -459,6 +471,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             sourceKey: cleanDebugUrl(entry.sourceKey),
             loadedTier: entry.loadedTier,
             requestedTier: entry.requestedTier,
+            sourceReloadPending: entry.sourceReloadPending,
             requestId: entry.requestId,
             textureKey: cleanDebugUrl(entry.textureKey),
             isVisible: entry.isVisible,
@@ -492,6 +505,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             assetId: entry.nodeRef.assetId,
             loadedTier: entry.loadedTier,
             requestedTier: entry.requestedTier,
+            sourceReloadPending: entry.sourceReloadPending,
             requestId: entry.requestId,
             textureKey: cleanDebugUrl(entry.textureKey),
             isVisible: entry.isVisible,
@@ -884,6 +898,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 entry.spriteMask.destroy()
                 entry.colorRect.destroy()
                 entries.delete(nodeId)
+                transientImageSources.delete(nodeId)
             }
         }
 
@@ -1258,7 +1273,13 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function makeSourceKey(node: ImageCanvasNode): string {
-        return node.assetId
+        return transientImageSources.get(node.nodeId) ?? node.assetId
+    }
+
+    function setTransientImageSource(nodeId: string, sourceUrl: string | null): void {
+        if (sourceUrl) transientImageSources.set(nodeId, sourceUrl)
+        else transientImageSources.delete(nodeId)
+        sync(lastState)
     }
 
     function shouldPromoteGeneratedFinalFrameDirectly(previousNode: ImageCanvasNode, nextNode: ImageCanvasNode): boolean {
@@ -1516,6 +1537,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 sourceKey: newSourceKey,
                 loadedTier: null,
                 requestedTier: null,
+                sourceReloadPending: false,
                 requestId: 0,
                 textureKey: null,
                 forceFullOnNextLoad: false,
@@ -1538,9 +1560,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 })
             }
         } else if (entry.sourceKey !== newSourceKey) {
-            // Source image replaced. Most replacements keep the current texture
-            // visible while the next source loads; generated placeholder -> final
-            // image swaps clear the placeholder and load the stored file directly.
+            // Keep the current texture visible until the replacement has fully
+            // decoded, then bind the new texture in one render pass.
             debugLog('entry-source-change', (verbose) => ({
                 nodeId: node.nodeId,
                 oldSourceKey: cleanDebugUrl(entry.sourceKey),
@@ -1554,19 +1575,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 },
             }))
             const promoteFinalFrameDirectly = shouldPromoteGeneratedFinalFrameDirectly(entry.nodeRef, node)
-            entry.loadedTier = null
             entry.requestedTier = null
             entry.requestId++
             entry.sourceKey = newSourceKey
+            entry.sourceReloadPending = true
             entry.forceFullOnNextLoad = promoteFinalFrameDirectly
-            if (promoteFinalFrameDirectly) {
-                const oldKey = entry.textureKey
-                entry.textureKey = null
-                bindTextureToEntrySprite(entry, Texture.EMPTY)
-                entry.sprite.visible = false
-                entry.colorRect.visible = entry.isVisible && !shouldTreatImageEntryAsFramePending(entry)
-                if (oldKey) releaseTexture(oldKey)
-            }
         }
 
         entry.nodeRef = node
@@ -1688,6 +1701,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function resolveRenderableImagePath(node: ImageCanvasNode): string {
+        const transientSource = transientImageSources.get(node.nodeId)
+        if (transientSource) return transientSource
         const forcedRendition = generatingImageNodeOutlines.get(node.nodeId)?.sourceRendition
         if (forcedRendition) return `/api/assets/${encodeURIComponent(node.assetId)}/renditions/${forcedRendition}`
         const renditions = assetsStore.get(node.assetId)?.media?.renditions
@@ -1740,7 +1755,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         // Rule 1: never downgrade. Mipmaps make a full-res texture render
         // perfectly at any zoom; refetching a smaller LoD is pure waste and
         // is exactly what made zoom-out feel sluggish.
-        if (entry.loadedTier !== null && tierRank(entry.loadedTier) >= tierRank(desiredTier)) {
+        if (!entry.sourceReloadPending
+            && entry.loadedTier !== null
+            && tierRank(entry.loadedTier) >= tierRank(desiredTier)) {
             entry.sprite.visible = true
             syncSpriteMask(entry, entry.worldRect.minX, entry.worldRect.minY, entry.nodeRef.dimensions.width, entry.nodeRef.dimensions.height)
             entry.colorRect.visible = false
@@ -1848,7 +1865,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     return
                 }
                 // Don't downgrade if a parallel request already loaded a higher tier.
-                if (entry.loadedTier !== null && tierRank(entry.loadedTier) > tierRank(fetchTier)) {
+                if (!entry.sourceReloadPending
+                    && entry.loadedTier !== null
+                    && tierRank(entry.loadedTier) > tierRank(fetchTier)) {
                     debugLog('texture-request-skip-downgrade', {
                         nodeId: node.nodeId,
                         requestId,
@@ -1863,7 +1882,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 const oldKey = entry.textureKey
                 bindTextureToEntrySprite(entry, texture)
                 if (Number.isFinite(texture.width) && Number.isFinite(texture.height) && texture.width > 0 && texture.height > 0) {
-                    onImageIntrinsicSize?.({ nodeId: node.nodeId, width: texture.width, height: texture.height })
+                    onImageIntrinsicSize?.({
+                        nodeId: node.nodeId,
+                        width: texture.width,
+                        height: texture.height,
+                        preserveNodeGeometry: Boolean(oldKey?.includes('/api/transient-media/')),
+                    })
                 }
                 entry.sprite.position.set(entry.worldRect.minX, entry.worldRect.minY)
                 entry.sprite.width = entry.nodeRef.dimensions.width
@@ -1872,6 +1896,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 entry.textureKey = resolved
                 entry.loadedTier = fetchTier
                 entry.requestedTier = null
+                entry.sourceReloadPending = false
                 entry.forceFullOnNextLoad = false
                 entry.sprite.visible = true
                 entry.colorRect.visible = false
@@ -1987,7 +2012,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 }))
                 return
             }
-            if (entry.loadedTier !== null && tierRank(entry.loadedTier) >= tierRank(targetTier)) {
+            if (!entry.sourceReloadPending
+                && entry.loadedTier !== null
+                && tierRank(entry.loadedTier) >= tierRank(targetTier)) {
                 debugLog('progressive-upgrade-skipped', (verbose) => ({
                     nodeId: entry.nodeRef.nodeId,
                     targetTier,
@@ -2488,6 +2515,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             entry.texture.destroy(true)
         }
         textureCache.clear()
+        transientImageSources.clear()
         spatialIndex.clear()
         destroyPixiImageDecoder()
         hostEl.remove()
@@ -2504,6 +2532,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     return {
         sync,
         setGeneratingImageNodes,
+        setTransientImageSource,
         setViewport,
         setNodeLiveTransform,
         setSelectedImageNodes,

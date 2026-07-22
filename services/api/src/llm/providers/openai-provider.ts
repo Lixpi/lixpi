@@ -9,7 +9,7 @@ import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
-import { detectCapabilities } from '../extraction/capabilities.ts'
+import { detectCapabilities } from './provider-capabilities.ts'
 import {
     convertAttachmentsForProvider,
     parseDataUrl,
@@ -26,6 +26,14 @@ import {
     extractVideoToolCall,
     getVideoToolForProvider,
 } from '../tools/video-generation.ts'
+import {
+    CapabilityModelToolExecutor,
+    shouldExposeCapabilityModelTools,
+} from '../../capability-system/capability-model-tool-executor.ts'
+import {
+    asOpenAITool,
+    parseCapabilityToolArguments,
+} from '../../capability-system/capability-model-tools.ts'
 
 type ImageRefFile = { file: File | Awaited<ReturnType<typeof toFile>>; name: string }
 
@@ -83,6 +91,12 @@ export class OpenAIProvider extends BaseProvider {
         if (injectVideoTool) {
             tools.push(getVideoToolForProvider('OpenAI'))
         }
+        const capabilityToolExecutor = shouldExposeCapabilityModelTools(state)
+            ? new CapabilityModelToolExecutor(state, this.capabilityDispatcher)
+            : undefined
+        if (capabilityToolExecutor) {
+            tools.push(...capabilityToolExecutor.definitions().map(asOpenAITool))
+        }
 
         try {
             // Skip START_STREAM when called as image model (via ImageRouter) or
@@ -118,6 +132,7 @@ export class OpenAIProvider extends BaseProvider {
                 enableVideoGeneration,
                 workspaceId,
                 aiChatThreadId,
+                capabilityToolExecutor,
             })
 
             if (!enableImageGeneration && !enableVideoGeneration) this.publisher.end()
@@ -145,7 +160,7 @@ export class OpenAIProvider extends BaseProvider {
 
     private async generateViaResponsesApi(args: {
         state: ProviderState
-        inputMessages: Array<{ role: string; content: any }>
+        inputMessages: Array<Record<string, any>>
         modelVersion: string
         instructions: string | undefined
         temperature: number
@@ -157,6 +172,8 @@ export class OpenAIProvider extends BaseProvider {
         enableVideoGeneration: boolean
         workspaceId: string
         aiChatThreadId: string
+        capabilityToolExecutor?: CapabilityModelToolExecutor
+        capabilityRound?: number
     }): Promise<Partial<ProviderState>> {
         const update: Partial<ProviderState> = {}
         // GPT-5 / o-series accept only the default temperature — omit it for them.
@@ -226,8 +243,54 @@ export class OpenAIProvider extends BaseProvider {
                     const response = event.response
                     update.responseId = response.id
                     update.aiVendorRequestId = response.id
+                    if (response.usage) {
+                        const usage = response.usage
+                        update.usage = {
+                            promptTokens: usage.input_tokens ?? 0,
+                            promptAudioTokens: usage.input_tokens_audio ?? 0,
+                            promptCachedTokens: usage.input_tokens_cached ?? 0,
+                            completionTokens: usage.output_tokens ?? 0,
+                            completionAudioTokens: usage.output_tokens_audio ?? 0,
+                            completionReasoningTokens: usage.output_tokens_reasoning ?? 0,
+                            totalTokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+                        }
+                    }
+
+                    const capabilityCalls = (response.output ?? []).flatMap((item: any) => {
+                        if (item?.type !== 'function_call'
+                            || !args.capabilityToolExecutor?.recognizes(item.name)) return []
+                        return [{
+                            callId: item.call_id ?? item.id ?? '',
+                            name: item.name,
+                            arguments: parseCapabilityToolArguments(item.arguments),
+                        }]
+                    })
+                    if (capabilityCalls.length > 0) {
+                        const round = args.capabilityRound ?? 0
+                        if (round >= 4) throw new Error('Capability model-tool round limit exceeded')
+                        const executions = []
+                        for (const call of capabilityCalls) {
+                            executions.push(await args.capabilityToolExecutor!.execute(call, this.signal))
+                        }
+                        const continuationInput = [
+                            ...args.inputMessages,
+                            ...(response.output ?? []),
+                            ...executions.map(execution => ({
+                                type: 'function_call_output',
+                                call_id: execution.call.callId,
+                                output: JSON.stringify(execution.result),
+                            })),
+                        ]
+                        const continuation = await this.generateViaResponsesApi({
+                            ...args,
+                            inputMessages: continuationInput,
+                            capabilityRound: round + 1,
+                        })
+                        return mergeProviderUpdates(update, continuation)
+                    }
 
                     if (args.hasImageModel || args.hasVideoModel) {
+
                         const videoCall = args.hasVideoModel ? extractVideoToolCall('OpenAI', response) : undefined
                         const imageCall = args.hasImageModel && !videoCall ? extractToolCall('OpenAI', response) : undefined
                         if (videoCall) {
@@ -500,5 +563,28 @@ export class OpenAIProvider extends BaseProvider {
         } as any)
         const out = this.extractResponseText(response)
         return out || undefined
+    }
+}
+
+function mergeProviderUpdates(
+    first: Partial<ProviderState>,
+    second: Partial<ProviderState>,
+): Partial<ProviderState> {
+    const firstUsage = first.usage
+    const secondUsage = second.usage
+    return {
+        ...first,
+        ...second,
+        ...(firstUsage || secondUsage ? {
+            usage: {
+                promptTokens: (firstUsage?.promptTokens ?? 0) + (secondUsage?.promptTokens ?? 0),
+                promptAudioTokens: (firstUsage?.promptAudioTokens ?? 0) + (secondUsage?.promptAudioTokens ?? 0),
+                promptCachedTokens: (firstUsage?.promptCachedTokens ?? 0) + (secondUsage?.promptCachedTokens ?? 0),
+                completionTokens: (firstUsage?.completionTokens ?? 0) + (secondUsage?.completionTokens ?? 0),
+                completionAudioTokens: (firstUsage?.completionAudioTokens ?? 0) + (secondUsage?.completionAudioTokens ?? 0),
+                completionReasoningTokens: (firstUsage?.completionReasoningTokens ?? 0) + (secondUsage?.completionReasoningTokens ?? 0),
+                totalTokens: (firstUsage?.totalTokens ?? 0) + (secondUsage?.totalTokens ?? 0),
+            },
+        } : {}),
     }
 }

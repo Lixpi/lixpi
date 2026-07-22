@@ -27,8 +27,8 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
         videoResolution: '720p',
         videoDurationSeconds: 8,
         generatedVideoPrompt: 'Film a paper fox taking three careful steps through warm studio light.',
-        featureReferenceImages: ['data:image/png;base64,feature-inline'],
-        featureUsagePrompt: 'Use rough cut-paper edges and visible fiber texture.',
+        capabilityReferenceImages: ['data:image/png;base64,capability-inline'],
+        capabilityUsagePrompt: 'Use rough cut-paper edges and visible fiber texture.',
         ...overrides,
     }
 }
@@ -84,18 +84,19 @@ describe('VideoRouter', () => {
         })
     })
 
-    it('routes the final VEO prompt and attaches feature references when reference images are allowed', async () => {
+    it('routes the final VEO prompt and attaches capability references when reference images are allowed', async () => {
         const { router, createTransient, process } = createRouter()
 
-        const result = await router.execute(createState())
+        const result = await router.execute(createState({ eventMeta: { organizationId: 'organization-1' } }))
 
         expect(createTransient).toHaveBeenCalledWith('workspace-1:thread-1:video', 'Google')
         expect(result.generatedVideos).toEqual(['nats-obj://workspace-workspace-1-files/video-file'])
         const requestData = process.mock.calls[0]?.[0]
+        expect(requestData.organizationId).toBe('organization-1')
         expect(requestData.messages[0].content).toContain('VEO QUALITY DIRECTION')
-        expect(requestData.messages[0].content).toContain('MANDATORY /use FEATURE TRANSFER FOR VIDEO')
+        expect(requestData.messages[0].content).toContain('MANDATORY VISUAL CAPABILITY TRANSFER FOR VIDEO')
         expect(requestData.messages[0].content).toContain('Negative prompt:')
-        expect(requestData.videoReferenceImages).toEqual(['data:image/png;base64,feature-inline'])
+        expect(requestData.videoReferenceImages).toEqual(['data:image/png;base64,capability-inline'])
     })
 
     it('omits videoReferenceImages when no source or first-frame references are available', async () => {
@@ -103,8 +104,8 @@ describe('VideoRouter', () => {
 
         await router.execute(createState({
             videoReferenceImages: [],
-            featureReferenceImages: [],
-            featureUsagePrompt: undefined,
+            capabilityReferenceImages: [],
+            capabilityUsagePrompt: undefined,
         }))
 
         expect(process).toHaveBeenCalledOnce()
@@ -112,7 +113,7 @@ describe('VideoRouter', () => {
         expect(requestData.videoReferenceImages).toBeUndefined()
     })
 
-    it('keeps feature references in the prompt only when VEO first-frame mode is active', async () => {
+    it('keeps capability references in the prompt only when VEO first-frame mode is active', async () => {
         const { router, process } = createRouter()
 
         await router.execute(createState({
@@ -121,7 +122,7 @@ describe('VideoRouter', () => {
 
         const requestData = process.mock.calls[0]?.[0]
         expect(requestData.messages[0].content).toContain('IMAGE-TO-VIDEO DIRECTION')
-        expect(requestData.messages[0].content).toContain('MANDATORY /use FEATURE TRANSFER FOR VIDEO')
+        expect(requestData.messages[0].content).toContain('MANDATORY VISUAL CAPABILITY TRANSFER FOR VIDEO')
         expect(requestData.videoReferenceImages).toBeUndefined()
     })
 
@@ -131,8 +132,8 @@ describe('VideoRouter', () => {
 
         await router.execute(createState({
             videoReferenceImages: refs,
-            featureReferenceImages: [],
-            featureUsagePrompt: undefined,
+            capabilityReferenceImages: [],
+            capabilityUsagePrompt: undefined,
         }))
 
         const requestData = process.mock.calls[0]?.[0]
@@ -147,8 +148,8 @@ describe('VideoRouter', () => {
             videoModelMetaInfo: { provider: 'Google', model: 'Seedance', modelVersion: 'dreamina-seedance-2-0-260128', videoMaxReferenceImages: 9 },
             videoModelVersion: 'dreamina-seedance-2-0-260128',
             videoReferenceImages: refs,
-            featureReferenceImages: [],
-            featureUsagePrompt: undefined,
+            capabilityReferenceImages: [],
+            capabilityUsagePrompt: undefined,
         }))
 
         const requestData = process.mock.calls[0]?.[0]
@@ -164,15 +165,15 @@ describe('VideoRouter', () => {
         expect(result).toEqual({ error: 'Video generation failed: provider completed without a generated video' })
     })
 
-    it('does not leak feature reference images into media references when videoSourceForExtension is present', async () => {
+    it('does not leak capability reference images into media references when videoSourceForExtension is present', async () => {
         const { router, process } = createRouter()
         const refs = ['data:image/png;base64,ref-0', 'data:image/png;base64,ref-1']
-        const featureRefs = ['data:image/png;base64,feature-0', 'data:image/png;base64,feature-1']
+        const capabilityRefs = ['data:image/png;base64,capability-0', 'data:image/png;base64,capability-1']
 
         await router.execute(createState({
             videoReferenceImages: refs,
-            featureReferenceImages: featureRefs,
-            featureUsagePrompt: 'Use warm brush marks in motion.',
+            capabilityReferenceImages: capabilityRefs,
+            capabilityUsagePrompt: 'Use warm brush marks in motion.',
             videoSourceForExtension: 'nats-obj://workspace-workspace-1-files/source-video-file',
         }))
 

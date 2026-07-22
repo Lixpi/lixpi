@@ -26,6 +26,18 @@ import { ImagePublisher, readImageIntrinsicSize } from './image-publisher.ts'
 
 type Published = { subject: string, payload: any }
 
+function makeNats(published: Published[]): any {
+    return {
+        publish: (subject: string, payload: any) => {
+            published.push({ subject, payload })
+        },
+        getObjectStore: vi.fn(async () => ({})),
+        createObjectStore: vi.fn(async () => ({})),
+        putObject: vi.fn(async () => undefined),
+        deleteObject: vi.fn(async () => undefined),
+    }
+}
+
 const baseGenerationRun = {
     generationRequestId: 'request-1',
     reasoningRunId: 'reasoning-1',
@@ -56,23 +68,38 @@ const baseGenerationRun = {
 
 const makePublisher = (generationRun: any = baseGenerationRun, ...rest: any[]) => {
     const published: Published[] = []
-    const nats = {
-        publish: (subject: string, payload: any) => {
-            published.push({ subject, payload })
-        },
-    } as any
+    const nats = makeNats(published)
     const publisher = new ImagePublisher(nats, 'org-1', 'ws-1', 'thread-1', 'Google', generationRun, ...rest)
-    return { publisher, published }
+    return { publisher, published, nats }
 }
 
 const makePublisherWithoutGenerationRun = () => {
+    const published: Published[] = []
+    const nats = makeNats(published)
+    const publisher = new ImagePublisher(nats, 'org-1', 'ws-1', 'thread-1', 'Google')
+    return { publisher, published }
+}
+
+const makeCaptureOnlyPublisher = () => {
     const published: Published[] = []
     const nats = {
         publish: (subject: string, payload: any) => {
             published.push({ subject, payload })
         },
     } as any
-    const publisher = new ImagePublisher(nats, 'org-1', 'ws-1', 'thread-1', 'Google')
+    const publisher = new ImagePublisher(
+        nats,
+        'org-1',
+        'ws-1',
+        'run-1',
+        'Google',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+    )
     return { publisher, published }
 }
 
@@ -111,7 +138,7 @@ describe('ImagePublisher', () => {
     })
 
     it('publishes partial image metadata for non-empty base64 payloads', async () => {
-        const { publisher, published } = makePublisher()
+        const { publisher, published, nats } = makePublisher()
         const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]).toString('base64')
 
         await publisher.partial(pngBase64, 1)
@@ -119,11 +146,17 @@ describe('ImagePublisher', () => {
         expect(published).toHaveLength(1)
         expect(published[0]?.payload.content).toMatchObject({
             status: STREAM_STATUS.IMAGE_PARTIAL,
-            imageUrl: `data:image/png;base64,${pngBase64}`,
+            imageUrl: expect.stringMatching(/^\/api\/transient-media\/workspaces\/ws-1\/objects\/partial-[a-f0-9]{64}\.png\?revision=1$/),
             assetId: 'asset-1',
             partialIndex: 1,
             aiProvider: 'Google',
         })
+        expect(nats.putObject).toHaveBeenCalledWith(
+            'transient-media-org-1-files',
+            expect.stringMatching(/^partial-[a-f0-9]{64}\.png$/),
+            expect.any(Buffer),
+            expect.objectContaining({ description: expect.stringContaining('Transient image partial') }),
+        )
     })
 
     it('throws when partial is called without a generationRun', async () => {
@@ -141,11 +174,42 @@ describe('ImagePublisher', () => {
 
     it('silently skips partial publish failures', async () => {
         const { publisher, published } = makePublisher()
-        const nats = { publish: () => { throw new Error('publish temporarily unavailable') } } as any
+        const nats = makeNats([])
+        nats.putObject.mockRejectedValueOnce(new Error('object storage temporarily unavailable'))
         const publisher2 = new ImagePublisher(nats, 'org-1', 'ws-1', 'thread-1', 'Google', baseGenerationRun)
 
         await expect(publisher2.partial('aW1hZ2UtdmFsaWQ=', 0)).resolves.toBeUndefined()
         expect(published).toHaveLength(0)
+    })
+
+    it('replaces an earlier partial object when the next partial arrives', async () => {
+        const { publisher, published, nats } = makePublisher()
+        const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]).toString('base64')
+
+        await publisher.partial(pngBase64, 0)
+        await publisher.partial(pngBase64, 1)
+
+        const firstUrl = published[0]?.payload.content.imageUrl as string
+        const firstObjectKey = firstUrl.match(/objects\/(partial-[a-f0-9]{64}\.png)/)?.[1]
+        expect(firstObjectKey).toBeTruthy()
+        expect(nats.deleteObject).toHaveBeenCalledWith('transient-media-org-1-files', firstObjectKey)
+    })
+
+    it('clears the active partial object after publishing the final image', async () => {
+        const { publisher, published, nats } = makePublisher()
+        const pngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]).toString('base64')
+
+        await publisher.partial(pngBase64, 0)
+        const partialUrl = published[0]?.payload.content.imageUrl as string
+        const partialObjectKey = partialUrl.match(/objects\/(partial-[a-f0-9]{64}\.png)/)?.[1]
+        await publisher.complete({
+            imageBase64: pngBase64,
+            responseId: 'resp-1',
+            revisedPrompt: 'finish it',
+            imageModelId: 'gemini-2.5-flash-image',
+        })
+
+        expect(nats.deleteObject).toHaveBeenLastCalledWith('transient-media-org-1-files', partialObjectKey)
     })
 
     it('rejects empty final image bytes', async () => {
@@ -201,6 +265,25 @@ describe('ImagePublisher', () => {
             revisedPrompt: 'cat',
             imageModelId: 'gemini-2.5-flash-image',
         })).rejects.toThrow('Image completion is missing generationRun')
+    })
+
+    it('captures valid provider bytes without publishing or persisting candidate media', async () => {
+        const { publisher, published } = makeCaptureOnlyPublisher()
+        const pngBase64 = Buffer.from([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00,
+        ]).toString('base64')
+
+        await publisher.partial('', 0)
+        await publisher.complete({
+            imageBase64: pngBase64,
+            responseId: 'candidate-1',
+            revisedPrompt: 'candidate',
+            imageModelId: 'gemini-2.5-flash-image',
+        })
+
+        expect(generatedAssetStorageMocks.attachGeneratedAssetNode).not.toHaveBeenCalled()
+        expect(generatedAssetStorageMocks.settleGeneratedAssetOriginal).not.toHaveBeenCalled()
+        expect(published).toEqual([])
     })
 
     it('stores JPEG final bytes with the JPEG MIME type', async () => {
@@ -356,11 +439,7 @@ describe('ImagePublisher', () => {
 
     it('routes image events through onPipelineContent when durable pipeline publishing is supplied', async () => {
         const published: Published[] = []
-        const nats = {
-            publish: (subject: string, payload: any) => {
-                published.push({ subject, payload })
-            },
-        } as any
+        const nats = makeNats(published)
         const onProseMirrorContent = vi.fn()
         const onPipelineContent = vi.fn()
         const publisher = new ImagePublisher(
