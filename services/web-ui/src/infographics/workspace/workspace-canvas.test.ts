@@ -514,6 +514,18 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectExcerptNotToContain(completeHandler, 'imgEl.src', 'complete image handler')
 	})
 
+	it('shows review and regeneration controls only for AI-generated media', () => {
+		const acceptStart = ts.indexOf('function createMediaAcceptButton')
+		const regenerateStart = ts.indexOf('function createMediaRegenerationControls', acceptStart)
+		const historyStart = ts.indexOf('function createMediaHistoryButton', regenerateStart)
+		expect(acceptStart).toBeGreaterThan(-1)
+		expect(regenerateStart).toBeGreaterThan(acceptStart)
+		expect(historyStart).toBeGreaterThan(regenerateStart)
+
+		expectExcerptToContain(ts.slice(acceptStart, regenerateStart), 'if (!node.generatedBy) return null', 'accept control')
+		expectExcerptToContain(ts.slice(regenerateStart, historyStart), 'if (!node.generatedBy) return null', 'regeneration control')
+	})
+
 	it('preserves workspace panel metadata when image workflows write canvas state', () => {
 		const imageCallbacksStart = ts.indexOf('setAiGeneratedImageCallbacks({')
 		const errorStart = ts.indexOf('onImageErrorToCanvas:', imageCallbacksStart)
@@ -585,7 +597,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		// re-persist, the API already wrote it) with a monotonic revision guard.
 		expectSourceToContain(ts, 'applyCanvasGeometryUpdateToState')
 		expectSourceToContain(ts, 'function applyApiCanvasGeometry(canvasGeometry: CanvasGeometryUpdate): void')
-		expectSourceToContain(ts, 'if (canvasGeometry.layoutRevision < lastAppliedApiLayoutRevision) return')
+		expectSourceToContain(ts, 'if (canvasGeometry.layoutRevision <= lastAppliedApiLayoutRevision) return')
 		expectSourceToContain(ts, 'if (canvasGeometry.layoutRevision < highestObservedApiLayoutRevision) return')
 		expectSourceToContain(ts, 'const result = applyCanvasGeometryUpdateToState(currentCanvasState, canvasGeometry)')
 		expectSourceToContain(ts, 'nodeSnapshotCount: canvasGeometry.nodeSnapshots?.length ?? 0')
@@ -607,6 +619,21 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'applyApiCanvasGeometry(data.canvasGeometry)')
 		expectSourceToContain(ts, "if (node.mediaGenerationPhase) return node.mediaGenerationPhase === 'pending-before-first-frame'")
 		expectSourceToContain(ts, "return Boolean(node.generatedBy) && asset?.media?.renditions.original?.status !== 'ready'")
+	})
+
+	it('swaps partial pixels without replaying geometry or blanking the prior texture', () => {
+		const pixiLayerTs = loadPixiMediaLayer()
+		const intrinsicStart = ts.indexOf('function handleImageIntrinsicSize')
+		const intrinsicEnd = ts.indexOf('function applyApiCanvasGeometry', intrinsicStart)
+		expect(intrinsicStart).toBeGreaterThan(-1)
+		expect(intrinsicEnd).toBeGreaterThan(intrinsicStart)
+		const intrinsicHandler = ts.slice(intrinsicStart, intrinsicEnd)
+
+		expectExcerptToContain(intrinsicHandler, 'if (size.preserveNodeGeometry) return', 'intrinsic image handler')
+		expectSourceToContain(pixiLayerTs, 'entry.sourceReloadPending = true')
+		expectSourceToContain(pixiLayerTs, 'if (!entry.sourceReloadPending\n            && entry.loadedTier !== null')
+		expectSourceToContain(pixiLayerTs, "preserveNodeGeometry: Boolean(oldKey?.includes('/api/transient-media/'))")
+		expectSourceNotToContain(pixiLayerTs, 'entry.sprite.texture = Texture.EMPTY')
 	})
 
 	it('keeps in-progress generated media aligned with API-owned lineage identity', () => {
@@ -1365,14 +1392,9 @@ describe('Workspace AI chat panel — session history interactions', () => {
 		expectExcerptToContain(closeBody, 'return', 'closeAiChatSidebarTab')
 	})
 
-	it('opens a feature extraction run on the Features surface', () => {
-		const openBody = extractFunctionBody(ts, 'openFeatureExtractionTab')
-		const openInFeaturesBody = extractFunctionBody(ts, 'openFeatureExtractionRunInFeatures')
-
-		expectExcerptToContain(openBody, 'openFeatureExtractionRunInFeatures(extractionRunId)', 'openFeatureExtractionTab')
-		expectExcerptToContain(openInFeaturesBody, 'const mediaLibrary = ensureMediaLibraryPanel()', 'openFeatureExtractionRunInFeatures')
-		expectExcerptToContain(openInFeaturesBody, "openRightSidePanelToMode('features')", 'openFeatureExtractionRunInFeatures')
-		expect(openInFeaturesBody.match(/mediaLibrary\.showExtractionRun\(extractionRunId\)/g)).toHaveLength(2)
+	it('opens the capability library on the Tools surface', () => {
+		expectSourceToContain(ts, "openRightSidePanelToMode('capabilities')")
+		expectSourceToContain(ts, "window.addEventListener('lixpi:open-capability-library', onOpenCapabilityLibrary)")
 	})
 
 	it('adds thread tabs idempotently when opening existing chat sessions', () => {
@@ -1391,18 +1413,16 @@ describe('Workspace AI chat panel — session history interactions', () => {
 		expectSourceToContain(ts, 'pluralizeSessionCount(messageCount, \'message\')')
 	})
 
-	it('renders session history entries with thread/extraction markers and timestamps', () => {
+	it('renders thread session history entries with timestamps', () => {
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-marker-thread')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-marker-extraction')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-content')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-title')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-date')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-meta')
 		expectSourceToContain(ts, 'formatSessionUpdatedAt(session.updatedAt)')
-		expectSourceToContain(ts, 'formatSessionUpdatedAt(extractionState.updatedAt)')
 		expectSourceToContain(ts, 'sessionEl.querySelector(\'.workspace-ai-chat-panel-session-open\')?.addEventListener(\'click\', () => {')
 		expectSourceToContain(ts, 'activeAiChatSidebarTabId = `thread:${session.threadId}`')
-		expectSourceToContain(ts, 'openFeatureExtractionTab(extractionState.extractionRunId)')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-session-marker-extraction')
 	})
 
 	it('defines stable session metadata formatters for deterministic labels', () => {
@@ -1547,20 +1567,8 @@ describe('Right side panel — TS infrastructure', () => {
 		expectExcerptNotToContain(fnBody, 'promptInputController.setTarget')
 	})
 
-	it('bubble menu callbacks include onAskAi', () => {
-		expectSourceToContain(ts, 'onAskAi')
-	})
-
-	it('onAskAi opens a persisted extraction session without creating a context region', () => {
-		expect(ts).toMatch(/onAskAi.*async|async.*onAskAi/)
-		expectSourceToContain(ts, 'setPendingExtractionContext(extractionRunId, sourceContextSnapshot)')
-		expectSourceToContain(ts, 'setPendingFeatureExtractionRun({')
-		expectSourceToContain(ts, 'openFeatureExtractionRunInFeatures(extractionRunId)')
-	})
-
-	it('rehydrates pending extraction context from the persisted snapshot when reopening a tab', () => {
-		expectSourceToContain(ts, 'if (extractionState?.sourceContextSnapshot && !getPendingExtractionContext(activeSidebarTab.refId)) {')
-		expectSourceToContain(ts, 'setPendingExtractionContext(activeSidebarTab.refId, extractionState.sourceContextSnapshot as any)')
+	it('removes the extraction-only image bubble menu callback', () => {
+		expectSourceNotToContain(ts, `on${'AskAi'}`)
 	})
 
 	it('bubble menu callbacks include onTriggerConnection', () => {
@@ -1611,8 +1619,6 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(ts, 'function openAiChatPanel(): void')
 		expectSourceToContain(ts, 'aiChatPanelState = { ...aiChatPanelState, isOpen: true }')
 		expectSourceToContain(ts, 'async function submitCanvasGenerationRun(data: AiPromptComposerSubmitData): Promise<void>')
-		expectSourceToContain(ts, 'void loadExtractionSessionHistory()')
-		expectSourceToContain(ts, 'extractionSessionHistoryLoaded = false')
 		expectSourceToContain(ts, "owner: { type: 'standalone' }")
 		const openAiChatPanelMatch = ts.match(/function openAiChatPanel\(\): void \{[\s\S]*?^    \}/m)
 		expect(openAiChatPanelMatch).not.toBeNull()
@@ -1839,15 +1845,12 @@ describe('Right side panel — TS infrastructure', () => {
 	it('keeps submitted-session tabs until explicit delete handlers remove them', () => {
 		const closeStart = ts.indexOf('function closeAiChatSidebarTab')
 		const deleteChatStart = ts.indexOf('async function deleteAiChatSession', closeStart)
-		const deleteExtractionStart = ts.indexOf('async function deleteExtractionSession', deleteChatStart)
 		const closeBody = ts.slice(closeStart, deleteChatStart)
-		const deleteChatBody = ts.slice(deleteChatStart, deleteExtractionStart)
-		const deleteExtractionBody = ts.slice(deleteExtractionStart, ts.indexOf('async function loadExtractionSessionHistory', deleteExtractionStart))
+		const deleteChatBody = ts.slice(deleteChatStart, ts.indexOf('function renderActiveAiChatPanel', deleteChatStart))
 
 		expectExcerptToContain(closeBody, 'aiChatSidebarTabs = aiChatSidebarTabs.filter((tab) => tab.tabId !== tabId)', 'close-tab handler')
 		expectExcerptToContain(closeBody, 'if (aiChatSidebarTabs.length === 0)', 'close-tab handler')
 		expectExcerptToContain(deleteChatBody, 'closeAiChatSidebarTab(`thread:${threadId}`)', 'delete-chat handler')
-		expectExcerptToContain(deleteExtractionBody, 'closeAiChatSidebarTab(`extraction:${extractionRunId}`)', 'delete-extraction handler')
 	})
 
 	it('uses the reusable SidePanel component as the horizontal resize handle', () => {

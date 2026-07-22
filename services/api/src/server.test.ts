@@ -52,25 +52,38 @@ const mocks = vi.hoisted(() => {
     const subscriptionSubjects = ['subscription-subject']
     const aiModelSubjects = ['ai-model-subject']
     const aiInteractionSubjects = ['ai-interaction-subject']
-    const extractionSubjects = ['extraction-subject']
     const mediaDescriptorSubjects = ['media-descriptor-subject']
     const workspaceSubjects = ['workspace-subject']
     const assetSubjects = ['asset-subject']
-    const featureSubjects = ['feature-subject']
+    const capabilitySubjects = ['capability-subject']
+    const setCapabilityRunDispatcher = vi.fn()
+    const capabilityDispatcher = {
+        startDetached: vi.fn(),
+        stopDetached: vi.fn(),
+    }
 
     const startNatsAuthCalloutService = vi.fn(async () => undefined)
 
     const assetRoutes = {}
     const workspaceExportRoutes = {}
-    const featureRoutes = {}
+    const capabilityRoutes = {}
+    const transientMediaRoutes = {}
 
     const createLlmModule = vi.fn()
-    let llmModule: { shutdown: ReturnType<typeof vi.fn> } | null = null
+    let llmModule: {
+        seedCapabilities: ReturnType<typeof vi.fn>
+        shutdown: ReturnType<typeof vi.fn>
+    } | null = null
 
     const setLlmModule = vi.fn()
-    const setExtractionLlmModule = vi.fn()
 
     const startAssetMaintenanceWorker = vi.fn(async () => undefined)
+    const capabilityRunEventRelayStart = vi.fn()
+    class CapabilityRunEventRelay {
+        start(): void {
+            capabilityRunEventRelayStart()
+        }
+    }
 
     const metricsConfigFromEnv = vi.fn(() => ({}))
     const MetricsClient = vi.fn()
@@ -107,24 +120,30 @@ const mocks = vi.hoisted(() => {
         subscriptionSubjects,
         aiModelSubjects,
         aiInteractionSubjects,
-        extractionSubjects,
         mediaDescriptorSubjects,
         workspaceSubjects,
         assetSubjects,
-        featureSubjects,
+        capabilitySubjects,
+        setCapabilityRunDispatcher,
+        capabilityDispatcher,
         startNatsAuthCalloutService,
         assetRoutes,
         workspaceExportRoutes,
-        featureRoutes,
+        capabilityRoutes,
+        transientMediaRoutes,
         createLlmModule: createLlmModule.mockImplementation(() => {
-            const module = { shutdown: vi.fn() }
+            const module = {
+                seedCapabilities: vi.fn(async () => undefined),
+                shutdown: vi.fn(),
+            }
             llmModule = module
             return module
         }),
         getLlmModule: () => llmModule,
         setLlmModule,
-        setExtractionLlmModule,
         startAssetMaintenanceWorker,
+        CapabilityRunEventRelay,
+        capabilityRunEventRelayStart,
         metricsConfigFromEnv,
         MetricsClient,
         log,
@@ -193,14 +212,19 @@ vi.mock('./NATS/subscriptions/ai-interaction-subjects.ts', () => ({
     aiInteractionSubjects: mocks.aiInteractionSubjects,
     setLlmModule: mocks.setLlmModule,
 }))
-vi.mock('./NATS/subscriptions/extraction-subjects.ts', () => ({
-    extractionSubjects: mocks.extractionSubjects,
-    setExtractionLlmModule: mocks.setExtractionLlmModule,
-}))
 vi.mock('./NATS/subscriptions/media-descriptor-subjects.ts', () => ({ mediaDescriptorSubjects: mocks.mediaDescriptorSubjects }))
 vi.mock('./NATS/subscriptions/workspace-subjects.ts', () => ({ workspaceSubjects: mocks.workspaceSubjects }))
 vi.mock('./NATS/subscriptions/asset-subjects.ts', () => ({ assetSubjects: mocks.assetSubjects }))
-vi.mock('./NATS/subscriptions/feature-subjects.ts', () => ({ featureSubjects: mocks.featureSubjects }))
+vi.mock('./NATS/subscriptions/capability-subjects.ts', () => ({
+    capabilitySubjects: mocks.capabilitySubjects,
+    setCapabilityRunDispatcher: mocks.setCapabilityRunDispatcher,
+}))
+vi.mock('./capability-system/capability-runtime.ts', () => ({
+    getCapabilityDispatcher: () => mocks.capabilityDispatcher,
+}))
+vi.mock('./capability-system/capability-state-resolver.ts', () => ({
+    asCapabilityArguments: (value: unknown) => value,
+}))
 
 vi.mock('./routes/asset-routes.ts', () => ({
     default: mocks.assetRoutes,
@@ -208,8 +232,11 @@ vi.mock('./routes/asset-routes.ts', () => ({
 vi.mock('./routes/workspace-export-routes.ts', () => ({
     default: mocks.workspaceExportRoutes,
 }))
-vi.mock('./routes/feature-routes.ts', () => ({
-    default: mocks.featureRoutes,
+vi.mock('./routes/capability-routes.ts', () => ({
+    default: mocks.capabilityRoutes,
+}))
+vi.mock('./routes/transient-media-routes.ts', () => ({
+    default: mocks.transientMediaRoutes,
 }))
 
 vi.mock('./llm/index.ts', () => ({
@@ -218,6 +245,9 @@ vi.mock('./llm/index.ts', () => ({
 
 vi.mock('./services/asset-maintenance-worker.ts', () => ({
     startAssetMaintenanceWorker: mocks.startAssetMaintenanceWorker,
+}))
+vi.mock('./services/capability-run-event-log.ts', () => ({
+    CapabilityRunEventRelay: mocks.CapabilityRunEventRelay,
 }))
 
 vi.mock('./metrics/metrics-client.ts', () => ({
@@ -275,7 +305,6 @@ function resetMockState(): void {
     mocks.startNatsAuthCalloutService.mockClear()
     mocks.createLlmModule.mockClear()
     mocks.setLlmModule.mockClear()
-    mocks.setExtractionLlmModule.mockClear()
     mocks.startAssetMaintenanceWorker.mockClear()
     mocks.metricsConfigFromEnv.mockClear()
     mocks.MetricsClient.mockClear()
@@ -290,6 +319,7 @@ function resetMockState(): void {
     mocks.app.use.mockClear()
     mocks.app.get.mockClear()
     mocks.httpServer.listen.mockClear()
+    mocks.capabilityRunEventRelayStart.mockClear()
 }
 
 describe('services/api server startup', () => {
@@ -298,11 +328,10 @@ describe('services/api server startup', () => {
         ...mocks.subscriptionSubjects,
         ...mocks.aiModelSubjects,
         ...mocks.aiInteractionSubjects,
-        ...mocks.extractionSubjects,
         ...mocks.mediaDescriptorSubjects,
         ...mocks.workspaceSubjects,
         ...mocks.assetSubjects,
-        ...mocks.featureSubjects,
+        ...mocks.capabilitySubjects,
     ]
 
     beforeEach(() => {
@@ -357,12 +386,13 @@ describe('services/api server startup', () => {
             natsService: mocks.natsInstance,
             metrics: expect.anything(),
         })
+        expect(mocks.getLlmModule()?.seedCapabilities).toHaveBeenCalledTimes(1)
 
         expect(mocks.warn).toHaveBeenCalledWith(
             'NATS_NEX_NODE_NKEY_PUBLIC is not configured; NEX clients cannot authenticate through auth callout',
         )
 
-        expect(mocks.app.use).toHaveBeenCalledTimes(7)
+        expect(mocks.app.use).toHaveBeenCalledTimes(8)
         expect(mocks.expressJson).toHaveBeenCalledWith({ limit: '100mb' })
         expect(mocks.expressUrlencoded).toHaveBeenCalledWith({ limit: '100mb', extended: true })
         expect(mocks.cors).toHaveBeenCalledWith({ origin: 'https://api.example.test', credentials: true })
@@ -370,7 +400,9 @@ describe('services/api server startup', () => {
 
         expect(routeForPath('/api/assets')).toBe(mocks.assetRoutes)
         expect(routeForPath('/api/workspaces')).toBe(mocks.workspaceExportRoutes)
-        expect(routeForPath('/api/features')).toBe(mocks.featureRoutes)
+        expect(routeForPath('/api/capabilities')).toBe(mocks.capabilityRoutes)
+        expect(routeForPath('/api/transient-media')).toBe(mocks.transientMediaRoutes)
+        expect(mocks.capabilityRunEventRelayStart).toHaveBeenCalledTimes(1)
 
         const healthRoute = mocks.appGetCalls.find((call) => call.path === '/health-check')
         expect(healthRoute).toBeDefined()
@@ -394,7 +426,6 @@ describe('services/api server startup', () => {
         ])
 
         expect(mocks.setLlmModule).toHaveBeenCalledWith(mocks.getLlmModule())
-        expect(mocks.setExtractionLlmModule).toHaveBeenCalledWith(mocks.getLlmModule())
 
         const sigint = processOnCalls.find((entry) => entry.event === 'SIGINT')
         const sigterm = processOnCalls.find((entry) => entry.event === 'SIGTERM')

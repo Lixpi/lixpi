@@ -12,6 +12,7 @@ import type { ChunkPayload, ProseMirrorContentHandler, ProseMirrorSnapshotProvid
 import { attachGeneratedAssetNode, settleGeneratedAssetOriginal } from '../../services/generated-asset-storage.ts'
 import { materializeAssetProvenance } from '../../services/asset-provenance-materializer.ts'
 import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
+import { TransientMediaStore, type TransientMediaMimeType } from '../../services/transient-media-store.ts'
 
 // Intrinsic pixel size read straight from the PNG IHDR / JPEG SOF header bytes
 // (no image library). Lets the API persist final fitted node dimensions so
@@ -55,8 +56,28 @@ export function readImageIntrinsicSize(buffer: Buffer): { width: number; height:
     return null
 }
 
+function readImageMimeType(buffer: Buffer): TransientMediaMimeType | null {
+    if (buffer.length >= 8
+        && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+        return 'image/png'
+    }
+    if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+        return 'image/jpeg'
+    }
+    if (buffer.length >= 12
+        && buffer.toString('ascii', 0, 4) === 'RIFF'
+        && buffer.toString('ascii', 8, 12) === 'WEBP') {
+        return 'image/webp'
+    }
+    if (buffer.length >= 6 && (buffer.toString('ascii', 0, 6) === 'GIF87a' || buffer.toString('ascii', 0, 6) === 'GIF89a')) {
+        return 'image/gif'
+    }
+    return null
+}
+
 export class ImagePublisher {
     private pendingCanvasGeometry?: Promise<CanvasGeometryUpdate>
+    private readonly transientMediaStore?: TransientMediaStore
 
     constructor(
         private readonly nats: NatsService,
@@ -69,7 +90,18 @@ export class ImagePublisher {
         private readonly onPipelineContent?: ProseMirrorContentHandler,
         private readonly canvasVisibleArea?: { width: number; height: number },
         private readonly getProseMirrorSnapshot?: ProseMirrorSnapshotProvider,
-    ) {}
+        private readonly captureOnly = false,
+    ) {
+        if (generationRun) {
+            this.transientMediaStore = new TransientMediaStore(nats, {
+                organizationId,
+                workspaceId,
+                conversationAssetId: aiChatThreadId,
+                generationRequestId: generationRun.generationRequestId,
+                mediaRunId: generationRun.mediaRunId ?? generationRun.generationRequestId,
+            })
+        }
+    }
 
     private publish(content: ChunkPayload['content']): void {
         if (this.onPipelineContent) {
@@ -87,12 +119,12 @@ export class ImagePublisher {
     // Empty imageBase64 publishes a placeholder event. Non-empty provider
     // partials stay transient; only final bytes settle the preassigned Asset.
     async partial(imageBase64: string, partialIndex: number): Promise<void> {
+        if (this.captureOnly) return
         if (!this.generationRun) throw new Error('Image partial is missing generationRun')
         const assetId = this.generationRun.lineageAssignment?.assetId
         if (!assetId) throw new Error('Image partial is missing Asset assignment')
-        const intrinsicSize = imageBase64
-            ? readImageIntrinsicSize(Buffer.from(imageBase64, 'base64'))
-            : null
+        const partialBuffer = imageBase64 ? Buffer.from(imageBase64, 'base64') : null
+        const intrinsicSize = partialBuffer ? readImageIntrinsicSize(partialBuffer) : null
         this.pendingCanvasGeometry ??= attachGeneratedAssetNode({
             assetId,
             workspaceId: this.workspaceId,
@@ -117,9 +149,18 @@ export class ImagePublisher {
         }
 
         try {
+            if (!this.transientMediaStore || !partialBuffer) return
+            const mimeType = readImageMimeType(partialBuffer) ?? 'image/png'
+            const imageUrl = await this.transientMediaStore.put({
+                mediaKind: 'image',
+                slot: assetId,
+                bytes: partialBuffer,
+                mimeType,
+                revision: partialIndex,
+            })
             this.publish({
                 status: STREAM_STATUS.IMAGE_PARTIAL,
-                imageUrl: `data:image/png;base64,${imageBase64}`,
+                imageUrl,
                 assetId,
                 partialIndex,
                 aiProvider: this.provider,
@@ -128,10 +169,12 @@ export class ImagePublisher {
                 generationRun: this.generationRun,
             })
         } catch {
-            // Match Python behavior: log-and-skip on partial failure rather than
-            // killing the entire stream. The next partial or the final image
-            // will arrive shortly anyway.
+            // Skip a failed partial; the next partial or final image can proceed.
         }
+    }
+
+    async clearTransientMedia(): Promise<void> {
+        await this.transientMediaStore?.clear()
     }
 
     async complete(args: {
@@ -157,6 +200,7 @@ export class ImagePublisher {
         if (!isPng && !isJpeg) {
             throw new Error('Image completion failed: provider returned bytes that are not a PNG or JPEG image')
         }
+        if (this.captureOnly) return
         if (!this.generationRun) throw new Error('Image completion is missing generationRun')
         const result = await settleGeneratedAssetOriginal({
             generationRun: this.generationRun,
@@ -199,6 +243,11 @@ export class ImagePublisher {
             canvasGeometry,
             ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
+        try {
+            await this.clearTransientMedia()
+        } catch {
+            // Provider teardown retries failed terminal cleanup.
+        }
         const provenancePayload = {
             assetId: result.assetId,
             organizationId: result.organizationId,

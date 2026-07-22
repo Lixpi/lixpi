@@ -19,17 +19,23 @@ import { userSubjects } from './NATS/subscriptions/user-subjects.ts'
 import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects.ts'
 import { aiModelSubjects } from './NATS/subscriptions/ai-model-subjects.ts'
 import { aiInteractionSubjects, setLlmModule } from './NATS/subscriptions/ai-interaction-subjects.ts'
-import { extractionSubjects, setExtractionLlmModule } from './NATS/subscriptions/extraction-subjects.ts'
 import { mediaDescriptorSubjects } from './NATS/subscriptions/media-descriptor-subjects.ts'
 import { workspaceSubjects } from './NATS/subscriptions/workspace-subjects.ts'
-import { featureSubjects } from './NATS/subscriptions/feature-subjects.ts'
 import { assetSubjects } from './NATS/subscriptions/asset-subjects.ts'
+import {
+    capabilitySubjects,
+    setCapabilityRunDispatcher,
+} from './NATS/subscriptions/capability-subjects.ts'
 import assetRoutes from './routes/asset-routes.ts'
+import transientMediaRoutes from './routes/transient-media-routes.ts'
 import workspaceExportRoutes from './routes/workspace-export-routes.ts'
-import featureRoutes from './routes/feature-routes.ts'
+import capabilityRoutes from './routes/capability-routes.ts'
 
 import { createLlmModule } from './llm/index.ts'
 import { startAssetMaintenanceWorker } from './services/asset-maintenance-worker.ts'
+import { CapabilityRunEventRelay } from './services/capability-run-event-log.ts'
+import { getCapabilityDispatcher } from './capability-system/capability-runtime.ts'
+import { asCapabilityArguments } from './capability-system/capability-state-resolver.ts'
 
 import { MetricsClient, metricsConfigFromEnv, type MetricsNats } from './metrics/metrics-client.ts'
 
@@ -70,17 +76,16 @@ const subscriptions = [
     ...subscriptionSubjects,
     ...aiModelSubjects,
 
-    // AI orchestration, replay streams, extraction, and media description.
+    // AI orchestration, replay streams, and media description.
     ...aiInteractionSubjects,
-    ...extractionSubjects,
     ...mediaDescriptorSubjects,
 
     // Workspace records and unified Asset authority.
     ...workspaceSubjects,
     ...assetSubjects,
 
-    // Reusable Features store sample bytes through the shared Blob registry.
-    ...featureSubjects,
+    // Capability catalog commands and generic Tool run transport.
+    ...capabilitySubjects,
 ]
 
 // Registered NATS-internal identities that the auth callout can authenticate
@@ -200,6 +205,7 @@ const apiNatsService = await NATS_Service.init({
 })
 
 await startAssetMaintenanceWorker(apiNatsService)
+new CapabilityRunEventRelay(apiNatsService).start()
 
 await startNatsAuthCalloutService({
     natsService: await NATS_Service.getInstance(),
@@ -239,8 +245,28 @@ const llmModule = createLlmModule({
     natsService: await NATS_Service.getInstance(),
     metrics,
 })
+await llmModule.seedCapabilities()
+const capabilityDispatcher = getCapabilityDispatcher()
+setCapabilityRunDispatcher({
+    start: async input => ({
+        ...await capabilityDispatcher.startDetached({
+            capabilityId: input.capabilityId,
+            arguments: asCapabilityArguments(input.arguments),
+            requester: {
+                userId: input.userId,
+                workspaceId: input.workspaceId,
+                organizationId: input.organizationId,
+            },
+            origin: input.origin,
+            conversationAssetId: input.conversationAssetId,
+        }),
+        ownerUserId: input.userId,
+    }),
+    stop: async run => {
+        capabilityDispatcher.stopDetached(run, run.ownerUserId)
+    },
+})
 setLlmModule(llmModule)
-setExtractionLlmModule(llmModule)
 
 
 
@@ -262,10 +288,11 @@ app.use(cookieParser())
 // Asset upload/import and authorized rendition delivery. The API resolves
 // organization-scoped Blobs and supports Range requests for seekable media.
 app.use('/api/assets', assetRoutes)
+app.use('/api/transient-media', transientMediaRoutes)
 
 // Workspace export routes
 app.use('/api/workspaces', workspaceExportRoutes)
-app.use('/api/features', featureRoutes)
+app.use('/api/capabilities', capabilityRoutes)
 
 
 

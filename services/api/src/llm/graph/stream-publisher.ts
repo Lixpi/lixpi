@@ -12,7 +12,6 @@ import {
     type MediaBranchLineagePlan,
     type MediaGenerationRunMeta,
     type ProviderName,
-    type StageTraceEvent,
     type StreamStatus,
     type VideoGenerationTrace,
     type WorkspaceContextResolution,
@@ -76,10 +75,6 @@ export type ChunkPayload = {
         videoGenerationTrace?: VideoGenerationTrace
         error?: string
         generationRequestId?: string
-        extractionStatus?: string
-        extractionDetail?: string
-        stageTraceEvent?: StageTraceEvent
-        featureCard?: Record<string, any>
         generationRun?: MediaGenerationRunMeta
     }
     conversationAssetId: string
@@ -423,6 +418,9 @@ export class StreamPublisher {
             mediaRunId: content.generationRun?.mediaRunId ?? '',
             mediaModelId: content.generationRun?.mediaModelId ?? '',
             partialIndex: content.partialIndex ?? null,
+            imageUrl: content.status === STREAM_STATUS.IMAGE_PARTIAL || content.status === STREAM_STATUS.IMAGE_COMPLETE
+                ? content.imageUrl ?? ''
+                : '',
             hasCanvasGeometry: Boolean(content.canvasGeometry),
             mediaQueueCount: this.mediaResponsePublishChains.size,
         })
@@ -717,36 +715,6 @@ export class StreamPublisher {
         } else {
             void this.finishProseMirrorStream()
         }
-    }
-
-    extractionProgress(status: string, detail: string): void {
-        this.publishChatContent({
-            status: STREAM_STATUS.STREAMING,
-            aiProvider: this.provider,
-            extractionStatus: status,
-            extractionDetail: detail,
-            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
-        })
-    }
-
-    stageTrace(event: StageTraceEvent): void {
-        this.publishChatContent({
-            status: STREAM_STATUS.STREAMING,
-            aiProvider: this.provider,
-            stageTraceEvent: event,
-            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
-        })
-    }
-
-    // Publishes the extracted feature as structured content. Sent this way (not as JSON
-    // embedded in the token stream) so TagAwareStream's tail buffering can't truncate it.
-    featureCard(payload: Record<string, any>): void {
-        this.publishChatContent({
-            status: STREAM_STATUS.STREAMING,
-            aiProvider: this.provider,
-            featureCard: payload,
-            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
-        })
     }
 
     mediaBranchResolved(resolution: MediaBranchVlmResolution, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {

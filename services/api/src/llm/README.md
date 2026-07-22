@@ -18,6 +18,7 @@ There is no document/chat-thread persistence model or workspace file storage ada
 
 - `process()` for a single reasoning request;
 - `processMediaGenerationMatrix()` for shared-preflight multi-model fan-out;
+- `seedCapabilities()` for package seeding after every isolated module has registered its actions;
 - `stop()` and `stopMediaGenerationMatrix()`;
 - `shutdown()`;
 - `getSubscriptions()` (currently empty because the API gateway invokes the module in-process).
@@ -27,11 +28,12 @@ The NATS gateway authenticates the conversation Asset, acquires its workspace le
 ## Workflow
 
 ```text
-resolveWorkspaceContext
-  → resolveFeatures
+validateRequest
+  → resolveWorkspaceContext
+  → resolveCapabilities
+  → executeRequiredCapabilities
   → resolveMediaBranch
   → planMediaBranchLineage
-  → validateRequest
   → streamTokens
   → generate_image | generate_video | skip
   → calculateUsage
@@ -39,6 +41,8 @@ resolveWorkspaceContext
 ```
 
 Context snapshots contain node/Asset IDs and descriptors. The API point-authorizes selected Assets and resolves model-safe Blob URLs. Video candidates use representative-frame/poster renditions; explicit extension resolves the authorized source video Asset to canonical/original MP4 internally.
+
+Capability resolution captures current manifest hashes, authorizes the transitive closure, enforces dependency and aggregate resource limits, and seals the plan. Required Tools run before provider streaming. The reasoning model also receives `search_capabilities` and `use_capability`; transient media providers cannot recurse into those functions.
 
 ## Streams
 
@@ -81,7 +85,7 @@ A reasoning-only matrix has no concrete media assignments, so it creates no pend
 
 ## Image and video publishers
 
-Image partials are ephemeral data URLs and are never Blob renditions. Final publishers:
+Image partials are ephemeral Object Store objects and are never Blob renditions. Final publishers:
 
 1. validate provider bytes;
 2. store/register the original Blob on the preassigned Asset;
@@ -99,6 +103,8 @@ Canvas attach failure propagates; the publisher does not emit a fabricated durab
 Request-level failure/cancellation settles every unfinished planned Asset. Assets whose original already settled rely on their per-publisher provenance job/retry.
 
 Pipeline cleanup may discard source events after terminal delivery because deferred provenance reconstruction reads the settled conversation Asset.
+
+Generated media partials never travel inside pipeline, ProseMirror, or live NATS event payloads. Providers write each revision to an immutable run-scoped object in the organization transient-media Object Store and publish only an authenticated API reference. After a replacement is stored, the superseded revision is deleted; terminal media clears the last partial immediately, with provider teardown retrying any failed cleanup. The mechanism is media-type agnostic, and final media remains available only through its settled Asset rendition.
 
 ## Cancellation
 
@@ -123,11 +129,15 @@ llm/
 │   └── media-generation-run-planner.ts
 ├── orchestration/media-generation-matrix.ts
 ├── providers/
+├── structured-vlm/
 ├── tools/
-├── extraction/
 ├── prompts/
 └── usage/
 
+../capability-system/                         # abstract resolver, registry, runner, Tool/Skill module contracts
+../installed-capabilities.ts                  # built-in Tool and Skill composition root
+../capability-modules/character-creator/      # self-contained Character Creator tools/ + skills/
+../capability-modules/feature-extraction/     # self-contained Feature Extraction tools/ + skills/
 ../prosemirror/ai-chat-stream-assembler.ts
 ../prosemirror/asset-prosemirror-step-transport.ts
 ../services/asset-canvas-projection.ts
@@ -138,6 +148,9 @@ llm/
 ## Provider invariants
 
 - Provider state updates are partial overlays; undefined fields do not erase state.
+- Capability references resolve once in shared preflight to an immutable, hash-verified plan. Matrix children receive that exact plan and never re-resolve it.
+- Reasoning providers expose `search_capabilities`, `use_capability`, and attached `model-choice` Tools through bounded provider-native continuation loops. Transient image/video providers never expose Capability invocation functions.
+- Required Tools execute before reasoning; every Tool action resolves through the server allowlist and emits replayable generic run events with sealed manifest provenance.
 - Transient media providers do not emit their own top-level start/end lifecycle.
 - Reference traces never contain inline image bytes.
 - Provider routers receive exact preplanned run metadata.

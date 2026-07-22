@@ -9,12 +9,9 @@ import {
 } from '@xyflow/system'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
-import { TextSelection } from 'prosemirror-state'
 import { v4 as uuidv4 } from 'uuid'
 import {
-    getAiInteractionResponseSubject,
     NATS_SUBJECTS,
-    STREAM_STATUS,
     LoadingStatus,
     type CanvasState,
     type CanvasNode,
@@ -33,10 +30,6 @@ import {
     type CanvasAiChatSidebarTab,
     type CanvasAiChatPanelState,
     type CanvasRightSidePanelMode,
-    type CanvasFeatureExtractionState,
-    type ExtractionRun,
-    type StageTraceEvent,
-    type FeatureMeta,
     type Asset,
     type AssetMeta,
     type CanvasGeometryUpdate,
@@ -64,6 +57,7 @@ import {
     type AiPromptComposerInstance,
     type AiPromptComposerSubmitData,
 } from '$src/components/proseMirror/aiPromptComposer.ts'
+import { createDefaultCapabilityCatalogClient } from '$src/services/capability-catalog-client.ts'
 import {
     parseAiModelSelectionAttr,
     serializeAiModelSelectionAttr,
@@ -210,14 +204,12 @@ import {
     createGenericVideoAspectDropdown,
     createGenericVideoResolutionDropdown,
     createGenericVideoDurationDropdown,
-    applyAiModelMenuStyleSettings,
-    createAiModelMenuContent,
 } from '$src/components/aiModelControls/index.ts'
 import { createPixiMediaLayer, type GeneratingMediaOutlineTarget, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
 import { createWorkspaceLoadingOutline, type WorkspaceLoadingOutlineInstance } from '$src/infographics/workspace/workspaceLoadingOutline.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
-import { createMediaLibraryPanel, type FeatureExtractionModelContext, type FeatureExtractionModelControlsInstance } from '$src/infographics/workspace/mediaLibraryPanel.ts'
-import { setPendingExtractionContext, getPendingExtractionContext, clearPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody, type ExtractionTabContext } from '$src/infographics/workspace/extractionTab.ts'
+import { createMediaLibraryPanel } from '$src/infographics/workspace/mediaLibraryPanel.ts'
+import { createCapabilityLibraryPanel, type CapabilityLibraryPanelInstance } from '$src/infographics/workspace/capabilityLibraryPanel.ts'
 import {
     getAiChatPanelState,
     setAiChatPanelState,
@@ -1020,13 +1012,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // instance whose visible projection is the spatial branch lineage marker.
     let globalCanvasComposer: AiPromptComposerInstance | null = null
     let globalCanvasComposerHostEl: HTMLDivElement | null = null
-    // Feature extraction opens on the right panel's Features surface. Confirming
-    // the pending feature row starts the dedicated extraction stream there.
-    const pendingFeatureExtractionRuns = new Map<string, CanvasFeatureExtractionState>()
-    const apiFeatureExtractionRuns = new Map<string, CanvasFeatureExtractionState>()
-    const subscribedFeatureExtractionRunSubjects = new Map<string, { subject: string; errorSubject: string }>()
-    const featureExtractionModelSelections = new Map<string, FeatureExtractionModelContext>()
-    const featureExtractionRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>()
     // In-flight detached canvas message ids for stream reattachment and delayed
     // editor teardown. Generated-media event routing uses normal thread and
     // workspace state.
@@ -1040,12 +1025,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const contextPreviewTilesByTray: Map<HTMLDivElement, Set<ContextPreviewTileInstance>> = new Map()
     let contextPreviewRefreshVersion = 0
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
+    let capabilityLibraryPanelInstance: CapabilityLibraryPanelInstance | null = null
     const assetService = new AssetService()
     let activeAiChatSidebarThreadId: string | null = null
     let activeAiChatSidebarTabId: string | null = null
     let aiChatSidebarTabs: CanvasAiChatSidebarTab[] = []
     let aiChatPanelState: CanvasAiChatPanelState = getAiChatPanelState(currentCanvasState)
-    let extractionSessionHistoryLoaded = false
     let pendingLocalCanvasVisualCommit: PendingCanvasVisualCommit | null = null
     let nodePointerPanLockNodeId: string | null = null
     let paneNoPanAddedForNodePointer = false
@@ -1304,33 +1289,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (!node?.assetId) return
                 openRightSidePanelToMode('media')
                 ensureMediaLibraryPanel().showAsset(node.assetId)
-            },
-            onAskAi: async (nodeId) => {
-                const imageNode = currentCanvasState?.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
-                if (!imageNode || imageNode.type !== 'image') return
-
-                try {
-                    const imageNatsUrl = `asset://${imageNode.assetId}`
-
-                    const extractionRunId = uuidv4()
-                    const sourceContextSnapshot: ExtractionTabContext = {
-                        imageNatsUrl,
-                        contextMessages: [],
-                    }
-
-                    setPendingExtractionContext(extractionRunId, sourceContextSnapshot)
-                    setPendingFeatureExtractionRun({
-                        extractionRunId,
-                        status: 'pending',
-                        userText: 'Extract a reusable visual feature from this image.',
-                        sourceContextSnapshot,
-                        updatedAt: Date.now(),
-                    })
-
-                    openFeatureExtractionRunInFeatures(extractionRunId)
-                } catch (error) {
-                    console.error('Failed to open feature extraction from image:', error)
-                }
             },
             onTriggerConnection: (nodeId) => {
                 if (!connectionManager) return
@@ -3116,6 +3074,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function createMediaAcceptButton(node: ImageCanvasNode | VideoCanvasNode): HTMLButtonElement | null {
+        if (!node.generatedBy) return null
         if (isGeneratedOutputAccepted(node)) return null
         const asset = assetsStore.get(node.assetId)
         if (!asset || asset.generatedOutputReview?.status === 'superseded') return null
@@ -3142,6 +3101,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function createMediaRegenerationControls(node: ImageCanvasNode | VideoCanvasNode): HTMLDivElement | null {
+        if (!node.generatedBy) return null
         const asset = assetsStore.get(node.assetId)
         if (!asset || isGeneratedOutputAccepted(node) || asset.generatedOutputReview?.status === 'superseded') return null
         const disabled = asset.media?.renditions.original?.status !== 'ready'
@@ -3174,7 +3134,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function createMediaHistoryButton(node: ImageCanvasNode | VideoCanvasNode): HTMLButtonElement | null {
-        if (!isGeneratedOutputAccepted(node)) return null
+        if (!node.generatedBy || !isGeneratedOutputAccepted(node)) return null
         const message = getGeneratedMediaUserMessage(node)
         if (!message) return null
 
@@ -4070,7 +4030,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         commitCanvasState({ ...currentCanvasState, nodes: resolvedNodes })
     }
 
-    function handleImageIntrinsicSize(size: { nodeId: string; width: number; height: number }): void {
+    function handleImageIntrinsicSize(size: {
+        nodeId: string
+        width: number
+        height: number
+        preserveNodeGeometry?: boolean
+    }): void {
         if (!currentCanvasState) {
             clearFinalizingGeneratedImageOutline(size.nodeId)
             return
@@ -4095,6 +4060,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
         decodedGeneratedImageNodeIds.add(size.nodeId)
         clearFinalizingGeneratedImageOutline(size.nodeId)
+        if (size.preserveNodeGeometry) return
         if (draggingNodeId === size.nodeId || resizingNodeId === size.nodeId) return
 
         const fittedDimensions = fitImageDimensionsToAspectRatio(imageNode.dimensions, intrinsicAspectRatio)
@@ -5217,7 +5183,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function getRightPanelModeSwitchTransitionDuration(previousMode: CanvasRightSidePanelMode, nextMode: CanvasRightSidePanelMode): number {
-        const modes: CanvasRightSidePanelMode[] = ['features', 'media', 'aiThreads']
+        const modes: CanvasRightSidePanelMode[] = ['capabilities', 'media', 'aiThreads']
         const previousIndex = modes.indexOf(previousMode)
         const nextIndex = modes.indexOf(nextMode)
         if (previousIndex < 0 || nextIndex < 0) return settings.aiChatThread.panelTabs.transitionDurationMs
@@ -5240,12 +5206,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function applyRightPanelModeBody(nextMode: CanvasRightSidePanelMode): void {
         if (activeRightPanelRenderedMode === nextMode) return
-
-        if (activeRightPanelRenderedMode !== 'aiThreads' && nextMode !== 'aiThreads') {
-            ensureMediaLibraryPanel().setMode(nextMode === 'media' ? 'media' : 'features')
-            activeRightPanelRenderedMode = nextMode
-            return
-        }
 
         renderActiveAiChatPanel(undefined, { preserveModeSwitch: true })
     }
@@ -5441,41 +5401,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return [
             pluralizeSessionCount(messageCount, 'message'),
             formatSessionStatus(session.status),
-        ].filter(Boolean).join(' · ')
-    }
-
-    function getExtractionSourceCount(sourceContextSnapshot: object | undefined): number {
-        if (!sourceContextSnapshot || typeof sourceContextSnapshot !== 'object') return 0
-
-        const snapshot = sourceContextSnapshot as {
-            imageNatsUrl?: unknown
-            contextMessages?: unknown
-            nodes?: unknown
-        }
-        let count = snapshot.imageNatsUrl ? 1 : 0
-        if (Array.isArray(snapshot.contextMessages)) count += snapshot.contextMessages.length
-        if (Array.isArray(snapshot.nodes)) count += snapshot.nodes.length
-
-        return count
-    }
-
-    function getExtractionSessionTitle(extractionState: CanvasFeatureExtractionState): string {
-        const userText = typeof extractionState.userText === 'string' ? extractionState.userText.trim() : ''
-        if (userText) return userText
-
-        const featureName = typeof extractionState.featureCard?.name === 'string'
-            ? extractionState.featureCard.name.trim()
-            : ''
-        return featureName ? `Extract ${featureName}` : 'Extract Feature'
-    }
-
-    function getExtractionSessionMeta(extractionState: CanvasFeatureExtractionState): string {
-        const sourceCount = getExtractionSourceCount(extractionState.sourceContextSnapshot)
-        return [
-            'Feature extraction',
-            formatSessionStatus(extractionState.status),
-            extractionState.aiProvider,
-            sourceCount > 0 ? pluralizeSessionCount(sourceCount, 'source') : '',
         ].filter(Boolean).join(' · ')
     }
 
@@ -5741,289 +5666,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         restoreAiChatPanelHistoryScroll(historyScrollerEl, previousScrollTop, refreshVersion)
     }
 
-    function isTerminalFeatureExtractionStatus(status: CanvasFeatureExtractionState['status'] | undefined): boolean {
-        return status === 'completed' || status === 'failed'
-    }
-
-    function normalizeFeatureExtractionStatus(status: unknown): CanvasFeatureExtractionState['status'] {
-        const statusText = typeof status === 'string' ? status : 'pending'
-        switch (statusText) {
-            case 'pending':
-            case 'analyzing':
-            case 'routing':
-            case 'extracting':
-            case 'extracting_axes':
-            case 'materializing_crops':
-            case 'synthesizing':
-            case 'generating_samples':
-            case 'saving':
-            case 'completed':
-            case 'failed':
-                return statusText
-            default:
-                return 'analyzing'
-        }
-    }
-
-    function toCanvasFeatureExtractionState(run: ExtractionRun): CanvasFeatureExtractionState {
-        const analysisProvider = run.modelConfig?.analysisModelId
-            ? splitAiModelId(run.modelConfig.analysisModelId).provider
-            : ''
-        return {
-            extractionRunId: run.extractionRunId,
-            ...(run.featureId ? { featureId: run.featureId } : {}),
-            status: normalizeFeatureExtractionStatus(run.status),
-            ...(run.userText ? { userText: run.userText } : {}),
-            ...(analysisProvider ? { aiProvider: analysisProvider } : {}),
-            ...(run.modelConfig ? { modelConfig: run.modelConfig } : {}),
-            ...(run.stageReasoning ? { stageReasoning: run.stageReasoning } : {}),
-            ...(run.featureCard ? { featureCard: run.featureCard } : {}),
-            ...(run.trace ? { traceEvents: run.trace } : {}),
-            ...(run.sourceContextSnapshot ? { sourceContextSnapshot: run.sourceContextSnapshot } : {}),
-            ...(run.error ? { error: run.error } : {}),
-            updatedAt: run.updatedAt,
-        }
-    }
-
-    function upsertFeatureExtractionTraceEvent(
-        traceEvents: StageTraceEvent[] | undefined,
-        event: StageTraceEvent,
-    ): StageTraceEvent[] {
-        const nextTraceEvents = [...(traceEvents ?? [])]
-        const existingIndex = nextTraceEvents.findIndex((existing) => existing.stage === event.stage)
-        if (existingIndex >= 0) nextTraceEvents[existingIndex] = event
-        else nextTraceEvents.push(event)
-        return nextTraceEvents
-    }
-
-    function refreshSelectedFeatureExtractionRun(): void {
-        if (!mediaLibraryPanelInstance) return
-        if (aiChatPanelState.topLevelMode !== 'features') return
-        mediaLibraryPanelInstance.refresh()
-    }
-
-    function scheduleFeatureExtractionPanelRefresh(extractionRunId: string, immediate = false): void {
-        const existingTimer = featureExtractionRefreshTimers.get(extractionRunId)
-        if (existingTimer) {
-            clearTimeout(existingTimer)
-            featureExtractionRefreshTimers.delete(extractionRunId)
-        }
-        if (immediate) {
-            refreshSelectedFeatureExtractionRun()
-            return
-        }
-        const timer = setTimeout(() => {
-            featureExtractionRefreshTimers.delete(extractionRunId)
-            refreshSelectedFeatureExtractionRun()
-        }, 600)
-        featureExtractionRefreshTimers.set(extractionRunId, timer)
-    }
-
-    function unsubscribeFeatureExtractionRun(extractionRunId: string): void {
-        const subjects = subscribedFeatureExtractionRunSubjects.get(extractionRunId)
-        if (!subjects) return
-        servicesStore.getData('nats')?.getSubscriptions?.([subjects.subject, subjects.errorSubject])
-            ?.forEach((sub: any) => sub.unsubscribe())
-        subscribedFeatureExtractionRunSubjects.delete(extractionRunId)
-    }
-
-    function unsubscribeAllFeatureExtractionRuns(): void {
-        for (const extractionRunId of Array.from(subscribedFeatureExtractionRunSubjects.keys())) {
-            unsubscribeFeatureExtractionRun(extractionRunId)
-        }
-        for (const timer of featureExtractionRefreshTimers.values()) clearTimeout(timer)
-        featureExtractionRefreshTimers.clear()
-    }
-
-    function subscribeToFeatureExtractionRun(extractionRunId: string): void {
-        const extractionState = apiFeatureExtractionRuns.get(extractionRunId)
-        if (!extractionState || isTerminalFeatureExtractionStatus(extractionState.status)) return
-        if (subscribedFeatureExtractionRunSubjects.has(extractionRunId)) return
-
-        const nats = servicesStore.getData('nats')
-        if (!nats) return
-
-        const subject = getAiInteractionResponseSubject(userStore.getData('userId') as string, workspaceId, extractionRunId)
-        const errorSubject = `ai.interaction.chat.error.${workspaceId}:${extractionRunId}`
-        if ((nats.getSubscriptions?.([subject, errorSubject])?.length ?? 0) > 0) return
-        subscribedFeatureExtractionRunSubjects.set(extractionRunId, { subject, errorSubject })
-
-        let currentReasoningStage = 'router'
-        const processedPipelineEventIds = new Set<string>()
-        let pipelineLocalStreamSeq = 0
-        const saveUpdatedState = (
-            updater: (state: CanvasFeatureExtractionState) => CanvasFeatureExtractionState,
-            refreshImmediately = false,
-        ) => {
-            const current = apiFeatureExtractionRuns.get(extractionRunId)
-            if (!current) return
-            const next = updater(current)
-            apiFeatureExtractionRuns.set(extractionRunId, next)
-            if (isTerminalFeatureExtractionStatus(next.status)) unsubscribeFeatureExtractionRun(extractionRunId)
-            scheduleFeatureExtractionPanelRefresh(extractionRunId, refreshImmediately)
-        }
-
-        const shouldProcessPipelinePayload = (data: any): boolean => {
-            const pipelineEventId = typeof data?.pipelineEventId === 'string' ? data.pipelineEventId : ''
-            const pipelineStreamSeq = typeof data?.pipelineStreamSeq === 'number' ? data.pipelineStreamSeq : 0
-
-            if (pipelineEventId) {
-                if (processedPipelineEventIds.has(pipelineEventId)) {
-                    pipelineLocalStreamSeq = Math.max(pipelineLocalStreamSeq, pipelineStreamSeq)
-                    return false
-                }
-                processedPipelineEventIds.add(pipelineEventId)
-            }
-
-            pipelineLocalStreamSeq = Math.max(pipelineLocalStreamSeq, pipelineStreamSeq)
-            return true
-        }
-
-        const handleFeatureExtractionResponse = (data: any): void => {
-            if (!shouldProcessPipelinePayload(data)) return
-            if (data?.error) {
-                saveUpdatedState((state) => ({
-                    ...state,
-                    status: 'failed',
-                    error: String(data.error),
-                    updatedAt: Date.now(),
-                }), true)
-                return
-            }
-            const content = data?.content
-            if (!content) return
-            if (content.stageTraceEvent) {
-                const event = content.stageTraceEvent as StageTraceEvent
-                if (event.status === 'running') currentReasoningStage = event.stage
-                saveUpdatedState((state) => ({
-                    ...state,
-                    traceEvents: upsertFeatureExtractionTraceEvent(state.traceEvents, event),
-                    status: event.stage === 'persist' && event.status === 'ok'
-                        ? 'completed'
-                        : state.status,
-                    updatedAt: Date.now(),
-                }), true)
-            }
-            if (content.extractionStatus) {
-                saveUpdatedState((state) => ({
-                    ...state,
-                    status: normalizeFeatureExtractionStatus(content.extractionStatus),
-                    updatedAt: Date.now(),
-                }), true)
-            }
-            if (content.featureCard) {
-                saveUpdatedState((state) => ({
-                    ...state,
-                    ...(typeof content.featureCard.featureId === 'string' ? { featureId: content.featureCard.featureId } : {}),
-                    featureCard: content.featureCard,
-                    updatedAt: Date.now(),
-                }), true)
-            }
-            if (content.status === STREAM_STATUS.STREAMING && content.text) {
-                const text = String(content.text)
-                saveUpdatedState((state) => ({
-                    ...state,
-                    stageReasoning: {
-                        ...(state.stageReasoning ?? {}),
-                        [currentReasoningStage]: `${state.stageReasoning?.[currentReasoningStage] ?? ''}${text}`,
-                    },
-                    updatedAt: Date.now(),
-                }))
-            }
-            if (content.status === STREAM_STATUS.END_STREAM) {
-                saveUpdatedState((state) => ({
-                    ...state,
-                    status: state.status === 'failed' ? state.status : 'completed',
-                    updatedAt: Date.now(),
-                }), true)
-            }
-        }
-
-        nats.subscribe(subject, handleFeatureExtractionResponse)
-
-        nats.subscribe(errorSubject, (data: any) => {
-            saveUpdatedState((state) => ({
-                ...state,
-                status: 'failed',
-                error: String(data?.error ?? data?.message ?? 'Unknown extraction error'),
-                updatedAt: Date.now(),
-            }), true)
-        })
-
-        const resumeFeatureExtractionPipeline = async (): Promise<void> => {
-            try {
-                let hasMore = false
-                do {
-                    const result = await nats.request(NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME, {
-                        token: await AuthService.getTokenSilently(),
-                        workspaceId,
-                        pipelineId: extractionRunId,
-                        localStreamSeq: pipelineLocalStreamSeq,
-                    }) as {
-                        error?: unknown
-                        events?: Array<{ payload: Record<string, any>; streamSequence: number }>
-                        hasMore?: boolean
-                    }
-                    if (result?.error) {
-                        console.error('[FEATURE_EXTRACTION] CHAT_PIPELINE_RESUME failed:', result.error)
-                        return
-                    }
-                    const events = result.events ?? []
-                    for (const event of events) {
-                        handleFeatureExtractionResponse({
-                            ...event.payload,
-                            pipelineStreamSeq: event.streamSequence,
-                        })
-                    }
-                    hasMore = result.hasMore === true && events.length > 0
-                } while (hasMore)
-            } catch (error) {
-                console.error('[FEATURE_EXTRACTION] CHAT_PIPELINE_RESUME failed:', error)
-            }
-        }
-        void resumeFeatureExtractionPipeline()
-    }
-
-    function getPersistedFeatureExtractionState(extractionRunId: string): CanvasFeatureExtractionState | undefined {
-        return apiFeatureExtractionRuns.get(extractionRunId)
-    }
-
-    function getFeatureExtractionState(extractionRunId: string): CanvasFeatureExtractionState | undefined {
-        return getPersistedFeatureExtractionState(extractionRunId) ?? pendingFeatureExtractionRuns.get(extractionRunId)
-    }
-
-    function getFeatureExtractionRunsForPanel(): CanvasFeatureExtractionState[] {
-        const persistedRuns = Array.from(apiFeatureExtractionRuns.values())
-        const persistedRunIds = new Set(persistedRuns.map((run) => run.extractionRunId))
-        const pendingRuns = Array.from(pendingFeatureExtractionRuns.values())
-            .filter((run) => !persistedRunIds.has(run.extractionRunId))
-        return [...pendingRuns, ...persistedRuns]
-    }
-
-    function setPendingFeatureExtractionRun(extractionState: CanvasFeatureExtractionState): void {
-        for (const pendingRunId of pendingFeatureExtractionRuns.keys()) {
-            if (pendingRunId !== extractionState.extractionRunId) {
-                clearPendingExtractionContext(pendingRunId)
-                featureExtractionModelSelections.delete(pendingRunId)
-            }
-        }
-        pendingFeatureExtractionRuns.clear()
-        pendingFeatureExtractionRuns.set(extractionState.extractionRunId, extractionState)
-    }
-
-    function persistFeatureExtractionState(extractionState: CanvasFeatureExtractionState): void {
-        pendingFeatureExtractionRuns.delete(extractionState.extractionRunId)
-        clearPendingExtractionContext(extractionState.extractionRunId)
-
-        const currentExtractionState = apiFeatureExtractionRuns.get(extractionState.extractionRunId)
-        if (currentExtractionState && JSON.stringify(currentExtractionState) === JSON.stringify(extractionState)) return
-
-        apiFeatureExtractionRuns.set(extractionState.extractionRunId, extractionState)
-        if (isTerminalFeatureExtractionStatus(extractionState.status)) {
-            scheduleFeatureExtractionPanelRefresh(extractionState.extractionRunId, true)
-        }
-    }
-
     function syncActiveAiChatPanelFromState(): void {
         aiChatPanelState = getAiChatPanelState(currentCanvasState)
         aiChatSidebarTabs = aiChatPanelState.tabs
@@ -6049,40 +5691,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return aiChatSidebarTabs.find((tab) => tab.tabId === activeAiChatSidebarTabId) ?? aiChatSidebarTabs[0]
     }
 
-    // Insert a media-library feature reference into the bottom-center global
-    // composer (the only AI input). Triggered by the Media Library `/use` command.
-    function insertFeatureIntoActivePrompt(feature: FeatureMeta): boolean {
-        const view = globalCanvasComposer?.editorView
-        const featureRefType = view?.state.schema.nodes.feature_reference
-        if (!view || !featureRefType) return false
-
-        try {
-            const node = featureRefType.create({
-                featureId: feature.featureId,
-                featureName: feature.name,
-                category: feature.category,
-            })
-            // The `/use` slash text is deleted when the Media Library opens, so re-insert "use" as
-            // plain text before the chip. The prompt then reads "use feature:<name>" and is no
-            // longer empty, so the placeholder stops showing over an already-filled input.
-            const usePrefix = 'use '
-            const insertAt = view.state.selection.from
-            let tr = view.state.tr.replaceSelectionWith(node)
-            tr = tr.insertText(usePrefix, insertAt)
-            const afterChip = insertAt + usePrefix.length + node.nodeSize
-            tr = tr.insertText(' ', afterChip)
-            tr = tr.setSelection(TextSelection.create(tr.doc, Math.min(afterChip + 1, tr.doc.content.size))).scrollIntoView()
-            view.dispatch(tr)
-            view.focus()
-            globalCanvasComposer?.triggerGradientAnimation()
-            return true
-        } catch (error) {
-            console.error('Failed to insert feature reference into prompt:', error)
-            view.focus()
-            return false
-        }
-    }
-
     function extractPromptTextFromContentJSON(contentJSON: any): string {
         const chunks: string[] = []
         const visit = (node: any) => {
@@ -6106,152 +5714,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return chunks.join('').replace(/\n{3,}/g, '\n\n').trim()
     }
 
-    function getModelId(model: any): string {
-        return model?.provider && model?.model ? `${model.provider}:${model.model}` : ''
-    }
-
-    function modelHasModality(model: any, modality: string): boolean {
-        return Boolean(model?.modalities?.some((entry: any) => (entry?.modality ?? entry) === modality))
-    }
-
-    function getDefaultFeatureExtractionAiModel(): string {
-        const models = (aiModelsStore.getData() ?? []) as any[]
-        const defaultId = aiModelsStore.getDefaultModelId('reasoning')
-        if (defaultId && models.some((model) => getModelId(model) === defaultId)) return defaultId
-        return getModelId(models.find((model) =>
-            !modelHasModality(model, 'image_generation') && !modelHasModality(model, 'video_generation')
-        ))
-    }
-
-    function getDefaultFeatureExtractionImageModel(): string | undefined {
-        const models = (aiModelsStore.getData() ?? []) as any[]
-        const defaultId = aiModelsStore.getDefaultModelId('image')
-        if (defaultId && models.some((model) => getModelId(model) === defaultId)) return defaultId
-        return getModelId(models.find((model) => modelHasModality(model, 'image_generation'))) || undefined
-    }
-
-    function getFeatureExtractionModelSelection(extractionRunId: string): FeatureExtractionModelContext {
-        const existing = featureExtractionModelSelections.get(extractionRunId)
-        if (existing) return existing
-        const extractionState = getFeatureExtractionState(extractionRunId)
-        const sourceContext = extractionState?.sourceContextSnapshot as ExtractionTabContext | undefined
-        const savedModelConfig = extractionState?.modelConfig ?? sourceContext?.modelConfig
-        const initialSelection = {
-            aiModel: savedModelConfig?.analysisModelId ?? sourceContext?.aiModel ?? getDefaultFeatureExtractionAiModel(),
-            aiImageModel: savedModelConfig?.mediaModelId ?? sourceContext?.aiImageModel ?? getDefaultFeatureExtractionImageModel(),
-        }
-        featureExtractionModelSelections.set(extractionRunId, initialSelection)
-        return initialSelection
-    }
-
-    function setFeatureExtractionModelSelection(extractionRunId: string, modelContext: FeatureExtractionModelContext): void {
-        featureExtractionModelSelections.set(extractionRunId, modelContext)
-    }
-
-    function createFeatureExtractionModelControls(extractionRunId: string): FeatureExtractionModelControlsInstance {
-        const modelContext = { ...getFeatureExtractionModelSelection(extractionRunId) }
-        const analysisDropdown = createGenericAiModelDropdown({
-            getCurrentAiModel: () => modelContext.aiModel ?? '',
-            setAiModel: (aiModel) => {
-                modelContext.aiModel = aiModel
-                setFeatureExtractionModelSelection(extractionRunId, modelContext)
-            },
-        }, `feature-extraction-reasoning-${extractionRunId}`)
-        const mediaDropdown = createGenericImageModelDropdown({
-            getCurrentImageModel: () => modelContext.aiImageModel ?? '',
-            setImageModel: (aiImageModel) => {
-                modelContext.aiImageModel = aiImageModel
-                setFeatureExtractionModelSelection(extractionRunId, modelContext)
-            },
-        }, `feature-extraction-media-${extractionRunId}`)
-        const modelMenuContent = createAiModelMenuContent([
-            {
-                title: 'Reasoning model',
-                helpText: 'Reasoning model works on your prompt, resolves the most relevant items on canvas, crafts a detailed prompt for media model and passed it to the media model with the reference items included.',
-                controls: [
-                    { label: 'Model', control: analysisDropdown.dom },
-                ],
-            },
-            {
-                title: 'Image model',
-                helpText: 'In this section you can configure image generation options. The model choice decides which image generator will draw it. The second option controls the shape or exact size of the image, depending on what that model supports.',
-                controls: [
-                    { label: 'Model', control: mediaDropdown.dom },
-                ],
-            },
-        ])
-        const dom = modelMenuContent.dom
-        dom.classList.add('feature-extraction-model-controls')
-        applyAiModelMenuStyleSettings(dom)
-
-        return {
-            dom,
-            getModelContext: () => ({ ...modelContext }),
-            destroy: () => {
-                analysisDropdown.destroy()
-                mediaDropdown.destroy()
-                modelMenuContent.destroy()
-            },
-        }
-    }
-
-    function getFeatureExtractionUserText(extractionState: CanvasFeatureExtractionState | undefined): string {
-        const userText = extractionState?.userText?.trim()
-        if (userText) return userText
-        const ctx = extractionState?.sourceContextSnapshot as ExtractionTabContext | undefined
-        return ctx?.imageNatsUrl
-            ? 'Extract a reusable visual feature from this image.'
-            : 'Extract a reusable visual feature from the selected context.'
-    }
-
-    function startFeatureExtractionFromPanel(extractionRunId: string, bodyEl: HTMLElement, modelContext: FeatureExtractionModelContext): void {
-        const extractionState = getFeatureExtractionState(extractionRunId)
-        const savedContext = extractionState?.sourceContextSnapshot as ExtractionTabContext | undefined
-        const selectedModelContext = {
-            ...getFeatureExtractionModelSelection(extractionRunId),
-            ...modelContext,
-        }
-        setFeatureExtractionModelSelection(extractionRunId, selectedModelContext)
-        const ctx: ExtractionTabContext = {
-            ...(savedContext ?? getPendingExtractionContext(extractionRunId) ?? {}),
-            aiModel: selectedModelContext.aiModel,
-            aiImageModel: selectedModelContext.aiImageModel,
-            modelConfig: {
-                analysisModelId: selectedModelContext.aiModel,
-                mediaModelId: selectedModelContext.aiImageModel,
-            },
-        }
-        submitExtractionRequest(
-            bodyEl,
-            extractionRunId,
-            workspaceId,
-            getFeatureExtractionUserText(extractionState),
-            ctx,
-            {
-                getState: getPersistedFeatureExtractionState,
-                saveState: persistFeatureExtractionState,
-                surface: 'feature',
-            },
-        )
-    }
-
-    function openFeatureExtractionRunInFeatures(extractionRunId: string): void {
-        const mediaLibrary = ensureMediaLibraryPanel()
-        mediaLibrary.showExtractionRun(extractionRunId)
-        openRightSidePanelToMode('features')
-        mediaLibrary.showExtractionRun(extractionRunId)
-    }
-
-    function openFeatureExtractionTab(extractionRunId: string): void {
-        openFeatureExtractionRunInFeatures(extractionRunId)
-    }
-
     function openAiChatPanel(): void {
         syncActiveAiChatPanelFromState()
         aiChatPanelState = { ...aiChatPanelState, isOpen: true }
         persistAiChatSidebarState()
         renderActiveAiChatPanel()
-        void loadExtractionSessionHistory()
     }
 
     async function playRightSidePanelOpen(sidePanel: SidePanelInstance, panelEl: HTMLElement): Promise<void> {
@@ -6318,64 +5785,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         closeAiChatSidebarTab(`thread:${threadId}`)
     }
 
-    async function deleteExtractionSession(extractionRunId: string): Promise<void> {
-        const deletedPendingRun = pendingFeatureExtractionRuns.delete(extractionRunId)
-        clearPendingExtractionContext(extractionRunId)
-        if (deletedPendingRun && !apiFeatureExtractionRuns.has(extractionRunId)) {
-            featureExtractionModelSelections.delete(extractionRunId)
-            closeAiChatSidebarTab(`extraction:${extractionRunId}`)
-            renderActiveAiChatPanel()
-            return
-        }
-
-        const response = await servicesStore.getData('nats')?.request(NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.FEATURE_EXTRACT.DELETE, {
-            token: await AuthService.getTokenSilently(),
-            workspaceId,
-            extractionRunId,
-        })
-        if (!response || response.error) return
-
-        apiFeatureExtractionRuns.delete(extractionRunId)
-        featureExtractionModelSelections.delete(extractionRunId)
-        unsubscribeFeatureExtractionRun(extractionRunId)
-        closeAiChatSidebarTab(`extraction:${extractionRunId}`)
-        renderActiveAiChatPanel()
-    }
-
-    async function loadExtractionSessionHistory(): Promise<void> {
-        if (extractionSessionHistoryLoaded || !currentCanvasState) return
-        extractionSessionHistoryLoaded = true
-        try {
-            const runs = await servicesStore.getData('nats')?.request(
-                NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.FEATURE_EXTRACT.LIST_BY_WORKSPACE,
-                {
-                    token: await AuthService.getTokenSilently(),
-                    workspaceId,
-                },
-            )
-            if (!Array.isArray(runs) || !currentCanvasState) {
-                extractionSessionHistoryLoaded = false
-                return
-            }
-            let added = false
-            for (const run of runs) {
-                if (!run?.extractionRunId) continue
-                const extractionState = toCanvasFeatureExtractionState(run as ExtractionRun)
-                const existing = apiFeatureExtractionRuns.get(extractionState.extractionRunId)
-                apiFeatureExtractionRuns.set(extractionState.extractionRunId, extractionState)
-                if (!isTerminalFeatureExtractionStatus(extractionState.status)) {
-                    subscribeToFeatureExtractionRun(extractionState.extractionRunId)
-                }
-                if (!existing || JSON.stringify(existing) !== JSON.stringify(extractionState)) added = true
-            }
-            if (!added) return
-            renderActiveAiChatPanel()
-        } catch (error) {
-            extractionSessionHistoryLoaded = false
-            console.error('Failed to load feature extraction sessions:', error)
-        }
-    }
-
     function renderActiveAiChatPanel(
         threadOverride?: AiChatThread,
         options: RenderActiveAiChatPanelOptions = {}
@@ -6395,7 +5804,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Suppress switch resizes for the whole synchronous body of a preserved
         // re-render so the in-flight slide is never re-laid or snapped.
         suppressModeSwitchResize = preserveModeSwitchForRender
-        void loadExtractionSessionHistory()
 
         // Play the drawer slide-in only when the panel goes from absent to
         // present. Tab switches and content re-renders rebuild the panel while it
@@ -6463,7 +5871,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 width: getAiChatPanelTabsViewportWidth(),
                 height: settings.aiChatThread.panelTabs.height,
                 options: [
-                    { label: 'Features', value: 'features' },
+                    { label: 'Features', value: 'capabilities' },
                     { label: 'Media', value: 'media' },
                     { label: 'AI Threads', value: 'aiThreads' },
                 ],
@@ -6607,34 +6015,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             sessionEl.appendChild(deleteEl)
             sessionsListEl.appendChild(sessionEl)
         }
-        const extractionSessions = Array.from(apiFeatureExtractionRuns.values())
-            .sort((a, b) => b.updatedAt - a.updatedAt)
-        for (const extractionState of extractionSessions) {
-            const sessionEl = html`<div className="workspace-ai-chat-panel-session">
-                <button type="button" className="workspace-ai-chat-panel-session-open">
-                    <span className="workspace-ai-chat-panel-session-marker workspace-ai-chat-panel-session-marker-extraction" aria-hidden="true"></span>
-                    <span className="workspace-ai-chat-panel-session-content">
-                        <span className="workspace-ai-chat-panel-session-title">${getExtractionSessionTitle(extractionState)}</span>
-                        <span className="workspace-ai-chat-panel-session-date">${formatSessionUpdatedAt(extractionState.updatedAt)}</span>
-                        <span className="workspace-ai-chat-panel-session-meta">${getExtractionSessionMeta(extractionState)}</span>
-                    </span>
-                </button>
-            </div>` as HTMLDivElement
-            sessionEl.querySelector('.workspace-ai-chat-panel-session-open')?.addEventListener('click', () => {
-                openFeatureExtractionTab(extractionState.extractionRunId)
-            })
-            const deleteEl = html`<button type="button" className="workspace-ai-chat-panel-session-delete" aria-label="Delete extraction session" innerHTML=${trashBinIcon}></button>` as HTMLButtonElement
-            deleteEl.addEventListener('click', () => void deleteExtractionSession(extractionState.extractionRunId))
-            sessionEl.appendChild(deleteEl)
-            sessionsListEl.appendChild(sessionEl)
-        }
         panelEl.appendChild(sessionsEl)
         if (tabsEl) panelEl.appendChild(tabsEl)
         if (singleTabDividerEl) panelEl.appendChild(singleTabDividerEl)
 
         const bodyHost = html`<div className="workspace-ai-chat-panel-body"></div>` as HTMLDivElement
         const showingThread = activeSidebarTab?.type === 'thread'
-        const showingExtraction = activeSidebarTab?.type === 'extraction'
         const projectionTarget = showingThread && panelThreadId
             ? getActiveAiChatPanelProjectionTarget(panelThreadId)
             : null
@@ -6645,11 +6031,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const emptyBodyText = 'Reopen a session from the history, or start a new chat from the prompt below the canvas.'
         const editorContainer = html`<div className=${`ai-chat-thread-node-editor workspace-ai-chat-panel-body-pane nopan${showingThread && !showingGeneratedMediaProjection ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
         const projectionContainer = html`<div className=${`workspace-ai-chat-panel-projection workspace-ai-chat-panel-body-pane nopan${showingGeneratedMediaProjection ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
-        const extractionBodyEl = html`<div className=${`workspace-ai-chat-panel-extraction workspace-ai-chat-panel-body-pane nopan${showingExtraction ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
-        const emptyBodyEl = html`<div className=${`workspace-ai-chat-panel-empty workspace-ai-chat-panel-body-pane nopan${showingThread || showingExtraction ? ' workspace-ai-chat-panel-body-pane-hidden' : ''}`}>${emptyBodyText}</div>` as HTMLDivElement
+        const emptyBodyEl = html`<div className=${`workspace-ai-chat-panel-empty workspace-ai-chat-panel-body-pane nopan${showingThread ? ' workspace-ai-chat-panel-body-pane-hidden' : ''}`}>${emptyBodyText}</div>` as HTMLDivElement
         bodyHost.appendChild(editorContainer)
         bodyHost.appendChild(projectionContainer)
-        bodyHost.appendChild(extractionBodyEl)
         bodyHost.appendChild(emptyBodyEl)
         panelEl.appendChild(bodyHost)
 
@@ -6681,15 +6065,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             editorContainer.classList.remove('workspace-ai-chat-panel-body-pane-hidden')
         }
 
-        if (showingExtraction && activeSidebarTab) {
-            const extractionState = getPersistedFeatureExtractionState(activeSidebarTab.refId)
-            if (extractionState?.sourceContextSnapshot && !getPendingExtractionContext(activeSidebarTab.refId)) {
-                setPendingExtractionContext(activeSidebarTab.refId, extractionState.sourceContextSnapshot as any)
-            }
-            renderExtractionTabBody(activeSidebarTab.tabId, activeSidebarTab.refId, extractionBodyEl, workspaceId, {
-                getState: getPersistedFeatureExtractionState,
-            })
-        }
 
         hasContent = aiChatThreadHasRenderableContent(thread)
         const promptControlFactories = getPromptControlFactories()
@@ -6754,7 +6129,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     useMultipleVideoModels,
                     imageOptions,
                     videoOptions,
-                    referencedFeatureIds,
+                    capabilityReferences,
                 }: any) => {
                     gradient?.triggerAnimation()
 
@@ -6819,7 +6194,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             videoDuration: videoOptions?.videoDuration,
                             videoConfigGroups: videoOptions?.configGroups,
                             videoSourceForExtension,
-                            referencedFeatureIds,
+                            capabilityReferences,
                             mediaBranchCandidateSnapshot,
                             workspaceContextSnapshot,
                             canvasVisibleArea: getCanvasVisibleAreaForApiProjection(),
@@ -6868,22 +6243,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 },
             })
         }
+        } else if (topLevelMode === 'capabilities') {
+            const capabilityHost = html`<div className="workspace-right-panel-capability-host workspace-right-panel-media-host"></div>` as HTMLDivElement
+            panelEl.appendChild(capabilityHost)
+            mediaLibraryPanelInstance?.unmount()
+            const capabilityLibrary = ensureCapabilityLibraryPanel()
+            capabilityHost.appendChild(capabilityLibrary.element)
+            void capabilityLibrary.load()
         } else {
-            // Features / Media surface: host the framework-agnostic media library
-            // renderer in the panel body, below the top-level mode switch.
             const mediaHost = html`<div className="workspace-right-panel-media-host"></div>` as HTMLDivElement
             panelEl.appendChild(mediaHost)
-            const mediaLibrary = ensureMediaLibraryPanel()
-            // Set the surface before mounting so it loads once for the right mode
-            // instead of loading `features` then reloading `media`.
-            mediaLibrary.setMode(topLevelMode === 'media' ? 'media' : 'features')
-            mediaLibrary.mountInto(mediaHost)
+            destroyCapabilityLibraryPanel()
+            ensureMediaLibraryPanel().mountInto(mediaHost)
         }
 
         // AI-thread editors are torn down when leaving the threads surface; detach
         // the media renderer when the threads surface is active so its NATS event
         // handlers stop reloading a hidden, detached body.
-        if (showingAiThreads) mediaLibraryPanelInstance?.unmount()
+        if (showingAiThreads) {
+            mediaLibraryPanelInstance?.unmount()
+            destroyCapabilityLibraryPanel()
+        }
 
         activeRightSidePanel = ensureActiveRightSidePanel()
         const resizeHandle = activeRightSidePanel.element
@@ -6952,6 +6332,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             className: 'workspace-canvas-global-composer',
             controlFactories: createDefaultPromptControlFactories(),
             initialContent: readGlobalComposerDraft(),
+            capabilityCatalog: createDefaultCapabilityCatalogClient(
+                workspaceId,
+                workspaceStore.getData('organizationId') as string,
+            ),
             onContentChange: (value: object) => {
                 try {
                     localStorage.setItem(globalComposerDraftKey, JSON.stringify(value))
@@ -7109,7 +6493,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 useMultipleVideoModels,
                 imageOptions,
                 videoOptions,
-                referencedFeatureIds,
+                capabilityReferences,
             }: any) => {
                 try {
                     if (!submittedData) return
@@ -7204,7 +6588,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         videoConfigGroups: videoOptions?.configGroups,
                         regeneration,
                         videoSourceForExtension,
-                        referencedFeatureIds,
+                        capabilityReferences,
                         mediaBranchCandidateSnapshot,
                         workspaceContextSnapshot,
                         canvasVisibleArea: getCanvasVisibleAreaForApiProjection(),
@@ -11210,7 +10594,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function prepareUploadReplacementNode(
         placeholderNode: UploadPlaceholderCanvasNode,
         node: WorkspaceCanvasNodeInsertion,
-        commit = true,
     ): CanvasNode {
         const position = {
             x: placeholderNode.position.x + (placeholderNode.dimensions.width - node.dimensions.width) / 2,
@@ -11222,7 +10605,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function replaceUploadPlaceholderInternal(
         placeholderNodeId: string,
-        node: WorkspaceCanvasNodeInsertion
+        node: WorkspaceCanvasNodeInsertion,
+        commit = true,
     ): CanvasState | null {
         if (!currentCanvasState) return null
         const placeholderNode = currentCanvasState.nodes.find((candidate: CanvasNode): candidate is UploadPlaceholderCanvasNode =>
@@ -11402,7 +10786,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // API-owned projected nodes arrive as snapshots in the same revision.
     function applyApiCanvasGeometry(canvasGeometry: CanvasGeometryUpdate): void {
         if (!currentCanvasState) return
-        if (canvasGeometry.layoutRevision < lastAppliedApiLayoutRevision) return
+        if (canvasGeometry.layoutRevision <= lastAppliedApiLayoutRevision) return
         if (canvasGeometry.layoutRevision < highestObservedApiLayoutRevision) return
 
         const result = applyCanvasGeometryUpdateToState(currentCanvasState, canvasGeometry)
@@ -11603,6 +10987,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
 
             partialImageTracker.delete(runKey)
+            pixiMediaLayer?.setTransientImageSource(existing.nodeId, null)
             selectedNodeIds.delete(existing.nodeId)
             syncPixiGeneratingImageNodes()
 
@@ -11649,6 +11034,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 const tracker = rememberPartialImageTrackerForNode(threadId, generationRun, imageNode)
                 const hasFrame = hasGeneratedImageFrame(imageNode) || Boolean(imageUrl)
+                if (imageUrl) {
+                    pixiMediaLayer?.setTransientImageSource(imageNode.nodeId, imageUrl)
+                }
                 setGeneratedMediaTracker(partialImageTracker, runKey, {
                     ...tracker,
                     assetId: assetId || tracker.assetId,
@@ -11775,6 +11163,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
 
                 if (imageUrl && currentCanvasState) {
+                    pixiMediaLayer?.setTransientImageSource(existing.nodeId, imageUrl)
                     clearGeneratingReferencesOnFirstPixels(threadId, generationRun)
                     const updatedNodes = currentCanvasState.nodes.map((node: CanvasNode) => {
                         if (node.nodeId !== existing.nodeId) return node
@@ -11811,6 +11200,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const completedNodeId = generationRun?.lineageAssignment
                 ? getPendingGeneratedMediaNodeId(generationRun.lineageAssignment)
                 : ''
+            if (pendingNodeId) pixiMediaLayer?.setTransientImageSource(pendingNodeId, null)
+            if (completedNodeId && completedNodeId !== pendingNodeId) {
+                pixiMediaLayer?.setTransientImageSource(completedNodeId, null)
+            }
             if (!data.canvasGeometry) {
                 const existingCompletedImageNode = completedNodeId ? getCurrentCanvasMediaNode(completedNodeId) : undefined
                 if (existingCompletedImageNode?.type === 'image') {
@@ -14233,10 +13626,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!mediaLibraryPanelInstance) {
             mediaLibraryPanelInstance = createMediaLibraryPanel({
                 workspaceId,
-                onUseFeature: insertFeatureIntoActivePrompt,
-                getFeatureExtractionRuns: getFeatureExtractionRunsForPanel,
-                createFeatureExtractionModelControls,
-                onConfirmFeatureExtraction: (extractionRunId, bodyEl, modelContext) => startFeatureExtractionFromPanel(extractionRunId, bodyEl, modelContext),
                 onInsertAsset: async (item: AssetMeta) => {
                     if (!onAssetAttach) return false
                     const nodeId = `node-${uuidv4()}`
@@ -14260,50 +13649,50 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return mediaLibraryPanelInstance
     }
 
-    // Open the right side panel on a specific top-level surface (used by the
-    // floating Media Library launcher and the `/use` slash command).
+    function ensureCapabilityLibraryPanel(): CapabilityLibraryPanelInstance {
+        if (!capabilityLibraryPanelInstance) {
+            capabilityLibraryPanelInstance = createCapabilityLibraryPanel({
+                client: createDefaultCapabilityCatalogClient(
+                    workspaceId,
+                    workspaceStore.getData('organizationId') as string,
+                ),
+                onAttach: (reference) => {
+                    const view = globalCanvasComposer?.editorView
+                    const nodeType = view?.state.schema.nodes.capability_reference
+                    if (!view || !nodeType) return
+                    const atom = nodeType.create(reference)
+                    const tr = view.state.tr.replaceSelectionWith(atom).insertText(' ').scrollIntoView()
+                    view.dispatch(tr)
+                    view.focus()
+                    globalCanvasComposer?.triggerGradientAnimation()
+                },
+            })
+        }
+        return capabilityLibraryPanelInstance
+    }
+
+    function destroyCapabilityLibraryPanel(): void {
+        capabilityLibraryPanelInstance?.destroy()
+        capabilityLibraryPanelInstance = null
+    }
+
+    // Open the right side panel on a specific top-level surface.
     function openRightSidePanelToMode(mode: CanvasRightSidePanelMode): void {
-        ensureMediaLibraryPanel()
         const alreadyOnMode = aiChatPanelState.isOpen && aiChatPanelState.topLevelMode === mode
         aiChatPanelState = { ...aiChatPanelState, isOpen: true, topLevelMode: mode }
         persistAiChatSidebarState()
         if (!alreadyOnMode) syncActiveAiChatPanelFromState()
         renderActiveAiChatPanel()
-        void loadExtractionSessionHistory()
     }
 
-    const onOpenExtractionPanel = (event: Event) => {
-        const detail = (event as CustomEvent<{
-            extractionRunId?: string
-            workspaceId?: string
-            userText?: string
-            sourceContextSnapshot?: ExtractionTabContext
-        }>).detail
-        if (!detail?.extractionRunId) return
-        if (detail.workspaceId && detail.workspaceId !== workspaceId) return
-        if (!getFeatureExtractionState(detail.extractionRunId)) {
-            const sourceContextSnapshot = detail.sourceContextSnapshot ?? {}
-            setPendingExtractionContext(detail.extractionRunId, sourceContextSnapshot)
-            setPendingFeatureExtractionRun({
-                extractionRunId: detail.extractionRunId,
-                status: 'pending',
-                userText: detail.userText?.trim() || 'Extract a reusable visual feature from the selected context.',
-                sourceContextSnapshot,
-                updatedAt: Date.now(),
-            })
-        }
-        openFeatureExtractionRunInFeatures(detail.extractionRunId)
-    }
-
-    const onOpenMediaLibraryFeatures = (event: Event) => {
+    const onOpenCapabilityLibrary = (event: Event) => {
         const detail = (event as CustomEvent<{ workspaceId?: string }>).detail
         if (detail?.workspaceId && detail.workspaceId !== workspaceId) return
-        openRightSidePanelToMode('features')
+        openRightSidePanelToMode('capabilities')
     }
 
     window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('lixpi:open-extraction-tab', onOpenExtractionPanel)
-    window.addEventListener('lixpi:open-media-library-features', onOpenMediaLibraryFeatures)
+    window.addEventListener('lixpi:open-capability-library', onOpenCapabilityLibrary)
 
     initializePanZoom()
     initCanvasBubbleMenu()
@@ -14467,7 +13856,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 selectedEdgeId = null
                 draggingNodeId = null
                 resizingNodeId = null
-                extractionSessionHistoryLoaded = false
                 liveAiChatThreadContentOverrides.clear()
                 partialImageTracker.clear()
                 videoGenerationTracker.clear()
@@ -14476,11 +13864,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 finalizingGeneratedImageRunKeysByNodeId.clear()
                 for (const timer of finalizingGeneratedImageOutlineTimersByNodeId.values()) window.clearTimeout(timer)
                 finalizingGeneratedImageOutlineTimersByNodeId.clear()
-                for (const pendingRunId of pendingFeatureExtractionRuns.keys()) clearPendingExtractionContext(pendingRunId)
-                pendingFeatureExtractionRuns.clear()
-                apiFeatureExtractionRuns.clear()
-                featureExtractionModelSelections.clear()
-                unsubscribeAllFeatureExtractionRuns()
             }
 
             // Only do a full re-render if node structure or documents/threads changed
@@ -14633,10 +14016,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         destroy() {
             clearRightPanelModeSwitchAnimationTimer()
             mediaLibraryPanelInstance?.destroy()
+            destroyCapabilityLibraryPanel()
             resizeObserver.disconnect()
             window.removeEventListener('keydown', onKeyDown)
-            window.removeEventListener('lixpi:open-extraction-tab', onOpenExtractionPanel)
-            window.removeEventListener('lixpi:open-media-library-features', onOpenMediaLibraryFeatures)
+            window.removeEventListener('lixpi:open-capability-library', onOpenCapabilityLibrary)
             unsubscribeAiModelsStore()
             unsubscribeAssetsStore()
             unsubscribeWorkspaceStore()
@@ -14744,12 +14127,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             activeCanvasRunServices.clear()
             activeCanvasRunIds.clear()
             settledDetachedCanvasRunThreadIds.clear()
-            for (const pendingRunId of pendingFeatureExtractionRuns.keys()) clearPendingExtractionContext(pendingRunId)
-            pendingFeatureExtractionRuns.clear()
-            apiFeatureExtractionRuns.clear()
-            featureExtractionModelSelections.clear()
-            unsubscribeAllFeatureExtractionRuns()
-
             globalCanvasComposer?.destroy()
             globalCanvasComposer = null
             globalCanvasComposerHostEl?.remove()

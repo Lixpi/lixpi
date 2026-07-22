@@ -7,19 +7,21 @@ import {
     STREAM_STATUS,
     type AiInteractionChatSendMessagePayload,
     type AiInteractionMediaGenerationRequest,
+    type CapabilityRunEventStreamPayload,
     type ImageGenerationTrace,
     type ImageGenerationSize,
     type MediaBranchLineagePlan,
     type MediaGenerationConfigSelectionGroup,
     type MediaGenerationRunMeta,
     type VideoGenerationTrace,
-    type WorkspaceContextResolution
+    type WorkspaceContextResolution,
 } from '@lixpi/constants'
 import AuthService from '$src/services/auth-service.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
+import { toCapabilityRunEventSegment } from '$src/services/capability-run-stream.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 
@@ -246,6 +248,13 @@ export default class AiInteractionService {
                 conversationAssetId: this.conversationAssetId,
                 usesServerProseMirror: true,
                 ...(generationRun ? { generationRun } : {}),
+            }
+
+            if (content.status === STREAM_STATUS.CAPABILITY_RUN_EVENT) {
+                this.segmentsReceiver.receiveSegment(toCapabilityRunEventSegment(
+                    content as CapabilityRunEventStreamPayload,
+                ))
+                return
             }
 
             if (content.status === STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED) {
@@ -503,7 +512,7 @@ export default class AiInteractionService {
         videoConfigGroups,
         regeneration,
         videoSourceForExtension,
-        referencedFeatureIds,
+        capabilityReferences,
         mediaBranchCandidateSnapshot,
         workspaceContextSnapshot,
         canvasVisibleArea,
@@ -531,8 +540,8 @@ export default class AiInteractionService {
             organizationId: this.organizationId
         }
 
-        if (referencedFeatureIds?.length) {
-            payload.referencedFeatureIds = referencedFeatureIds
+        if (capabilityReferences?.length) {
+            payload.capabilityReferences = capabilityReferences
         }
 
         if (mediaBranchCandidateSnapshot) {
@@ -606,7 +615,7 @@ export default class AiInteractionService {
             videoModelCount: videoModelIds.length,
             hasImageModel: imageModelIds.length > 0,
             hasVideoModel: videoModelIds.length > 0,
-            referencedFeatureCount: referencedFeatureIds?.length ?? 0,
+            capabilityReferenceCount: capabilityReferences?.length ?? 0,
             mediaBranchCandidateCount: mediaBranchCandidateSnapshot?.candidates.length ?? 0,
             workspaceContextNodeCount: workspaceContextSnapshot?.nodes.length ?? 0,
         })

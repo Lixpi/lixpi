@@ -22,18 +22,24 @@ import {
 import { buildImageGenerationTrace } from '../tools/image-generation-trace.ts'
 import { buildVideoGenerationTrace } from '../tools/video-generation-trace.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
-import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { tokenUsageConfirm, imageUsageConfirm, videoUsageConfirm } from '../usage/usage-event-mapper.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
+import type { CapabilityDispatcher } from '../../capability-system/capability-dispatcher.ts'
+import { getCapabilityDispatcher } from '../../capability-system/capability-runtime.ts'
+import {
+    executeRequiredCapabilitiesForState,
+    resolveCapabilitiesForState,
+} from '../../capability-system/capability-state-resolver.ts'
 
 export type BaseProviderDeps = {
     natsService: NatsService
     usageReporter: UsageReporter
     runImageRouter: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
     runVideoRouter: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
+    capabilityDispatcher?: CapabilityDispatcher
     // Metrics (optional — absent/disabled = the open-source plug, i.e. today's
     // behavior). The synchronous check/confirm run on the workflow path via this
     // abstract metering client (see metrics/metrics-client.ts).
@@ -51,6 +57,7 @@ type FanoutRouterResult = Pick<ProviderState,
 type MediaRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
     getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
+    signal?: AbortSignal
 }
 
 const LIVE_MIRRORED_MEDIA_STATUSES: ReadonlySet<StreamStatus> = new Set([
@@ -86,16 +93,14 @@ const normalizeModelOption = (
 }
 
 // Shared LangGraph workflow for chat-style LLM calls (with optional image-gen branch).
-// Extraction runs have their own dedicated graph in src/llm/extraction/; this graph is
-// for chat threads and image generation only. The resolveFeatures pre-stage handles
-// /use chip resolution by injecting Feature definitions + source crops into state.messages.
+// Feature Extraction is a Capability Tool; this graph handles chat threads and media generation.
 // Top-level chat requests publish START_STREAM before graph invocation so expensive
 // pre-stream VLM/image preprocessing never leaves the browser looking frozen.
 // Transient image-model providers skip their own stream lifecycle because the parent
 // chat stream owns it.
 //
 // Topology:
-//   START → validateRequest → resolveWorkspaceContext → resolveFeatures → resolveMediaBranch → planMediaBranchLineage → streamTokens → [conditional]
+//   START → validateRequest → resolveWorkspaceContext → resolveCapabilities → executeRequiredCapabilities → resolveMediaBranch → planMediaBranchLineage → streamTokens → [conditional]
 //     generate_image: validateImagePrompt → [conditional]
 //       generate_image: executeImageGeneration → calculateUsage → cleanup → END
 //       skip:                                    calculateUsage → cleanup → END
@@ -113,6 +118,7 @@ export abstract class BaseProvider {
     public readonly instanceKey: string
     private readonly mediaBranchLineagePlanner = new MediaBranchLineagePlanner()
     private readonly mediaGenerationRunPlanner = new MediaGenerationRunPlanner()
+    protected readonly capabilityDispatcher: CapabilityDispatcher
     private pipelineProseMirrorContentHandler: ProseMirrorContentHandler | undefined
     private pipelineProseMirrorSnapshotProvider: ProseMirrorSnapshotProvider | undefined
 
@@ -121,6 +127,7 @@ export abstract class BaseProvider {
         protected readonly deps: BaseProviderDeps,
     ) {
         this.instanceKey = _instanceKey
+        this.capabilityDispatcher = deps.capabilityDispatcher ?? getCapabilityDispatcher()
         this.app = this.buildWorkflow().compile()
     }
 
@@ -169,7 +176,10 @@ export abstract class BaseProvider {
                 publisher: this.publisher,
                 abortSignal: this.signal,
             }))
-            .addNode('resolveFeatures', async (s: ProviderState) => s.preflightResolved ? {} : resolveFeatures(s))
+            .addNode('resolveCapabilities', async (s: ProviderState) => s.preflightResolved ? {} : resolveCapabilitiesForState(s, this.signal))
+            .addNode('executeRequiredCapabilities', async (s: ProviderState) => s.preflightResolved
+                ? {}
+                : executeRequiredCapabilitiesForState(s, this.capabilityDispatcher, this.signal))
             .addNode('resolveMediaBranch', async (s: ProviderState) => s.preflightResolved ? {} : resolveMediaBranch(s, {
                 natsService: this.nats,
                 publisher: this.publisher,
@@ -185,8 +195,9 @@ export abstract class BaseProvider {
 
         graph.addEdge(START, 'validateRequest' as any)
         graph.addEdge('validateRequest' as any, 'resolveWorkspaceContext' as any)
-        graph.addEdge('resolveWorkspaceContext' as any, 'resolveFeatures' as any)
-        graph.addEdge('resolveFeatures' as any, 'resolveMediaBranch' as any)
+        graph.addEdge('resolveWorkspaceContext' as any, 'resolveCapabilities' as any)
+        graph.addEdge('resolveCapabilities' as any, 'executeRequiredCapabilities' as any)
+        graph.addEdge('executeRequiredCapabilities' as any, 'resolveMediaBranch' as any)
         graph.addEdge('resolveMediaBranch' as any, 'planMediaBranchLineage' as any)
         graph.addEdge('planMediaBranchLineage' as any, 'streamTokens' as any)
         graph.addConditionalEdges(
@@ -213,6 +224,8 @@ export abstract class BaseProvider {
     // Run a request through the LangGraph workflow.
     async process(requestData: Record<string, any>): Promise<ProviderState> {
         this.abortController = new AbortController()
+        const organizationId = requestData.organizationId ?? requestData.eventMeta?.organizationId
+        if (!organizationId) throw new Error('Provider request is missing organizationId')
         const ownsServerProseMirrorStream = Boolean(
             requestData.proseMirrorInitialDoc
             && requestData.generationRun?.requestKind !== 'media-generation-matrix',
@@ -238,7 +251,7 @@ export abstract class BaseProvider {
             this.providerName,
             requestData.generationRun,
             {
-                organizationId: requestData.organizationId,
+                organizationId,
                 assetLeaseId: requestData.assetLeaseId,
                 assetLeaseHolderId: requestData.assetLeaseHolderId,
                 enableProseMirrorStream: ownsServerProseMirrorStream,
@@ -251,7 +264,7 @@ export abstract class BaseProvider {
         )
         this.imagePublisher = new ImagePublisher(
             this.deps.natsService,
-            requestData.organizationId,
+            organizationId,
             requestData.workspaceId,
             requestData.aiChatThreadId,
             this.providerName,
@@ -260,10 +273,11 @@ export abstract class BaseProvider {
             onPipelineContent,
             requestData.canvasVisibleArea,
             getProseMirrorSnapshot,
+            requestData.captureOnlyImageGeneration === true,
         )
         this.videoPublisher = new VideoPublisher(
             this.deps.natsService,
-            requestData.organizationId,
+            organizationId,
             requestData.workspaceId,
             requestData.aiChatThreadId,
             this.providerName,
@@ -299,10 +313,14 @@ export abstract class BaseProvider {
             mediaBranchResolution: requestData.mediaBranchResolution,
             mediaBranchLineagePlan: requestData.mediaBranchLineagePlan,
             canvasVisibleArea: requestData.canvasVisibleArea,
-            referencedFeatureIds: requestData.referencedFeatureIds,
-            featureReferenceImages: requestData.featureReferenceImages,
-            featureReferenceImageTraceUrls: requestData.featureReferenceImageTraceUrls,
-            featureUsagePrompt: requestData.featureUsagePrompt,
+            capabilityReferences: requestData.capabilityReferences,
+            capabilityInputs: requestData.capabilityInputs,
+            resolvedCapabilityPlan: requestData.resolvedCapabilityPlan,
+            capabilityInvocationDepth: requestData.capabilityInvocationDepth ?? 0,
+            capabilityToolResults: requestData.capabilityToolResults,
+            capabilityReferenceImages: requestData.capabilityReferenceImages,
+            capabilityReferenceImageTraceUrls: requestData.capabilityReferenceImageTraceUrls,
+            capabilityUsagePrompt: requestData.capabilityUsagePrompt,
             enableVideoGeneration: requestData.enableVideoGeneration ?? false,
             videoModelMetaInfo: requestData.videoModelMetaInfo,
             videoModelVersion: requestData.videoModelMetaInfo?.modelVersion,
@@ -355,6 +373,11 @@ export abstract class BaseProvider {
                 aiRequestFinishedAt: Date.now(),
             }
         } finally {
+            try {
+                await this.imagePublisher?.clearTransientMedia()
+            } catch (cleanupError) {
+                err(`Transient media cleanup failed for ${this.instanceKey}:`, cleanupError)
+            }
             clearTimeout(timeoutHandle)
         }
     }
