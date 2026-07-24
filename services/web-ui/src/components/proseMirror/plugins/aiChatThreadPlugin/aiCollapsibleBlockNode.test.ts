@@ -25,7 +25,7 @@ function createTrace(overrides: Partial<ImageGenerationTrace> = {}): ImageGenera
         imageModelId: 'gemini-2.5-flash-image',
         imageSize: '1:1',
         toolPrompt: 'Paint the same man in orange monochrome.',
-        finalPrompt: 'MANDATORY /use FEATURE TRANSFER\nPaint the same man in orange monochrome.',
+        finalPrompt: 'MANDATORY CAPABILITY TRANSFER\nPaint the same man in orange monochrome.',
         promptWasChanged: true,
         referenceImages: [
             {
@@ -163,7 +163,7 @@ describe('aiCollapsibleBlockNodeView', () => {
         const { nodeView } = createCollapsibleNodeView({ imageGenerationTrace: createTrace() })
 
         expect(nodeView.dom.querySelector('.ai-image-generation-tool-prompt-section')?.textContent).toContain('Prompt for media generation model written by reasoning model')
-        expect(nodeView.dom.querySelector('.ai-image-generation-final-prompt')?.textContent).toContain('MANDATORY /use FEATURE TRANSFER')
+        expect(nodeView.dom.querySelector('.ai-image-generation-final-prompt')?.textContent).toContain('MANDATORY CAPABILITY TRANSFER')
         expect(nodeView.dom.querySelector('.ai-image-generation-resolver-summary')?.textContent).toBe('Style Transfer | Edit Active Branch | confidence 91%')
         expect(nodeView.dom.querySelector('.ai-image-generation-resolver-rationale')?.textContent).toContain('exclude the goat branch')
         expect(nodeView.dom.querySelector('.ai-image-generation-excluded-label')?.textContent).toBe('painted goat')

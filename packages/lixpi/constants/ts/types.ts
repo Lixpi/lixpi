@@ -590,12 +590,12 @@ export type ContextRelevanceErrorStreamPayload = {
     error: string
 }
 
-export type ImageGenerationTraceReferenceRole = MediaBranchReferenceRole | 'feature-reference' | 'message-reference'
+export type ImageGenerationTraceReferenceRole = MediaBranchReferenceRole | 'capability-reference' | 'message-reference'
 
 export type ImageGenerationTraceReference = {
     id: string
     imageUrl: string
-    source: 'branch-candidate' | 'feature-reference' | 'message-reference'
+    source: 'branch-candidate' | 'capability-reference' | 'message-reference'
     label: string
     role: ImageGenerationTraceReferenceRole
     nodeId?: string
@@ -988,127 +988,233 @@ export type WorkspaceEdge = {
     pathType?: WorkspaceEdgePathType
 }
 
-// Feature access scopes are separate from Asset scopes: Features are org-wide
-// and accessible across every workspace in the organization.
-// 'shared' (external/cross-org sharing) is reserved for a future release and has
-// no UI or code path yet.
-export type FeatureScope = 'organization' | 'shared'
-export type FeatureStatus = 'active' | 'reported' | 'removed'
+export type CapabilityKind = 'tool' | 'skill'
+export type CapabilityScope = 'user' | 'organization' | 'global'
+export type CapabilityStatus = 'active' | 'disabled' | 'removed'
+export type CapabilityCatalogVisibility = 'listed' | 'internal'
 
-export const FEATURE_SCOPE = {
-    ORGANIZATION: 'organization',
-    SHARED: 'shared',
-} as const
-export type FeatureScopeValue = typeof FEATURE_SCOPE[keyof typeof FEATURE_SCOPE]
+export type CapabilityJsonPrimitive = string | number | boolean | null
+export type CapabilityJsonValue =
+    | CapabilityJsonPrimitive
+    | CapabilityJsonValue[]
+    | { [key: string]: CapabilityJsonValue }
 
-export type FeatureSampleKind = 'source-crop' | 'texture-specimen' | 'applied-medium-probe' | 'palette-board'
-
-export type FeatureSampleCropRegion = {
-    imageRef: string
-    x: number
-    y: number
-    width: number
-    height: number
-    label: string
-    purpose: 'texture-evidence' | 'applied-medium-evidence' | 'subject-detail-evidence' | 'composition-evidence'
+export type CapabilityReference = {
+    capabilityId: string
+    kind: CapabilityKind
+    import?: string[]
 }
 
-export type FeatureSampleRef = {
-    idx: number
-    subject: string
-    rationale?: string
-    aspectRatio?: string
-    ext: string
-    blobHash: string
-    imageUrl?: string
-    kind?: FeatureSampleKind
-    cropRegion?: FeatureSampleCropRegion
+export type CapabilityPromptReference = {
+    capabilityId: string
+    kind: CapabilityKind
 }
 
-export type FeatureSourceImageCrop = {
-    imageRef: string
-    x: number
-    y: number
-    width: number
-    height: number
-    label: string
-    purpose: 'texture-evidence' | 'applied-medium-evidence' | 'subject-detail-evidence' | 'composition-evidence'
-    rationale: string
+export type CapabilityCatalogRecord = {
+    capabilityId: string
+    kind: CapabilityKind
+    scope: CapabilityScope
+    scopeOwnerId: string
+    storageOwnerId: string
+    manifestBlobHash: string
+    catalogVisibility: CapabilityCatalogVisibility
+    status: CapabilityStatus
+    ownerUserId: string
+    createdAt: number
+    updatedAt: number
 }
 
-export type SceneSubject = {
-    label: string
-    bbox: [number, number, number, number]
-    salience: number
-    description: string
-}
-
-export type SceneRegion = {
-    label: string
-    bbox: [number, number, number, number]
-    description: string
-}
-
-export type SceneReference = {
-    imageRef: string
-    subjects: SceneSubject[]
-    regions: SceneRegion[]
-}
-
-export type SceneAssessment = {
-    references: SceneReference[]
-    medium: string
-    axisDominance: Record<string, number>
-    intentResolution: {
-        forcedCategory?: string | null
-        forcedAxes?: string[] | null
-        proposedCategory: string
-    }
-    notes: string
-}
-
-export type AxisExtraction = {
-    axis: string
-    dominance: number
-    fields: Record<string, any>
-    rationale: string
-}
-
-export type FeatureRecommendedSampleSubject = {
-    kind: FeatureSampleKind
-    prompt: string
-    aspectRatio: string
-    rationale: string
-}
-
-export type FeatureDraft = {
-    category: string
+export type CapabilityMeta = {
+    scopeAndOwner: string
+    scope: CapabilityScope
+    scopeOwnerId: string
+    searchKey: string
+    capabilityId: string
+    kind: CapabilityKind
     name: string
+    normalizedName: string
     summary: string
     tags: string[]
-    instructions: string
-    parameters: Record<string, any>
-    recommendedSampleSubjects: FeatureRecommendedSampleSubject[]
+    manifestBlobHash: string
+    catalogVisibility: CapabilityCatalogVisibility
+    status: CapabilityStatus
+    updatedAt: number
 }
 
-export type StageTraceEvent = {
-    extractionRunId: string
-    stage: string
-    modelName?: string
-    promptHash?: string
-    promptPreview?: string
-    startedAt: number
-    finishedAt: number
-    durationMs: number
-    // 'running' is a publish-only, in-flight marker streamed when a stage starts so
-    // the UI can show a live spinner. Only the terminal event ('ok' | 'error' | 'skipped')
-    // is persisted to ExtractionRun.trace.
-    status: 'running' | 'ok' | 'error' | 'skipped'
+export type CapabilityResourceMediaType =
+    | 'application/json'
+    | 'application/schema+json'
+    | 'text/markdown'
+    | `image/${string}`
+
+export type CapabilityResourceRole =
+    | 'instructions'
+    | 'reference'
+    | 'schema'
+    | 'example'
+    | 'asset'
+
+export type CapabilityResourceRef = {
+    resourceId: string
+    blobHash: string
+    mediaType: CapabilityResourceMediaType
+    role: CapabilityResourceRole
+    name?: string
+}
+
+export type CapabilityInstructionExport = {
+    resourceIds: string[]
+}
+
+export type CapabilityStepTemplateExport = {
+    steps: CapabilityWorkflowStep[]
+    outputs: Record<string, CapabilityValueBinding>
+}
+
+export type CapabilityExports = {
+    instructions?: Record<string, CapabilityInstructionExport>
+    stepTemplates?: Record<string, CapabilityStepTemplateExport>
+}
+
+export type CapabilityValueBinding =
+    | { source: 'input'; path: string[] }
+    | { source: 'step'; stepId: string; path: string[] }
+    | { source: 'resource'; capabilityId?: string; resourceId: string }
+    | { source: 'literal'; value: CapabilityJsonValue }
+
+export type CapabilityComparisonOperator =
+    | 'equals'
+    | 'not-equals'
+    | 'greater-than'
+    | 'greater-than-or-equal'
+    | 'less-than'
+    | 'less-than-or-equal'
+    | 'contains'
+
+export type CapabilityCondition =
+    | {
+        type: 'compare'
+        left: CapabilityValueBinding
+        operator: CapabilityComparisonOperator
+        right: CapabilityValueBinding
+    }
+    | { type: 'exists'; value: CapabilityValueBinding }
+    | { type: 'all' | 'any'; conditions: CapabilityCondition[] }
+    | { type: 'not'; condition: CapabilityCondition }
+
+export type CapabilityWorkflowStep = {
+    stepId: string
+    title: string
+    action: string
+    dependsOn: string[]
+    input: Record<string, CapabilityValueBinding>
+    condition?: CapabilityCondition
+    retry?: {
+        maxAttempts: number
+        backoffMs: number
+    }
+    progress: {
+        group?: string
+        exposeReasoning?: boolean
+    }
+}
+
+export type CapabilityWorkflow = {
+    steps: CapabilityWorkflowStep[]
+    outputs: Record<string, CapabilityValueBinding>
+}
+
+export type CapabilityToolDefinition = {
+    toolType: string
+    inputSchema: CapabilityResourceRef
+    outputSchema: CapabilityResourceRef
+    executionPolicy: 'required' | 'model-choice'
+    workflow: CapabilityWorkflow
+}
+
+export type CapabilityManifest = {
+    schemaVersion: 1
+    capabilityId: string
+    kind: CapabilityKind
+    name: string
+    description: string
+    references: CapabilityReference[]
+    resources: CapabilityResourceRef[]
+    exports?: CapabilityExports
+    tool?: CapabilityToolDefinition
+}
+
+export type ResolvedCapability = {
+    capabilityId: string
+    kind: CapabilityKind
+    manifestBlobHash: string
+    manifest: CapabilityManifest
+}
+
+export type ResolvedCapabilityPlan = {
+    rootCapabilityIds: string[]
+    capabilities: ResolvedCapability[]
+    resolvedManifests: Array<{
+        capabilityId: string
+        manifestBlobHash: string
+    }>
+}
+
+export type CapabilityRunOrigin = 'prompt' | 'model' | 'panel'
+export type CapabilityRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type CapabilityRunStepStatus = 'pending' | 'running' | 'completed' | 'skipped' | 'failed' | 'cancelled'
+
+export type CapabilityRun = {
+    runId: string
+    rootCapabilityId: string
+    resolvedManifests: Array<{
+        capabilityId: string
+        manifestBlobHash: string
+    }>
+    workspaceId: string
+    conversationAssetId?: string
+    origin: CapabilityRunOrigin
+    status: CapabilityRunStatus
+    currentStepIds: string[]
+    outputAssetIds: string[]
+    eventStreamName: string
+    createdAt: number
+    updatedAt: number
+}
+
+export type CapabilityRunEventType =
+    | 'RUN_STARTED'
+    | 'STEP_STARTED'
+    | 'STEP_COMPLETED'
+    | 'STEP_SKIPPED'
+    | 'STEP_FAILED'
+    | 'STEP_CANCELLED'
+    | 'RUN_COMPLETED'
+    | 'RUN_FAILED'
+    | 'RUN_CANCELLED'
+
+export type CapabilityRunEvent = {
+    runId: string
+    sequence: number
+    eventType: CapabilityRunEventType
+    timestamp: number
+    runStatus: CapabilityRunStatus
+    stepId?: string
+    stepTitle?: string
+    stepStatus?: CapabilityRunStepStatus
+    safeInputSummary?: string
+    safeOutputSummary?: string
+    outputAssetIds?: string[]
+    canvasGeometry?: CanvasGeometryUpdate
+    errorCode?: string
     errorMessage?: string
-    inputSummary?: string
-    outputSummary?: string
-    outputBytes?: number
-    metricTags?: Record<string, string | number>
+}
+
+export type CapabilityRunEventStreamPayload = {
+    status: 'CAPABILITY_RUN_EVENT'
+    aiProvider: 'Capability'
+    capabilityRunEvent: CapabilityRunEvent
+    conversationAssetId: string
 }
 
 // Markdown stream parser segment shapes. These mirror what @lixpi/markdown-stream-parser
@@ -1138,114 +1244,16 @@ export type MarkdownStreamToken = {
     segment?: MarkdownParsedSegment
 }
 
-export type FeatureSourceContext = {
-    extractionRunId: string
-    sourceWorkspaceId: string
-    sourceImages?: Array<{
-        idx: number
-        assetId: string
-        role: 'source-reference'
-    }>
-}
-
-export type Feature = {
-    featureId: string
-    version: number
-    category: string
-    name: string
-    summary: string
-    tags: string[]
-    instructions: string
-    parameters: Record<string, any>
-    sampleImages: FeatureSampleRef[]
-    scope: FeatureScope
-    scopeOwnerId: string
-    status: FeatureStatus
-    ownerUserId: string
-    workspaceId: string
-    sourceContext: FeatureSourceContext
-    reportCount: number
-    createdAt: number
-    updatedAt: number
-}
-
-export type FeatureMeta = {
-    featureId: string
-    category: string
-    name: string
-    summary: string
-    tags: string[]
-    scope: FeatureScope
-    scopeOwnerId: string
-    status: FeatureStatus
-    ownerUserId: string
-    scopeAndOwner?: string    // PK of the Features-Meta table — `${scope}#${scopeOwnerId}`; present on persisted rows
-    sampleZeroKey?: string
-    sampleZeroUrl?: string
-    updatedAt: number
-}
-
-export type FeatureAccessList = {
-    userId: string
-    featureId: string
-    createdAt: number
-}
-
-export type FeatureReferenceMessageBlock = {
-    featureId: string
-    name: string
-    category: string
-    scope: FeatureScope
-    summary: string
-    instructions: string
-    parameters: Record<string, any>
-    sampleImages: Array<{ idx: number; subject: string; base64: string }>
-}
-
-export type ExtractionRunStatus =
-    | 'pending'
-    | 'analyzing'
-    | 'routing'
-    | 'extracting'
-    | 'extracting_axes'
-    | 'materializing_crops'
-    | 'synthesizing'
-    | 'generating_samples'
-    | 'saving'
-    | 'completed'
-    | 'failed'
-
-export type ExtractionRun = {
-    extractionRunId: string
-    workspaceId: string
-    userId: string
-    status: ExtractionRunStatus
-    featureId?: string
-    userText?: string
-    modelConfig?: {
-        analysisModelId?: string
-        mediaModelId?: string
-    }
-    transcriptJson?: object
-    sourceContextSnapshot?: object
-    trace?: StageTraceEvent[]
-    stageReasoning?: Record<string, string>
-    featureCard?: Record<string, any>
-    error?: string
-    createdAt: number
-    updatedAt: number
-}
-
 export type CanvasAiChatSidebarTab = {
     tabId: string
-    type: 'thread' | 'extraction'
+    type: 'thread'
     refId: string
     title: string
 }
 
-// Right side panel top-level surface: the Feature library, the unified Asset
+// Right side panel top-level surface: the Capability library, the unified Asset
 // library, or conversation Assets.
-export type CanvasRightSidePanelMode = 'features' | 'media' | 'aiThreads'
+export type CanvasRightSidePanelMode = 'capabilities' | 'media' | 'aiThreads'
 
 export type CanvasAiChatPanelState = {
     isOpen: boolean
@@ -1261,31 +1269,8 @@ export type CanvasAiChatPanelState = {
     width?: number
 }
 
-export type CanvasFeatureExtractionState = {
-    extractionRunId: string
-    featureId?: string
-    status: ExtractionRunStatus
-    userText?: string
-    aiProvider?: string
-    modelConfig?: {
-        analysisModelId?: string
-        mediaModelId?: string
-    }
-    stepDetails?: Record<string, string>
-    reasoningText?: string
-    // Streamed model output (thinking/reasoning) keyed by the stage that produced it,
-    // so the extraction tab can show live output under each in-progress substep.
-    stageReasoning?: Record<string, string>
-    featureCard?: Record<string, any>
-    traceEvents?: StageTraceEvent[]
-    sourceContextSnapshot?: object
-    error?: string
-    updatedAt: number
-}
-
 export type CanvasState = {
     viewport: CanvasViewport
-    sourceContext?: FeatureSourceContext
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
     lastActiveConversationAssetId?: string
@@ -1344,7 +1329,7 @@ export type AiInteractionChatSendMessagePayload = {
     // via `mediaGenerationRequest.reasoningModelIds`.
     aiReasoningModels: AiModelId[]
     conversationAssetId: string
-    referencedFeatureIds?: string[]
+    capabilityReferences?: CapabilityPromptReference[]
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
     mediaGenerationRequest?: AiInteractionMediaGenerationRequest
     // Whole-workspace, descriptors-only index sent each turn and consumed by

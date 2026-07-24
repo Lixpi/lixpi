@@ -38,6 +38,7 @@ import type {
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
     AiModelId,
+    CapabilityPromptReference,
     MediaBranchVlmResolution,
     ImageGenerationTrace,
     ImageGenerationSize,
@@ -46,12 +47,14 @@ import type {
     MediaGenerationRunMeta,
     StreamStatus,
     WorkspaceContextResolution,
+    CapabilityRunEvent,
 } from '@lixpi/constants'
 
 import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 import { setAiGeneratedVideoCallbacks, aiGeneratedVideoNodeView, type AiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import { routeSegmentEventToCanvas } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedMediaCanvasRouter.ts'
+import { CapabilityChatRunProgressController } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/capabilityChatRunProgress.ts'
 
 const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 
@@ -93,9 +96,10 @@ type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' 
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'
 type MediaLineageSegmentType = 'media_lineage_planned' | 'media_generation_skipped' | 'media_generation_request_complete' | 'canvas_geometry_resolved'
+type CapabilitySegmentType = 'capability_run_event'
 export type SegmentEvent = {
     status?: StreamStatus
-    type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType | MediaLineageSegmentType
+    type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType | MediaLineageSegmentType | CapabilitySegmentType
     aiProvider?: string
     imageModelProvider?: string
     imageModelId?: string
@@ -127,6 +131,7 @@ export type SegmentEvent = {
     videoGenerationTrace?: import('@lixpi/constants').VideoGenerationTrace
     usesServerProseMirror?: boolean
     error?: string
+    capabilityRunEvent?: CapabilityRunEvent
 }
 type GeneratedRunAttrs = {
     generationRequestId: string
@@ -151,7 +156,7 @@ type ThreadContent = {
     nodeType: string
     textContent: string
     images?: ImageReference[]
-    featureIds?: string[]
+    capabilityReferences?: CapabilityPromptReference[]
 }
 type AiGeneratedImageAlignment = 'left' | 'center' | 'right'
 type AiGeneratedImageTextWrap = 'none' | 'left' | 'right'
@@ -436,10 +441,14 @@ class ContentExtractor {
     }
 
     // Extract text and images from a message block
-    static collectContentWithImages(node: ProseMirrorNode): { text: string; images: ImageReference[]; featureIds: string[] } {
+    static collectContentWithImages(node: ProseMirrorNode): {
+        text: string
+        images: ImageReference[]
+        capabilityReferences: CapabilityPromptReference[]
+    } {
         let text = ''
         const images: ImageReference[] = []
-        const featureIds: string[] = []
+        const capabilityReferences: CapabilityPromptReference[] = []
 
         node.forEach((child: ProseMirrorNode) => {
             if (child.type.name === 'text') {
@@ -452,22 +461,21 @@ class ContentExtractor {
             } else if (child.type.name === aiGeneratedImageNodeType || child.type.name === aiGeneratedVideoNodeType) {
                 // Generated media is resolved through the workspace Asset context
                 // snapshot, not browser-constructed Object Store coordinates.
-            } else if (child.type.name === 'feature_reference') {
-                const { featureId, featureName } = child.attrs
-                // Cosmetic label only; resolution is driven by featureIds (see resolveFeatures).
-                // Kept in sync with the chip's visual `feature:<name>` format.
-                if (featureName) text += `feature:${featureName}`
-                if (featureId) featureIds.push(featureId)
+            } else if (child.type.name === 'capability_reference') {
+                const { capabilityId, kind } = child.attrs
+                if (capabilityId && (kind === 'tool' || kind === 'skill')) {
+                    capabilityReferences.push({ capabilityId, kind })
+                }
             } else {
                 // Recurse into other nodes
                 const nested = ContentExtractor.collectContentWithImages(child)
                 text += nested.text
                 images.push(...nested.images)
-                featureIds.push(...nested.featureIds)
+                capabilityReferences.push(...nested.capabilityReferences)
             }
         })
 
-        return { text, images, featureIds }
+        return { text, images, capabilityReferences }
     }
 
     // Simple text extraction without formatting (for backwards compatibility)
@@ -516,10 +524,15 @@ class ContentExtractor {
                 return
             }
 
-            const { text: textContent, images, featureIds } = ContentExtractor.collectContentWithImages(block)
-            if (!textContent && images.length === 0 && featureIds.length === 0) return
+            const { text: textContent, images, capabilityReferences } = ContentExtractor.collectContentWithImages(block)
+            if (!textContent && images.length === 0 && capabilityReferences.length === 0) return
 
-            content.push({ nodeType: block.type.name, textContent, images: images.length > 0 ? images : undefined, featureIds: featureIds.length > 0 ? featureIds : undefined })
+            content.push({
+                nodeType: block.type.name,
+                textContent,
+                images: images.length > 0 ? images : undefined,
+                capabilityReferences: capabilityReferences.length > 0 ? capabilityReferences : undefined,
+            })
         })
 
         return content
@@ -546,14 +559,14 @@ class ContentExtractor {
                         return
                     }
 
-                    const { text: textContent, images, featureIds } = ContentExtractor.collectContentWithImages(block)
+                    const { text: textContent, images, capabilityReferences } = ContentExtractor.collectContentWithImages(block)
 
-                    if (textContent || images.length > 0 || featureIds.length > 0) {
+                    if (textContent || images.length > 0 || capabilityReferences.length > 0) {
                         allThreadsContent.push({
                             nodeType: block.type.name,
                             textContent,
                             images: images.length > 0 ? images : undefined,
-                            featureIds: featureIds.length > 0 ? featureIds : undefined,
+                            capabilityReferences: capabilityReferences.length > 0 ? capabilityReferences : undefined,
                         })
                     }
                 })
@@ -598,14 +611,14 @@ class ContentExtractor {
                         return
                     }
 
-                    const { text: textContent, images, featureIds } = ContentExtractor.collectContentWithImages(block)
+                    const { text: textContent, images, capabilityReferences } = ContentExtractor.collectContentWithImages(block)
 
-                    if (textContent || images.length > 0 || featureIds.length > 0) {
+                    if (textContent || images.length > 0 || capabilityReferences.length > 0) {
                         selectedContent.push({
                             nodeType: block.type.name,
                             textContent,
                             images: images.length > 0 ? images : undefined,
-                            featureIds: featureIds.length > 0 ? featureIds : undefined,
+                            capabilityReferences: capabilityReferences.length > 0 ? capabilityReferences : undefined,
                         })
                     }
                 })
@@ -639,8 +652,14 @@ class ContentExtractor {
         return messages
     }
 
-    static collectReferencedFeatureIds(items: ThreadContent[]): string[] {
-        return Array.from(new Set(items.flatMap((item) => item.featureIds ?? [])))
+    static collectCapabilityReferences(items: ThreadContent[]): CapabilityPromptReference[] {
+        const byId = new Map<string, CapabilityPromptReference>()
+        for (const item of items) {
+            for (const reference of item.capabilityReferences ?? []) {
+                if (!byId.has(reference.capabilityId)) byId.set(reference.capabilityId, reference)
+            }
+        }
+        return [...byId.values()]
     }
 }
 
@@ -961,6 +980,7 @@ class AiChatThreadPluginClass {
     private onReceivingStateChange: ((threadId: string, receiving: boolean) => void) | null
     private renderContext: AiChatThreadRenderContext
     private unsubscribeFromSegments: (() => void) | null = null
+    private readonly capabilityRunProgress = new CapabilityChatRunProgressController()
 
     constructor({
         sendAiRequestHandler,
@@ -1514,6 +1534,11 @@ class AiChatThreadPluginClass {
             const { status, type, aiProvider, threadId, conversationAssetId } = event
             const effectiveThreadId = conversationAssetId || threadId
             const { state, dispatch } = view
+
+            if (type === 'capability_run_event' && event.capabilityRunEvent) {
+                this.capabilityRunProgress.applyEvent(view, event.capabilityRunEvent)
+                return
+            }
 
             // Handle image generation events
             if (type === 'image_generation_trace') {
@@ -2421,7 +2446,7 @@ class AiChatThreadPluginClass {
         // Pass threadId for Workspace mode to ensure current thread is always included
         const threadContent = ContentExtractor.getActiveThreadContent(newState, threadContext, nodePos, threadId)
         const messages = ContentExtractor.toMessages(threadContent)
-        const referencedFeatureIds = ContentExtractor.collectReferencedFeatureIds(threadContent)
+        const capabilityReferences = ContentExtractor.collectCapabilityReferences(threadContent)
 
         // Build image generation options if an image model is selected
         const imageOptions = effectiveImageModel ? {
@@ -2467,7 +2492,7 @@ class AiChatThreadPluginClass {
             conversationAssetId: threadId,
             imageOptions,
             videoOptions,
-            referencedFeatureIds,
+            capabilityReferences,
         }
 
         queueMicrotask(() => {
@@ -2722,11 +2747,15 @@ class AiChatThreadPluginClass {
                 // Note: Dropdown state bridging removed - now handled by dropdown primitive plugin
 
                 return {
+                    update: (updatedView: EditorView) => {
+                        this.capabilityRunProgress.sync(updatedView)
+                    },
                     destroy: () => {
                         destroyed = true
                         if (this.unsubscribeFromSegments) {
                             this.unsubscribeFromSegments()
                         }
+                        this.capabilityRunProgress.destroy()
                     }
                 }
             },

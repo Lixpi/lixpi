@@ -368,14 +368,22 @@ const BlobModel = {
         derivationKind?: AssetRenditionName
         derivationVersion?: string
     }): Promise<BlobRecord> => {
-        const stored = await putContentAddressedBlob({ organizationId, bytes, mimeType, description })
-        return await BlobModel.registerStoredBlob({
-            organizationId,
-            ...stored,
-            ...(sourceBlobHash ? { sourceBlobHash } : {}),
-            ...(derivationKind ? { derivationKind } : {}),
-            ...(derivationVersion ? { derivationVersion } : {}),
-        })
+        for (let attempt = 1; attempt <= 10; attempt++) {
+            const stored = await putContentAddressedBlob({ organizationId, bytes, mimeType, description })
+            try {
+                return await BlobModel.registerStoredBlob({
+                    organizationId,
+                    ...stored,
+                    ...(sourceBlobHash ? { sourceBlobHash } : {}),
+                    ...(derivationKind ? { derivationKind } : {}),
+                    ...(derivationVersion ? { derivationVersion } : {}),
+                })
+            } catch (error) {
+                if ((error as Error).message !== 'BLOB_DELETION_IN_PROGRESS' || attempt === 10) throw error
+                await new Promise(resolve => setTimeout(resolve, attempt * 50))
+            }
+        }
+        throw new Error('BLOB_STORE_RETRY_EXHAUSTED')
     },
 
     addReference: async ({
@@ -519,24 +527,31 @@ const BlobModel = {
         if (blob.referenceCount !== 0) return false
         if (blob.status === 'staging') return false
 
-        if (blob.status !== 'deleting') {
+        const deletionClaim = `${Date.now()}-${crypto.randomUUID()}`
+        try {
             await dynamoDBService.updateItem({
                 tableName: blobsTableName(),
                 key: { blobKey: blob.blobKey },
-                updateExpression: 'SET #status = :deleting, #updatedAt = :updatedAt',
-                conditionExpression: '#referenceCount = :zero',
+                updateExpression: 'SET #status = :deleting, #deletionClaim = :deletionClaim, #updatedAt = :updatedAt',
+                conditionExpression: '#referenceCount = :zero AND attribute_not_exists(#deletionClaim)',
                 expressionAttributeNames: {
                     '#status': 'status',
+                    '#deletionClaim': 'deletionClaim',
                     '#updatedAt': 'updatedAt',
                     '#referenceCount': 'referenceCount',
                 },
                 expressionAttributeValues: {
                     ':deleting': 'deleting',
+                    ':deletionClaim': deletionClaim,
                     ':updatedAt': Date.now(),
                     ':zero': 0,
                 },
-                origin: 'Blob.deleteZeroReferenceBlob.mark',
+                logConditionalCheckFailures: false,
+                origin: 'Blob.deleteZeroReferenceBlob.claim',
             })
+        } catch (error) {
+            if (!isTransactionConditionalCheckFailure(error)) throw error
+            return false
         }
 
         await deleteContentAddressedBlob({ ...blob, status: 'deleting' })
@@ -546,14 +561,16 @@ const BlobModel = {
                     type: 'delete',
                     tableName: blobsTableName(),
                     key: { blobKey: blob.blobKey },
-                    conditionExpression: '#referenceCount = :zero AND #status = :deleting',
+                    conditionExpression: '#referenceCount = :zero AND #status = :deleting AND #deletionClaim = :deletionClaim',
                     expressionAttributeNames: {
                         '#referenceCount': 'referenceCount',
                         '#status': 'status',
+                        '#deletionClaim': 'deletionClaim',
                     },
                     expressionAttributeValues: {
                         ':zero': 0,
                         ':deleting': 'deleting',
+                        ':deletionClaim': deletionClaim,
                     },
                 }],
                 logConditionalCheckFailures: false,

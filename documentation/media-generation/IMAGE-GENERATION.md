@@ -193,7 +193,7 @@ Image generation publishes live pipeline events on the same per-thread receive s
 | Event | Image-specific nuance |
 |-------|-----------------------|
 | `IMAGE_PARTIAL` (empty) | Empty `imageUrl` is a signal, not pixels: the canvas renders the deterministic pending Asset node and starts the PIXI traveling progress border. |
-| `IMAGE_PARTIAL` (non-empty) | Up to three transient data-URL partials update the same pending node. Partials are not durable Asset renditions. Gemini thought images use the same event. |
+| `IMAGE_PARTIAL` (non-empty) | Up to three Object-Store-backed partial URLs update the same pending node. NATS carries only the small authenticated URL; superseded and terminal objects are deleted. Partials are not durable Asset renditions. Gemini thought images use the same event. |
 | `IMAGE_COMPLETE` | Settles final bytes into the preassigned Asset and sends `{ imageUrl, assetId, responseId, revisedPrompt, imageModelId, canvasGeometry }`. The API-owned geometry finalizes the node and lineage. |
 
 On the workspace canvas, `IMAGE_PARTIAL` updates one generated image node in place and marks it as generating; `pixiMediaLayer.ts` renders the partial pixels and supplies the active image bounds to the reusable `PixiTravelingOutlineRenderer`, and `IMAGE_COMPLETE` is the event that clears that outline. These events **bypass** the markdown stream parser — `AiInteractionService` routes them straight to the canvas/media handlers. In matrix fanout, each image model run carries a distinct `mediaRunId`, and its partial/final events publish through that run's response queue. The API preserves ordering for one run while allowing sibling image variants to render their partials as soon as their own object-store write and canvas projection finish.

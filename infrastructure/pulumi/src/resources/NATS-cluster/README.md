@@ -1,5 +1,23 @@
 # NATS Cluster Architecture with CloudMap Service Discovery
 
+## Durable JetStream deployment
+
+AWS NATS runs as an ECS EC2 daemon service on a dedicated three-instance cluster. Each instance has an encrypted gp3 EBS volume mounted on the host and bind-mounted into the NATS container at `/data/jetstream`. JetStream stores file data there, and application-created streams and Object Store buckets use three replicas.
+
+Every six hours, EventBridge starts the `nats-backup` ECS task. The task executes `nats stream backup` for every stream visible in the AUTH account and copies the snapshots to the versioned, encrypted S3 backup bucket. Snapshots expire after 35 days; noncurrent S3 versions expire after seven days.
+
+### Restore validation and procedure
+
+Perform restores into an empty recovery cluster or after confirming the target stream does not exist. Never restore over a live stream.
+
+1. Stop application writes to NATS and record the selected snapshot ID. Omitting the ID selects the S3 `LATEST` marker.
+2. Start a one-off ECS task from the deployed NATS image, override its entry point to `/opt/nats/restore-streams.sh`, and provide `NATS_BACKUP_BUCKET`, `NATS_BACKUP_PREFIX`, `NATS_URL`, `NATS_SYS_USER`, and `NATS_SYS_PASSWORD`. Pass the snapshot ID as the first command argument when restoring a snapshot other than `LATEST`.
+3. The script downloads every stream snapshot and runs `nats stream restore` in deterministic name order.
+4. Run `nats stream report`, confirm every restored stream has three replicas and a current leader, then compare stream message counts with the backup task log.
+5. Read at least one known Object Store object through the API before re-enabling writes.
+
+The backup and restore scripts fail on the first unsuccessful command. A restore drill is successful only when stream counts, replica health, and a content-addressed Blob hash all match.
+
 ## Overview
 
 This NATS cluster implementation uses AWS CloudMap for service discovery and Caddy for TLS certificate management. It provides both internal cluster communication and external client access through a dual CloudMap architecture. The system includes NATS auth callout integration with the main API service for authentication and authorization.

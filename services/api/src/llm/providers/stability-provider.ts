@@ -10,6 +10,7 @@ import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState, ChatMessage } from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
+import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 
 const MODEL_ENDPOINT_MAP: Record<string, string> = {
     'stability-ultra': '/v2beta/stable-image/generate/ultra',
@@ -22,61 +23,11 @@ const STYLE_TRANSFER_ENDPOINT = '/v2beta/stable-image/control/style-transfer'
 const STYLE_CONTROL_FIDELITY = 0.7
 const MAX_STABILITY_REFERENCE_PIXELS = 9_437_184
 
-type StabilityReferenceImage = { bytes: Buffer; mime: string }
-
-const decodeDataUrlWithMime = (url: string): StabilityReferenceImage | undefined => {
-    if (!url || !url.startsWith('data:')) return undefined
-    const commaIdx = url.indexOf(',')
-    if (commaIdx === -1) return undefined
-    const header = url.slice(0, commaIdx)
-    const data = url.slice(commaIdx + 1)
-    let mime = 'image/png'
-    if (header.includes(':') && header.includes(';')) {
-        mime = header.split(':')[1]!.split(';')[0]!
-    }
-    return { bytes: Buffer.from(data, 'base64'), mime }
-}
-
-const extractAllReferenceImages = (messages: ChatMessage[]): StabilityReferenceImage[] => {
-    const images: StabilityReferenceImage[] = []
-    for (const msg of messages) {
-        if (msg.role !== 'user') continue
-        const content = msg.content
-        if (!Array.isArray(content)) continue
-        for (const block of content) {
-            if (typeof block !== 'object' || block === null) continue
-            const blockType = (block as any).type
-            if (blockType === 'input_image') {
-                const url = (block as any).image_url
-                const decoded = typeof url === 'string' ? decodeDataUrlWithMime(url) : undefined
-                if (decoded) images.push(decoded)
-            } else if (blockType === 'image') {
-                const source = (block as any).source ?? {}
-                if (source.type === 'base64' && source.data) {
-                    images.push({
-                        bytes: Buffer.from(source.data, 'base64'),
-                        mime: source.media_type ?? 'image/png',
-                    })
-                }
-            } else if (blockType === 'inline_data') {
-                const data = (block as any).data
-                if (data) {
-                    images.push({
-                        bytes: Buffer.from(data, 'base64'),
-                        mime: (block as any).mime_type ?? 'image/png',
-                    })
-                }
-            }
-        }
-    }
-    return images
-}
-
 const resizeReferenceForStability = async (
-    ref: StabilityReferenceImage,
+    ref: ResolvedImageGenerationReference,
     logPrefix: string,
     label: string,
-): Promise<StabilityReferenceImage> => {
+): Promise<ResolvedImageGenerationReference> => {
     let metadata: sharp.Metadata
     try {
         metadata = await sharp(ref.bytes).metadata()
@@ -114,7 +65,11 @@ const resizeReferenceForStability = async (
             `(${outWidth * outHeight} px) for Stability limit ${MAX_STABILITY_REFERENCE_PIXELS}`,
         )
 
-        return { bytes: resizedBytes, mime: ref.mime }
+        return {
+            ...ref,
+            bytes: resizedBytes,
+            byteLength: resizedBytes.byteLength,
+        }
     } catch (e) {
         warn(`${logPrefix} Failed to resize ${label} reference image for Stability: ${e}`)
         return ref
@@ -174,15 +129,25 @@ export class StabilityProvider extends BaseProvider {
         if (validationError) throw new Error(validationError)
 
         const aspectRatio = resolveAspectRatio(imageSize)
-        const allRefs = extractAllReferenceImages(messages)
-        info(`[Stability:${this.instanceKey}] Found ${allRefs.length} reference image(s) in messages`)
+        const allRefs = [...(state.resolvedImageGenerationReferences ?? [])]
+        info(`[Stability:${this.instanceKey}] reference images ${JSON.stringify(allRefs.map(reference => ({
+            role: reference.role,
+            fileName: reference.fileName,
+            byteLength: reference.byteLength,
+            mediaType: reference.mediaType,
+            sha256: reference.sha256,
+        })))}`)
 
-        let primaryRef: StabilityReferenceImage | undefined
-        let styleRef: StabilityReferenceImage | undefined
+        let primaryRef: ResolvedImageGenerationReference | undefined
+        let styleRef: ResolvedImageGenerationReference | undefined
         if (allRefs.length >= 2) {
-            allRefs.sort((a, b) => b.bytes.length - a.bytes.length)
-            primaryRef = allRefs[0]
-            styleRef = allRefs[1]
+            primaryRef = allRefs.find(reference => reference.role === 'character-source')
+            styleRef = allRefs.find(reference => reference.role === 'character-layout-example')
+            if (!primaryRef || !styleRef) {
+                allRefs.sort((a, b) => b.bytes.length - a.bytes.length)
+                primaryRef = allRefs[0]
+                styleRef = allRefs[1]
+            }
             if (allRefs.length > 2) {
                 warn(`[Stability:${this.instanceKey}] ${allRefs.length - 2} extra references skipped`)
             }
@@ -208,18 +173,18 @@ export class StabilityProvider extends BaseProvider {
         let endpoint: string
         if (primaryRef && styleRef) {
             endpoint = STYLE_TRANSFER_ENDPOINT
-            const initExt = primaryRef.mime.split('/')[1] ?? 'png'
-            const styleExt = styleRef.mime.split('/')[1] ?? 'png'
-            const initBlob = new Blob([new Uint8Array(primaryRef.bytes)], { type: primaryRef.mime })
-            const styleBlob = new Blob([new Uint8Array(styleRef.bytes)], { type: styleRef.mime })
+            const initExt = primaryRef.mediaType.split('/')[1] ?? 'png'
+            const styleExt = styleRef.mediaType.split('/')[1] ?? 'png'
+            const initBlob = new Blob([new Uint8Array(primaryRef.bytes)], { type: primaryRef.mediaType })
+            const styleBlob = new Blob([new Uint8Array(styleRef.bytes)], { type: styleRef.mediaType })
             formData.set('init_image', initBlob, `init.${initExt}`)
             formData.set('style_image', styleBlob, `style.${styleExt}`)
         } else if (primaryRef) {
             endpoint = STYLE_CONTROL_ENDPOINT
             formData.set('aspect_ratio', aspectRatio)
             formData.set('fidelity', String(STYLE_CONTROL_FIDELITY))
-            const refExt = primaryRef.mime.split('/')[1] ?? 'png'
-            const refBlob = new Blob([new Uint8Array(primaryRef.bytes)], { type: primaryRef.mime })
+            const refExt = primaryRef.mediaType.split('/')[1] ?? 'png'
+            const refBlob = new Blob([new Uint8Array(primaryRef.bytes)], { type: primaryRef.mediaType })
             formData.set('image', refBlob, `reference.${refExt}`)
         } else {
             const ep = MODEL_ENDPOINT_MAP[modelVersion]

@@ -32,6 +32,7 @@ export const testSchema = new Schema({
 
         // Regular image node
         image: nodes.image,
+        capability_reference: nodes.capability_reference,
 
         // AI-generated image node (used inside aiResponseMessage)
         aiGeneratedImage: aiGeneratedImageNodeSpec,

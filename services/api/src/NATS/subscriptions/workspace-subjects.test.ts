@@ -20,16 +20,12 @@ const mocks = vi.hoisted(() => ({
     asset: {
         removeAllWorkspaceReferences: vi.fn(),
     },
-    extractionRun: {
-        deleteWorkspaceRuns: vi.fn(),
-    },
 }))
 
 vi.mock('@lixpi/debug-tools', () => ({ info: vi.fn(), err: vi.fn(), warn: vi.fn() }))
 vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
 vi.mock('../../models/organization.ts', () => ({ default: mocks.organization }))
 vi.mock('../../models/asset.ts', () => ({ default: mocks.asset }))
-vi.mock('../../models/extraction-run.ts', () => ({ default: mocks.extractionRun }))
 
 import { workspaceSubjects } from './workspace-subjects.ts'
 
@@ -56,7 +52,6 @@ describe('Workspace subject handlers', () => {
         mocks.workspace.updateCanvasState.mockResolvedValue({ status: 'canvas-saved' })
         mocks.organization.getUserOrganizations.mockResolvedValue([{ organizationId: 'organization-1' }])
         mocks.asset.removeAllWorkspaceReferences.mockResolvedValue(2)
-        mocks.extractionRun.deleteWorkspaceRuns.mockResolvedValue(1)
     })
 
     // =========================================================================
@@ -165,7 +160,7 @@ describe('Workspace subject handlers', () => {
     // CLEANUP / DELETION
     // =========================================================================
 
-    it('deletes the workspace after cleaning up asset references and extraction runs', async () => {
+    it('deletes the workspace after cleaning up asset references', async () => {
         const result = await getHandler(WORKSPACE_SUBJECTS.DELETE_WORKSPACE)({
             user: { userId: 'user-1' },
             workspaceId: 'ws-1',
@@ -176,7 +171,6 @@ describe('Workspace subject handlers', () => {
             workspaceId: 'ws-1',
             requester: expect.objectContaining({ userId: 'user-1' }),
         })
-        expect(mocks.extractionRun.deleteWorkspaceRuns).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
         expect(mocks.workspace.delete).toHaveBeenCalledWith({
             userId: 'user-1',
             workspaceId: 'ws-1',

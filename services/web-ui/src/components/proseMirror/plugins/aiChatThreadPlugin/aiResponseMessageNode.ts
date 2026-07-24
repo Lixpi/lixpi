@@ -21,6 +21,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     const aiResponseMessageContainer = responseShell.messageEl
     const loadingElement = responseShell.loadingEl
     const responseMessageContent = responseShell.contentEl
+    const capabilityProgressElement = responseShell.capabilityProgressEl
 
     // // Create an accept button
     // const acceptButton = document.createElement('button')
@@ -59,6 +60,9 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
         dom: parentWrapper, // The outer DOM node of the node view
         contentDOM: responseMessageContent, // The DOM node that holds the node's content
         ignoreMutation: (mutation) => {
+            if (mutation.target === capabilityProgressElement || capabilityProgressElement.contains(mutation.target)) {
+                return true
+            }
             // Ignore style attribute changes on the wrapper. Without this,
             // ProseMirror's internal MutationObserver can detect a canvas-driven
             // style change and reconcile away the externally-set margin.

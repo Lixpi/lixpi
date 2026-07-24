@@ -11,6 +11,7 @@ import { createSsmParameters } from './resources/SSM-parameters.ts'
 import { createDynamoDbTables } from './resources/db/DynamoDB-tables.ts'
 import { createNetworkInfrastructure } from './resources/network.ts'
 import { createEcsCluster } from './resources/ECS-cluster.ts'
+import { createEcsEc2Cluster } from './resources/ECS-EC2-cluster.ts'
 import { createNatsClusterService } from './resources/NATS-cluster/NATS-cluster.ts'
 import { createMainApiService } from './resources/main-api-service.ts'
 import { createNexNodeService } from './resources/nex-node/nex-node.ts'
@@ -180,6 +181,23 @@ export const createInfrastructure = async () => {
         },
     })
 
+    const natsEcsCluster = await createEcsEc2Cluster({
+        vpc: networkInfrastructure.vpc,
+        publicSubnets: networkInfrastructure.publicSubnets,
+        privateSubnets: networkInfrastructure.privateSubnets,
+        clusterName: 'NATS-ECS-Cluster',
+        instanceType: process.env.NATS_EC2_INSTANCE_TYPE ?? 'm6i.large',
+        minCapacity: 3,
+        maxCapacity: 3,
+        desiredCapacity: 3,
+        dataVolumeSizeGiB: Number(process.env.NATS_EBS_VOLUME_SIZE_GIB ?? 150),
+        tags: {
+            Environment: ENVIRONMENT!,
+            Project: 'Lixpi AI',
+            Workload: 'NATS',
+        },
+    })
+
     // Create NATS domain for certificate management - USE MANAGEABLE DOMAIN
     // The client connects to nats.cloudmap.shelby-dev.lixpi.dev, but we generate cert for controllable domain
     const natsDomain = `nats.${DOMAIN_NAME}`  // nats.shelby-dev.lixpi.dev (manageable via Route53)
@@ -233,11 +251,13 @@ export const createInfrastructure = async () => {
         cloudMapNamespaceName,
         parentHostedZoneId: hostedZoneId, // Hosted zone we manage / created or existing
         natsRecordName: natsDomain, // e.g., "nats.shelby-dev.lixpi.dev"
-        ecsCluster: {  // Add back ECS cluster - Fargate tasks run on the existing cluster
-            id: ecsCluster.outputs.clusterId,
-            arn: ecsCluster.outputs.clusterArn,
-            name: ecsCluster.outputs.clusterName,
+        ecsCluster: {
+            id: natsEcsCluster.outputs.clusterId,
+            arn: natsEcsCluster.outputs.clusterArn,
+            name: natsEcsCluster.outputs.clusterName,
         },
+        capacityProviderName: natsEcsCluster.outputs.capacityProviderName,
+        ec2SecurityGroup: natsEcsCluster.ecsSecurityGroup,
         vpc: networkInfrastructure.vpc,
         publicSubnets: networkInfrastructure.publicSubnets,
         privateSubnets: networkInfrastructure.privateSubnets,
@@ -302,10 +322,10 @@ export const createInfrastructure = async () => {
                 assetReferencesTable: dynamoDBtables.assetReferencesTable,
                 blobsTable: dynamoDBtables.blobsTable,
                 blobReferencesTable: dynamoDBtables.blobReferencesTable,
-                featuresTable: dynamoDBtables.featuresTable,
-                featuresMetaTable: dynamoDBtables.featuresMetaTable,
-                featuresAccessListTable: dynamoDBtables.featuresAccessListTable,
-                extractionRunsTable: dynamoDBtables.extractionRunsTable,
+                capabilitiesTable: dynamoDBtables.capabilitiesTable,
+                capabilitiesMetaTable: dynamoDBtables.capabilitiesMetaTable,
+                capabilitiesAccessListTable: dynamoDBtables.capabilitiesAccessListTable,
+                capabilityRunsTable: dynamoDBtables.capabilityRunsTable,
                 aiModelsListTable: dynamoDBtables.aiModelsListTable,
             },
         },

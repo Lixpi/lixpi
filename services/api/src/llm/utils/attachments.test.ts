@@ -18,4 +18,21 @@ describe('convertAttachmentsForProvider', () => {
             { inlineData: { mimeType: 'image/png', data: 'abc123' } },
         ])
     })
+
+    it('does not leak internal character reference roles into ordinary OpenAI messages', () => {
+        const converted = convertAttachmentsForProvider([{
+            type: 'input_image',
+            image_url: 'data:image/jpeg;base64,source',
+            detail: 'high',
+            reference_role: 'character-source',
+            reference_file_name: 'character-source-1',
+        }], 'OPENAI')
+
+        expect(converted).toEqual([{
+            type: 'input_image',
+            image_url: 'data:image/jpeg;base64,source',
+            detail: 'high',
+        }])
+    })
+
 })

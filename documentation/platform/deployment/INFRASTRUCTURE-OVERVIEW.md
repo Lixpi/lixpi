@@ -40,9 +40,9 @@ flowchart TB
 
     subgraph VPC["VPC — 10.0.0.0/16 — 2 AZs"]
         subgraph Public["Public Subnets"]
-            NATS1["NATS node 1<br/>Fargate"]
-            NATS2["NATS node 2<br/>Fargate"]
-            NATS3["NATS node 3<br/>Fargate"]
+            NATS1["NATS node 1<br/>ECS EC2 + EBS"]
+            NATS2["NATS node 2<br/>ECS EC2 + EBS"]
+            NATS3["NATS node 3<br/>ECS EC2 + EBS"]
             NAT["NAT Gateway"]
         end
 
@@ -106,7 +106,7 @@ flowchart TB
 | `web-ui` | S3 + CloudFront | Static SPA served from a global CDN with HTTP/3 |
 | `api` | ECS/Fargate (private subnets) | CRUD, auth callout, DynamoDB access, AND in-process LangGraph LLM workflow (pipeline events, ProseMirror transcript steps, image generation, vendor SDK egress) |
 | `nex` | ECS/Fargate (private subnets, 1 task) | NATS NEX node — runs background workloads (the hourly AI-models sync), writes the `AI_MODELS_LIST` table. See [NEX Execution Engine](./NEX-EXECUTION-ENGINE.md) |
-| `nats` | ECS/Fargate (public subnets, 3 tasks) | Message bus — clients connect directly |
+| `nats` | ECS EC2 daemon service (3 public-subnet instances, one encrypted EBS volume each) | Message bus, three-replica JetStream, and Blob Object Store; clients connect directly |
 | `cert-manager` | Lambda (Caddy + ACME) | Issues real TLS certs for the NATS domain |
 | `nats-sidecar` | Lambda | Watches ECS task IPs and updates Route53 A records |
 | `DynamoDB` | On-demand application tables | Application data, with streams on selected tables |
@@ -203,7 +203,7 @@ flowchart TB
     ECS[ECS cluster]
     PLACE[NATS DNS placeholder 8.8.8.8]
     CERTMGR[Lambda cert-manager<br/>issues NATS TLS cert]
-    NATS[NATS cluster 3x Fargate]
+    NATS[NATS cluster 3x ECS EC2 + EBS]
     API[api service + LLM workflow]
     WEB[Web UI — S3 + CloudFront]
     DNS[Web + www A records]
@@ -258,16 +258,16 @@ flowchart LR
 
 | Subnet | CIDR | What runs there |
 |--------|------|-----------------|
-| Public AZ1 | `10.0.0.0/24` | NATS task, NAT Gateway |
-| Public AZ2 | `10.0.1.0/24` | NATS task |
+| Public AZ1 | `10.0.0.0/24` | NATS EC2 instances, NAT Gateway |
+| Public AZ2 | `10.0.1.0/24` | NATS EC2 instances |
 | Private AZ1 | `10.0.2.0/24` | api, Lambdas |
 | Private AZ2 | `10.0.3.0/24` | api, Lambdas |
 
-**Why NATS sits in public subnets.** Browsers connect directly to NATS over WebSocket-Secure. Putting NATS tasks in public subnets means each Fargate task gets a routable public IP, and the Lambda sidecar can publish those IPs to Route53.
+**Why NATS sits in public subnets.** Browsers connect directly to NATS over WebSocket Secure. Each NATS EC2 host has a routable public IP that the discovery sidecar can publish to Route53. The daemon task uses host networking and stores JetStream data on the host's mounted EBS volume.
 
 **Why api sits in private subnets.** The main app-command path reaches the API through NATS subjects, so the Fargate service does not need public ingress for normal Workspace/Asset operations or AI streaming. Outbound traffic (Auth0, OpenAI, Anthropic, Google, Stability) goes through the single NAT Gateway.
 
-The API process also defines HTTP routes for media bytes, feature/media-library previews, workspace export/import, and health checks. Local development calls those routes directly through `VITE_API_URL`. The current AWS topology shown here does not create a public `api.*` route or a CloudFront API origin, so any production feature that depends on those HTTP routes needs an explicit front door before it can work from the hosted SPA.
+The API process also defines HTTP routes for media bytes, Capability resources, workspace export/import, and health checks. Local development calls those routes directly through `VITE_API_URL`. The current AWS topology shown here does not create a public `api.*` route or a CloudFront API origin, so any production feature that depends on those HTTP routes needs an explicit front door before it can work from the hosted SPA.
 
 ## ECS Services: api
 
@@ -283,7 +283,7 @@ The CPU/memory baseline is sized to accommodate the in-process LangGraph LLM wor
 
 For NATS request/reply subjects, there is nothing HTTP-shaped to route. The service pulls work off NATS subjects using **queue groups**. When you add another `api` task, it joins the same queue group, NATS starts distributing messages across the tasks, and no external load balancer needs to know about that subject.
 
-That does not remove the need for an HTTP front door for byte routes. The Express routes under `/api/assets`, `/api/workspaces`, and `/api/features` exist in the API service; exposing them from the hosted SPA is a separate deployment concern.
+That does not remove the need for an HTTP front door for byte routes. The Express routes under `/api/assets`, `/api/workspaces`, and `/api/capabilities` exist in the API service; exposing them from the hosted SPA is a separate deployment concern.
 
 The revision-2 storage cutover removes the legacy document, chat-thread, and media-library tables after their deletion protection is disabled. Production therefore requires two explicitly staged removal deployments: `disable-protection`, then `remove`. Phase 11 defaults to the completed `remove` state so retired resources are not recreated; use explicit `retain` only before the removal window. Verify the revision-2 export/rollback artifact before the second deployment. Do not target-delete protected tables or bypass Pulumi state.
 
@@ -370,12 +370,16 @@ Highlights:
 | `ASSETS_ACCESS_LIST` | `assetId / principalId` | — | Point authorization and grant cleanup |
 | `ASSET_REFERENCES` | `assetId / referenceKey` | — | Workspace placements and catalog lifetime references |
 | `BLOBS` | `blobKey` | — | Organization-qualified immutable-object registry |
-| `BLOB_REFERENCES` | `blobKey / referenceKey` | — | Idempotent Asset/Feature ownership of Blob objects |
+| `BLOB_REFERENCES` | `blobKey / referenceKey` | — | Idempotent Asset/Capability ownership of Blob objects |
+| `CAPABILITIES` | `capabilityId` | — | Capability authority row and current manifest pointer |
+| `CAPABILITIES_META` | `scopeAndOwner / searchKey` | — | Scope and principal catalog projections |
+| `CAPABILITIES_ACCESS_LIST` | `capabilityId / principalId` | — | Explicit Capability grants |
+| `CAPABILITY_RUNS` | `runId / workspaceId` | — | Sealed run index, state, and event-stream coordinates |
 | `AI_TOKENS_USAGE_TRANSACTIONS` | `userId / transactionProcessedAt` | LSI x4 (document, model, org, formatted date) | Usage ledger |
 | `FINANCIAL_TRANSACTIONS` | `userId / transactionId` | LSI on status, createdAt, provider | Billing |
 | `AI_MODELS_LIST` | `provider / model` | — | Provider/model registry |
 
-The six Asset/Blob tables have no GSIs; `ASSETS_META.updatedAt` is their only secondary index. All real-AWS stacks enable DynamoDB **streams** with `NEW_AND_OLD_IMAGES` (skipped only for local DynamoDB). **Deletion protection** is additionally enabled on production stacks only. Retired document/thread/media-library table definitions exist only inside the explicit staged-removal helper and are excluded from the normal resource set.
+The six Asset/Blob tables have no GSIs; `ASSETS_META.updatedAt` is their only secondary index. Capability tables use their primary keys without GSIs. All real-AWS stacks enable DynamoDB **streams** with `NEW_AND_OLD_IMAGES` (skipped only for local DynamoDB). **Deletion protection** is additionally enabled on production stacks only. Retired document/thread/media-library table definitions exist only inside the explicit staged-removal helper and are excluded from the normal resource set.
 
 ## How Services Communicate — End to End
 
@@ -387,7 +391,7 @@ sequenceDiagram
     participant Browser
     participant CF as CloudFront
     participant R53 as Route53
-    participant NATS as NATS (Fargate)
+    participant NATS as NATS (ECS EC2 + EBS)
     participant API as api + LLM workflow (Fargate)
     participant DDB as DynamoDB
     participant AI as AI Provider

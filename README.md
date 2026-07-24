@@ -11,7 +11,7 @@ Lixpi looks like an AI concept board where an artist runs their entire creative 
 A few things make it unusual:
 
 - **Topology is the workflow.** Images, documents, and AI chat threads are nodes; directional edges between them define what feeds into what. Rearranging the canvas rearranges the pipeline.
-- **Feature extraction.** A "feature" is any reusable abstraction pulled from one or more reference inputs — a texture, drawing style, stroke pattern, lighting setup, time period, genre, or something abstract like mood or atmosphere. Each feature is stored as a small set of graphic artifacts together with a written skill that tells the model what they encode and how to apply them. Reference them in plain language (`/use loose-watercolor`) inside any prompt and mix freely. Stacking features is what gives character-consistent generation across many scenes — the hard problem text prompts alone cannot solve.
+- **Style extraction.** A "feature" is any reusable abstraction pulled from one or more reference inputs — a texture, drawing style, stroke pattern, lighting setup, time period, genre, or something abstract like mood or atmosphere. Each feature is stored as a small set of graphic artifacts together with a written skill that tells the model what they encode and how to apply them. Reference them in plain language (`/use loose-watercolor`) inside any prompt and mix freely. Stacking features is what gives character-consistent generation across many scenes — the hard problem text prompts alone cannot solve.
 - **Prompt enhancement.** Image and video generation isn't a one-shot call. The prompt first runs through a reasoning model that expands your input into a detailed brief; that brief is what the media model actually receives.
 
 ---
@@ -84,13 +84,13 @@ start.bat
 
 ## Key Features
 
-### Feature Extraction & Library
+### Style Extraction & Library
 
 Features are first-class library entries that capture the essence of any visual abstraction — painting style, color palette, mood, lighting setup, stroke pattern, character design — extracted from one or more reference inputs (images, documents, threads, or mixes of all three).
 
 Extraction runs as a multi-stage pipeline: scene assessment and routing → parallel per-axis extractors (palette, lighting, character design, line quality, medium signature, composition, mood, texture, etc.) → deterministic source-pixel crops → dominance-weighted synthesis → sample generation → persistence. The result is a reusable entry with structured parameters, a written instruction body, and content-free sample artifacts that preserve the medium without leaking the source subject. Features apply via `/use <name>` in any prompt; the server resolves the reference at send time and injects the instructions and samples as system context — the original reference content is never forwarded to the downstream model.
 
-See [Feature Extraction & Library](documentation/library/FEATURE-EXTRACTION-OVERVIEW.md).
+See [Style Extraction & Library](documentation/library/STYLE-EXTRACTION-OVERVIEW.md).
 
 ### Media Library
 
@@ -139,7 +139,7 @@ An animated placeholder appears immediately when generation starts; up to three 
 
 - **Everything talks through NATS** — browser clients and backend services share the same message bus.
 - **Web UI connects directly to NATS** via WebSocket, enabling real-time streaming without HTTP polling.
-- **Main API** handles authentication, CRUD, DynamoDB persistence, and **all LLM orchestration in-process** as a TypeScript LangGraph module — validation, token streaming, image generation, feature extraction, branch resolution, and usage tracking. (Earlier releases ran a separate Python `llm-api` service; that has been absorbed into the main API.)
+- **Main API** handles authentication, CRUD, DynamoDB persistence, and **all LLM orchestration in-process** as a TypeScript LangGraph module — validation, token streaming, image generation, style extraction, branch resolution, and usage tracking. (Earlier releases ran a separate Python `llm-api` service; that has been absorbed into the main API.)
 - **AI tokens stream directly** through per-thread NATS subjects to the browser, so token delivery is not gated by any extra service hop.
 
 For the full architecture deep-dive — including AI chat request/response flow, streaming, scalability via NATS queue groups, and authentication — see [Architecture](documentation/platform/SYSTEM-ARCHITECTURE.md). For image generation specifics, see [Image Generation](documentation/media-generation/IMAGE-GENERATION.md).
@@ -153,7 +153,7 @@ For the full architecture deep-dive — including AI chat request/response flow,
 - [System Architecture](documentation/platform/SYSTEM-ARCHITECTURE.md) — services, NATS backbone, design decisions, scalability
 - [AI Generation Pipeline](documentation/platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow, routing, streaming, usage
 - [Development Guide](documentation/platform/DEVELOPMENT.md) — building services, local auth, Pulumi
-- [Feature Extraction & Library](documentation/library/FEATURE-EXTRACTION-OVERVIEW.md)
+- [Style Extraction & Library](documentation/library/STYLE-EXTRACTION-OVERVIEW.md)
 - [Media Library](documentation/library/MEDIA-LIBRARY.md)
 - [Branch Lineage & Provenance](documentation/media-generation/BRANCH-LINEAGE.md)
 - [Canvas Rendering Engine](documentation/canvas/RENDERING-ENGINE.md) — DOM/PIXI rendering, pan/zoom, node interactions

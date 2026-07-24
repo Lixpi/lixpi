@@ -304,7 +304,6 @@ describe('formatImageGenerationTraceRole', () => {
 describe('formatImageGenerationTraceReferenceSource', () => {
     it('maps known reference sources to stable human labels', () => {
         expect(formatImageGenerationTraceReferenceSource('branch-candidate')).toBe('Image from this branch')
-        expect(formatImageGenerationTraceReferenceSource('feature-reference')).toBe('Feature reference image')
         expect(formatImageGenerationTraceReferenceSource('message-reference')).toBe('Attached to chat message')
         expect(formatImageGenerationTraceReferenceSource('unknown-source')).toBe('Reference image')
     })

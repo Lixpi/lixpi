@@ -10,9 +10,12 @@ import {
     parseMediaGenerationConfigSelectionAttr,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
+import type { CapabilityPromptReference } from '@lixpi/constants'
+import { collectCapabilityReferences } from '$src/components/proseMirror/plugins/capabilityMentionPlugin/index.ts'
 
 type SubmitHandler = (data: {
     contentJSON: any[]
+    capabilityReferences: CapabilityPromptReference[]
     aiReasoningModels: string[]
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
@@ -54,7 +57,7 @@ class KeyboardHandler {
     }
 }
 
-function extractContentJSON(state: EditorState): any[] | null {
+export function extractContentJSON(state: EditorState): any[] | null {
     // Find the aiPromptInput node and extract its content as JSON
     let inputNode: ProseMirrorNode | null = null
     state.doc.descendants((node: ProseMirrorNode) => {
@@ -65,7 +68,7 @@ function extractContentJSON(state: EditorState): any[] | null {
     })
 
     if (!inputNode) return null
-    if ((inputNode as ProseMirrorNode).textContent.trim() === '') return null
+    if (!hasSubmittableContent(inputNode as ProseMirrorNode)) return null
 
     // Convert content to JSON array
     const content: any[] = []
@@ -74,6 +77,16 @@ function extractContentJSON(state: EditorState): any[] | null {
     })
 
     return content
+}
+
+function hasSubmittableContent(node: ProseMirrorNode): boolean {
+    if (node.isText && node.text?.trim()) return true
+    if (node.type.name === 'capability_reference') return true
+    let found = false
+    node.forEach((child) => {
+        if (!found && hasSubmittableContent(child)) found = true
+    })
+    return found
 }
 
 type InputAttrs = {
@@ -194,6 +207,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
 
         return {
             contentJSON,
+            capabilityReferences: collectCapabilityReferences(contentJSON),
             aiReasoningModels,
             useMultipleReasoningModels: attrs.useMultipleReasoningModels,
             useMultipleImageModels: attrs.useMultipleImageModels,

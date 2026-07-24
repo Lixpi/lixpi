@@ -279,12 +279,16 @@ export function getBranchMarkerConversationPreviewFromThreadContent(
         }
     }
 
+    const conversationalResponseText = collectProseMirrorText(responseContainer, {
+        excludedNodeTypes: ['aiGeneratedImage', 'aiGeneratedVideo', 'aiLineageEvent', 'aiCollapsibleBlock'],
+    }).trim()
+    const responseText = conversationalResponseText || collectProseMirrorText(responseContainer, {
+        excludedNodeTypes: ['aiGeneratedImage', 'aiGeneratedVideo', 'aiLineageEvent'],
+    }).trim()
     const { phase, isReceiving: streamIsReceiving } = inferBranchMarkerPreviewPhase(responseMessage, responseContainer)
     return {
         userText,
-        responseText: collectProseMirrorText(responseContainer, {
-            excludedNodeTypes: ['aiGeneratedImage', 'aiGeneratedVideo', 'aiLineageEvent', 'aiCollapsibleBlock'],
-        }).trim(),
+        responseText,
         phase,
         isReceiving: streamIsReceiving || Boolean(options.generationActive),
         streamIsReceiving,

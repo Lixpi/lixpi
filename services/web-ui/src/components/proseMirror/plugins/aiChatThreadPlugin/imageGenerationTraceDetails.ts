@@ -70,8 +70,6 @@ export const formatImageGenerationTraceReferenceSource = (source: string): strin
     switch (source) {
         case 'branch-candidate':
             return 'Image from this branch'
-        case 'feature-reference':
-            return 'Feature reference image'
         case 'message-reference':
             return 'Attached to chat message'
         default:

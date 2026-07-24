@@ -435,7 +435,7 @@
             },
         }) as { error?: string }
         if (response?.error) throw new Error(response.error)
-        renderer?.commitTransientCanvasState(nextCanvasState)
+        renderer?.commitTransientCanvasNodeInsertion(nextCanvasState, nodeId, placeholderNodeId ?? undefined)
         workspaceStore.updateCanvasState(nextCanvasState)
         workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
     }

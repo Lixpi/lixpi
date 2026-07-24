@@ -4,6 +4,8 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { describe, expect, it } from 'vitest'
 
+import { formatMediaFileSize, stripMediaFileExtension } from './mediaLibraryPanel.ts'
+
 function expectSourceToContain(source: string, snippet: string): void {
     expect(source.includes(snippet), `source should contain: ${snippet}`).toBe(true)
 }
@@ -18,13 +20,12 @@ const canvasSource = readFileSync(resolve(__dirname, 'WorkspaceCanvas.ts'), 'utf
 const workspaceSvelteSource = readFileSync(resolve(__dirname, '../../components/WorkspaceCanvas.svelte'), 'utf-8')
 const WORKSPACE_IMPORT_GUARD_SNIPPET =
     'if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return'
-const WORKSPACE_IMPORT_FINALIZE_SNIPPET = 'await finalizeIngest(data, token, targetWorkspaceId, placeholderNodeId)'
+const WORKSPACE_IMPORT_FINALIZE_SNIPPET = 'await addAssetToCanvas(data, targetWorkspaceId, placeholderNodeId)'
 
 describe('Media Library panel contract', () => {
     it('is an embedded renderer the right side panel hosts, not a standalone drawer', () => {
         expectSourceToContain(panelSource, 'media-library-panel-embedded')
-        expectSourceToContain(panelSource, 'function mountInto')
-        expectSourceToContain(panelSource, 'function setMode')
+        expectSourceToContain(panelSource, 'mountInto(hostEl: HTMLElement): void')
         // No browse-scope filter control — the panel always shows everything available.
         expectSourceNotToContain(panelSource, 'media-library-scope-select')
         // No standalone modal chrome, category tab strip, or backdrop.
@@ -34,12 +35,10 @@ describe('Media Library panel contract', () => {
         expectSourceNotToContain(panelSource, 'role="tablist"')
     })
 
-    it('colocates saved images and videos under the Media surface', () => {
-        expectSourceToContain(panelSource, "mode === 'media'")
-        expectSourceToContain(panelSource, 'function loadMedia')
-        expectSourceToContain(panelSource, 'media-library-media-group-title')
-        expectSourceToContain(panelSource, 'renderImages(browserEl)')
-        expectSourceToContain(panelSource, 'renderVideos(browserEl)')
+    it('loads cataloged Assets and excludes conversation records', () => {
+        expectSourceToContain(panelSource, 'await this.assetService.list({ limit: 100, cursor })')
+        expectSourceToContain(panelSource, "filter((asset) => asset.primaryCategory !== 'conversation')")
+        expectSourceToContain(panelSource, 'for (const asset of this.allAssets)')
     })
 
     it('removes the Extract-new button and its color entirely', () => {
@@ -52,35 +51,43 @@ describe('Media Library panel contract', () => {
         expectSourceNotToContain(panelStyles, '#55967c')
     })
 
-    it('keeps browsing cards concise while retaining complete inspector details', () => {
-        expectSourceToContain(panelSource, 'feature-library-inspector-card')
+    it('keeps browsing rows concise while retaining complete inspector details', () => {
         expectSourceToContain(panelSource, 'media-library-browser-intro')
-        expectSourceToContain(panelSource, 'renderMarkdownStatic(feature.instructions')
-        expectSourceToContain(panelSource, 'for (const tag of tags)')
-        expectSourceNotToContain(panelSource, 'feature.instructions.slice')
-        expectSourceToContain(panelStyles, '-webkit-line-clamp: 2')
+        expectSourceToContain(panelSource, 'media-library-panel-images')
+        expectSourceToContain(panelSource, 'capability-library-section-items')
+        expectSourceToContain(panelSource, 'capability-library-row-thumb')
+        expectSourceToContain(panelSource, 'capability-library-row-use')
+        expectSourceNotToContain(panelSource, 'media-library-item-thumb')
+        expectSourceNotToContain(panelSource, 'media-library-item-info')
+        expectSourceNotToContain(panelStyles, '.media-library-item-thumb')
+        expectSourceNotToContain(panelStyles, '.media-library-item-info')
+        expectSourceToContain(panelSource, 'private buildAssetInspector(asset: Asset): HTMLElement')
+        expectSourceToContain(panelSource, 'private async mountAssetDocuments')
+        expectSourceToContain(panelSource, "role: 'provenance'")
     })
 
-    it('retains source sample previews and falls back to the durable authorized sample route', () => {
-        expectSourceToContain(panelSource, 'function getStoredSampleUrl')
-        expectSourceToContain(panelSource, '/api/features/${feature.featureId}/samples/${sampleIndex}')
-        expect(panelSource.indexOf('if (featureSample?.imageUrl)')).toBeLessThan(panelSource.indexOf('return getStoredSampleUrl(feature, sampleIndex)'))
-        expectSourceToContain(panelSource, 'imageEl.src = getStoredSampleUrl(feature, sampleIndex)')
+    it('formats media names and byte sizes consistently', () => {
+        expect(stripMediaFileExtension('reference.image.png')).toBe('reference.image')
+        expect(stripMediaFileExtension('untitled')).toBe('untitled')
+        expect(formatMediaFileSize(512)).toBe('1 KB')
+        expect(formatMediaFileSize(1024 * 1024)).toBe('1.0 MB')
     })
 
     it('hosts the embedded library so it fills the right side panel body', () => {
         expectSourceToContain(panelStyles, '.workspace-right-panel-media-host .media-library-panel')
-        expectSourceToContain(panelStyles, '@container media-library (max-width: 680px)')
-        expectSourceToContain(panelStyles, '.media-library-panel-feature-selected .media-library-inspector')
+        expectSourceToContain(panelStyles, '@container media-library (min-width: 680px)')
+        expectSourceToContain(panelStyles, '.media-library-panel-images .media-library-body')
+        expectSourceToContain(panelStyles, '.media-library-panel-images .media-library-inspector')
     })
 
-    it('drives the right side panel surface from a top-level Features / Media / AI Threads switch', () => {
+    it('drives the right side panel surface from a top-level Capabilities / Media / AI Threads switch', () => {
         expectSourceToContain(canvasSource, 'createSlidingSwitch<CanvasRightSidePanelMode>')
         expectSourceToContain(canvasSource, 'workspace-right-panel-mode-switch')
-        expectSourceToContain(canvasSource, "{ label: 'Features', value: 'features' }")
+        expectSourceToContain(canvasSource, "{ label: 'Capabilities', value: 'capabilities' }")
         expectSourceToContain(canvasSource, "{ label: 'Media', value: 'media' }")
         expectSourceToContain(canvasSource, "{ label: 'AI Threads', value: 'aiThreads' }")
         expectSourceToContain(canvasSource, 'function openRightSidePanelToMode')
+        expectSourceToContain(canvasSource, 'ensureCapabilityLibraryPanel()')
     })
 
     it('keeps the Media Library trigger in the right-side circular action panel', () => {
@@ -94,19 +101,17 @@ describe('Media Library panel contract', () => {
         expectSourceNotToContain(leftPanel, 'handleToggleMediaLibrary')
     })
 
-    it('restores saved images through materialization and the existing centered insertion path', () => {
-        expectSourceToContain(canvasSource, 'mediaLibraryService.materializeImage')
-        expectSourceToContain(canvasSource, 'insertNodeAtViewportCenterInternal(imageNode)')
-        expectSourceToContain(canvasSource, "type: 'image'")
-        expectSourceToContain(workspaceSvelteSource, '/api/files/${targetWorkspaceId}/import-url')
-        expectSourceToContain(workspaceSvelteSource, 'insertNodeAtViewportCenter(imageNode)')
+    it('inserts catalog Assets through the existing centered insertion path', () => {
+        expectSourceToContain(canvasSource, 'onInsertAsset: async (item: AssetMeta) => {')
+        expectSourceToContain(canvasSource, 'insertNodeAtViewportCenterInternal(insertion, {}, false)')
+        expectSourceToContain(canvasSource, 'await onAssetAttach({ assetId: item.assetId, nodeId, canvasState: nextState })')
+        expectSourceToContain(workspaceSvelteSource, 'await addAssetToCanvas(data, targetWorkspaceId, placeholderNodeId)')
     })
 
     it('imports remote images with the current workspace target and encoded auth token', () => {
         expectSourceToContain(workspaceSvelteSource, "const targetWorkspaceId = workspaceId")
-        expectSourceToContain(workspaceSvelteSource, "fetch(`${API_BASE_URL}/api/files/${targetWorkspaceId}/import-url`, {")
+        expectSourceToContain(workspaceSvelteSource, "fetch(`${API_BASE_URL}/api/assets/workspaces/${targetWorkspaceId}/import-url`, {")
         expectSourceToContain(workspaceSvelteSource, "'Authorization': `Bearer ${token}`")
-        expectSourceToContain(workspaceSvelteSource, 'const src = tokenizeUrl(result.url, token)')
         expectSourceToContain(workspaceSvelteSource, WORKSPACE_IMPORT_FINALIZE_SNIPPET)
         expectSourceToContain(
             workspaceSvelteSource,

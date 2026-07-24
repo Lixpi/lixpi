@@ -2,6 +2,11 @@ import { Plugin, PluginKey, type Transaction } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
 import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
 import { SLASH_COMMANDS, filterCommands, type SlashCommand } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/commandRegistry.ts'
+import {
+    getTransformedAncestorScale,
+    resolveFloatingMenuScreenPosition,
+    screenPointToLocal,
+} from '$src/components/proseMirror/plugins/floatingMenuPosition.ts'
 
 export const slashCommandsMenuPluginKey = new PluginKey('slashCommandsMenu')
 
@@ -66,53 +71,24 @@ class SlashCommandsMenuView {
         return true
     }
 
-    private findTransformedAncestor(): { element: HTMLElement; scale: number } | null {
-        let current: HTMLElement | null = this.menuParent
-        while (current) {
-            const style = getComputedStyle(current)
-            const transform = style.transform
-            if (transform && transform !== 'none') {
-                const match = transform.match(/matrix\(([^,]+),/)
-                if (match) {
-                    return { element: current, scale: parseFloat(match[1]) }
-                }
-            }
-            current = current.parentElement
-        }
-        return null
-    }
-
-    private screenToLocal(screenX: number, screenY: number): { x: number; y: number } {
-        if (!this.menuParent) {
-            return { x: screenX, y: screenY }
-        }
-
-        const parentRect = this.menuParent.getBoundingClientRect()
-        const transformInfo = this.findTransformedAncestor()
-        const scale = transformInfo?.scale ?? 1
-
-        const localX = (screenX - parentRect.left) / scale
-        const localY = (screenY - parentRect.top) / scale
-
-        return { x: localX, y: localY }
-    }
-
-    private getScale(): number {
-        const transformInfo = this.findTransformedAncestor()
-        return transformInfo?.scale ?? 1
-    }
-
     private updatePosition(triggerPos: number): void {
         const coords = this.view.coordsAtPos(triggerPos)
-        const scale = this.getScale()
-
-        // Convert screen coordinates to local
-        const local = this.screenToLocal(coords.left, coords.bottom + 4 * scale)
+        const parentRect = this.menuParent?.getBoundingClientRect() ?? { left: 0, top: 0 }
+        const menuRect = this.menu.getBoundingClientRect()
+        const scale = getTransformedAncestorScale(this.menuParent)
+        const screenPosition = resolveFloatingMenuScreenPosition(
+            coords,
+            menuRect,
+            { width: window.innerWidth, height: window.innerHeight },
+            4 * scale,
+        )
+        const localPosition = screenPointToLocal(parentRect, screenPosition, scale)
 
         applyStyle(this.menu, {
-            left: `${local.x}px`,
-            top: `${local.y}px`,
+            left: `${localPosition.left}px`,
+            top: `${localPosition.top}px`,
         })
+        this.menu.dataset.placement = screenPosition.placement
     }
 
     private buildMenuItems(commands: SlashCommand[], selectedIndex: number): void {

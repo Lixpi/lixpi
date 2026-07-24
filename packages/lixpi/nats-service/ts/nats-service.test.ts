@@ -156,6 +156,7 @@ describe('NatsService', () => {
             consumers: {
                 info: vi.fn(),
                 add: vi.fn(),
+                update: vi.fn(),
             },
         }
         jetstreamManagerMock.mockResolvedValue(jetstreamManagerMockInstance)
@@ -548,6 +549,32 @@ describe('NatsService', () => {
             expect(streamInfo.config.subjects).toEqual(['a', 'b', 'c'])
         })
 
+        it('does not mutate an existing stream when the requested config is already current', async () => {
+            const streamInfo = {
+                config: {
+                    name: 'stream-x',
+                    subjects: ['a', 'b'],
+                    retention: 'workqueue',
+                    storage: 'file',
+                    max_age: 100,
+                },
+            }
+            jetstreamManagerMockInstance.streams.info.mockResolvedValue(streamInfo)
+
+            const service = new (NatsService as any)({})
+            service['nc'] = connectionMock
+            const result = await service.ensureJetStreamStream({
+                name: 'stream-x',
+                subjects: ['a', 'b'],
+                retention: 'workqueue',
+                storage: 'file',
+                max_age: 100,
+            })
+
+            expect(result).toBe(streamInfo)
+            expect(jetstreamManagerMockInstance.streams.update).not.toHaveBeenCalled()
+        })
+
         it('supports consumeJetStreamMessages with ack and parsing', async () => {
             jetstreamClientMock.consumers.get.mockResolvedValue({
                 consume: vi.fn().mockResolvedValue(createAsyncIterable([
@@ -579,11 +606,17 @@ describe('NatsService', () => {
         it('creates or updates stream consumers and object info entries as expected', async () => {
             const infoObject = { name: 'consumer.1' }
             jetstreamManagerMockInstance.consumers.info.mockResolvedValue(infoObject)
+            jetstreamManagerMockInstance.consumers.update.mockResolvedValue(infoObject)
             const service = new (NatsService as any)({})
             service['nc'] = connectionMock
 
             const existing = await service.ensureJetStreamConsumer('stream', { durable_name: 'c1' })
             expect(existing).toEqual(infoObject)
+            expect(jetstreamManagerMockInstance.consumers.update).toHaveBeenCalledWith(
+                'stream',
+                'c1',
+                { durable_name: 'c1' },
+            )
             expect(jetstreamManagerMockInstance.consumers.add).not.toHaveBeenCalled()
 
             jetstreamManagerMockInstance.consumers.info.mockRejectedValueOnce({ code: 10059 })

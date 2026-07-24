@@ -7,7 +7,7 @@ description: The conceptual overview of Lixpi's NATS-first, message-driven servi
 
 Lixpi is a message-driven system built around [NATS](https://nats.io/). The browser uses NATS over WebSocket for normal app commands, Workspace and Asset CRUD, canvas-state saves, live AI pipeline events, and Asset-role ProseMirror step streams. The API service handles those subjects, persists bounded records in DynamoDB, and hosts the LangGraph workflow in-process. JetStream backs one content-addressed Blob Object Store bucket per organization plus short-lived durable replay logs for AI pipeline events and Asset document steps.
 
-There are still HTTP routes where HTTP is the right tool: Asset upload/import and authenticated rendition download, Range-capable audio/video playback, Feature sample previews, health checks, and Workspace export/import archives. Those routes move browser-friendly bytes or ZIP files; they are not the primary app command path.
+There are still HTTP routes where HTTP is the right tool: Asset upload/import and authenticated rendition download, Range-capable audio/video playback, authenticated Capability resource reads, health checks, and Workspace export/import archives. Those routes move browser-friendly bytes or ZIP files; they are not the primary app command path.
 
 This page maps how the running system fits together: which services exist, how they talk, the design decisions that shaped them, and how the system scales.
 
@@ -26,7 +26,7 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 | **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, organization Blob Object Store, and JetStream replay logs for pipeline/Asset-document events |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 | **nex** | Node.js / TypeScript | `services/nex/` | NATS NEX execution-engine node — runs background workloads on the bus: the hourly AI-models catalog sync and heavy file conversion/frame extraction. See [NEX Execution Engine](./deployment/NEX-EXECUTION-ENGINE.md) |
-| **DynamoDB** | AWS (local via Docker) | — | Asset/Blob metadata and references, Workspaces, Features, Extraction Runs, users, and AI model metadata |
+| **DynamoDB** | AWS (local via Docker) | — | Asset/Blob metadata and references, Workspaces, Capabilities, Capability Runs, users, and AI model metadata |
 
 {% callout type="note" %}
 **Historical note.** LLM orchestration used to live in a separate Python `services/llm-api/` Fargate task using the Python LangGraph package. It was absorbed into `services/api` once the TypeScript LangGraph package covered Lixpi's workflow needs. The in-process LangGraph workflow now runs alongside the gateway logic in the `api` container. For the internal-service NATS auth pattern that the former Python service used — and that a future split would reuse — see [Internal Service NATS Auth Pattern](../knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md).
@@ -61,7 +61,7 @@ graph TB
     end
 
     subgraph Storage["Storage & Providers"]
-        DDB[("DynamoDB<br/>Assets · Blobs · Workspaces · Features · Users")]
+        DDB[("DynamoDB<br/>Assets · Blobs · Workspaces · Capabilities · Users")]
         Provider(("AI Providers<br/>OpenAI · Anthropic · Google"))
     end
 
@@ -82,10 +82,10 @@ graph TB
 | Client | Web UI | Renders the canvas, hosts ProseMirror editors, extracts context from the node graph, and connects to NATS over WebSocket |
 | Broker | NATS Cluster | Carries app commands, auth callouts, CRUD requests, AI pipeline events, replay logs, Asset-role ProseMirror steps, and rendition requests; stores immutable Blob objects in organization Object Store buckets |
 | API | api service | Validates tokens, performs CRUD against DynamoDB, hosts byte-oriented HTTP routes, and bridges browser requests to the in-process workflow |
-| API | LangGraph workflow | Resolves features, streams the text model, routes image/video tool calls, and publishes pipeline events plus ProseMirror transcript steps to NATS |
+| API | LangGraph workflow | Resolves sealed Capabilities, streams the text model, routes image/video Tool calls, and publishes pipeline events plus ProseMirror transcript steps to NATS |
 | Workers | NEX workloads | Run long-lived background services on NATS, including file conversion/probing and AI-model catalog synchronization |
 | Identity | Auth0 / LocalAuth0 | Issues RS256 user JWTs and exposes a JWKS endpoint for verification |
-| Storage | DynamoDB | Persists Asset/Blob registries and references, Workspaces, Features, Extraction Runs, users, and AI model metadata |
+| Storage | DynamoDB | Persists Asset/Blob registries and references, Workspaces, Capabilities, Capability Runs, users, and AI model metadata |
 | Storage | AI Providers | External text, image, and video models invoked through vendor SDKs |
 
 ## NATS as the Backbone
@@ -104,7 +104,7 @@ HTTP remains in the system for payloads that are better served as HTTP responses
 |-------------------|----------------|
 | `/api/assets/*` | Browser Asset upload/import, authenticated rendition download, audio/video Range requests, and media playback need ordinary HTTP semantics. Blob bytes are stored in organization-scoped NATS Object Store buckets; rendition work is handed off over NATS. |
 | `/api/workspaces/:workspaceId/export` and `/api/workspaces/:workspaceId/import` | Workspace portability uses ZIP archives and multipart uploads. Normal workspace reads, writes, canvas-state updates, and deletion are still NATS subjects. |
-| `/api/features/*` | Authenticated Feature sample previews are browser media requests, while Feature metadata flows over NATS subjects. |
+| `/api/capabilities/*` | Authenticated Capability resource reads use HTTP byte responses; catalog commands and invalidations flow over NATS subjects. |
 | `/health-check` | ECS needs a simple health endpoint. |
 
 For the AI event path from provider output to rendered DOM, and the catalog of stream event types, see [Streaming & Events](./STREAMING-AND-EVENTS.md).
@@ -150,7 +150,7 @@ The canvas engine (`WorkspaceCanvas.ts`) is pure vanilla TypeScript with zero fr
 
 ### Provider-Agnostic AI
 
-Every AI request sends the full conversation history — no provider-specific session IDs are stored. A user can start a conversation with Claude, switch to GPT, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`. The shared LangGraph workflow resolves `/use` features and branch candidates, streams the text model, then conditionally routes `generate_image` and `generate_video` tool calls through transient media providers before calculating usage and cleaning up. See [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md).
+Every AI request sends the full conversation history; no provider-specific session IDs are stored. A user can start a conversation with Claude, switch to GPT, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`. The shared LangGraph workflow resolves sealed Tools and Skills plus branch candidates, executes explicitly required Tools, streams the text model with `search_capabilities` and `use_capability`, then conditionally routes `generate_image` and `generate_video` calls through transient media providers before calculating usage and cleaning up. See [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md).
 
 ### Client-Side Context Extraction
 
@@ -198,6 +198,8 @@ Shared packages in `packages/lixpi/` keep service contracts in sync so that the 
 | Package | Purpose |
 |---------|---------|
 | `@lixpi/constants` | Shared NATS subjects, shared types, AI model metadata with pricing |
+| `@lixpi/capability-system` | Cross-runtime Capability validation plus backend resolution, action registration, workflow execution, dispatch, module composition, and provider-neutral model Tool definitions |
+| `@lixpi/canvas-engine` | Shared canvas geometry, collision, lineage layout, connector, animation, and rendering modules split by runtime boundary |
 | `@lixpi/nats-service` | TypeScript NATS client, JetStream stream/direct-message helpers, JetStream Object Store helpers, NKey auth |
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by both the API and the NATS Auth Callout |
 | `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |

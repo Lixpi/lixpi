@@ -14,8 +14,11 @@
         "../nats-subjects.json",
         "../ai-interaction-constants.json"
     ],
-    "scripts": {},
+    "scripts": {
+        "test:run": "vitest run"
+    },
     "devDependencies": {
+        "vitest": "*"
     },
     "dependencies": {
         "type-fest": "*"

@@ -13,7 +13,7 @@ import type {
     ProviderName,
 } from '@lixpi/constants'
 
-import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from '../extraction/vlm-client.ts'
+import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from '../structured-vlm/structured-vlm-client.ts'
 import { resolveImageUrls } from '../utils/attachments.ts'
 import { restrictSnapshotToExplicitRefs } from './media-branch-snapshot.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
@@ -581,7 +581,8 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
     // The resolver runs for both image AND video generation: VEO image-to-video
     // and reference-conditioned video both need the same VLM grounding that
     // image generation uses.
-    if (!state.imageModelVersion && !state.videoModelVersion) return {}
+    const hasCapabilityMediaOutput = (state.capabilityOutputAssetIds?.length ?? 0) > 0
+    if (!hasCapabilityMediaOutput && !state.imageModelVersion && !state.videoModelVersion) return {}
     const snapshot = restrictSnapshotToExplicitRefs(state.mediaBranchCandidateSnapshot)
     if (!snapshot) {
         const message = state.videoModelVersion

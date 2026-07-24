@@ -35,7 +35,7 @@ vi.mock('../../services/asset-requester-context.ts', () => ({
 
 import { resolveWorkspaceContext } from './workspace-context-resolver.ts'
 import type { ProviderState } from './state.ts'
-import type { VlmCallArgs, VlmCallResult } from '../extraction/vlm-client.ts'
+import type { VlmCallArgs, VlmCallResult } from '../structured-vlm/structured-vlm-client.ts'
 
 const tinyPngBytes = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',

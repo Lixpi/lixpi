@@ -54,6 +54,7 @@
         "@lixpi/markdown-stream-parser": "latest"
     },
     "dependencies": {
+        "@lixpi/capability-system": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/canvas-engine": "workspace:*",
         "@lixpi/nats-service": "workspace:*",

@@ -31,7 +31,7 @@ graph TB
     end
 
     subgraph "AI Chat Panel"
-        Panel[Right-side panel<br/>standalone chats + Features surface]
+        Panel[Right-side panel<br/>standalone chats + Capability library]
         Chips[Explicit context chips<br/>plus workspace relevance]
         Composer[Composer<br/>documentType: 'aiPromptInput']
     end
@@ -69,7 +69,9 @@ graph TB
 
 **AI Chat Panel Composer** is a separate ProseMirror editor (`documentType: 'aiPromptInput'`) inside the right-side panel. It provides rich-text composition, model controls, image/video generation settings, and Cmd/Ctrl+Enter to submit. The composer is decoupled from durable sessions; the panel creates a standalone chat only on first submit.
 
-**Media Library** is the Asset catalog in the canvas-owned right-side panel. Reusing media attaches the same Asset under a fresh node ID; it never copies bytes. Scope/catalog/workspace references determine visibility and lifetime. Extracted Features remain separate records whose sample bytes use the shared Blob registry.
+**Media Library** is the Asset catalog in the canvas-owned right-side panel. Reusing media attaches the same Asset under a fresh node ID; it never copies bytes. Scope/catalog/workspace references determine visibility and lifetime.
+
+**Tools and Skills** are reusable Capabilities in the adjacent library surface. A Skill contributes sealed instructions and resources to model context. A Tool runs an allowlisted declarative workflow. Both kinds can be attached with a stable `@` chip, discovered by the reasoning model, or inspected in the paginated library. Tool progress is durable and renders through the same projection in chat and in the side panel. Style Extraction is a built-in Tool that saves reusable visual behavior as another Tool, without introducing a separate storage model.
 
 **AI Chat Panel and Sessions** are workspace-owned UI and conversation state, not a canvas-node requirement. The right-side AI Chat launcher opens an empty panel without creating a chat record. A standalone chat is created only after the user submits its first prompt. Panel visibility, open tabs, active tab, panel width, prompt drafts, explicit context chips, and whether the Sessions list is expanded are persisted in the workspace. Sessions is collapsed by default; when expanded it can reopen closed sessions until they are explicitly deleted.
 
@@ -408,4 +410,4 @@ This page is the product-level picture. For the technical deep dives, start at t
 - **Canvas** — [Workspace Model](canvas/WORKSPACE-MODEL.md), [Rendering Engine](canvas/RENDERING-ENGINE.md).
 - **AI chat** — [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md), [Context Relevance](ai-chat/CONTEXT-RELEVANCE.md).
 - **Media generation** — [Image Generation](media-generation/IMAGE-GENERATION.md), [Video Generation](media-generation/VIDEO-GENERATION.md), [Branch Lineage & Provenance](media-generation/BRANCH-LINEAGE.md).
-- **Library** — [Feature Extraction](library/FEATURE-EXTRACTION-OVERVIEW.md), [Media Library](library/MEDIA-LIBRARY.md), [Workspace Export & Import](library/WORKSPACE-EXPORT-IMPORT.md).
+- **Library** - [Tools and Skills](library/TOOLS-AND-SKILLS.md), [Character Creator](library/CHARACTER-CREATOR.md), [Style Extraction Tool](library/STYLE-EXTRACTION-TOOL.md), [Media Library](library/MEDIA-LIBRARY.md), [Workspace Export & Import](library/WORKSPACE-EXPORT-IMPORT.md).

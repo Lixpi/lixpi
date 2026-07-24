@@ -14,6 +14,7 @@
 
 - Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiLineageEvent`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
 - Handles image, video, context-resolution, branch-resolution, trace, and error side-effect events from `SegmentsReceiver`.
+- Routes `CAPABILITY_RUN_EVENT` pipeline payloads into the generic Tool progress renderer inside the active assistant response. Events received before the response NodeView mounts remain projected in memory and attach on the next editor view update.
 - Applies ProseMirror document changes only through authority step events. Raw media/control pipeline events are routed to canvas placement without locally mutating the same ProseMirror doc.
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
 - Delegates generated-image and generated-video canvas side effects through callback surfaces registered by `createAiChatThreadPlugin`.
@@ -114,6 +115,7 @@ Assistant response node created as the request is submitted, then filled by stre
 - Attrs: `id`, `style`, `isInitialRenderAnimation`, `isReceivingAnimation`, `aiProvider`
 - Request metadata attrs: `generationRequestId`
 - Empty receiving responses show the shell ring loading indicator until the first content arrives; the empty content container keeps only a small bottom pad so the waiting response stays compact without clipping the spinner.
+- The non-editable `.ai-response-capability-progress` mount hosts the shared sequence-deduplicating `CapabilityRunEvent` projection.
 - Response nodes in the chat thread do not render an assistant avatar.
 
 ### `aiReasoningSection`
@@ -185,7 +187,7 @@ The request payload includes:
 - `conversationAssetId`
 - `imageOptions` (carries `aiImageModels`)
 - `videoOptions` (carries `aiVideoModels`)
-- `referencedFeatureIds`
+- ordered, stable `capabilityReferences` extracted from `capability_reference` Tool/Skill atoms
 
 Each section's selection is a single JSON-like model-id array parsed with `parseAiModelSelectionAttr()`. Multi-model mode is controlled independently per section through `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels`; when a flag is off, that section's array is collapsed to its first model before submit.
 
@@ -193,7 +195,7 @@ Media configuration group attrs are JSON strings parsed through `parseMediaGener
 
 `ContentExtractor.getActiveThreadContent()` extracts only `aiUserMessage` and
 `aiResponseMessage` blocks. It preserves code blocks with triple backticks,
-converts hard breaks to newlines, and collects `feature_reference` ids. Generated
+converts hard breaks to newlines, and collects generic `capability_reference` IDs/kinds. Generated
 media is resolved from the API-authorized Workspace Asset context rather than
 from browser-built Object Store coordinates.
 

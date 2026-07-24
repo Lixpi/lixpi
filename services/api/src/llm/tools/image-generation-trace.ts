@@ -30,17 +30,45 @@ export const normalizeImageSize = (imageProvider: ProviderName | undefined, imag
 
 export const buildImageModelPrompt = (state: ProviderState): string => {
     const prompt = state.generatedImagePrompt ?? ''
-    const featureReferenceImages = state.featureReferenceImages ?? []
-    const hasFeatureReferences = featureReferenceImages.length > 0
-    const featureUsagePrompt = state.featureUsagePrompt?.trim()
+    const capabilityReferenceImages = state.capabilityReferenceImages ?? []
+    const hasCapabilityReferences = capabilityReferenceImages.length > 0
+    const capabilityUsagePrompt = state.capabilityUsagePrompt?.trim()
 
-    if (!hasFeatureReferences && !featureUsagePrompt) return prompt
+    if (!hasCapabilityReferences && !capabilityUsagePrompt) return prompt
+
+    if (state.capabilityUsageMode === 'character-creator') {
+        const sourceReferenceCount = state.referenceImages?.length ?? 0
+        const capabilityReferenceCount = capabilityReferenceImages.length
+        const hasSourceReferences = sourceReferenceCount > 0
+        const originalCharacterRequest = state.mediaBranchCandidateSnapshot?.promptText?.trim()
+            || state.mediaBranchLineagePlan?.promptText?.trim()
+            || prompt
+        return [
+            'MANDATORY CHARACTER CREATOR GENERATION:',
+            'Generate the requested character as one coherent multi-view character sheet using the fixed textual layout contract below.',
+            capabilityUsagePrompt ? `CHARACTER CREATOR BRIEF:\n${capabilityUsagePrompt}` : undefined,
+            'USER CHARACTER REQUEST:',
+            originalCharacterRequest,
+            hasSourceReferences
+                ? [
+                    'REFERENCE FIDELITY OVERRIDE — HIGHEST PRIORITY:',
+                    `Reference image${sourceReferenceCount === 1 ? '' : 's'} 1${sourceReferenceCount === 1 ? '' : `-${sourceReferenceCount}`} depict${sourceReferenceCount === 1 ? 's' : ''} the authoritative character to reproduce, not merely a style reference and not a request to invent a different person.`,
+                    'Preserve the same apparent identity, face, hair style and color, skin tone, body proportions, clothing construction and colors, accessories, materials, and illustration style across every view.',
+                    'Do not change the character identity, gender presentation, hair, outfit, or palette unless the original user request above explicitly asks for that exact change.',
+                    'Ignore any conflicting character changes invented by an intermediate reasoning prompt.',
+                    capabilityReferenceCount > 0
+                        ? `The final ${capabilityReferenceCount} attached image${capabilityReferenceCount === 1 ? '' : 's'} ${capabilityReferenceCount === 1 ? 'is' : 'are'} a CHARACTER SHEET LAYOUT EXAMPLE ONLY. Copy its sheet organization and view coverage, but never copy or blend its depicted character identity, face, hair, clothing, colors, or body.`
+                        : '',
+                ].join('\n')
+                : undefined,
+        ].filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n\n')
+    }
 
     return [
-        'MANDATORY /use FEATURE TRANSFER: the attached feature reference image(s) and feature brief are not optional inspiration. They define the medium the generated image must be made of.',
+        'MANDATORY VISUAL CAPABILITY TRANSFER: the attached capability reference image(s) and capability brief are not optional inspiration. They define the medium the generated image must be made of.',
         'The new subject MUST be CONSTRUCTED FROM this medium itself \u2014 brush strokes, washes, paper tooth, grain, deckle behavior, palette, edge softness, and mark-making must appear on the subject\'s own surface (its body, fur, skin, form), not only as a frame or background. A clean, smooth, digitally-rendered subject placed on top of a textured paper backdrop is a REJECTED result.',
         'Do not copy the reference subject, composition, pose, or layout. Carry only the medium and its mark-making behavior.',
-        featureUsagePrompt ? `FEATURE BRIEF:\n${featureUsagePrompt}` : undefined,
+        capabilityUsagePrompt ? `VISUAL CAPABILITY BRIEF:\n${capabilityUsagePrompt}` : undefined,
         'USER IMAGE REQUEST:',
         prompt,
     ].filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n\n')
@@ -104,16 +132,16 @@ const buildBranchReference = (args: {
     }
 }
 
-const buildFeatureReference = (imageUrl: string, index: number): ImageGenerationTraceReference => ({
-    id: `feature:${index + 1}`,
+const buildCapabilityReference = (imageUrl: string, index: number): ImageGenerationTraceReference => ({
+    id: `capability:${index + 1}`,
     imageUrl: getTraceSafeImageUrl(imageUrl),
-    source: 'feature-reference',
-    label: `Feature reference ${index + 1}`,
-    role: 'feature-reference',
+    source: 'capability-reference',
+    label: `Capability reference ${index + 1}`,
+    role: 'capability-reference',
 })
 
-const buildFeatureReferenceWithTraceUrl = (imageUrl: string, traceImageUrl: string | undefined, index: number): ImageGenerationTraceReference => ({
-    ...buildFeatureReference(imageUrl, index),
+const buildCapabilityReferenceWithTraceUrl = (imageUrl: string, traceImageUrl: string | undefined, index: number): ImageGenerationTraceReference => ({
+    ...buildCapabilityReference(imageUrl, index),
     imageUrl: traceImageUrl ?? getTraceSafeImageUrl(imageUrl),
 })
 
@@ -160,17 +188,17 @@ const buildBranchReferenceTrace = (state: ProviderState): ImageGenerationTraceRe
 const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
     const referenceImages = state.referenceImages ?? []
     const branchReferences = buildBranchReferenceTrace(state)
-    const featureReferenceImages = state.featureReferenceImages ?? []
-    const featureReferenceImagesCount = featureReferenceImages.length
-    const featureReferenceImageTraceUrls = state.featureReferenceImageTraceUrls ?? []
+    const capabilityReferenceImages = state.capabilityReferenceImages ?? []
+    const capabilityReferenceImagesCount = capabilityReferenceImages.length
+    const capabilityReferenceImageTraceUrls = state.capabilityReferenceImageTraceUrls ?? []
     const messageTraceImageUrls = extractTraceImageUrlsFromMessages(state.messages)
-    const featureStartIndex = branchReferences.length
-    const messageStartIndex = featureStartIndex + featureReferenceImagesCount
-    const featureReferences = featureReferenceImages.map((imageUrl, featureIndex) =>
-        buildFeatureReferenceWithTraceUrl(
+    const capabilityStartIndex = branchReferences.length
+    const messageStartIndex = capabilityStartIndex + capabilityReferenceImagesCount
+    const capabilityReferences = capabilityReferenceImages.map((imageUrl, capabilityIndex) =>
+        buildCapabilityReferenceWithTraceUrl(
             imageUrl,
-            featureReferenceImageTraceUrls[featureIndex] ?? messageTraceImageUrls[featureStartIndex + featureIndex],
-            featureIndex,
+            capabilityReferenceImageTraceUrls[capabilityIndex] ?? messageTraceImageUrls[capabilityStartIndex + capabilityIndex],
+            capabilityIndex,
         )
     )
     const messageReferences = referenceImages.slice(messageStartIndex).map((imageUrl, index) => {
@@ -180,7 +208,7 @@ const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReferenc
 
     return [
         ...branchReferences,
-        ...featureReferences,
+        ...capabilityReferences,
         ...messageReferences,
     ]
 }

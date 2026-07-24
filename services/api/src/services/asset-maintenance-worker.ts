@@ -6,6 +6,7 @@ import NATS_Service from '@lixpi/nats-service'
 import { getDynamoDbTableStageName, NATS_SUBJECTS, type MediaGenerationRunMeta } from '@lixpi/constants'
 
 import BlobModel from '../models/blob.ts'
+import { retireSupersededCapabilityBlobReferences } from '../models/capability.ts'
 import AssetModel, { getAssetRecord } from '../models/asset.ts'
 import AssetMaintenance from './asset-maintenance.ts'
 import AssetDocumentService from './asset-document-service.ts'
@@ -202,6 +203,7 @@ export const startAssetMaintenanceWorker = async (natsService: NATS_Service): Pr
     await ensureAssetMaintenanceQueue(natsService)
     let nextStagingCollectionAt = 0
     let nextUnregisteredObjectCollectionAt = 0
+    let nextCapabilityBlobRetirementAt = 0
     const poll = async (): Promise<void> => {
         try {
             await natsService.processJetStreamMessages<AssetMaintenanceMessage>(
@@ -223,6 +225,10 @@ export const startAssetMaintenanceWorker = async (natsService: NATS_Service): Pr
                     isRegistered: async (organizationId, blobHash) => Boolean(await BlobModel.get({ organizationId, blobHash })),
                 })
                 nextUnregisteredObjectCollectionAt = Date.now() + 24 * 60 * 60 * 1000
+            }
+            if (Date.now() >= nextCapabilityBlobRetirementAt) {
+                await retireSupersededCapabilityBlobReferences({ limit: 100 })
+                nextCapabilityBlobRetirementAt = Date.now() + 60 * 60 * 1000
             }
         } catch (error) {
             console.error('Asset maintenance worker poll failed:', error)

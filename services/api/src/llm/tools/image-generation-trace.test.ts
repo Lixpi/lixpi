@@ -40,12 +40,12 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
         generatedImagePrompt: 'Paint the same man in a restrained orange monochrome palette.',
         referenceImages: [
             'data:image/png;base64,branch-inline',
-            'data:image/png;base64,feature-inline',
+            'data:image/png;base64,capability-inline',
             'data:image/png;base64,message-inline',
         ],
-        featureReferenceImages: ['data:image/png;base64,feature-inline'],
-        featureReferenceImageTraceUrls: ['/api/features/feature-1/samples/0?workspaceId=workspace-1'],
-        featureUsagePrompt: 'Use rough watercolor paper and visible brush texture.',
+        capabilityReferenceImages: ['data:image/png;base64,capability-inline'],
+        capabilityReferenceImageTraceUrls: ['/api/capabilities/visual-style.1/resources/sample-0'],
+        capabilityUsagePrompt: 'Use rough watercolor paper and visible brush texture.',
         mediaBranchCandidateSnapshot: {
             resolverVersion: 'image-branch-vlm-v1',
             threadId: 'thread-1',
@@ -119,17 +119,38 @@ describe('normalizeImageSize', () => {
 })
 
 describe('buildImageModelPrompt', () => {
-    it('wraps the tool prompt when feature references are present', () => {
+    it('wraps the tool prompt when visual-capability references are present', () => {
         const prompt = buildImageModelPrompt(createState())
 
-        expect(prompt).toContain('MANDATORY /use FEATURE TRANSFER')
+        expect(prompt).toContain('MANDATORY VISUAL CAPABILITY TRANSFER')
         expect(prompt).toContain('Use rough watercolor paper and visible brush texture.')
         expect(prompt).toContain('Paint the same man in a restrained orange monochrome palette.')
+    })
+
+    it('treats Character Creator attachments as authoritative character sources without claiming a sample is attached', () => {
+        const prompt = buildImageModelPrompt(createState({
+            capabilityUsageMode: 'character-creator',
+            capabilityReferenceImages: ['data:image/jpeg;base64,layout-example'],
+            referenceImages: ['data:image/png;base64,user-character'],
+            generatedImagePrompt: 'Invent a blonde character in green clothing.',
+            mediaBranchCandidateSnapshot: {
+                ...createState().mediaBranchCandidateSnapshot!,
+                promptText: 'Create a character sheet from the selected character.',
+            },
+        }))
+
+        expect(prompt).toContain('Reference image 1 depicts the authoritative character to reproduce')
+        expect(prompt).toContain('Preserve the same apparent identity, face, hair style and color')
+        expect(prompt).toContain('CHARACTER SHEET LAYOUT EXAMPLE ONLY')
+        expect(prompt).toContain('Create a character sheet from the selected character.')
+        expect(prompt).not.toContain('Invent a blonde character in green clothing.')
+        expect(prompt).not.toContain('capability reference image')
+        expect(prompt).not.toContain('example character')
     })
 })
 
 describe('buildImageGenerationTrace', () => {
-    it('records prompt, branch references, feature references, message references, resolver audit, and exclusions without inline image bytes', () => {
+    it('records prompt, branch references, capability references, message references, resolver audit, and exclusions without inline image bytes', () => {
         const trace = buildImageGenerationTrace(createState())
 
         expect(trace).toBeDefined()
@@ -141,7 +162,7 @@ describe('buildImageGenerationTrace', () => {
             imageSize: '1:1',
             promptWasChanged: true,
         })
-        expect(trace?.finalPrompt).toContain('MANDATORY /use FEATURE TRANSFER')
+        expect(trace?.finalPrompt).toContain('MANDATORY VISUAL CAPABILITY TRANSFER')
         expect(trace?.referenceImages).toHaveLength(3)
         expect(trace?.referenceImages[0]).toMatchObject({
             id: 'branch:person-generated',
@@ -154,10 +175,10 @@ describe('buildImageGenerationTrace', () => {
             reason: 'selected generated portrait branch',
         })
         expect(trace?.referenceImages[1]).toMatchObject({
-            id: 'feature:1',
-            source: 'feature-reference',
-            imageUrl: '/api/features/feature-1/samples/0?workspaceId=workspace-1',
-            role: 'feature-reference',
+            id: 'capability:1',
+            source: 'capability-reference',
+            imageUrl: '/api/capabilities/visual-style.1/resources/sample-0',
+            role: 'capability-reference',
         })
         expect(trace?.referenceImages[2]).toMatchObject({
             id: 'message:3',

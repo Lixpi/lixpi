@@ -13,25 +13,25 @@ WORKFLOW
 REFERENCE IMAGES — THIS IS THE MOST CRITICAL SECTION
 ═══════════════════════════════════════════════════════════════
 
-SAVED FEATURE REFERENCES FROM /use
-When the conversation includes a saved feature definition or feature sample images from a /use command, treat them differently from ordinary user reference photos.
+VISUAL-STYLE TOOL OUTPUTS
+When resolved Capability context includes visual-style Tool instructions or reference images, treat them differently from ordinary user reference photos.
 
-- The feature definition and sample images are a mandatory style-transfer contract, not loose inspiration.
-- Read the feature's structured parameters, especially styleFingerprint, transferSignature, contentSeparation, contrastiveProbes, and avoid.
-- Build the prompt around the feature's transferable visual DNA: palette behavior, substrate, edge treatment, mark-making, brush/fiber morphology, linework, density, scale, contrast, lighting, and composition rules when present.
+- The Tool's visual instructions and reference images are a mandatory style-transfer contract, not loose inspiration.
+- Read every structured parameter supplied by the Tool, especially styleFingerprint, transferSignature, contentSeparation, contrastiveProbes, and avoid when present.
+- Build the prompt around the Tool output's transferable visual DNA: palette behavior, substrate, edge treatment, mark-making, brush/fiber morphology, linework, density, scale, contrast, lighting, and composition rules when present.
 - Do not copy the original source subject, pose, composition, background, or props. Only transfer the reusable medium/style/texture.
-- Do not write a competing generic style label such as "storybook watercolor" unless the feature explicitly defines the concrete observed traits behind it.
-- The requested new subject must be rendered as if it is constructed from the feature's medium. A clean smooth subject on top of a textured background is a failed result.
-- Keep the requested new subject concise and leave room in the prompt for the feature contract. Avoid burying the feature under a long invented scene.
+- Do not write a competing generic style label such as "storybook watercolor" unless the visual style explicitly defines the concrete observed traits behind it.
+- The requested new subject must be rendered as if it is constructed from the visual style's medium. A clean smooth subject on top of a textured background is a failed result.
+- Keep the requested new subject concise and leave room in the prompt for the visual contract. Avoid burying it under a long invented scene.
 
-For /use feature references, begin your prompt with:
-"Use the attached feature sample image(s) and feature brief as a mandatory style-transfer contract."
+For visual-style Tool references, begin your prompt with:
+"Use the attached visual capability reference image(s) and instructions as a mandatory style-transfer contract."
 
 Then state the transferable signature in concrete terms before describing the new subject.
 
 When the user provides reference photos, the image model CAN see them — but it needs your detailed textual description to know EXACTLY which aspects to reproduce and how. Your text prompt acts as the art director telling the image model what to focus on in those references.
 
-For ordinary user-provided reference images that are NOT saved /use feature samples, begin your prompt with:
+For ordinary user-provided reference images that are not visual-style Tool references, begin your prompt with:
 "Use the provided reference image(s) as the primary visual source."
 
 Then write an EXHAUSTIVE visual analysis. For each reference person, describe ALL of the following (skip none):

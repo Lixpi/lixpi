@@ -33,6 +33,7 @@ import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenu
 import { linkTooltipPlugin } from '$src/components/proseMirror/plugins/linkTooltipPlugin/linkTooltipPlugin.ts'
 import { slashCommandsMenuPlugin } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/index.ts'
 import { imageSelectionPlugin } from '$src/components/proseMirror/plugins/imageSelectionPlugin/index.ts'
+import { createCapabilityMentionPlugin } from '$src/components/proseMirror/plugins/capabilityMentionPlugin/index.ts'
 
 import {buildKeymap} from "$src/components/proseMirror/components/keyMap.js"
 import {buildInputRules} from "$src/components/proseMirror/components/inputRules.js"
@@ -55,6 +56,7 @@ type ProseMirrorEditorConfig = {
     onAiChatStop?: (value: any) => void
     onPromptSubmit?: (value: any) => void
     promptControlFactories?: any
+    capabilityCatalog?: any
     onReceivingStateChange?: (threadId: string, receiving: boolean) => void
     readOnly?: boolean
     proseMirrorAuthority?: any
@@ -79,6 +81,7 @@ export class ProseMirrorEditor {
         onAiChatStop,
         onPromptSubmit,
         promptControlFactories,
+        capabilityCatalog,
         onReceivingStateChange,
         readOnly = false,
         proseMirrorAuthority,
@@ -90,6 +93,7 @@ export class ProseMirrorEditor {
         this.onAiChatStop = onAiChatStop
         this.onPromptSubmit = onPromptSubmit
         this.promptControlFactories = promptControlFactories
+        this.capabilityCatalog = capabilityCatalog
         this.onReceivingStateChange = onReceivingStateChange
         this.proseMirrorAuthorityOptions = proseMirrorAuthority
         this.proseMirrorAuthority = null
@@ -131,14 +135,6 @@ export class ProseMirrorEditor {
     createInitialDocument(initialVal, content) {
         const hasValidContent = initialVal && typeof initialVal === 'object' && Object.keys(initialVal).length > 0
 
-        console.log('📝 [EDITOR] createInitialDocument called:', {
-            documentType: this.documentType,
-            threadId: this.threadId,
-            hasValidContent,
-            initialValKeys: initialVal ? Object.keys(initialVal) : null,
-            initialValType: initialVal?.type
-        })
-
         if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
             if (hasValidContent) {
                 try {
@@ -159,11 +155,8 @@ export class ProseMirrorEditor {
         ) {
             if (hasValidContent) {
                 try {
-                    console.log('📝 [EDITOR] Attempting to parse initialVal as AI chat thread:', JSON.stringify(initialVal, null, 2).substring(0, 500))
                     const doc = this.editorSchema.nodeFromJSON(initialVal)
-                    console.log('📝 [EDITOR] Successfully created doc from JSON, running check()...')
                     doc.check()
-                    console.log('📝 [EDITOR] doc.check() passed, returning doc')
                     return doc
                 } catch (e) {
                     console.warn('📝 [EDITOR] Invalid AI chat thread content, creating fresh document:', e)
@@ -171,9 +164,7 @@ export class ProseMirrorEditor {
                 }
             }
 
-            console.log('📝 [EDITOR] Creating fresh AI chat thread document with threadId:', this.threadId)
             const threadNode = this.editorSchema.nodes.aiChatThread.createAndFill({ threadId: this.threadId })
-            console.log('📝 [EDITOR] Created threadNode:', threadNode?.toString())
             return this.editorSchema.nodes.doc.create(null, [threadNode])
         }
 
@@ -232,6 +223,9 @@ export class ProseMirrorEditor {
 
         // Add aiPromptInput-specific plugin for the floating input editor
         if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
+            if (this.capabilityCatalog) {
+                basePlugins.push(createCapabilityMentionPlugin(this.capabilityCatalog))
+            }
             basePlugins.push(
                 createAiPromptInputPlugin({
                     onSubmit: (data) => this.onPromptSubmit?.(data),

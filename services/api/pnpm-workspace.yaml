@@ -1,5 +1,6 @@
 packages:
   - "packages/lixpi/auth-service"
+  - "packages/lixpi/capability-system"
   - "packages/lixpi/canvas-engine"
   - "packages/lixpi/constants/ts"
   - "packages/lixpi/debug-tools/ts"

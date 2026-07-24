@@ -1,6 +1,6 @@
 ---
 title: Lixpi Documentation
-description: Map of the Lixpi documentation — product, platform, canvas, AI chat, media generation, and the feature library.
+description: Map of the Lixpi documentation for the product, platform, canvas, AI chat, media generation, and Capability library.
 ---
 
 # Lixpi Documentation
@@ -46,7 +46,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [Authentication](platform/AUTHENTICATION.md) | Dual auth model, NATS auth callout, `@lixpi/auth-service`, LocalAuth0 |
 | [Nano Stores](platform/NANOSTORES.md) | Browser-side store conventions for `nanostores`, persistent stores, and framework-agnostic TypeScript consumers |
 | [Infrastructure Overview](platform/deployment/INFRASTRUCTURE-OVERVIEW.md) | Pulumi, AWS topology, network, ECS `api`, web-ui delivery, DynamoDB |
-| [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | NATS on Fargate, CloudMap discovery, the Route53 sidecar, Caddy-in-Lambda TLS, the auth-callout boundary |
+| [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | Three-node ECS EC2 NATS cluster, EBS JetStream storage, discovery, TLS, authentication, backup, and restore |
 | [NEX Execution Engine](platform/deployment/NEX-EXECUTION-ENGINE.md) | The background-workload node — AI-models sync, file conversion/frame extraction, the NEX account and credentials, local and AWS deployment |
 | [Scaling & Operations](platform/deployment/SCALING-AND-OPERATIONS.md) | Scaling profile, capacity ceilings, failure modes, environments, observability |
 
@@ -68,7 +68,7 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 
 | Page | What it covers |
 |------|----------------|
-| [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md) | The workspace-owned AI chat panel, standalone chats, tabs, Sessions, extraction sessions, persistence |
+| [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md) | The workspace-owned AI chat panel, standalone chats, Capability runs, tabs, Sessions, and persistence |
 | [Context Relevance](ai-chat/CONTEXT-RELEVANCE.md) | Descriptor-first workspace relevance, the resolver, explicit chips, automatic selections, data contracts, context-region removal |
 | [Media & Content Descriptors](ai-chat/MEDIA-DESCRIPTORS.md) | The `ContentDescriptor` shape, sourcing paths, self-heal, the canvas indicator |
 
@@ -85,11 +85,12 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 
 | Page | What it covers |
 |------|----------------|
-| [Feature Extraction — Overview](library/FEATURE-EXTRACTION-OVERVIEW.md) | The feature primitive, why it exists, design principles, the field model, examples |
-| [Extraction Pipeline](library/EXTRACTION-PIPELINE.md) | The six-stage LangGraph, research foundations, modular extractors, dominance-weighted synthesis, tracing |
-| [Anti-Leakage](library/ANTI-LEAKAGE.md) | Content-free pixel cropping, why it beats text-only, sample QA, the v2 escalation path |
-| [Using Features](library/USING-FEATURES.md) | Entry points (Ask AI / natural language / `/extract`), applying features via `/use`, scope & sharing |
-| [Feature Storage](library/FEATURE-STORAGE.md) | DDB tables, object-store layout, NATS subjects, the `resolveFeatures` pre-stage, the dedicated extraction graph, known limitations |
+| [Tools and Skills](library/TOOLS-AND-SKILLS.md) | Capability discovery, `@` attachment, sealed resolution, workflow execution, scopes, progress, and built-ins |
+| [Capability Storage and Operations](library/CAPABILITY-STORAGE.md) | Catalog tables, Blob-backed packages, run logs, limits, backup, restore, repair, and garbage collection |
+| [Character Creator](library/CHARACTER-CREATOR.md) | Capability composition, fixed sheet contract, shared model matrix, reference normalization, and branch lineage |
+| [Style Extraction Tool](library/STYLE-EXTRACTION-TOOL.md) | The global Tool DAG, specialist actions, visual-style output, and generic progress |
+| [Style Extraction Pipeline](library/STYLE-EXTRACTION-PIPELINE.md) | Router, parallel axis specialists, crops, synthesis, samples, validation, and visual-style persistence |
+| [Style Reference Isolation](library/ANTI-LEAKAGE.md) | Source evidence, neutral probes, provider-neutral references, traceability, and isolation limits |
 | [Media Library](library/MEDIA-LIBRARY.md) | The saved-media panel, saved images/videos, scopes, ownership, URL import, data model, service surface |
 | [Workspace Export & Import](library/WORKSPACE-EXPORT-IMPORT.md) | ZIP export and the validate-wipe-replace import |
 

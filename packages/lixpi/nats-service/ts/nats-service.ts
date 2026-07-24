@@ -724,10 +724,21 @@ export default class NatsService {
             const streamInfo = await jsm.streams.info(config.name)
             const existingSubjects = streamInfo.config.subjects ?? []
             const nextSubjects = Array.from(new Set([...existingSubjects, ...(config.subjects ?? [])]))
-            await jsm.streams.update(config.name, {
-                ...streamInfo.config,
+            const requestedConfig = {
                 ...config,
                 subjects: nextSubjects,
+            }
+            const requestedEntries = Object.entries(requestedConfig)
+            const isCurrent = requestedEntries.every(([key, value]) => {
+                if (key === 'subjects') {
+                    return JSON.stringify(streamInfo.config.subjects ?? []) === JSON.stringify(value)
+                }
+                return streamInfo.config[key] === value
+            })
+            if (isCurrent) return streamInfo
+            await jsm.streams.update(config.name, {
+                ...streamInfo.config,
+                ...requestedConfig,
             })
             return await jsm.streams.info(config.name)
         } catch (e: any) {

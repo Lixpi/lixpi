@@ -10,6 +10,7 @@ import {
     buildImageModelPrompt,
     normalizeImageSize,
 } from './image-generation-trace.ts'
+import { buildImageGenerationReferences } from '../image-generation-references.ts'
 
 // Short fingerprint for a reference image URL — enough to spot duplicates
 // or wrong-image issues in logs without dumping base64.
@@ -76,7 +77,12 @@ export class ImageRouter {
             ? `${workspaceId}:${aiChatThreadId}:${generationRun.mediaRunId}`
             : `${workspaceId}:${aiChatThreadId}:image`
         const capabilityReferenceImages = state.capabilityReferenceImages ?? []
-        const referenceImages = [...capabilityReferenceImages, ...(state.referenceImages ?? [])]
+        const sourceReferenceImages = state.referenceImages ?? []
+        const referenceImages = buildImageGenerationReferences({
+            sourceReferenceImages,
+            capabilityReferenceImages,
+            capabilityUsageMode: state.capabilityUsageMode,
+        })
         const capabilityUsagePrompt = state.capabilityUsagePrompt?.trim()
         const imageModelPrompt = buildImageModelPrompt(state)
 
@@ -96,7 +102,11 @@ export class ImageRouter {
             originalPromptLen: prompt.length,
             routedPromptLen: imageModelPrompt.length,
             referenceImagesCount: referenceImages.length,
-            referenceImageFingerprints: referenceImages.map(fingerprintRef),
+            referenceImages: referenceImages.map(reference => ({
+                role: reference.role,
+                fileName: reference.fileName,
+                fingerprint: fingerprintRef(reference.url),
+            })),
             capabilityReferenceImagesCount: capabilityReferenceImages.length,
             capabilityBriefLen: capabilityUsagePrompt?.length ?? 0,
             instanceKey,
@@ -112,22 +122,12 @@ export class ImageRouter {
             const stopForAbort = (): void => { void this.registry.stop(instanceKey) }
             options.signal?.addEventListener('abort', stopForAbort, { once: true })
 
-            // Build a fresh request: just the prompt + reference images, with
+            // Build a fresh request with the provider-neutral prompt and typed
+            // references. BaseProvider resolves every reference exactly once;
+            // each vendor adapter only serializes those resolved bytes.
             // enableImageGeneration=true so the provider takes the image path
             // and skips its own stream lifecycle.
-            const messages: ProviderState['messages'] = referenceImages.length > 0
-                ? [{
-                    role: 'user',
-                    content: [
-                        { type: 'input_text', text: imageModelPrompt },
-                        ...referenceImages.map(url => ({
-                            type: 'input_image',
-                            image_url: url,
-                            detail: 'high',
-                        })),
-                    ],
-                }]
-                : [{ role: 'user', content: imageModelPrompt }]
+            const messages: ProviderState['messages'] = [{ role: 'user', content: imageModelPrompt }]
 
             const requestData = {
                 messages,
@@ -137,6 +137,7 @@ export class ImageRouter {
                 aiChatThreadId,
                 enableImageGeneration: true,
                 imageSize,
+                imageGenerationReferences: referenceImages,
                 generationRun,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
                 proseMirrorContentHandler: options.onProseMirrorContent,

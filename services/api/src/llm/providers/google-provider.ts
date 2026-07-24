@@ -26,6 +26,11 @@ import {
     getVideoToolForProvider,
 } from '../tools/video-generation.ts'
 import { VEO_POLL_INTERVAL_MS } from '../config.ts'
+import {
+    CapabilityModelToolExecutor,
+    shouldExposeCapabilityModelTools,
+} from '../../capability-system/capability-model-tool-executor.ts'
+import { asGoogleTool } from '@lixpi/capability-system/backend'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -95,6 +100,9 @@ export class GoogleProvider extends BaseProvider {
         const hasVideoModel = !!state.videoModelVersion
         const injectVideoTool = hasVideoModel && !enableImageGeneration && !enableVideoGeneration
         let mediaFanoutAllowedFunctionNames: string[] = []
+        const capabilityToolExecutor = shouldExposeCapabilityModelTools(state)
+            ? new CapabilityModelToolExecutor(state, this.capabilityDispatcher)
+            : undefined
 
         // Resolve message content (so reference-image extraction sees data URLs)
         // and convert each message to a Google `Content` object.
@@ -110,6 +118,28 @@ export class GoogleProvider extends BaseProvider {
             contents.push({ role, parts: this.buildParts(content) })
         }
 
+        const resolvedImageGenerationReferences = state.resolvedImageGenerationReferences ?? []
+        if (effectiveImageGen && resolvedImageGenerationReferences.length > 0) {
+            let targetUserContent: Record<string, any> | undefined
+            for (let index = contents.length - 1; index >= 0; index--) {
+                if (contents[index]?.role === 'user') {
+                    targetUserContent = contents[index]
+                    break
+                }
+            }
+            if (!targetUserContent) throw new Error('No user prompt found for image generation')
+            const parts = Array.isArray(targetUserContent.parts) ? targetUserContent.parts : []
+            targetUserContent.parts = [
+                ...parts,
+                ...resolvedImageGenerationReferences.map(reference => ({
+                    inlineData: {
+                        mimeType: reference.mediaType,
+                        data: reference.bytes.toString('base64'),
+                    },
+                })),
+            ]
+        }
+
         const config: Record<string, any> = { temperature }
         if (maxTokens) config.maxOutputTokens = maxTokens
 
@@ -120,18 +150,22 @@ export class GoogleProvider extends BaseProvider {
             }
         }
 
-        if (injectTool || injectVideoTool) {
+        if (injectTool || injectVideoTool || capabilityToolExecutor) {
             const functionDeclarations: Array<Record<string, any>> = []
             if (injectTool) {
                 const toolDef = getToolForProvider('Google', state.imageModelMetaInfo, state.imageProviderName)
                 functionDeclarations.push({ name: TOOL_NAME, description: toolDef.description, parameters: toolDef.parameters })
+                mediaFanoutAllowedFunctionNames.push(TOOL_NAME)
             }
             if (injectVideoTool) {
                 const videoToolDef = getVideoToolForProvider('Google')
                 functionDeclarations.push({ name: VIDEO_TOOL_NAME, description: videoToolDef.description, parameters: videoToolDef.parameters })
+                mediaFanoutAllowedFunctionNames.push(VIDEO_TOOL_NAME)
+            }
+            if (capabilityToolExecutor) {
+                functionDeclarations.push(...capabilityToolExecutor.definitions().map(asGoogleTool))
             }
             config.tools = [{ functionDeclarations }]
-            mediaFanoutAllowedFunctionNames = functionDeclarations.map((declaration) => declaration.name)
         }
 
         let systemInstruction: string | undefined
@@ -185,6 +219,13 @@ export class GoogleProvider extends BaseProvider {
                     contentsCount: contents.length,
                     inputImageCount,
                     inputTextLen,
+                    referenceMetadata: resolvedImageGenerationReferences.map(reference => ({
+                        role: reference.role,
+                        fileName: reference.fileName,
+                        byteLength: reference.byteLength,
+                        mediaType: reference.mediaType,
+                        sha256: reference.sha256,
+                    })),
                 }, null, 0)}`)
                 await this.imagePub.partial('', 0)
                 const response = await this.client.models.generateContent({
@@ -235,11 +276,16 @@ export class GoogleProvider extends BaseProvider {
                     })
                     update.generatedImages = [final]
                 }
-            } else if (injectTool || injectVideoTool) {
+            } else if (injectTool || injectVideoTool || capabilityToolExecutor) {
                 const runToolStream = async (
                     streamConfig: Record<string, any>,
                     publishText: boolean,
-                ): Promise<{ detectedImage?: string; detectedVideo?: string; usageMetadata?: any }> => {
+                ): Promise<{
+                    detectedImage?: string
+                    detectedVideo?: string
+                    capabilityCalls: Array<{ callId: string; name: string; arguments: Record<string, any>; part: any }>
+                    usageMetadata?: any
+                }> => {
                     const stream = await this.client.models.generateContentStream({
                         model: modelVersion,
                         contents: contents as any,
@@ -247,6 +293,7 @@ export class GoogleProvider extends BaseProvider {
                     })
                     let detectedImage: string | undefined
                     let detectedVideo: string | undefined
+                    const capabilityCalls: Array<{ callId: string; name: string; arguments: Record<string, any>; part: any }> = []
                     let streamUsageMetadata: any = null
 
                     for await (const chunk of stream) {
@@ -260,6 +307,13 @@ export class GoogleProvider extends BaseProvider {
                                     detectedImage = (fnCall.args ?? {}).prompt ?? ''
                                 } else if (fnCall && fnCall.name === VIDEO_TOOL_NAME) {
                                     detectedVideo = (fnCall.args ?? {}).prompt ?? ''
+                                } else if (fnCall && capabilityToolExecutor?.recognizes(fnCall.name)) {
+                                    capabilityCalls.push({
+                                        callId: fnCall.id ?? `${fnCall.name}-${capabilityCalls.length}`,
+                                        name: fnCall.name,
+                                        arguments: fnCall.args ?? {},
+                                        part,
+                                    })
                                 } else if (publishText && (part as any).text) {
                                     this.publisher.chunk((part as any).text)
                                 }
@@ -267,13 +321,39 @@ export class GoogleProvider extends BaseProvider {
                         }
                     }
 
-                    return { detectedImage, detectedVideo, usageMetadata: streamUsageMetadata }
+                    return { detectedImage, detectedVideo, capabilityCalls, usageMetadata: streamUsageMetadata }
                 }
 
                 let toolStreamResult = await runToolStream(config, true)
-                usageMetadata = toolStreamResult.usageMetadata ?? usageMetadata
+                usageMetadata = mergeGoogleUsageMetadata(usageMetadata, toolStreamResult.usageMetadata)
+                for (let round = 0; toolStreamResult.capabilityCalls.length > 0; round++) {
+                    if (round >= 4) throw new Error('Capability model-tool round limit exceeded')
+                    const executions = []
+                    for (const call of toolStreamResult.capabilityCalls) {
+                        executions.push(await capabilityToolExecutor!.execute(call, this.signal))
+                    }
+                    contents.push({
+                        role: 'model',
+                        parts: toolStreamResult.capabilityCalls.map(call => call.part),
+                    })
+                    contents.push({
+                        role: 'user',
+                        parts: executions.map(execution => ({
+                            functionResponse: {
+                                name: execution.call.name,
+                                response: execution.result,
+                            },
+                        })),
+                    })
+                    toolStreamResult = await runToolStream(config, true)
+                    usageMetadata = mergeGoogleUsageMetadata(usageMetadata, toolStreamResult.usageMetadata)
+                }
                 let detectedImage = toolStreamResult.detectedImage
                 let detectedVideo = toolStreamResult.detectedVideo
+                if (state.capabilityUsageMode === 'character-creator') {
+                    detectedVideo = undefined
+                    mediaFanoutAllowedFunctionNames = mediaFanoutAllowedFunctionNames.filter(name => name === TOOL_NAME)
+                }
 
                 if (state.mediaFanoutPlan
                     && !this.shouldStop
@@ -290,7 +370,7 @@ export class GoogleProvider extends BaseProvider {
                             },
                         },
                     }, false)
-                    usageMetadata = toolStreamResult.usageMetadata ?? usageMetadata
+                    usageMetadata = mergeGoogleUsageMetadata(usageMetadata, toolStreamResult.usageMetadata)
                     detectedImage = toolStreamResult.detectedImage
                     detectedVideo = toolStreamResult.detectedVideo
                 }
@@ -628,7 +708,28 @@ export class GoogleProvider extends BaseProvider {
             } as any)
             return await readFile(outPath)
         } finally {
-            if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {})
+            if (dir) {
+                try {
+                    await rm(dir, { recursive: true, force: true })
+                } catch {
+                    // Best-effort cleanup of an isolated temporary download directory.
+                }
+            }
         }
     }
+}
+
+function mergeGoogleUsageMetadata(first: any, second: any): any {
+    if (!first) return second
+    if (!second) return first
+    const numericKeys = [
+        'promptTokenCount',
+        'thoughtsTokenCount',
+        'candidatesTokenCount',
+        'cachedContentTokenCount',
+        'totalTokenCount',
+    ]
+    const merged = { ...first, ...second }
+    for (const key of numericKeys) merged[key] = (first[key] ?? 0) + (second[key] ?? 0)
+    return merged
 }

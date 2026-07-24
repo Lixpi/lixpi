@@ -39,9 +39,9 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
         videoDurationSeconds: 8,
         generatedVideoPrompt: 'Animate the portrait with a slow push-in as watercolor paper texture shimmers softly.',
         videoFirstFrameImage: 'data:image/png;base64,branch-inline',
-        featureReferenceImages: ['data:image/png;base64,feature-inline'],
-        featureReferenceImageTraceUrls: ['/api/features/feature-1/samples/0?workspaceId=workspace-1'],
-        featureUsagePrompt: 'Use rough watercolor paper and visible brush texture.',
+        capabilityReferenceImages: ['data:image/png;base64,capability-inline'],
+        capabilityReferenceImageTraceUrls: ['/api/capabilities/visual-style.1/resources/sample-0'],
+        capabilityUsagePrompt: 'Use rough watercolor paper and visible brush texture.',
         mediaBranchCandidateSnapshot: {
             resolverVersion: 'image-branch-vlm-v1',
             threadId: 'thread-1',
@@ -103,29 +103,29 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
 }
 
 describe('buildVideoModelPrompt', () => {
-    it('adds VEO quality, image-to-video, feature-transfer, and negative-prompt guidance', () => {
+    it('adds VEO quality, image-to-video, visual-capability transfer, and negative-prompt guidance', () => {
         const prompt = buildVideoModelPrompt(createState())
 
         expect(prompt).toContain('VEO QUALITY DIRECTION')
         expect(prompt).toContain('IMAGE-TO-VIDEO DIRECTION')
-        expect(prompt).toContain('MANDATORY /use FEATURE TRANSFER FOR VIDEO')
-        expect(prompt).toContain('FEATURE BRIEF:')
+        expect(prompt).toContain('MANDATORY VISUAL CAPABILITY TRANSFER FOR VIDEO')
+        expect(prompt).toContain('VISUAL CAPABILITY BRIEF:')
         expect(prompt).toContain('Use rough watercolor paper and visible brush texture.')
         expect(prompt).toContain('USER VIDEO REQUEST:')
         expect(prompt).toContain('Animate the portrait with a slow push-in')
         expect(prompt).toContain(`Negative prompt: ${VEO_NEGATIVE_PROMPT}`)
     })
 
-    it('adds text-to-video guardrails even without feature references', () => {
+    it('adds text-to-video guardrails even without visual-capability references', () => {
         const prompt = buildVideoModelPrompt(createState({
             videoFirstFrameImage: undefined,
-            featureReferenceImages: [],
-            featureUsagePrompt: undefined,
+            capabilityReferenceImages: [],
+            capabilityUsagePrompt: undefined,
         }))
 
         expect(prompt).toContain('TEXT-TO-VIDEO DIRECTION')
         expect(prompt).toContain('Negative prompt:')
-        expect(prompt).not.toContain('MANDATORY /use FEATURE TRANSFER FOR VIDEO')
+        expect(prompt).not.toContain('MANDATORY VISUAL CAPABILITY TRANSFER FOR VIDEO')
     })
 
     // Locks in VEO's reference-mode wording after it moved into the profile, so
@@ -134,8 +134,8 @@ describe('buildVideoModelPrompt', () => {
         const prompt = buildVideoModelPrompt(createState({
             videoFirstFrameImage: undefined,
             videoReferenceImages: ['data:image/png;base64,ref-a', 'data:image/png;base64,ref-b'],
-            featureReferenceImages: [],
-            featureUsagePrompt: undefined,
+            capabilityReferenceImages: [],
+            capabilityUsagePrompt: undefined,
         }))
 
         expect(prompt).toContain('VEO QUALITY DIRECTION')
@@ -162,7 +162,7 @@ describe('buildVideoModelPrompt — Seedance profile', () => {
         expect(prompt).not.toContain(VEO_NEGATIVE_PROMPT)
         // Shared core is preserved across providers.
         expect(prompt).toContain('IMAGE-TO-VIDEO DIRECTION')
-        expect(prompt).toContain('MANDATORY /use FEATURE TRANSFER FOR VIDEO')
+        expect(prompt).toContain('MANDATORY VISUAL CAPABILITY TRANSFER FOR VIDEO')
         expect(prompt).toContain('USER VIDEO REQUEST:')
         expect(prompt).toContain('Animate the portrait with a slow push-in')
     })
@@ -172,8 +172,8 @@ describe('buildVideoModelPrompt — Seedance profile', () => {
             ...seedanceOverrides,
             videoFirstFrameImage: undefined,
             videoReferenceImages: ['data:image/png;base64,ref-a', 'data:image/png;base64,ref-b'],
-            featureReferenceImages: [],
-            featureUsagePrompt: undefined,
+            capabilityReferenceImages: [],
+            capabilityUsagePrompt: undefined,
         }))
 
         expect(prompt).toContain('REFERENCE-IMAGE DIRECTION')
@@ -183,7 +183,7 @@ describe('buildVideoModelPrompt — Seedance profile', () => {
 })
 
 describe('buildVideoGenerationTrace', () => {
-    it('records the routed prompt, branch references, feature references, resolver audit, and exclusions without inline image bytes', () => {
+    it('records the routed prompt, branch references, capability references, resolver audit, and exclusions without inline image bytes', () => {
         const trace = buildVideoGenerationTrace(createState())
 
         expect(trace).toBeDefined()
@@ -211,10 +211,10 @@ describe('buildVideoGenerationTrace', () => {
             reason: 'selected generated portrait branch',
         })
         expect(trace?.referenceImages[1]).toMatchObject({
-            id: 'feature:1',
-            source: 'feature-reference',
-            imageUrl: '/api/features/feature-1/samples/0?workspaceId=workspace-1',
-            role: 'feature-reference',
+            id: 'capability:1',
+            source: 'capability-reference',
+            imageUrl: '/api/capabilities/visual-style.1/resources/sample-0',
+            role: 'capability-reference',
         })
         expect(trace?.referenceImages.every((reference: { imageUrl: string }) => !reference.imageUrl.startsWith('data:'))).toBe(true)
         expect(trace?.excludedReferences).toEqual([

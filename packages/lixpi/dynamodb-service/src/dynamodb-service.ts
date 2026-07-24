@@ -25,6 +25,37 @@ const toCapacityUnits = (cc) => {
     return cc?.CapacityUnits ?? 0
 }
 
+export type SortKeyCondition =
+    | { key: string; operator: 'begins_with'; value: string }
+    | { key: string; operator: '=' | '<' | '<=' | '>' | '>='; value: unknown }
+    | { key: string; operator: 'between'; lower: unknown; upper: unknown }
+
+const prepareSortKeyCondition = (condition: SortKeyCondition) => {
+    const keyName = '#sortKey'
+    if (condition.operator === 'begins_with') {
+        return {
+            expression: `begins_with(${keyName}, :sortKeyValue)`,
+            expressionAttributeNames: { [keyName]: condition.key },
+            expressionAttributeValues: { ':sortKeyValue': condition.value },
+        }
+    }
+    if (condition.operator === 'between') {
+        return {
+            expression: `${keyName} BETWEEN :sortKeyLower AND :sortKeyUpper`,
+            expressionAttributeNames: { [keyName]: condition.key },
+            expressionAttributeValues: {
+                ':sortKeyLower': condition.lower,
+                ':sortKeyUpper': condition.upper,
+            },
+        }
+    }
+    return {
+        expression: `${keyName} ${condition.operator} :sortKeyValue`,
+        expressionAttributeNames: { [keyName]: condition.key },
+        expressionAttributeValues: { ':sortKeyValue': condition.value },
+    }
+}
+
 // One operation inside a transaction — same shapes the models pass to
 // putItem / updateItem / deleteItems, discriminated by `type`. Soft deletes
 // are expressed as a 'update' setting the TTL attribute.
@@ -169,14 +200,36 @@ export default class DynamoDBService {
         scanIndexForward = true,
         consistentRead = false,
         exclusiveStartKey = undefined,
-        origin = 'unknown'
+        origin = 'unknown',
+        sortKeyCondition = undefined,
+    }: {
+        tableName?: string
+        indexName?: string
+        keyConditions?: Record<string, unknown>
+        limit?: number
+        fetchAllItems?: boolean
+        scanIndexForward?: boolean
+        consistentRead?: boolean
+        exclusiveStartKey?: Record<string, unknown>
+        origin?: string
+        sortKeyCondition?: SortKeyCondition
     }) {
         if (Object.keys(keyConditions).length === 0) {
             console.error("Key conditions must be provided.")
             return
         }
 
-        const { expression: keyConditionExpression, expressionAttributeValues, expressionAttributeNames } = this.prepareAttributes(keyConditions, ' AND ')
+        const preparedKeys = this.prepareAttributes(keyConditions, ' AND ')
+        const preparedSortKey = sortKeyCondition ? prepareSortKeyCondition(sortKeyCondition) : undefined
+        const keyConditionExpression = [preparedKeys.expression, preparedSortKey?.expression].filter(Boolean).join(' AND ')
+        const expressionAttributeValues = {
+            ...preparedKeys.expressionAttributeValues,
+            ...preparedSortKey?.expressionAttributeValues,
+        }
+        const expressionAttributeNames = {
+            ...preparedKeys.expressionAttributeNames,
+            ...preparedSortKey?.expressionAttributeNames,
+        }
 
         const params: any = {
             TableName: tableName,
@@ -229,6 +282,7 @@ export default class DynamoDBService {
         limit = 1000,
         fetchAllItems = false,
         consistentRead = false,
+        exclusiveStartKey,
         origin = 'unknown'
     }) {
         if (!tableName) {
@@ -242,10 +296,11 @@ export default class DynamoDBService {
             ConsistentRead: consistentRead,
             ReturnConsumedCapacity: 'TOTAL'
         }
+        if (exclusiveStartKey) params.ExclusiveStartKey = exclusiveStartKey
 
         let items: any[] = []
         const consumedCapacities: any[] = []
-        let lastEvaluatedKey: any = null
+        let lastEvaluatedKey: any = exclusiveStartKey ?? null
         let scanIterations = 0;
 
         do {
@@ -273,7 +328,12 @@ export default class DynamoDBService {
             origin
         });
 
-        return { items, consumedCapacities, scanIterations };
+        return {
+            items,
+            consumedCapacities,
+            scanIterations,
+            ...(lastEvaluatedKey ? { lastEvaluatedKey } : {})
+        };
     }
 
     async batchReadItems({
@@ -471,10 +531,16 @@ export default class DynamoDBService {
 
         // Use the simple update method if 'updates' is provided
         if (Object.keys(updates).length > 0) {
-            const { expression, expressionAttributeValues, expressionAttributeNames } = this.prepareAttributes(updates)
-            params.UpdateExpression = `SET ${expression}`
-            params.ExpressionAttributeValues = expressionAttributeValues
-            params.ExpressionAttributeNames = expressionAttributeNames
+            const prepared = this.prepareAttributes(updates)
+            params.UpdateExpression = `SET ${prepared.expression}`
+            params.ExpressionAttributeValues = {
+                ...prepared.expressionAttributeValues,
+                ...expressionAttributeValues,
+            }
+            params.ExpressionAttributeNames = {
+                ...prepared.expressionAttributeNames,
+                ...expressionAttributeNames,
+            }
         } else if (updateExpression) {
             // TODO: make this work via this.prepareAttributes() method, I couldn't figure out why it wasn't working !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             params.UpdateExpression = updateExpression

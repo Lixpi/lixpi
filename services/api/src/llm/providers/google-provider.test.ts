@@ -324,6 +324,8 @@ describe('GoogleProvider internals', () => {
 
         const provider = new GoogleProvider('ws-1:thread-1', createProviderDeps())
         const { chunk, imagePublisher } = configureProviderInternals(provider)
+        const sourceBytes = Buffer.from('character-source')
+        const layoutBytes = Buffer.from('character-layout-example')
 
         const update = await (provider as any).streamImpl({
             ...baseGoogleState(),
@@ -331,8 +333,40 @@ describe('GoogleProvider internals', () => {
             enableImageGeneration: true,
             imageSize: '16:9',
             messages: [{ role: 'user', content: 'show me a dog' }],
+            resolvedImageGenerationReferences: [
+                {
+                    url: 'source-url',
+                    role: 'character-source',
+                    fileName: 'character-source-1.jpg',
+                    bytes: sourceBytes,
+                    dataUrl: `data:image/jpeg;base64,${sourceBytes.toString('base64')}`,
+                    mediaType: 'image/jpeg',
+                    byteLength: sourceBytes.byteLength,
+                    sha256: 'source-sha',
+                },
+                {
+                    url: 'layout-url',
+                    role: 'character-layout-example',
+                    fileName: 'character-layout-example-1.png',
+                    bytes: layoutBytes,
+                    dataUrl: `data:image/png;base64,${layoutBytes.toString('base64')}`,
+                    mediaType: 'image/png',
+                    byteLength: layoutBytes.byteLength,
+                    sha256: 'layout-sha',
+                },
+            ],
         })
 
+        expect(generateContent).toHaveBeenCalledWith(expect.objectContaining({
+            contents: [{
+                role: 'user',
+                parts: [
+                    { text: 'show me a dog' },
+                    { inlineData: { mimeType: 'image/jpeg', data: sourceBytes.toString('base64') } },
+                    { inlineData: { mimeType: 'image/png', data: layoutBytes.toString('base64') } },
+                ],
+            }],
+        }))
         expect(imagePublisher.partial).toHaveBeenCalledWith('iVBORw0KGgo=', 1)
         expect(imagePublisher.complete).toHaveBeenCalledTimes(1)
         const completeArgs = imagePublisher.complete.mock.calls[0]?.[0]
@@ -460,6 +494,79 @@ describe('GoogleProvider internals', () => {
                     }),
                 ]),
             }),
+        }))
+    })
+
+    it('registers standing Capability tools and continues after search_capabilities results', async () => {
+        googleMocks.generateContentStream.mockResolvedValueOnce(makeAsyncStream([{
+            usageMetadata: { promptTokenCount: 2, candidatesTokenCount: 1, totalTokenCount: 3 },
+            candidates: [{
+                content: {
+                    parts: [{
+                        functionCall: {
+                            name: 'search_capabilities',
+                            args: { query: 'character' },
+                        },
+                    }],
+                },
+            }],
+        }]))
+        googleMocks.generateContentStream.mockResolvedValueOnce(makeAsyncStream([{
+            usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 4, totalTokenCount: 7 },
+            candidates: [{ content: { parts: [{ text: 'I found the Tool.' }] } }],
+        }]))
+        const search = vi.fn(async () => ({
+            items: [{
+                capabilityId: 'character-creator',
+                kind: 'tool',
+                name: 'Character Creator',
+                summary: 'Creates sheets',
+                tags: ['character'],
+            }],
+        }))
+        const deps = {
+            ...createProviderDeps(),
+            capabilityDispatcher: { search, use: vi.fn() },
+        } as any
+        const provider = new GoogleProvider('ws-1:thread-1', deps)
+        const { chunk } = configureProviderInternals(provider)
+
+        const update = await (provider as any).streamImpl({
+            ...baseGoogleState(),
+            eventMeta: { userId: 'user-1', organizationId: 'organization-1' },
+            capabilityInvocationDepth: 0,
+        } as any)
+
+        expect(search).toHaveBeenCalledWith(
+            expect.objectContaining({ query: 'character' }),
+            expect.objectContaining({ userId: 'user-1', workspaceId: 'ws-1' }),
+        )
+        expect(googleMocks.generateContentStream).toHaveBeenCalledTimes(2)
+        expect(googleMocks.generateContentStream.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+            config: expect.objectContaining({
+                tools: [{
+                    functionDeclarations: expect.arrayContaining([
+                        expect.objectContaining({ name: 'search_capabilities' }),
+                        expect.objectContaining({ name: 'use_capability' }),
+                    ]),
+                }],
+            }),
+        }))
+        expect(googleMocks.generateContentStream.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+            contents: expect.arrayContaining([
+                expect.objectContaining({
+                    role: 'user',
+                    parts: [expect.objectContaining({
+                        functionResponse: expect.objectContaining({ name: 'search_capabilities' }),
+                    })],
+                }),
+            ]),
+        }))
+        expect(chunk).toHaveBeenCalledWith('I found the Tool.')
+        expect(update.usage).toEqual(expect.objectContaining({
+            promptTokens: 5,
+            completionTokens: 5,
+            totalTokens: 10,
         }))
     })
 

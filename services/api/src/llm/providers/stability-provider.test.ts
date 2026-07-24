@@ -114,6 +114,8 @@ const processWithMessages = async (overrides: Record<string, any> = {}): Promise
     const result = await provider.process({
         workspaceId: 'ws-1',
         aiChatThreadId: 'thread-1',
+        organizationId: 'org-1',
+        eventMeta: { userId: 'user-1', organizationId: 'org-1' },
         enableImageGeneration: true,
         preflightResolved: true,
         imageSize: '1:1',
@@ -144,13 +146,12 @@ const processWithMessages = async (overrides: Record<string, any> = {}): Promise
 
 const processWithReferences = async (references: string[]): Promise<CapturedRequest> => {
     return processWithMessages({
-        messages: [{
-            role: 'user',
-            content: [
-                { type: 'input_text', text: 'Use the provided reference image as the primary visual source and paint it in oils.' },
-                ...references.map(imageUrl => ({ type: 'input_image', image_url: imageUrl, detail: 'high' })),
-            ],
-        }],
+        messages: [{ role: 'user', content: 'Use the provided reference image as the primary visual source and paint it in oils.' }],
+        imageGenerationReferences: references.map((url, index) => ({
+            url,
+            role: 'source-reference',
+            fileName: `source-reference-${index + 1}`,
+        })),
     })
 }
 
@@ -230,19 +231,23 @@ describe('StabilityProvider reference image ingestion', () => {
         await expectUploadedImageWithinStabilityLimit(formData, 'image')
     })
 
-    it('uses the style-transfer endpoint with two different reference image block formats', async () => {
+    it('uses the style-transfer endpoint with two provider-neutral references', async () => {
         const largeJpegDataUrl = await createOversizedJpegDataUrl('#d8d8d8')
 
         const request = await processWithMessages({
-            messages: [{
-                role: 'user',
-                content: [
-                    { type: 'input_text', text: 'Blend the source and style images.' },
-                    { type: 'image', source: { type: 'base64', data: TINY_PNG_BASE64, media_type: 'image/png' } },
-                    { type: 'inline_data', data: TINY_PNG_BASE64, mime_type: 'image/jpeg' },
-                    { type: 'input_image', image_url: largeJpegDataUrl, detail: 'high' },
-                ],
-            }],
+            messages: [{ role: 'user', content: 'Blend the source and style images.' }],
+            imageGenerationReferences: [
+                {
+                    url: largeJpegDataUrl,
+                    role: 'source-reference',
+                    fileName: 'source-reference-1',
+                },
+                {
+                    url: TINY_PNG_DATA_URL,
+                    role: 'capability-reference',
+                    fileName: 'capability-reference-1',
+                },
+            ],
             imageSize: '3:2',
         })
         const formData = getFormData(request)
@@ -252,10 +257,33 @@ describe('StabilityProvider reference image ingestion', () => {
         expect(formData.get('fidelity')).toBeNull()
         expect(formData.has('init_image')).toBe(true)
         expect(formData.has('style_image')).toBe(true)
-        // References are sorted by size descending: largest (the oversized JPEG) becomes init_image,
-        // smallest (the first tiny image, PNG) becomes style_image.
+        // References without Character Creator roles fall back to byte-size ordering.
         expect(getUploadedBlob(formData, 'init_image').type).toBe('image/jpeg')
         expect(getUploadedBlob(formData, 'style_image').type).toBe('image/png')
+    })
+
+    it('uses explicit Character Creator roles instead of byte size to assign source and layout images', async () => {
+        const largeLayoutExample = await createOversizedJpegDataUrl('#d8d8d8')
+        const request = await processWithMessages({
+            messages: [{ role: 'user', content: 'Preserve the character and use the layout example only for sheet organization.' }],
+            imageGenerationReferences: [
+                {
+                    url: TINY_PNG_DATA_URL,
+                    role: 'character-source',
+                    fileName: 'character-source-1',
+                },
+                {
+                    url: largeLayoutExample,
+                    role: 'character-layout-example',
+                    fileName: 'character-layout-example-1',
+                },
+            ],
+        })
+        const formData = getFormData(request)
+
+        expect(request.url).toBe('https://api.stability.ai/v2beta/stable-image/control/style-transfer')
+        expect(getUploadedBlob(formData, 'init_image').type).toBe('image/png')
+        expect(getUploadedBlob(formData, 'style_image').type).toBe('image/jpeg')
     })
 
     it('resizes oversized style-control reference before upload', async () => {
@@ -301,6 +329,8 @@ describe('StabilityProvider stream validation', () => {
             const result = await provider.process({
                 workspaceId: 'ws-1',
                 aiChatThreadId: 'thread-1',
+                organizationId: 'org-1',
+                eventMeta: { userId: 'user-1', organizationId: 'org-1' },
                 enableImageGeneration: true,
                 aiModelMetaInfo: { provider: 'Stability', model: 'sd3.5-large', modelVersion: 'sd3.5-large' },
                 messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
@@ -323,6 +353,8 @@ describe('StabilityProvider stream validation', () => {
         const result = await provider.process({
             workspaceId: 'ws-1',
             aiChatThreadId: 'thread-1',
+            organizationId: 'org-1',
+            eventMeta: { userId: 'user-1', organizationId: 'org-1' },
             enableImageGeneration: true,
             aiModelMetaInfo: { provider: 'Stability', model: 'unsupported', modelVersion: 'unsupported' },
             messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
@@ -348,6 +380,8 @@ describe('StabilityProvider stream validation', () => {
         const result = await provider.process({
             workspaceId: 'ws-1',
             aiChatThreadId: 'thread-1',
+            organizationId: 'org-1',
+            eventMeta: { userId: 'user-1', organizationId: 'org-1' },
             enableImageGeneration: true,
             aiModelMetaInfo: { provider: 'Stability', model: 'stability-ultra', modelVersion: 'stability-ultra' },
             messages: [{ role: 'assistant', content: [{ type: 'text', text: 'I can help' }] }],
@@ -367,6 +401,8 @@ describe('StabilityProvider stream validation', () => {
         const result = await provider.process({
             workspaceId: 'ws-1',
             aiChatThreadId: 'thread-1',
+            organizationId: 'org-1',
+            eventMeta: { userId: 'user-1', organizationId: 'org-1' },
             enableImageGeneration: true,
             aiModelMetaInfo: { provider: 'Stability', model: 'sd3.5-large', modelVersion: 'sd3.5-large' },
             messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
@@ -396,6 +432,8 @@ describe('StabilityProvider stream validation', () => {
         const result = await provider.process({
             workspaceId: 'ws-1',
             aiChatThreadId: 'thread-1',
+            organizationId: 'org-1',
+            eventMeta: { userId: 'user-1', organizationId: 'org-1' },
             enableImageGeneration: true,
             preflightResolved: true,
             aiModelMetaInfo: { provider: 'Stability', model: 'sd3.5-large', modelVersion: 'sd3.5-large' },
@@ -428,6 +466,8 @@ describe('StabilityProvider stream validation', () => {
         const result = await provider.process({
             workspaceId: 'ws-1',
             aiChatThreadId: 'thread-1',
+            organizationId: 'org-1',
+            eventMeta: { userId: 'user-1', organizationId: 'org-1' },
             enableImageGeneration: true,
             preflightResolved: true,
             aiModelMetaInfo: { provider: 'Stability', model: 'sd3.5-large', modelVersion: 'sd3.5-large' },

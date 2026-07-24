@@ -6,7 +6,7 @@ import * as debugTools from '@lixpi/debug-tools'
 
 import { resolveMediaBranch } from './media-branch-resolver.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
-import type { VlmCallArgs, VlmCallResult } from '../extraction/vlm-client.ts'
+import type { VlmCallArgs, VlmCallResult } from '../structured-vlm/structured-vlm-client.ts'
 
 const portraitUrl = 'nats-obj://workspace-workspace-1-files/portrait-file'
 const landscapeUrl = 'nats-obj://workspace-workspace-1-files/landscape-file'
@@ -243,6 +243,22 @@ function createDeps(parsed: Record<string, unknown>) {
 }
 
 describe('resolveMediaBranch', () => {
+    it('resolves lineage for Capability media output even when ordinary media providers are disabled', async () => {
+        const { deps, publisher } = createDeps(createParsedResolution())
+        const state = createState({ candidates: [] })
+        state.imageModelVersion = undefined
+        state.imageProviderName = undefined
+        state.capabilityOutputAssetIds = ['asset-character-sheet']
+
+        const update = await resolveMediaBranch(state, deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            mode: 'fresh-branch',
+            operationKind: 'fresh_branch',
+        })
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
+    })
+
     it('preserves feature images and removes unselected candidate images from provider messages', async () => {
         const { deps, publisher, callVlm } = createDeps({
             mode: 'context-only',

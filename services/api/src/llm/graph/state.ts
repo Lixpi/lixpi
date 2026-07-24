@@ -1,6 +1,8 @@
 'use strict'
 
 import type {
+    CapabilityJsonValue,
+    CapabilityPromptReference,
     MediaBranchCandidateSnapshot,
     MediaBranchVlmResolution,
     MediaBranchLineagePlan,
@@ -10,6 +12,11 @@ import type {
     WorkspaceContextResolution,
     WorkspaceContextSnapshot,
 } from '@lixpi/constants'
+import type { SealedResolvedCapabilityPlan } from '@lixpi/capability-system/backend'
+import type {
+    ImageGenerationReference,
+    ResolvedImageGenerationReference,
+} from '../image-generation-references.ts'
 
 export type Usage = {
     promptTokens: number
@@ -140,8 +147,11 @@ export type ProviderState = {
     // Tool-calling: dual-model image routing
     generatedImagePrompt?: string | undefined
     referenceImages?: string[] | undefined
-    featureReferenceImages?: string[] | undefined
-    featureReferenceImageTraceUrls?: string[] | undefined
+    capabilityReferenceImages?: string[] | undefined
+    imageGenerationReferences?: ImageGenerationReference[] | undefined
+    resolvedImageGenerationReferences?: ResolvedImageGenerationReference[] | undefined
+    capabilityReferenceImageTraceUrls?: string[] | undefined
+    capabilityUsageMode?: 'visual-style' | 'character-creator' | undefined
     imagePromptRetryCount?: number | undefined
     generatedImages?: string[] | undefined
     workspaceContextSnapshot?: WorkspaceContextSnapshot | undefined
@@ -171,9 +181,19 @@ export type ProviderState = {
     // Multi-turn editing (OpenAI Responses API)
     previousResponseId?: string | undefined
 
-    // Feature reference resolution (/use chips on chat messages)
-    referencedFeatureIds?: string[] | undefined
-    featureUsagePrompt?: string | undefined
+    // Capability resolution and bounded Tool invocation.
+    capabilityReferences?: CapabilityPromptReference[] | undefined
+    capabilityInputs?: Record<string, Record<string, CapabilityJsonValue>> | undefined
+    resolvedCapabilityPlan?: SealedResolvedCapabilityPlan | undefined
+    capabilityInvocationDepth?: number | undefined
+    capabilityToolResults?: Array<{
+        capabilityId: string
+        runId: string
+        output: Record<string, CapabilityJsonValue>
+    }> | undefined
+    capabilityOutputAssetIds?: string[] | undefined
+
+    capabilityUsagePrompt?: string | undefined
 
     // Metrics — transient per-run identity. workflowId is minted in validateRequest
     // and groups this run's calls; workflowSeq is a 1-based counter per confirmed
@@ -223,8 +243,11 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     imageProviderName: { reducer: keep },
     generatedImagePrompt: { reducer: keep },
     referenceImages: { reducer: keep },
-    featureReferenceImages: { reducer: keep },
-    featureReferenceImageTraceUrls: { reducer: keep },
+    capabilityReferenceImages: { reducer: keep },
+    imageGenerationReferences: { reducer: keep },
+    resolvedImageGenerationReferences: { reducer: keep },
+    capabilityReferenceImageTraceUrls: { reducer: keep },
+    capabilityUsageMode: { reducer: keep },
     imagePromptRetryCount: { reducer: keep, default: () => 0 },
     generatedImages: { reducer: keep },
     workspaceContextSnapshot: { reducer: keep },
@@ -247,8 +270,13 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     generatedVideos: { reducer: keep },
     videoUsage: { reducer: keep },
     previousResponseId: { reducer: keep },
-    referencedFeatureIds: { reducer: keep },
-    featureUsagePrompt: { reducer: keep },
+    capabilityReferences: { reducer: keep },
+    capabilityInputs: { reducer: keep },
+    resolvedCapabilityPlan: { reducer: keep },
+    capabilityInvocationDepth: { reducer: keep, default: () => 0 },
+    capabilityToolResults: { reducer: keep },
+    capabilityOutputAssetIds: { reducer: keep },
+    capabilityUsagePrompt: { reducer: keep },
     workflowId: { reducer: keep },
     workflowSeq: { reducer: keep },
     metricsOperationId: { reducer: keep },

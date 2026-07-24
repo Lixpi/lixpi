@@ -24,7 +24,12 @@ import {
     extractVideoToolCall,
     getVideoToolForProvider,
 } from '../tools/video-generation.ts'
-import { detectCapabilities } from '../extraction/capabilities.ts'
+import { detectCapabilities } from './provider-capabilities.ts'
+import {
+    CapabilityModelToolExecutor,
+    shouldExposeCapabilityModelTools,
+} from '../../capability-system/capability-model-tool-executor.ts'
+import { asAnthropicTool } from '@lixpi/capability-system/backend'
 
 export class AnthropicProvider extends BaseProvider {
     readonly providerName: ProviderName = 'Anthropic'
@@ -69,6 +74,12 @@ export class AnthropicProvider extends BaseProvider {
         if (hasVideoModel) {
             tools.push(getVideoToolForProvider('Anthropic'))
         }
+        const capabilityToolExecutor = shouldExposeCapabilityModelTools(state)
+            ? new CapabilityModelToolExecutor(state, this.capabilityDispatcher)
+            : undefined
+        if (capabilityToolExecutor) {
+            tools.push(...capabilityToolExecutor.definitions().map(asAnthropicTool))
+        }
 
         let systemPrompt = getSystemPrompt(hasImageModel, hasVideoModel)
         if (hasImageModel) {
@@ -83,33 +94,66 @@ export class AnthropicProvider extends BaseProvider {
         try {
             this.publisher.start()
 
-            const streamArgs: Record<string, any> = {
-                model: modelVersion,
-                messages: formatted,
-                max_tokens: maxTokens,
-                system: systemPrompt,
-            }
-            if (tools.length > 0) streamArgs.tools = tools
-
-            const stream = this.client.messages.stream(streamArgs as any, {
-                signal: this.signal,
-            })
-
-            for await (const event of stream) {
-                if (this.shouldStop) {
-                    info('Stream stopped by user request')
-                    break
+            let roundMessages = formatted
+            let finalMessage: any
+            let promptTokens = 0
+            let completionTokens = 0
+            for (let round = 0; round <= 4; round++) {
+                const streamArgs: Record<string, any> = {
+                    model: modelVersion,
+                    messages: roundMessages,
+                    max_tokens: maxTokens,
+                    system: systemPrompt,
                 }
-                if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-                    const text = (event.delta as any).text ?? ''
-                    if (text) this.publisher.chunk(text)
+                if (tools.length > 0) streamArgs.tools = tools
+                const stream = this.client.messages.stream(streamArgs as any, { signal: this.signal })
+                for await (const event of stream) {
+                    if (this.shouldStop) {
+                        info('Stream stopped by user request')
+                        break
+                    }
+                    if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+                        const text = (event.delta as any).text ?? ''
+                        if (text) this.publisher.chunk(text)
+                    }
                 }
+                finalMessage = await stream.finalMessage()
+                promptTokens += finalMessage.usage?.input_tokens ?? 0
+                completionTokens += finalMessage.usage?.output_tokens ?? 0
+                const capabilityCalls = (finalMessage.content ?? []).flatMap((block: any) => {
+                    if (block?.type !== 'tool_use' || !capabilityToolExecutor?.recognizes(block.name)) return []
+                    return [{
+                        callId: block.id ?? '',
+                        name: block.name,
+                        arguments: block.input ?? {},
+                    }]
+                })
+                if (capabilityCalls.length === 0) break
+                if (round === 4) throw new Error('Capability model-tool round limit exceeded')
+                const executions = []
+                for (const call of capabilityCalls) {
+                    executions.push(await capabilityToolExecutor!.execute(call, this.signal))
+                }
+                roundMessages = [
+                    ...roundMessages,
+                    { role: 'assistant', content: finalMessage.content },
+                    {
+                        role: 'user',
+                        content: executions.map(execution => ({
+                            type: 'tool_result',
+                            tool_use_id: execution.call.callId,
+                            content: JSON.stringify(execution.result),
+                        })),
+                    },
+                ]
             }
-
-            const finalMessage = await stream.finalMessage()
+            if (!finalMessage) throw new Error('Anthropic returned no final message')
 
             if (hasImageModel || hasVideoModel) {
-                const videoCall = hasVideoModel ? extractVideoToolCall('Anthropic', finalMessage) : undefined
+                const characterCreatorActive = state.capabilityUsageMode === 'character-creator'
+                const videoCall = hasVideoModel && !characterCreatorActive
+                    ? extractVideoToolCall('Anthropic', finalMessage)
+                    : undefined
                 const imageCall = hasImageModel && !videoCall ? extractToolCall('Anthropic', finalMessage) : undefined
                 if (videoCall) {
                     update.generatedVideoPrompt = videoCall.prompt
@@ -140,20 +184,19 @@ export class AnthropicProvider extends BaseProvider {
             }
 
             if (finalMessage.usage) {
-                const u = finalMessage.usage
                 // Anthropic reports prompt caching as separate cache_read_input_tokens /
                 // cache_creation_input_tokens (input_tokens EXCLUDES them). We don't capture
                 // those yet, so promptCachedTokens stays 0. If added later, fold cache reads
                 // into promptTokens AND promptCachedTokens to preserve the cached ⊆ prompt
                 // invariant in the reported usage.
                 update.usage = {
-                    promptTokens: u.input_tokens ?? 0,
+                    promptTokens,
                     promptAudioTokens: 0,
                     promptCachedTokens: 0,
-                    completionTokens: u.output_tokens ?? 0,
+                    completionTokens,
                     completionAudioTokens: 0,
                     completionReasoningTokens: 0,
-                    totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
+                    totalTokens: promptTokens + completionTokens,
                 }
                 update.aiVendorRequestId = finalMessage.id
             }

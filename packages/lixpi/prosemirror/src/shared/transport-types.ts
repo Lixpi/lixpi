@@ -42,9 +42,11 @@ export type LoggedAssetStepStreamEvent = AssetStepStreamEvent & {
 }
 
 export type AssetDocResumeResult = {
-    snapshot: AssetDocSnapshot | null
+    snapshot: AssetDocSnapshotReference | null
     currentVersion: number
     currentStreamSeq: number
+    latestStreamSeq: number
+    hasMore: boolean
     streamName: string
     subject: string
     liveSubject?: string
@@ -66,6 +68,13 @@ export type AssetDocSnapshot = AssetDocCoordinate & {
     version: number
     schemaVersion: string
     doc: object
+}
+
+export type AssetDocSnapshotReference = AssetDocCoordinate & {
+    blobHash: string
+    version: number
+    schemaVersion: string
+    url: string
 }
 
 export const ASSET_PROSEMIRROR_STEP_SUBJECT_PREFIX = 'asset.document.steps'

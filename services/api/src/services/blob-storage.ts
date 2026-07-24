@@ -36,7 +36,7 @@ export const ensureOrganizationAssetStorage = async (organizationId: string): Pr
     } catch {
         try {
             await natsService.createObjectStore(bucketName, {
-                description: `Content-addressed Asset and Feature Blobs for ${organizationId}`,
+                description: `Content-addressed Asset and Capability Blobs for ${organizationId}`,
             })
         } catch (creationError) {
             try {
@@ -91,6 +91,23 @@ export const putContentAddressedBlob = async ({
         mimeType,
         byteSize: bytes.byteLength,
     }
+}
+
+export const getContentAddressedBlob = async ({
+    organizationId,
+    blobHash,
+}: {
+    organizationId: string
+    blobHash: string
+}): Promise<Uint8Array> => {
+    const natsService = getNatsService()
+    const bucketName = getOrganizationBlobBucketName(organizationId)
+    const objectKey = getBlobObjectKey(blobHash)
+    const info = await natsService.getObjectInfo(bucketName, objectKey)
+    if (!info || info.deleted) throw new Error('BLOB_NOT_FOUND')
+    const bytes = await natsService.getObject(bucketName, objectKey)
+    if (!bytes || hashBlobBytes(bytes) !== blobHash) throw new Error('BLOB_HASH_MISMATCH')
+    return bytes
 }
 
 export const deleteContentAddressedBlob = async (blob: BlobRecord): Promise<void> => {

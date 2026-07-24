@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { afterEach, beforeEach, beforeAll } from 'vitest'
-import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
+import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import { EditorState } from 'prosemirror-state'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { AI_CHAT_THREAD_PLUGIN_KEY, STOP_AI_CHAT_META, USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
@@ -14,7 +14,6 @@ import {
     findNodePosition,
     schema,
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
-import { nodes as sharedNodes } from '$src/components/proseMirror/components/schema.ts'
 
 vi.mock('prosemirror-transform', () => ({
     Step: {
@@ -27,14 +26,6 @@ vi.mock('prosemirror-transform', () => ({
         })),
     },
 }))
-
-const schemaWithFeatureReference = new Schema({
-    nodes: {
-        ...(schema.spec.nodes.toObject() as Record<string, any>),
-        feature_reference: sharedNodes.feature_reference,
-    },
-    marks: schema.spec.marks.toObject(),
-})
 
 function createPlugin(sendAiRequestHandler = vi.fn(), stopAiRequestHandler = vi.fn()) {
     return createAiChatThreadPlugin({
@@ -120,15 +111,6 @@ function makeVideoRef(overrides: Record<string, unknown> = {}): ProseMirrorNode 
     })
 }
 
-function makeFeatureReference(overrides: Record<string, unknown> = {}): ProseMirrorNode {
-    return schemaWithFeatureReference.nodes.feature_reference.create({
-        featureId: 'feature-1',
-        featureName: 'Feature One',
-        category: 'default',
-        ...overrides,
-    })
-}
-
 function makeParagraphMessage(
     nodeType: 'aiUserMessage' | 'aiResponseMessage',
     text: string,
@@ -139,22 +121,6 @@ function makeParagraphMessage(
         : schema.nodes.aiResponseMessage
     return creator.create({}, [
         schema.nodes.paragraph.create(null, [schema.text(text), ...inlineChildren]),
-    ])
-}
-
-function makeFeatureReferenceParagraphMessage(
-    nodeType: 'aiUserMessage' | 'aiResponseMessage',
-    text: string,
-    inlineChildren: ProseMirrorNode[] = [],
-): ProseMirrorNode {
-    const creator = nodeType === 'aiUserMessage'
-        ? schemaWithFeatureReference.nodes.aiUserMessage
-        : schemaWithFeatureReference.nodes.aiResponseMessage
-    return creator.create({}, [
-        schemaWithFeatureReference.nodes.paragraph.create(
-            null,
-            [schemaWithFeatureReference.text(text), ...inlineChildren],
-        ),
     ])
 }
 
@@ -285,7 +251,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 ],
             },
         ])
-        expect(payload.referencedFeatureIds).toEqual([])
+        expect(payload.capabilityReferences).toEqual([])
     })
 
     it('forwards valid image generation config groups to imageOptions', async () => {
@@ -394,55 +360,6 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 },
             ],
         })
-    })
-
-    it('deduplicates referenced feature ids across user and assistant messages', async () => {
-        const sendAiRequestHandler = vi.fn()
-        const plugin = createPlugin(sendAiRequestHandler)
-
-        const state = EditorState.create({
-            doc: schemaWithFeatureReference.nodes.doc.create(null, [
-                schemaWithFeatureReference.nodes.aiChatThread.create(
-                    {
-                        threadId: 'thread-featured-refs',
-                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
-                    },
-                    [
-                        makeFeatureReferenceParagraphMessage(
-                            'aiUserMessage',
-                            'User message references ',
-                            [
-                                makeFeatureReference({ featureId: 'feature-a', featureName: 'Feature A' }),
-                                schemaWithFeatureReference.text(' and '),
-                                makeFeatureReference({ featureId: 'feature-b', featureName: 'Feature B' }),
-                            ],
-                        ),
-                        makeFeatureReferenceParagraphMessage(
-                            'aiResponseMessage',
-                            'Assistant message references ',
-                            [
-                                makeFeatureReference({ featureId: 'feature-a', featureName: 'Feature A' }),
-                                schemaWithFeatureReference.text(' and '),
-                                makeFeatureReference({ featureId: 'feature-c', featureName: 'Feature C' }),
-                            ],
-                        ),
-                    ],
-                ),
-            ]),
-            schema: schemaWithFeatureReference,
-            plugins: [plugin],
-        })
-
-        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
-            threadId: 'thread-featured-refs',
-            nodePos: findNodePosition(state.doc, 'aiChatThread'),
-        })
-        state.applyTransaction(trigger)
-
-        await Promise.resolve()
-
-        const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
-        expect(payload.referencedFeatureIds).toEqual(['feature-a', 'feature-b', 'feature-c'])
     })
 
     it('extracts and merges consecutive text-only messages while preserving text order', async () => {

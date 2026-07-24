@@ -20,7 +20,9 @@ Every uploaded/generated media item, document, and conversation is already an As
 
 Pages are merged by `updatedAt`, deduplicated by `assetId`, filtered by lifecycle/category, and returned with an opaque cursor. The UI can filter `primaryCategory` to image, video, audio, document, or conversation.
 
-Meta rows contain only list-card data: title, category, owner/origin, lifecycle/media state, thumbnail/preview hashes, MIME/size/dimensions, and descriptor summary/tags.
+Meta rows contain only list-card data: title, category, scope/owner/origin, lifecycle/media state, thumbnail/preview hashes, MIME/size/dimensions, and descriptor summary/tags.
+
+The workspace Media picker filters this authorized catalog to Assets attachable to its current workspace. Workspace-scoped Assets owned by another workspace remain available through that workspace but are not offered as insertion targets elsewhere.
 
 ## Library cards
 
@@ -41,7 +43,7 @@ Adding a catalog Asset creates a new random node ID and an appropriate node type
 - new `nodeId`;
 - the expected and next Workspace canvas state/revision.
 
-The API authorizes scope/access and commits the node plus workspace reference atomically. Multiple placements in one workspace share one reference row with multiple node IDs. Placements in other workspaces create separate reference rows.
+The API authorizes scope/access and commits the node plus workspace reference atomically. Multiple placements in one workspace share one reference row with multiple node IDs. User- and organization-scoped Assets can create separate reference rows in other authorized workspaces; workspace-scoped Assets can only be placed in their owning workspace.
 
 ## Global metadata
 

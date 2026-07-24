@@ -88,6 +88,7 @@ export function getPixiLodTier(zoom: number): LodTier {
 
 export function addPixiLodSizeParam(url: string, tier: LodTier): string {
     if (tier === 'color' || !url.includes('/api/assets/')) return url
+    if (/\/renditions\/original(?:[/?]|$)/.test(url)) return url
     return url.replace(/\/renditions\/[^/?]+/, tier === 'thumb-256' ? '/renditions/thumbnail' : '/renditions/preview')
 }
 

@@ -99,10 +99,8 @@ describe('AI chat panel persisted state', () => {
         const tabs = [
             { tabId: 'thread:thread-a', type: 'thread' as const, refId: 'thread-a', title: 'Thread A' },
             { tabId: 'bad:thread-b', type: 'bad' as 'thread', refId: 'thread-b', title: 'Bad' },
-            { tabId: 'extraction:extraction-a', type: 'extraction', refId: 'extraction-a', title: 'Extraction A' },
             { tabId: 'thread:thread-a', type: 'thread' as const, refId: 'thread-a', title: 'Duplicate' },
             { tabId: 'missing-ref', type: 'thread' as const, refId: '', title: 'Missing' },
-            { tabId: 'extraction:extraction-b', type: 'extraction', refId: 'extraction-b', title: 'Extraction B' },
         ]
 
         const state = getAiChatPanelState(makeCanvasState({
@@ -116,22 +114,20 @@ describe('AI chat panel persisted state', () => {
 
         expect(state.tabs).toEqual([
             { tabId: 'thread:thread-a', type: 'thread', refId: 'thread-a', title: 'Thread A' },
-            { tabId: 'extraction:extraction-a', type: 'extraction', refId: 'extraction-a', title: 'Extraction A' },
-            { tabId: 'extraction:extraction-b', type: 'extraction', refId: 'extraction-b', title: 'Extraction B' },
         ])
         expect(state.activeTabId).toBe('thread:thread-a')
     })
 
-    it('supports extraction tab ids in persisted panel state', () => {
+    it('drops removed extraction tabs from persisted panel state', () => {
         const state = getAiChatPanelState(makeCanvasState({
             aiChatPanel: {
                 ...createDefaultAiChatPanelState(),
-                tabs: [{ tabId: 'extraction:new', type: 'extraction', refId: 'new', title: 'Extract Feature' }],
+                tabs: [{ tabId: 'extraction:new', type: 'extraction' as 'thread', refId: 'new', title: 'Removed extraction' }],
             },
         }))
 
-        expect(state.tabs[0]).toEqual({ tabId: 'extraction:new', type: 'extraction', refId: 'new', title: 'Extract Feature' })
-        expect(state.activeTabId).toBe('extraction:new')
+        expect(state.tabs).toEqual([])
+        expect(state.activeTabId).toBeUndefined()
     })
 
     it('sanitizeContextChips filters blanks, duplicates, and unknown nodes', () => {
@@ -142,14 +138,13 @@ describe('AI chat panel persisted state', () => {
 
     it('setAiChatPanelState replaces the legacy active tab id with the normalized active tab', () => {
         const legacyCanvasState = makeCanvasState({
-            activeAiChatSidebarTabId: 'extraction:extraction-1',
+            activeAiChatSidebarTabId: 'thread:thread-1',
             aiChatPanel: {
                 ...createDefaultAiChatPanelState(),
                 tabs: [
                     { tabId: 'thread:thread-1', type: 'thread', refId: 'thread-1', title: 'Thread 1' },
-                    { tabId: 'extraction:extraction-1', type: 'extraction', refId: 'extraction-1', title: 'Extraction 1' },
                 ],
-                activeTabId: 'extraction:extraction-1',
+                activeTabId: 'thread:thread-1',
             },
         })
 
@@ -164,10 +159,8 @@ describe('AI chat panel persisted state', () => {
             isOpen: true,
             activeTabId: 'thread:thread-2',
         })
-        expect(normalized.aiChatSidebarTabs).toEqual([
-            { tabId: 'thread:thread-2', type: 'thread', refId: 'thread-2', title: 'Thread 2' },
-        ])
-        expect(normalized.activeAiChatSidebarTabId).toBe('thread:thread-2')
+        expect(normalized.aiChatSidebarTabs).toBeUndefined()
+        expect(normalized.activeAiChatSidebarTabId).toBeUndefined()
     })
 
     it('setAiChatPanelState removes stale legacy active tab id when no tab remains active', () => {
@@ -176,7 +169,7 @@ describe('AI chat panel persisted state', () => {
         }), createDefaultAiChatPanelState())
 
         expect(normalized.aiChatPanel.activeTabId).toBeUndefined()
-        expect(normalized.aiChatSidebarTabs).toEqual([])
+        expect(normalized.aiChatSidebarTabs).toBeUndefined()
         expect(normalized.activeAiChatSidebarTabId).toBeUndefined()
     })
 
@@ -205,7 +198,6 @@ describe('AI chat panel persisted state', () => {
 
         expect(state.tabs).toEqual([
             { tabId: 'thread:thread-a', type: 'thread', refId: 'thread-a', title: 'A' },
-            { tabId: 'extraction:extract-a', type: 'extraction', refId: 'extract-a', title: 'Extraction A' },
         ])
     })
 

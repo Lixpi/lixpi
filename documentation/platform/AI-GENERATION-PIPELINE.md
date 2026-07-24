@@ -17,14 +17,15 @@ LLM orchestration previously lived in a separate Python `services/llm-api/` task
 
 ## The Shared Workflow
 
-The workflow processes every request through the same ordered nodes. Resolver and planner nodes run before the provider stream: they assemble workspace context, resolve `/use` features, ground visual references, and plan media lineage before any semantic text token is generated. The text model then streams. A single 3-way router inspects the streamed result and sends the request down the video branch, the image branch, or straight to usage accounting. Every path converges on `calculateUsage` and `cleanup`.
+The workflow processes every request through the same ordered nodes. Resolver and planner nodes run before the provider stream: they assemble workspace context, seal attached Capabilities, execute required Tools, ground visual references, and plan media lineage before any semantic text token is generated. The text model then streams. A single 3-way router inspects the streamed result and sends the request down the video branch, the image branch, or straight to usage accounting. Every path converges on `calculateUsage` and `cleanup`.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 stateDiagram-v2
     [*] --> resolveWorkspaceContext
-    resolveWorkspaceContext --> resolveFeatures
-    resolveFeatures --> resolveMediaBranch
+    resolveWorkspaceContext --> resolveCapabilities
+    resolveCapabilities --> executeRequiredCapabilities
+    executeRequiredCapabilities --> resolveMediaBranch
     resolveMediaBranch --> planMediaBranchLineage
     planMediaBranchLineage --> validateRequest
     validateRequest --> streamTokens
@@ -58,7 +59,8 @@ The pre-stream resolvers and planner are large features in their own right; each
 | Node | Job |
 |------|-----|
 | `resolveWorkspaceContext` | Ranks the descriptors-only workspace snapshot, force-includes explicit chips and edge-connected nodes, self-heals weak descriptors once, and narrows the media candidate set. Runs on every text, image, and video turn. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md). |
-| `resolveFeatures` | Always-on pre-stage. Resolves `/use` feature references at send time, fetching each feature (ACL-checked) and injecting its instructions, parameters, and content-free source crops as system context. See [Using Features](../library/USING-FEATURES.md). |
+| `resolveCapabilities` | Authorizes ordered `capability_reference` IDs, resolves transitive dependencies from captured manifest pointers, verifies hashes and schemas, and seals the per-run plan. Skills contribute context; attached Tools become callable or required according to policy. See [Tools and Skills](../library/TOOLS-AND-SKILLS.md). |
+| `executeRequiredCapabilities` | Runs explicitly attached `required` Tools through the allowlisted DAG runner before provider streaming. Safe run events are durable and mirrored to chat. A `visual-style` Tool contributes its instructions and authorized sample resources through this seam. |
 | `resolveMediaBranch` | Structured VLM resolver that assigns visual roles (target, base-context, style-reference, comparison-target, excluded) to the narrowed candidate media. Shared by image *and* video; a no-op when no media model is selected. See [Branch Lineage](../media-generation/BRANCH-LINEAGE.md). |
 | `planMediaBranchLineage` / `MediaBranchLineagePlanner` | API-side planner used after branch resolution for media-enabled requests. It assigns branch origin/fork marker IDs, lineage parent IDs, neutral branch-root provenance, and per-run lineage assignments before reasoning/media fanout. Matrix requests run the same planner once in shared preflight and pass the plan to every child run. |
 | `validateRequest` | Validates required request fields and extracts model metadata (text model, and any image/video model pricing + capabilities) before streaming begins. |
@@ -81,7 +83,7 @@ For media-enabled requests, branch resolution is immediately followed by API lin
 
 The API also owns durable canvas projection for media generation. `StreamPublisher.mediaLineagePlanned()` persists planned branch-origin/fork/line markers into `Workspace.canvasState`, and the image/video publishers persist final generated media nodes after object storage succeeds. These writes are idempotent and use guarded workspace canvas mutations, so a generation can finish with no browser connected and still be visible when the workspace is opened later. Browser canvas code may render transient preflight markers and live stream updates, but it is not the source of truth for completed media lineage.
 
-**Shared-preflight propagation invariant.** Matrix requests run the three resolver pre-stages and lineage planning once in a shared preflight, then dispatch every reasoning child with `preflightResolved: true`, which makes each child's provider graph skip those nodes. So the orchestrator forwards the **complete** resolved patch — workspace context, `/use` feature output (`featureReferenceImages`, `featureUsagePrompt`, and the rewritten `messages`), branch resolution (including the video first-frame / reference images), and the lineage plan — to every child rather than a hand-picked subset. This is enforced at the pipeline level, not per media type: `runSharedPreflight` returns exactly the accumulated resolver patches and the fanout spreads them, so reference inputs for images, video, and any media modality added later propagate to every child uniformly. Any field a resolver emits but the fanout drops is invisible to matrix children — for video that collapses generation to text-to-video — so the contract is to forward the whole patch and never re-enumerate fields. `/use` feature references therefore reach every selected image and video model the same way: `resolveFeatures` produces them once, the preflight forwards them, and each router applies them in its provider's reference format (image input blocks; VEO/Seedance reference images, capped per model and mutually exclusive with first-frame/extension inputs).
+**Shared-preflight propagation invariant.** Matrix requests run workspace context resolution, Capability resolution and required Tool execution, media branch resolution, and lineage planning once in a shared preflight. Every reasoning child receives `preflightResolved: true` and the **complete** accumulated patch. The fanout must spread that patch rather than re-enumerating fields. This preserves Tool-contributed instructions and reference images, branch inputs, and lineage assignments for every selected image and video model.
 {% /callout %}
 
 ## Provider State
@@ -247,7 +249,7 @@ That `enable…` flag is what makes the transient provider **skip its own stream
 
 ## Stream Lifecycle
 
-Top-level user-facing requests publish `START_STREAM` before the pre-stream resolver work runs. This opens the API-side stream lifecycle immediately, so the browser enters a receiving state and does not look frozen while workspace relevance, feature resolution, image-URL normalization, and the branch VLM call execute. Real text tokens still wait until branch resolution completes, because the text model must receive the VLM-approved reference set.
+Top-level user-facing requests publish `START_STREAM` before the pre-stream resolver work runs. This opens the API-side stream lifecycle immediately, so the browser enters a receiving state while workspace relevance, Capability resolution and required Tool work, image-URL normalization, and the branch VLM call execute. Real text tokens wait until branch resolution completes because the text model must receive the sealed Capability context and VLM-approved reference set.
 
 The `StreamPublisher` ([`stream-publisher.ts`](../../services/api/src/llm/graph/stream-publisher.ts)) makes `start()` and `end()` **idempotent**:
 
@@ -306,7 +308,8 @@ sequenceDiagram
         LLM->>PM: publish document START
         NATS-->>WebUI: receiving state
         PM-->>WebUI: document START
-        LLM->>LLM: resolveWorkspaceContext → resolveFeatures → resolveMediaBranch
+        LLM->>LLM: resolveWorkspaceContext, resolveCapabilities, executeRequiredCapabilities
+        LLM->>LLM: resolveMediaBranch
         LLM->>LLM: planMediaBranchLineage
         LLM->>LLM: validateRequest
         deactivate API
@@ -368,6 +371,6 @@ Adding a new model vendor means implementing the `BaseProvider` class in [`servi
 - [System Architecture](./SYSTEM-ARCHITECTURE.md) — how the API hosts this workflow and scales it.
 - [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md) — the `resolveWorkspaceContext` resolver.
 - [Branch Lineage](../media-generation/BRANCH-LINEAGE.md) — the shared `resolveMediaBranch` structured VLM resolver.
-- [Using Features](../library/USING-FEATURES.md) — the `resolveFeatures` `/use` pre-stage.
+- [Tools and Skills](../library/TOOLS-AND-SKILLS.md) — Capability resolution, invocation, and progress.
 - [Image Generation](../media-generation/IMAGE-GENERATION.md) — the image branch detail (providers, partial streaming).
 - [Video Generation](../media-generation/VIDEO-GENERATION.md) — the video branch detail (VEO submit/poll, playback).

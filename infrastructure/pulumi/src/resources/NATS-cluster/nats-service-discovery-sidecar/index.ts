@@ -8,15 +8,17 @@ import {
 } from '@aws-sdk/client-route-53'
 import {
     ECSClient,
+    DescribeContainerInstancesCommand,
     DescribeTasksCommand,
     ListTasksCommand
 } from '@aws-sdk/client-ecs'
 import {
     EC2Client,
+    DescribeInstancesCommand,
     DescribeNetworkInterfacesCommand
 } from '@aws-sdk/client-ec2'
 
-interface ECSTaskStateChangeEvent {
+type ECSTaskStateChangeEvent = {
     version: string
     id: string
     'detail-type': 'ECS Task State Change'
@@ -138,8 +140,21 @@ const getTaskPublicIP = async (taskArn: string, clusterArn: string): Promise<str
             if (networkInterfaceId) break
         }
 
+        if (!networkInterfaceId && task.containerInstanceArn) {
+            const containerInstances = await ecsClient.send(new DescribeContainerInstancesCommand({
+                cluster: clusterArn,
+                containerInstances: [task.containerInstanceArn],
+            }))
+            const ec2InstanceId = containerInstances.containerInstances?.[0]?.ec2InstanceId
+            if (ec2InstanceId) {
+                const instances = await ec2Client.send(new DescribeInstancesCommand({ InstanceIds: [ec2InstanceId] }))
+                const publicIP = instances.Reservations?.[0]?.Instances?.[0]?.PublicIpAddress
+                if (publicIP) return publicIP
+            }
+        }
+
         if (!networkInterfaceId) {
-            log('No network interface found for task', { taskArn })
+            log('No network interface or EC2 public IP found for task', { taskArn })
             return null
         }
 

@@ -17,15 +17,15 @@ For the topology these pieces scale within, see [Infrastructure Overview](./INFR
 |---------|-------------------|-------|
 | `web-ui` | CloudFront edge cache | No origin scaling needed; global CDN |
 | `api` | ECS desired count + NATS queue group `aiInteraction` | Stateless — add tasks freely. Hosts both the gateway logic and the in-process LangGraph LLM workflow. CPU-bound on provider streaming, ProseMirror step assembly, and media routing. |
-| `nats` | App Auto Scaling target (CPU 70%, memory 80%) + ECS desired count | The program provisions `minCount=3, maxCount=3` by default — see "NATS cluster sizing" below |
+| `nats` | Three-instance ECS EC2 capacity provider plus daemon scheduling | One NATS task per host; scale only through a reviewed cluster topology and replica-placement change |
 | `DynamoDB` | On-demand capacity mode (default) | No manual scaling; pay per request |
 | `Lambda` (cert-manager, sidecar) | AWS-managed | Short-lived, invoked rarely |
 
-The NATS cluster template already contains a full auto-scaling block (`appautoscaling.Target` + target tracking on CPU 70% / memory 80%) — it's only dormant because `minCount === maxCount` in the default config. Set them to different values in [`pulumiProgram.ts`](../../../infrastructure/pulumi/src/pulumiProgram.ts) and scaling goes live.
+NATS does not use task-count auto scaling. The daemon service binds one node to each EC2 instance, and JetStream streams and Object Store buckets expect three replicas. Changing the instance count requires a reviewed storage, route-membership, quorum, and backup-capacity plan.
 
 ### NATS Cluster Sizing
 
-The default deployment runs a small NATS cluster on modest Fargate tasks. That is a reasonable starting point because NATS is lightweight, but capacity should be validated with Lixpi-shaped payloads before making promises about production traffic.
+The default deployment runs three NATS EC2 instances with encrypted gp3 EBS volumes. Capacity must be validated with Lixpi-shaped payloads, including Capability packages, Asset document streams, and replay traffic.
 
 - The NATS server is a single Go binary that typically uses **under 20 MB of RAM** per node (per [nats.io/about](https://nats.io/about/)).
 - Published NATS benchmarks are high, but Lixpi's real ceiling depends on WebSocket clients, payload size, JetStream/Object Store use, auth middleware, and API task concurrency.

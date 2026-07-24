@@ -152,18 +152,31 @@ export const buildVideoModelPrompt = (state: ProviderState): string => {
     if (!prompt) return ''
 
     const profile = getVideoModelProfile(state)
-    const featureReferenceImages = state.featureReferenceImages ?? []
-    const hasFeatureReferences = featureReferenceImages.length > 0
-    const featureUsagePrompt = state.featureUsagePrompt?.trim()
+    const capabilityReferenceImages = state.capabilityReferenceImages ?? []
+    const hasCapabilityReferences = capabilityReferenceImages.length > 0
+    const capabilityUsagePrompt = state.capabilityUsagePrompt?.trim()
+
+    if (state.capabilityUsageMode === 'character-creator') {
+        return [
+            profile.qualityDirection,
+            buildImageConditioningSafetyDirection(state, profile),
+            buildInputModeDirection(state, profile),
+            'MANDATORY CHARACTER CREATOR GENERATION: preserve one consistent character identity, anatomy, clothing, materials, colors, and distinguishing details from the request and attached source images. The capability sample is a layout reference, not a subject to copy.',
+            capabilityUsagePrompt ? `CHARACTER CREATOR BRIEF:\n${capabilityUsagePrompt}` : undefined,
+            'USER VIDEO REQUEST:',
+            prompt,
+            profile.negativePrompt ? `Negative prompt: ${profile.negativePrompt}` : undefined,
+        ].filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n\n')
+    }
 
     return [
         profile.qualityDirection,
         buildImageConditioningSafetyDirection(state, profile),
         buildInputModeDirection(state, profile),
-        hasFeatureReferences || featureUsagePrompt
-            ? 'MANDATORY /use FEATURE TRANSFER FOR VIDEO: the feature reference image(s) and feature brief define a reusable visual medium or material, not optional inspiration. Transfer that medium into the moving subject itself so texture, palette, mark-making, grain, edge behavior, and material response remain visible on the subject during motion. Do not copy the feature sample subject, pose, composition, or layout.'
+        hasCapabilityReferences || capabilityUsagePrompt
+            ? 'MANDATORY VISUAL CAPABILITY TRANSFER FOR VIDEO: the capability reference image(s) and capability brief define a reusable visual medium or material, not optional inspiration. Transfer that medium into the moving subject itself so texture, palette, mark-making, grain, edge behavior, and material response remain visible on the subject during motion. Do not copy the capability sample subject, pose, composition, or layout.'
             : undefined,
-        featureUsagePrompt ? `FEATURE BRIEF:\n${featureUsagePrompt}` : undefined,
+        capabilityUsagePrompt ? `VISUAL CAPABILITY BRIEF:\n${capabilityUsagePrompt}` : undefined,
         'USER VIDEO REQUEST:',
         prompt,
         profile.negativePrompt ? `Negative prompt: ${profile.negativePrompt}` : undefined,
@@ -232,22 +245,22 @@ const buildBranchReferenceTrace = (state: ProviderState): ImageGenerationTraceRe
     })
 }
 
-const buildFeatureReference = (imageUrl: string, traceImageUrl: string | undefined, index: number): ImageGenerationTraceReference => ({
-    id: `feature:${index + 1}`,
+const buildCapabilityReference = (imageUrl: string, traceImageUrl: string | undefined, index: number): ImageGenerationTraceReference => ({
+    id: `capability:${index + 1}`,
     imageUrl: traceImageUrl ?? getTraceSafeImageUrl(imageUrl),
-    source: 'feature-reference',
-    label: `Feature reference ${index + 1}`,
-    role: 'feature-reference',
+    source: 'capability-reference',
+    label: `Capability reference ${index + 1}`,
+    role: 'capability-reference',
 })
 
 const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
-    const featureReferenceImages = state.featureReferenceImages ?? []
-    const featureReferenceImageTraceUrls = state.featureReferenceImageTraceUrls ?? []
+    const capabilityReferenceImages = state.capabilityReferenceImages ?? []
+    const capabilityReferenceImageTraceUrls = state.capabilityReferenceImageTraceUrls ?? []
     return [
         ...buildBranchReferenceTrace(state),
-        ...featureReferenceImages.map((imageUrl, index) => buildFeatureReference(
+        ...capabilityReferenceImages.map((imageUrl, index) => buildCapabilityReference(
             imageUrl,
-            featureReferenceImageTraceUrls[index],
+            capabilityReferenceImageTraceUrls[index],
             index,
         )),
     ]

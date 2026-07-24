@@ -15,7 +15,7 @@ const formatStageResourceName = (resourceName: string, orgName: string, stageNam
 
 const { ORG_NAME, STAGE } = process.env
 
-export interface ServiceDiscoverySidecarArgs {
+export type ServiceDiscoverySidecarArgs = {
     // Route53 configuration for public IP registration
     route53HostedZoneId: pulumi.Input<string>
     natsRecordName: string  // e.g., "nats.shelby-dev.lixpi.dev"
@@ -119,6 +119,7 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
                     {
                         Effect: 'Allow',
                         Action: [
+                            'ec2:DescribeInstances',
                             'ec2:DescribeNetworkInterfaces',
                         ],
                         Resource: '*',

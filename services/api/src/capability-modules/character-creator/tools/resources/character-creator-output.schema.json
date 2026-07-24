@@ -1,0 +1,29 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["mediaGenerationMode", "preserveUserPrompt", "visualInstructions", "referenceImages", "referenceImageTraceUrls"],
+    "properties": {
+        "mediaGenerationMode": {
+            "const": "character-creator",
+            "description": "Selects the Character Creator media-generation policy in the shared provider pipeline."
+        },
+        "preserveUserPrompt": {
+            "const": true,
+            "description": "Keeps the user's character request as the image-generation prompt while applying Tool instructions separately."
+        },
+        "visualInstructions": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Character-sheet generation brief applied to every selected media-model run."
+        },
+        "referenceImages": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+        },
+        "referenceImageTraceUrls": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+        }
+    }
+}

@@ -123,12 +123,11 @@ describe('ImageRouter', () => {
             model: 'Gemini Image',
             modelVersion: 'gemini-2.5-flash-image',
         })
-        expect(requestData.messages).toEqual([{
-            role: 'user',
-            content: [
-                { type: 'input_text', text: expect.any(String) },
-                { type: 'input_image', image_url: 'data:image/png;base64,cat-ref', detail: 'high' },
-            ],
+        expect(requestData.messages).toEqual([{ role: 'user', content: expect.any(String) }])
+        expect(requestData.imageGenerationReferences).toEqual([{
+            url: 'data:image/png;base64,cat-ref',
+            role: 'source-reference',
+            fileName: 'source-reference-1',
         }])
         expect(result.generatedImages).toEqual(['nats-obj://workspace-workspace-1-files/cat.png'])
         expect(result.imageUsage).toMatchObject({
@@ -241,5 +240,38 @@ describe('ImageRouter', () => {
         }))
 
         await execution
+    })
+
+    it('passes the character source first and the packaged sheet layout second with explicit roles', async () => {
+        const { router, process } = createRouter()
+        const state = createState({
+            capabilityUsageMode: 'character-creator',
+            capabilityUsagePrompt: 'Use the fixed multi-view layout.',
+            capabilityReferenceImages: ['data:image/jpeg;base64,character-sheet-layout'],
+            referenceImages: ['data:image/jpeg;base64,user-character-reference'],
+        })
+
+        await router.execute(state)
+
+        const request = process.mock.calls[0]?.[0] as {
+            messages: ProviderState['messages']
+            imageGenerationReferences: ProviderState['imageGenerationReferences']
+        }
+        expect(request.messages).toHaveLength(1)
+        expect(request.messages[0]?.content).toEqual(
+            expect.stringContaining('Reference image 1 depicts the authoritative character to reproduce'),
+        )
+        expect(request.imageGenerationReferences).toEqual([
+            {
+                url: 'data:image/jpeg;base64,user-character-reference',
+                role: 'character-source',
+                fileName: 'character-source-1',
+            },
+            {
+                url: 'data:image/jpeg;base64,character-sheet-layout',
+                role: 'character-layout-example',
+                fileName: 'character-layout-example-1',
+            },
+        ])
     })
 })

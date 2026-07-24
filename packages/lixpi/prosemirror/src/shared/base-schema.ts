@@ -145,34 +145,36 @@ export const nodes = {
         toDOM() { return brDOM },
     } as NodeSpec,
 
-    feature_reference: {
+    capability_reference: {
         inline: true,
         atom: true,
         group: 'inline',
         attrs: {
-            featureId: { default: '' },
-            featureName: { default: '' },
-            category: { default: '' },
+            capabilityId: { default: '' },
+            kind: { default: 'skill' },
+            displayName: { default: '' },
         },
         parseDOM: [{
-            tag: 'span[data-feature-id]',
+            tag: 'span[data-capability-id]',
             getAttrs(dom: HTMLElement) {
+                const kind = dom.getAttribute('data-capability-kind')
                 return {
-                    featureId: dom.getAttribute('data-feature-id') ?? '',
-                    featureName: dom.getAttribute('data-feature-name') ?? '',
-                    category: dom.getAttribute('data-feature-category') ?? '',
+                    capabilityId: dom.getAttribute('data-capability-id') ?? '',
+                    kind: kind === 'tool' ? 'tool' : 'skill',
+                    displayName: dom.getAttribute('data-capability-display-name') ?? '',
                 }
             },
         }],
         toDOM(node) {
+            const kind = node.attrs.kind === 'tool' ? 'tool' : 'skill'
             return ['span', {
-                'data-feature-id': node.attrs.featureId,
-                'data-feature-name': node.attrs.featureName,
-                'data-feature-category': node.attrs.category,
-                class: `feature-reference-chip feature-reference-chip-${node.attrs.category || 'default'}`,
+                'data-capability-id': node.attrs.capabilityId,
+                'data-capability-kind': kind,
+                'data-capability-display-name': node.attrs.displayName,
+                class: `capability-reference-chip capability-reference-chip-${kind}`,
             },
-                ['span', { class: 'feature-reference-chip-prefix' }, 'feature:'],
-                ['span', { class: 'feature-reference-chip-name' }, node.attrs.featureName],
+                ['span', { class: 'capability-reference-chip-prefix' }, '@'],
+                ['span', { class: 'capability-reference-chip-name' }, node.attrs.displayName],
             ]
         },
     } as NodeSpec,

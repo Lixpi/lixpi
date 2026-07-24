@@ -60,6 +60,8 @@ describe('aiResponseMessageShell', () => {
 		expect(shell.wrapper.className).toBe('ai-response-message-wrapper')
 		expect(shell.messageEl.className).toBe('ai-response-message')
 		expect(shell.contentEl.className).toBe('ai-response-message-content')
+		expect(shell.capabilityProgressEl.className).toBe('ai-response-capability-progress')
+		expect(shell.capabilityProgressEl.getAttribute('contenteditable')).toBe('false')
 	})
 
 	it('renders the ring loading indicator by default', () => {

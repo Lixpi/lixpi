@@ -309,23 +309,6 @@ const collisionSettingsFor = (node: CanvasNode) => {
     }
 }
 
-const getPendingMediaLayoutRect = (
-    node: GeneratedMediaNode,
-    position: { x: number; y: number },
-): { x: number; y: number; width: number; height: number } => {
-    const configuredScale = Number(layout.preFrameCircleScale)
-    const scale = Number.isFinite(configuredScale) && configuredScale > 0
-        ? Math.min(1, configuredScale)
-        : 1 / 3
-    const size = Math.max(1, Math.min(node.dimensions.width, node.dimensions.height) * scale)
-    return {
-        x: position.x + (node.dimensions.width - size) / 2,
-        y: position.y + (node.dimensions.height - size) / 2,
-        width: size,
-        height: size,
-    }
-}
-
 const rebalance = (
     state: CanvasState,
     context: ProjectionContext = {},
@@ -335,12 +318,6 @@ const rebalance = (
         const dimensions = markerDimensions(node, context)
         return resizeBranchMarkerToDimensions(node, dimensions)
     })
-    const pendingMediaNodeIds = new Set(resizedNodes.flatMap((node): string[] =>
-        (node.type === 'image' || node.type === 'video')
-            && node.mediaGenerationPhase === 'pending-before-first-frame'
-            ? [node.nodeId]
-            : []
-    ))
     const nodes = rebalanceBranchTreesAndResolve(resizedNodes, state.edges ?? [], {
         depthGap: layout.mediaToMediaGap,
         branchOriginDepthGap: layout.branchOriginToFirstMediaGap,
@@ -350,28 +327,25 @@ const rebalance = (
         branchOriginMarkerStackGap: layout.nodeGap,
         collisionIterations: Math.max(...Object.values(collision.nodeTypes).map((entry) => entry.iterations)),
         collisionMargin: 0,
-        getNodeCollisionRect: (node, position) =>
-            pendingMediaNodeIds.has(node.nodeId) && (node.type === 'image' || node.type === 'video')
-                ? getPendingMediaLayoutRect(node, position)
-                : {
-                    x: position.x,
-                    y: position.y,
-                    width: node.dimensions.width,
-                    height: node.dimensions.height + (
-                        node.type === 'image' || node.type === 'video'
-                            ? getGeneratedMediaChromeCollisionHeight(node.type)
-                            : 0
-                    ),
-                },
-        getNodeConnectorAnchorRect: (node, position) =>
-            pendingMediaNodeIds.has(node.nodeId) && (node.type === 'image' || node.type === 'video')
-                ? getPendingMediaLayoutRect(node, position)
-                : {
-                    x: position.x,
-                    y: position.y,
-                    width: node.dimensions.width,
-                    height: node.dimensions.height,
-                },
+        // Loading media is visually rendered as a compact circle, but it still
+        // reserves its final card footprint. Otherwise every first frame changes
+        // the collision boxes and repeatedly reflows the entire branch tree.
+        getNodeCollisionRect: (node, position) => ({
+            x: position.x,
+            y: position.y,
+            width: node.dimensions.width,
+            height: node.dimensions.height + (
+                node.type === 'image' || node.type === 'video'
+                    ? getGeneratedMediaChromeCollisionHeight(node.type)
+                    : 0
+            ),
+        }),
+        getNodeConnectorAnchorRect: (node, position) => ({
+            x: position.x,
+            y: position.y,
+            width: node.dimensions.width,
+            height: node.dimensions.height,
+        }),
         getNodeCollisionMargin: (node) => isMarkerNode(node) ? layout.nodeGap : collisionSettingsFor(node).margin,
         getNodeCollisionOverlapThreshold: (node) => collisionSettingsFor(node).overlapThreshold,
     })
@@ -461,16 +435,11 @@ export const upsertMediaLineagePlanToCanvas = async (params: {
                 params.canvasVisibleArea,
             )
             const markerResult = ensureMarkers(canvasState, markers)
-            const plannedMediaResult = projectPlannedMediaSlots(
-                markerResult.state,
-                params.lineagePlan,
-                params.conversationAssetId,
-            )
-            const balanced = rebalance(plannedMediaResult.state, { proseMirrorThreadContent: params.proseMirrorThreadContent })
+            const balanced = rebalance(markerResult.state, { proseMirrorThreadContent: params.proseMirrorThreadContent })
             geometryNodes = geometryDiff(canvasState, balanced.state)
             return {
                 canvasState: balanced.state,
-                changed: markerResult.changed || plannedMediaResult.changed || balanced.changed,
+                changed: markerResult.changed || balanced.changed,
             }
         },
     })
@@ -695,7 +664,12 @@ export const projectGeneratedAssetNode = ({
     const existing = markerResult.state.nodes.find((node) => node.nodeId === nodeId) as GeneratedMediaNode | undefined
     const width = existing?.dimensions.width ?? layout.generatedMediaSize
     const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1
-    const dimensions = { width, height: width / safeAspectRatio }
+    // Planned nodes reserve their stable card size before any provider pixels
+    // arrive. Partials and completion replace content/state inside that card;
+    // they must not resize it and trigger a whole-tree reflow.
+    const dimensions = existing?.mediaGenerationPhase === 'pending-before-first-frame'
+        ? existing.dimensions
+        : { width, height: width / safeAspectRatio }
     const lineageParentNodeId = assignment.lineageParentNodeId
         ?? assignment.branchLineNodeId
         ?? assignment.branchForkNodeId
@@ -747,46 +721,6 @@ export const projectGeneratedAssetNode = ({
     const edgeResult = addEdge(markerResult.state.edges ?? [], lineageParentNodeId, nodeId)
     const next = rebalance({ ...markerResult.state, nodes: nodeResult.nodes, edges: edgeResult.edges }).state
     return { canvasState: next, nodeId, geometryNodes: geometryDiff(canvasState, next) }
-}
-
-function projectPlannedMediaSlots(
-    canvasState: CanvasState,
-    lineagePlan: MediaBranchLineagePlan,
-    conversationAssetId: string,
-): { state: CanvasState; changed: boolean } {
-    let state = canvasState
-    for (const assignment of lineagePlan.runAssignments) {
-        if (
-            !assignment.assetId
-            || !assignment.mediaType
-            || !assignment.reasoningRunId
-            || !assignment.reasoningModelId
-        ) continue
-        state = projectGeneratedAssetNode({
-            canvasState: state,
-            assetId: assignment.assetId,
-            kind: assignment.mediaType,
-            aspectRatio: 1,
-            generationRun: {
-                requestKind: 'media-generation-matrix',
-                generationRequestId: assignment.generationRequestId,
-                reasoningRunId: assignment.reasoningRunId,
-                ...(assignment.mediaRunId ? { mediaRunId: assignment.mediaRunId } : {}),
-                reasoningModelId: assignment.reasoningModelId,
-                ...(assignment.mediaModelId ? { mediaModelId: assignment.mediaModelId } : {}),
-                mediaType: assignment.mediaType,
-                reasoningIndex: assignment.reasoningIndex ?? 0,
-                ...(assignment.mediaIndex == null ? {} : {
-                    mediaIndex: assignment.mediaIndex,
-                    variantIndex: assignment.mediaIndex,
-                }),
-                lineageAssignment: assignment,
-            },
-            conversationAssetId,
-            pendingBeforeFirstFrame: true,
-        }).canvasState
-    }
-    return { state, changed: JSON.stringify(state) !== JSON.stringify(canvasState) }
 }
 
 export const detachReviewedGeneratedOutputsFromCanvas = ({

@@ -89,6 +89,12 @@ beforeEach(() => {
 })
 
 describe('createAiPromptComposer', () => {
+    it('forwards the capability catalog to the editor plugin boundary', () => {
+        const capabilityCatalog = { search: vi.fn() }
+        createComposer({ capabilityCatalog })
+        expect(getLastEditor().options.capabilityCatalog).toBe(capabilityCatalog)
+    })
+
     it('builds host and mount elements with expected base and custom classes', () => {
         const composer = createComposer({
             className: 'my-composer',

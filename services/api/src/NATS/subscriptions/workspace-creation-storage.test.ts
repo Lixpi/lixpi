@@ -17,7 +17,6 @@ vi.mock('@lixpi/debug-tools', () => ({ info: vi.fn(), err: vi.fn(), warn: vi.fn(
 vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
 vi.mock('../../models/organization.ts', () => ({ default: mocks.organization }))
 vi.mock('../../models/asset.ts', () => ({ default: {} }))
-vi.mock('../../models/extraction-run.ts', () => ({ default: {} }))
 
 import { workspaceSubjects } from './workspace-subjects.ts'
 

@@ -3,7 +3,7 @@
 import { writable } from 'svelte/store'
 import type { AssetDocumentRole } from '@lixpi/constants'
 
-type AssetDocumentSnapshot = {
+export type AssetDocumentSnapshot = {
     assetId: string
     role: AssetDocumentRole
     version: number
@@ -20,6 +20,16 @@ export const assetDocumentsStore = {
         next.set(key(snapshot.assetId, snapshot.role), snapshot)
         return next
     }),
+    setMany: (snapshots: AssetDocumentSnapshot[]): void => {
+        if (snapshots.length === 0) return
+        store.update((items) => {
+            const next = new Map(items)
+            for (const snapshot of snapshots) {
+                next.set(key(snapshot.assetId, snapshot.role), snapshot)
+            }
+            return next
+        })
+    },
     get: (assetId: string, role: AssetDocumentRole): AssetDocumentSnapshot | undefined => {
         let result: AssetDocumentSnapshot | undefined
         const unsubscribe = store.subscribe((items) => { result = items.get(key(assetId, role)) })

@@ -465,7 +465,7 @@ describe('AiInteractionService', () => {
             videoSourceForExtension: 's3://video-source',
             useMultipleVideoModels: true,
             videoConfigGroups: [{ id: 'quality', configs: [] }],
-            referencedFeatureIds: ['feat-1'],
+            capabilityReferences: [{ capabilityId: 'tool-1', kind: 'tool' }],
             mediaBranchCandidateSnapshot: {
                 resolverVersion: 'image-branch-v1',
                 threadId: aiChatThreadId,
@@ -498,7 +498,7 @@ describe('AiInteractionService', () => {
                 workspaceId,
                 nodes: [],
             },
-            referencedFeatureIds: ['feat-1'],
+            capabilityReferences: [{ capabilityId: 'tool-1', kind: 'tool' }],
             mediaGenerationRequest: {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: 'matrix-request-id',

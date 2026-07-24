@@ -105,7 +105,9 @@ The browser may render a transient preflight branch marker before the lineage pl
 
 The API projection service persists marker topology when the lineage plan is announced. It uses shared marker text metrics and canvas-engine branch-tree/collision settings. Canvas revisions are strictly greater than the persisted revision, including when several provider events commit in the same millisecond. Every connected client can therefore apply the same ordered node snapshots and coordinates.
 
-Generated media nodes persist `mediaGenerationPhase` with their geometry. Before the original rendition is ready, the phase is `pending-before-first-frame` and every API rebalance uses the configured pending-circle footprint for all pending nodes in the branch forest. Final projection changes the phase to `ready`, replaces placeholder dimensions with the fitted final aspect ratio while preserving the node center, then rebalances with the full media dimensions. This keeps incremental sibling placement independent of provider completion order. Clients consume the persisted phase and use local event or Asset state only as a fallback for workspace data created without it.
+Streaming reasoning text updates the conversation document but does not emit canvas geometry revisions per text chunk. Marker geometry is reserved by the lineage plan and reconciled once at request settlement, preventing token streaming from continuously resizing and rebalancing the visible tree.
+
+Generated media nodes persist `mediaGenerationPhase` with their geometry. Before the original rendition is ready, the phase is `pending-before-first-frame`; the client paints a compact loading circle, while every API rebalance reserves the node's full final card footprint and media-chrome height. Partial attachment is idempotent, and final projection changes the phase to `ready` without changing the reserved card dimensions. A first frame therefore cannot enlarge a collision box, overlap a sibling, or repeatedly reflow the branch forest. Clients consume the persisted phase and use local event or Asset state only as a fallback for workspace data created without it.
 
 When a final image or video settles, the API:
 
@@ -124,7 +126,7 @@ Clients discard stale geometry revisions and ignore late upserts for locally can
 
 ## Partial image events
 
-Progressive image partials are ephemeral data URLs associated with the assignment’s `assetId`. They update the API-persisted pending node only. Partial bytes are not registered as Asset renditions and are not persisted in Workspace state.
+Progressive image partials are ephemeral NATS Object Store objects associated with the assignment’s `assetId`. Pipeline events carry only authenticated `/api/transient-media/...` references. Replacements delete superseded revisions, terminal completion/teardown deletes the last revision, and partial bytes are never registered as Asset renditions or persisted in Workspace state.
 
 The final event contains the durable Asset original URL and API canvas geometry. The Asset rendition worker then produces preview and thumbnail asynchronously.
 

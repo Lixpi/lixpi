@@ -9,27 +9,81 @@ import {
     type GeneratedOutputReviewRequest,
     type GeneratedOutputReviewResponse,
 } from '@lixpi/constants'
+import {
+    type AssetDocResumeResult,
+    type AssetDocSnapshot,
+    type AssetDocSnapshotReference,
+} from '@lixpi/prosemirror'
 
 import AuthService from '$src/services/auth-service.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { assetsStore } from '$src/stores/assetsStore.ts'
-import { assetDocumentsStore } from '$src/stores/assetDocumentsStore.ts'
+import {
+    assetDocumentsStore,
+    type AssetDocumentSnapshot,
+} from '$src/stores/assetDocumentsStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 
 const { ASSET_SUBJECTS } = NATS_SUBJECTS
 const WORKSPACE_RECONCILIATION_INTERVAL_MS = 5 * 60_000
+const ASSET_LOAD_CONCURRENCY = 8
+const ASSET_DOCUMENT_RESUME_CONCURRENCY = 4
+const ASSET_DOCUMENT_STORE_BATCH_SIZE = 16
+const ASSET_DOCUMENT_RESUME_TIMEOUT_MS = 15_000
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
-const request = async <T>(subject: string, payload: Record<string, unknown>): Promise<T> => {
+const request = async <T>(
+    subject: string,
+    payload: Record<string, unknown>,
+    timeout?: number,
+): Promise<T> => {
     const nats = servicesStore.getData('nats')
     if (!nats) throw new Error('NATS service unavailable')
     return await nats.request(subject, {
         token: await AuthService.getTokenSilently(),
         ...payload,
-    }) as T
+    }, timeout) as T
+}
+
+async function mapWithConcurrency<T, R>(
+    items: T[],
+    concurrency: number,
+    mapItem: (item: T) => Promise<R>,
+): Promise<R[]> {
+    const results = new Array<R>(items.length)
+    const entries = items.entries()
+
+    const workers = Array.from(
+        { length: Math.min(concurrency, items.length) },
+        async () => {
+            while (true) {
+                const entry = entries.next()
+                if (entry.done) return
+                const [index, item] = entry.value
+                results[index] = await mapItem(item)
+            }
+        },
+    )
+    await Promise.all(workers)
+    return results
 }
 
 export class AssetService {
+    async fetchDocumentSnapshot(reference: AssetDocSnapshotReference): Promise<AssetDocSnapshot> {
+        const response = await fetch(`${API_BASE_URL}${reference.url}`, {
+            headers: { Authorization: `Bearer ${await AuthService.getTokenSilently()}` },
+        })
+        if (!response.ok) throw new Error(`Asset document snapshot fetch failed: ${response.status}`)
+        const snapshot = await response.json() as AssetDocSnapshot
+        if (snapshot.assetId !== reference.assetId
+            || snapshot.organizationId !== reference.organizationId
+            || snapshot.role !== reference.role) {
+            throw new Error('ASSET_DOCUMENT_SNAPSHOT_COORDINATE_MISMATCH')
+        }
+        return snapshot
+    }
+
     async get(assetId: string): Promise<Asset | { error: string }> {
         return await request(ASSET_SUBJECTS.GET, { assetId })
     }
@@ -134,15 +188,53 @@ export class AssetService {
                     cursor = page.cursor
                 } while (cursor)
             }
-            const results = await Promise.all([...assetIds].map(async (assetId) => await this.get(assetId)))
+            const prioritizedAssetIds = [...assetIds].sort((left, right) => {
+                const activeConversationAssetId = workspace?.canvasState?.lastActiveConversationAssetId
+                if (left === activeConversationAssetId) return -1
+                if (right === activeConversationAssetId) return 1
+                return 0
+            })
+            const results = await mapWithConcurrency(prioritizedAssetIds, ASSET_LOAD_CONCURRENCY, async (assetId) => {
+                try {
+                    return await this.get(assetId)
+                } catch (error) {
+                    console.warn('[AssetService] Asset load failed; synchronization will retry it', { assetId, error })
+                    return { error: 'ASSET_LOAD_FAILED' }
+                }
+            })
             const assets = results.filter((result): result is Asset => !('error' in result))
             assetsStore.setAssets(workspaceId, Array.isArray(assets) ? assets : [])
-            await Promise.all(assets.flatMap((asset) => (Object.keys(asset.documents) as AssetDocumentRole[])
-                .map(async (role) => await this.resumeDocument({
+            const documentCoordinates = assets
+                .flatMap((asset) => (Object.keys(asset.documents) as AssetDocumentRole[]).map((role) => ({
                     organizationId: asset.organizationId,
                     assetId: asset.assetId,
                     role,
-                }))))
+                })))
+                .filter(({ assetId, role }) => !assetDocumentsStore.get(assetId, role))
+                .sort((left, right) => {
+                    if (left.role === 'conversation' && right.role !== 'conversation') return -1
+                    if (right.role === 'conversation' && left.role !== 'conversation') return 1
+                    return 0
+                })
+            const pendingSnapshots: AssetDocumentSnapshot[] = []
+            const flushPendingSnapshots = (): void => {
+                if (pendingSnapshots.length === 0) return
+                assetDocumentsStore.setMany(pendingSnapshots.splice(0, pendingSnapshots.length))
+            }
+            await mapWithConcurrency(documentCoordinates, ASSET_DOCUMENT_RESUME_CONCURRENCY, async (coordinate) => {
+                try {
+                    const snapshot = await this.resumeDocumentSnapshot(coordinate)
+                    if (snapshot) pendingSnapshots.push(snapshot)
+                    if (pendingSnapshots.length >= ASSET_DOCUMENT_STORE_BATCH_SIZE) flushPendingSnapshots()
+                } catch (error) {
+                    console.warn('[AssetService] Asset document resume failed; synchronization will retry it', {
+                        assetId: coordinate.assetId,
+                        role: coordinate.role,
+                        error,
+                    })
+                }
+            })
+            flushPendingSnapshots()
             return assets
         } catch (error) {
             assetsStore.setError(error)
@@ -163,22 +255,73 @@ export class AssetService {
         localVersion?: number
         localStreamSeq?: number
     }): Promise<any> {
-        const result = await request<any>(ASSET_SUBJECTS.DOCUMENT_RESUME, {
+        const { result, snapshot } = await this.requestDocumentResume({
             organizationId,
             assetId,
             role,
             localVersion,
             localStreamSeq,
         })
-        if (result?.snapshot?.doc) {
-            assetDocumentsStore.set({
-                assetId,
-                role,
-                version: result.snapshot.version,
-                doc: result.snapshot.doc,
-            })
-        }
+        if (snapshot) assetDocumentsStore.set(snapshot)
         return result
+    }
+
+    private async resumeDocumentSnapshot({
+        organizationId,
+        assetId,
+        role,
+        localVersion = 0,
+        localStreamSeq = 0,
+    }: {
+        organizationId: string
+        assetId: string
+        role: AssetDocumentRole
+        localVersion?: number
+        localStreamSeq?: number
+    }): Promise<AssetDocumentSnapshot | null> {
+        const { snapshot } = await this.requestDocumentResume({
+            organizationId,
+            assetId,
+            role,
+            localVersion,
+            localStreamSeq,
+        })
+        return snapshot
+    }
+
+    private async requestDocumentResume({
+        organizationId,
+        assetId,
+        role,
+        localVersion,
+        localStreamSeq,
+    }: {
+        organizationId: string
+        assetId: string
+        role: AssetDocumentRole
+        localVersion: number
+        localStreamSeq: number
+    }): Promise<{ result: AssetDocResumeResult; snapshot: AssetDocumentSnapshot | null }> {
+        const result = await request<AssetDocResumeResult>(ASSET_SUBJECTS.DOCUMENT_RESUME, {
+            organizationId,
+            assetId,
+            role,
+            localVersion,
+            localStreamSeq,
+        }, ASSET_DOCUMENT_RESUME_TIMEOUT_MS)
+        if (result.snapshot) {
+            const snapshot = await this.fetchDocumentSnapshot(result.snapshot)
+            return {
+                result,
+                snapshot: {
+                    assetId,
+                    role,
+                    version: snapshot.version,
+                    doc: snapshot.doc,
+                },
+            }
+        }
+        return { result, snapshot: null }
     }
 
     async create({

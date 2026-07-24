@@ -23,7 +23,7 @@ type Workspace = {
 }
 ```
 
-The Main/Meta/Access-List triad remains transactional. `organizationId` is authoritative for Assets, Blobs, and Features created from the workspace.
+The Main/Meta/Access-List triad remains transactional. `organizationId` is authoritative for Assets, Blobs, and organization-scoped Capabilities created from the workspace.
 
 ## Canvas state
 
@@ -34,13 +34,10 @@ type CanvasState = {
   edges: WorkspaceEdge[]
   aiChatPanel?: CanvasAiChatPanelState
   lastActiveConversationAssetId?: string
-  sourceContext?: FeatureSourceContext
 }
 ```
 
-The persisted chat panel contains ordered conversation/extraction tabs, the active tab, open/history state, panel width, top-level mode, and explicit context-chip node IDs. Conversation tab `refId` values are conversation Asset IDs.
-
-Extraction Runs are API records and are never persisted in Workspace state.
+The persisted chat panel contains ordered conversation tabs, the active tab, open/history state, panel width, top-level mode, and explicit context-chip node IDs. Conversation tab `refId` values are conversation Asset IDs. Capability Runs are API records and are never persisted in Workspace state.
 
 ## Canvas node identity
 
@@ -190,7 +187,7 @@ Changing an Asset title updates every placement after the Asset event/reload. Mo
 
 ## Workspace deletion
 
-Only an owner can delete a Workspace. The API first removes all Asset workspace references, removes catalogs whose scope owner is that workspace, and deletes Extraction Runs. Final-reference Assets enter maintenance. It then deletes the Workspace Main/Meta rows and every Access-List row from the embedded access list.
+Only an owner can delete a Workspace. The API marks the Workspace as deleting, removes all Asset workspace references, then deletes the Workspace Main/Meta rows and every Access-List row from the embedded access list. Final-reference Assets enter maintenance. Capability Runs remain separate records governed by Capability-run retention.
 
 Organization/user-scoped Assets attached elsewhere survive. Blob deletion is controlled exclusively by Blob reference counts.
 

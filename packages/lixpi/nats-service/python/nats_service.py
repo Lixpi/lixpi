@@ -8,18 +8,21 @@ import io
 import json
 import time
 import base64
-from typing import Any, Dict, Optional, Callable, List, Union
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 from enum import Enum
 
 import nats
 from nats.aio.client import Client as NATS
 from nats.aio.msg import Msg
 from nats.js import JetStreamContext
-from nats.js.api import ObjectStoreConfig, ObjectInfo, ObjectMeta
+from nats.js.api import ConsumerConfig, ObjectStoreConfig, ObjectInfo, ObjectMeta
 from nats.js.object_store import ObjectStore
 from nkeys import from_seed
 from colorama import Fore, Style
 from lixpi_debug_tools import log, info, info_str, warn, err
+
+
+DEFAULT_STREAM_REPLICAS = 3
 
 
 def encode(value: Any, payload_type: str) -> bytes:
@@ -133,6 +136,7 @@ class NatsServiceConfig:
         reply_middleware: Optional[List[Callable]] = None,
         get_token: Optional[Callable[[], Any]] = None,
         on_auth_error: Optional[Callable[[Exception], Any]] = None,
+        stream_replicas: int = DEFAULT_STREAM_REPLICAS,
     ):
         """
         Initialize NATS service configuration.
@@ -156,6 +160,7 @@ class NatsServiceConfig:
             on_auth_error: Optional callable invoked when the server rejects our
                 credentials so the caller can invalidate any cached token before
                 `get_token` is called again.
+            stream_replicas: Replication factor for created JetStream stores.
         """
         self.servers = servers or ["nats://localhost:4222"]
         self.name = name or "default"
@@ -172,6 +177,7 @@ class NatsServiceConfig:
         self.reply_middleware = reply_middleware or []
         self.get_token = get_token
         self.on_auth_error = on_auth_error
+        self.stream_replicas = stream_replicas
 
 
 class NatsService:
@@ -752,6 +758,34 @@ class NatsService:
             self._objm = self._get_jetstream()
         return self._objm
 
+    @staticmethod
+    def _is_stream_not_found_error(error: Any) -> bool:
+        """Return whether a JetStream error means the stream is absent."""
+        message = str(error or '').lower()
+        code = getattr(error, 'code', None)
+        error_code = getattr(error, 'err_code', None)
+        if 'no responders' in message or 'timeout' in message or '503' in message:
+            return False
+        return (
+            code == 404
+            or error_code == 10059
+            or 'stream not found' in message
+            or 'no stream' in message
+            or 'not found' in message
+        )
+
+    async def _open_object_store_or_none(
+        self,
+        bucket_name: str
+    ) -> Optional[ObjectStore]:
+        """Open an Object Store, returning None only when it is absent."""
+        try:
+            return await self.get_object_store(bucket_name)
+        except Exception as error:
+            if self._is_stream_not_found_error(error):
+                return None
+            raise
+
     async def create_object_store(
         self,
         bucket_name: str,
@@ -760,10 +794,25 @@ class NatsService:
         """Create an Object Store bucket."""
         js = self._get_jetstream()
         if options:
-            os = await js.create_object_store(bucket_name, config=options)
+            replicas = (
+                options.replicas
+                if options.replicas is not None
+                else self.config.stream_replicas
+            )
+            os = await js.create_object_store(
+                bucket_name,
+                config=ObjectStoreConfig(**{
+                    **options.as_dict(),
+                    'replicas': replicas,
+                })
+            )
         else:
-            os = await js.create_object_store(bucket_name)
-        info(f"Object Store bucket created: {bucket_name}")
+            replicas = self.config.stream_replicas
+            os = await js.create_object_store(
+                bucket_name,
+                config=ObjectStoreConfig(replicas=replicas)
+            )
+        info(f"Object Store bucket created: {bucket_name} (replicas={replicas})")
         return os
 
     async def get_object_store(self, bucket_name: str) -> ObjectStore:
@@ -777,6 +826,286 @@ class NatsService:
         result = await js.delete_object_store(bucket_name)
         info(f"Object Store bucket deleted: {bucket_name}")
         return result
+
+    async def list_stream_names(self) -> List[str]:
+        """List all stream names visible to the current NATS account."""
+        stream_names = []
+        async for stream_info in self._get_jetstream().streams_info_iterator():
+            stream_names.append(stream_info.config.name)
+        return stream_names
+
+    async def ensure_stream_replicas(
+        self,
+        stream_name: str,
+        replicas: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Scale a stream up to the requested replication factor."""
+        js = self._get_jetstream()
+        target = (
+            replicas
+            if replicas is not None
+            else self.config.stream_replicas
+        )
+        stream_info = await js.stream_info(stream_name)
+        current = stream_info.config.num_replicas or 1
+        if current >= target:
+            return {
+                'name': stream_name,
+                'from': current,
+                'to': current,
+                'changed': False,
+            }
+        config = stream_info.config.as_dict()
+        config['num_replicas'] = target
+        await js.update_stream(**config)
+        return {
+            'name': stream_name,
+            'from': current,
+            'to': target,
+            'changed': True,
+        }
+
+    async def ensure_jetstream_stream(self, config: Dict[str, Any]) -> Any:
+        """Create or update a stream while preserving existing subjects."""
+        js = self._get_jetstream()
+        try:
+            stream_info = await js.stream_info(config['name'])
+            existing_config = stream_info.config.as_dict()
+            existing_subjects = existing_config.get('subjects') or []
+            requested_subjects = config.get('subjects') or []
+            next_subjects = list(dict.fromkeys(existing_subjects + requested_subjects))
+            requested_config = {**config, 'subjects': next_subjects}
+            is_current = all(
+                existing_config.get(key) == value
+                for key, value in requested_config.items()
+            )
+            if is_current:
+                return stream_info
+            return await js.update_stream(**{
+                **existing_config,
+                **requested_config,
+            })
+        except Exception as error:
+            if not self._is_stream_not_found_error(error):
+                raise
+            return await js.add_stream(**config)
+
+    async def get_jetstream_stream_info(
+        self,
+        stream_name: str,
+        options: Optional[Dict[str, Any]] = None
+    ) -> Any:
+        """Read metadata for a JetStream stream."""
+        options = options or {}
+        return await self._get_jetstream().stream_info(stream_name, **options)
+
+    async def get_jetstream_stream_info_or_none(
+        self,
+        stream_name: str,
+        options: Optional[Dict[str, Any]] = None
+    ) -> Optional[Any]:
+        """Read stream metadata, returning None only when it is absent."""
+        try:
+            return await self.get_jetstream_stream_info(stream_name, options)
+        except Exception as error:
+            if self._is_stream_not_found_error(error):
+                return None
+            raise
+
+    async def get_jetstream_message(
+        self,
+        stream_name: str,
+        request: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Read and decode one JetStream message."""
+        js = self._get_jetstream()
+        try:
+            if 'last_by_subj' in request:
+                message = await js.get_last_msg(
+                    stream_name,
+                    request['last_by_subj'],
+                    direct=request.get('direct', False)
+                )
+            else:
+                subject = request.get('next_by_subj')
+                message = await js.get_msg(
+                    stream_name,
+                    seq=request.get('seq'),
+                    subject=subject,
+                    direct=request.get('direct', False),
+                    next=subject is not None
+                )
+            if not message:
+                return None
+            return {
+                'data': json.loads(message.data.decode()),
+                'subject': message.subject,
+                'seq': message.sequence,
+            }
+        except Exception as error:
+            if self._is_stream_not_found_error(error):
+                return None
+            raise
+
+    async def publish_jetstream(
+        self,
+        subject: str,
+        data: Any,
+        options: Optional[Dict[str, Any]] = None
+    ) -> Any:
+        """Publish JSON or bytes to JetStream with optional expectations."""
+        options = options or {}
+        payload = (
+            bytes(data)
+            if isinstance(data, (bytes, bytearray, memoryview))
+            else json.dumps(data).encode()
+        )
+        headers = dict(options.get('headers') or {})
+        message_id = options.get('msg_id', options.get('msgID'))
+        if message_id is not None:
+            headers['Nats-Msg-Id'] = str(message_id)
+        expectations = options.get('expect') or {}
+        expectation_headers = {
+            'stream_name': 'Nats-Expected-Stream',
+            'streamName': 'Nats-Expected-Stream',
+            'last_sequence': 'Nats-Expected-Last-Sequence',
+            'lastSequence': 'Nats-Expected-Last-Sequence',
+            'last_msg_id': 'Nats-Expected-Last-Msg-Id',
+            'lastMsgID': 'Nats-Expected-Last-Msg-Id',
+            'last_subject_sequence': 'Nats-Expected-Last-Subject-Sequence',
+            'lastSubjectSequence': 'Nats-Expected-Last-Subject-Sequence',
+        }
+        for key, value in expectations.items():
+            header_name = expectation_headers.get(key)
+            if header_name is None:
+                raise ValueError(f"Unsupported JetStream expectation: {key}")
+            headers[header_name] = str(value)
+        return await self._get_jetstream().publish(
+            subject,
+            payload,
+            headers=headers or None
+        )
+
+    async def ensure_jetstream_consumer(
+        self,
+        stream_name: str,
+        config: Dict[str, Any]
+    ) -> Any:
+        """Create or update a durable JetStream consumer."""
+        js = self._get_jetstream()
+        durable_name = config['durable_name']
+        try:
+            consumer_info = await js.consumer_info(stream_name, durable_name)
+            existing_config = consumer_info.config.as_dict()
+            return await js.add_consumer(
+                stream_name,
+                config=ConsumerConfig(**{**existing_config, **config})
+            )
+        except Exception as error:
+            if not self._is_stream_not_found_error(error):
+                raise
+            return await js.add_consumer(
+                stream_name,
+                config=ConsumerConfig(**config)
+            )
+
+    async def consume_jetstream_messages(
+        self,
+        stream_name: str,
+        consumer_name: str,
+        options: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """Fetch, decode, and acknowledge messages from a durable consumer."""
+        options = options or {}
+        subscription = await self._get_jetstream().pull_subscribe_bind(
+            stream=stream_name,
+            consumer=consumer_name
+        )
+        try:
+            messages = await subscription.fetch(
+                batch=options.get('max_messages', 100),
+                timeout=options.get('expires_ms', 1000) / 1000
+            )
+        except nats.errors.TimeoutError:
+            return []
+        decoded_messages = []
+        for message in messages:
+            decoded_messages.append(self._decode_jetstream_message(message))
+            await message.ack()
+        return decoded_messages
+
+    async def process_jetstream_messages(
+        self,
+        stream_name: str,
+        consumer_name: str,
+        handler: Callable[[Dict[str, Any]], Awaitable[Optional[Dict[str, int]]]],
+        options: Optional[Dict[str, Any]] = None
+    ) -> int:
+        """Process messages and apply explicit ack/nak dispositions."""
+        options = options or {}
+        subscription = await self._get_jetstream().pull_subscribe_bind(
+            stream=stream_name,
+            consumer=consumer_name
+        )
+        try:
+            messages = await subscription.fetch(
+                batch=options.get('max_messages', 100),
+                timeout=options.get('expires_ms', 1000) / 1000
+            )
+        except nats.errors.TimeoutError:
+            return 0
+        processed = 0
+        for message in messages:
+            try:
+                disposition = await handler(self._decode_jetstream_message(message))
+                if disposition:
+                    delay_ms = disposition.get(
+                        'nak_delay_ms',
+                        disposition.get('nakDelayMs')
+                    )
+                    await message.nak(
+                        delay=None if delay_ms is None else delay_ms / 1000
+                    )
+                    continue
+                await message.ack()
+                processed += 1
+            except Exception:
+                delay_ms = options.get(
+                    'nak_delay_ms',
+                    options.get('nakDelayMs')
+                )
+                await message.nak(
+                    delay=None if delay_ms is None else delay_ms / 1000
+                )
+                raise
+        return processed
+
+    @staticmethod
+    def _decode_jetstream_message(message: Msg) -> Dict[str, Any]:
+        """Decode a JetStream message into the shared service shape."""
+        return {
+            'data': json.loads(message.data.decode()),
+            'subject': message.subject,
+            'seq': message.metadata.sequence.stream,
+        }
+
+    async def purge_jetstream_subject(
+        self,
+        stream_name: str,
+        subject: str,
+        options: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Purge a filtered subject, optionally through an inclusive sequence."""
+        options = options or {}
+        through_sequence = options.get(
+            'through_sequence',
+            options.get('throughSequence')
+        )
+        await self._get_jetstream().purge_stream(
+            stream_name,
+            subject=subject,
+            seq=None if through_sequence is None else through_sequence + 1
+        )
 
     async def put_object(
         self,
@@ -806,7 +1135,9 @@ class NatsService:
 
     async def get_object(self, bucket_name: str, name: str) -> Optional[bytes]:
         """Retrieve an object as bytes."""
-        os = await self.get_object_store(bucket_name)
+        os = await self._open_object_store_or_none(bucket_name)
+        if not os:
+            return None
         try:
             result = await os.get(name)
         except Exception as e:
@@ -824,7 +1155,9 @@ class NatsService:
         writeinto: io.BufferedIOBase
     ) -> Optional[ObjectInfo]:
         """Retrieve an object by streaming directly into a writable buffer."""
-        os = await self.get_object_store(bucket_name)
+        os = await self._open_object_store_or_none(bucket_name)
+        if not os:
+            return None
         try:
             result = await os.get(name, writeinto=writeinto)
         except Exception as e:
@@ -837,7 +1170,9 @@ class NatsService:
 
     async def get_object_info(self, bucket_name: str, name: str) -> Optional[ObjectInfo]:
         """Get object metadata."""
-        os = await self.get_object_store(bucket_name)
+        os = await self._open_object_store_or_none(bucket_name)
+        if not os:
+            return None
         try:
             return await os.info(name)
         except Exception as e:

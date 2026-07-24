@@ -5,7 +5,7 @@ description: How AI generation events move from the in-process API workflow to t
 
 # Streaming and Events
 
-Lixpi uses NATS for the live AI generation path and JetStream for resumability. The in-process LangGraph workflow publishes live chat pipeline events onto an internal per-pipeline subject, writes the same pipeline events to a workspace JetStream log before live publish, and mirrors AI chat document mutations into the conversation Asset's organization-scoped ProseMirror step log. Authorized API relays copy canonical live traffic to per-user browser subjects. A refreshed browser can therefore recover both pieces of state it needs:
+Lixpi uses NATS for the live AI generation path and JetStream for resumability while a response is active. The in-process LangGraph workflow publishes live chat pipeline events onto an internal per-pipeline subject, writes the same pipeline events to a workspace JetStream log before live publish, and mirrors AI chat document mutations into the conversation Asset's organization-scoped ProseMirror step log. Authorized API relays copy canonical live traffic to per-user browser subjects. A refreshed browser can therefore recover both pieces of active state it needs:
 
 - non-ProseMirror pipeline events such as branch resolution, lineage planning, image/video progress, traces, and errors through `CHAT_PIPELINE_RESUME`
 - rendered AI chat text and generated-media transcript nodes through `asset.document.resume` plus a per-user Asset-document event relay
@@ -29,30 +29,40 @@ asset.document.steps.{organizationId}.{assetId}.{role}
 asset.document.events.{userIdToken}.{organizationId}.{assetId}.{role}
 asset.events.{created|updated|deleted|renditionUpdated}
 asset.events.{created|updated|deleted|renditionUpdated}.{userIdToken}
+capability.catalog.{search|list|get|create|update|delete|grant|revoke|save}
+capability.catalog.changed
+ai.interaction.capability.run.{start|stop|resume|get|replay}
+ai.interaction.capability.run.events.{workspaceId}.{runId}
+ai.interaction.capability.run.status.{userIdToken}.{workspaceId}.{runId}
 ```
 
 | Direction | Subject | Side |
 |-----------|---------|------|
 | Request | `ai.interaction.chat.sendMessage` | Browser publishes; the API AI-interaction handler subscribes in the `aiInteraction` queue group. |
-| Canonical live pipeline events | `ai.interaction.chat.receiveMessage.{scopeId}.{pipelineId}` | API publishers write to this internal-only subject. Chat uses organization scope; extraction uses Workspace scope. |
+| Canonical live pipeline events | `ai.interaction.chat.receiveMessage.{scopeId}.{pipelineId}` | API publishers write to this internal-only subject. Conversation pipelines use the conversation Asset's organization as the scope. |
 | Browser live pipeline events | `ai.interaction.chat.receiveMessage.{userIdToken}.{scopeId}.{pipelineId}` | An API relay is activated only after the user is authorized for the conversation Asset or Workspace. `AiInteractionService` subscribes under its own tokenized prefix. |
 | Pipeline replay request | `ai.interaction.chat.pipelineResume` | Browser requests missed pipeline events after `pipelineLocalStreamSeq`; API reads JetStream and replies. |
 | Durable pipeline log | `ai.interaction.chat.pipelineEvents.{workspaceId}.{pipelineId}` | `PipelineEventLog` stores events before live publish. `pipelineId` is the conversation Asset ID for chat requests. |
-| Asset-role replay request | `asset.document.resume` | `ProseMirrorAuthorityService` requests the persisted Blob snapshot plus missed Asset-role stream events. |
+| Asset-role replay request | `asset.document.resume` | `ProseMirrorAuthorityService` requests a small authenticated HTTP snapshot reference plus a byte-bounded page of missed Asset-role stream events. Snapshot JSON stays in Object Store and never crosses core NATS. |
 | Canonical Asset-role steps | `asset.document.steps.{organizationId}.{assetId}.{role}` | API publishes durable ProseMirror `START` / `STEP` / `END` / `ERROR` events. Browsers cannot subscribe directly. |
 | Browser live Asset-role events | `asset.document.events.{userIdToken}.{organizationId}.{assetId}.{role}` | `asset.document.resume` authorizes the Asset and, when `activateLiveRelay: true`, activates a per-user relay before returning replay state and the exact live subject. The relay point-checks Asset/ACL access for every event and refreshes workspace/organization membership at most five seconds after it changes. Snapshot-only loads do not create relays. |
 | Canonical Asset invalidations | `asset.events.{created|updated|deleted|renditionUpdated}` | API Asset/maintenance/rendition writers publish organization-tagged invalidations. Browsers cannot subscribe directly. |
 | Browser Asset invalidations | `asset.events.{created|updated|deleted|renditionUpdated}.{userIdToken}` | Every active API replica re-evaluates current organization, scope/reference, and ACL authorization before relaying. Previously authorized IDs are remembered so revocation/deletion can remove cache entries; duplicate/out-of-order refreshes are revision-guarded. |
+| Capability catalog commands | `capability.catalog.*` | Browser commands reach authenticated API handlers. Search and list return thin authorized metadata; full manifests and resources require separate authorization. |
+| Capability catalog invalidation | `capability.catalog.changed` plus user-tokenized relay | Catalog mutations invalidate affected user, organization, global, and explicit-principal query caches. |
+| Capability run commands | `ai.interaction.capability.run.{start|stop|resume|get|replay}` | Start validates ownership and Tool input. Stop requires the run owner. Resume authorizes the run, activates the live relay, and returns replay state plus the exact tokenized subject. |
+| Durable Capability run events | `ai.interaction.capability.run.events.{workspaceId}.{runId}` | The runner writes safe ordered events before live publication. Raw prompts, resource bytes, and unrestricted action output are excluded. |
+| Browser Capability run status | `ai.interaction.capability.run.status.{userIdToken}.{workspaceId}.{runId}` | Authorized per-user relay. The browser subscribes before replay, buffers live events, deduplicates by run sequence, then drains the buffer to close the replay/live race. |
 
 Subject names live in [`nats-subjects.json`](../../packages/lixpi/constants/nats-subjects.json). AI stream status values live in [`ai-interaction-constants.json`](../../packages/lixpi/constants/ai-interaction-constants.json) (`STREAM_STATUS`).
 
-Browser user JWTs grant publish permission for command subjects and subscribe permission for `_INBOX.>` plus tokenized live-event prefixes. They never grant subscribe permission on command subjects, canonical AI/document/Asset subjects, or cross-tenant Feature events; request payloads contain bearer tokens and must not be observable by another NATS client.
+Browser user JWTs grant publish permission for command subjects and subscribe permission for `_INBOX.>` plus tokenized live-event prefixes. They never grant subscribe permission on command subjects, canonical AI/document/Asset subjects, or cross-tenant Capability events; request payloads contain bearer tokens and must not be observable by another NATS client.
 
 ## Durable Logs
 
 ### Pipeline Event Log
 
-`StreamPublisher` writes every chat pipeline event through [`PipelineEventLog`](../../services/api/src/llm/graph/pipeline-event-log.ts) before publishing the canonical live `receiveMessage` event. The stream is per workspace (`PIPELINE_EVENTS_{workspaceId}`), uses file storage, `allow_direct`, limits retention, and one subject per pipeline. Normal cleanup purges a completed pipeline only after every planned output has `sealed`, `failed`, or `cancelled` provenance. The seven-day maximum age is a crash/orphan backstop that preserves the authoritative log across long media jobs and API restarts; it is not the normal completion lifetime. The browser never receives permission for the canonical subject; an API relay copies events to the authorized user-token subject.
+`StreamPublisher` writes every chat pipeline event through [`PipelineEventLog`](../../services/api/src/llm/graph/pipeline-event-log.ts) before publishing the canonical live `receiveMessage` event. The stream is per workspace (`PIPELINE_EVENTS_{workspaceId}`), uses file storage, `allow_direct`, limits retention, and one subject per pipeline. When a chat-only or media response finishes, `StreamPublisher` drains every response and canvas write, persists and ends the conversation document, then immediately purges that pipeline subject. A failed purge is retried after one minute. The seven-day maximum age is only a crash/orphan backstop for a process that terminates before explicit cleanup succeeds. Generated output provenance is materialized from the persisted conversation Asset, so completed pipeline events are not retained for provenance. The browser never receives permission for the canonical subject; an API relay copies events to the authorized user-token subject.
 
 Response publishing uses separate in-process queues for media runs. Events without a concrete `generationRun.mediaRunId` publish through the main response queue. Media trace, partial, complete, and error events with a `mediaRunId` publish through that run's queue, which preserves ordering for one generated image/video while allowing sibling variants to publish independently. A final `IMAGE_COMPLETE` for a run waits behind that run's earlier partials; it does not wait behind another run's partial upload or JetStream acknowledgement.
 
@@ -70,7 +80,7 @@ type PipelineEventEnvelope = {
 }
 ```
 
-`AiInteractionService` tracks `pipelineEventId` for dedupe and `pipelineLocalStreamSeq` as its replay cursor. On mount it calls `CHAT_PIPELINE_RESUME`; the API returns events after that stream sequence by reading direct JetStream messages with `last_by_subj` and `next_by_subj`. Replay pages expose `hasMore`, and the browser continues from its last applied stream sequence until the bounded subject is caught up.
+`AiInteractionService` tracks `pipelineEventId` for dedupe and `pipelineLocalStreamSeq` as its replay cursor. On mount it calls `CHAT_PIPELINE_RESUME`; for an active response, the API returns events after that stream sequence by reading direct JetStream messages with `last_by_subj` and `next_by_subj`. Replay pages expose `hasMore`, and the browser continues from its last applied stream sequence until the bounded subject is caught up. A finished response loads from its persisted conversation, Asset, provenance, and canvas state because its pipeline subject has already been purged.
 
 ### ProseMirror Step Log
 
@@ -89,7 +99,7 @@ Events carry two cursors with different meanings:
 | `version` / `finalVersion` | ProseMirror document version after applying document-changing steps. Browser freshness is based on this value. |
 | `streamSequence` | JetStream stream sequence for replay. Browser resume uses this to avoid missing control messages that do not increment document version. |
 
-`asset.document.resume` authorizes the Asset/Workspace/role and returns a persisted Blob-backed snapshot when one is newer than the browser document, the latest document version, the latest stream sequence, and missed events after `localStreamSeq`. Mounted authorities request `activateLiveRelay: true`; the API then activates the user relay and returns its exact live subject. Snapshot-only Asset loads omit the flag and create no relay. `ProseMirrorAuthorityService` subscribes to its predicted tokenized subject before resume to close the live/replay race and verifies the returned subject. With no pending local steps it can apply a newer snapshot directly; otherwise it replays `STEP` events with `Step.fromJSON(view.state.schema, event.step)` and rebases pending local steps. Settled history has a five-minute replay grace before purge through the incorporated sequence. Mutable roles require the current workspace lease; provenance is sealed and never accepts client steps.
+`asset.document.resume` authorizes the Asset/Workspace/role and returns only persisted snapshot metadata plus an authenticated `/api/assets/:assetId/documents/:role/snapshot` URL. The browser fetches that JSON over HTTP; the API reads it from the Asset's Blob Object Store. Missed step events are returned in pages capped by a serialized-byte budget, with separate replayed and latest stream cursors, so a long active stream cannot exceed core NATS `max_payload`. Mounted authorities request `activateLiveRelay: true`; the API then activates the user relay and returns its exact live subject. Snapshot-only Asset loads omit the flag and create no relay. `ProseMirrorAuthorityService` subscribes to its predicted tokenized subject before resume to close the live/replay race, verifies the returned subject, and drains every replay page. With no pending local steps it can apply a newer snapshot directly; otherwise it requests events relative to its local version and rebases pending local steps. The server-authored AI chat assembler purges the conversation step subject immediately after its final snapshot and `END` event are persisted. General mutable-document settlement retains incorporated client-edit steps for a five-minute replay grace before purging through that sequence. Mutable roles require the current workspace lease; provenance is sealed and never accepts client steps.
 
 JetStream publish CAS uses the last JetStream stream sequence returned for that document subject. The envelope's logical `subjectSeq` is ordering metadata and must never be passed as `lastSubjectSequence`; organization streams interleave many Asset subjects, so those values are intentionally different.
 
@@ -104,16 +114,17 @@ Every live pipeline message carries a `status` from `STREAM_STATUS` inside `cont
 | Status | Payload | Browser segment / handling | Purpose |
 |--------|---------|----------------------------|---------|
 | `START_STREAM` | — | Pipeline lifecycle; ProseMirror authority receives a separate `START` document event | Begin the top-level stream before pre-stream resolver work. Idempotent. |
-| `STREAMING` | `{ text }` or structured progress fields | Text is mirrored into ProseMirror steps by the API; extraction/stage/feature fields remain pipeline events | A text delta or structured progress payload from the provider path. Anthropic media tool `prompt` input deltas are decoded server-side and emitted through the generated-prompt text path before the final tool call is available. |
+| `STREAMING` | `{ text }` | Text is mirrored into ProseMirror steps by the API | A text delta from the provider path. Anthropic media tool `prompt` input deltas are decoded server-side and emitted through the generated-prompt text path before the final tool call is available. Tool progress uses `CAPABILITY_RUN_EVENT`. |
 | `END_STREAM` | `{ text: '', aiProvider }` | Pipeline lifecycle; ProseMirror authority receives a separate `END` document event after final snapshot persistence | End the top-level stream. Usage is computed separately and is not currently included in the stream event. |
 | `ERROR` | `{ error }` | Surface the error; end receiving state | Stream-level failure (including pre-stream errors). |
 | `CONTEXT_RELEVANCE_RESOLVED` | `{ workspaceContextResolution }` | Panel/canvas: keep selections scoped to the submitted turn, patch improved descriptors, narrow media candidates | Result of `resolveWorkspaceContext`. Bypasses the markdown parser. |
 | `CONTEXT_RELEVANCE_ERROR` | `{ error }` | Surface relevance failure; the graph error path closes the stream | Relevance resolution failed. |
+| `CAPABILITY_RUN_EVENT` | `{ runId, event }` with safe `CapabilityRunEvent` data | Shared Tool progress projection in the transcript; detached clients consume the tokenized run-status family directly | Mirrors a durable chat-originated Tool event after it has been appended to the run log. Step states include pending, running, completed, skipped, failed, and cancelled. |
 | `MEDIA_BRANCH_RESOLVED` | `{ resolution }` | Canvas/media: store VLM-selected references | Result of `resolveMediaBranch` (image and video). Forwarded as an `image_branch_resolved` segment. |
 | `MEDIA_LINEAGE_PLANNED` | `{ lineagePlan, generationRun }` | Canvas: apply API-declared branch origin/fork IDs, lineage parent, marker provenance, and run assignments | API-owned media lineage topology for media-enabled requests. Forwarded as a `media_lineage_planned` segment. |
 | `MEDIA_BRANCH_RESOLUTION_ERROR` | `{ error }` | Surface branch failure; clear pending placement | Branch resolution failed (e.g. missing candidate snapshot). |
 | `IMAGE_GENERATION_TRACE` | `{ imageGenerationTrace }` | `image_generation_trace` segment | Audit trace: image tool prompt + selected/excluded references, published before the transient image provider runs. |
-| `IMAGE_PARTIAL` | `{ imageUrl, assetId, partialIndex }` | Canvas media layer (bypasses markdown) | Empty `imageUrl` triggers the placeholder; non-empty provider partials are transient data URLs that update the deterministic pending Asset node without becoming durable Blobs. |
+| `IMAGE_PARTIAL` | `{ imageUrl, assetId, partialIndex }` | Canvas media layer (bypasses markdown) | Empty `imageUrl` triggers the placeholder. Non-empty provider bytes are stored in the transient NATS Object Store; the event carries only an authenticated `/api/transient-media/...` URL. A replacement deletes the superseded object, and terminal completion/teardown deletes the last object. |
 | `IMAGE_COMPLETE` | `{ imageUrl, assetId, responseId, revisedPrompt, imageModelId, imageModelProvider, canvasGeometry }` | Canvas media layer | Final bytes settle the preassigned Asset, and the API-authored canvas projection finalizes the node. |
 | `VIDEO_GENERATION_TRACE` | `{ videoGenerationTrace }` | `video_generation_trace` segment | Audit trace: video tool prompt + selected/excluded references, published before VEO runs (so the trace survives a later VEO failure). |
 | `VIDEO_PENDING` | — | `video_pending` segment + placeholder node | Create the placeholder `VideoCanvasNode` and start the traveling outline. |

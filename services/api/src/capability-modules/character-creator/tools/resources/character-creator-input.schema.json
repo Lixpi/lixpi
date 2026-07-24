@@ -1,0 +1,24 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["prompt"],
+    "properties": {
+        "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000,
+            "description": "Character description and requested design constraints."
+        },
+        "referenceAssetIds": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+                "type": "string",
+                "minLength": 1
+            },
+            "description": "Optional authorized image Asset IDs used for identity and design fidelity."
+        }
+    }
+}

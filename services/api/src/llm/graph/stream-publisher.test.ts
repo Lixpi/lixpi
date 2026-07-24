@@ -303,23 +303,6 @@ describe('StreamPublisher extraction progress', () => {
         expect(nats.fake.publishJetStream).toHaveBeenCalledTimes(3)
     })
 
-    it('publishes extraction status and detail on the chat stream', async () => {
-        const nats = makeFakeNats()
-        const publisher = new StreamPublisher(nats.fake, 'ws1', 'run1', 'Anthropic')
-
-        publisher.extractionProgress('generating_samples', 'Rendering a texture reference sheet.')
-        await flushPipelinePublishes()
-
-        expect(nats.published).toHaveLength(1)
-        expect(nats.published[0]?.subject).toBe('ai.interaction.chat.receiveMessage.ws1.run1')
-        expect(nats.published[0]?.payload.content).toEqual(expect.objectContaining({
-            status: STREAM_STATUS.STREAMING,
-            extractionStatus: 'generating_samples',
-            extractionDetail: 'Rendering a texture reference sheet.',
-            aiProvider: 'Anthropic',
-        }))
-    })
-
     it('publishes workflow errors to both the dedicated error channel and streaming channel', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
@@ -696,22 +679,6 @@ describe('StreamPublisher trace payloads', () => {
         })
     })
 
-    it('publishes feature cards as structured stream updates', async () => {
-        const nats = makeFakeNats()
-        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
-
-        const payload = { title: 'A feature', value: 'details' }
-        publisher.featureCard(payload)
-        await flushPipelinePublishes()
-
-        expect(nats.published).toHaveLength(1)
-        expect(nats.published[0]?.payload.content).toEqual({
-            status: STREAM_STATUS.STREAMING,
-            aiProvider: 'Anthropic',
-            featureCard: payload,
-        })
-    })
-
     it('publishes image branch and lineage resolution events with generation-run defaults and overrides', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(
@@ -749,16 +716,8 @@ describe('StreamPublisher trace payloads', () => {
         })
     })
 
-    it('refreshes API canvas geometry while planned lineage reasoning text streams', async () => {
+    it('does not refresh API canvas geometry for streamed reasoning text', async () => {
         const nats = makeFakeNats()
-        canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry.mockResolvedValue({
-            layoutRevision: 77,
-            nodes: [{
-                nodeId: 'fork-1',
-                position: { x: 10, y: 20 },
-                dimensions: { width: 320, height: 80 },
-            }],
-        })
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', generationRun)
         ;(publisher as any).options.enableProseMirrorStream = true
         ;(publisher as any).proseMirrorAssembler = {
@@ -777,28 +736,11 @@ describe('StreamPublisher trace payloads', () => {
         await publisher.drainPendingWrites()
         await flushPipelinePublishes()
 
-        expect(canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry).toHaveBeenCalledWith({
-            workspaceId: 'ws1',
-            generationRequestId: 'request-1',
-            proseMirrorThreadContent: { type: 'doc', content: [] },
-        })
-        expect(nats.published).toEqual(expect.arrayContaining([
-            expect.objectContaining({
-                payload: expect.objectContaining({
-                    content: expect.objectContaining({
-                        status: STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED,
-                        canvasGeometry: {
-                            layoutRevision: 77,
-                            nodes: [{
-                                nodeId: 'fork-1',
-                                position: { x: 10, y: 20 },
-                                dimensions: { width: 320, height: 80 },
-                            }],
-                        },
-                    }),
-                }),
-            }),
-        ]))
+        expect(canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry).not.toHaveBeenCalled()
+        const publishedGeometryEvent = nats.published.some(entry =>
+            entry.payload.content?.status === STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED
+        )
+        expect(publishedGeometryEvent).toBe(false)
     })
 })
 

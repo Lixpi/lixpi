@@ -1,0 +1,73 @@
+.capability-run-form,
+.capability-run-form-fields,
+.capability-run-form-field {
+    display: grid;
+    gap: 8px;
+}
+
+.capability-run-form-field textarea,
+.capability-run-form-field input,
+.capability-run-form-field select {
+    padding: 8px 10px;
+    border: 1px solid rgb(255 255 255 / 14%);
+    border-radius: 8px;
+    background: rgb(0 0 0 / 16%);
+    color: inherit;
+}
+
+.capability-run-form-field small {
+    color: rgb(255 255 255 / 58%);
+}
+
+.capability-run-form-submit {
+    justify-self: start;
+}
+
+.capability-run-form-errors,
+.capability-run-step-error {
+    color: #ffaaaa;
+}
+
+.capability-run-progress-header {
+    display: flex;
+    justify-content: space-between;
+}
+
+.capability-run-steps {
+    display: grid;
+    gap: 8px;
+    padding: 0;
+    list-style: none;
+}
+
+.capability-run-step {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr);
+    gap: 8px;
+}
+
+.capability-run-step small {
+    display: block;
+    color: rgb(255 255 255 / 58%);
+}
+
+.capability-run-step-marker {
+    width: 8px;
+    height: 8px;
+    margin-top: 5px;
+    border-radius: 50%;
+    background: #777;
+}
+
+.capability-run-step-running .capability-run-step-marker {
+    background: #b8a5ff;
+}
+
+.capability-run-step-completed .capability-run-step-marker {
+    background: #72d4a9;
+}
+
+.capability-run-step-failed .capability-run-step-marker,
+.capability-run-step-cancelled .capability-run-step-marker {
+    background: #ff8b8b;
+}

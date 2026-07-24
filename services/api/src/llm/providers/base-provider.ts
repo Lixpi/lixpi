@@ -26,13 +26,17 @@ import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { tokenUsageConfirm, imageUsageConfirm, videoUsageConfirm } from '../usage/usage-event-mapper.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
+import { resolveCapabilityOutputMediaRuns } from '../lineage/capability-output-media-runs.ts'
 import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
-import type { CapabilityDispatcher } from '../../capability-system/capability-dispatcher.ts'
+import type { CapabilityDispatcher } from '@lixpi/capability-system/backend'
 import { getCapabilityDispatcher } from '../../capability-system/capability-runtime.ts'
 import {
     executeRequiredCapabilitiesForState,
+    requiredCapabilityProducedOutput,
     resolveCapabilitiesForState,
 } from '../../capability-system/capability-state-resolver.ts'
+import { isCharacterCreatorCapabilitySelected } from '../../capability-modules/character-creator/character-creator-routing.ts'
+import { resolveImageGenerationReferences } from '../image-generation-references.ts'
 
 export type BaseProviderDeps = {
     natsService: NatsService
@@ -93,14 +97,14 @@ const normalizeModelOption = (
 }
 
 // Shared LangGraph workflow for chat-style LLM calls (with optional image-gen branch).
-// Feature Extraction is a Capability Tool; this graph handles chat threads and media generation.
+// Style Extraction is a Capability Tool; this graph handles chat threads and media generation.
 // Top-level chat requests publish START_STREAM before graph invocation so expensive
 // pre-stream VLM/image preprocessing never leaves the browser looking frozen.
 // Transient image-model providers skip their own stream lifecycle because the parent
 // chat stream owns it.
 //
 // Topology:
-//   START → validateRequest → resolveWorkspaceContext → resolveCapabilities → executeRequiredCapabilities → resolveMediaBranch → planMediaBranchLineage → streamTokens → [conditional]
+//   START → validateRequest → resolveWorkspaceContext → resolveCapabilities → executeRequiredCapabilities → resolveMediaBranch → streamTokens → planMediaBranchLineage → [conditional]
 //     generate_image: validateImagePrompt → [conditional]
 //       generate_image: executeImageGeneration → calculateUsage → cleanup → END
 //       skip:                                    calculateUsage → cleanup → END
@@ -121,6 +125,7 @@ export abstract class BaseProvider {
     protected readonly capabilityDispatcher: CapabilityDispatcher
     private pipelineProseMirrorContentHandler: ProseMirrorContentHandler | undefined
     private pipelineProseMirrorSnapshotProvider: ProseMirrorSnapshotProvider | undefined
+    private publishMirroredMediaLive = true
 
     constructor(
         protected readonly _instanceKey: string,
@@ -134,17 +139,7 @@ export abstract class BaseProvider {
     private publishPipelineProseMirrorContent(content: Parameters<ProseMirrorContentHandler>[0]): void {
         if (this.pipelineProseMirrorContentHandler) {
             this.pipelineProseMirrorContentHandler(content)
-            if (LIVE_MIRRORED_MEDIA_STATUSES.has(content.status)) {
-                info('[BaseProvider][pipeline-content] live-publish-mirrored-media', {
-                    instanceKey: this.instanceKey,
-                    status: content.status,
-                    generationRequestId: content.generationRun?.generationRequestId ?? '',
-                    reasoningRunId: content.generationRun?.reasoningRunId ?? '',
-                    mediaRunId: content.generationRun?.mediaRunId ?? '',
-                    mediaModelId: content.generationRun?.mediaModelId ?? '',
-                    partialIndex: content.partialIndex ?? null,
-                    hasCanvasGeometry: Boolean(content.canvasGeometry),
-                })
+            if (this.publishMirroredMediaLive && LIVE_MIRRORED_MEDIA_STATUSES.has(content.status)) {
                 this.streamPublisher?.publishChatContent(content, { mirrorProseMirror: false })
             }
             return
@@ -180,11 +175,15 @@ export abstract class BaseProvider {
             .addNode('executeRequiredCapabilities', async (s: ProviderState) => s.preflightResolved
                 ? {}
                 : executeRequiredCapabilitiesForState(s, this.capabilityDispatcher, this.signal))
-            .addNode('resolveMediaBranch', async (s: ProviderState) => s.preflightResolved ? {} : resolveMediaBranch(s, {
-                natsService: this.nats,
-                publisher: this.publisher,
-                abortSignal: this.signal,
-            }))
+            .addNode('resolveMediaBranch', async (s: ProviderState) => (
+                s.preflightResolved
+                    ? {}
+                    : resolveMediaBranch(s, {
+                        natsService: this.nats,
+                        publisher: this.publisher,
+                        abortSignal: this.signal,
+                    })
+            ))
             .addNode('planMediaBranchLineage', async (s: ProviderState) => s.preflightResolved ? {} : this.planMediaBranchLineage(s))
             .addNode('streamTokens', async (s: ProviderState) => this.streamTokens(s))
             .addNode('validateImagePrompt', async (s: ProviderState) => this.validateImagePromptNode(s))
@@ -198,10 +197,10 @@ export abstract class BaseProvider {
         graph.addEdge('resolveWorkspaceContext' as any, 'resolveCapabilities' as any)
         graph.addEdge('resolveCapabilities' as any, 'executeRequiredCapabilities' as any)
         graph.addEdge('executeRequiredCapabilities' as any, 'resolveMediaBranch' as any)
-        graph.addEdge('resolveMediaBranch' as any, 'planMediaBranchLineage' as any)
-        graph.addEdge('planMediaBranchLineage' as any, 'streamTokens' as any)
+        graph.addEdge('resolveMediaBranch' as any, 'streamTokens' as any)
+        graph.addEdge('streamTokens' as any, 'planMediaBranchLineage' as any)
         graph.addConditionalEdges(
-            'streamTokens' as any,
+            'planMediaBranchLineage' as any,
             (s: ProviderState) => this.routeAfterStream(s),
             {
                 generate_image: 'validateImagePrompt' as any,
@@ -224,8 +223,36 @@ export abstract class BaseProvider {
     // Run a request through the LangGraph workflow.
     async process(requestData: Record<string, any>): Promise<ProviderState> {
         this.abortController = new AbortController()
+        const characterCreatorSelected = requestData.capabilityUsageMode === 'character-creator'
+            || isCharacterCreatorCapabilitySelected(requestData.capabilityReferences)
+        const mediaFanoutPlan = characterCreatorSelected && requestData.mediaFanoutPlan
+            ? {
+                ...requestData.mediaFanoutPlan,
+                videoModels: [],
+                videoModelOptions: {},
+                videoConfigGroups: [],
+            }
+            : requestData.mediaFanoutPlan
         const organizationId = requestData.organizationId ?? requestData.eventMeta?.organizationId
         if (!organizationId) throw new Error('Provider request is missing organizationId')
+        const imageGenerationReferences = requestData.imageGenerationReferences ?? []
+        const resolvedImageGenerationReferences = requestData.enableImageGeneration
+            ? await resolveImageGenerationReferences(imageGenerationReferences, this.nats)
+            : undefined
+        if (resolvedImageGenerationReferences) {
+            info(`[ImageGenerationReferences:${this.instanceKey}] resolved ${JSON.stringify({
+                provider: this.providerName,
+                modelVersion: requestData.aiModelMetaInfo?.modelVersion,
+                referenceCount: resolvedImageGenerationReferences.length,
+                references: resolvedImageGenerationReferences.map(reference => ({
+                    role: reference.role,
+                    fileName: reference.fileName,
+                    byteLength: reference.byteLength,
+                    mediaType: reference.mediaType,
+                    sha256: reference.sha256,
+                })),
+            })}`)
+        }
         const ownsServerProseMirrorStream = Boolean(
             requestData.proseMirrorInitialDoc
             && requestData.generationRun?.requestKind !== 'media-generation-matrix',
@@ -242,6 +269,7 @@ export abstract class BaseProvider {
         this.pipelineProseMirrorSnapshotProvider = typeof requestData.proseMirrorSnapshotProvider === 'function'
             ? requestData.proseMirrorSnapshotProvider as ProseMirrorSnapshotProvider
             : undefined
+        this.publishMirroredMediaLive = !requestData.enableImageGeneration && !requestData.enableVideoGeneration
         const onPipelineContent: ProseMirrorContentHandler = content => this.publishPipelineProseMirrorContent(content)
         const getProseMirrorSnapshot: ProseMirrorSnapshotProvider = () => this.getPipelineProseMirrorSnapshot()
         this.streamPublisher = new StreamPublisher(
@@ -307,6 +335,8 @@ export abstract class BaseProvider {
             imageModelVersion: requestData.imageModelMetaInfo?.modelVersion,
             imageProviderName: requestData.imageModelMetaInfo?.provider,
             imagePromptRetryCount: 0,
+            imageGenerationReferences,
+            resolvedImageGenerationReferences,
             workspaceContextSnapshot: requestData.workspaceContextSnapshot,
             workspaceContextResolution: requestData.workspaceContextResolution,
             mediaBranchCandidateSnapshot: requestData.mediaBranchCandidateSnapshot,
@@ -318,25 +348,27 @@ export abstract class BaseProvider {
             resolvedCapabilityPlan: requestData.resolvedCapabilityPlan,
             capabilityInvocationDepth: requestData.capabilityInvocationDepth ?? 0,
             capabilityToolResults: requestData.capabilityToolResults,
+            capabilityOutputAssetIds: requestData.capabilityOutputAssetIds,
             capabilityReferenceImages: requestData.capabilityReferenceImages,
             capabilityReferenceImageTraceUrls: requestData.capabilityReferenceImageTraceUrls,
+            capabilityUsageMode: requestData.capabilityUsageMode,
             capabilityUsagePrompt: requestData.capabilityUsagePrompt,
-            enableVideoGeneration: requestData.enableVideoGeneration ?? false,
-            videoModelMetaInfo: requestData.videoModelMetaInfo,
-            videoModelVersion: requestData.videoModelMetaInfo?.modelVersion,
-            videoProviderName: requestData.videoModelMetaInfo?.provider,
-            videoAspectRatio: requestData.videoAspectRatio,
-            videoResolution: requestData.videoResolution,
-            videoDurationSeconds: requestData.videoDurationSeconds,
-            videoFirstFrameImage: requestData.videoFirstFrameImage,
-            videoReferenceImages: requestData.videoReferenceImages,
-            videoSourceForExtension: requestData.videoSourceForExtension,
+            enableVideoGeneration: characterCreatorSelected ? false : requestData.enableVideoGeneration ?? false,
+            videoModelMetaInfo: characterCreatorSelected ? undefined : requestData.videoModelMetaInfo,
+            videoModelVersion: characterCreatorSelected ? undefined : requestData.videoModelMetaInfo?.modelVersion,
+            videoProviderName: characterCreatorSelected ? undefined : requestData.videoModelMetaInfo?.provider,
+            videoAspectRatio: characterCreatorSelected ? undefined : requestData.videoAspectRatio,
+            videoResolution: characterCreatorSelected ? undefined : requestData.videoResolution,
+            videoDurationSeconds: characterCreatorSelected ? undefined : requestData.videoDurationSeconds,
+            videoFirstFrameImage: characterCreatorSelected ? undefined : requestData.videoFirstFrameImage,
+            videoReferenceImages: characterCreatorSelected ? undefined : requestData.videoReferenceImages,
+            videoSourceForExtension: characterCreatorSelected ? undefined : requestData.videoSourceForExtension,
             workflowId: requestData.workflowId,
             workflowSeq: requestData.workflowSeq,
             metricsOperationId: requestData.metricsOperationId,
             metricsAdmissionApproved: requestData.metricsAdmissionApproved,
             generationRun: requestData.generationRun,
-            mediaFanoutPlan: requestData.mediaFanoutPlan,
+            mediaFanoutPlan,
             replayMediaPrompts: requestData.replayMediaPrompts,
             preflightResolved: requestData.preflightResolved ?? false,
         }
@@ -362,7 +394,9 @@ export abstract class BaseProvider {
                 err(`Workflow failed for ${this.instanceKey}: ${message}`)
             }
             this.streamPublisher.error(message)
-            this.streamPublisher.completeKnownMediaGenerationRequests()
+            if (initialState.generationRun?.requestKind !== 'media-generation-matrix') {
+                this.streamPublisher.completeKnownMediaGenerationRequests()
+            }
             this.streamPublisher.end()
             await this.streamPublisher.drainPendingWrites()
             await this.streamPublisher.finishProseMirrorStream()
@@ -390,8 +424,10 @@ export abstract class BaseProvider {
     // -- Workflow nodes (shared) --
 
     protected async planMediaBranchLineage(state: ProviderState): Promise<Partial<ProviderState>> {
-        if (!state.imageModelVersion && !state.videoModelVersion) return {}
         if (state.mediaBranchLineagePlan) return {}
+
+        const capabilityOutputAssetIds = state.capabilityOutputAssetIds ?? []
+        if (capabilityOutputAssetIds.length === 0 && !state.imageModelVersion && !state.videoModelVersion) return {}
 
         const generationRun = this.mediaGenerationRunPlanner.buildSingleReasoningRun({
             existingRun: state.generationRun,
@@ -400,29 +436,55 @@ export abstract class BaseProvider {
             modelName: state.aiModelMetaInfo.model,
             modelVersion: state.modelVersion,
         })
-        const imageModelId = state.imageModelVersion && state.imageProviderName
+        const selectedImageModality = Boolean(state.generatedImagePrompt)
+        const selectedVideoModality = Boolean(state.generatedVideoPrompt)
+        const hasSelectedModality = selectedImageModality || selectedVideoModality
+        const imageModelId = state.imageModelVersion
+            && state.imageProviderName
+            && (selectedImageModality || (!hasSelectedModality && !state.videoModelVersion))
             ? this.mediaGenerationRunPlanner.buildMediaModelId(state.imageProviderName, state.imageModelMetaInfo?.model, state.imageModelVersion)
             : undefined
-        const videoModelId = state.videoModelVersion && state.videoProviderName
+        const videoModelId = state.capabilityUsageMode !== 'character-creator'
+            && state.videoModelVersion
+            && state.videoProviderName
+            && (selectedVideoModality || (!hasSelectedModality && !state.imageModelVersion))
             ? this.mediaGenerationRunPlanner.buildMediaModelId(state.videoProviderName, state.videoModelMetaInfo?.model, state.videoModelVersion)
+            : undefined
+        const preassignedMediaRuns = capabilityOutputAssetIds.length > 0
+            ? await resolveCapabilityOutputMediaRuns(capabilityOutputAssetIds)
             : undefined
         const lineagePlan = this.mediaBranchLineagePlanner.buildPlan({
             generationRequestId: generationRun.generationRequestId,
-            reasoningModelIds: [generationRun.reasoningModelId],
-            ...(imageModelId ? { imageModelIds: [imageModelId] } : {}),
-            ...(videoModelId ? { videoModelIds: [videoModelId] } : {}),
+            reasoningModelIds: preassignedMediaRuns
+                ? [...new Set(preassignedMediaRuns.map(run => run.reasoningModelId))]
+                : [generationRun.reasoningModelId],
+            ...(preassignedMediaRuns
+                ? { preassignedMediaRuns }
+                : {
+                    ...(imageModelId ? { imageModelIds: [imageModelId] } : {}),
+                    ...(videoModelId ? { videoModelIds: [videoModelId] } : {}),
+                }),
             mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
             mediaBranchResolution: state.mediaBranchResolution,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
             createdAt: Date.now(),
         })
-        const lineageAssignment = lineagePlan.runAssignments.find(
-            assignment => assignment.reasoningRunId === generationRun.reasoningRunId
-        )
-        const nextGenerationRun: MediaGenerationRunMeta = {
-            ...generationRun,
-            ...(lineageAssignment ? { lineageAssignment } : {}),
-        }
+        const lineageAssignment = preassignedMediaRuns
+            ? lineagePlan.runAssignments[0]
+            : lineagePlan.runAssignments.find(assignment => assignment.reasoningRunId === generationRun.reasoningRunId)
+        const nextGenerationRun: MediaGenerationRunMeta = lineageAssignment
+            ? {
+                ...generationRun,
+                reasoningRunId: lineageAssignment.reasoningRunId,
+                reasoningModelId: lineageAssignment.reasoningModelId,
+                reasoningIndex: lineageAssignment.reasoningIndex,
+                ...(lineageAssignment.mediaRunId ? { mediaRunId: lineageAssignment.mediaRunId } : {}),
+                ...(lineageAssignment.mediaModelId ? { mediaModelId: lineageAssignment.mediaModelId } : {}),
+                ...(lineageAssignment.mediaType ? { mediaType: lineageAssignment.mediaType } : {}),
+                mediaIndex: lineageAssignment.mediaIndex,
+                lineageAssignment,
+            }
+            : generationRun
 
         const organizationId = state.eventMeta.organizationId as string | undefined
         const ownerUserId = state.eventMeta.userId as string | undefined
@@ -535,6 +597,12 @@ export abstract class BaseProvider {
             const implResult = await this.streamImpl(state)
             return {
                 ...update,
+                capabilityToolResults: state.capabilityToolResults,
+                capabilityOutputAssetIds: state.capabilityOutputAssetIds,
+                capabilityReferenceImages: state.capabilityReferenceImages,
+                capabilityReferenceImageTraceUrls: state.capabilityReferenceImageTraceUrls,
+                capabilityUsageMode: state.capabilityUsageMode,
+                capabilityUsagePrompt: state.capabilityUsagePrompt,
                 ...implResult,
                 streamActive: false,
                 aiRequestFinishedAt: Date.now(),
@@ -544,7 +612,9 @@ export abstract class BaseProvider {
             err(`Streaming error (${this.providerName}): ${message}`)
             try {
                 this.streamPublisher?.error(message)
-                this.streamPublisher?.completeKnownMediaGenerationRequests()
+                if (state.generationRun?.requestKind !== 'media-generation-matrix') {
+                    this.streamPublisher?.completeKnownMediaGenerationRequests()
+                }
                 this.streamPublisher?.end()
                 await this.streamPublisher?.drainPendingWrites()
             } catch { }
@@ -560,13 +630,22 @@ export abstract class BaseProvider {
     protected abstract streamImpl(state: ProviderState): Promise<Partial<ProviderState>>
 
     protected shouldGenerateImage(state: ProviderState): 'generate_image' | 'skip' {
+        if (requiredCapabilityProducedOutput(state)) return 'skip'
         return state.generatedImagePrompt ? 'generate_image' : 'skip'
     }
 
-    // Post-stream routing: a generate_video tool call takes precedence, then
-    // generate_image, else skip straight to usage. The text model normally emits
-    // at most one media tool call per turn.
+    // Post-stream routing normally gives video precedence when a model emits
+    // both calls. Character Creator is image-only and keeps its prepared image
+    // prompt authoritative even if the reasoning model also emits a video call.
     protected routeAfterStream(state: ProviderState): 'generate_image' | 'generate_video' | 'skip' {
+        if (requiredCapabilityProducedOutput(state)) {
+            const generationRequestId = state.generationRun?.generationRequestId
+            if (generationRequestId && state.generationRun?.requestKind !== 'media-generation-matrix') {
+                this.publisher.mediaGenerationRequestComplete(generationRequestId)
+            }
+            return 'skip'
+        }
+        if (state.capabilityUsageMode === 'character-creator' && state.generatedImagePrompt) return 'generate_image'
         if (state.generatedVideoPrompt) return 'generate_video'
         if (state.generatedImagePrompt) return 'generate_image'
         // A lineage plan was already announced to clients, but no media tool
@@ -993,7 +1072,9 @@ export abstract class BaseProvider {
     }
 
     protected async cleanup(_state: ProviderState): Promise<Partial<ProviderState>> {
-        this.streamPublisher?.completeKnownMediaGenerationRequests()
+        if (_state.generationRun?.requestKind !== 'media-generation-matrix') {
+            this.streamPublisher?.completeKnownMediaGenerationRequests()
+        }
         await this.streamPublisher?.drainPendingWrites()
         await this.streamPublisher?.finishProseMirrorStream()
         return {}

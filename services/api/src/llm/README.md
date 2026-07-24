@@ -33,8 +33,8 @@ validateRequest
   → resolveCapabilities
   → executeRequiredCapabilities
   → resolveMediaBranch
-  → planMediaBranchLineage
   → streamTokens
+  → planMediaBranchLineage
   → generate_image | generate_video | skip
   → calculateUsage
   → cleanup
@@ -42,7 +42,7 @@ validateRequest
 
 Context snapshots contain node/Asset IDs and descriptors. The API point-authorizes selected Assets and resolves model-safe Blob URLs. Video candidates use representative-frame/poster renditions; explicit extension resolves the authorized source video Asset to canonical/original MP4 internally.
 
-Capability resolution captures current manifest hashes, authorizes the transitive closure, enforces dependency and aggregate resource limits, and seals the plan. Required Tools run before provider streaming. The reasoning model also receives `search_capabilities` and `use_capability`; transient media providers cannot recurse into those functions.
+Capability resolution captures current manifest hashes, authorizes the transitive closure, enforces dependency and aggregate resource limits, and seals the plan. Required Tools run before provider streaming. The reasoning model also receives `search_capabilities` and `use_capability` on media-enabled turns; model-selected visual Tool output is folded back into the same provider state before lineage planning and generation. Transient media providers cannot recurse into those functions.
 
 ## Streams
 
@@ -54,6 +54,8 @@ ai.interaction.chat.receiveMessage.<userIdToken>.<organizationId>.<conversationA
 ```
 
 Pipeline replay logs are keyed by workspace and conversation pipeline ID. `StreamPublisher` writes replay before live publication and preserves per-`mediaRunId` event ordering without serializing sibling runs.
+The authorized browser relay refreshes requester and conversation authorization on a short interval, then forwards events directly between refreshes so partial-image fanout cannot queue behind one database authorization read per event.
+Transient image/video providers forward media events to their owning reasoning provider; only that owner live-publishes the mirrored event, preventing duplicate partial and completion delivery.
 
 Conversation document steps use:
 
@@ -71,6 +73,8 @@ Generated-output replay is an explicit exception to reasoning prompt creation, n
 
 `MediaBranchLineagePlanner` enumerates reasoning/media axes and returns marker topology plus one `MediaRunLineageAssignment` per concrete output. Each assignment includes its stable `assetId`.
 
+For a plain single-model request, reasoning chooses `generate_image` or `generate_video` before lineage planning, so only the chosen modality receives an assignment even though both scalar model selectors are configured. Character Creator is image-only: request routing selects the Tool before provider execution, retains the selected reasoning/image axes, and removes every video model and video option before matrix normalization or scalar provider setup. Explicit matrix requests still enumerate every requested model axis allowed by the selected Tool. `ImageRouter` packages every source and capability image into the typed `imageGenerationReferences` contract. `BaseProvider` resolves and fingerprints that ordered list exactly once before any image-provider workflow runs; OpenAI, Google, Stability, and future provider adapters consume the same `resolvedImageGenerationReferences` state instead of reparsing vendor-specific message blocks. Character Creator therefore preserves the authoritative character source first and the packaged sheet-layout example second across every provider. The Character Creator action logs the packaged example's byte length and SHA-256 when it leaves capability storage, and the shared resolver logs the same fingerprint at provider ingress, so a run can prove that the repository resource—not a prompt-only substitute—reached the media adapter.
+
 Shared preflight creates pending Assets with:
 
 - workspace scope/catalog and conversation/media surface reference;
@@ -81,6 +85,8 @@ Shared preflight creates pending Assets with:
 - generation/reasoning/media IDs and prompt fingerprint.
 
 Providers and browser code must never synthesize assignments, marker IDs, or output Asset IDs.
+A lineage-plan canvas write persists branch markers only. Planned media slots remain transient until the first media event attaches each preassigned Asset node through its reference-counted Asset/workspace transaction.
+A matrix reasoning child never completes the shared generation request. It may settle only its own skipped branch; the matrix orchestrator publishes the single request-level completion after every reasoning child finishes.
 A reasoning-only matrix has no concrete media assignments, so it creates no pending output Assets or media-lineage canvas markers.
 
 ## Image and video publishers
@@ -105,6 +111,8 @@ Request-level failure/cancellation settles every unfinished planned Asset. Asset
 Pipeline cleanup may discard source events after terminal delivery because deferred provenance reconstruction reads the settled conversation Asset.
 
 Generated media partials never travel inside pipeline, ProseMirror, or live NATS event payloads. Providers write each revision to an immutable run-scoped object in the organization transient-media Object Store and publish only an authenticated API reference. After a replacement is stored, the superseded revision is deleted; terminal media clears the last partial immediately, with provider teardown retrying any failed cleanup. The mechanism is media-type agnostic, and final media remains available only through its settled Asset rendition.
+
+Asset-document resume follows the same payload boundary: core NATS returns snapshot metadata and byte-bounded replay pages, while the browser fetches the Blob-backed ProseMirror snapshot through the authenticated Asset HTTP route. Conversation growth cannot turn a resume reply into a `max_payload` failure.
 
 ## Cancellation
 
@@ -134,10 +142,11 @@ llm/
 ├── prompts/
 └── usage/
 
-../capability-system/                         # abstract resolver, registry, runner, Tool/Skill module contracts
+../../../packages/lixpi/capability-system/    # reusable validation, resolver, registry, runner, dispatcher, module contracts
+../capability-system/                         # API storage, NATS, LangGraph, and seeding adapters
 ../installed-capabilities.ts                  # built-in Tool and Skill composition root
 ../capability-modules/character-creator/      # self-contained Character Creator tools/ + skills/
-../capability-modules/feature-extraction/     # self-contained Feature Extraction tools/ + skills/
+../capability-modules/style-extraction/       # self-contained Style Extraction tools/ + skills/
 ../prosemirror/ai-chat-stream-assembler.ts
 ../prosemirror/asset-prosemirror-step-transport.ts
 ../services/asset-canvas-projection.ts
@@ -151,6 +160,8 @@ llm/
 - Capability references resolve once in shared preflight to an immutable, hash-verified plan. Matrix children receive that exact plan and never re-resolve it.
 - Reasoning providers expose `search_capabilities`, `use_capability`, and attached `model-choice` Tools through bounded provider-native continuation loops. Transient image/video providers never expose Capability invocation functions.
 - Required Tools execute before reasoning; every Tool action resolves through the server allowlist and emits replayable generic run events with sealed manifest provenance.
+- Media-generation context Tools return provider-neutral instructions and model-safe references. Shared preflight forwards that context to every selected reasoning/media child without changing the selected model matrix. `MediaBranchLineagePlanner` allocates the normal output Assets and topology before provider fanout; Tool runtimes do not generate or attach those outputs themselves.
+- A required non-generation Tool may still return terminal output Assets and suppress ordinary media routing when that Tool's product contract makes those Assets the request result. Character Creator is a generation-context Tool, so it does not use that terminal-output path.
 - Transient media providers do not emit their own top-level start/end lifecycle.
 - Reference traces never contain inline image bytes.
 - Provider routers receive exact preplanned run metadata.
