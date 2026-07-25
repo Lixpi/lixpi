@@ -31,7 +31,10 @@ vi.mock('./asset-canvas-projection.ts', () => ({
 vi.mock('./asset-rendition-service.ts', () => ({ default: {} }))
 vi.mock('./asset-maintenance-queue.ts', () => ({ enqueueRenditionRetry: vi.fn() }))
 
-import { attachGeneratedAssetNode } from './generated-asset-storage.ts'
+import {
+    attachGeneratedAssetNode,
+    collectGeneratedAssetSourceIds,
+} from './generated-asset-storage.ts'
 
 const generationRun: MediaGenerationRunMeta = {
     requestKind: 'media-generation-matrix',
@@ -48,6 +51,7 @@ const generationRun: MediaGenerationRunMeta = {
         mediaIndex: 0,
         branchId: 'branch-1',
         lineageParentNodeId: 'fork-1',
+        referenceAssetIds: [],
         referenceNodeIds: [],
         sourceContextNodeIds: [],
         promptText: 'draw a stone',
@@ -99,6 +103,35 @@ const canvasState: CanvasState = {
     nodes: [],
     edges: [],
 }
+
+describe('collectGeneratedAssetSourceIds', () => {
+    it('preserves Asset-only references while translating only node-backed context IDs', () => {
+        expect(collectGeneratedAssetSourceIds(
+            {
+                ...generationRun.lineageAssignment!,
+                referenceAssetIds: ['library-portrait', 'context-node'],
+                sourceContextNodeIds: ['context-node'],
+            },
+            {
+                resolverVersion: 'image-branch-vlm-v1',
+                conversationAssetId: 'thread-1',
+                regionNodeId: 'standalone:thread-1',
+                promptText: 'Use both references',
+                promptFingerprint: 'fingerprint',
+                transcriptContext: '',
+                candidates: [{
+                    candidateId: 'node:context-node',
+                    nodeId: 'context-node',
+                    assetId: 'context-asset',
+                    imageUrl: 'nats-obj://assets/context',
+                    roleHints: ['base-context'],
+                    ancestorNodeIds: ['context-node'],
+                    sourceContextNodeIds: ['context-node'],
+                }],
+            },
+        )).toEqual(['library-portrait', 'context-node', 'context-asset'])
+    })
+})
 
 beforeEach(() => {
     vi.useRealTimers()

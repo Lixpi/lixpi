@@ -238,7 +238,8 @@ export type MediaBranchCandidateRoleHint =
     | 'active-target'
 
 export type MediaBranchCandidateImage = {
-    nodeId: string
+    candidateId: string
+    nodeId?: string
     assetId: string
     imageUrl: string
     // Whether `imageUrl` points at a still image or at a video's representative
@@ -265,12 +266,12 @@ export type MediaBranchCandidateSnapshot = {
     resolverVersion: string
     conversationAssetId: string
     regionNodeId: string
-    activeTargetNodeId?: string
-    // Media node ids the user explicitly attached as context (chips / reference
-    // selections). When present, the API resolvers must treat these as the
-    // exclusive context — no other candidates may be evaluated or selected.
-    // The candidate list itself stays unfiltered; the API is the source of truth.
-    explicitReferenceNodeIds?: string[]
+    activeTargetCandidateId?: string
+    // Candidate identities the user explicitly attached as context. Asset-only
+    // references have no canvas node, so resolver routing must never key on
+    // nodeId. The candidate list itself stays unfiltered; the API remains the
+    // source of truth for authorization and exclusivity.
+    explicitReferenceCandidateIds?: string[]
     promptText: string
     promptFingerprint: string
     candidates: MediaBranchCandidateImage[]
@@ -328,7 +329,7 @@ export type MediaBranchReferenceRole =
     | 'excluded'
 
 export type MediaBranchVlmReferenceDecision = {
-    nodeId: string
+    candidateId: string
     role: MediaBranchReferenceRole
     reason: string
 }
@@ -340,14 +341,14 @@ export type MediaBranchVlmResolution = {
     resolverModelId: string
     mode: MediaBranchSelectionMode
     operationKind: ImageGenerationOperationKind
-    targetImageNodeId: string | null
-    parentImageNodeId?: string
+    targetCandidateId: string | null
+    parentCandidateId?: string
     branchId: string | null
-    includeGeneratedNodeIds: string[]
-    referenceImageNodeIds: string[]
+    includeGeneratedCandidateIds: string[]
+    referenceCandidateIds: string[]
     sourceContextNodeIds: string[]
-    styleReferenceNodeIds: string[]
-    excludedNodeIds: string[]
+    styleReferenceCandidateIds: string[]
+    excludedCandidateIds: string[]
     visualEntitySummary?: string
     visualStyleSummary?: string
     entityTags: string[]
@@ -459,6 +460,7 @@ export type MediaRunLineageAssignment = {
     branchForkNodeId?: string
     branchLineNodeId?: string
     lineageParentNodeId?: string
+    referenceAssetIds: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
     operationKind?: ImageGenerationOperationKind
@@ -475,6 +477,7 @@ export type MediaBranchLineagePlan = {
     promptFingerprint?: string
     sourceNodeId?: string
     placementAnchorNodeId?: string
+    referenceAssetIds: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
     regenerationTarget?: {
@@ -598,6 +601,7 @@ export type ImageGenerationTraceReference = {
     source: 'branch-candidate' | 'capability-reference' | 'message-reference'
     label: string
     role: ImageGenerationTraceReferenceRole
+    candidateId?: string
     nodeId?: string
     assetId?: string
     branchId?: string
@@ -605,7 +609,8 @@ export type ImageGenerationTraceReference = {
 }
 
 export type ImageGenerationTraceExcludedReference = {
-    nodeId: string
+    candidateId: string
+    nodeId?: string
     label: string
     role: 'excluded'
     reason: string
@@ -635,8 +640,8 @@ export type ImageGenerationTrace = {
         operationKind: ImageGenerationOperationKind
         confidence: number
         rationale: string
-        targetImageNodeId: string | null
-        parentImageNodeId?: string
+        targetCandidateId: string | null
+        parentCandidateId?: string
         branchId: string | null
     }
 }
@@ -682,8 +687,8 @@ export type VideoGenerationTrace = {
         operationKind: ImageGenerationOperationKind
         confidence: number
         rationale: string
-        targetImageNodeId: string | null
-        parentImageNodeId?: string
+        targetCandidateId: string | null
+        parentCandidateId?: string
         branchId: string | null
     }
 }
@@ -726,6 +731,7 @@ export type GeneratedMediaVariantMetadata = {
     branchForkNodeId?: string
     branchLineNodeId?: string
     lineageParentNodeId?: string
+    referenceAssetIds?: string[]
 }
 
 export type MediaGenerationCanvasPhase = 'pending-before-first-frame' | 'ready'
@@ -991,7 +997,7 @@ export type WorkspaceEdge = {
 export type CapabilityKind = 'tool' | 'skill'
 export type CapabilityScope = 'user' | 'organization' | 'global'
 export type CapabilityStatus = 'active' | 'disabled' | 'removed'
-export type CapabilityCatalogVisibility = 'listed' | 'internal'
+export type CapabilityPackageExposure = 'standalone' | 'module-internal'
 
 export type CapabilityJsonPrimitive = string | number | boolean | null
 export type CapabilityJsonValue =
@@ -1010,6 +1016,82 @@ export type CapabilityPromptReference = {
     kind: CapabilityKind
 }
 
+export type PromptReferenceType = 'media' | 'capability-module' | 'tool' | 'skill'
+
+export type MediaPromptReference = {
+    referenceType: 'media'
+    assetId: string
+    nodeId?: string
+    mediaKind: 'image' | 'video' | 'audio' | 'document'
+}
+
+export type CapabilityModulePromptReference = {
+    referenceType: 'capability-module'
+    moduleId: string
+}
+
+export type StandaloneCapabilityPromptReference = {
+    referenceType: CapabilityKind
+    capabilityId: string
+}
+
+export type PromptReference =
+    | MediaPromptReference
+    | CapabilityModulePromptReference
+    | StandaloneCapabilityPromptReference
+
+export type PromptReferenceAtomAttrs = PromptReference & {
+    displayName: string
+}
+
+export type PromptReferenceCategory = 'media' | 'capabilities' | 'tools' | 'skills'
+
+export type MediaPromptReferenceCatalogItem = MediaPromptReference & {
+    referenceId: string
+    source: 'canvas' | 'library'
+    title: string
+    scope: 'workspace' | 'user' | 'organization'
+    updatedAt: number
+    thumbnailAvailable?: boolean
+}
+
+export type CapabilityModulePromptReferenceCatalogItem = CapabilityModuleMeta & {
+    referenceType: 'capability-module'
+    referenceId: string
+}
+
+export type StandaloneCapabilityPromptReferenceCatalogItem = CapabilityMeta & {
+    referenceType: CapabilityKind
+    referenceId: string
+}
+
+export type PromptReferenceCatalogItem =
+    | MediaPromptReferenceCatalogItem
+    | CapabilityModulePromptReferenceCatalogItem
+    | StandaloneCapabilityPromptReferenceCatalogItem
+
+export type PromptReferenceCatalogPage = {
+    items: PromptReferenceCatalogItem[]
+    cursor?: string
+}
+
+export type PromptReferenceRecent = {
+    userId: string
+    referenceKey: string
+    referenceType: PromptReferenceType
+    referenceId: string
+    updatedAt: number
+}
+
+export type CapabilityModuleMeta = {
+    moduleId: string
+    name: string
+    normalizedName: string
+    summary: string
+    tags: string[]
+    status: Extract<CapabilityStatus, 'active' | 'disabled'>
+}
+
 export type CapabilityCatalogRecord = {
     capabilityId: string
     kind: CapabilityKind
@@ -1017,7 +1099,8 @@ export type CapabilityCatalogRecord = {
     scopeOwnerId: string
     storageOwnerId: string
     manifestBlobHash: string
-    catalogVisibility: CapabilityCatalogVisibility
+    parentModuleId?: string
+    catalogExposure: CapabilityPackageExposure
     status: CapabilityStatus
     ownerUserId: string
     createdAt: number
@@ -1036,7 +1119,8 @@ export type CapabilityMeta = {
     summary: string
     tags: string[]
     manifestBlobHash: string
-    catalogVisibility: CapabilityCatalogVisibility
+    parentModuleId?: string
+    catalogExposure: CapabilityPackageExposure
     status: CapabilityStatus
     updatedAt: number
 }
@@ -1323,13 +1407,11 @@ export type MessageContentBlock = TextContentBlock | ImageContentBlock
 export type MessageContent = string | MessageContentBlock[]
 
 export type AiInteractionChatSendMessagePayload = {
-    messages: Array<{ role: string; content: MessageContent }>
     // Ordered reasoning-model selection (length 1 = singular). The scalar
     // provider path reads index 0; the matrix path reads the full list
     // via `mediaGenerationRequest.reasoningModelIds`.
-    aiReasoningModels: AiModelId[]
+    aiReasoningModels: string[]
     conversationAssetId: string
-    capabilityReferences?: CapabilityPromptReference[]
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
     mediaGenerationRequest?: AiInteractionMediaGenerationRequest
     // Whole-workspace, descriptors-only index sent each turn and consumed by
@@ -1339,6 +1421,13 @@ export type AiInteractionChatSendMessagePayload = {
         width: number
         height: number
     }
+}
+
+// Local editor submission contract. The browser uses these messages to update
+// the persisted conversation document, but does not publish them to NATS; the
+// API reconstructs the authoritative messages from that document instead.
+export type AiInteractionChatSubmitPayload = AiInteractionChatSendMessagePayload & {
+    messages: Array<{ role: string; content: MessageContent }>
 }
 
 export type AiInteractionMediaGenerationRequest = {
@@ -1380,11 +1469,11 @@ export type AiInteractionMediaGenerationRequest = {
     }
 }
 
-export type AiInteractionChatSendMessagePayloadV2 = AiInteractionChatSendMessagePayload & {
+export type AiInteractionChatSendMessagePayloadV2 = AiInteractionChatSubmitPayload & {
     mediaGenerationRequest: AiInteractionMediaGenerationRequest
 }
 
-export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {
+export type AiInteractionImageGenerationPayload = AiInteractionChatSubmitPayload & {
     aiImageModels: AiModelId[]
     imageSize?: ImageGenerationSize
     previousResponseId?: string

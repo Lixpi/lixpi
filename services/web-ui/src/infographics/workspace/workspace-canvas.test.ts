@@ -1663,6 +1663,21 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceNotToContain(composer, 'open-prompt-z-index')
 	})
 
+	it('raises the global composer above its action panels only while a reference picker is visible', () => {
+		const scss = loadScss()
+		const actionPanel = extractBlock(scss, '.workspace-canvas-action-panel')
+		const composerHost = extractBlock(scss, '.workspace-canvas-global-composer-host')
+		const composerHostWithPicker = extractBlock(
+			scss,
+			'.workspace-canvas-global-composer-host:has(.prompt-reference-picker-visible)'
+		)
+
+		expectExcerptToContain(actionPanel, 'z-index: 9991;', '.workspace-canvas-action-panel')
+		expectExcerptToContain(composerHost, 'z-index: 9990;', '.workspace-canvas-global-composer-host')
+		expectExcerptToContain(composerHostWithPicker, 'z-index: 9992;', 'visible picker composer host')
+		expectSourceNotToContain(ts, "zIndex: '9990',")
+	})
+
 	it('opens the panel without requiring an existing thread and creates standalone history on submit', () => {
 		expectSourceToContain(ts, 'function openAiChatPanel(): void')
 		expectSourceToContain(ts, 'aiChatPanelState = { ...aiChatPanelState, isOpen: true }')
@@ -1828,9 +1843,9 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(ts, 'mediaBranchResolution: resolution')
 		expectSourceToContain(ts, 'mediaBranchResolution: resolution')
 		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds([')
-		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds(resolution.referenceImageNodeIds)')
+		expectSourceToContain(ts, 'resolution.referenceCandidateIds.flatMap(candidateId => {')
 		expectSourceToContain(ts, 'operationKind: resolution.operationKind')
-		expectSourceToContain(ts, 'referenceImageNodeIds: resolution.referenceImageNodeIds')
+		expectSourceToContain(ts, 'referenceCandidateIds: resolution.referenceCandidateIds')
 		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds([')
 		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(getGeneratedMediaPlacementKey(threadId, generationRun), referenceNodeIds)')
 		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string, generationRun?: MediaGenerationRunMeta): Rect | undefined')

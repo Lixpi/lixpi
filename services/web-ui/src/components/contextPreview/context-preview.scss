@@ -37,6 +37,14 @@
     align-items: stretch;
 }
 
+.workspace-ai-chat-panel-context-preview-tooltip-inline-label.help-tooltip {
+    display: inline-flex;
+    align-items: baseline;
+    width: auto;
+    height: auto;
+    flex: 0 0 auto;
+}
+
 .workspace-ai-chat-panel-context-preview-trigger,
 .workspace-ai-chat-panel-context-preview-trigger.help-tooltip-trigger,
 .workspace-ai-chat-panel-context-preview-trigger.help-tooltip-trigger-custom {
@@ -62,6 +70,19 @@
 .workspace-ai-chat-panel-context-preview-trigger:focus-visible {
     background: var(--workspace-ai-chat-panel-context-chip-background, transparent);
     color: inherit;
+}
+
+.workspace-ai-chat-panel-context-preview-trigger-inline-label.help-tooltip-trigger-custom {
+    display: inline-flex;
+    align-items: baseline;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    border-radius: 0;
+    overflow: visible;
 }
 
 .workspace-ai-chat-panel-context-preview-image,

@@ -87,6 +87,7 @@ describe('visual-style Capability persistence', () => {
             scopeOwnerId: 'organization-1',
             storageOwnerId: 'organization-1',
             manifestBlobHash: 'c'.repeat(64),
+            catalogExposure: 'standalone',
             status: 'active',
             ownerUserId: 'user-1',
             createdAt: 1,

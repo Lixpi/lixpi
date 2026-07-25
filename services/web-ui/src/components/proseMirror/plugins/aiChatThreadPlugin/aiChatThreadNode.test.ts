@@ -84,6 +84,7 @@ function createImageGenerationTrace(overrides: Partial<ImageGenerationTrace> = {
         ],
         excludedReferences: [
             {
+                candidateId: 'goat-generated',
                 nodeId: 'goat-generated',
                 label: 'painted goat',
                 role: 'excluded',
@@ -100,8 +101,8 @@ function createImageGenerationTrace(overrides: Partial<ImageGenerationTrace> = {
             operationKind: 'style_transfer',
             confidence: 0.95,
             rationale: 'Continue the generated portrait branch.',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
             branchId: 'branch-person',
         },
         ...overrides,

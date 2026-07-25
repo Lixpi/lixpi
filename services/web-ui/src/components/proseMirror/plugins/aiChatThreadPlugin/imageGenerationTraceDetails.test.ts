@@ -251,11 +251,12 @@ describe('createImageGenerationTraceDetails — render contract', () => {
                 operationKind: 'new_image',
                 confidence: 0.82,
                 rationale: 'Closest candidate in context',
-                targetImageNodeId: 'person',
+                targetCandidateId: 'person',
                 branchId: null,
             },
             excludedReferences: [
                 {
+                    candidateId: 'excluded-node',
                     nodeId: 'excluded-node',
                     label: 'Old result',
                     role: 'excluded',

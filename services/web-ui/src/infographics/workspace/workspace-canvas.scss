@@ -1759,6 +1759,7 @@
 // The context tray is outside the input pill so selected references do not
 // consume text-field space.
 .workspace-canvas-global-composer-host {
+    z-index: 9990;
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -1777,6 +1778,10 @@
         box-sizing: border-box;
     }
 
+}
+
+.workspace-canvas-global-composer-host:has(.prompt-reference-picker-visible) {
+    z-index: 9992;
 }
 
 // Single compact row: input on the left, model selector + send on the right,

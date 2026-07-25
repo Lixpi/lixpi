@@ -7,12 +7,10 @@ import type { MetricsClient } from './metrics/metrics-client.ts'
 import type { ImageRouter } from './llm/tools/image-router.ts'
 import {
     createCharacterCreatorActionDependencies,
-    createCharacterCreatorSkillModules,
-    createCharacterCreatorToolModule,
+    createCharacterCreatorModule,
 } from './capability-modules/character-creator/index.ts'
 import {
-    createStyleExtractionSkillModules,
-    createStyleExtractionToolModule,
+    createStyleExtractionModule,
 } from './capability-modules/style-extraction/index.ts'
 
 export type InstalledCapabilityDependencies = {
@@ -25,16 +23,14 @@ export function createDefaultCapabilityModuleCatalog(
     dependencies: InstalledCapabilityDependencies,
 ): CapabilityModuleCatalog {
     const catalog = new CapabilityModuleCatalog()
-    for (const skill of createCharacterCreatorSkillModules()) catalog.registerSkill(skill)
-    for (const skill of createStyleExtractionSkillModules()) catalog.registerSkill(skill)
-    catalog.registerTool(createCharacterCreatorToolModule(
+    catalog.registerModule(createCharacterCreatorModule(
         createCharacterCreatorActionDependencies({
             natsService: dependencies.natsService,
             imageRouter: dependencies.imageRouter,
             metrics: dependencies.metrics,
         }),
     ))
-    catalog.registerTool(createStyleExtractionToolModule({
+    catalog.registerModule(createStyleExtractionModule({
         runImageRouter: state => dependencies.imageRouter.execute(state),
     }))
     return catalog

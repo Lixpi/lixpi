@@ -13,18 +13,18 @@ The module lives at `services/api/src/capability-modules/character-creator/` and
 
 | Package | Visibility | Responsibility |
 |---|---|---|
-| `global.character-creator` Tool | Listed | Validates the request and returns media-generation instructions and reference images. |
-| Character Sheet Layout Skill | Internal | Defines the fixed cell order, labels, framing, scale, and background. |
-| Reference Fidelity Skill | Internal | Defines identity, construction, material, and conflict-resolution rules for source references. |
-| Character Image Prompt Skill | Internal | Defines how to assemble one provider-neutral prompt for a single sheet image. |
+| `global.character-creator` Tool | Module-internal entry | Validates the request and returns media-generation instructions and reference images. |
+| Character Sheet Layout Skill | Module-internal | Defines the fixed cell order, labels, framing, scale, and background. |
+| Reference Fidelity Skill | Module-internal | Defines identity, construction, material, and conflict-resolution rules for source references. |
+| Character Image Prompt Skill | Module-internal | Defines how to assemble one provider-neutral prompt for a single sheet image. |
 
-The Tool also stores `character-sheet-example.jpg` as an immutable example resource. The three Skills remain independently stored and resolved even though the user sees one Character Creator entry point.
+The Tool also stores `character-sheet-example.jpg` as an immutable example resource. Every package carries `parentModuleId: 'character-creator'` and `catalogExposure: 'module-internal'`. They remain independently stored and resolved, but none appears on standalone Tool or Skill surfaces; the module is the only user-facing entry point.
 
 ## Activation
 
 Character Creator becomes active when either condition is true:
 
-- The prompt contains an explicit `@Character Creator` Tool reference.
+- The prompt contains an explicit Character Creator module reference selected through `/` or the `@` Capabilities category.
 - The request router recognizes a character creation, character design, character sheet, model sheet, or turnaround request and adds the same Tool reference.
 
 The Tool uses `executionPolicy: 'required'`, so it runs during shared preflight before the reasoning-model matrix fans out.
@@ -42,7 +42,7 @@ The Tool sets `mediaGenerationMode` to `character-creator` and `preserveUserProm
 
 ## Source and layout references
 
-Explicit image chips become `referenceAssetIds` only after Workspace context resolution has authorized them. The Capability Tool returns the packaged layout example separately. The image router combines both groups through `buildImageGenerationReferences()`:
+Explicit media prompt references become `referenceAssetIds` only after the API reads the authoritative conversation atom and authorizes its Asset identity. Asset-only references do not need canvas placements. The Capability Tool returns the packaged layout example separately. The image router combines both groups through `buildImageGenerationReferences()`:
 
 1. source references with role `character-source`
 2. Capability resources with role `character-layout-example`

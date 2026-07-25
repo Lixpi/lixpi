@@ -51,6 +51,10 @@
 		"GENERATE_RENDITIONS": "blob.processing.generateRenditions"
 	},
 	"CAPABILITY_SUBJECTS": {
+		"MODULES": {
+			"LIST": "capability.modules.list",
+			"GET": "capability.modules.get"
+		},
 		"CATALOG": {
 			"SEARCH": "capability.catalog.search",
 			"LIST": "capability.catalog.list",
@@ -73,6 +77,10 @@
 			"REPLAY": "ai.interaction.capability.run.replay",
 			"EVENTS": "ai.interaction.capability.run.events"
 		}
+	},
+	"PROMPT_REFERENCE_SUBJECTS": {
+		"LIST": "prompt.reference.list",
+		"RECORD_ACCEPTED_USE": "prompt.reference.acceptedUse"
 	},
 	"ASSET_MAINTENANCE_SUBJECTS": {
 		"DELETE_ASSET": "asset.maintenance.delete",

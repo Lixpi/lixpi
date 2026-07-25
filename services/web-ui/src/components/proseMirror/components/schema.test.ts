@@ -33,6 +33,7 @@ describe('schema module — pass-through exports', () => {
             'text',
             'image',
             'code_block',
+            'prompt_reference',
             'capability_reference',
         ]))
     })

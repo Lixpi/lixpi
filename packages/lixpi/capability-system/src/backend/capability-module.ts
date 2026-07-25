@@ -1,60 +1,143 @@
 'use strict'
 
+import type {
+    CapabilityKind,
+    CapabilityModuleMeta,
+} from '@lixpi/constants'
+
 import { CapabilityActionRegistry } from './capability-action-registry.ts'
 
-export type CapabilityModuleSeedContext = {
+export type CapabilityPackageSeedContext = {
     allowedActions: ReadonlySet<string>
+    parentModuleId: string
+    catalogExposure: 'module-internal'
 }
 
-export type SkillModule = {
+export type CapabilitySkillPackageInstaller = {
     kind: 'skill'
-    moduleId: string
-    seed: (context: CapabilityModuleSeedContext) => Promise<void>
+    capabilityId: string
+    seed: (context: CapabilityPackageSeedContext) => Promise<void>
 }
 
-export type ToolModule = {
+export type CapabilityToolPackageInstaller = {
     kind: 'tool'
-    moduleId: string
+    capabilityId: string
     registerActions: (registry: CapabilityActionRegistry) => void
-    seed: (context: CapabilityModuleSeedContext) => Promise<void>
+    seed: (context: CapabilityPackageSeedContext) => Promise<void>
+}
+
+export type CapabilityModuleDefinition = Omit<CapabilityModuleMeta, 'status'> & {
+    entry: {
+        capabilityId: string
+        kind: CapabilityKind
+    }
+    tools: CapabilityToolPackageInstaller[]
+    skills: CapabilitySkillPackageInstaller[]
 }
 
 export class CapabilityModuleCatalog {
-    private readonly skills = new Map<string, SkillModule>()
-    private readonly tools = new Map<string, ToolModule>()
+    private readonly modules = new Map<string, CapabilityModuleDefinition>()
+    private readonly packageOwners = new Map<string, string>()
 
-    registerSkill(module: SkillModule): void {
-        this.assertUnique(module.moduleId)
-        this.skills.set(module.moduleId, module)
-    }
+    registerModule(definition: CapabilityModuleDefinition): void {
+        this.validateDefinition(definition)
+        if (this.modules.has(definition.moduleId)) {
+            throw new Error(`CAPABILITY_MODULE_ALREADY_REGISTERED:${definition.moduleId}`)
+        }
 
-    registerTool(module: ToolModule): void {
-        this.assertUnique(module.moduleId)
-        this.tools.set(module.moduleId, module)
-    }
+        for (const installer of [...definition.tools, ...definition.skills]) {
+            const owner = this.packageOwners.get(installer.capabilityId)
+            if (owner) {
+                throw new Error(`CAPABILITY_PACKAGE_ALREADY_OWNED:${installer.capabilityId}:${owner}`)
+            }
+        }
 
-    private assertUnique(moduleId: string): void {
-        if (this.skills.has(moduleId) || this.tools.has(moduleId)) {
-            throw new Error(`CAPABILITY_MODULE_ALREADY_REGISTERED:${moduleId}`)
+        this.modules.set(definition.moduleId, definition)
+        for (const installer of [...definition.tools, ...definition.skills]) {
+            this.packageOwners.set(installer.capabilityId, definition.moduleId)
         }
     }
 
     registerActions(registry: CapabilityActionRegistry): void {
-        for (const module of this.tools.values()) module.registerActions(registry)
+        for (const definition of this.modules.values()) {
+            for (const installer of definition.tools) installer.registerActions(registry)
+        }
     }
 
     async seedAll(registry: CapabilityActionRegistry): Promise<void> {
-        const context: CapabilityModuleSeedContext = {
-            allowedActions: registry.allowedActionKeys(),
+        for (const definition of this.modules.values()) {
+            const context: CapabilityPackageSeedContext = {
+                allowedActions: registry.allowedActionKeys(),
+                parentModuleId: definition.moduleId,
+                catalogExposure: 'module-internal',
+            }
+            for (const installer of definition.skills) await installer.seed(context)
+            for (const installer of definition.tools) await installer.seed(context)
         }
-        for (const module of this.skills.values()) await module.seed(context)
-        for (const module of this.tools.values()) await module.seed(context)
     }
 
-    listModuleIds(): { skills: string[]; tools: string[] } {
+    getModule(moduleId: string): CapabilityModuleDefinition | undefined {
+        return this.modules.get(moduleId)
+    }
+
+    getModuleMeta(moduleId: string): CapabilityModuleMeta | undefined {
+        const definition = this.modules.get(moduleId)
+        return definition ? this.toMeta(definition) : undefined
+    }
+
+    listModules(query = ''): CapabilityModuleMeta[] {
+        const normalizedQuery = query.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US')
+        return [...this.modules.values()]
+            .filter((definition) => !normalizedQuery
+                || definition.normalizedName.startsWith(normalizedQuery)
+                || definition.tags.some((tag) => tag.startsWith(normalizedQuery)))
+            .map((definition) => this.toMeta(definition))
+            .sort((left, right) => left.normalizedName.localeCompare(right.normalizedName)
+                || left.moduleId.localeCompare(right.moduleId))
+    }
+
+    listModuleIds(): string[] {
+        return [...this.modules.keys()]
+    }
+
+    resolveEntry(moduleId: string): { capabilityId: string; kind: CapabilityKind } | undefined {
+        const definition = this.modules.get(moduleId)
+        return definition ? { ...definition.entry } : undefined
+    }
+
+    private validateDefinition(definition: CapabilityModuleDefinition): void {
+        if (!definition.moduleId.trim()) throw new Error('CAPABILITY_MODULE_ID_REQUIRED')
+        if (!definition.name.trim()) throw new Error(`CAPABILITY_MODULE_NAME_REQUIRED:${definition.moduleId}`)
+        if (definition.normalizedName !== definition.name.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US')) {
+            throw new Error(`CAPABILITY_MODULE_NORMALIZED_NAME_INVALID:${definition.moduleId}`)
+        }
+
+        const packages = [...definition.tools, ...definition.skills]
+        const localIds = new Set<string>()
+        for (const installer of packages) {
+            if (localIds.has(installer.capabilityId)) {
+                throw new Error(`CAPABILITY_MODULE_DUPLICATE_PACKAGE:${definition.moduleId}:${installer.capabilityId}`)
+            }
+            localIds.add(installer.capabilityId)
+        }
+
+        const entryMatches = packages.filter((installer) => installer.capabilityId === definition.entry.capabilityId)
+        if (entryMatches.length !== 1) {
+            throw new Error(`CAPABILITY_MODULE_ENTRY_NOT_OWNED:${definition.moduleId}:${definition.entry.capabilityId}`)
+        }
+        if (entryMatches[0]!.kind !== definition.entry.kind) {
+            throw new Error(`CAPABILITY_MODULE_ENTRY_KIND_MISMATCH:${definition.moduleId}:${definition.entry.capabilityId}`)
+        }
+    }
+
+    private toMeta(definition: CapabilityModuleDefinition): CapabilityModuleMeta {
         return {
-            skills: [...this.skills.keys()],
-            tools: [...this.tools.keys()],
+            moduleId: definition.moduleId,
+            name: definition.name,
+            normalizedName: definition.normalizedName,
+            summary: definition.summary,
+            tags: [...definition.tags],
+            status: 'active',
         }
     }
 }

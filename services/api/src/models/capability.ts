@@ -6,10 +6,10 @@ import {
     getDynamoDbTableStageName,
     type BlobReference,
     type CapabilityCatalogRecord,
-    type CapabilityCatalogVisibility,
     type CapabilityKind,
     type CapabilityManifest,
     type CapabilityMeta,
+    type CapabilityPackageExposure,
     type CapabilityResourceRef,
     type CapabilityResourceRole,
     type CapabilityResourceMediaType,
@@ -53,7 +53,9 @@ export type CapabilityRequesterContext = {
 
 export type CapabilityCatalogCursor = {
     partitions: Record<string, Record<string, unknown>>
-    buffered?: CapabilityMeta[]
+    query: string
+    kinds: CapabilityKind[]
+    buffered?: Array<Pick<CapabilityMeta, 'scopeAndOwner' | 'searchKey'>>
     completed?: string[]
 }
 
@@ -69,7 +71,8 @@ type SaveCapabilityInput = {
     storageOwnerId: string
     summary: string
     tags: string[]
-    catalogVisibility?: CapabilityCatalogVisibility
+    parentModuleId?: string
+    catalogExposure: CapabilityPackageExposure
     requester: CapabilityRequesterContext
     expectedManifestBlobHash?: string
     grants?: Array<{ principalId: string; accessLevel: CapabilityAccessLevel }>
@@ -106,11 +109,40 @@ export function buildCapabilitySearchKey(kind: CapabilityKind, normalizedName: s
     return `${kind}#${normalizedName}#${capabilityId}`
 }
 
-function decodeCursor(cursor?: string): CapabilityCatalogCursor {
-    if (!cursor) return { partitions: {} }
+function decodeCursor(
+    cursor: string | undefined,
+    query: string,
+    kinds: CapabilityKind[],
+    allowedCursorKeys: Map<string, { scopeAndOwner: string; searchPrefix: string }>,
+): CapabilityCatalogCursor {
+    if (!cursor) return { partitions: {}, query, kinds }
     try {
         const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as CapabilityCatalogCursor
-        if (!parsed || typeof parsed !== 'object' || !parsed.partitions) throw new Error('INVALID_CURSOR')
+        if (!parsed || typeof parsed !== 'object' || !parsed.partitions
+            || typeof parsed.partitions !== 'object' || Array.isArray(parsed.partitions)
+            || parsed.query !== query || JSON.stringify(parsed.kinds) !== JSON.stringify(kinds)) {
+            throw new Error('INVALID_CURSOR')
+        }
+        for (const [cursorKey, lastKey] of Object.entries(parsed.partitions)) {
+            const expected = allowedCursorKeys.get(cursorKey)
+            if (!expected || !lastKey || typeof lastKey !== 'object' || Array.isArray(lastKey)
+                || lastKey.scopeAndOwner !== expected.scopeAndOwner
+                || typeof lastKey.searchKey !== 'string'
+                || !lastKey.searchKey.startsWith(expected.searchPrefix)) throw new Error('INVALID_CURSOR')
+        }
+        if (parsed.completed && (!Array.isArray(parsed.completed)
+            || parsed.completed.some((cursorKey) => typeof cursorKey !== 'string' || !allowedCursorKeys.has(cursorKey)))) {
+            throw new Error('INVALID_CURSOR')
+        }
+        if (parsed.buffered && (!Array.isArray(parsed.buffered) || parsed.buffered.length > 1_000
+            || parsed.buffered.some((key) => {
+                if (!key || typeof key !== 'object' || Array.isArray(key)
+                    || typeof key.scopeAndOwner !== 'string' || typeof key.searchKey !== 'string') return true
+                return ![...allowedCursorKeys.values()].some((expected) => (
+                    key.scopeAndOwner === expected.scopeAndOwner
+                    && key.searchKey.startsWith(expected.searchPrefix)
+                ))
+            }))) throw new Error('INVALID_CURSOR')
         return parsed
     } catch {
         throw new Error('INVALID_CURSOR')
@@ -148,6 +180,24 @@ function canManageBaseScope(record: CapabilityCatalogRecord, requester: Capabili
     return record.ownerUserId === requester.userId
 }
 
+function normalizeStoredCapabilityRecord(record: CapabilityCatalogRecord): CapabilityCatalogRecord {
+    if (record.catalogExposure === 'standalone' || record.catalogExposure === 'module-internal') return record
+    const { catalogVisibility: legacyVisibility, ...normalized } = record as CapabilityCatalogRecord & { catalogVisibility?: unknown }
+    return {
+        ...normalized,
+        catalogExposure: legacyVisibility === 'internal' ? 'module-internal' : 'standalone',
+    }
+}
+
+function normalizeStoredCapabilityMeta(meta: CapabilityMeta): CapabilityMeta {
+    if (meta.catalogExposure === 'standalone' || meta.catalogExposure === 'module-internal') return meta
+    const { catalogVisibility: legacyVisibility, ...normalized } = meta as CapabilityMeta & { catalogVisibility?: unknown }
+    return {
+        ...normalized,
+        catalogExposure: legacyVisibility === 'internal' ? 'module-internal' : 'standalone',
+    }
+}
+
 export async function authorizeCapability({
     capabilityId,
     requester,
@@ -164,11 +214,12 @@ export async function authorizeCapability({
         origin: 'Capability.authorize',
     }) as CapabilityCatalogRecord | undefined
     if (!record || record.status === 'removed') return { error: 'NOT_FOUND' }
-    if (access === 'read' && canReadBaseScope(record, requester)) return record
-    if (access === 'edit' && canManageBaseScope(record, requester)) return record
+    const normalizedRecord = normalizeStoredCapabilityRecord(record)
+    if (access === 'read' && canReadBaseScope(normalizedRecord, requester)) return normalizedRecord
+    if (access === 'edit' && canManageBaseScope(normalizedRecord, requester)) return normalizedRecord
     const grant = await getAccess(capabilityId, requester.userId)
-    if (access === 'read' && grant) return record
-    if (access === 'edit' && (grant?.accessLevel === 'editor' || grant?.accessLevel === 'owner')) return record
+    if (access === 'read' && grant) return normalizedRecord
+    if (access === 'edit' && (grant?.accessLevel === 'editor' || grant?.accessLevel === 'owner')) return normalizedRecord
     return { error: 'PERMISSION_DENIED' }
 }
 
@@ -195,7 +246,7 @@ export async function getAuthorizedCapabilityRecords({
     await Promise.all(records.map(async (record) => {
         if (record.status === 'removed') return
         if (canReadBaseScope(record, requester) || await getAccess(record.capabilityId, requester.userId)) {
-            authorized.set(record.capabilityId, record)
+            authorized.set(record.capabilityId, normalizeStoredCapabilityRecord(record))
         }
     }))
     return authorized
@@ -319,15 +370,27 @@ export async function listAuthorizedCapabilities({
     cursor?: string
 }): Promise<CapabilityCatalogPage> {
     if (limit < 1 || limit > 20) throw new Error('INVALID_CAPABILITY_PAGE_LIMIT')
-    const decoded = decodeCursor(cursor)
     const normalizedQuery = normalizeCapabilityName(query)
+    const uniqueKinds = [...new Set(kinds)]
     const partitions = [
         `user#${requester.userId}`,
         ...requester.organizationIds.map((organizationId) => `organization#${organizationId}`),
         'global#system',
         `principal#${requester.userId}`,
     ]
-    const requests = partitions.flatMap((partition) => kinds.map(async (kind) => {
+    const allowedCursorKeys = new Map(partitions.flatMap((partition) => uniqueKinds.map((kind) => [
+        `${partition}|${kind}`,
+        { scopeAndOwner: partition, searchPrefix: `${kind}#${normalizedQuery}` },
+    ] as const)))
+    const decoded = decodeCursor(cursor, normalizedQuery, uniqueKinds, allowedCursorKeys)
+    const bufferedRows = await Promise.all((decoded.buffered ?? []).map(async (key) =>
+        await dynamoDBService.getItem({
+            tableName: capabilitiesMetaTableName(),
+            key,
+            consistentRead: true,
+            origin: 'Capability.listAuthorizedCapabilities.buffered',
+        }) as CapabilityMeta | undefined))
+    const requests = partitions.flatMap((partition) => uniqueKinds.map(async (kind) => {
         const cursorKey = `${partition}|${kind}`
         if (decoded.completed?.includes(cursorKey)) {
             return { cursorKey, items: [] as CapabilityMeta[], lastKey: undefined, completed: true }
@@ -356,11 +419,13 @@ export async function listAuthorizedCapabilities({
     const nextPartitions: Record<string, Record<string, unknown>> = {}
     const completed = new Set(decoded.completed ?? [])
     const merged = new Map<string, CapabilityMeta>()
-    const candidates = [...(decoded.buffered ?? [])]
+    const candidates = bufferedRows
+        .filter((item): item is CapabilityMeta => item !== undefined)
+        .map(normalizeStoredCapabilityMeta)
     for (const page of pages) {
         if (page.lastKey) nextPartitions[page.cursorKey] = page.lastKey
         if (page.completed) completed.add(page.cursorKey)
-        candidates.push(...page.items)
+        candidates.push(...page.items.map(normalizeStoredCapabilityMeta))
     }
     const editVisibilityByCapabilityId = new Map<string, Promise<boolean>>()
     const visibleCandidates = await Promise.all(candidates.map(async item => ({
@@ -385,11 +450,19 @@ export async function listAuthorizedCapabilities({
         ...(Object.keys(nextPartitions).length > 0 || buffered.length > 0
             ? { cursor: encodeCursor({
                 partitions: nextPartitions,
+                query: normalizedQuery,
+                kinds: uniqueKinds,
                 completed: [...completed],
-                ...(buffered.length > 0 ? { buffered } : {}),
+                ...(buffered.length > 0 ? {
+                    buffered: buffered.map(({ scopeAndOwner, searchKey }) => ({ scopeAndOwner, searchKey })),
+                } : {}),
             }) }
             : {}),
     }
+}
+
+export async function listAuthorizedStandaloneCapabilities(input: Parameters<typeof listAuthorizedCapabilities>[0]): Promise<CapabilityCatalogPage> {
+    return await listAuthorizedCapabilities(input)
 }
 
 async function isCatalogMetaVisible(
@@ -397,7 +470,7 @@ async function isCatalogMetaVisible(
     requester: CapabilityRequesterContext,
     editVisibilityByCapabilityId: Map<string, Promise<boolean>>,
 ): Promise<boolean> {
-    if (item.catalogVisibility === 'internal') return false
+    if (item.catalogExposure !== 'standalone' || item.parentModuleId !== undefined) return false
     if (item.status === 'active') return true
     if (item.status !== 'disabled') return false
     let canEdit = editVisibilityByCapabilityId.get(item.capabilityId)
@@ -423,7 +496,8 @@ function buildMeta(record: CapabilityCatalogRecord, manifest: CapabilityManifest
         summary,
         tags: [...new Set(tags.map((tag) => normalizeCapabilityName(tag)).filter(Boolean))],
         manifestBlobHash: record.manifestBlobHash,
-        catalogVisibility: record.catalogVisibility ?? 'listed',
+        ...(record.parentModuleId ? { parentModuleId: record.parentModuleId } : {}),
+        catalogExposure: record.catalogExposure,
         status: record.status,
         updatedAt: record.updatedAt,
     }
@@ -643,6 +717,12 @@ export async function saveCapability(input: SaveCapabilityInput): Promise<Capabi
     if (input.scope === 'user' && !input.requester.organizationIds.includes(input.storageOwnerId)) {
         throw new Error('INVALID_STORAGE_OWNER')
     }
+    if (input.catalogExposure === 'module-internal' && !input.parentModuleId) {
+        throw new Error('CAPABILITY_PARENT_MODULE_REQUIRED')
+    }
+    if (input.catalogExposure === 'standalone' && input.parentModuleId) {
+        throw new Error('STANDALONE_CAPABILITY_PARENT_FORBIDDEN')
+    }
 
     const existing = await dynamoDBService.getItem({
         tableName: capabilitiesTableName(),
@@ -650,6 +730,8 @@ export async function saveCapability(input: SaveCapabilityInput): Promise<Capabi
         consistentRead: true,
         origin: 'Capability.save.getCurrent',
     }) as CapabilityCatalogRecord | undefined
+    const hasStructuralExposure = existing?.catalogExposure === 'standalone'
+        || existing?.catalogExposure === 'module-internal'
     if (existing) {
         const authorized = await authorizeCapability({
             capabilityId: existing.capabilityId,
@@ -660,7 +742,9 @@ export async function saveCapability(input: SaveCapabilityInput): Promise<Capabi
         if (existing.kind !== input.manifest.kind
             || existing.scope !== input.scope
             || existing.scopeOwnerId !== input.scopeOwnerId
-            || existing.storageOwnerId !== input.storageOwnerId) {
+            || existing.storageOwnerId !== input.storageOwnerId
+            || (hasStructuralExposure && existing.catalogExposure !== input.catalogExposure)
+            || (hasStructuralExposure && existing.parentModuleId !== input.parentModuleId)) {
             throw new Error('IMMUTABLE_CAPABILITY_AUTHORITY_CHANGED')
         }
         if (!input.expectedManifestBlobHash) throw new Error('EXPECTED_MANIFEST_BLOB_HASH_REQUIRED')
@@ -699,7 +783,8 @@ export async function saveCapability(input: SaveCapabilityInput): Promise<Capabi
         scopeOwnerId: input.scopeOwnerId,
         storageOwnerId: input.storageOwnerId,
         manifestBlobHash: storedManifest.blobHash,
-        catalogVisibility: input.catalogVisibility ?? existing?.catalogVisibility ?? 'listed',
+        ...(input.parentModuleId ? { parentModuleId: input.parentModuleId } : {}),
+        catalogExposure: input.catalogExposure,
         status: existing?.status ?? 'active',
         ownerUserId: existing?.ownerUserId ?? input.requester.userId,
         createdAt: existing?.createdAt ?? now,
@@ -732,7 +817,8 @@ export async function saveCapability(input: SaveCapabilityInput): Promise<Capabi
             key: { capabilityId: record.capabilityId },
             updates: {
                 manifestBlobHash: record.manifestBlobHash,
-                catalogVisibility: record.catalogVisibility,
+                catalogExposure: record.catalogExposure,
+                ...(record.parentModuleId ? { parentModuleId: record.parentModuleId } : {}),
                 updatedAt: now,
             },
             conditionExpression: '#manifestBlobHash = :expectedManifestBlobHash',
@@ -867,14 +953,16 @@ export async function seedBuiltInCapability({
     tags,
     storageOwnerId = 'system',
     allowedActions,
-    catalogVisibility = 'listed',
+    parentModuleId,
+    catalogExposure,
 }: {
     manifest: CapabilityManifest
     summary: string
     tags: string[]
     storageOwnerId?: string
     allowedActions: ReadonlySet<string>
-    catalogVisibility?: CapabilityCatalogVisibility
+    parentModuleId?: string
+    catalogExposure: CapabilityPackageExposure
 }): Promise<CapabilityCatalogRecord> {
     const requester: CapabilityRequesterContext = {
         userId: 'system',
@@ -889,7 +977,8 @@ export async function seedBuiltInCapability({
         storageOwnerId,
         summary,
         tags,
-        catalogVisibility,
+        parentModuleId,
+        catalogExposure,
         requester,
         allowedActions,
         ...(!('error' in current) ? { expectedManifestBlobHash: current.manifestBlobHash } : {}),
@@ -1129,7 +1218,7 @@ export async function getCapabilityAudienceUserIds(capabilityId: string): Promis
 const CapabilityModel = {
     authorize: authorizeCapability,
     getAuthorizedRecords: getAuthorizedCapabilityRecords,
-    listAuthorized: listAuthorizedCapabilities,
+    listAuthorized: listAuthorizedStandaloneCapabilities,
     readManifest: readAuthorizedCapabilityManifest,
     readManifestSnapshot: readAuthorizedCapabilityManifestSnapshot,
     readResource: readAuthorizedCapabilityResource,

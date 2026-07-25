@@ -324,6 +324,7 @@ function buildCanvasGenerationRun(args: {
             mediaType: 'image',
             mediaIndex: 0,
             branchId: `capability-${args.runId}`,
+            referenceAssetIds: [],
             referenceNodeIds: [],
             sourceContextNodeIds: [],
             promptText: args.prompt,

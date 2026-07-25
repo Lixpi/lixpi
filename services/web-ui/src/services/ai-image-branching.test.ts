@@ -294,11 +294,11 @@ describe('buildMediaBranchCandidateSnapshot', () => {
         const candidateIds = snapshot.candidates.map((candidate) => candidate.nodeId)
         const goatCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'goat-generated')
 
-        expect(snapshot.activeTargetNodeId).toBe('goat-generated')
+        expect(snapshot.activeTargetCandidateId).toBe('node:goat-generated')
         expect(goatCandidate?.roleHints).toContain('active-target')
         expect(candidateIds.indexOf('person-generated')).toBeLessThan(candidateIds.indexOf('goat-generated'))
-        expect(snapshot.transcriptContext).toContain('Active target nodeId: goat-generated')
-        expect(snapshot.transcriptContext).toContain('nodeId=goat-generated | kind=image | roles=generated-variant,branch-leaf,active-target')
+        expect(snapshot.transcriptContext).toContain('Active target candidateId: node:goat-generated')
+        expect(snapshot.transcriptContext).toContain('candidateId=node:goat-generated | nodeId=goat-generated | assetId=')
     })
 
     it('marks generated ancestors and leaves so the API can preserve branch lineage', () => {
@@ -485,7 +485,7 @@ describe('buildMediaBranchCandidateSnapshot', () => {
         expect(candidateIds).toEqual(['disconnected-source', 'portrait-source'])
         expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'disconnected-source')?.roleHints).toEqual(['base-context'])
         expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'portrait-source')?.roleHints).toEqual(['base-context'])
-        expect(snapshot.explicitReferenceNodeIds).toEqual(['disconnected-source'])
+        expect(snapshot.explicitReferenceCandidateIds).toEqual(['node:disconnected-source'])
     })
 })
 
@@ -623,7 +623,7 @@ describe('buildCanvasWideCandidateSnapshot', () => {
             referenceNodeIds: ['person-generated'],
         })
 
-        expect(snapshot.activeTargetNodeId).toBe('person-generated')
+        expect(snapshot.activeTargetCandidateId).toBe('node:person-generated')
         expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'person-generated')?.roleHints).toContain(
             'active-target',
         )
@@ -637,7 +637,7 @@ describe('buildCanvasWideCandidateSnapshot', () => {
             referenceNodeIds: ['portrait-source', 'landscape-source'],
         })
 
-        expect(snapshot.activeTargetNodeId).toBeUndefined()
+        expect(snapshot.activeTargetCandidateId).toBeUndefined()
         expect(snapshot.candidates.some((candidate) => candidate.roleHints.includes('active-target'))).toBe(false)
     })
 
@@ -654,17 +654,17 @@ describe('buildCanvasWideCandidateSnapshot', () => {
             'person-generated',
             'portrait-source',
         ])
-        expect(snapshot.explicitReferenceNodeIds).toEqual(['portrait-source'])
+        expect(snapshot.explicitReferenceCandidateIds).toEqual(['node:portrait-source'])
     })
 
-    it('omits explicitReferenceNodeIds when no references are supplied', () => {
+    it('omits explicitReferenceCandidateIds when no references are supplied', () => {
         const snapshot = buildCanvasWideCandidateSnapshot({
             generationRunId: 'run-wide-5',
             nodes: [portraitSourceNode],
             prompt: 'compose globally',
         })
 
-        expect(snapshot.explicitReferenceNodeIds).toBeUndefined()
+        expect(snapshot.explicitReferenceCandidateIds).toBeUndefined()
     })
 })
 

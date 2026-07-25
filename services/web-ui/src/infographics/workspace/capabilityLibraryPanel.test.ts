@@ -26,7 +26,7 @@ function item(
         summary: `${name} summary`,
         tags: [],
         manifestBlobHash: `hash-${capabilityId}`,
-        catalogVisibility: 'listed',
+        catalogExposure: 'standalone',
         status: 'active',
         updatedAt: 1,
     }
@@ -43,7 +43,7 @@ function details(capabilityId: string, name: string): CapabilityDetails {
             scopeOwnerId: 'system',
             storageOwnerId: 'system',
             manifestBlobHash: `hash-${capabilityId}`,
-            catalogVisibility: 'listed',
+            catalogExposure: 'standalone',
             status: 'active',
             ownerUserId: 'system',
             createdAt: 1,

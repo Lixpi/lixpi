@@ -16,29 +16,33 @@ The active runtime has no document table, chat-thread table, media-library table
 | `Workspace` | Canvas viewport, node geometry, edges, panel tabs, local context chips | Titles, descriptors, bytes, document snapshots, Asset lifecycle |
 | `Asset` | Stable identity, global title, scope, owner, optional media/document/lineage components, states, revision, edit lease | Binary bytes and large JSON documents |
 | `Asset-Meta` | Compact list projection ordered by `updatedAt` | ACLs, references, full documents, rendition maps |
+| `Asset-Search` | Thin scope/category/normalized-title autocomplete projection | Authorization, full Assets, conversation rows |
 | `Asset-Access-List` | Per-principal grants | Workspace membership |
 | `Asset-References` | Catalog membership and workspace placements/surfaces | Blob ownership |
 | `Blob` | Organization-scoped hash, object address, MIME, byte size, status, reference count | Product semantics |
 | `Blob-References` | Asset or Capability ownership of a Blob | Product scope or ACL |
-| `Capability` | Kind, scope, owners, status, and current manifest hash | Manifest and resource bytes |
+| `Capability` package | Kind, scope, owners, status, module membership/exposure, and current manifest hash | Manifest and resource bytes or top-level module presentation metadata |
+| `Prompt-Reference-Recent` | Per-user reference identity and last accepted-use timestamp | Authorization or display metadata |
 | `Capability Run` | Sealed manifest hashes, owner, origin, state, steps, and output Asset IDs | Event payload bytes |
 
 ## DynamoDB tables
 
-The six revision-2 tables are defined in [`DynamoDB-tables.ts`](../../infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts).
+The Asset/Blob tables and their prompt-reference projections are defined in [`DynamoDB-tables.ts`](../../infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts).
 
 | Table | Partition key | Sort key | Indexes |
 |---|---|---|---|
 | `Assets` | `assetId` | — | none |
 | `Assets-Meta` | `scopeAndOwner` | `assetId` | LSI `updatedAt` only |
+| `Assets-Search` | `scopeAndOwner` | `searchKey` | none |
 | `Assets-Access-List` | `assetId` | `principalId` | none |
 | `Asset-References` | `assetId` | `referenceKey` | none |
 | `Blobs` | `blobKey = organizationId#sha256` | — | none |
 | `Blob-References` | `blobKey` | `referenceKey` | none |
+| `Prompt-Reference-Recents` | `userId` | `referenceKey` | LSI `updatedAt` |
 
-There are no GSIs on these tables. Listing queries bounded `Assets-Meta` partitions. Authorization and ordinary maintenance use point reads or one Asset/Blob partition. Maintenance-only orphan collection scans staging Blob rows and organization IDs; request paths do not.
+There are no GSIs on these tables. Listing queries bounded `Assets-Meta` partitions. Prompt autocomplete queries authorized `Assets-Search` partitions by `begins_with(<media-kind>#<normalized-title>)`, merges and deduplicates thin rows, and still point-authorizes the selected Asset before use. Conversation Assets are not projected into media search. Authorization and ordinary maintenance use point reads or one Asset/Blob partition. Maintenance-only orphan collection scans staging Blob rows and organization IDs; request paths do not.
 
-Capability storage uses `Capabilities`, `Capabilities-Meta`, `Capabilities-Access-List`, and `Capability-Runs` alongside the Asset/Blob tables. Workspaces include `organizationId`; every Asset or organization-owned Capability created from a workspace uses that organization rather than selecting an arbitrary organization from the user account.
+Capability-package storage uses `Capabilities`, `Capabilities-Meta`, `Capabilities-Access-List`, and `Capability-Runs` alongside the Asset/Blob tables. Source-registered top-level Capability modules remain authoritative in the module registry; their contained packages carry `parentModuleId` plus `catalogExposure: 'module-internal'`. Workspaces include `organizationId`; every Asset or organization-owned Capability package created from a workspace uses that organization rather than selecting an arbitrary organization from the user account.
 
 ## Asset aggregate
 
@@ -83,8 +87,10 @@ The list API queries every scope partition available to the requester plus the r
 
 Changing scope validates every workspace reference before moving the catalog and Meta projection. A scope cannot be narrowed when an existing reference would become inaccessible. Blob keys never change when scope changes.
 
-Grant/revoke operations update the ACL row, principal Meta projection, base/other projections, and Asset revision in one conditional transaction. They cannot overwrite the owner's permanent `owner` row or race a metadata update into a stale principal projection.
-The model caps total Meta projections at 90 so every Asset mutation remains below DynamoDB's 100-operation transaction limit; a grant beyond that bound is rejected before writing.
+Asset create, title update, scope change, grant/revoke, repair, and deletion maintain `Assets-Meta` and `Assets-Search` together. Grant/revoke operations update the ACL row, principal Meta/search projections, base/other projections, and Asset revision in one conditional transaction. They cannot overwrite the owner's permanent `owner` row or race a metadata update into a stale principal projection.
+The model caps total Asset projection scopes at 32 so the authority mutation plus Meta and search writes remain below DynamoDB's 100-operation transaction limit; a grant beyond that bound is rejected before writing.
+
+`Prompt-Reference-Recents` stores at most 100 stable identities per user. Accepted authoritative submissions upsert recents; empty picker queries reauthorize the newest five in the active category, remove stale rows, then fill from current catalog results. Recents never grant access.
 
 ## References and deletion
 

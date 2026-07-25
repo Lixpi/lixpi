@@ -123,12 +123,12 @@ const getVideoConditioningImageUrls = (state: ProviderState): Set<string> => {
     )
 }
 
-const getSelectedVideoReferenceNodeIds = (state: ProviderState): Set<string> => {
-    const nodeIds = new Set<string>()
+const getSelectedVideoReferenceCandidateIds = (state: ProviderState): Set<string> => {
+    const candidateIds = new Set<string>()
     const resolution = state.mediaBranchResolution
-    if (resolution?.targetImageNodeId) nodeIds.add(resolution.targetImageNodeId)
-    for (const nodeId of resolution?.referenceImageNodeIds ?? []) nodeIds.add(nodeId)
-    return nodeIds
+    if (resolution?.targetCandidateId) candidateIds.add(resolution.targetCandidateId)
+    for (const candidateId of resolution?.referenceCandidateIds ?? []) candidateIds.add(candidateId)
+    return candidateIds
 }
 
 const buildImageConditioningSafetyDirection = (state: ProviderState, profile: VideoModelProfile): string | undefined => {
@@ -137,9 +137,9 @@ const buildImageConditioningSafetyDirection = (state: ProviderState, profile: Vi
     const conditioningImageUrls = getVideoConditioningImageUrls(state)
     if (conditioningImageUrls.size === 0) return undefined
 
-    const selectedNodeIds = getSelectedVideoReferenceNodeIds(state)
+    const selectedCandidateIds = getSelectedVideoReferenceCandidateIds(state)
     const selectedCandidates = (state.mediaBranchCandidateSnapshot?.candidates ?? []).filter((candidate) =>
-        selectedNodeIds.has(candidate.nodeId) || conditioningImageUrls.has(candidate.imageUrl),
+        selectedCandidateIds.has(candidate.candidateId ?? candidate.nodeId ?? '') || conditioningImageUrls.has(candidate.imageUrl),
     )
 
     return selectedCandidates.some(candidateHasStylizedOrSyntheticSignals)
@@ -214,30 +214,34 @@ const getTraceSafeImageUrl = (imageUrl: string, candidate?: MediaBranchCandidate
     }
 }
 
-const getDecisionByNodeId = (
+const getDecisionByCandidateId = (
     decisions: MediaBranchVlmReferenceDecision[] | undefined,
 ): Map<string, MediaBranchVlmReferenceDecision> => {
-    return new Map((decisions ?? []).map((decision) => [decision.nodeId, decision]))
+    return new Map((decisions ?? []).map((decision) => [
+        decision.candidateId ?? (decision as { nodeId?: string }).nodeId ?? '',
+        decision,
+    ]))
 }
 
 const buildBranchReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
     const resolution = state.mediaBranchResolution
     if (!resolution) return []
-    const candidatesByNodeId = new Map(
-        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]),
+    const candidatesById = new Map(
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.candidateId ?? candidate.nodeId, candidate]),
     )
-    const decisionsByNodeId = getDecisionByNodeId(resolution.decisions)
+    const decisionsById = getDecisionByCandidateId(resolution.decisions)
 
-    return resolution.referenceImageNodeIds.map((nodeId, index) => {
-        const candidate = candidatesByNodeId.get(nodeId)
-        const decision = decisionsByNodeId.get(nodeId)
+    return resolution.referenceCandidateIds.map((candidateId, index) => {
+        const candidate = candidatesById.get(candidateId)
+        const decision = decisionsById.get(candidateId)
         return {
-            id: `branch:${nodeId}`,
+            id: `branch:${candidateId}`,
             imageUrl: getTraceSafeImageUrl(candidate?.imageUrl ?? '', candidate),
             source: 'branch-candidate' as const,
             label: getCandidateLabel(candidate, `Reference image ${index + 1}`),
             role: decision?.role ?? 'base-context',
-            nodeId,
+            candidateId,
+            nodeId: candidate?.nodeId,
             assetId: candidate?.assetId,
             branchId: candidate?.branchId,
             reason: decision?.reason,
@@ -269,17 +273,18 @@ const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReferenc
 const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedReference[] => {
     const resolution = state.mediaBranchResolution
     if (!resolution) return []
-    const candidatesByNodeId = new Map(
-        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]),
+    const candidatesById = new Map(
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.candidateId ?? candidate.nodeId, candidate]),
     )
-    const decisionsByNodeId = getDecisionByNodeId(resolution.decisions)
+    const decisionsById = getDecisionByCandidateId(resolution.decisions)
 
-    return resolution.excludedNodeIds.map((nodeId) => {
-        const candidate = candidatesByNodeId.get(nodeId)
-        const decision = decisionsByNodeId.get(nodeId)
+    return resolution.excludedCandidateIds.map((candidateId) => {
+        const candidate = candidatesById.get(candidateId)
+        const decision = decisionsById.get(candidateId)
         return {
-            nodeId,
-            label: getCandidateLabel(candidate, nodeId),
+            candidateId,
+            nodeId: candidate?.nodeId,
+            label: getCandidateLabel(candidate, candidateId),
             role: 'excluded' as const,
             reason: decision?.reason ?? 'Excluded by image branch resolver.',
             assetId: candidate?.assetId,
@@ -321,8 +326,8 @@ export const buildVideoGenerationTrace = (state: ProviderState): VideoGeneration
             operationKind: resolution.operationKind,
             confidence: resolution.confidence,
             rationale: resolution.rationale,
-            targetImageNodeId: resolution.targetImageNodeId,
-            parentImageNodeId: resolution.parentImageNodeId,
+            targetCandidateId: resolution.targetCandidateId,
+            parentCandidateId: resolution.parentCandidateId,
             branchId: resolution.branchId,
         } : undefined,
     }

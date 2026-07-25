@@ -679,6 +679,7 @@ export class MediaGenerationMatrixOrchestrator {
             imagePromptRetryCount: 0,
             workspaceContextSnapshot: requestData.workspaceContextSnapshot,
             mediaBranchCandidateSnapshot: requestData.mediaBranchCandidateSnapshot,
+            promptReferenceAssetIds: requestData.promptReferenceAssetIds,
             canvasVisibleArea: requestData.canvasVisibleArea,
             capabilityReferences: requestData.capabilityReferences,
             capabilityInputs: requestData.capabilityInputs,
@@ -761,6 +762,7 @@ export class MediaGenerationMatrixOrchestrator {
                 }),
             mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
             mediaBranchResolution: state.mediaBranchResolution,
+            referenceAssetIds: state.promptReferenceAssetIds,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
             ...(normalized.regeneration?.mode === 'existing-prompt' ? {
                 regenerationTarget: {

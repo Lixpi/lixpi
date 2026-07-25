@@ -1,9 +1,9 @@
 'use strict'
 
-import type { SkillModule } from '@lixpi/capability-system/backend'
-import { createCharacterImagePromptSkillModule } from './image-prompt/index.ts'
-import { createReferenceFidelitySkillModule } from './reference-fidelity/index.ts'
-import { createCharacterSheetLayoutSkillModule } from './sheet-layout/index.ts'
+import type { CapabilitySkillPackageInstaller } from '@lixpi/capability-system/backend'
+import { createCharacterImagePromptSkillPackage } from './image-prompt/index.ts'
+import { createReferenceFidelitySkillPackage } from './reference-fidelity/index.ts'
+import { createCharacterSheetLayoutSkillPackage } from './sheet-layout/index.ts'
 
 export {
     CHARACTER_IMAGE_PROMPT_RESOURCE_ID,
@@ -18,10 +18,10 @@ export {
     CHARACTER_SHEET_LAYOUT_SKILL_ID,
 } from './sheet-layout/index.ts'
 
-export function createCharacterCreatorSkillModules(): SkillModule[] {
+export function createCharacterCreatorSkillPackages(): CapabilitySkillPackageInstaller[] {
     return [
-        createCharacterSheetLayoutSkillModule(),
-        createReferenceFidelitySkillModule(),
-        createCharacterImagePromptSkillModule(),
+        createCharacterSheetLayoutSkillPackage(),
+        createReferenceFidelitySkillPackage(),
+        createCharacterImagePromptSkillPackage(),
     ]
 }

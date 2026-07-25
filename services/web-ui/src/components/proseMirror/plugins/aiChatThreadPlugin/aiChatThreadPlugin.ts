@@ -20,8 +20,10 @@ import {
     aiResponseMessageNodeType,
     aiUserMessageNodeType,
     getAiLineageEventsForProjection,
+    LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
     parseAiModelSelectionAttr,
     parseMediaGenerationConfigSelectionAttr,
+    PROMPT_REFERENCE_NODE_TYPE,
     serializeAiModelSelectionAttr,
     type AiLineageEventDescriptor,
 } from '@lixpi/prosemirror'
@@ -35,10 +37,9 @@ import { aiLineageEventNodeView } from '$src/components/proseMirror/plugins/aiCh
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import type {
-    AiInteractionChatSendMessagePayload,
+    AiInteractionChatSubmitPayload,
     AiInteractionChatStopMessagePayload,
     AiModelId,
-    CapabilityPromptReference,
     MediaBranchVlmResolution,
     ImageGenerationTrace,
     ImageGenerationSize,
@@ -77,7 +78,7 @@ type VideoOptions = {
     sourceVideoNodeId?: string
 }
 
-type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & {
+type SendAiRequestHandler = (data: AiInteractionChatSubmitPayload & {
     aiReasoningModels?: string[]
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
@@ -156,7 +157,7 @@ type ThreadContent = {
     nodeType: string
     textContent: string
     images?: ImageReference[]
-    capabilityReferences?: CapabilityPromptReference[]
+    hasPromptReferences?: boolean
 }
 type AiGeneratedImageAlignment = 'left' | 'center' | 'right'
 type AiGeneratedImageTextWrap = 'none' | 'left' | 'right'
@@ -444,11 +445,11 @@ class ContentExtractor {
     static collectContentWithImages(node: ProseMirrorNode): {
         text: string
         images: ImageReference[]
-        capabilityReferences: CapabilityPromptReference[]
+        hasPromptReferences: boolean
     } {
         let text = ''
         const images: ImageReference[] = []
-        const capabilityReferences: CapabilityPromptReference[] = []
+        let hasPromptReferences = false
 
         node.forEach((child: ProseMirrorNode) => {
             if (child.type.name === 'text') {
@@ -461,21 +462,19 @@ class ContentExtractor {
             } else if (child.type.name === aiGeneratedImageNodeType || child.type.name === aiGeneratedVideoNodeType) {
                 // Generated media is resolved through the workspace Asset context
                 // snapshot, not browser-constructed Object Store coordinates.
-            } else if (child.type.name === 'capability_reference') {
-                const { capabilityId, kind } = child.attrs
-                if (capabilityId && (kind === 'tool' || kind === 'skill')) {
-                    capabilityReferences.push({ capabilityId, kind })
-                }
+            } else if (child.type.name === PROMPT_REFERENCE_NODE_TYPE
+                || child.type.name === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE) {
+                hasPromptReferences = true
             } else {
                 // Recurse into other nodes
                 const nested = ContentExtractor.collectContentWithImages(child)
                 text += nested.text
                 images.push(...nested.images)
-                capabilityReferences.push(...nested.capabilityReferences)
+                hasPromptReferences ||= nested.hasPromptReferences
             }
         })
 
-        return { text, images, capabilityReferences }
+        return { text, images, hasPromptReferences }
     }
 
     // Simple text extraction without formatting (for backwards compatibility)
@@ -524,14 +523,14 @@ class ContentExtractor {
                 return
             }
 
-            const { text: textContent, images, capabilityReferences } = ContentExtractor.collectContentWithImages(block)
-            if (!textContent && images.length === 0 && capabilityReferences.length === 0) return
+            const { text: textContent, images, hasPromptReferences } = ContentExtractor.collectContentWithImages(block)
+            if (!textContent && images.length === 0 && !hasPromptReferences) return
 
             content.push({
                 nodeType: block.type.name,
                 textContent,
                 images: images.length > 0 ? images : undefined,
-                capabilityReferences: capabilityReferences.length > 0 ? capabilityReferences : undefined,
+                ...(hasPromptReferences ? { hasPromptReferences: true } : {}),
             })
         })
 
@@ -559,14 +558,14 @@ class ContentExtractor {
                         return
                     }
 
-                    const { text: textContent, images, capabilityReferences } = ContentExtractor.collectContentWithImages(block)
+                    const { text: textContent, images, hasPromptReferences } = ContentExtractor.collectContentWithImages(block)
 
-                    if (textContent || images.length > 0 || capabilityReferences.length > 0) {
+                    if (textContent || images.length > 0 || hasPromptReferences) {
                         allThreadsContent.push({
                             nodeType: block.type.name,
                             textContent,
                             images: images.length > 0 ? images : undefined,
-                            capabilityReferences: capabilityReferences.length > 0 ? capabilityReferences : undefined,
+                            ...(hasPromptReferences ? { hasPromptReferences: true } : {}),
                         })
                     }
                 })
@@ -611,14 +610,14 @@ class ContentExtractor {
                         return
                     }
 
-                    const { text: textContent, images, capabilityReferences } = ContentExtractor.collectContentWithImages(block)
+                    const { text: textContent, images, hasPromptReferences } = ContentExtractor.collectContentWithImages(block)
 
-                    if (textContent || images.length > 0 || capabilityReferences.length > 0) {
+                    if (textContent || images.length > 0 || hasPromptReferences) {
                         selectedContent.push({
                             nodeType: block.type.name,
                             textContent,
                             images: images.length > 0 ? images : undefined,
-                            capabilityReferences: capabilityReferences.length > 0 ? capabilityReferences : undefined,
+                            ...(hasPromptReferences ? { hasPromptReferences: true } : {}),
                         })
                     }
                 })
@@ -652,15 +651,6 @@ class ContentExtractor {
         return messages
     }
 
-    static collectCapabilityReferences(items: ThreadContent[]): CapabilityPromptReference[] {
-        const byId = new Map<string, CapabilityPromptReference>()
-        for (const item of items) {
-            for (const reference of item.capabilityReferences ?? []) {
-                if (!byId.has(reference.capabilityId)) byId.set(reference.capabilityId, reference)
-            }
-        }
-        return [...byId.values()]
-    }
 }
 
 // Document position and insertion utilities
@@ -2446,7 +2436,6 @@ class AiChatThreadPluginClass {
         // Pass threadId for Workspace mode to ensure current thread is always included
         const threadContent = ContentExtractor.getActiveThreadContent(newState, threadContext, nodePos, threadId)
         const messages = ContentExtractor.toMessages(threadContent)
-        const capabilityReferences = ContentExtractor.collectCapabilityReferences(threadContent)
 
         // Build image generation options if an image model is selected
         const imageOptions = effectiveImageModel ? {
@@ -2492,7 +2481,6 @@ class AiChatThreadPluginClass {
             conversationAssetId: threadId,
             imageOptions,
             videoOptions,
-            capabilityReferences,
         }
 
         queueMicrotask(() => {

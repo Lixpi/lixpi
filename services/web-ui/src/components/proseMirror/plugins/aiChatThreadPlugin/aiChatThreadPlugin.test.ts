@@ -243,7 +243,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 content: 'Assistant message with visual context',
             },
         ])
-        expect(payload.capabilityReferences).toEqual([])
+        expect(payload).not.toHaveProperty('capabilityReferences')
     })
 
     it('forwards valid image generation config groups to imageOptions', async () => {

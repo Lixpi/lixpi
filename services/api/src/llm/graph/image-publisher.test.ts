@@ -59,6 +59,7 @@ const baseGenerationRun = {
         branchId: 'branch-1',
         branchForkNodeId: 'fork-1',
         lineageParentNodeId: 'fork-1',
+        referenceAssetIds: [],
         referenceNodeIds: [],
         sourceContextNodeIds: [],
         promptText: 'draw it',

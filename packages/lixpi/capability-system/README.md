@@ -1,6 +1,6 @@
 # Capability System
 
-`@lixpi/capability-system` contains the reusable contracts and runtime for Lixpi Capabilities. A Capability is a manifest-backed plug-in unit. A Skill contributes instruction resources. A Tool contributes an executable workflow whose steps call registered application actions.
+`@lixpi/capability-system` contains the reusable contracts and runtime for Lixpi Capabilities. A Capability is a first-class source-registered module with one owned entry package and explicit Tool/Skill package membership. A Skill package contributes instruction resources. A Tool package contributes an executable workflow whose steps call registered application actions. Standalone Tool and Skill packages are stored without module membership and remain independently selectable.
 
 The package is split by runtime boundary:
 
@@ -32,7 +32,7 @@ Backend code owns the reusable Capability engine:
 - action registration and allow-list enforcement;
 - workflow input, output, condition, retry, and binding handling;
 - run dispatch and cancellation;
-- Tool and Skill module composition;
+- first-class Capability-module registration and Tool/Skill package installation;
 - provider-neutral model-tool definitions and provider payload conversion.
 
 The backend accepts storage, search, event, and persistence adapters through constructors or function arguments. It must not import a service implementation.
@@ -43,9 +43,9 @@ Frontend code owns the transport-injected catalog client, cache, deterministic e
 
 ## Service integration
 
-An API service supplies adapters for catalog storage, resource loading, run persistence, event streams, and chat event mirroring. It registers concrete Capability modules in its composition root, then calls the package runtime. Concrete modules can use application services inside their registered actions, but the package cannot import or name those modules.
+An API service supplies adapters for catalog storage, resource loading, run persistence, event streams, and chat event mirroring. It registers one `CapabilityModuleDefinition` per concrete module in its composition root, then calls the package runtime. Registry validation requires unique module IDs, unique package ownership, and exactly one owned entry package with the declared kind. Concrete modules can use application services inside their registered actions, but the package cannot import or name those modules.
 
-An instruction Skill uses `createInstructionSkillModule()` with an injected storage adapter. This keeps file parsing and manifest construction in the package while the API controls blob persistence and catalog seeding.
+A module-owned instruction Skill uses `createInstructionSkillPackage()` with an injected storage adapter. The module catalog supplies its `parentModuleId` and `catalogExposure: 'module-internal'` during seeding. Standalone package saves use `catalogExposure: 'standalone'` with no parent module. This keeps file parsing and manifest construction in the package while the API controls Blob persistence and catalog seeding.
 
 ## Adding code
 

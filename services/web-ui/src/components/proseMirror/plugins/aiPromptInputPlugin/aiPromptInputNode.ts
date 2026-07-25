@@ -19,6 +19,8 @@ import {
 } from '$src/components/aiModelControls/index.ts'
 import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
 import {
+    LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
+    PROMPT_REFERENCE_NODE_TYPE,
     aiPromptInputNodeSpec,
     aiPromptInputNodeType,
     normalizeAiModelSelectionAttr,
@@ -124,6 +126,17 @@ const modelMenuToggleDimensions = {
 
 function uniqueNonEmptyValues(values: string[]): string[] {
     return Array.from(new Set(values.filter((value) => value.trim().length > 0)))
+}
+
+export function hasAiPromptInputContent(node: ProseMirrorNode): boolean {
+    if (node.isText && node.text?.trim()) return true
+    if (node.type.name === PROMPT_REFERENCE_NODE_TYPE
+        || node.type.name === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE) return true
+    let found = false
+    node.forEach((child) => {
+        if (!found && hasAiPromptInputContent(child)) found = true
+    })
+    return found
 }
 
 function setNodeAttrs(view: EditorView, getPos: () => number | undefined, attrs: Record<string, unknown>): void {
@@ -853,7 +866,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         document.addEventListener('mousedown', handleDocumentMouseDown, true)
 
         const syncEmptyState = (n: ProseMirrorNode) => {
-            const empty = n.textContent.trim() === ''
+            const empty = !hasAiPromptInputContent(n)
             dom.setAttribute('data-empty', String(empty))
         }
 

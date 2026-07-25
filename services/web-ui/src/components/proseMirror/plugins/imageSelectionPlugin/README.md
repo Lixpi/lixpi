@@ -13,7 +13,7 @@ This plugin provides rich image editing functionality in the ProseMirror editor 
 
 This plugin handles two node types:
 
-1. **`image`** - Regular images inserted via slash command or drag-drop
+1. **`image`** - Regular images inserted through supported document/media flows or drag-drop
 2. **`aiGeneratedImage`** - AI-generated images from the chat thread plugin
 
 **IMPORTANT:** Both node types MUST have these attributes for the bubble menu to work:
@@ -103,7 +103,7 @@ aiGeneratedImage: {
 
 The plugin is automatically registered in the editor. To use:
 
-1. Insert an image using the slash command `/image`
+1. Insert or drag an image into a document surface that supports regular image nodes
 2. Click on the image to select it
 3. Use the bubble menu to adjust alignment, text wrap, or delete
 4. Drag any corner handle to resize the image

@@ -215,6 +215,7 @@ const assetById: Record<string, Asset> = {
 
 const baseCandidates: MediaBranchCandidateImage[] = [
     {
+        candidateId: 'goat-image',
         nodeId: 'goat-image',
         assetId: 'asset-goat-image',
         imageUrl: 'nats-obj://workspace-workspace-1-files/goat-file',
@@ -227,6 +228,7 @@ const baseCandidates: MediaBranchCandidateImage[] = [
         entityTags: ['goat'],
     },
     {
+        candidateId: 'landscape-image',
         nodeId: 'landscape-image',
         assetId: 'asset-landscape-image',
         imageUrl: 'nats-obj://workspace-workspace-1-files/landscape-file',
@@ -263,7 +265,7 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
             resolverVersion: 'image-branch-vlm-v1',
             conversationAssetId: 'conversation-asset-1',
             regionNodeId: 'root-thread',
-            activeTargetNodeId: 'landscape-image',
+            activeTargetCandidateId: 'landscape-image',
             promptText: 'put the goat beside the cubist dog',
             promptFingerprint: 'prompt-1',
             candidates: baseCandidates,
@@ -546,7 +548,7 @@ describe('resolveWorkspaceContext', () => {
         // mediaBranchCandidateSnapshot) only expands for forced-chip/forced-edge
         // selections; the auto-picked goat-image selection cannot re-enter it,
         // so only the edge-forced team-video is added.
-        expect(update.mediaBranchCandidateSnapshot?.activeTargetNodeId).toBeUndefined()
+        expect(update.mediaBranchCandidateSnapshot?.activeTargetCandidateId).toBeUndefined()
         expect(update.mediaBranchCandidateSnapshot?.candidates.map((candidate) => candidate.nodeId)).toEqual(['team-video'])
         const addedVideo = update.mediaBranchCandidateSnapshot?.candidates.find((candidate) => candidate.nodeId === 'team-video')
         expect(addedVideo).toEqual(expect.objectContaining({
@@ -775,7 +777,7 @@ describe('resolveWorkspaceContext', () => {
         expect(update.workspaceContextResolution?.narrowedMediaNodeIds).toEqual(['goat-image'])
         expect(publisher.contextRelevanceResolved).toHaveBeenCalledOnce()
         expect(update.mediaBranchCandidateSnapshot?.candidates.map((candidate) => candidate.nodeId)).toEqual(['goat-image'])
-        expect(update.mediaBranchCandidateSnapshot?.activeTargetNodeId).toBeUndefined()
+        expect(update.mediaBranchCandidateSnapshot?.activeTargetCandidateId).toBeUndefined()
     })
 
     it('keeps non-media explicit chips exclusive too and yields no media candidates', async () => {
@@ -814,13 +816,13 @@ describe('resolveWorkspaceContext', () => {
             },
             mediaBranchCandidateSnapshot: {
                 ...createState().mediaBranchCandidateSnapshot!,
-                explicitReferenceNodeIds: ['goat-image'],
+                explicitReferenceCandidateIds: ['goat-image'],
             },
         }), deps)
 
         expect(callLlm).toHaveBeenCalledOnce()
         expect(update.workspaceContextResolution?.selections).toEqual([])
         expect(update.mediaBranchCandidateSnapshot?.candidates.map((candidate) => candidate.nodeId)).toEqual(['goat-image'])
-        expect(update.mediaBranchCandidateSnapshot?.activeTargetNodeId).toBeUndefined()
+        expect(update.mediaBranchCandidateSnapshot?.activeTargetCandidateId).toBeUndefined()
     })
 })

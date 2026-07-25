@@ -11,12 +11,14 @@ Capability discovery and Capability content use separate storage paths. DynamoDB
 
 | Table | Key | Contents |
 |------|-----|----------|
-| `CAPABILITIES` | `capabilityId` | Kind, status, scope, owners, storage owner, current manifest hash, timestamps |
-| `CAPABILITIES_META` | `scopeAndOwner`, `searchKey` | Thin picker projection with `kind#normalizedName#capabilityId` ordering |
+| `CAPABILITIES` | `capabilityId` | Kind, status, scope, owners, storage owner, current manifest hash, `catalogExposure`, optional `parentModuleId`, timestamps |
+| `CAPABILITIES_META` | `scopeAndOwner`, `searchKey` | Thin standalone-package projection with `kind#normalizedName#capabilityId` ordering and structural membership fields |
 | `CAPABILITIES_ACCESS_LIST` | `capabilityId`, `principalId` | Explicit viewer, editor, and owner grants |
 | `CAPABILITY_RUNS` | `runId`, `workspaceId` | Owner, origin, sealed manifest hashes, state, current steps, outputs, event stream |
 
 Create and update transactions write the authority row, scope projection, principal projections, grants, and Blob references below DynamoDB's 100-operation transaction limit. Manifest edits require the caller's expected manifest hash and fail on a concurrent pointer swap.
+
+Source-registered Capability modules are not DynamoDB manifest rows. `CapabilityModuleCatalog` is the module authority and exposes module metadata through separate list/get subjects. Every package contained by a module, including the entry package, is persisted with `catalogExposure: 'module-internal'` and a required `parentModuleId`. Standalone Tool/Skill queries require `catalogExposure: 'standalone'` and no parent before serializing a row.
 
 ## Blob layout
 

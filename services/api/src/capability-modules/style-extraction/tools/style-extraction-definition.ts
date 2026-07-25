@@ -9,6 +9,7 @@ import {
     type CapabilityResourceRole,
     type CapabilityValueBinding,
 } from '@lixpi/constants'
+import type { CapabilityPackageSeedContext } from '@lixpi/capability-system/backend'
 
 import {
     seedBuiltInCapability,
@@ -68,16 +69,18 @@ const outputSchemaSource: ResourceSource = {
 }
 
 export async function seedStyleExtractionTool(
-    allowedActions: ReadonlySet<string>,
+    context: CapabilityPackageSeedContext,
     storageOwnerId = 'system',
 ): Promise<void> {
     const inputSchema = await storeToolResource(storageOwnerId, inputSchemaSource)
     const outputSchema = await storeToolResource(storageOwnerId, outputSchemaSource)
     await seedBuiltInCapability({
-        allowedActions,
+        allowedActions: context.allowedActions,
         manifest: buildStyleExtractionManifest({ inputSchema, outputSchema }),
         summary: 'Analyzes visual references through parallel specialist axes and saves a reusable visual style.',
         tags: ['style', 'visual-analysis', 'extraction', 'global'],
+        parentModuleId: context.parentModuleId,
+        catalogExposure: context.catalogExposure,
         storageOwnerId,
     })
 }

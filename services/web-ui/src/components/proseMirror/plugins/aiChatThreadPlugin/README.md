@@ -187,7 +187,6 @@ The request payload includes:
 - `conversationAssetId`
 - `imageOptions` (carries `aiImageModels`)
 - `videoOptions` (carries `aiVideoModels`)
-- ordered, stable `capabilityReferences` extracted from `capability_reference` Tool/Skill atoms
 
 Each section's selection is a single JSON-like model-id array parsed with `parseAiModelSelectionAttr()`. Multi-model mode is controlled independently per section through `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels`; when a flag is off, that section's array is collapsed to its first model before submit.
 
@@ -195,9 +194,7 @@ Media configuration group attrs are JSON strings parsed through `parseMediaGener
 
 `ContentExtractor.getActiveThreadContent()` extracts only `aiUserMessage` and
 `aiResponseMessage` blocks. It preserves code blocks with triple backticks,
-converts hard breaks to newlines, and collects generic `capability_reference` IDs/kinds. Generated
-media is resolved from the API-authorized Workspace Asset context rather than
-from browser-built Object Store coordinates.
+converts hard breaks to newlines, and leaves typed `prompt_reference` atoms in the persisted message document. The request payload does not duplicate those references. After acquiring the conversation lease, the API reads the authoritative latest user message, validates each atom's union shape, and authorizes its stable identity. Generated media is resolved from API-authorized Workspace and Asset context rather than from browser-built Object Store coordinates.
 
 `ContentExtractor.toMessages()` maps `aiUserMessage` to `user`,
 `aiResponseMessage` to `assistant`, and merges adjacent text-only messages with

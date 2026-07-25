@@ -54,6 +54,7 @@ function createTrace(overrides: Partial<ImageGenerationTrace> = {}): ImageGenera
         ],
         excludedReferences: [
             {
+                candidateId: 'goat-generated',
                 nodeId: 'goat-generated',
                 label: 'painted goat',
                 role: 'excluded',
@@ -70,8 +71,8 @@ function createTrace(overrides: Partial<ImageGenerationTrace> = {}): ImageGenera
             operationKind: 'style_transfer',
             confidence: 0.91,
             rationale: 'Continue the generated portrait branch and exclude the goat branch.',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
             branchId: 'branch-person',
         },
         ...overrides,
@@ -231,8 +232,8 @@ describe('aiCollapsibleBlockNodeView', () => {
                 operationKind: 'edit_existing',
                 confidence: 0.88,
                 rationale: 'Continue the seaside clip branch.',
-                targetImageNodeId: 'video-generated',
-                parentImageNodeId: 'video-generated',
+                targetCandidateId: 'video-generated',
+                parentCandidateId: 'video-generated',
                 branchId: 'branch-video',
             },
         }

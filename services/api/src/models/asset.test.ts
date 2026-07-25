@@ -17,7 +17,11 @@ vi.mock('../services/asset-maintenance-queue.ts', () => ({
     enqueueAssetDeletion: vi.fn(),
 }))
 
-import AssetModel, { buildAssetWorkspaceReferenceKey } from './asset.ts'
+import AssetModel, {
+    buildAssetSearchRecord,
+    buildAssetWorkspaceReferenceKey,
+    normalizeAssetTitle,
+} from './asset.ts'
 
 const dynamo = {
     getItem: vi.fn(),
@@ -145,5 +149,276 @@ describe('Asset.attachWorkspaceReference', () => {
 
         expect(result).toEqual(surfaceReference)
         expect(dynamo.transactWrite).not.toHaveBeenCalled()
+    })
+})
+
+describe('Asset prompt-reference search', () => {
+    it('normalizes titles and excludes conversation Assets from the search projection', () => {
+        expect(normalizeAssetTitle('  PoRTRAIT\u00a0  Study  ')).toBe('portrait study')
+        expect(buildAssetSearchRecord({
+            ...asset,
+            title: '  Portrait Study  ',
+            documents: { content: {
+                role: 'content',
+                blobHash: 'a'.repeat(64),
+                version: 1,
+                schemaVersion: '1',
+                byteSize: 10,
+                updatedAt: 1,
+            } },
+        })).toMatchObject({
+            searchKey: 'document#portrait study#asset-1',
+            normalizedTitle: 'portrait study',
+            primaryCategory: 'document',
+        })
+        expect(buildAssetSearchRecord({
+            ...asset,
+            documents: { conversation: {
+                role: 'conversation',
+                blobHash: 'a'.repeat(64),
+                version: 1,
+                schemaVersion: '1',
+                byteSize: 10,
+                updatedAt: 1,
+            } },
+        })).toBeNull()
+    })
+
+    it('queries category prefixes, deduplicates scope rows, and prefers a principal projection', async () => {
+        const baseRecord = buildAssetSearchRecord({
+            ...asset,
+            title: 'Portrait Study',
+            scope: 'organization',
+            scopeOwnerId: 'organization-1',
+            states: { ...asset.states, lifecycle: 'active' },
+        })!
+        dynamo.queryItems.mockImplementation(async ({ keyConditions }: { keyConditions: { scopeAndOwner: string } }) => ({
+            items: keyConditions.scopeAndOwner === 'organization#organization-1'
+                ? [baseRecord]
+                : keyConditions.scopeAndOwner === 'principal#user-1'
+                    ? [{ ...baseRecord, scopeAndOwner: 'principal#user-1' }]
+                    : [],
+        }))
+
+        const result = await AssetModel.searchAvailable({
+            scopeAndOwners: ['organization#organization-1'],
+            principalId: 'user-1',
+            organizationIds: ['organization-1'],
+            query: 'POR',
+            categories: ['document'],
+        })
+
+        expect(result.items).toEqual([{ ...baseRecord, scopeAndOwner: 'principal#user-1' }])
+        expect(dynamo.queryItems).toHaveBeenCalledWith(expect.objectContaining({
+            sortKeyCondition: { key: 'searchKey', operator: 'begins_with', value: 'document#por' },
+        }))
+    })
+
+    it('does not autocomplete Assets that are not active and model-usable', async () => {
+        const creatingDocument = buildAssetSearchRecord({ ...asset, title: 'Still creating' })!
+        const failedImage = {
+            ...creatingDocument,
+            primaryCategory: 'image' as const,
+            searchKey: 'image#failed image#asset-1',
+            normalizedTitle: 'failed image',
+            lifecycleStatus: 'active' as const,
+            mediaStatus: 'failed' as const,
+        }
+        dynamo.queryItems.mockResolvedValue({ items: [creatingDocument, failedImage] })
+
+        const result = await AssetModel.searchAvailable({
+            scopeAndOwners: [creatingDocument.scopeAndOwner],
+            principalId: 'user-1',
+            organizationIds: ['organization-1'],
+            categories: ['document', 'image'],
+        })
+
+        expect(result.items).toEqual([])
+    })
+
+    it('binds opaque cursors to the normalized query and category set', async () => {
+        const record = buildAssetSearchRecord({ ...asset, title: 'Portrait Study' })!
+        dynamo.queryItems.mockResolvedValue({
+            items: [record],
+            lastEvaluatedKey: { scopeAndOwner: record.scopeAndOwner, searchKey: record.searchKey },
+        })
+        const first = await AssetModel.searchAvailable({
+            scopeAndOwners: [record.scopeAndOwner],
+            principalId: 'user-1',
+            organizationIds: ['organization-1'],
+            query: 'portrait',
+            categories: ['document'],
+            limit: 1,
+        })
+
+        expect(first.cursor).toEqual(expect.any(String))
+        await expect(AssetModel.searchAvailable({
+            scopeAndOwners: [record.scopeAndOwner],
+            principalId: 'user-1',
+            organizationIds: ['organization-1'],
+            query: 'different',
+            categories: ['document'],
+            cursor: first.cursor,
+        })).rejects.toThrow('INVALID_ASSET_SEARCH_CURSOR')
+    })
+
+    it('reauthorizes buffered search cursor rows instead of trusting cursor metadata', async () => {
+        const cursor = Buffer.from(JSON.stringify({
+            partitions: {},
+            query: 'portrait',
+            categories: ['document'],
+            completed: [
+                'organization#organization-1|document',
+                'principal#user-1|document',
+            ],
+            buffered: [{
+                scopeAndOwner: 'organization#organization-1',
+                searchKey: 'document#portrait secret#asset-secret',
+            }],
+        }), 'utf8').toString('base64url')
+        dynamo.getItem.mockResolvedValue(undefined)
+
+        const result = await AssetModel.searchAvailable({
+            scopeAndOwners: ['organization#organization-1'],
+            principalId: 'user-1',
+            organizationIds: ['organization-1'],
+            query: 'portrait',
+            categories: ['document'],
+            cursor,
+        })
+
+        expect(dynamo.getItem).toHaveBeenCalledWith(expect.objectContaining({
+            key: {
+                scopeAndOwner: 'organization#organization-1',
+                searchKey: 'document#portrait secret#asset-secret',
+            },
+        }))
+        expect(result.items).toEqual([])
+    })
+
+    it('atomically replaces title-dependent search keys with every metadata projection', async () => {
+        const catalogReference: AssetReference = {
+            assetId: asset.assetId,
+            referenceKey: 'catalog#workspace#workspace-1',
+            type: 'catalog',
+            scope: 'workspace',
+            scopeOwnerId: 'workspace-1',
+            createdAt: 1,
+            updatedAt: 10,
+        }
+        dynamo.getItem
+            .mockResolvedValueOnce(asset)
+            .mockResolvedValueOnce(undefined)
+            .mockResolvedValueOnce(catalogReference)
+            .mockResolvedValueOnce(catalogReference)
+        dynamo.queryItems.mockResolvedValue({ items: [] })
+
+        await AssetModel.updateMetadata({
+            assetId: asset.assetId,
+            requester,
+            expectedRevision: asset.revision,
+            title: 'Renamed Portrait',
+        })
+
+        const transaction = dynamo.transactWrite.mock.calls[0]![0]
+        expect(transaction.origin).toBe('Asset.updateMetadata')
+        expect(transaction.operations).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                type: 'delete',
+                key: expect.objectContaining({ searchKey: 'document#generated image#asset-1' }),
+            }),
+            expect.objectContaining({
+                type: 'put',
+                item: expect.objectContaining({ searchKey: 'document#renamed portrait#asset-1' }),
+            }),
+        ]))
+    })
+
+    it('creates and removes principal search projections with Asset grants', async () => {
+        const grant = {
+            assetId: asset.assetId,
+            principalId: 'user-2',
+            accessLevel: 'viewer' as const,
+            createdAt: 1,
+            updatedAt: 2,
+        }
+        dynamo.getItem
+            .mockResolvedValueOnce(asset)
+            .mockResolvedValueOnce(undefined)
+        dynamo.queryItems.mockResolvedValue({ items: [] })
+
+        await AssetModel.grantAccess({
+            assetId: asset.assetId,
+            requester,
+            principalId: 'user-2',
+            accessLevel: 'viewer',
+        })
+        expect(dynamo.transactWrite.mock.calls[0]![0]).toMatchObject({
+            origin: 'Asset.grantAccess',
+            operations: expect.arrayContaining([
+                expect.objectContaining({
+                    type: 'put',
+                    item: expect.objectContaining({
+                        scopeAndOwner: 'principal#user-2',
+                        searchKey: 'document#generated image#asset-1',
+                    }),
+                }),
+            ]),
+        })
+
+        vi.clearAllMocks()
+        ;(globalThis as any).dynamoDBService = dynamo
+        dynamo.getItem
+            .mockResolvedValueOnce(asset)
+            .mockResolvedValueOnce(grant)
+        dynamo.queryItems.mockResolvedValue({ items: [grant] })
+        dynamo.transactWrite.mockResolvedValue(undefined)
+
+        await AssetModel.revokeAccess({
+            assetId: asset.assetId,
+            requester,
+            principalId: 'user-2',
+        })
+        expect(dynamo.transactWrite.mock.calls[0]![0]).toMatchObject({
+            origin: 'Asset.revokeAccess',
+            operations: expect.arrayContaining([
+                expect.objectContaining({
+                    type: 'delete',
+                    key: {
+                        scopeAndOwner: 'principal#user-2',
+                        searchKey: 'document#generated image#asset-1',
+                    },
+                }),
+            ]),
+        })
+    })
+
+    it('removes the searchable catalog projection when an Asset leaves the catalog', async () => {
+        const catalogReference: AssetReference = {
+            assetId: asset.assetId,
+            referenceKey: 'catalog#workspace#workspace-1',
+            type: 'catalog',
+            scope: 'workspace',
+            scopeOwnerId: 'workspace-1',
+            createdAt: 1,
+            updatedAt: 10,
+        }
+        dynamo.getItem
+            .mockResolvedValueOnce(asset)
+            .mockResolvedValueOnce(catalogReference)
+
+        await AssetModel.detachCatalogReference({ assetId: asset.assetId, requester })
+
+        expect(dynamo.transactWrite).toHaveBeenCalledWith(expect.objectContaining({
+            origin: 'Asset.detachCatalogReference',
+            operations: expect.arrayContaining([expect.objectContaining({
+                type: 'delete',
+                tableName: expect.stringContaining('Assets-Search'),
+                key: {
+                    scopeAndOwner: 'workspace#workspace-1',
+                    searchKey: 'document#generated image#asset-1',
+                },
+            })]),
+        }))
     })
 })

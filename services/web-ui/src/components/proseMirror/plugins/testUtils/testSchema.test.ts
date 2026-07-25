@@ -18,7 +18,7 @@ describe('testSchema — shared node coverage', () => {
         expect(testSchema.nodes.aiGeneratedImage).toBeDefined()
         expect(testSchema.nodes.aiGeneratedVideo).toBeDefined()
         expect(testSchema.nodes.aiReasoningSection).toBeDefined()
-        expect(testSchema.nodes.capability_reference).toBeDefined()
+        expect(testSchema.nodes.prompt_reference).toBeDefined()
     })
 
     it('reuses marks from the shared proseMirror schema', () => {

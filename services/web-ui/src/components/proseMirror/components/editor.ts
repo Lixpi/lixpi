@@ -32,7 +32,12 @@ import { activeNodePlugin } from "$src/components/proseMirror/plugins/activeNode
 import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/index.ts'
 import { linkTooltipPlugin } from '$src/components/proseMirror/plugins/linkTooltipPlugin/linkTooltipPlugin.ts'
 import { imageSelectionPlugin } from '$src/components/proseMirror/plugins/imageSelectionPlugin/index.ts'
-import { createCapabilityMentionPlugin } from '$src/components/proseMirror/plugins/capabilityMentionPlugin/index.ts'
+import {
+    createAtPromptReferencePickerPlugin,
+    createPromptReferenceNodeViewPlugin,
+    createSlashCapabilityModulePickerPlugin,
+    type PromptReferencePreviewRenderer,
+} from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 
 import {buildKeymap} from "$src/components/proseMirror/components/keyMap.js"
 import {buildInputRules} from "$src/components/proseMirror/components/inputRules.js"
@@ -55,7 +60,8 @@ type ProseMirrorEditorConfig = {
     onAiChatStop?: (value: any) => void
     onPromptSubmit?: (value: any) => void
     promptControlFactories?: any
-    capabilityCatalog?: any
+    promptReferenceCatalog?: any
+    promptReferencePreviewRenderer?: PromptReferencePreviewRenderer
     onReceivingStateChange?: (threadId: string, receiving: boolean) => void
     readOnly?: boolean
     proseMirrorAuthority?: any
@@ -80,7 +86,8 @@ export class ProseMirrorEditor {
         onAiChatStop,
         onPromptSubmit,
         promptControlFactories,
-        capabilityCatalog,
+        promptReferenceCatalog,
+        promptReferencePreviewRenderer,
         onReceivingStateChange,
         readOnly = false,
         proseMirrorAuthority,
@@ -92,7 +99,8 @@ export class ProseMirrorEditor {
         this.onAiChatStop = onAiChatStop
         this.onPromptSubmit = onPromptSubmit
         this.promptControlFactories = promptControlFactories
-        this.capabilityCatalog = capabilityCatalog
+        this.promptReferenceCatalog = promptReferenceCatalog
+        this.promptReferencePreviewRenderer = promptReferencePreviewRenderer
         this.onReceivingStateChange = onReceivingStateChange
         this.proseMirrorAuthorityOptions = proseMirrorAuthority
         this.proseMirrorAuthority = null
@@ -188,6 +196,7 @@ export class ProseMirrorEditor {
             bubbleMenuPlugin(),
             linkTooltipPlugin(),
             imageSelectionPlugin(),
+            createPromptReferenceNodeViewPlugin(this.promptReferencePreviewRenderer),
             buildInputRules(this.editorSchema),
             keymap(buildKeymap(this.editorSchema, this.documentType)),
             keymap(baseKeymap),
@@ -221,8 +230,11 @@ export class ProseMirrorEditor {
 
         // Add aiPromptInput-specific plugin for the floating input editor
         if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
-            if (this.capabilityCatalog) {
-                basePlugins.push(createCapabilityMentionPlugin(this.capabilityCatalog))
+            if (this.promptReferenceCatalog) {
+                basePlugins.push(
+                    createAtPromptReferencePickerPlugin(this.promptReferenceCatalog),
+                    createSlashCapabilityModulePickerPlugin(this.promptReferenceCatalog),
+                )
             }
             basePlugins.push(
                 createAiPromptInputPlugin({

@@ -85,10 +85,10 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 
 | Page | What it covers |
 |------|----------------|
-| [Tools and Skills](library/TOOLS-AND-SKILLS.md) | Capability discovery, `@` attachment, sealed resolution, workflow execution, scopes, progress, and built-ins |
+| [Tools and Skills](library/TOOLS-AND-SKILLS.md) | Capability modules, standalone packages, `/` and media-first `@` references, sealed resolution, workflow execution, scopes, and progress |
 | [Capability Storage and Operations](library/CAPABILITY-STORAGE.md) | Catalog tables, Blob-backed packages, run logs, limits, backup, restore, repair, and garbage collection |
 | [Character Creator](library/CHARACTER-CREATOR.md) | Capability composition, fixed sheet contract, shared model matrix, reference normalization, and branch lineage |
-| [Style Extraction Tool](library/STYLE-EXTRACTION-TOOL.md) | The global Tool DAG, specialist actions, visual-style output, and generic progress |
+| [Style Extraction Tool](library/STYLE-EXTRACTION-TOOL.md) | The built-in Capability module's Tool DAG, specialist actions, standalone visual-style output, and generic progress |
 | [Style Extraction Pipeline](library/STYLE-EXTRACTION-PIPELINE.md) | Router, parallel axis specialists, crops, synthesis, samples, validation, and visual-style persistence |
 | [Style Reference Isolation](library/ANTI-LEAKAGE.md) | Source evidence, neutral probes, provider-neutral references, traceability, and isolation limits |
 | [Media Library](library/MEDIA-LIBRARY.md) | The saved-media panel, saved images/videos, scopes, ownership, URL import, data model, service surface |

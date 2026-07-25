@@ -60,6 +60,7 @@ export async function persistStyle(
             storageOwnerId: organizationId,
             summary: draft.summary,
             tags: [...draft.tags, 'visual-style'],
+            catalogExposure: 'standalone',
             requester: {
                 userId: state.input.userId,
                 organizationIds: [organizationId],

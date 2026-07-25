@@ -2,26 +2,27 @@
 
 import type {
     CapabilityActionRegistry,
-    CapabilityModuleSeedContext,
-    ToolModule,
+    CapabilityPackageSeedContext,
+    CapabilityToolPackageInstaller,
 } from '@lixpi/capability-system/backend'
 import {
     registerCharacterCreatorActions,
     type CharacterCreatorActionDependencies,
 } from './character-creator-actions.ts'
 import { seedCharacterCreatorTool } from './character-creator-definition.ts'
+import { CHARACTER_CREATOR_TOOL_ID } from '../character-creator-routing.ts'
 
-export function createCharacterCreatorToolModule(
+export function createCharacterCreatorToolPackage(
     dependencies: CharacterCreatorActionDependencies,
-): ToolModule {
+): CapabilityToolPackageInstaller {
     return {
         kind: 'tool',
-        moduleId: 'character-creator',
+        capabilityId: CHARACTER_CREATOR_TOOL_ID,
         registerActions: (registry: CapabilityActionRegistry): void => {
             registerCharacterCreatorActions(registry, dependencies)
         },
-        seed: async (context: CapabilityModuleSeedContext): Promise<void> => {
-            await seedCharacterCreatorTool(context.allowedActions)
+        seed: async (context: CapabilityPackageSeedContext): Promise<void> => {
+            await seedCharacterCreatorTool(context)
         },
     }
 }

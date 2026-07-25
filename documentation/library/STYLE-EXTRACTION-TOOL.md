@@ -5,7 +5,7 @@ description: The built-in workflow that extracts reusable visual traits and save
 
 # Style Extraction Tool
 
-Style Extraction is a global Tool implemented by the generic Capability runner. Its self-contained module under `services/api/src/capability-modules/style-extraction/` is split into `tools/` and `skills/`. The Tool definition, action bindings, input authorization, schemas, complete specialist pipeline, and tests live under `tools/`. Router, axes, and synthesis instruction packages live under `skills/`, each with its own `SKILL.md`. The Tool references those sibling Skills through its manifest and plugs into the abstract runtime through `ToolModule`; the runtime does not import Style Extraction directly.
+Style Extraction is a built-in Capability module implemented by the generic Capability runner. Its self-contained source under `services/api/src/capability-modules/style-extraction/` is split into `tools/` and `skills/`. The module owns one internal Tool entry package plus internal router, axes, and synthesis Skill packages, each with its own `SKILL.md`. The Tool references those sibling Skills through its manifest and plugs into the abstract runtime through a `CapabilityToolPackageInstaller`; the runtime does not import Style Extraction directly. Every contained package is structurally module-internal and therefore absent from standalone Tool/Skill catalog results.
 
 ## Workflow
 

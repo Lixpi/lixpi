@@ -42,6 +42,12 @@ import {
     resolveCharacterCreatorRouting,
     restrictMediaRequestToCharacterImages,
 } from '../../capability-modules/character-creator/character-creator-routing.ts'
+import {
+    addPromptReferenceMediaToLatestUserMessage,
+    authorizePromptReferences,
+    extractLatestUserPromptReferences,
+} from '../../services/prompt-reference-resolver.ts'
+import PromptReferenceRecentModel from '../../models/prompt-reference-recent.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 type PipelineResumePayload = {
@@ -173,7 +179,7 @@ const buildAuthoritativeConversationMessages = (
         if (previous?.role === role) previous.content += `\n${content}`
         else messages.push({ role, content })
     }
-    if (!messages.some((message) => message.role === 'user' && message.content.trim())) {
+    if (!messages.some((message) => message.role === 'user')) {
         throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
     }
     return messages
@@ -200,15 +206,18 @@ const resolveAuthorizedCandidateSnapshot = async ({
     if (snapshot.regionNodeId !== `standalone:${conversationAssetId}` && !workspaceNodeById.has(snapshot.regionNodeId)) {
         throw new Error('MEDIA_BRANCH_REGION_NOT_IN_WORKSPACE')
     }
-    const candidateNodeIds = new Set(snapshot.candidates.map((candidate) => candidate.nodeId))
-    if (candidateNodeIds.size !== snapshot.candidates.length) throw new Error('DUPLICATE_MEDIA_BRANCH_CANDIDATE')
-    if (snapshot.activeTargetNodeId && !candidateNodeIds.has(snapshot.activeTargetNodeId)) {
+    const candidateIds = new Set(snapshot.candidates.map((candidate) => candidate.candidateId))
+    if (candidateIds.size !== snapshot.candidates.length) throw new Error('DUPLICATE_MEDIA_BRANCH_CANDIDATE')
+    if (snapshot.activeTargetCandidateId && !candidateIds.has(snapshot.activeTargetCandidateId)) {
         throw new Error('MEDIA_BRANCH_ACTIVE_TARGET_INVALID')
     }
-    if (snapshot.explicitReferenceNodeIds?.some((nodeId) => !candidateNodeIds.has(nodeId))) {
+    if (snapshot.explicitReferenceCandidateIds?.some((candidateId) => !candidateIds.has(candidateId))) {
         throw new Error('MEDIA_BRANCH_EXPLICIT_REFERENCE_INVALID')
     }
     const candidates = await Promise.all(snapshot.candidates.map(async (candidate) => {
+        if (!candidate.nodeId || candidate.candidateId !== `node:${candidate.nodeId}`) {
+            throw new Error(`INVALID_MEDIA_BRANCH_CANDIDATE_ID:${candidate.candidateId}`)
+        }
         const workspaceNode = workspaceNodeById.get(candidate.nodeId)
         if (!workspaceNode || (workspaceNode.type !== 'image' && workspaceNode.type !== 'video')
             || workspaceNode.assetId !== candidate.assetId) {
@@ -241,7 +250,7 @@ const resolveAuthorizedCandidateSnapshot = async ({
             roleHints.add('generated-variant')
             roleHints.add(childExists ? 'branch-ancestor' : 'branch-leaf')
         }
-        if (snapshot.activeTargetNodeId === workspaceNode.nodeId) roleHints.add('active-target')
+        if (snapshot.activeTargetCandidateId === candidate.candidateId) roleHints.add('active-target')
         const ancestorNodeIds = [workspaceNode.nodeId]
         let parentNodeId = generatedBy?.parentMediaNodeId
         while (parentNodeId && !ancestorNodeIds.includes(parentNodeId)) {
@@ -254,6 +263,7 @@ const resolveAuthorizedCandidateSnapshot = async ({
             ?.filter((nodeId) => workspaceNodeById.has(nodeId))
             ?? [workspaceNode.nodeId]
         return {
+            candidateId: candidate.candidateId,
             nodeId: workspaceNode.nodeId,
             assetId: workspaceNode.assetId,
             imageUrl: `nats-obj://${blob.bucketName}/${blob.objectKey}`,
@@ -279,14 +289,14 @@ const resolveAuthorizedCandidateSnapshot = async ({
         resolverVersion: 'image-branch-vlm-v1',
         conversationAssetId,
         regionNodeId: snapshot.regionNodeId,
-        ...(snapshot.activeTargetNodeId ? { activeTargetNodeId: snapshot.activeTargetNodeId } : {}),
-        ...(snapshot.explicitReferenceNodeIds?.length ? {
-            explicitReferenceNodeIds: [...new Set(snapshot.explicitReferenceNodeIds)],
+        ...(snapshot.activeTargetCandidateId ? { activeTargetCandidateId: snapshot.activeTargetCandidateId } : {}),
+        ...(snapshot.explicitReferenceCandidateIds?.length ? {
+            explicitReferenceCandidateIds: [...new Set(snapshot.explicitReferenceCandidateIds)],
         } : {}),
         promptText,
         promptFingerprint: createHash('sha256').update(promptText).digest('hex'),
         candidates,
-        transcriptContext: buildCandidateTranscriptContext(candidates, promptText, snapshot.activeTargetNodeId),
+        transcriptContext: buildCandidateTranscriptContext(candidates, promptText, snapshot.activeTargetCandidateId),
     }
 }
 
@@ -346,6 +356,49 @@ const resolveAuthorizedWorkspaceContextSnapshot = ({
     }
 }
 
+const mergePromptReferenceMediaCandidates = ({
+    snapshot,
+    candidates,
+    conversationAssetId,
+    promptText,
+}: {
+    snapshot: MediaBranchCandidateSnapshot | undefined
+    candidates: MediaBranchCandidateSnapshot['candidates']
+    conversationAssetId: string
+    promptText: string
+}): MediaBranchCandidateSnapshot | undefined => {
+    if (!snapshot && candidates.length === 0) return undefined
+    const candidatesById = new Map<string, MediaBranchCandidateSnapshot['candidates'][number]>()
+    for (const candidate of snapshot?.candidates ?? []) candidatesById.set(candidate.candidateId, candidate)
+    for (const candidate of candidates) {
+        const existing = candidatesById.get(candidate.candidateId)
+        candidatesById.set(candidate.candidateId, existing ? {
+            ...existing,
+            ...candidate,
+            roleHints: [...new Set([...existing.roleHints, ...candidate.roleHints])],
+            ancestorNodeIds: [...new Set([...existing.ancestorNodeIds, ...candidate.ancestorNodeIds])],
+            sourceContextNodeIds: [...new Set([...existing.sourceContextNodeIds, ...candidate.sourceContextNodeIds])],
+        } : candidate)
+    }
+    const mergedCandidates = [...candidatesById.values()]
+    const explicitReferenceCandidateIds = [...new Set([
+        ...(snapshot?.explicitReferenceCandidateIds ?? []),
+        ...candidates.map(candidate => candidate.candidateId),
+    ])]
+    const activeTargetCandidateId = snapshot?.activeTargetCandidateId
+    return {
+        resolverVersion: 'image-branch-vlm-v1',
+        conversationAssetId,
+        regionNodeId: snapshot?.regionNodeId ?? `standalone:${conversationAssetId}`,
+        ...(activeTargetCandidateId ? { activeTargetCandidateId } : {}),
+        ...(explicitReferenceCandidateIds.length > 0 ? { explicitReferenceCandidateIds } : {}),
+        promptText,
+        promptFingerprint: createHash('sha256').update(promptText).digest('hex'),
+        candidates: mergedCandidates,
+        transcriptContext: buildCandidateTranscriptContext(mergedCandidates, promptText, activeTargetCandidateId),
+    }
+}
+
 export const aiInteractionSubjects = [
     {
         subject: AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE,
@@ -359,7 +412,6 @@ export const aiInteractionSubjects = [
         handler: async (data: any, _msg: any) => {
             const {
                 user: { userId, stripeCustomerId },
-                messages,
                 aiReasoningModels,
                 aiImageModels,
                 aiVideoModels,
@@ -371,7 +423,6 @@ export const aiInteractionSubjects = [
                 videoResolution,
                 videoDuration,
                 videoSourceForExtension,
-                capabilityReferences,
                 mediaBranchCandidateSnapshot,
                 workspaceContextSnapshot,
                 canvasVisibleArea,
@@ -409,7 +460,6 @@ export const aiInteractionSubjects = [
             }
             let releaseLease = async (): Promise<void> => {}
             try {
-            if (!Array.isArray(messages)) return rejectSend('INVALID_MESSAGES')
             if (!mediaGenerationRequest && (typeof aiModel !== 'string' || !aiModel.includes(':'))) {
                 return rejectSend('AI_MODEL_REQUIRED')
             }
@@ -555,14 +605,33 @@ export const aiInteractionSubjects = [
                 authoritativeProseMirrorInitialDoc,
                 conversationAssetId,
             )
-            const authoritativePromptText = [...authoritativeMessages]
+            const submittedPromptReferences = extractLatestUserPromptReferences(
+                authoritativeProseMirrorInitialDoc,
+                conversationAssetId,
+            )
+            const authorizedPromptReferences = await authorizePromptReferences({
+                references: submittedPromptReferences,
+                requester,
+                workspace,
+                moduleCatalog: getLlmModule().capabilityModuleCatalog,
+            })
+            const latestAuthoritativeUserMessage = [...authoritativeMessages]
                 .reverse()
-                .find((message) => message.role === 'user' && message.content.trim())!
-                .content
-                .slice(0, 20_000)
+                .find((message) => message.role === 'user')
+            if (!latestAuthoritativeUserMessage) throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
+            if (!latestAuthoritativeUserMessage.content.trim() && authorizedPromptReferences.references.length > 0) {
+                latestAuthoritativeUserMessage.content = 'Use the selected prompt references.'
+            }
+            const authoritativePromptText = latestAuthoritativeUserMessage.content.slice(0, 20_000)
+            if (authorizedPromptReferences.documentContext.length > 0) {
+                latestAuthoritativeUserMessage.content = [
+                    latestAuthoritativeUserMessage.content,
+                    ...authorizedPromptReferences.documentContext,
+                ].filter(Boolean).join('\n\n')
+            }
             const characterCreatorRouting = resolveCharacterCreatorRouting(
                 authoritativePromptText,
-                capabilityReferences,
+                authorizedPromptReferences.capabilityReferences,
             )
             const canonicalMediaGenerationRequest = mediaGenerationRequest
                 ? {
@@ -573,24 +642,30 @@ export const aiInteractionSubjects = [
             const routedMediaGenerationRequest = canonicalMediaGenerationRequest && characterCreatorRouting.isCharacterCreator
                 ? restrictMediaRequestToCharacterImages(canonicalMediaGenerationRequest)
                 : canonicalMediaGenerationRequest
+            const hasMediaModelSelection = Boolean(
+                routedMediaGenerationRequest?.imageModelIds.length
+                || routedMediaGenerationRequest?.videoModelIds.length
+                || aiImageModel
+                || (!characterCreatorRouting.isCharacterCreator && aiVideoModel),
+            )
+            const providerMessages = hasMediaModelSelection
+                ? authoritativeMessages
+                : addPromptReferenceMediaToLatestUserMessage(
+                    authoritativeMessages,
+                    authorizedPromptReferences.mediaCandidates,
+                )
             if (characterCreatorRouting.isCharacterCreator) {
                 info('[CHARACTER_CREATOR] Enforcing selected reasoning/image model axes and excluding video', {
                     reasoningModelIds: routedMediaGenerationRequest?.reasoningModelIds ?? aiReasoningModels,
                     imageModelIds: routedMediaGenerationRequest?.imageModelIds ?? aiImageModels,
                 })
             }
-            if (resolvedMediaBranchCandidateSnapshot) {
-                resolvedMediaBranchCandidateSnapshot = {
-                    ...resolvedMediaBranchCandidateSnapshot,
-                    promptText: authoritativePromptText,
-                    promptFingerprint: createHash('sha256').update(authoritativePromptText).digest('hex'),
-                    transcriptContext: buildCandidateTranscriptContext(
-                        resolvedMediaBranchCandidateSnapshot.candidates,
-                        authoritativePromptText,
-                        resolvedMediaBranchCandidateSnapshot.activeTargetNodeId,
-                    ),
-                }
-            }
+            resolvedMediaBranchCandidateSnapshot = mergePromptReferenceMediaCandidates({
+                snapshot: resolvedMediaBranchCandidateSnapshot,
+                candidates: authorizedPromptReferences.mediaCandidates,
+                conversationAssetId,
+                promptText: authoritativePromptText,
+            })
             if (resolvedWorkspaceContextSnapshot) {
                 resolvedWorkspaceContextSnapshot = {
                     ...resolvedWorkspaceContextSnapshot,
@@ -623,9 +698,17 @@ export const aiInteractionSubjects = [
                     throw error
                 }
             }
+            const recordAcceptedReferences = async (): Promise<void> => {
+                if (authorizedPromptReferences.references.length === 0) return
+                await PromptReferenceRecentModel.recordAccepted({
+                    userId,
+                    references: authorizedPromptReferences.references,
+                }).catch(error => warn('Failed to record accepted prompt-reference recents', error))
+            }
 
             if (routedMediaGenerationRequest) {
                 if (!await claimConversation()) return
+                await recordAcceptedReferences()
                 infoStr([
                     chalk.cyan('🧬 [AI_INTERACTION]'),
                     ' :: Invoking media generation matrix',
@@ -640,8 +723,9 @@ export const aiInteractionSubjects = [
                         await runWithLease(async () => await getLlmModule().processMediaGenerationMatrix({
                             ...data,
                             aiVideoModels: characterCreatorRouting.isCharacterCreator ? [] : aiVideoModels,
-                            messages: authoritativeMessages,
+                            messages: providerMessages,
                             capabilityReferences: characterCreatorRouting.capabilityReferences,
+                            promptReferenceAssetIds: authorizedPromptReferences.assetIds,
                             mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
                             workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,
                             workspaceId,
@@ -749,6 +833,7 @@ export const aiInteractionSubjects = [
                 const normalizedVideoResolution = normalizeModelOption(videoResolution, videoModelMetaInfo?.videoResolutions)
                 const normalizedVideoDuration = normalizeModelOption(videoDuration, videoModelMetaInfo?.videoDurations)
                 if (!await claimConversation()) return
+                await recordAcceptedReferences()
 
                 const instanceKey = `${workspaceId}:${aiChatThreadId}`
 
@@ -768,7 +853,7 @@ export const aiInteractionSubjects = [
                 const runLlmProcess = async (): Promise<void> => {
                     try {
                         await runWithLease(async () => await getLlmModule().process(instanceKey, provider as ProviderName, {
-                            messages: authoritativeMessages,
+                            messages: providerMessages,
                             aiModelMetaInfo,
                             imageModelMetaInfo,
                             videoModelMetaInfo,
@@ -788,6 +873,7 @@ export const aiInteractionSubjects = [
                                 ? undefined
                                 : resolvedVideoSourceForExtension,
                             capabilityReferences: characterCreatorRouting.capabilityReferences,
+                            promptReferenceAssetIds: authorizedPromptReferences.assetIds,
                             mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
                             workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,
                             canvasVisibleArea,

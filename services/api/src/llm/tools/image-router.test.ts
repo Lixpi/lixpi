@@ -356,7 +356,7 @@ describe('ImageRouter', () => {
                 }],
             } as any,
             mediaBranchResolution: {
-                referenceImageNodeIds: ['selected-character-node'],
+                referenceCandidateIds: ['selected-character-node'],
             } as any,
         })
 

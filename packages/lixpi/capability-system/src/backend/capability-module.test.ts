@@ -1,76 +1,100 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import { CapabilityActionRegistry } from './capability-action-registry.ts'
 import {
     CapabilityModuleCatalog,
-    type SkillModule,
-    type ToolModule,
+    type CapabilityModuleDefinition,
+    type CapabilitySkillPackageInstaller,
+    type CapabilityToolPackageInstaller,
 } from './capability-module.ts'
 
-function makeSkill(moduleId: string, calls: string[]): SkillModule {
-    return {
-        kind: 'skill',
-        moduleId,
-        seed: async context => {
-            calls.push(`seed-skill:${moduleId}:${[...context.allowedActions].sort().join(',')}`)
-        },
-    }
-}
+const makeSkill = (capabilityId: string, calls: string[]): CapabilitySkillPackageInstaller => ({
+    kind: 'skill',
+    capabilityId,
+    seed: async context => {
+        calls.push(`seed:${capabilityId}:${context.parentModuleId}:${context.catalogExposure}`)
+    },
+})
 
-function makeTool(moduleId: string, calls: string[]): ToolModule {
-    return {
-        kind: 'tool',
-        moduleId,
-        registerActions: () => { calls.push(`register-tool:${moduleId}`) },
-        seed: async context => {
-            calls.push(`seed-tool:${moduleId}:${[...context.allowedActions].sort().join(',')}`)
-        },
-    }
-}
+const makeTool = (capabilityId: string, calls: string[]): CapabilityToolPackageInstaller => ({
+    kind: 'tool',
+    capabilityId,
+    registerActions: () => { calls.push(`register:${capabilityId}`) },
+    seed: async context => {
+        calls.push(`seed:${capabilityId}:${context.parentModuleId}:${context.catalogExposure}`)
+    },
+})
+
+const makeModule = (
+    moduleId: string,
+    calls: string[],
+    entry = `global.${moduleId}`,
+): CapabilityModuleDefinition => ({
+    moduleId,
+    name: moduleId === 'character-creator' ? 'Character Creator' : 'Style Extraction',
+    normalizedName: moduleId.replace('-', ' '),
+    summary: `${moduleId} summary`,
+    tags: [moduleId.split('-')[0]!],
+    entry: { capabilityId: entry, kind: 'tool' },
+    tools: [makeTool(entry, calls)],
+    skills: [makeSkill(`${entry}.instructions`, calls)],
+})
 
 describe('CapabilityModuleCatalog', () => {
-    it('registers Tool actions and seeds Skills before Tools in deterministic order', async () => {
+    it('registers one top-level module and seeds every contained package as internal', async () => {
         const calls: string[] = []
-        const registry = new CapabilityActionRegistry()
-        registry.register({
-            key: 'test.action',
-            timeoutMs: 1,
-            validateInput: () => ({ valid: true }),
-            validateOutput: () => ({ valid: true }),
-            authorize: () => true,
-            execute: vi.fn(async () => ({})),
-            classifyRetry: () => 'terminal',
-            summarizeInput: () => '',
-            summarizeOutput: () => '',
-        })
+        const actionRegistry = new CapabilityActionRegistry()
         const catalog = new CapabilityModuleCatalog()
-        catalog.registerTool(makeTool('character-creator', calls))
-        catalog.registerSkill(makeSkill('character-layout', calls))
-        catalog.registerTool(makeTool('style-extraction', calls))
-        catalog.registerSkill(makeSkill('style-axes', calls))
+        catalog.registerModule(makeModule('character-creator', calls))
 
-        catalog.registerActions(registry)
-        await catalog.seedAll(registry)
+        catalog.registerActions(actionRegistry)
+        await catalog.seedAll(actionRegistry)
 
-        expect(catalog.listModuleIds()).toEqual({
-            skills: ['character-layout', 'style-axes'],
-            tools: ['character-creator', 'style-extraction'],
+        expect(catalog.listModuleIds()).toEqual(['character-creator'])
+        expect(catalog.resolveEntry('character-creator')).toEqual({
+            capabilityId: 'global.character-creator',
+            kind: 'tool',
         })
         expect(calls).toEqual([
-            'register-tool:character-creator',
-            'register-tool:style-extraction',
-            'seed-skill:character-layout:test.action',
-            'seed-skill:style-axes:test.action',
-            'seed-tool:character-creator:test.action',
-            'seed-tool:style-extraction:test.action',
+            'register:global.character-creator',
+            'seed:global.character-creator.instructions:character-creator:module-internal',
+            'seed:global.character-creator:character-creator:module-internal',
         ])
     })
 
-    it('rejects duplicate module IDs across Tool and Skill kinds', () => {
+    it('rejects duplicate module IDs and package ownership across modules', () => {
         const catalog = new CapabilityModuleCatalog()
-        catalog.registerSkill(makeSkill('duplicate', []))
+        catalog.registerModule(makeModule('character-creator', []))
 
-        expect(() => catalog.registerTool(makeTool('duplicate', [])))
-            .toThrow('CAPABILITY_MODULE_ALREADY_REGISTERED:duplicate')
+        expect(() => catalog.registerModule(makeModule('character-creator', [])))
+            .toThrow('CAPABILITY_MODULE_ALREADY_REGISTERED:character-creator')
+        expect(() => catalog.registerModule(makeModule('style-extraction', [], 'global.character-creator')))
+            .toThrow('CAPABILITY_PACKAGE_ALREADY_OWNED:global.character-creator:character-creator')
+    })
+
+    it('rejects missing and kind-mismatched entry packages', () => {
+        const catalog = new CapabilityModuleCatalog()
+        const missing = makeModule('character-creator', [], 'global.missing')
+        missing.tools = [makeTool('global.other', [])]
+        expect(() => catalog.registerModule(missing))
+            .toThrow('CAPABILITY_MODULE_ENTRY_NOT_OWNED:character-creator:global.missing')
+
+        const wrongKind = makeModule('style-extraction', [])
+        wrongKind.entry = { ...wrongKind.entry, kind: 'skill' }
+        expect(() => catalog.registerModule(wrongKind))
+            .toThrow('CAPABILITY_MODULE_ENTRY_KIND_MISMATCH:style-extraction:global.style-extraction')
+    })
+
+    it('searches only module metadata by normalized name or tag', () => {
+        const catalog = new CapabilityModuleCatalog()
+        catalog.registerModule(makeModule('character-creator', []))
+        catalog.registerModule(makeModule('style-extraction', []))
+
+        expect(catalog.listModules('char').map(module => module.moduleId)).toEqual(['character-creator'])
+        expect(catalog.listModules('style').map(module => module.moduleId)).toEqual(['style-extraction'])
+        expect(catalog.getModuleMeta('character-creator')).toEqual(expect.objectContaining({
+            name: 'Character Creator',
+            status: 'active',
+        }))
     })
 })

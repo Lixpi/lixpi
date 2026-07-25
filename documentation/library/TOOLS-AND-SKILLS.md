@@ -5,23 +5,23 @@ description: How Lixpi packages AI instructions and executable workflows, how us
 
 # Tools, Skills, and Capability Modules
 
-Lixpi's Capability system is a plug-in architecture for reusable AI behavior. It separates model context from executable code:
+Lixpi's Capability system is a plug-in architecture for reusable AI behavior. Its public product unit is a first-class **Capability module**. A module owns one entry package and any Tool or Skill packages required to implement the behavior:
 
 - A **Skill** contributes sealed instructions and authorized resources to model context.
 - A **Tool** runs a declarative workflow whose steps call allowlisted API actions.
 
-Both are stored as Capabilities. They share the catalog, scopes, permissions, dependency resolver, package format, `@` picker, and run infrastructure.
+Tools and Skills are manifest-backed packages. They share scopes, permissions, dependency resolution, package storage, and run infrastructure, but a package contained by a module is not a separate user-facing catalog item.
 
-## Capability means package and module
+## Taxonomy
 
-The word Capability appears at two layers:
+A **Capability module** is a source-registered product behavior. It has a stable `moduleId`, presentation metadata, exactly one owned entry package, and an explicit set of Tool and Skill package installers. Character Creator and Style Extraction are modules.
 
-1. A **runtime Capability package** is one catalog record with `kind: 'skill'` or `kind: 'tool'`. Every package has its own immutable ID, manifest, resources, permissions, and manifest hash.
-2. A **Capability module** is an optional source-code grouping for one product behavior. A module can install several Tool and Skill packages that work together.
+A **Capability package** is one stored record with `kind: 'skill'` or `kind: 'tool'`. Every package has its own immutable ID, manifest, resources, permissions, and manifest hash. Packages are either:
 
-Character Creator is one module. It installs one listed Tool plus internal sheet-layout, reference-fidelity, and image-prompt Skills. Style Extraction is another module. It installs one listed Tool plus internal router, axes, and synthesis Skills.
+- `module-internal`, with a required `parentModuleId`; or
+- `standalone`, with no parent module.
 
-A Tool or Skill does not need a higher-order module with sibling packages. A standalone Skill can be listed and attached directly. A standalone Tool can register its actions and workflow without shipping any related Skill. The `CapabilityModuleCatalog` registers every `ToolModule` and `SkillModule` independently, regardless of how source files are grouped.
+All packages owned by a module, including its entry package, are `module-internal`. The module is the only row shown on the Capability surface. Standalone packages remain directly selectable on the Tool or Skill surfaces. The API enforces this boundary before serialization; clients do not infer containment from names, folders, or tags.
 
 {% callout type="important" %}
 A manifest can describe resources, dependencies, and workflow bindings. It cannot register JavaScript, grant access to an action, embed credentials, or execute arbitrary code. Executable actions must be compiled into the API and registered in the allowlist.
@@ -76,7 +76,7 @@ A Skill is instruction-first. It can contain:
 
 A Skill does not register API actions. When the resolver includes it in a plan, its authorized resources can be added to model context or bound into a Tool workflow.
 
-Use an internal Skill when it exists only to support a listed Tool. Use a listed Skill when users or models should attach it directly. `catalogVisibility: 'internal'` hides the package from normal catalog search while keeping it independently stored, authorized, and resolvable. `listed` is the default user-facing behavior.
+Use a module-internal Skill when it exists only to support a module. Use a standalone Skill when users or models should attach it directly. Module membership is structural: internal packages use `catalogExposure: 'module-internal'` and a required `parentModuleId`; standalone packages use `catalogExposure: 'standalone'` and no parent.
 
 ## Tools
 
@@ -119,11 +119,15 @@ The module must include these fields in its output schema and workflow output bi
 
 This boundary is important for extension. Adding another media-generation Tool requires a module-owned output mode and a media-policy implementation. It must not add provider-specific reference assembly or a concrete module check to `@lixpi/capability-system`.
 
-## How users and models use Capabilities
+## How users and models select modules and packages
 
-Typing `@` at a text boundary opens the Capability picker. Selecting a row inserts a `capability_reference` ProseMirror atom with the immutable Capability ID, kind, and a cosmetic display name. Prompt submission deduplicates IDs while preserving their first occurrence order.
+Typing `/` at a prompt token boundary opens the module picker. It lists top-level Capability modules only; it has no formatting, upload, Tool, or Skill commands.
 
-The right-side Capability panel lists authorized Tools and can attach one to the prompt. The `@` picker searches both listed Tools and listed Skills. The catalog client and NATS API also expose manifest details, dependency names, input schemas, and detached Tool-run operations. The side-panel inspector does not render a Run form.
+Typing `@` opens the media-first prompt-reference picker. Media is the default category; the category switch also exposes Capabilities, Tools, and Skills. Capability results are source-registered modules. Tool and Skill results contain standalone packages only. Selection inserts a typed `prompt_reference` atom with a stable Asset, module, Tool, or Skill identity and a cosmetic display name.
+
+The authoritative submitted conversation document is the reference source of truth. After acquiring the conversation lease, the API extracts atoms from the latest user message and reauthorizes each identity. The browser does not send a parallel capability-reference list. Media references can point to an Asset without adding it to the canvas; an optional `nodeId` is present only when the user selected a current-workspace placement.
+
+The right-side Capability panel lists authorized standalone packages for inspection and attachment. Top-level modules are selected through `/` or the Capabilities category in `@`. The package catalog client and NATS API also expose manifest details, dependency names, input schemas, and detached Tool-run operations. The side-panel inspector does not render a Run form.
 
 A Tool can start in four ways:
 
@@ -152,13 +156,13 @@ The resulting `ResolvedCapabilityPlan` records every Capability ID and manifest 
 
 ## Source layout
 
-The reusable runtime, service adapters, and concrete plug-ins have separate dependency boundaries:
+The reusable runtime, service adapters, and concrete modules have separate dependency boundaries:
 
 ```text
 packages/lixpi/capability-system/
   src/
     shared/                       cross-runtime validation, limits, schemas, errors
-    backend/                      resolver, registry, runner, dispatcher, module contracts
+    backend/                      resolver, registry, runner, dispatcher, module/package contracts
     frontend/                     transport-injected catalog client, cache, ranking, validation
 
 services/api/src/
@@ -166,9 +170,9 @@ services/api/src/
   capability-modules/
     <module-id>/
       index.ts                    module entry point
-      tools/                      optional Tool modules
+      tools/                      Tool package installers and implementations
         index.ts
-      skills/                     optional Skill modules
+      skills/                     Skill package installers and resources
         index.ts
         <skill-id>/
           index.ts
@@ -176,115 +180,51 @@ services/api/src/
   installed-capabilities.ts      built-in composition root
 ```
 
-`@lixpi/capability-system` contains the reusable system. `shared` is safe in the browser and backend. `backend` contains `ToolModule` and `SkillModule` contracts, manifest and resource resolution, the action registry, workflow runner, dispatcher, instruction-Skill construction, and provider-neutral model-tool conversion. The package accepts catalog search, Blob access, run persistence, event naming, and event mirroring as injected adapters. It does not import a service or name a concrete module.
+`@lixpi/capability-system` contains the reusable system. `shared` is safe in the browser and backend. `backend` contains `CapabilityModuleDefinition`, Tool/Skill package installer contracts, manifest and resource resolution, the action registry, workflow runner, dispatcher, instruction-Skill construction, and provider-neutral model-tool conversion. The package accepts catalog search, Blob access, run persistence, event naming, and event mirroring as injected adapters. It does not import a service or name a concrete module.
 
 `services/api/src/capability-system/` supplies those injected adapters. It connects the package to DynamoDB-backed catalog models, Blob storage, Capability run records, JetStream events, chat event mirroring, and LangGraph state. Provider files consume the same model-tool definitions from the package; provider-specific SDK payload conversion does not fork Capability resolution or execution.
 
 `services/web-ui` imports the transport-injected catalog client from `@lixpi/capability-system/frontend` and manifest validation from `@lixpi/capability-system/shared`. Its authentication, concrete NATS transport, Svelte state, and UI remain application code.
 
-A module directory must have an `index.ts` and at least one of `tools/` or `skills/`:
-
-- A higher-order product module usually has both directories.
-- A standalone Tool module can have only `tools/`.
-- A standalone Skill module can have only `skills/`.
-
-`installed-capabilities.ts` is the built-in composition root. It creates concrete module objects and registers them with `CapabilityModuleCatalog`.
+Every direct module directory has an `index.ts` that exports one `CapabilityModuleDefinition`. A module must own its declared entry package and may contain any number of additional Tool or Skill packages. `installed-capabilities.ts` is the built-in composition root and registers each definition once with `CapabilityModuleCatalog`.
 
 ## Add a standalone Skill
 
-Use `createInstructionSkillModule` when one Markdown file is the Skill's instruction resource:
-
-```ts
-import { createInstructionSkillModule } from '@lixpi/capability-system/backend'
-import { capabilityInstructionSkillStorage } from '../../../capability-system/instruction-skill.ts'
-
-export const BRAND_VOICE_SKILL_ID = 'global.brand-voice'
-
-export function createBrandVoiceSkillModule() {
-    return createInstructionSkillModule({
-        moduleId: 'brand-voice',
-        capabilityId: BRAND_VOICE_SKILL_ID,
-        name: 'Brand Voice',
-        description: 'Writing rules for approved product language.',
-        summary: 'Applies approved terminology, tone, and exclusions.',
-        tags: ['writing', 'brand'],
-        catalogVisibility: 'listed',
-        exportName: 'brand-voice',
-        resourceId: 'brand-voice-instructions',
-        resourceName: 'Brand Voice Instructions',
-        skillFile: new URL('./SKILL.md', import.meta.url),
-    }, capabilityInstructionSkillStorage)
-}
-```
-
-Then export it from the module root and register it:
-
-```ts
-catalog.registerSkill(createBrandVoiceSkillModule())
-```
-
-Use a custom `SkillModule` seeder when the Skill needs several resources or exports. Store each resource through `storeCapabilityResource`, build the manifest, then call `seedBuiltInCapability`.
+A standalone Skill is a normal stored Skill manifest saved with `catalogExposure: 'standalone'` and no `parentModuleId`. Store its resources through the Capability resource path, build and validate the manifest, then save it through the catalog-management API. `createInstructionSkillPackage()` is for package installers owned by a source-registered module; it always receives module-internal membership from the module catalog during seeding.
 
 ## Add a standalone Tool
 
-A Tool needs three pieces:
+A standalone Tool needs three pieces:
 
 1. Registered actions.
 2. Input and output schema resources.
 3. A Tool manifest whose workflow names only those registered actions.
 
-The module adapter connects those pieces:
-
-```ts
-import type {
-    CapabilityActionRegistry,
-    CapabilityModuleSeedContext,
-    ToolModule,
-} from '@lixpi/capability-system/backend'
-
-export function createMetadataAuditToolModule(dependencies: MetadataAuditDependencies): ToolModule {
-    return {
-        kind: 'tool',
-        moduleId: 'metadata-audit',
-        registerActions: (registry: CapabilityActionRegistry): void => {
-            registerMetadataAuditActions(registry, dependencies)
-        },
-        seed: async (context: CapabilityModuleSeedContext): Promise<void> => {
-            await seedMetadataAuditTool(context.allowedActions)
-        },
-    }
-}
-```
-
-Register it at the composition root:
-
-```ts
-catalog.registerTool(createMetadataAuditToolModule(dependencies))
-```
+Save the Tool record with `catalogExposure: 'standalone'` and no `parentModuleId`. Generated visual-style Tools use this path. Executable action code still has to be compiled into the API and registered in the server allowlist; saving a manifest cannot install an action.
 
 Action keys should be namespaced to the module, such as `metadata-audit.inspect`. The action's `authorize` function must verify the expected root Tool and requester context. Keep raw credentials, arbitrary URLs, source code, and provider secrets out of manifests and workflow values.
 
 ## Add a multi-package Capability module
 
-Use a module with both `tools/` and `skills/` when one product behavior needs executable orchestration plus reusable instruction packages.
+Use a first-class module when one product behavior needs executable orchestration plus reusable instruction packages.
 
-1. Choose stable IDs for the listed Tool and every supporting Skill.
+1. Choose a stable module ID, entry package ID, and IDs for every supporting package.
 2. Put each Skill in `skills/<skill-id>/` with its own `SKILL.md` and seeding adapter.
 3. Export all Skill modules from `skills/index.ts`.
 4. Put Tool schemas, action registration, workflow definition, resources, and implementation code under `tools/`.
-5. Add Skill references to the Tool manifest. Set supporting Skills to `catalogVisibility: 'internal'` when users should see one logical entry point.
-6. Export the Tool and Skill factories from the module root.
-7. Register every Skill and Tool in `installed-capabilities.ts`.
+5. Add Skill references to the Tool manifest.
+6. Export one `CapabilityModuleDefinition` from the module root. Its entry and every installer are persisted with `catalogExposure: 'module-internal'` and the module's `parentModuleId`.
+7. Register the module definition once in `installed-capabilities.ts`.
 
 If the Tool augments media generation, also declare the shared media-generation output contract in its action result, output schema, and workflow outputs. Keep the mode value and its policy implementation outside the abstract Capability runtime.
 
 Startup follows this order:
 
-1. Construct the module catalog.
-2. Register actions from every Tool module.
+1. Construct and validate the module catalog.
+2. Register actions from every Tool package installer.
 3. Capture the complete allowlisted action set.
-4. Seed Skill packages.
-5. Seed Tool packages.
+4. Seed module-internal Skill packages.
+5. Seed module-internal Tool packages.
 
 Skills are seeded before Tools so Tool references resolve against installed Skill packages. Runtime dependency resolution remains kind-neutral, so a Tool or Skill may reference either kind without merging their package identities.
 
@@ -311,11 +251,11 @@ User and organization packages store resources in the organization Blob bucket. 
 
 ### Style Extraction
 
-Style Extraction lives under `services/api/src/capability-modules/style-extraction/`. Its Tool routes source images, selects visual axes, runs applicable specialists with bounded concurrency, materializes source evidence, synthesizes a visual contract, generates samples, validates the result, and saves an organization-scoped `visual-style` Tool. Router, axes, and synthesis are separate internal Skills. See [Style Extraction Tool](./STYLE-EXTRACTION-TOOL.md).
+Style Extraction lives under `services/api/src/capability-modules/style-extraction/`. Its module-internal entry Tool routes source images, selects visual axes, runs applicable specialists with bounded concurrency, materializes source evidence, synthesizes a visual contract, generates samples, validates the result, and saves an organization-scoped standalone `visual-style` Tool. Router, axes, and synthesis are separate module-internal Skills. See [Style Extraction Tool](./STYLE-EXTRACTION-TOOL.md).
 
 ### Character Creator
 
-Character Creator lives under `services/api/src/capability-modules/character-creator/`. Its Tool validates the request and builds a provider-neutral character-generation brief with an authorized layout example. Separate internal Skills define sheet layout, reference fidelity, and image-prompt rules.
+Character Creator lives under `services/api/src/capability-modules/character-creator/`. Its module-internal entry Tool validates the request and builds a provider-neutral character-generation brief with an authorized layout example. Separate module-internal Skills define sheet layout, reference fidelity, and image-prompt rules.
 
 The Tool does not select a hidden media model or generate an Asset itself. The selected reasoning and image-model matrix remains authoritative. The normal media pipeline receives the Tool output, allocates branch lineage, sends the source and layout references through the shared provider-neutral reference resolver, and settles every variant through ordinary Asset and canvas paths. Character Creator excludes video generation. See [Character Creator](./CHARACTER-CREATOR.md).
 

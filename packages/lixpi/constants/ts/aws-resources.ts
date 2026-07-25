@@ -18,8 +18,10 @@ export const DYNAMODB_TABLES: Record<string, string> = {
     CAPABILITY_RUNS: 'Capability-Runs',
     ASSETS: 'Assets',
     ASSETS_META: 'Assets-Meta',
+    ASSETS_SEARCH: 'Assets-Search',
     ASSETS_ACCESS_LIST: 'Assets-Access-List',
     ASSET_REFERENCES: 'Asset-References',
+    PROMPT_REFERENCE_RECENTS: 'Prompt-Reference-Recents',
     BLOBS: 'Blobs',
     BLOB_REFERENCES: 'Blob-References',
 }

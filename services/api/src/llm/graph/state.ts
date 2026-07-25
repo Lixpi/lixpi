@@ -159,6 +159,7 @@ export type ProviderState = {
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot | undefined
     mediaBranchResolution?: MediaBranchVlmResolution | undefined
     mediaBranchLineagePlan?: MediaBranchLineagePlan | undefined
+    promptReferenceAssetIds?: string[] | undefined
     canvasVisibleArea?: { width: number; height: number } | undefined
 
     // Video generation (VEO) — async submit/poll routing. Mirrors the image
@@ -255,6 +256,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     mediaBranchCandidateSnapshot: { reducer: keep },
     mediaBranchResolution: { reducer: keep },
     mediaBranchLineagePlan: { reducer: keep },
+    promptReferenceAssetIds: { reducer: keep },
     canvasVisibleArea: { reducer: keep },
     enableVideoGeneration: { reducer: keep, default: () => false },
     videoModelMetaInfo: { reducer: keep },

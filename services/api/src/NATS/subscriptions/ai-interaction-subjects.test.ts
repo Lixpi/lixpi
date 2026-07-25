@@ -2,7 +2,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { NATS_SUBJECTS } from '@lixpi/constants'
+import {
+    getAiInteractionResponseSubject,
+    NATS_SUBJECTS,
+} from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({
     nats: {
@@ -408,7 +411,7 @@ describe('AI interaction message routing', () => {
         await flushPromises()
 
         expect(mocks.nats.publish).toHaveBeenCalledWith(
-            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.org-1.conv-1`,
+            getAiInteractionResponseSubject('user-1', 'workspace-1', 'conv-1'),
             { error: 'LLM module not initialized' },
         )
     })

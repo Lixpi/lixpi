@@ -29,21 +29,26 @@ type ResolveMediaBranchDeps = {
 type MediaBranchVlmRawResolution = {
     mode: string
     operationKind: string
-    targetImageNodeId: string
-    parentImageNodeId: string
+    targetCandidateId: string
+    parentCandidateId: string
     branchId: string
-    includeGeneratedNodeIds: string[]
-    referenceImageNodeIds: string[]
+    includeGeneratedCandidateIds: string[]
+    referenceCandidateIds: string[]
     sourceContextNodeIds: string[]
-    styleReferenceNodeIds: string[]
-    excludedNodeIds: string[]
+    styleReferenceCandidateIds: string[]
+    excludedCandidateIds: string[]
     visualEntitySummary: string
     visualStyleSummary: string
     entityTags: string[]
     styleTags: string[]
     confidence: number
     rationale: string
-    decisions: MediaBranchVlmReferenceDecision[]
+    decisions: Array<{
+        candidateId?: string
+        nodeId?: string
+        role: MediaBranchVlmReferenceDecision['role']
+        reason: string
+    }>
 }
 
 const SUPPORTED_RESOLVER_PROVIDERS = new Set<ProviderName>(['Anthropic', 'OpenAI', 'Google'])
@@ -79,42 +84,42 @@ const RESOLUTION_SCHEMA: VlmJsonSchema = {
                 type: 'string',
                 enum: ['new_image', 'edit_existing', 'style_transfer', 'compare_branches', 'fresh_branch'],
             },
-            targetImageNodeId: {
+            targetCandidateId: {
                 type: 'string',
-                description: 'Candidate nodeId being edited. Empty string when the prompt requests a new/fresh image rather than editing an existing generated image.',
+                description: 'Candidate identity being edited. Empty string when the prompt requests a new/fresh image.',
             },
-            parentImageNodeId: {
+            parentCandidateId: {
                 type: 'string',
-                description: 'Parent generated image nodeId for placement. Empty string when there is no generated-image parent.',
+                description: 'Generated parent candidate identity. Empty string when there is no generated-media parent.',
             },
             branchId: {
                 type: 'string',
                 description: 'Existing branchId to continue, or empty string for a new branch.',
             },
-            includeGeneratedNodeIds: {
+            includeGeneratedCandidateIds: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'Generated candidate nodeIds selected as target/comparison visual references.',
+                description: 'Generated candidate identities selected as target/comparison visual references.',
             },
-            referenceImageNodeIds: {
+            referenceCandidateIds: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'Exact candidate nodeIds that should be sent to the image or video model as visual references.',
+                description: 'Exact candidate identities that should be sent to the image or video model as visual references.',
             },
             sourceContextNodeIds: {
                 type: 'array',
                 items: { type: 'string' },
                 description: 'Base context candidate nodeIds relevant to the request.',
             },
-            styleReferenceNodeIds: {
+            styleReferenceCandidateIds: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'Candidate nodeIds used as style, palette, medium, mood, or composition evidence rather than target identity.',
+                description: 'Candidate identities used as style, palette, medium, mood, or composition evidence rather than target identity.',
             },
-            excludedNodeIds: {
+            excludedCandidateIds: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'Candidate nodeIds that should not be sent because they are unrelated or would contaminate identity/style.',
+                description: 'Candidate identities that should not be sent because they are unrelated or would contaminate identity/style.',
             },
             visualEntitySummary: {
                 type: 'string',
@@ -146,14 +151,14 @@ const RESOLUTION_SCHEMA: VlmJsonSchema = {
                 items: {
                     type: 'object',
                     properties: {
-                        nodeId: { type: 'string' },
+                        candidateId: { type: 'string' },
                         role: {
                             type: 'string',
                             enum: ['target', 'base-context', 'style-reference', 'comparison-target', 'excluded'],
                         },
                         reason: { type: 'string' },
                     },
-                    required: ['nodeId', 'role', 'reason'],
+                    required: ['candidateId', 'role', 'reason'],
                     additionalProperties: false,
                 },
             },
@@ -161,14 +166,14 @@ const RESOLUTION_SCHEMA: VlmJsonSchema = {
         required: [
             'mode',
             'operationKind',
-            'targetImageNodeId',
-            'parentImageNodeId',
+            'targetCandidateId',
+            'parentCandidateId',
             'branchId',
-            'includeGeneratedNodeIds',
-            'referenceImageNodeIds',
+            'includeGeneratedCandidateIds',
+            'referenceCandidateIds',
             'sourceContextNodeIds',
-            'styleReferenceNodeIds',
-            'excludedNodeIds',
+            'styleReferenceCandidateIds',
+            'excludedCandidateIds',
             'visualEntitySummary',
             'visualStyleSummary',
             'entityTags',
@@ -185,12 +190,12 @@ const SYSTEM_PROMPT = [
     'You are Lixpi\'s image branch resolver. Your job is to inspect the user prompt plus labeled candidate images and assign visual roles before image or video generation. Image generation and video generation are both fully supported capabilities; which one runs is decided elsewhere and is never your concern — you only ground visual references.',
     'Resolve visual references only — never judge feasibility. Do not refuse, lower confidence, or return mode="ambiguous" because the request is for a video, because it asks for motion, animation, camera movement, or audio, or because of any perceived capability limit. Motion and clip requests are ordinary video generation and must be grounded exactly like image requests. For video, the target identity you pick becomes the first frame (image-to-video) and your selected style references become the video reference images.',
     'Always ground decisions in the actual candidate pixels. Do not route from regexes, recency, prompt text alone, or guessed entity tags.',
-    'If the candidate metadata includes roleHints containing "active-target" or the prompt context names an Active target nodeId, treat that as a weak UI selection hint only. It is not visual truth and must never override the user prompt or candidate pixels.',
+    'If the candidate metadata includes roleHints containing "active-target" or the prompt context names an Active target candidateId, treat that as a weak UI selection hint only. It is not visual truth and must never override the user prompt or candidate pixels.',
     'Purely deictic prompts like "this", "that", "it", or "make it" usually refer to the active-target candidate. Deictic prompts with an explicit visible subject like "that man", "that guy", "that person", "that goat", "that portrait", or "that landscape" must target a candidate whose pixels match that named subject. If the active target visibly conflicts with the named subject, exclude it and choose the matching candidate; if no candidate matches, return mode="ambiguous" with low confidence.',
-    'For style/medium changes to an active-target candidate, return mode="edit-active-branch", operationKind="edit_existing", targetImageNodeId set to the active target nodeId, and include the active target as a reference only when the prompt is purely deictic or the active target visibly matches the named subject. Do not use the active target for a different visible subject or a fresh unrelated image.',
-    'If the prompt identifies an existing generated candidate or branch as the subject/identity, continue that generated branch even when the requested palette, medium, or style changes substantially. If you include a generated candidate as the target/identity reference, set targetImageNodeId to that generated candidate, set parentImageNodeId to that candidate, preserve its branchId when available, and do not return targetless mode="fresh-branch".',
+    'For style/medium changes to an active-target candidate, return mode="edit-active-branch", operationKind="edit_existing", targetCandidateId set to the active target candidateId, and include the active target as a reference only when the prompt is purely deictic or the active target visibly matches the named subject. Do not use the active target for a different visible subject or a fresh unrelated image.',
+    'If the prompt identifies an existing generated candidate or branch as the subject/identity, continue that generated branch even when the requested palette, medium, or style changes substantially. If you include a generated candidate as the target/identity reference, set targetCandidateId and parentCandidateId to that candidate, preserve its branchId when available, and do not return targetless mode="fresh-branch".',
     'Separate target identity from style/source evidence. A phrase like "draw a goat in the style of that landscape painting" means the goat is the requested subject and the landscape can be style evidence; unrelated generated portraits must be excluded.',
-    'referenceImageNodeIds is authoritative: include only candidate nodeIds that should be sent to the image or video model. Exclude distractors aggressively because unrelated generated variants contaminate identity.',
+    'referenceCandidateIds is authoritative: include only candidate identities that should be sent to the image or video model. Exclude distractors aggressively because unrelated generated variants contaminate identity.',
     'Reserve mode="ambiguous" strictly for when the visual referent genuinely cannot be determined from the candidate pixels — never to flag an unsupported output type or a request you believe cannot be fulfilled. If the prompt is genuinely impossible to resolve from the candidate images, return mode="ambiguous" with low confidence and explain why.',
 ].join('\n')
 
@@ -210,15 +215,14 @@ const getResolverModel = (state: ProviderState): { provider: ProviderName; model
     return { provider, modelVersion }
 }
 
-const compactCandidateForPrompt = (
-    candidate: MediaBranchCandidateImage,
-    candidateNodeIds: Set<string>,
-): Record<string, unknown> => ({
+const compactCandidateForPrompt = (candidate: MediaBranchCandidateImage): Record<string, unknown> => ({
+    candidateId: candidate.candidateId,
     nodeId: candidate.nodeId,
+    assetId: candidate.assetId,
     roleHints: candidate.roleHints,
     branchId: candidate.branchId ?? '',
-    ancestorNodeIds: (candidate.ancestorNodeIds ?? []).filter((nodeId) => candidateNodeIds.has(nodeId)),
-    sourceContextNodeIds: (candidate.sourceContextNodeIds ?? []).filter((nodeId) => candidateNodeIds.has(nodeId)),
+    ancestorNodeIds: candidate.ancestorNodeIds ?? [],
+    sourceContextNodeIds: candidate.sourceContextNodeIds ?? [],
     sourceMessageId: candidate.sourceMessageId ?? '',
     promptText: candidate.promptText ?? '',
     visualEntitySummary: candidate.visualEntitySummary ?? '',
@@ -249,8 +253,6 @@ const resolveCandidateImageUrls = async (
 const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
     const snapshot = state.mediaBranchCandidateSnapshot
     if (!snapshot) throw new Error('Image branch candidate snapshot is required')
-    const candidateNodeIds = new Set(snapshot.candidates.map((candidate) => candidate.nodeId))
-
     const blocks: Array<Record<string, any>> = [{
         type: 'input_text',
         text: [
@@ -258,22 +260,22 @@ const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
             `Prompt fingerprint: ${snapshot.promptFingerprint}`,
             `Conversation Asset ID: ${snapshot.conversationAssetId}`,
             `Region node ID: ${snapshot.regionNodeId}`,
-            snapshot.activeTargetNodeId ? `Active target node ID: ${snapshot.activeTargetNodeId}` : undefined,
+            snapshot.activeTargetCandidateId ? `Active target candidate ID: ${snapshot.activeTargetCandidateId}` : undefined,
             '',
             'Candidate metadata JSON:',
-            JSON.stringify(snapshot.candidates.map((candidate) => compactCandidateForPrompt(candidate, candidateNodeIds)), null, 2),
+            JSON.stringify(snapshot.candidates.map(compactCandidateForPrompt), null, 2),
             '',
             'Transcript/candidate context:',
             snapshot.transcriptContext,
             '',
-            'Inspect each attached candidate image. Return strict JSON using the tool schema. Use nodeId values exactly as given.',
+            'Inspect each attached candidate image. Return strict JSON using the tool schema. Use candidateId values exactly as given.',
         ].filter((line): line is string => typeof line === 'string').join('\n'),
     }]
 
     for (const candidate of snapshot.candidates) {
         blocks.push({
             type: 'input_text',
-            text: `Candidate image nodeId=${candidate.nodeId} roleHints=${candidate.roleHints.join(',')} branchId=${candidate.branchId ?? ''}`,
+            text: `Candidate image candidateId=${candidate.candidateId} nodeId=${candidate.nodeId ?? ''} roleHints=${candidate.roleHints.join(',')} branchId=${candidate.branchId ?? ''}`,
         })
         blocks.push({ type: 'input_image', image_url: candidate.imageUrl, detail: 'high' })
     }
@@ -281,7 +283,7 @@ const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
     return [{ role: 'user', content: blocks }]
 }
 
-const normalizeOptionalNodeId = (value: unknown): string | null => {
+const normalizeOptionalCandidateId = (value: unknown): string | null => {
     if (typeof value !== 'string') return null
     const trimmed = value.trim()
     return trimmed ? trimmed : null
@@ -292,8 +294,8 @@ const normalizeStringArray = (value: unknown): string[] => {
     return Array.from(new Set(value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim())))
 }
 
-const assertKnownNodeIds = (label: string, nodeIds: string[], candidateByNodeId: Map<string, MediaBranchCandidateImage>): void => {
-    const unknown = nodeIds.filter((nodeId) => !candidateByNodeId.has(nodeId))
+const assertKnownCandidateIds = (label: string, candidateIds: string[], candidateById: Map<string, MediaBranchCandidateImage>): void => {
+    const unknown = candidateIds.filter((candidateId) => !candidateById.has(candidateId))
     if (unknown.length > 0) {
         throw new Error(`Image branch resolver returned unknown ${label}: ${unknown.join(', ')}`)
     }
@@ -304,26 +306,28 @@ const appendRationale = (rationale: string, guardMessage: string): string =>
 
 const sanitizeDecisions = (
     decisions: unknown,
-    candidateByNodeId: Map<string, MediaBranchCandidateImage>
+    candidateById: Map<string, MediaBranchCandidateImage>
 ): MediaBranchVlmReferenceDecision[] => {
     if (!Array.isArray(decisions)) return []
     const out: MediaBranchVlmReferenceDecision[] = []
     for (const decision of decisions) {
         if (typeof decision !== 'object' || decision === null) continue
-        const nodeId = normalizeOptionalNodeId((decision as any).nodeId)
-        if (!nodeId) continue
+        const candidateId = normalizeOptionalCandidateId(
+            (decision as any).candidateId ?? (decision as any).nodeId,
+        )
+        if (!candidateId) continue
         // Decisions are trace/debug metadata, not routing authority. VLMs can
         // echo stale or invented nodeIds here even when target/reference arrays
         // are valid, so unknown audit rows are discarded instead of failing a
         // simple generation. The authoritative node-id fields are validated
         // below and still fail hard when they name unknown candidates.
-        if (!candidateByNodeId.has(nodeId)) continue
+        if (!candidateById.has(candidateId)) continue
         const role = (decision as any).role
         if (!['target', 'base-context', 'style-reference', 'comparison-target', 'excluded'].includes(role)) {
-            throw new Error(`Image branch resolver returned invalid decision role for ${nodeId}: ${role}`)
+            throw new Error(`Image branch resolver returned invalid decision role for ${candidateId}: ${role}`)
         }
         out.push({
-            nodeId,
+            candidateId,
             role,
             reason: typeof (decision as any).reason === 'string' ? (decision as any).reason : '',
         })
@@ -335,21 +339,21 @@ const isGeneratedCandidate = (candidate: MediaBranchCandidateImage): boolean =>
     candidate.roleHints.includes('generated-variant')
 
 const findGeneratedTargetReference = (args: {
-    candidateByNodeId: Map<string, MediaBranchCandidateImage>
-    referenceImageNodeIds: string[]
-    styleReferenceNodeIds: string[]
+    candidateById: Map<string, MediaBranchCandidateImage>
+    referenceCandidateIds: string[]
+    styleReferenceCandidateIds: string[]
     decisions: MediaBranchVlmReferenceDecision[]
 }): MediaBranchCandidateImage | undefined => {
-    const styleReferenceNodeIds = new Set(args.styleReferenceNodeIds)
-    const decisionByNodeId = new Map(args.decisions.map((decision) => [decision.nodeId, decision]))
-    const generatedReferences = args.referenceImageNodeIds
-        .map((nodeId) => args.candidateByNodeId.get(nodeId))
+    const styleReferenceCandidateIds = new Set(args.styleReferenceCandidateIds)
+    const decisionByCandidateId = new Map(args.decisions.map((decision) => [decision.candidateId, decision]))
+    const generatedReferences = args.referenceCandidateIds
+        .map((candidateId) => args.candidateById.get(candidateId))
         .filter((candidate): candidate is MediaBranchCandidateImage => Boolean(candidate && isGeneratedCandidate(candidate)))
-        .filter((candidate) => !styleReferenceNodeIds.has(candidate.nodeId))
-        .filter((candidate) => decisionByNodeId.get(candidate.nodeId)?.role !== 'style-reference')
+        .filter((candidate) => !styleReferenceCandidateIds.has(candidate.candidateId))
+        .filter((candidate) => decisionByCandidateId.get(candidate.candidateId)?.role !== 'style-reference')
 
     const explicitTargetReferences = generatedReferences.filter((candidate) => {
-        const role = decisionByNodeId.get(candidate.nodeId)?.role
+        const role = decisionByCandidateId.get(candidate.candidateId)?.role
         return role === 'target' || role === 'base-context'
     })
     let targetReferences = explicitTargetReferences
@@ -371,68 +375,75 @@ const sanitizeResolution = (args: {
     const snapshot = args.state.mediaBranchCandidateSnapshot
     if (!snapshot) throw new Error('Image branch candidate snapshot is required')
 
-    const candidateByNodeId: Map<string, MediaBranchCandidateImage> = new Map(snapshot.candidates.map((candidate: MediaBranchCandidateImage) => [candidate.nodeId, candidate]))
+    const candidateById = new Map(snapshot.candidates.map((candidate) => [candidate.candidateId, candidate]))
     let mode = args.parsed.mode as MediaBranchVlmResolution['mode']
     let operationKind = args.parsed.operationKind as ImageGenerationOperationKind
     if (!VALID_MODES.has(mode)) throw new Error(`Image branch resolver returned invalid mode: ${args.parsed.mode}`)
     if (!VALID_OPERATION_KINDS.has(operationKind)) throw new Error(`Image branch resolver returned invalid operationKind: ${args.parsed.operationKind}`)
 
-    let targetImageNodeId = normalizeOptionalNodeId(args.parsed.targetImageNodeId)
-    let parentImageNodeId = normalizeOptionalNodeId(args.parsed.parentImageNodeId) ?? targetImageNodeId ?? undefined
-    const includeGeneratedNodeIds = normalizeStringArray(args.parsed.includeGeneratedNodeIds)
-    const referenceImageNodeIds = normalizeStringArray(args.parsed.referenceImageNodeIds)
+    let targetCandidateId = normalizeOptionalCandidateId(args.parsed.targetCandidateId)
+    let parentCandidateId = normalizeOptionalCandidateId(args.parsed.parentCandidateId) ?? targetCandidateId ?? undefined
+    const includeGeneratedCandidateIds = normalizeStringArray(args.parsed.includeGeneratedCandidateIds)
+    const referenceCandidateIds = normalizeStringArray(args.parsed.referenceCandidateIds)
     const sourceContextNodeIds = normalizeStringArray(args.parsed.sourceContextNodeIds)
-    const styleReferenceNodeIds = normalizeStringArray(args.parsed.styleReferenceNodeIds)
-    let excludedNodeIds = normalizeStringArray(args.parsed.excludedNodeIds)
-    const decisions = sanitizeDecisions(args.parsed.decisions, candidateByNodeId)
+    const styleReferenceCandidateIds = normalizeStringArray(args.parsed.styleReferenceCandidateIds)
+    let excludedCandidateIds = normalizeStringArray(args.parsed.excludedCandidateIds)
+    const decisions = sanitizeDecisions(args.parsed.decisions, candidateById)
 
     let rationale = typeof args.parsed.rationale === 'string' ? args.parsed.rationale.trim() : ''
-    if (!targetImageNodeId && (mode === 'fresh-branch' || operationKind === 'new_image' || operationKind === 'fresh_branch')) {
+    if (!targetCandidateId && (mode === 'fresh-branch' || operationKind === 'new_image' || operationKind === 'fresh_branch')) {
         const generatedTarget = findGeneratedTargetReference({
-            candidateByNodeId,
-            referenceImageNodeIds,
-            styleReferenceNodeIds,
+            candidateById,
+            referenceCandidateIds,
+            styleReferenceCandidateIds,
             decisions,
         })
         if (generatedTarget) {
-            targetImageNodeId = generatedTarget.nodeId
-            parentImageNodeId = generatedTarget.nodeId
+            targetCandidateId = generatedTarget.candidateId
+            parentCandidateId = generatedTarget.candidateId
             mode = 'edit-active-branch'
             if (operationKind === 'new_image' || operationKind === 'fresh_branch') operationKind = 'style_transfer'
-            excludedNodeIds = excludedNodeIds.filter((nodeId) => nodeId !== generatedTarget.nodeId)
+            excludedCandidateIds = excludedCandidateIds.filter((candidateId) => candidateId !== generatedTarget.candidateId)
             rationale = appendRationale(
                 rationale,
-                `Resolver guard continued generated branch via selected target reference ${generatedTarget.nodeId}.`,
+                `Resolver guard continued generated branch via selected target reference ${generatedTarget.candidateId}.`,
             )
         }
     }
 
-    if (parentImageNodeId && !candidateByNodeId.has(parentImageNodeId)) {
-        const unknownParentImageNodeId = parentImageNodeId
-        parentImageNodeId = targetImageNodeId && candidateByNodeId.has(targetImageNodeId)
-            ? targetImageNodeId
+    if (parentCandidateId && !candidateById.has(parentCandidateId)) {
+        const unknownParentCandidateId = parentCandidateId
+        parentCandidateId = targetCandidateId && candidateById.has(targetCandidateId)
+            ? targetCandidateId
             : undefined
         rationale = appendRationale(
             rationale,
-            parentImageNodeId
-                ? `Resolver guard replaced unknown parentImageNodeId ${unknownParentImageNodeId} with targetImageNodeId ${parentImageNodeId}.`
-                : `Resolver guard ignored unknown parentImageNodeId ${unknownParentImageNodeId}.`,
+            parentCandidateId
+                ? `Resolver guard replaced unknown parentCandidateId ${unknownParentCandidateId} with targetCandidateId ${parentCandidateId}.`
+                : `Resolver guard ignored unknown parentCandidateId ${unknownParentCandidateId}.`,
         )
     }
 
-    assertKnownNodeIds('targetImageNodeId', targetImageNodeId ? [targetImageNodeId] : [], candidateByNodeId)
-    assertKnownNodeIds('parentImageNodeId', parentImageNodeId ? [parentImageNodeId] : [], candidateByNodeId)
-    assertKnownNodeIds('includeGeneratedNodeIds', includeGeneratedNodeIds, candidateByNodeId)
-    assertKnownNodeIds('referenceImageNodeIds', referenceImageNodeIds, candidateByNodeId)
-    assertKnownNodeIds('sourceContextNodeIds', sourceContextNodeIds, candidateByNodeId)
-    assertKnownNodeIds('styleReferenceNodeIds', styleReferenceNodeIds, candidateByNodeId)
-    assertKnownNodeIds('excludedNodeIds', excludedNodeIds, candidateByNodeId)
-
-    if (targetImageNodeId && excludedNodeIds.includes(targetImageNodeId)) {
-        throw new Error(`Image branch resolver excluded its own targetImageNodeId: ${targetImageNodeId}`)
+    assertKnownCandidateIds('targetCandidateId', targetCandidateId ? [targetCandidateId] : [], candidateById)
+    assertKnownCandidateIds('parentCandidateId', parentCandidateId ? [parentCandidateId] : [], candidateById)
+    assertKnownCandidateIds('includeGeneratedCandidateIds', includeGeneratedCandidateIds, candidateById)
+    assertKnownCandidateIds('referenceCandidateIds', referenceCandidateIds, candidateById)
+    assertKnownCandidateIds('styleReferenceCandidateIds', styleReferenceCandidateIds, candidateById)
+    assertKnownCandidateIds('excludedCandidateIds', excludedCandidateIds, candidateById)
+    const knownSourceNodeIds = new Set(snapshot.candidates.flatMap(candidate => [
+        ...(candidate.nodeId ? [candidate.nodeId] : []),
+        ...candidate.sourceContextNodeIds,
+    ]))
+    const unknownSourceNodeIds = sourceContextNodeIds.filter(nodeId => !knownSourceNodeIds.has(nodeId))
+    if (unknownSourceNodeIds.length > 0) {
+        throw new Error(`Image branch resolver returned unknown sourceContextNodeIds: ${unknownSourceNodeIds.join(', ')}`)
     }
-    if (targetImageNodeId && !referenceImageNodeIds.includes(targetImageNodeId)) {
-        throw new Error(`Image branch resolver targetImageNodeId is not in referenceImageNodeIds: ${targetImageNodeId}`)
+
+    if (targetCandidateId && excludedCandidateIds.includes(targetCandidateId)) {
+        throw new Error(`Image branch resolver excluded its own targetCandidateId: ${targetCandidateId}`)
+    }
+    if (targetCandidateId && !referenceCandidateIds.includes(targetCandidateId)) {
+        throw new Error(`Image branch resolver targetCandidateId is not in referenceCandidateIds: ${targetCandidateId}`)
     }
 
     const confidence = Math.max(0, Math.min(1, Number(args.parsed.confidence) || 0))
@@ -443,8 +454,8 @@ const sanitizeResolution = (args: {
         throw new Error(`Image branch resolver confidence too low (${confidence}): ${rationale || 'no rationale provided'}`)
     }
 
-    const targetCandidate = targetImageNodeId ? candidateByNodeId.get(targetImageNodeId) : undefined
-    const rawBranchId = normalizeOptionalNodeId(args.parsed.branchId)
+    const targetCandidate = targetCandidateId ? candidateById.get(targetCandidateId) : undefined
+    const rawBranchId = normalizeOptionalCandidateId(args.parsed.branchId)
     const branchId = targetCandidate?.branchId ?? rawBranchId ?? `branch-${randomUUID()}`
 
     return {
@@ -454,14 +465,14 @@ const sanitizeResolution = (args: {
         resolverModelId: args.resolverModelId,
         mode,
         operationKind,
-        targetImageNodeId,
-        parentImageNodeId,
+        targetCandidateId,
+        parentCandidateId,
         branchId,
-        includeGeneratedNodeIds,
-        referenceImageNodeIds,
+        includeGeneratedCandidateIds,
+        referenceCandidateIds,
         sourceContextNodeIds,
-        styleReferenceNodeIds,
-        excludedNodeIds,
+        styleReferenceCandidateIds,
+        excludedCandidateIds,
         visualEntitySummary: args.parsed.visualEntitySummary?.trim() || undefined,
         visualStyleSummary: args.parsed.visualStyleSummary?.trim() || undefined,
         entityTags: normalizeStringArray(args.parsed.entityTags),
@@ -519,29 +530,31 @@ const buildResolvedBranchMessage = (
     resolution: MediaBranchVlmResolution,
     candidates: MediaBranchCandidateImage[]
 ): ChatMessage => {
-    const candidateByNodeId = new Map(candidates.map((candidate) => [candidate.nodeId, candidate]))
+    const candidateById = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]))
     const blocks: Array<Record<string, any>> = [{
         type: 'input_text',
         text: JSON.stringify({
             type: 'image_branch_vlm_resolution',
             mode: resolution.mode,
             operationKind: resolution.operationKind,
-            targetImageNodeId: resolution.targetImageNodeId,
-            referenceImageNodeIds: resolution.referenceImageNodeIds,
-            styleReferenceNodeIds: resolution.styleReferenceNodeIds,
-            excludedNodeIds: resolution.excludedNodeIds,
+            targetCandidateId: resolution.targetCandidateId,
+            referenceCandidateIds: resolution.referenceCandidateIds,
+            styleReferenceCandidateIds: resolution.styleReferenceCandidateIds,
+            excludedCandidateIds: resolution.excludedCandidateIds,
             rationale: resolution.rationale,
         }),
     }]
 
-    for (const nodeId of resolution.referenceImageNodeIds) {
-        const candidate = candidateByNodeId.get(nodeId)
+    for (const candidateId of resolution.referenceCandidateIds) {
+        const candidate = candidateById.get(candidateId)
         if (!candidate) continue
         blocks.push({
             type: 'input_text',
             text: JSON.stringify({
                 type: 'image_branch_selected_reference',
+                candidateId: candidate.candidateId,
                 nodeId: candidate.nodeId,
+                assetId: candidate.assetId,
                 roleHints: candidate.roleHints,
                 branchId: candidate.branchId ?? '',
             }),
@@ -562,13 +575,13 @@ const buildFreshBranchResolution = (state: ProviderState): MediaBranchVlmResolut
         resolverModelId: state.modelVersion,
         mode: 'fresh-branch',
         operationKind: 'fresh_branch',
-        targetImageNodeId: null,
+        targetCandidateId: null,
         branchId: `branch-${randomUUID()}`,
-        includeGeneratedNodeIds: [],
-        referenceImageNodeIds: [],
+        includeGeneratedCandidateIds: [],
+        referenceCandidateIds: [],
         sourceContextNodeIds: [],
-        styleReferenceNodeIds: [],
-        excludedNodeIds: [],
+        styleReferenceCandidateIds: [],
+        excludedCandidateIds: [],
         entityTags: [],
         styleTags: [],
         confidence: 1,
@@ -646,12 +659,12 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
             aiChatThreadId: state.aiChatThreadId,
             provider,
             model: result.modelName || modelVersion,
-            activeTargetNodeId: snapshot.activeTargetNodeId,
+            activeTargetCandidateId: snapshot.activeTargetCandidateId,
             mode: resolution.mode,
             operationKind: resolution.operationKind,
-            targetImageNodeId: resolution.targetImageNodeId,
-            referenceImageNodeIds: resolution.referenceImageNodeIds,
-            excludedNodeIds: resolution.excludedNodeIds,
+            targetCandidateId: resolution.targetCandidateId,
+            referenceCandidateIds: resolution.referenceCandidateIds,
+            excludedCandidateIds: resolution.excludedCandidateIds,
             confidence: resolution.confidence,
             rationale: resolution.rationale,
         }, null, 0)}`)
@@ -668,16 +681,16 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
         // each reference is used is planned but out of scope here.)
         let videoFirstFrameImage: string | undefined
         let videoReferenceImages: string[] | undefined
-        if (state.videoModelVersion && resolution.referenceImageNodeIds.length > 0) {
-            const urlByNodeId = new Map(resolvedCandidates.map(c => [c.nodeId, c.imageUrl]))
+        if (state.videoModelVersion && resolution.referenceCandidateIds.length > 0) {
+            const urlByCandidateId = new Map(resolvedCandidates.map(candidate => [candidate.candidateId, candidate.imageUrl]))
             const orderedFrames: string[] = []
             const pushFrame = (url: string | undefined): void => {
                 if (typeof url === 'string' && url.length > 0 && !orderedFrames.includes(url)) {
                     orderedFrames.push(url)
                 }
             }
-            if (resolution.targetImageNodeId) pushFrame(urlByNodeId.get(resolution.targetImageNodeId))
-            for (const nodeId of resolution.referenceImageNodeIds) pushFrame(urlByNodeId.get(nodeId))
+            if (resolution.targetCandidateId) pushFrame(urlByCandidateId.get(resolution.targetCandidateId))
+            for (const candidateId of resolution.referenceCandidateIds) pushFrame(urlByCandidateId.get(candidateId))
 
             videoFirstFrameImage = orderedFrames[0]
             videoReferenceImages = orderedFrames.slice(1, 2)

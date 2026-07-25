@@ -47,6 +47,7 @@ import {
     type VideoGenerationTrace,
     type AiInteractionMediaGenerationRequest,
     type AiModelId,
+    type MediaPromptReference,
     MEDIA_DESCRIPTOR_VERSION,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
@@ -58,6 +59,8 @@ import {
     type AiPromptComposerSubmitData,
 } from '$src/components/proseMirror/aiPromptComposer.ts'
 import { createDefaultCapabilityCatalogClient } from '$src/services/capability-catalog-client.ts'
+import { createPromptReferenceCatalogClient } from '$src/services/prompt-reference-catalog-client.ts'
+import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 import {
     parseAiModelSelectionAttr,
     serializeAiModelSelectionAttr,
@@ -70,6 +73,10 @@ import {
     buildGeneratedMediaTurnProjectionFromThreadContent,
     type GeneratedMediaTurnLocator,
 } from '@lixpi/prosemirror/shared/generated-media-turn-projection'
+import {
+    LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
+    PROMPT_REFERENCE_NODE_TYPE,
+} from '@lixpi/prosemirror/shared/prompt-reference'
 import {
     collectProseMirrorText,
     findAiChatThreadContentNode,
@@ -5536,6 +5543,55 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function normalizePromptReferencePreviewNode(
+        node: CanvasNode | undefined,
+        reference: MediaPromptReference,
+    ): CanvasNode | undefined {
+        if (!node || !('assetId' in node) || node.assetId !== reference.assetId) return undefined
+        if (reference.mediaKind === 'image' && node.type === 'image') return node
+        if (reference.mediaKind === 'video' && node.type === 'video') return node
+        if (reference.mediaKind === 'document' && node.type === 'document') return node
+        if (reference.mediaKind === 'document' && node.type === 'mediaDocument') {
+            return { ...node, type: 'document' }
+        }
+        return undefined
+    }
+
+    function getPromptReferencePreviewNode(reference: MediaPromptReference): CanvasNode | undefined {
+        const explicitNode = normalizePromptReferencePreviewNode(
+            findCanvasNodeById(reference.nodeId),
+            reference,
+        )
+        if (explicitNode) return explicitNode
+
+        const matchingNode = currentCanvasState?.nodes.find((node) => (
+            'assetId' in node && node.assetId === reference.assetId
+        ))
+        const normalizedMatchingNode = normalizePromptReferencePreviewNode(matchingNode, reference)
+        if (normalizedMatchingNode) return normalizedMatchingNode
+        if (reference.mediaKind === 'audio') return undefined
+
+        const asset = assetsStore.get(reference.assetId)
+        const width = Math.max(1, asset?.media?.width ?? 320)
+        const height = Math.max(1, asset?.media?.height ?? 240)
+        const baseNode = {
+            nodeId: reference.nodeId ?? `prompt-reference-${reference.assetId}`,
+            assetId: reference.assetId,
+            position: { x: 0, y: 0 },
+            dimensions: { width, height },
+        }
+        if (reference.mediaKind === 'image') return { ...baseNode, type: 'image' }
+        if (reference.mediaKind === 'video') return { ...baseNode, type: 'video' }
+        return { ...baseNode, type: 'document' }
+    }
+
+    function getPromptReferencePreviewRenderer(): PromptReferencePreviewRenderer {
+        return {
+            getNode: getPromptReferencePreviewNode,
+            environment: getContextPreviewEnvironment(),
+        }
+    }
+
     function getAiUserMessageContextPreviewRenderer(options: { inlinePopover?: boolean } = {}) {
         return {
             getNodeById: (nodeId: string) => findCanvasNodeById(nodeId),
@@ -5755,6 +5811,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
         visit(contentJSON)
         return chunks.join('').replace(/\n{3,}/g, '\n\n').trim()
+    }
+
+    function contentJSONHasPromptReference(contentJSON: unknown): boolean {
+        if (!contentJSON || typeof contentJSON !== 'object') return false
+        if (Array.isArray(contentJSON)) return contentJSON.some(contentJSONHasPromptReference)
+        const node = contentJSON as { type?: unknown; content?: unknown }
+        return node.type === PROMPT_REFERENCE_NODE_TYPE
+            || node.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
+            || (Array.isArray(node.content) && node.content.some(contentJSONHasPromptReference))
     }
 
     function openAiChatPanel(): void {
@@ -6147,6 +6212,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         activeAiChatPanelTracePreviewTiles,
                     ),
                 },
+                promptReferencePreviewRenderer: getPromptReferencePreviewRenderer(),
                 onEditorChange: (value: any) => {
                     liveAiChatThreadContentOverrides.delete(panelThreadId)
                     rememberAiChatThreadContent(panelThreadId, value)
@@ -6172,7 +6238,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     useMultipleVideoModels,
                     imageOptions,
                     videoOptions,
-                    capabilityReferences,
                 }: any) => {
                     gradient?.triggerAnimation()
 
@@ -6180,7 +6245,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         // Explicit context chips are always force-included. The thread has
                         // no canvas node, so all context comes from the chips.
                         const chipNodeIds = aiChatPanelState.contextChips.slice()
-                        const messagesWithContext = messages
                         // The branch-resolver snapshot is reused for video generation too —
                         // VEO image-to-video / reference-image inputs come from the same VLM
                         // resolution, so the snapshot must be built whenever an image OR
@@ -6223,7 +6287,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         }
 
                         await getAiService().sendChatMessage({
-                            messages: messagesWithContext,
                             aiReasoningModels: aiReasoningModels ?? [],
                             useMultipleReasoningModels,
                             useMultipleImageModels,
@@ -6237,7 +6300,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             videoDuration: videoOptions?.videoDuration,
                             videoConfigGroups: videoOptions?.configGroups,
                             videoSourceForExtension,
-                            capabilityReferences,
                             mediaBranchCandidateSnapshot,
                             workspaceContextSnapshot,
                             canvasVisibleArea: getCanvasVisibleAreaForApiProjection(),
@@ -6375,10 +6437,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             className: 'workspace-canvas-global-composer',
             controlFactories: createDefaultPromptControlFactories(),
             initialContent: readGlobalComposerDraft(),
-            capabilityCatalog: createDefaultCapabilityCatalogClient(
+            promptReferenceCatalog: createPromptReferenceCatalogClient(
                 workspaceId,
                 workspaceStore.getData('organizationId') as string,
             ),
+            promptReferencePreviewRenderer: getPromptReferencePreviewRenderer(),
             onContentChange: (value: object) => {
                 try {
                     localStorage.setItem(globalComposerDraftKey, JSON.stringify(value))
@@ -6396,7 +6459,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             transform: 'translateX(-50%)',
             width: '760px',
             maxWidth: 'calc(100% - 48px)',
-            zIndex: '9990',
         }
         applyStyle(hostEl, hostStyle)
         hostEl.appendChild(contextTrayEl)
@@ -6511,6 +6573,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             aiChatThreadRenderContext: {
                 contextPreview: getAiUserMessageContextPreviewRenderer(),
             },
+            promptReferencePreviewRenderer: getPromptReferencePreviewRenderer(),
             onEditorChange: (value: any) => {
                 liveAiChatThreadContentOverrides.delete(threadId)
                 rememberAiChatThreadContent(threadId, value)
@@ -6536,7 +6599,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 useMultipleVideoModels,
                 imageOptions,
                 videoOptions,
-                capabilityReferences,
             }: any) => {
                 try {
                     if (!submittedData) return
@@ -6587,7 +6649,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     if (mediaBranchCandidateSnapshot) {
                         const candidateNodeIds = explicitMediaReferenceNodeIds.length > 0
                             ? explicitMediaReferenceNodeIds
-                            : mediaBranchCandidateSnapshot.candidates.map((candidate) => candidate.nodeId)
+                            : mediaBranchCandidateSnapshot.candidates.flatMap((candidate) => candidate.nodeId ? [candidate.nodeId] : [])
                         pendingGeneratedImagePlacements.set(threadId, {
                             referenceNodeIds: candidateNodeIds,
                             promptText,
@@ -6603,8 +6665,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         }
                     }
 
-                    const messagesWithContext = messages
-
                     let videoSourceForExtension: string | undefined
                     if (videoOptions?.sourceVideoNodeId) {
                         const sourceVideoNode = currentCanvasState?.nodes.find(
@@ -6616,7 +6676,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     }
 
                     await getAiService().sendChatMessage({
-                        messages: messagesWithContext,
                         aiReasoningModels: aiReasoningModels ?? [],
                         useMultipleReasoningModels,
                         useMultipleImageModels,
@@ -6631,7 +6690,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         videoConfigGroups: videoOptions?.configGroups,
                         regeneration,
                         videoSourceForExtension,
-                        capabilityReferences,
                         mediaBranchCandidateSnapshot,
                         workspaceContextSnapshot,
                         canvasVisibleArea: getCanvasVisibleAreaForApiProjection(),
@@ -6765,7 +6823,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return
         }
         const promptText = extractPromptTextFromContentJSON(data.contentJSON)
-        if (!promptText) return
+        const hasPromptReference = contentJSONHasPromptReference(data.contentJSON)
+        if (!promptText && !hasPromptReference) return
 
         const threadId = uuidv4()
         const explicitContextNodeIds = options.explicitContextNodeIds ?? aiChatPanelState.contextChips.slice()
@@ -6823,7 +6882,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const asset = await assetService.create({
                 organizationId: workspaceStore.getData('organizationId'),
                 workspaceId,
-                title: promptText,
+                title: promptText || 'Capability request',
                 primaryCategory: 'conversation',
                 assetId: threadId,
                 initialDoc: initialContent,
@@ -10028,7 +10087,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             contextMediaNodeIds: referenceNodeIds,
             generatedImageTextByNodeId: getGeneratedImageTextByNodeIdForThread(threadId),
         })
-        const candidateNodeIds = mediaBranchCandidateSnapshot.candidates.map((candidate: MediaBranchCandidateSnapshot['candidates'][number]) => candidate.nodeId)
+        const candidateNodeIds = mediaBranchCandidateSnapshot.candidates.flatMap(
+            (candidate: MediaBranchCandidateSnapshot['candidates'][number]) => candidate.nodeId ? [candidate.nodeId] : [],
+        )
         if (candidateNodeIds.length === 0) {
             pendingGeneratedImagePlacements.set(threadId, {
                 referenceNodeIds,
@@ -10041,7 +10102,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 threadId,
                 candidateCount: 0,
                 promptFingerprint: mediaBranchCandidateSnapshot.promptFingerprint,
-                activeTargetNodeId: mediaBranchCandidateSnapshot.activeTargetNodeId,
+                activeTargetCandidateId: mediaBranchCandidateSnapshot.activeTargetCandidateId,
                 candidateNodeIds,
             })
             return { promptText, mediaBranchCandidateSnapshot }
@@ -10059,7 +10120,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             threadId,
             candidateCount: mediaBranchCandidateSnapshot.candidates.length,
             promptFingerprint: mediaBranchCandidateSnapshot.promptFingerprint,
-            activeTargetNodeId: mediaBranchCandidateSnapshot.activeTargetNodeId,
+            activeTargetCandidateId: mediaBranchCandidateSnapshot.activeTargetCandidateId,
             candidateNodeIds,
         })
         return { promptText, mediaBranchCandidateSnapshot }
@@ -10074,6 +10135,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!lineageAssignment) return {}
 
         const resolution = placement?.mediaBranchResolution
+        const candidateById = new Map(
+            (placement?.mediaBranchCandidateSnapshot?.candidates ?? []).map(candidate => [candidate.candidateId, candidate]),
+        )
+        const targetImageNodeId = resolution?.targetCandidateId
+            ? candidateById.get(resolution.targetCandidateId)?.nodeId
+            : undefined
+        const styleReferenceNodeIds = (resolution?.styleReferenceCandidateIds ?? []).flatMap(candidateId => {
+            const nodeId = candidateById.get(candidateId)?.nodeId
+            return nodeId ? [nodeId] : []
+        })
+        const excludedNodeIds = (resolution?.excludedCandidateIds ?? []).flatMap(candidateId => {
+            const nodeId = candidateById.get(candidateId)?.nodeId
+            return nodeId ? [nodeId] : []
+        })
 
         return {
             generationRequestId: lineageAssignment.generationRequestId,
@@ -10099,9 +10174,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             entitySummary: resolution?.visualEntitySummary,
             entityTags: resolution?.entityTags ?? [],
             styleTags: resolution?.styleTags ?? [],
-            targetImageNodeId: resolution?.targetImageNodeId ?? undefined,
-            styleReferenceNodeIds: resolution?.styleReferenceNodeIds ?? [],
-            excludedNodeIds: resolution?.excludedNodeIds ?? [],
+            targetImageNodeId,
+            styleReferenceNodeIds,
+            excludedNodeIds,
             resolverKind: resolution?.resolverKind,
             resolverModelProvider: resolution?.resolverModelProvider,
             resolverModelId: resolution?.resolverModelId,
@@ -11323,7 +11398,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const placement = ensurePendingGeneratedMediaPlacementForApiRun(threadId, generationRun)
             if (!placement) return
 
-            const referenceNodeIds = getExistingMediaNodeIds(resolution.referenceImageNodeIds)
+            const candidateById = new Map(
+                (placement.mediaBranchCandidateSnapshot?.candidates ?? []).map(candidate => [candidate.candidateId, candidate]),
+            )
+            const referenceNodeIds = getExistingMediaNodeIds(
+                resolution.referenceCandidateIds.flatMap(candidateId => {
+                    const nodeId = candidateById.get(candidateId)?.nodeId
+                    return nodeId ? [nodeId] : []
+                }),
+            )
             const placementAnchorNodeId = placement.placementAnchorNodeId ?? referenceNodeIds[0]
             setPendingGeneratedMediaPlacement(threadId, generationRun, {
                 ...placement,
@@ -11338,8 +11421,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 mode: resolution.mode,
                 branchId: resolution.branchId,
                 operationKind: resolution.operationKind,
-                referenceImageNodeIds: resolution.referenceImageNodeIds,
-                excludedNodeIds: resolution.excludedNodeIds,
+                referenceCandidateIds: resolution.referenceCandidateIds,
+                excludedCandidateIds: resolution.excludedCandidateIds,
                 confidence: resolution.confidence,
                 rationale: resolution.rationale,
             })
@@ -14195,9 +14278,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ),
                 onAttach: (reference) => {
                     const view = globalCanvasComposer?.editorView
-                    const nodeType = view?.state.schema.nodes.capability_reference
+                    const nodeType = view?.state.schema.nodes.prompt_reference
                     if (!view || !nodeType) return
-                    const atom = nodeType.create(reference)
+                    const atom = nodeType.create({
+                        referenceType: reference.kind,
+                        capabilityId: reference.capabilityId,
+                        displayName: reference.displayName,
+                    })
                     const tr = view.state.tr.replaceSelectionWith(atom).insertText(' ').scrollIntoView()
                     view.dispatch(tr)
                     view.focus()

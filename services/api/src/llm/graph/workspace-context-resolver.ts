@@ -630,6 +630,7 @@ const buildCandidateFromWorkspaceNode = async (
         : ['base-context']
 
     return {
+        candidateId: `node:${node.nodeId}`,
         nodeId: node.nodeId,
         assetId: node.assetId,
         imageUrl,
@@ -653,6 +654,7 @@ const buildNarrowedMediaBranchSnapshot = async (
     const snapshot = state.workspaceContextSnapshot
     const existingSnapshot = restrictSnapshotToExplicitRefs(state.mediaBranchCandidateSnapshot)
     if (!snapshot) return existingSnapshot
+    if (existingSnapshot?.explicitReferenceCandidateIds?.length) return existingSnapshot
 
     const nodeById = new Map(snapshot.nodes.map((node) => [node.nodeId, node]))
     const existingByNodeId = new Map((existingSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]))
@@ -680,8 +682,8 @@ const buildNarrowedMediaBranchSnapshot = async (
     const hasExplicitChips = snapshot.nodes.some((node) => node.isExplicitChip)
     if (existingSnapshot && candidates.length === 0 && !hasExplicitChips) return existingSnapshot
 
-    const activeTargetNodeId = existingSnapshot?.activeTargetNodeId && candidates.some((candidate) => candidate.nodeId === existingSnapshot.activeTargetNodeId)
-        ? existingSnapshot.activeTargetNodeId
+    const activeTargetCandidateId = existingSnapshot?.activeTargetCandidateId && candidates.some((candidate) => candidate.candidateId === existingSnapshot.activeTargetCandidateId)
+        ? existingSnapshot.activeTargetCandidateId
         : undefined
     const promptText = existingSnapshot?.promptText ?? snapshot.promptText
 
@@ -689,11 +691,11 @@ const buildNarrowedMediaBranchSnapshot = async (
         resolverVersion: existingSnapshot?.resolverVersion ?? snapshot.resolverVersion,
         conversationAssetId: existingSnapshot?.conversationAssetId ?? snapshot.conversationAssetId,
         regionNodeId: existingSnapshot?.regionNodeId ?? snapshot.conversationAssetId,
-        ...(activeTargetNodeId ? { activeTargetNodeId } : {}),
+        ...(activeTargetCandidateId ? { activeTargetCandidateId } : {}),
         promptText,
         promptFingerprint: existingSnapshot?.promptFingerprint ?? `workspace-context:${snapshot.conversationAssetId}:${snapshot.promptText}:${selectedMediaSelections.map((selection) => selection.nodeId).join(',')}`,
         candidates,
-        transcriptContext: buildCandidateTranscriptContext(candidates, promptText, activeTargetNodeId),
+        transcriptContext: buildCandidateTranscriptContext(candidates, promptText, activeTargetCandidateId),
     }
 }
 

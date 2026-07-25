@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { CapabilityManifest, CapabilityResourceRef } from '@lixpi/constants'
 
-import { createInstructionSkillModule } from './instruction-skill.ts'
+import { createInstructionSkillPackage } from './instruction-skill.ts'
 
-describe('createInstructionSkillModule', () => {
+describe('createInstructionSkillPackage', () => {
     it('loads instructions and delegates persistence through one injected adapter', async () => {
         const resource: CapabilityResourceRef = {
             resourceId: 'instructions',
@@ -15,8 +15,7 @@ describe('createInstructionSkillModule', () => {
         }
         const storeResource = vi.fn(async () => resource)
         const seedBuiltInCapability = vi.fn(async () => undefined)
-        const module = createInstructionSkillModule({
-            moduleId: 'test-skill',
+        const module = createInstructionSkillPackage({
             capabilityId: 'global.test-skill',
             name: 'Test Skill',
             description: 'Test instructions.',
@@ -31,7 +30,11 @@ describe('createInstructionSkillModule', () => {
             seedBuiltInCapability,
         })
 
-        await module.seed({ allowedActions: new Set(['test.action']) })
+        await module.seed({
+            allowedActions: new Set(['test.action']),
+            parentModuleId: 'test-module',
+            catalogExposure: 'module-internal',
+        })
 
         expect(storeResource).toHaveBeenCalledWith(expect.objectContaining({
             storageOwnerId: 'system',
@@ -42,6 +45,8 @@ describe('createInstructionSkillModule', () => {
         }))
         const seeded = seedBuiltInCapability.mock.calls[0]?.[0]
         expect(seeded?.allowedActions).toEqual(new Set(['test.action']))
+        expect(seeded?.parentModuleId).toBe('test-module')
+        expect(seeded?.catalogExposure).toBe('module-internal')
         expect((seeded?.manifest as CapabilityManifest).exports).toEqual({
             instructions: {
                 instructions: { resourceIds: ['instructions'] },

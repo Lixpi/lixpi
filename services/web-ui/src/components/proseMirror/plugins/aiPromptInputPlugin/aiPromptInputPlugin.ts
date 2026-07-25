@@ -1,21 +1,19 @@
 import { Plugin, EditorState, Transaction, TextSelection } from 'prosemirror-state'
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
 
 import { AI_PROMPT_INPUT_PLUGIN_KEY, SUBMIT_AI_PROMPT_META } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
 import {
     aiPromptInputNodeType,
     createAiPromptInputNodeView,
+    hasAiPromptInputContent,
     parseAiModelSelectionAttr,
     parseMediaGenerationConfigSelectionAttr,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
-import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
-import type { CapabilityPromptReference } from '@lixpi/constants'
-import { collectCapabilityReferences } from '$src/components/proseMirror/plugins/capabilityMentionPlugin/index.ts'
 
 type SubmitHandler = (data: {
     contentJSON: any[]
-    capabilityReferences: CapabilityPromptReference[]
     aiReasoningModels: string[]
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
@@ -68,7 +66,7 @@ export function extractContentJSON(state: EditorState): any[] | null {
     })
 
     if (!inputNode) return null
-    if (!hasSubmittableContent(inputNode as ProseMirrorNode)) return null
+    if (!hasAiPromptInputContent(inputNode as ProseMirrorNode)) return null
 
     // Convert content to JSON array
     const content: any[] = []
@@ -77,16 +75,6 @@ export function extractContentJSON(state: EditorState): any[] | null {
     })
 
     return content
-}
-
-function hasSubmittableContent(node: ProseMirrorNode): boolean {
-    if (node.isText && node.text?.trim()) return true
-    if (node.type.name === 'capability_reference') return true
-    let found = false
-    node.forEach((child) => {
-        if (!found && hasSubmittableContent(child)) found = true
-    })
-    return found
 }
 
 type InputAttrs = {
@@ -207,7 +195,6 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
 
         return {
             contentJSON,
-            capabilityReferences: collectCapabilityReferences(contentJSON),
             aiReasoningModels,
             useMultipleReasoningModels: attrs.useMultipleReasoningModels,
             useMultipleImageModels: attrs.useMultipleImageModels,
@@ -268,7 +255,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                 const decorations: Decoration[] = []
 
                 state.doc.descendants((node: ProseMirrorNode, pos: number) => {
-                    if (node.type.name === aiPromptInputNodeType && node.textContent.trim() === '') {
+                    if (node.type.name === aiPromptInputNodeType && !hasAiPromptInputContent(node)) {
                         decorations.push(
                             Decoration.node(pos, pos + node.nodeSize, {
                                 class: 'empty-node-placeholder',

@@ -78,7 +78,7 @@ function makeFixture(manifestValues: CapabilityManifest[], resourceValues: Map<s
             scopeOwnerId: 'system',
             storageOwnerId: 'system',
             manifestBlobHash: hash(manifestBytes),
-            catalogVisibility: 'listed',
+            catalogExposure: 'standalone',
             status: 'active',
             ownerUserId: 'system',
             createdAt: 1,

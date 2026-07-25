@@ -379,6 +379,38 @@ describe('createContextPreviewTile — document content', () => {
 // =============================================================================
 
 describe('createContextPreviewTile — popover layout', () => {
+    it('uses a caller-provided inline label as the trigger for the same shared preview card', async () => {
+        const env = createMockEnvironment()
+        const triggerContent = document.createElement('span')
+        triggerContent.className = 'test-inline-reference-label'
+        triggerContent.textContent = 'Character Sheet'
+        const { dom, destroy } = createContextPreviewTile({
+            node: createImageNode({ assetId: 'image-1' }),
+            environment: env,
+            triggerContent,
+            titleOverride: 'Character Sheet',
+        })
+        document.body.appendChild(dom)
+
+        expect(dom.classList.contains('workspace-ai-chat-panel-context-preview-tooltip-inline-label')).toBe(true)
+        const trigger = dom.querySelector('.help-tooltip-trigger') as HTMLElement
+        expect(trigger.classList.contains('workspace-ai-chat-panel-context-preview-trigger-inline-label')).toBe(true)
+        expect(trigger.querySelector('.test-inline-reference-label')).toBe(triggerContent)
+        expect(trigger.querySelector('.workspace-ai-chat-panel-context-preview-image-mini')).toBeNull()
+        expect(trigger.getAttribute('aria-label')).toBe('Character Sheet')
+
+        trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
+        await waitForMicrotasks()
+
+        const tooltipContent = document.body.querySelector('.help-tooltip-content') as HTMLElement
+        expect(tooltipContent.querySelector('.workspace-ai-chat-panel-context-preview-image-large')).not.toBeNull()
+        expect(tooltipContent.querySelector('.workspace-ai-chat-panel-context-preview-popover-title')?.textContent)
+            .toBe('Character Sheet')
+
+        destroy()
+        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+    })
+
     it('uses the base popover class when image/video metadata is missing', async () => {
         const env = createMockEnvironment()
         const { dom, destroy } = createContextPreviewTile({
