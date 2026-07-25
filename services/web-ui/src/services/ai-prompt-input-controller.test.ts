@@ -198,13 +198,11 @@ function createController(options?: {
     createAiChatThread?: ReturnType<typeof vi.fn>
     onAiChatThreadCreated?: ReturnType<typeof vi.fn>
     onAiSubmit?: ReturnType<typeof vi.fn>
-    onAiStop?: ReturnType<typeof vi.fn>
 }) {
     const persistCanvasState = options?.persistCanvasState ?? vi.fn()
     const createAiChatThread = options?.createAiChatThread ?? vi.fn()
     const onAiChatThreadCreated = options?.onAiChatThreadCreated ?? vi.fn()
     const onAiSubmit = options?.onAiSubmit ?? vi.fn()
-    const onAiStop = options?.onAiStop ?? vi.fn()
 
     const controller = new AiPromptInputController({
         workspaceId: 'workspace-1',
@@ -213,7 +211,6 @@ function createController(options?: {
         onAiChatThreadCreated,
         createAiChatThread,
         onAiSubmit,
-        onAiStop,
     })
 
     return {
@@ -222,7 +219,6 @@ function createController(options?: {
         createAiChatThread,
         onAiChatThreadCreated,
         onAiSubmit,
-        onAiStop,
     }
 }
 
@@ -251,10 +247,8 @@ describe('AiPromptInputController', () => {
         warnSpy.mockRestore()
     })
 
-    it('alerts when AI models are missing', async () => {
-        const alertSpy = vi.fn()
-        const originalAlert = (globalThis as { alert?: () => void }).alert
-        ;(globalThis as { alert?: () => void }).alert = alertSpy
+    it('logs a validation error when AI models are missing', async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
         const { controller } = createController()
 
@@ -264,8 +258,8 @@ describe('AiPromptInputController', () => {
             aiReasoningModels: [],
         })
 
-        expect(alertSpy).toHaveBeenCalledWith('Please select an AI model from the dropdown before submitting.')
-        ;(globalThis as { alert?: () => void }).alert = originalAlert
+        expect(errorSpy).toHaveBeenCalledWith('[AiPromptInputController] Cannot submit without a reasoning model.')
+        errorSpy.mockRestore()
     })
 
     it('queues a pending message and injects it once the thread editor registers', async () => {
@@ -529,18 +523,6 @@ describe('AiPromptInputController', () => {
         controller.setReceiving('thread-2', true)
         expect(controller.isReceiving('thread-2')).toBe(true)
         expect(controller.isReceiving('thread-1')).toBe(false)
-    })
-
-    it('forwards stop requests only when a target thread is active', () => {
-        const onAiStop = vi.fn()
-        const { controller } = createController({ onAiStop })
-
-        controller.stopStreaming()
-        expect(onAiStop).not.toHaveBeenCalled()
-
-        controller.setTarget({ nodeId: 'thread-1', type: 'aiChatThread', referenceId: 'thread-1' })
-        controller.stopStreaming()
-        expect(onAiStop).toHaveBeenCalledWith('thread-1')
     })
 
     it('drops queued or pending messages after destroy', async () => {

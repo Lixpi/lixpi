@@ -81,9 +81,7 @@ function makeAudioNode(overrides: Partial<AudioCanvasNode> = {}): AudioCanvasNod
     return {
         nodeId: 'audio-1',
         type: 'audio',
-        fileId: 'audio-file-id',
-        workspaceId: 'workspace-1',
-        src: '/api/files/audio.wav',
+        assetId: 'audio-asset-id',
         dimensions: { width: 420, height: 110 },
         position: { x: 10, y: 20 },
         ...overrides,
@@ -154,27 +152,24 @@ describe('audioNodeHandler', () => {
         const audioElement = handler.getAudioElement(audio.nodeId)!
         await vi.waitFor(() => expect(onAudioElementReady).toHaveBeenCalledTimes(1))
 
-        expect(audioElement.src).toContain('/api/files/audio.wav?token=token')
+        expect(audioElement.src).toContain('/api/assets/audio-asset-id/renditions/original?token=token')
         expect(onAudioElementReady).toHaveBeenCalledWith(audio.nodeId)
     })
 
-    it('does not authenticate data: and blob: URLs', async () => {
+    it('does not resolve a source or notify readiness when the node has no assetId yet', async () => {
         const handler = createAudioNodeHandler({
             audioLayer,
             onRender,
             onAudioElementReady,
         })
-        const audio = makeAudioNode({
-            nodeId: 'audio-data',
-            src: 'data:audio/wav;base64,ZmFrZQ==',
-        })
+        const audio = makeAudioNode({ nodeId: 'audio-pending', assetId: '' })
 
         handler.upsert(audio, { x: 10, y: 20 }, makeCanvasState(audio))
         const audioElement = handler.getAudioElement(audio.nodeId)!
 
-        await vi.waitFor(() => expect(onAudioElementReady).toHaveBeenCalledWith(audio.nodeId))
         expect(AuthService.getTokenSilently).not.toHaveBeenCalled()
-        expect(audioElement.getAttribute('src')).toContain('data:audio/wav;base64,ZmFrZQ==')
+        expect(onAudioElementReady).not.toHaveBeenCalled()
+        expect(audioElement.getAttribute('src')).toBeNull()
     })
 
     it('only updates audio element when source key changes', async () => {
@@ -193,15 +188,12 @@ describe('audioNodeHandler', () => {
         handler.upsert(audio, { x: 10, y: 20 }, makeCanvasState(audio))
         expect(loadSpy).toHaveBeenCalledTimes(1)
 
-        const changed = makeAudioNode({
-            src: '/api/files/audio-v2.wav',
-            fileId: 'audio-file-v2',
-        })
+        const changed = makeAudioNode({ assetId: 'audio-asset-v2' })
         handler.upsert(changed, { x: 10, y: 20 }, makeCanvasState(changed))
 
         await vi.waitFor(() => expect(loadSpy).toHaveBeenCalledTimes(2))
         await vi.waitFor(() => expect(onAudioElementReady).toHaveBeenCalledTimes(2))
-        expect(element.src).toContain('audio-v2.wav?token=token')
+        expect(element.src).toContain('/api/assets/audio-asset-v2/renditions/original?token=token')
     })
 
     it('handles play / pause / toggle state transitions', async () => {
@@ -249,7 +241,7 @@ describe('audioNodeHandler', () => {
             onAudioElementReady,
         })
         const first = makeAudioNode()
-        const second = makeAudioNode({ nodeId: 'audio-2', src: '/api/files/audio-2.wav' })
+        const second = makeAudioNode({ nodeId: 'audio-2', assetId: 'audio-asset-2' })
 
         handler.upsert(first, { x: 10, y: 20 }, makeCanvasState(first))
         handler.upsert(second, { x: 20, y: 30 }, makeCanvasState(second))

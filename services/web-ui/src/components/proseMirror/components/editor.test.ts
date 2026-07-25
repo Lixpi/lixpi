@@ -14,7 +14,7 @@ import * as aiChatThreadPluginModule from '$src/components/proseMirror/plugins/a
 import * as aiPromptInputPluginModule from '$src/components/proseMirror/plugins/aiPromptInputPlugin'
 import { aiChatThreadNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
 import { aiPromptInputNodeType } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
-import { documentTitleNodeType } from '$src/components/proseMirror/customNodes/documentTitleNode.ts'
+import { DOCUMENT_TYPE } from '@lixpi/prosemirror'
 
 let consoleWarnSpy: ReturnType<typeof vi.spyOn> | null = null
 let consoleLogSpy: ReturnType<typeof vi.spyOn> | null = null
@@ -82,35 +82,34 @@ afterEach(() => {
 })
 
 describe('ProseMirrorEditor — schema creation', () => {
-    it('builds chat-thread document schema with title + chat thread content model', () => {
-        const editor = createEditorShim('aiChatThread')
-        const titleNode = editor.editorSchema.nodes.documentTitle.create(null, [editor.editorSchema.text('chat document')])
+    it('builds chat-thread document schema with a chat thread content model', () => {
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONVERSATION)
         const chatThreadNode = editor.editorSchema.nodes.aiChatThread.createAndFill()
 
-        const doc = editor.editorSchema.nodes.doc.create(null, [titleNode, chatThreadNode])
+        const doc = editor.editorSchema.nodes.doc.create(null, [chatThreadNode])
 
-        expect(editor.editorSchema.nodes.doc.spec.content).toBe('documentTitle aiChatThread+')
+        expect(editor.editorSchema.nodes.doc.spec.content).toBe('aiChatThread+')
         expect(editor.editorSchema.nodes[aiChatThreadNodeType]).toBeDefined()
         expect(() => doc.check()).not.toThrow()
     })
 
     it('builds prompt-input document schema with only a single prompt input node', () => {
-        const editor = createEditorShim('aiPromptInput')
+        const editor = createEditorShim(DOCUMENT_TYPE.AI_PROMPT_INPUT)
 
         expect(editor.editorSchema.nodes.doc.spec.content).toBe('aiPromptInput')
         expect(editor.editorSchema.nodes[aiPromptInputNodeType]).toBeDefined()
     })
 
-    it('builds standard document schema with title + block content model', () => {
-        const editor = createEditorShim('document')
+    it('builds standard document schema with a block content model', () => {
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
 
-        expect(editor.editorSchema.nodes.doc.spec.content).toBe('documentTitle block+')
+        expect(editor.editorSchema.nodes.doc.spec.content).toBe('block+')
     })
 })
 
 describe('ProseMirrorEditor — createInitialDocument', () => {
     it('returns provided initialVal for valid AI prompt input documents', () => {
-        const editor = createEditorShim('aiPromptInput')
+        const editor = createEditorShim(DOCUMENT_TYPE.AI_PROMPT_INPUT)
         const inputNode = editor.editorSchema.nodes.aiPromptInput.createAndFill()
         const initialDocument = editor.editorSchema.nodes.doc.create(null, [inputNode]).toJSON()
 
@@ -120,7 +119,7 @@ describe('ProseMirrorEditor — createInitialDocument', () => {
     })
 
     it('falls back to a fresh AI prompt input node for invalid draft JSON', () => {
-        const editor = createEditorShim('aiPromptInput')
+        const editor = createEditorShim(DOCUMENT_TYPE.AI_PROMPT_INPUT)
 
         const doc = editor.createInitialDocument({
             type: 'doc',
@@ -138,12 +137,11 @@ describe('ProseMirrorEditor — createInitialDocument', () => {
     })
 
     it('reuses parsed AI chat thread content when it is valid', () => {
-        const editor = createEditorShim('aiChatThread')
-        const titleNode = editor.editorSchema.nodes.documentTitle.create(null, [editor.editorSchema.text('Hello world')])
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONVERSATION)
         const threadNode = editor.editorSchema.nodes.aiChatThread.createAndFill({
             threadId: 'from-initial-val',
         })
-        const initialVal = editor.editorSchema.nodes.doc.create(null, [titleNode, threadNode]).toJSON()
+        const initialVal = editor.editorSchema.nodes.doc.create(null, [threadNode]).toJSON()
 
         const doc = editor.createInitialDocument(initialVal, undefined)
 
@@ -151,7 +149,7 @@ describe('ProseMirrorEditor — createInitialDocument', () => {
     })
 
     it('falls back to a fresh chat thread doc with threadId when initialVal is invalid', () => {
-        const editor = createEditorShim('aiChatThread')
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONVERSATION)
         editor.threadId = 'fallback-thread'
 
         const doc = editor.createInitialDocument({
@@ -160,9 +158,9 @@ describe('ProseMirrorEditor — createInitialDocument', () => {
         }, undefined)
 
         expect(doc.type.name).toBe('doc')
-        expect(doc.child(0).type.name).toBe(documentTitleNodeType)
-        expect(doc.child(1).type.name).toBe(aiChatThreadNodeType)
-        expect(doc.child(1).attrs.threadId).toBe('fallback-thread')
+        expect(doc.childCount).toBe(1)
+        expect(doc.child(0).type.name).toBe(aiChatThreadNodeType)
+        expect(doc.child(0).attrs.threadId).toBe('fallback-thread')
         expect(consoleWarnSpy).not.toBeNull()
         expect(consoleWarnSpy).toHaveBeenCalledWith(
             expect.stringContaining('📝 [EDITOR] Invalid AI chat thread content, creating fresh document:'),
@@ -171,7 +169,7 @@ describe('ProseMirrorEditor — createInitialDocument', () => {
     })
 
     it('reuses provided initial content when parsing a standard document and no fallback is needed', () => {
-        const editor = createEditorShim('document')
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
         const paragraphNode = editor.editorSchema.nodes.paragraph.create(null, [
             editor.editorSchema.text('Hello, world'),
         ])
@@ -183,20 +181,19 @@ describe('ProseMirrorEditor — createInitialDocument', () => {
     })
 
     it('falls back to DOM parsing for standard documents when initialVal is empty', () => {
-        const editor = createEditorShim('document')
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
         const content = document.createElement('div')
         content.innerHTML = '<p>Fallback content</p>'
 
         const doc = editor.createInitialDocument({}, content)
 
-        expect(doc.childCount).toBe(2)
-        expect(doc.child(0).type.name).toBe(documentTitleNodeType)
-        expect(doc.child(1).type.name).toBe('paragraph')
+        expect(doc.childCount).toBe(1)
+        expect(doc.child(0).type.name).toBe('paragraph')
         expect(doc.textContent).toBe('Fallback content')
     })
 
     it('throws while parsing standard documents when initialVal has unknown node shape', () => {
-        const editor = createEditorShim('document')
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
         const call = () => editor.createInitialDocument({ invalid: 'document' }, undefined)
 
         expect(call).toThrow()
@@ -204,15 +201,17 @@ describe('ProseMirrorEditor — createInitialDocument', () => {
 })
 
 describe('ProseMirrorEditor — plugin wiring', () => {
-    it('adds AI chat thread plugin only for aiChatThread documents', () => {
-        const editor = createEditorShim('aiChatThread')
+    it('adds AI chat thread plugin only for assetConversation documents', async () => {
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONVERSATION)
 
         const plugins = editor.createPlugins({}, false)
 
         expect(spyCreateAiChatThreadPlugin).toHaveBeenCalledOnce()
         expect(spyCreateAiPromptInputPlugin).not.toHaveBeenCalled()
         const args = spyCreateAiChatThreadPlugin.mock.calls[0][0]
-        args.sendAiRequestHandler('payload')
+        // sendAiRequestHandler awaits proseMirrorAuthority?.flushPendingSteps() before
+        // forwarding, so the callback resolves asynchronously.
+        await args.sendAiRequestHandler('payload')
         expect(editor.onAiChatSubmit).toHaveBeenCalledWith('payload')
         args.stopAiRequestHandler('thread-id')
         expect(editor.onAiChatStop).toHaveBeenCalledWith('thread-id')
@@ -221,8 +220,7 @@ describe('ProseMirrorEditor — plugin wiring', () => {
     })
 
     it('adds AI prompt input plugin only for aiPromptInput documents', () => {
-        const editor = createEditorShim('aiPromptInput')
-        editor.isPromptReceiving = vi.fn(() => true)
+        const editor = createEditorShim(DOCUMENT_TYPE.AI_PROMPT_INPUT)
         const plugins = editor.createPlugins({}, false)
 
         expect(spyCreateAiPromptInputPlugin).toHaveBeenCalledOnce()
@@ -230,17 +228,13 @@ describe('ProseMirrorEditor — plugin wiring', () => {
         const args = spyCreateAiPromptInputPlugin.mock.calls[0][0]
         args.onSubmit('payload')
         expect(editor.onPromptSubmit).toHaveBeenCalledWith('payload')
-        args.onStop()
-        expect(editor.onPromptStop).toHaveBeenCalled()
-        expect(args.isReceiving()).toBe(true)
-        expect(editor.isPromptReceiving).toHaveBeenCalledTimes(1)
         expect(args.createContextTray).toBe(editor.promptControlFactories.createContextTray)
         expect(args.createModelDropdown).toBe(editor.promptControlFactories.createModelDropdown)
         expect(plugins).toContain(aiPromptInputPluginMock)
     })
 
     it('does not add AI-specific plugins for standard documents', () => {
-        const editor = createEditorShim('document')
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
         const plugins = editor.createPlugins({}, false)
 
         expect(spyCreateAiPromptInputPlugin).not.toHaveBeenCalled()
@@ -250,7 +244,7 @@ describe('ProseMirrorEditor — plugin wiring', () => {
     })
 
     it('injects ai thread render context into aiChatThread plugin creation args', () => {
-        const editor = createEditorShim('aiChatThread')
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONVERSATION)
         editor.aiChatThreadRenderContext = { custom: true, trace: 'enabled' }
 
         const plugins = editor.createPlugins({}, false)
@@ -264,7 +258,7 @@ describe('ProseMirrorEditor — plugin wiring', () => {
 
 describe('ProseMirrorEditor — state/editability and lifecycle', () => {
     it('reports editability from disabled/read-only flags', () => {
-        const editor = createEditorShim('document')
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
 
         expect(editor.isEditorEditable()).toBe(true)
 
@@ -277,7 +271,7 @@ describe('ProseMirrorEditor — state/editability and lifecycle', () => {
     })
 
     it('forwards editor state and streaming callbacks', () => {
-        const editor = createEditorShim('document')
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
         const documentChange = { type: 'change' }
         const streamingChange = { type: 'streaming' }
 
@@ -289,7 +283,7 @@ describe('ProseMirrorEditor — state/editability and lifecycle', () => {
     })
 
     it('delegates local transactions to ProseMirror authority when present', () => {
-        const editor = createEditorShim('document')
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
         const transaction = { docChanged: true }
         editor.proseMirrorAuthority = {
             submitLocalTransaction: vi.fn(),
@@ -302,7 +296,7 @@ describe('ProseMirrorEditor — state/editability and lifecycle', () => {
     })
 
     it('sets new editable prop when focus state updates', () => {
-        const editor = createEditorShim('document')
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
         editor.editorView = {
             setProps: vi.fn(),
         }
@@ -314,7 +308,7 @@ describe('ProseMirrorEditor — state/editability and lifecycle', () => {
     })
 
     it('destroys editor view and clears schema state', () => {
-        const editor = createEditorShim('document')
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
         const destroyMock = vi.fn()
         const disconnectMock = vi.fn()
         editor.editorView = { destroy: destroyMock }

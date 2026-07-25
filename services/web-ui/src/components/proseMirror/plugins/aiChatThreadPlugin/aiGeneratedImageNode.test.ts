@@ -26,8 +26,7 @@ beforeEach(() => {
 const createImageNode = (overrides: Record<string, unknown> = {}) => {
     return schema.nodes.aiGeneratedImage.create({
         imageData: 'data:image/png;base64,AAA',
-        fileId: 'image-file',
-        workspaceId: 'workspace-id',
+        assetId: 'image-asset',
         revisedPrompt: 'A reference',
         responseId: 'response-id',
         aiModel: 'Google:gemini-2.5-flash-image',
@@ -79,8 +78,7 @@ describe('aiGeneratedImageNodeSpec', () => {
     it('serializes and parses media metadata attrs', () => {
         const node = createImageNode({
             imageData: '/api/images/workspace-1/file',
-            fileId: 'img-1',
-            workspaceId: 'workspace-1',
+            assetId: 'img-1',
             responseId: 'resp-1',
             variantIndex: 3,
             mediaType: 'image',
@@ -91,8 +89,7 @@ describe('aiGeneratedImageNodeSpec', () => {
         expect(domSpec[0]).toBe('div')
         expect(domSpec[1].class).toBe('ai-generated-image')
         expect(domSpec[1]['data-image-data']).toBe('/api/images/workspace-1/file')
-        expect(domSpec[1]['data-file-id']).toBe('img-1')
-        expect(domSpec[1]['data-workspace-id']).toBe('workspace-1')
+        expect(domSpec[1]['data-asset-id']).toBe('img-1')
         expect(domSpec[1]['data-revised-prompt']).toBe('A reference')
         expect(domSpec[1]['data-response-id']).toBe('resp-1')
         expect(domSpec[1]['data-variant-index']).toBe('3')
@@ -117,8 +114,7 @@ function createFakeNodeElement(imageData: string, variantIndex: string): HTMLEle
     const node = document.createElement('div')
     node.className = 'ai-generated-image'
     node.dataset.imageData = imageData
-    node.dataset.fileId = 'img-1'
-    node.dataset.workspaceId = 'workspace-1'
+    node.dataset.assetId = 'img-1'
     node.dataset.revisedPrompt = 'A reference'
     node.dataset.responseId = 'resp-1'
     node.dataset.aiModel = 'Google:gemini'
@@ -175,6 +171,7 @@ describe('aiGeneratedImageNodeView', () => {
     it('shows spinner while image data is not yet available', async () => {
         const { nodeView } = createNodeView({
             imageData: '',
+            assetId: '',
             isPartial: true,
         })
 
@@ -197,7 +194,7 @@ describe('aiGeneratedImageNodeView', () => {
         await vi.waitFor(() => expect(getImageSrc(nodeView)).toContain('token=token-1'))
 
         expect(AuthService.getTokenSilently).toHaveBeenCalledTimes(1)
-        expect(getImageSrc(nodeView)).toContain('/api/files/workspace-images/final-file')
+        expect(getImageSrc(nodeView)).toContain('/api/images/workspace-images/final-file')
         expect(getImageSrc(nodeView)).toContain('token=token-1')
     })
 
@@ -270,6 +267,7 @@ describe('aiGeneratedImageNodeView', () => {
     it('transitions from pending to complete image state and applies authenticated /api URL', async () => {
         const { nodeView } = createNodeView({
             imageData: '',
+            assetId: '',
             isPartial: true,
         })
         const spinner = nodeView.dom.querySelector('.ai-generated-image-spinner') as HTMLElement
@@ -289,7 +287,7 @@ describe('aiGeneratedImageNodeView', () => {
         expect(updated).toBe(true)
         expect(spinner.classList.contains('is-active')).toBe(false)
         expect(image.classList.contains('is-visible')).toBe(true)
-        await vi.waitFor(() => expect(getImageSrc(nodeView)).toContain('/api/files/workspace-images/new-file'))
+        await vi.waitFor(() => expect(getImageSrc(nodeView)).toContain('/api/images/workspace-images/new-file'))
         expect(getImageSrc(nodeView)).toContain('token=token-1')
     })
 

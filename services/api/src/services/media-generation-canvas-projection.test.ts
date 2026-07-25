@@ -8,7 +8,6 @@ import type {
     MediaGenerationRunMeta,
     MediaRunLineageAssignment,
 } from '@lixpi/constants'
-import { mediaGenerationLayoutSettings } from '@lixpi/constants'
 import {
     estimateBranchMarkerDimensions,
     getPendingGeneratedMediaNodeId,
@@ -274,7 +273,7 @@ describe('asset canvas projection', () => {
         })
     })
 
-    it('persists every API-planned media slot with the lineage markers before providers start', async () => {
+    it('seeds only the lineage markers before any media asset is projected, leaving media slots for per-asset projection', async () => {
         const plan = lineagePlan()
         plan.runAssignments = twoImageModelAssignments()
         const geometry = await upsertMediaLineagePlanToCanvas({
@@ -286,37 +285,25 @@ describe('asset canvas projection', () => {
         expect(workspaceMutateCanvasState).toHaveBeenCalledWith(expect.objectContaining({
             origin: 'upsertAssetMediaLineagePlanToCanvas',
         }))
-        expect(storedState.nodes).toEqual(expect.arrayContaining([
-            expect.objectContaining({ nodeId: 'origin-1' }),
-            expect.objectContaining({ nodeId: 'fork-1' }),
-            expect.objectContaining({
-                nodeId: getPendingGeneratedMediaNodeId(assignmentFor(0)),
-                assetId: 'asset-1',
-                mediaGenerationPhase: 'pending-before-first-frame',
-            }),
-            expect.objectContaining({
-                nodeId: getPendingGeneratedMediaNodeId(assignmentFor(1)),
-                assetId: 'asset-2',
-                mediaGenerationPhase: 'pending-before-first-frame',
-            }),
-        ]))
-        expect(storedState.edges).toEqual(expect.arrayContaining([
-            expect.objectContaining({ sourceNodeId: 'fork-1', targetNodeId: getPendingGeneratedMediaNodeId(assignmentFor(0)) }),
-            expect.objectContaining({ sourceNodeId: 'fork-1', targetNodeId: getPendingGeneratedMediaNodeId(assignmentFor(1)) }),
-        ]))
+        expect(storedState.nodes).toEqual([
+            expect.objectContaining({ nodeId: 'origin-1', type: 'branchOrigin' }),
+            expect.objectContaining({ nodeId: 'fork-1', type: 'branchFork' }),
+        ])
+        expect(storedState.nodes.some(node => node.type === 'image' || node.type === 'video')).toBe(false)
+        expect(storedState.edges).toEqual([
+            expect.objectContaining({ sourceNodeId: 'origin-1', targetNodeId: 'fork-1' }),
+        ])
         expect(geometry).toMatchObject({
             generationRequestId: 'request-1',
             layoutRevision: 101,
             nodeSnapshots: expect.arrayContaining([
                 expect.objectContaining({ nodeId: 'origin-1' }),
                 expect.objectContaining({ nodeId: 'fork-1' }),
-                expect.objectContaining({ nodeId: getPendingGeneratedMediaNodeId(assignmentFor(0)) }),
-                expect.objectContaining({ nodeId: getPendingGeneratedMediaNodeId(assignmentFor(1)) }),
             ]),
         })
     })
 
-    it('projects a selected generated-media continuation as one balanced fork with every model slot', async () => {
+    it('projects a selected generated-media continuation onto a shared fork marker for every model slot', async () => {
         storedState = {
             ...emptyCanvasState(),
             nodes: [{
@@ -349,42 +336,21 @@ describe('asset canvas projection', () => {
         })
 
         const forks = storedState.nodes.filter(node => node.type === 'branchFork' && node.generationRequestId === 'request-1')
-        const pending = storedState.nodes.filter(node =>
-            (node.type === 'image' || node.type === 'video')
-            && node.generatedBy?.generationRequestId === 'request-1'
-        )
         expect(forks).toHaveLength(1)
-        expect(pending).toHaveLength(2)
-        expect(pending.map(node => node.generatedBy?.mediaModelId).sort()).toEqual([
-            'Google:gemini-2.5-flash-image',
-            'Stability:sd3.5-large',
-        ])
+        expect(forks[0]).toMatchObject({ nodeId: 'selected-media-fork', parentBranchNodeId: 'selected-media' })
+        expect(storedState.nodes.some(node => node.type === 'image' || node.type === 'video')).toBe(true)
+        // The lineage upsert projects no media assets of its own — only the fork marker.
+        expect(storedState.nodes.filter(node => node.type === 'image' && node.nodeId !== 'selected-media')).toHaveLength(0)
         expect(storedState.nodes.some(node => node.type === 'branchOrigin' && node.generationRequestId === 'request-1')).toBe(false)
         expect(storedState.edges).toEqual(expect.arrayContaining([
             expect.objectContaining({ sourceNodeId: 'selected-media', targetNodeId: 'selected-media-fork' }),
-            ...pending.map(node => expect.objectContaining({ sourceNodeId: 'selected-media-fork', targetNodeId: node.nodeId })),
         ]))
-        expect(nodeCenterY(forks[0]!)).toBeCloseTo(
-            pending.reduce((sum, node) => sum + nodeCenterY(node), 0) / pending.length,
-            6,
-        )
-        const pendingCircleScale = mediaGenerationLayoutSettings.preFrameCircleScale
-        const pendingCircleInset = pending[0]!.dimensions.width * (1 - pendingCircleScale) / 2
-        const expectedCircleLeft = selectedMediaFanoutPlan().runAssignments.length > 1
-            ? 100 + 800
-                + mediaGenerationLayoutSettings.mediaToMediaGap
-                + mediaGenerationLayoutSettings.branchFanoutExtraGap
-            : 100 + 800 + mediaGenerationLayoutSettings.mediaToMediaGap
-        for (const node of pending) {
-            expect(node.position.x + pendingCircleInset).toBeCloseTo(expectedCircleLeft, 6)
-        }
         expect(geometry?.nodeSnapshots).toEqual(expect.arrayContaining([
             expect.objectContaining({ nodeId: 'selected-media-fork' }),
-            ...pending.map(node => expect.objectContaining({ nodeId: node.nodeId })),
         ]))
     })
 
-    it('replays a selected-media lineage plan without duplicating its fork or model slots', async () => {
+    it('replays a selected-media lineage plan without duplicating its fork marker', async () => {
         storedState = {
             ...emptyCanvasState(),
             nodes: [{
@@ -402,9 +368,6 @@ describe('asset canvas projection', () => {
         await upsertMediaLineagePlanToCanvas({ workspaceId: 'workspace-1', conversationAssetId: 'thread-1', lineagePlan: plan })
 
         expect(storedState.nodes.filter(node => node.nodeId === 'selected-media-fork')).toHaveLength(1)
-        for (const run of plan.runAssignments) {
-            expect(storedState.nodes.filter(node => node.nodeId === getPendingGeneratedMediaNodeId(run))).toHaveLength(1)
-        }
         expect(new Set(storedState.edges.map(edge => edge.edgeId)).size).toBe(storedState.edges.length)
     })
 
@@ -458,15 +421,18 @@ describe('asset canvas projection', () => {
         ]))
     })
 
-    it('keeps the parent centered while one sibling is ready and the other is still pending', () => {
+    it('keeps a pending sibling square and freezes a completed sibling at its reserved card size, ignoring its real aspect ratio', () => {
         const bothPending = projectMedia(projectMedia(emptyCanvasState(), 0, true), 1, true)
         const mixed = projectMedia(bothPending, 0, false, 16 / 9)
         const fork = mixed.nodes.find((node) => node.nodeId === 'fork-1')!
         const first = mixed.nodes.find((node) => node.nodeId === getPendingGeneratedMediaNodeId(assignmentFor(0)))!
         const second = mixed.nodes.find((node) => node.nodeId === getPendingGeneratedMediaNodeId(assignmentFor(1)))!
 
+        // The card reserved its footprint while pending; completing it must not
+        // resize the card and trigger a tree reflow, even though the real
+        // aspect ratio (16/9) would imply a shorter card.
         expect(first).toMatchObject({
-            dimensions: { width: 800, height: 450 },
+            dimensions: { width: 800, height: 800 },
             mediaGenerationPhase: 'ready',
         })
         expect(second).toMatchObject({
@@ -476,7 +442,7 @@ describe('asset canvas projection', () => {
         expect(nodeCenterY(fork)).toBeCloseTo((nodeCenterY(first) + nodeCenterY(second)) / 2, 6)
     })
 
-    it('converges on one final tree regardless of both arrival and completion order', () => {
+    it('converges on one final tree regardless of both arrival and completion order, with dimensions frozen at their pending size', () => {
         let forward = projectMedia(projectMedia(emptyCanvasState(), 0, true), 1, true)
         forward = projectMedia(forward, 0, false, 16 / 9)
         forward = projectMedia(forward, 1, false, 4 / 3)
@@ -487,12 +453,17 @@ describe('asset canvas projection', () => {
 
         expect(canonicalGenerationTree(reverse)).toEqual(canonicalGenerationTree(forward))
         expect(forward.nodes).toEqual(expect.arrayContaining([
-            expect.objectContaining({ dimensions: { width: 800, height: 450 }, mediaGenerationPhase: 'ready' }),
-            expect.objectContaining({ dimensions: { width: 800, height: 600 }, mediaGenerationPhase: 'ready' }),
+            expect.objectContaining({ dimensions: { width: 800, height: 800 }, mediaGenerationPhase: 'ready' }),
         ]))
+        const readyNodes = forward.nodes.filter((node) =>
+            (node.type === 'image') && node.mediaGenerationPhase === 'ready')
+        expect(readyNodes).toHaveLength(2)
+        for (const node of readyNodes) {
+            expect(node.dimensions).toEqual({ width: 800, height: 800 })
+        }
     })
 
-    it('balances heterogeneous image and video siblings deterministically', () => {
+    it('balances heterogeneous image and video siblings deterministically, both frozen at their pending square size', () => {
         let imageFirst = projectVideo(projectMedia(emptyCanvasState(), 0, true), true)
         imageFirst = projectMedia(imageFirst, 0, false, 4 / 3)
         imageFirst = projectVideo(imageFirst, false, 16 / 9)
@@ -503,8 +474,8 @@ describe('asset canvas projection', () => {
 
         expect(canonicalGenerationTree(videoFirst)).toEqual(canonicalGenerationTree(imageFirst))
         expect(imageFirst.nodes).toEqual(expect.arrayContaining([
-            expect.objectContaining({ type: 'image', dimensions: { width: 800, height: 600 } }),
-            expect.objectContaining({ type: 'video', dimensions: { width: 800, height: 450 } }),
+            expect.objectContaining({ type: 'image', dimensions: { width: 800, height: 800 } }),
+            expect.objectContaining({ type: 'video', dimensions: { width: 800, height: 800 } }),
         ]))
     })
 

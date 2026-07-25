@@ -100,63 +100,58 @@ describe('pixiMediaLayerLogic', () => {
 
         it('preserves data URLs and applies token only to /api paths', () => {
             expect(buildPixiImageSrc('data:image/png,ok', 'https://api', 'token')).toBe('data:image/png,ok')
-            expect(buildPixiImageSrc('/api/files/x.png', 'https://api', 'token')).toBe('https://api/api/files/x.png?token=token')
+            expect(buildPixiImageSrc('/api/assets/asset-1/renditions/preview', 'https://api', 'token'))
+                .toBe('https://api/api/assets/asset-1/renditions/preview?token=token')
         })
 
         it('detects stored image source URLs', () => {
-            expect(isStoredImageSrc('/api/files/one/two')).toBe(true)
-            expect(isStoredImageSrc('https://cdn.test/api/files/one/two')).toBe(true)
+            expect(isStoredImageSrc('/api/assets/asset-1/renditions/preview')).toBe(true)
+            expect(isStoredImageSrc('https://cdn.test/api/assets/asset-1/renditions/preview')).toBe(true)
             expect(isStoredImageSrc('https://cdn.test/media/one/two')).toBe(false)
         })
 
-        it('strips existing token params before resolving stored API paths', () => {
+        it('resolves the Asset-owned rendition path from assetId, ignoring the workspace argument', () => {
             const node: ImageCanvasNode = {
                 nodeId: 'img-1',
                 type: 'image',
-                fileId: 'file-id',
-                workspaceId: 'workspace-1',
-                src: 'https://cdn.test/api/files/workspace-1/old.png?token=old',
+                assetId: 'asset-id',
                 dimensions: { width: 1, height: 1 },
                 position: { x: 0, y: 0 },
             }
 
-            expect(resolveStoredImagePath(node, 'workspace-override')).toBe('/api/files/workspace-override/file-id')
+            expect(resolveStoredImagePath(node, 'workspace-override')).toBe('/api/assets/asset-id/renditions/preview')
         })
 
-        it('keeps plain URLs untouched when not a stored image path', () => {
+        it('URL-encodes the assetId when building the rendition path', () => {
             const node: ImageCanvasNode = {
                 nodeId: 'img-2',
                 type: 'image',
-                fileId: 'file-id',
-                workspaceId: 'workspace-1',
-                src: 'https://cdn.test/images/preview.png?token=abc',
+                assetId: 'asset/with space',
                 dimensions: { width: 1, height: 1 },
                 position: { x: 0, y: 0 },
             }
 
-            expect(resolveStoredImagePath(node, 'workspace-override')).toBe('https://cdn.test/images/preview.png')
+            expect(resolveStoredImagePath(node, 'workspace-1')).toBe('/api/assets/asset%2Fwith%20space/renditions/preview')
         })
 
-        it('classifies sourceless generated images as waiting for their first frame', () => {
+        it('classifies media-less generated images as waiting for their first frame', () => {
             const pendingGenerated: ImageCanvasNode = {
                 nodeId: 'pending-image-1',
                 type: 'image',
-                fileId: '',
-                workspaceId: 'workspace-1',
-                src: '',
-                aspectRatio: 1,
+                assetId: '',
+                mediaGenerationPhase: 'pending-before-first-frame',
                 dimensions: { width: 1, height: 1 },
                 position: { x: 0, y: 0 },
                 generatedBy: {
-                    aiChatThreadId: 'thread-1',
+                    conversationAssetId: 'thread-1',
                     responseId: '',
                     aiModel: 'Anthropic:claude-sonnet-4-6',
                     revisedPrompt: 'make a mountain',
                     generationRequestId: 'request-1',
                 },
             }
-            const finalGenerated = { ...pendingGenerated, fileId: 'file-1', src: '/api/files/workspace-1/file-1' }
-            const uploaded = { ...pendingGenerated, generatedBy: undefined }
+            const finalGenerated = { ...pendingGenerated, assetId: 'asset-1', mediaGenerationPhase: 'ready' as const }
+            const uploaded = { ...pendingGenerated, assetId: 'asset-1', generatedBy: undefined }
 
             expect(isGeneratedImageNodeWaitingForFrame(pendingGenerated)).toBe(true)
             expect(isGeneratedImageNodeWaitingForFrame(finalGenerated)).toBe(false)
@@ -170,14 +165,20 @@ describe('pixiMediaLayerLogic', () => {
             expect(getPixiLodTier(1.4)).toBe('full')
         })
 
-        it('appends LoD size params only to API image URLs and keeps existing query params', () => {
-            const thumbUrl = addPixiLodSizeParam('/api/files/workspace/image.png?token=old', 'thumb-256')
-            const thumb = new URL(thumbUrl, 'http://localhost')
-            expect(thumb.searchParams.get('size')).toBe('256')
-            expect(thumb.searchParams.get('token')).toBe('old')
+        it('rewrites the Asset rendition segment for the requested LoD tier and keeps existing query params', () => {
+            const thumbUrl = addPixiLodSizeParam('/api/assets/asset-1/renditions/original?token=old', 'thumb-256')
+            expect(thumbUrl).toBe('/api/assets/asset-1/renditions/original?token=old')
 
-            const fullUrl = addPixiLodSizeParam('/api/files/workspace/image.png', 'full')
-            expect(fullUrl).toBe('/api/files/workspace/image.png')
+            const previewSwap = addPixiLodSizeParam('/api/assets/asset-1/renditions/thumbnail?token=old', 'thumb-1024')
+            expect(previewSwap).toBe('/api/assets/asset-1/renditions/preview?token=old')
+
+            const thumbSwap = addPixiLodSizeParam('/api/assets/asset-1/renditions/preview?token=old', 'thumb-256')
+            expect(thumbSwap).toBe('/api/assets/asset-1/renditions/thumbnail?token=old')
+        })
+
+        it('leaves non-color, non-Asset URLs and the color tier untouched', () => {
+            const fullUrl = addPixiLodSizeParam('/api/assets/asset-1/renditions/preview', 'color')
+            expect(fullUrl).toBe('/api/assets/asset-1/renditions/preview')
 
             expect(addPixiLodSizeParam('https://cdn.test/not-an-api.png', 'thumb-256')).toBe('https://cdn.test/not-an-api.png')
         })

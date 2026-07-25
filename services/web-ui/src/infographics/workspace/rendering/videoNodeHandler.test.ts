@@ -110,14 +110,7 @@ function makeVideoNode(overrides: Partial<VideoCanvasNode> = {}): VideoCanvasNod
     return {
         nodeId: 'video-1',
         type: 'video',
-        fileId: 'video-file-id',
-        posterFileId: 'poster-file-id',
-        workspaceId: 'workspace-1',
-        src: 'https://cdn.example/video.mp4',
-        posterSrc: 'data:image/png;base64,vGVzdA==',
-        aspectRatio: 16 / 9,
-        durationSeconds: 6,
-        hasAudio: true,
+        assetId: 'video-asset-1',
         dimensions: { width: 640, height: 360 },
         position: { x: 10, y: 20 },
         ...overrides,
@@ -211,11 +204,13 @@ describe('videoNodeHandler', () => {
         const sprite = videoLayer.children[2] as FakeSprite
         await vi.waitFor(() => expect(decodeImageInWorker).toHaveBeenCalled())
 
-        expect(decodeImageInWorker).toHaveBeenCalledWith(video.posterSrc)
+        expect(decodeImageInWorker).toHaveBeenCalledWith(
+            expect.stringContaining('/api/assets/video-asset-1/renditions/poster')
+        )
         expect(sprite.texture).toBeInstanceOf(FakeTexture)
         expect((sprite.texture as FakeTexture).width).toBe(10)
         expect(videoLayer.children[0]).toBeInstanceOf(FakeGraphics)
-        expect(handler.getVideoElement(video.nodeId)?.poster).toBe(video.posterSrc)
+        expect(handler.getVideoElement(video.nodeId)?.poster).toContain('/api/assets/video-asset-1/renditions/poster')
         expect(onVideoElementReady).toHaveBeenCalledWith(video.nodeId)
         expect(sprite.texture).not.toBe(FakeTexture.EMPTY)
     })
@@ -245,7 +240,7 @@ describe('videoNodeHandler', () => {
             onRender,
             onVideoElementReady,
         })
-        const video = makeVideoNode({ src: 'https://cdn.example/video-v1.mp4' })
+        const video = makeVideoNode({ assetId: 'video-asset-v1' })
 
         handler.upsert(video, { x: 10, y: 20 }, makeCanvasState(video))
         await vi.waitFor(() => expect(onVideoElementReady).toHaveBeenCalledTimes(1))
@@ -253,11 +248,11 @@ describe('videoNodeHandler', () => {
         const videoElement = handler.getVideoElement(video.nodeId)!
         const loadSpy = vi.spyOn(videoElement, 'load').mockImplementation(() => undefined)
 
-        const updated = makeVideoNode({ src: 'https://cdn.example/video-v2.mp4', posterSrc: video.posterSrc })
+        const updated = makeVideoNode({ assetId: 'video-asset-v2' })
         handler.upsert(updated, { x: 10, y: 20 }, makeCanvasState(updated))
         await vi.waitFor(() => expect(onVideoElementReady).toHaveBeenCalledTimes(2))
 
-        expect(videoElement.src).toContain('video-v2.mp4')
+        expect(videoElement.src).toContain('/api/assets/video-asset-v2/renditions/original')
         expect(loadSpy).toHaveBeenCalled()
     })
 
@@ -268,8 +263,8 @@ describe('videoNodeHandler', () => {
             onRender,
             onVideoElementReady,
         })
-        const first = makeVideoNode({ posterSrc: 'data:image/png;base64,Zmlyc3Q=' })
-        const second = makeVideoNode({ posterSrc: 'data:image/png;base64,c2Vjb25k' })
+        const first = makeVideoNode({ assetId: 'video-asset-first' })
+        const second = makeVideoNode({ assetId: 'video-asset-second' })
 
         handler.upsert(first, { x: 10, y: 20 }, makeCanvasState(first))
         await vi.waitFor(() => expect(decodeImageInWorker).toHaveBeenCalledTimes(1))

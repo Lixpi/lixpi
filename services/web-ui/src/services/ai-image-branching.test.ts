@@ -1,6 +1,6 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 
 import {
     getPromptTextFromMessages,
@@ -9,12 +9,13 @@ import {
     buildWorkspaceContextSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
 } from '$src/services/ai-image-branching.ts'
-import type { CanvasNode, WorkspaceEdge } from '@lixpi/constants'
+import { assetsStore } from '$src/stores/assetsStore.ts'
+import type { Asset, CanvasNode, WorkspaceEdge } from '@lixpi/constants'
 
 const rootNode = {
     nodeId: 'thread-node-1',
     type: 'document',
-    referenceId: 'thread-1',
+    assetId: 'thread-1',
     position: { x: 0, y: 0 },
     dimensions: { width: 100, height: 100 },
 } satisfies CanvasNode
@@ -22,7 +23,7 @@ const rootNode = {
 const portraitSourceNode = {
     nodeId: 'portrait-source',
     type: 'image',
-    fileId: 'portrait-file',
+    assetId: 'portrait-file',
     workspaceId: 'workspace-1',
     src: '/api/images/workspace-1/portrait-file',
     aspectRatio: 1,
@@ -34,7 +35,7 @@ const portraitSourceNode = {
 const landscapeSourceNode = {
     nodeId: 'landscape-source',
     type: 'image',
-    fileId: 'landscape-file',
+    assetId: 'landscape-file',
     workspaceId: 'workspace-1',
     src: '/api/images/workspace-1/landscape-file',
     aspectRatio: 1,
@@ -46,14 +47,14 @@ const landscapeSourceNode = {
 const personGeneratedNode = {
     nodeId: 'person-generated',
     type: 'image',
-    fileId: 'person-generated-file',
+    assetId: 'person-generated-file',
     workspaceId: 'workspace-1',
     src: '/api/images/workspace-1/person-generated-file',
     aspectRatio: 1,
     position: { x: 240, y: 0 },
     dimensions: { width: 100, height: 100 },
     generatedBy: {
-        aiChatThreadId: 'thread-1',
+        conversationAssetId: 'thread-1',
         responseId: 'response-person',
         aiModel: 'OpenAI:gpt-4.1' as any,
         revisedPrompt: 'make that guy more expressive',
@@ -69,14 +70,14 @@ const personGeneratedNode = {
 const goatGeneratedNode = {
     nodeId: 'goat-generated',
     type: 'image',
-    fileId: 'goat-generated-file',
+    assetId: 'goat-generated-file',
     workspaceId: 'workspace-1',
     src: '/api/images/workspace-1/goat-generated-file',
     aspectRatio: 1,
     position: { x: 360, y: 0 },
     dimensions: { width: 100, height: 100 },
     generatedBy: {
-        aiChatThreadId: 'thread-1',
+        conversationAssetId: 'thread-1',
         responseId: 'response-goat',
         aiModel: 'OpenAI:gpt-4.1' as any,
         revisedPrompt: 'draw a goat',
@@ -92,14 +93,14 @@ const goatGeneratedNode = {
 const refinedPersonGeneratedNode = {
     nodeId: 'person-refined',
     type: 'image',
-    fileId: 'person-refined-file',
+    assetId: 'person-refined-file',
     workspaceId: 'workspace-1',
     src: '/api/images/workspace-1/person-refined-file',
     aspectRatio: 1,
     position: { x: 480, y: 0 },
     dimensions: { width: 100, height: 100 },
     generatedBy: {
-        aiChatThreadId: 'thread-1',
+        conversationAssetId: 'thread-1',
         responseId: 'response-refined',
         responseMessageId: 'response-refined-message',
         aiModel: 'OpenAI:gpt-4.1' as any,
@@ -119,7 +120,7 @@ const refinedPersonGeneratedNode = {
 const videoGeneratedNode = {
     nodeId: 'video-generated',
     type: 'video',
-    fileId: 'video-mp4-file',
+    assetId: 'video-mp4-file',
     posterFileId: 'video-poster-file',
     frameFileId: 'video-frame-file',
     workspaceId: 'workspace-1',
@@ -131,7 +132,7 @@ const videoGeneratedNode = {
     position: { x: 600, y: 0 },
     dimensions: { width: 160, height: 90 },
     generatedBy: {
-        aiChatThreadId: 'thread-1',
+        conversationAssetId: 'thread-1',
         responseId: 'response-video',
         videoModel: 'Google:veo-3.0-generate-001' as any,
         revisedPrompt: 'a calm seaside village at dawn',
@@ -149,7 +150,7 @@ const videoGeneratedNode = {
 const uploadedVideoNode = {
     nodeId: 'video-uploaded',
     type: 'video',
-    fileId: 'uploaded-mp4-file',
+    assetId: 'uploaded-mp4-file',
     posterFileId: 'uploaded-poster-file',
     workspaceId: 'workspace-1',
     src: '/api/videos/workspace-1/uploaded-mp4-file',
@@ -181,7 +182,7 @@ const branchOriginNode = {
 const cubistDocNode = {
     nodeId: 'cubist-doc',
     type: 'document',
-    referenceId: 'doc-cubist',
+    assetId: 'doc-cubist',
     position: { x: 0, y: 0 },
     dimensions: { width: 100, height: 100 },
     descriptor: {
@@ -198,7 +199,7 @@ const cubistDocNode = {
 const threadContextNode = {
     nodeId: 'thread-context',
     type: 'document',
-    referenceId: 'thread-context-ref',
+    assetId: 'thread-context-ref',
     position: { x: 0, y: 0 },
     dimensions: { width: 100, height: 100 },
     descriptor: {
@@ -212,10 +213,25 @@ const threadContextNode = {
     },
 } satisfies CanvasNode
 
+// Descriptor summaries/tags come from the assetsStore (populated from the
+// Asset record), not from the canvas node itself — the node only carries the
+// assetId. Seed the store with the uploaded video's descriptor before tests
+// that assert on it.
+beforeEach(() => {
+    assetsStore.reset()
+    for (const node of [uploadedVideoNode, cubistDocNode, threadContextNode]) {
+        assetsStore.upsert({
+            assetId: node.assetId,
+            descriptor: node.descriptor,
+            revision: 1,
+        } as Asset)
+    }
+})
+
 function buildSnapshot(prompt: string, generatedNodes: CanvasNode[] = [personGeneratedNode]) {
     return buildMediaBranchCandidateSnapshot({
         regionNodeId: 'thread-node-1',
-        threadId: 'thread-1',
+        conversationAssetId: 'thread-1',
         nodes: [rootNode, portraitSourceNode, landscapeSourceNode, ...generatedNodes],
         edges: generatedNodes.map((node) => ({
             edgeId: `edge-root-${node.nodeId}`,
@@ -255,17 +271,17 @@ describe('buildMediaBranchCandidateSnapshot', () => {
         expect(goatCandidate?.entityTags).toEqual(['goat'])
     })
 
-    it('uses nats object references so the API VLM can fetch candidate pixels', () => {
+    it('grounds candidates by their Asset rendition path so the API VLM can fetch candidate pixels', () => {
         const snapshot = buildSnapshot('make a painting of that guy look like cubist oil painting')
 
-        expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).toContain('nats-obj://workspace-workspace-1-files/person-generated-file')
-        expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).toContain('nats-obj://workspace-workspace-1-files/portrait-file')
+        expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).toContain('/api/assets/person-generated-file/renditions/preview')
+        expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).toContain('/api/assets/portrait-file/renditions/preview')
     })
 
     it('adds an active-target hint without moving that candidate ahead of other candidates', () => {
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             activeTargetNodeId: 'goat-generated',
             nodes: [rootNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, goatGeneratedNode],
             edges: [
@@ -288,7 +304,7 @@ describe('buildMediaBranchCandidateSnapshot', () => {
     it('marks generated ancestors and leaves so the API can preserve branch lineage', () => {
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             nodes: [rootNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
             edges: [
                 { edgeId: 'edge-person-refined', sourceNodeId: 'person-generated', targetNodeId: 'person-refined' },
@@ -334,7 +350,7 @@ describe('buildMediaBranchCandidateSnapshot', () => {
 
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             nodes: [rootNode, portraitSourceNode, parentImage, childImage],
             edges: [{
                 edgeId: 'edge-parent-child',
@@ -358,7 +374,7 @@ describe('buildMediaBranchCandidateSnapshot', () => {
 
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             nodes: [rootNode, portraitSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
             edges: [{
                 edgeId: 'edge-person-refined',
@@ -388,7 +404,7 @@ describe('buildMediaBranchCandidateSnapshot', () => {
     it('does not crash when a generated branch is connected through a non-media branch origin', () => {
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             nodes: [rootNode, branchOriginNode, personGeneratedNode],
             edges: [
                 { edgeId: 'edge-origin-person', sourceNodeId: 'branch-origin-1', targetNodeId: 'person-generated' },
@@ -426,7 +442,7 @@ describe('buildMediaBranchCandidateSnapshot', () => {
         )
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             nodes: [rootNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
             edges: [
                 { edgeId: 'edge-person-refined', sourceNodeId: 'person-generated', targetNodeId: 'person-refined' },
@@ -448,7 +464,7 @@ describe('buildMediaBranchCandidateSnapshot', () => {
         const disconnectedContextNode = {
             nodeId: 'disconnected-source',
             type: 'image',
-            fileId: 'disconnected-source-file',
+            assetId: 'disconnected-source-file',
             workspaceId: 'workspace-1',
             src: '/api/images/workspace-1/disconnected-source-file',
             aspectRatio: 1,
@@ -458,7 +474,7 @@ describe('buildMediaBranchCandidateSnapshot', () => {
 
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             nodes: [rootNode, portraitSourceNode, disconnectedContextNode],
             edges: [],
             contextMediaNodeIds: ['disconnected-source'],
@@ -516,7 +532,7 @@ describe('getGeneratedImageTextByNodeIdFromThreadContent', () => {
             nodeId: 'other-thread-goat',
             generatedBy: {
                 ...goatGeneratedNode.generatedBy,
-                aiChatThreadId: 'thread-other',
+                conversationAssetId: 'thread-other',
                 responseMessageId: 'other-response-id',
             },
         } satisfies CanvasNode
@@ -590,7 +606,7 @@ describe('buildCanvasWideCandidateSnapshot', () => {
         })
 
         expect(snapshot.resolverVersion).toBe('image-branch-vlm-v1')
-        expect(snapshot.threadId).toBe('run-wide-1')
+        expect(snapshot.conversationAssetId).toBe('run-wide-1')
         expect(snapshot.regionNodeId).toBe('standalone:run-wide-1')
         expect(snapshot.candidates.map((candidate) => candidate.nodeId).sort()).toEqual([
             'person-generated',
@@ -657,14 +673,14 @@ describe('buildCanvasWideCandidateSnapshot', () => {
 // =============================================================================
 
 describe('buildMediaBranchCandidateSnapshot — video media', () => {
-    it('grounds a generated video by its representative frame, never the MP4', () => {
+    it('grounds a generated video by its representative-frame rendition, never the MP4', () => {
         const snapshot = buildSnapshot('extend that seaside clip', [videoGeneratedNode])
         const videoCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'video-generated')
 
         expect(videoCandidate?.mediaKind).toBe('video')
-        expect(videoCandidate?.imageUrl).toBe('nats-obj://workspace-workspace-1-files/video-frame-file')
-        expect(videoCandidate?.fileId).toBe('video-frame-file')
-        expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).not.toContain('nats-obj://workspace-workspace-1-files/video-mp4-file')
+        expect(videoCandidate?.assetId).toBe('video-mp4-file')
+        expect(videoCandidate?.imageUrl).toBe('/api/assets/video-mp4-file/renditions/representativeFrame')
+        expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).not.toContain('/api/assets/video-mp4-file/renditions/original')
     })
 
     it('keeps a generated video on its branch so an edit continues lineage', () => {
@@ -679,7 +695,7 @@ describe('buildMediaBranchCandidateSnapshot — video media', () => {
     it('falls back to the poster frame and uses the descriptor for uploaded video', () => {
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             nodes: [rootNode, uploadedVideoNode],
             edges: [],
             prompt: 'make the car blue',
@@ -687,7 +703,8 @@ describe('buildMediaBranchCandidateSnapshot — video media', () => {
         const uploaded = snapshot.candidates.find((candidate) => candidate.nodeId === 'video-uploaded')
 
         expect(uploaded?.mediaKind).toBe('video')
-        expect(uploaded?.imageUrl).toBe('nats-obj://workspace-workspace-1-files/uploaded-poster-file')
+        expect(uploaded?.assetId).toBe('uploaded-mp4-file')
+        expect(uploaded?.imageUrl).toBe('/api/assets/uploaded-mp4-file/renditions/representativeFrame')
         expect(uploaded?.entityTags).toEqual(['car', 'city'])
         expect(uploaded?.styleTags).toEqual(['neon', 'night'])
         expect(uploaded?.promptText).toContain('a red sports car drifting on a wet city street at night')
@@ -711,7 +728,7 @@ describe('buildWorkspaceContextSnapshot', () => {
     it('indexes every context-bearing node, descriptors-only (no pixel data)', () => {
         const snapshot = buildWorkspaceContextSnapshot({
             workspaceId: 'workspace-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             prompt: 'summarize my canvas',
             nodes: workspaceNodes,
             edges: [],
@@ -719,7 +736,7 @@ describe('buildWorkspaceContextSnapshot', () => {
 
         expect(snapshot.resolverVersion).toBe('workspace-context-v1')
         expect(snapshot.workspaceId).toBe('workspace-1')
-        expect(snapshot.threadId).toBe('thread-1')
+        expect(snapshot.conversationAssetId).toBe('thread-1')
         expect(snapshot.promptText).toBe('summarize my canvas')
         expect(snapshot.nodes.map((node) => node.nodeId).sort()).toEqual(
             ['cubist-doc', 'goat-generated', 'person-generated', 'thread-context', 'thread-node-1', 'video-uploaded'],
@@ -734,7 +751,7 @@ describe('buildWorkspaceContextSnapshot', () => {
     it('carries descriptor summary + tags and a still reference for media, none for docs', () => {
         const snapshot = buildWorkspaceContextSnapshot({
             workspaceId: 'workspace-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             prompt: 'x',
             nodes: workspaceNodes,
             edges: [],
@@ -746,28 +763,27 @@ describe('buildWorkspaceContextSnapshot', () => {
         expect(video?.descriptorSummary).toBe('a red sports car drifting on a wet city street at night')
         expect(video?.entityTags).toEqual(['car', 'city'])
         expect(video?.styleTags).toEqual(['neon', 'night'])
-        // Grounded by the poster still, never the MP4.
-        expect(video?.imageUrl).toBe('nats-obj://workspace-workspace-1-files/uploaded-poster-file')
-        expect(video?.fileId).toBe('uploaded-poster-file')
+        // The workspace context snapshot carries Asset identity only — the API
+        // resolves the canonical/representative-frame Blob from assetId.
+        expect(video?.assetId).toBe('uploaded-mp4-file')
 
         const generated = byId.get('person-generated')
         expect(generated?.branchId).toBe('branch-person')
-        expect(generated?.sourceThreadId).toBe('thread-1')
-        expect(generated?.isCurrentThreadGenerated).toBe(true)
-        expect(generated?.imageUrl).toBe('nats-obj://workspace-workspace-1-files/person-generated-file')
+        expect(generated?.sourceConversationAssetId).toBe('thread-1')
+        expect(generated?.isCurrentConversationGenerated).toBe(true)
+        expect(generated?.assetId).toBe('person-generated-file')
         expect(generated?.descriptorSummary).toBeUndefined()
 
         const doc = byId.get('cubist-doc')
-        expect(doc?.referenceId).toBe('doc-cubist')
+        expect(doc?.nodeId).toBe('cubist-doc')
         expect(doc?.descriptorStatus).toBe('ready')
         expect(doc?.descriptorSummary).toBe('a cubist study of a dog')
         expect(doc?.entityTags).toEqual(['dog'])
-        expect(doc?.fileId).toBeUndefined()
-        expect(doc?.imageUrl).toBeUndefined()
+        expect(doc?.assetId).toBe('doc-cubist')
         expect(doc?.branchId).toBeUndefined()
 
         const thread = byId.get('thread-context')
-        expect(thread?.referenceId).toBe('thread-context-ref')
+        expect(thread?.nodeId).toBe('thread-context')
     })
 
     it('marks generated media from other chats without treating it as current-thread output', () => {
@@ -776,26 +792,26 @@ describe('buildWorkspaceContextSnapshot', () => {
             nodeId: 'other-thread-generated',
             generatedBy: {
                 ...personGeneratedNode.generatedBy,
-                aiChatThreadId: 'thread-other',
+                conversationAssetId: 'thread-other',
             },
         } satisfies CanvasNode
         const snapshot = buildWorkspaceContextSnapshot({
             workspaceId: 'workspace-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             prompt: 'now make it warmer',
             nodes: [rootNode, otherThreadImage],
             edges: [],
         })
         const generated = snapshot.nodes.find((node) => node.nodeId === 'other-thread-generated')
 
-        expect(generated?.sourceThreadId).toBe('thread-other')
-        expect(generated?.isCurrentThreadGenerated).toBeUndefined()
+        expect(generated?.sourceConversationAssetId).toBe('thread-other')
+        expect(generated?.isCurrentConversationGenerated).toBeUndefined()
     })
 
     it('flags explicit chips and edge-forced nodes (edges + parent children)', () => {
         const snapshot = buildWorkspaceContextSnapshot({
             workspaceId: 'workspace-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             prompt: 'put the portrait behind the dog doc',
             nodes: workspaceNodes,
             edges: [
@@ -824,7 +840,7 @@ describe('buildWorkspaceContextSnapshot', () => {
     it('forces no edge nodes for a standalone chat with no root node', () => {
         const snapshot = buildWorkspaceContextSnapshot({
             workspaceId: 'workspace-1',
-            threadId: 'thread-standalone',
+            conversationAssetId: 'thread-standalone',
             prompt: 'x',
             nodes: workspaceNodes,
             edges: [
@@ -840,7 +856,7 @@ describe('buildWorkspaceContextSnapshot', () => {
     it('includes caller-supplied doc/thread titles only', () => {
         const snapshot = buildWorkspaceContextSnapshot({
             workspaceId: 'workspace-1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             prompt: 'x',
             nodes: workspaceNodes,
             edges: [],

@@ -31,10 +31,8 @@ vi.mock('$src/services/auth-service.ts', () => ({
 const createVideoNode = (attrs: Record<string, unknown> = {}) => {
     return testSchema.nodes.aiGeneratedVideo.create({
         videoUrl: '',
-        fileId: 'video-file-id',
-        workspaceId: 'workspace-id',
+        assetId: 'video-asset-id',
         posterUrl: '',
-        posterFileId: '',
         durationSeconds: 12,
         aspectRatio: 1.777,
         hasAudio: true,
@@ -78,7 +76,7 @@ describe('aiGeneratedVideoNodeSpec', () => {
     it('serializes core video attrs for ProseMirror DOM output', () => {
         const node = createVideoNode({
             videoUrl: '/video.mp4',
-            fileId: 'file-1',
+            assetId: 'file-1',
             responseId: 'resp-1',
             videoModel: 'Google:veo-3',
             generationRequestId: 'req-1',
@@ -93,7 +91,7 @@ describe('aiGeneratedVideoNodeSpec', () => {
         expect(domSpec[0]).toBe('div')
         expect(domSpec[1].class).toBe('ai-generated-video')
         expect(domSpec[1]['data-video-url']).toBe('/video.mp4')
-        expect(domSpec[1]['data-file-id']).toBe('file-1')
+        expect(domSpec[1]['data-asset-id']).toBe('file-1')
         expect(domSpec[1]['data-response-id']).toBe('resp-1')
         expect(domSpec[1]['data-variant-index']).toBe('2')
     })

@@ -71,7 +71,7 @@ describe('mountReadOnlyAiChatThreadProjection', () => {
 		expect(editorOptions.options.initialVal).toBe(content)
 		expect(editorOptions.options.isDisabled).toBe(false)
 		expect(editorOptions.options.readOnly).toBe(true)
-		expect(editorOptions.options.documentType).toBe('aiChatThread')
+		expect(editorOptions.options.documentType).toBe('assetProvenance')
 		expect(editorOptions.options.threadId).toBe('thread-1')
 		expect(editorOptions.options.aiChatThreadRenderContext).toEqual({
 			readOnly: true,

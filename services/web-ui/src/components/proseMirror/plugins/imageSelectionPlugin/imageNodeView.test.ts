@@ -114,7 +114,7 @@ describe('ImageNodeView — initialization and source resolution', () => {
         }))
 
         await vi.waitFor(() => expect(getResolvedImageSrc(nodeView)).toContain('token=token-1'))
-        expect(getResolvedImageSrc(nodeView)).toContain('/api/files/workspace-1/final-file')
+        expect(getResolvedImageSrc(nodeView)).toContain('/api/images/workspace-1/final-file')
         expect(AuthService.getTokenSilently).toHaveBeenCalledTimes(1)
     })
 
@@ -123,14 +123,14 @@ describe('ImageNodeView — initialization and source resolution', () => {
             src: '/api/images/workspace-1/old',
         }))
 
-        await vi.waitFor(() => expect(getResolvedImageSrc(nodeView)).toContain('/api/files/workspace-1/old'))
+        await vi.waitFor(() => expect(getResolvedImageSrc(nodeView)).toContain('/api/images/workspace-1/old'))
 
         const updated = nodeView.update(createImageNode({
             src: '/api/images/workspace-1/new',
         }))
         expect(updated).toBe(true)
 
-        await vi.waitFor(() => expect(getResolvedImageSrc(nodeView)).toContain('/api/files/workspace-1/new'))
+        await vi.waitFor(() => expect(getResolvedImageSrc(nodeView)).toContain('/api/images/workspace-1/new'))
     })
 })
 

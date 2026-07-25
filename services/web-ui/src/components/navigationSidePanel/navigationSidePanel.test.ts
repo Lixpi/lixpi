@@ -20,8 +20,7 @@ const mocks = vi.hoisted(() => ({
     deleteWorkspace: vi.fn().mockResolvedValue(undefined),
     getWorkspace: vi.fn().mockResolvedValue(undefined),
     getTokenSilently: vi.fn(),
-    getWorkspaceDocuments: vi.fn().mockResolvedValue(undefined),
-    getWorkspaceAiChatThreads: vi.fn().mockResolvedValue(undefined),
+    loadWorkspaceAssets: vi.fn().mockResolvedValue(undefined),
     dropdownInstances: [] as Array<{ dom: HTMLDivElement; destroy: () => void; config: any }>,
 }))
 
@@ -114,8 +113,7 @@ beforeEach(() => {
     mocks.deleteWorkspace.mockClear()
     mocks.getWorkspace.mockClear()
     mocks.getTokenSilently.mockReset()
-    mocks.getWorkspaceDocuments.mockClear()
-    mocks.getWorkspaceAiChatThreads.mockClear()
+    mocks.loadWorkspaceAssets.mockClear()
 
     workspacesStore.resetStore()
     workspaceStore.resetStore()
@@ -126,8 +124,7 @@ beforeEach(() => {
     userInfoPanelStore.set(false)
 
     servicesStore.setDataValues({
-        documentService: { getWorkspaceDocuments: mocks.getWorkspaceDocuments },
-        aiChatThreadService: { getWorkspaceAiChatThreads: mocks.getWorkspaceAiChatThreads },
+        assetService: { loadWorkspaceAssets: mocks.loadWorkspaceAssets },
     })
 
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -544,7 +541,7 @@ describe('NavigationSidePanel — workspace import flow', () => {
         instance.destroy()
     })
 
-    it('refreshes workspace, document, and AI chat thread data only when the import target is the currently open workspace', async () => {
+    it('refreshes workspace metadata and assets only when the import target is the currently open workspace', async () => {
         mocks.getTokenSilently.mockResolvedValue('token-abc')
         fetchSpy?.mockResolvedValue({ ok: true, json: async () => ({}) } as Response)
         workspacesStore.setWorkspaces([makeWorkspace({ workspaceId: 'ws-1', name: 'Alpha' })])
@@ -560,8 +557,7 @@ describe('NavigationSidePanel — workspace import flow', () => {
         await Promise.resolve()
 
         expect(mocks.getWorkspace).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'ws-1' })
-        expect(mocks.getWorkspaceDocuments).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'ws-1' })
-        expect(mocks.getWorkspaceAiChatThreads).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'ws-1' })
+        expect(mocks.loadWorkspaceAssets).toHaveBeenCalledExactlyOnceWith('ws-1')
 
         instance.destroy()
     })
@@ -585,8 +581,7 @@ describe('NavigationSidePanel — workspace import flow', () => {
         await Promise.resolve()
 
         expect(mocks.getWorkspace).not.toHaveBeenCalled()
-        expect(mocks.getWorkspaceDocuments).not.toHaveBeenCalled()
-        expect(mocks.getWorkspaceAiChatThreads).not.toHaveBeenCalled()
+        expect(mocks.loadWorkspaceAssets).not.toHaveBeenCalled()
 
         instance.destroy()
     })

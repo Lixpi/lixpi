@@ -314,7 +314,7 @@ describe('applyMediaModelBadgeStyleProperties', () => {
         applyMediaModelBadgeStyleProperties(host)
 
         expect(host.style.getPropertyValue('--workspace-generated-media-chrome-icon-size')).toBe(`${settings.mediaNode.generatedMediaChrome.iconSize}px`)
-        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.topGap}px`)
+        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.gap}px`)
         expect(host.style.getPropertyValue('--workspace-media-model-badge-icon-gap')).toBe(settings.mediaNode.generatedMediaChrome.styles.modelBadgeIconGap)
         expect(host.style.getPropertyValue('--workspace-media-model-badge-provider-color')).toBe(settings.mediaNode.generatedMediaChrome.styles.modelBadgeProviderColor)
         expect(host.style.getPropertyValue('--workspace-media-model-badge-name-font-size')).toBe(settings.mediaNode.generatedMediaChrome.styles.modelBadgeNameFontSize)
@@ -325,7 +325,7 @@ describe('applyMediaModelBadgeStyleProperties', () => {
         applyMediaModelBadgeStyleProperties(host, { scale: 2 })
 
         expect(host.style.getPropertyValue('--workspace-generated-media-chrome-icon-size')).toBe(`${settings.mediaNode.generatedMediaChrome.iconSize * 2}px`)
-        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.topGap * 2}px`)
+        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.gap * 2}px`)
         expect(host.style.getPropertyValue('--workspace-media-model-badge-icon-gap')).toBe('6px')
         expect(host.style.getPropertyValue('--workspace-media-model-badge-name-font-size')).toBe('30px')
     })
@@ -335,7 +335,7 @@ describe('applyMediaModelBadgeStyleProperties', () => {
         applyMediaModelBadgeStyleProperties(host, { scale: Number.NaN })
 
         expect(host.style.getPropertyValue('--workspace-generated-media-chrome-icon-size')).toBe(`${settings.mediaNode.generatedMediaChrome.iconSize}px`)
-        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.topGap}px`)
+        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.gap}px`)
         expect(host.style.getPropertyValue('--workspace-media-model-badge-name-font-size')).toBe(settings.mediaNode.generatedMediaChrome.styles.modelBadgeNameFontSize)
     })
 
@@ -343,7 +343,7 @@ describe('applyMediaModelBadgeStyleProperties', () => {
         const host = createHost()
         applyMediaModelBadgeStyleProperties(host, { scale: 0 })
         expect(host.style.getPropertyValue('--workspace-generated-media-chrome-icon-size')).toBe(`${settings.mediaNode.generatedMediaChrome.iconSize}px`)
-        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.topGap}px`)
+        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.gap}px`)
         applyMediaModelBadgeStyleProperties(host, { scale: -1 })
         expect(host.style.getPropertyValue('--workspace-generated-media-chrome-icon-size')).toBe(`${settings.mediaNode.generatedMediaChrome.iconSize}px`)
     })
@@ -362,7 +362,7 @@ describe('applyMediaModelBadgeStyleProperties', () => {
         applyMediaModelBadgeStyleProperties(host, { scale: Number.POSITIVE_INFINITY })
 
         expect(host.style.getPropertyValue('--workspace-generated-media-chrome-icon-size')).toBe(`${settings.mediaNode.generatedMediaChrome.iconSize}px`)
-        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.topGap}px`)
+        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.gap}px`)
         expect(host.style.getPropertyValue('--workspace-media-model-badge-name-line-height')).toBe(String(settings.mediaNode.generatedMediaChrome.styles.modelBadgeNameLineHeight))
     })
 })
