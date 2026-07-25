@@ -94,12 +94,13 @@ Notes
     - Asset content: parse the title-free role snapshot or create a paragraph.
     - Asset conversation/provenance: parse the role snapshot or create a schema-valid `aiChatThread` using the Asset ID as `threadId`.
   - Plugin list (order matters):
-    - `statePlugin`, `focusPlugin`, `bubbleMenuPlugin`, `linkTooltipPlugin`, `slashCommandsMenuPlugin`
+    - `statePlugin`, `focusPlugin`, `bubbleMenuPlugin`, `linkTooltipPlugin`
     - `imageSelectionPlugin`
     - `buildInputRules`, `keymap(buildKeymap)`, `keymap(baseKeymap)`, `dropCursor`, `gapCursor`, `history`
     - `createCodeBlockPlugin` + `codeBlockInputRule` (CodeMirror integration and ``` fences)
     - `activeNodePlugin`
     - AI stack (Asset conversation and provenance roles): `createAiChatThreadPlugin`
+    - Floating prompt stack: `@` capability mentions, then `createAiPromptInputPlugin`
 
 
 ## Transaction meta signaling: contract

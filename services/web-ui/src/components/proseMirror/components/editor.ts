@@ -31,7 +31,6 @@ import { activeNodePlugin } from "$src/components/proseMirror/plugins/activeNode
 
 import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/index.ts'
 import { linkTooltipPlugin } from '$src/components/proseMirror/plugins/linkTooltipPlugin/linkTooltipPlugin.ts'
-import { slashCommandsMenuPlugin } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/index.ts'
 import { imageSelectionPlugin } from '$src/components/proseMirror/plugins/imageSelectionPlugin/index.ts'
 import { createCapabilityMentionPlugin } from '$src/components/proseMirror/plugins/capabilityMentionPlugin/index.ts'
 
@@ -188,7 +187,6 @@ export class ProseMirrorEditor {
             focusPlugin(this.updateEditorFocusState.bind(this)), // Allows to enable editor if it was disabled and user clicks on the editor area
             bubbleMenuPlugin(),
             linkTooltipPlugin(),
-            slashCommandsMenuPlugin(),
             imageSelectionPlugin(),
             buildInputRules(this.editorSchema),
             keymap(buildKeymap(this.editorSchema, this.documentType)),
