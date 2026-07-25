@@ -36,20 +36,45 @@ describe('branch marker lifecycle', () => {
         expect(screenPlacementBody).toContain('cleanupBranchMarkerArtifacts([nodeId])')
     })
 
+    it('removes superseded preflight DOM before measuring the composer stack', () => {
+        const screenPlacementBody = extractFunctionBody('syncPendingBranchMarkerScreenPlacements')
+
+        expect(
+            screenPlacementBody.includes('resolvePreflightBranchMarkerScreenOwnership('),
+            'screen placement should resolve visible preflight ownership',
+        ).toBe(true)
+        expect(
+            screenPlacementBody.includes('cleanupBranchMarkerArtifacts(screenOwnership.supersededPreflightNodeIds)'),
+            'screen placement should remove superseded preflight DOM from every marker root',
+        ).toBe(true)
+        expect(
+            screenPlacementBody.includes('const pendingNodes = screenOwnership.visiblePreflightNodes'),
+            'composer stack measurement should include only visible preflight owners',
+        ).toBe(true)
+    })
+
     it('sweeps late composer preflight markers when the API request completes', () => {
         const settleBody = extractFunctionBody('settleMediaGenerationRequest')
 
         expect(settleBody).toContain('removePreflightBranchMarkersForThread(currentCanvasState, threadId)')
         expect(settleBody).toContain('cleanupBranchMarkerArtifacts(preflightSettlement.removedNodeIds)')
-        expect(settleBody).toContain('commitCanvasStatePreservingEditors(preflightSettlement.state)')
+        expect(settleBody).toContain('commitTransientCanvasStatePreservingEditors(preflightSettlement.state)')
     })
 
     it('settles a single-model detached run immediately when its final media completes', () => {
         const finishBody = extractFunctionBody('finishGeneratedMediaRun')
 
         expect(finishBody).toContain('if (activeRunKeys.size > 0)')
+        expect(
+            finishBody.includes('pendingGeneratedImagePlacements.delete(threadId)'),
+            'final run settlement should remove the thread-scoped placement alias',
+        ).toBe(true)
         expect(finishBody).toContain('removePreflightBranchMarkersForThread(currentCanvasState, threadId)')
         expect(finishBody).toContain('removeOrphanedBranchMarkerOverlayElements(')
+        expect(
+            finishBody.includes('removeOrphanedBranchMarkerOverlayElements(\n            viewportEl,'),
+            'final run settlement should sweep stale branch-marker copies stranded in the viewport',
+        ).toBe(true)
         expect(finishBody).toContain('removeBranchMarkerOverlayElementsForConversation(')
         expect(finishBody).toContain('settleDetachedCanvasRun(threadId)')
         expect(finishBody).toContain('scheduleDetachedCanvasRunTeardown(threadId)')

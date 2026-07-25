@@ -8,13 +8,14 @@ export type CharacterCreatorPromptInput = {
 
 export type CharacterSheetAssessment = {
     isSingleImage: boolean
-    hasPortrait: boolean
-    hasFrontView: boolean
-    hasLeftView: boolean
-    hasRightView: boolean
-    hasBackView: boolean
-    hasThreeQuarterView: boolean
-    hasWalkingPose: boolean
+    isLandscape: boolean
+    hasFiveFullBodyViews: boolean
+    hasFiveHeadViews: boolean
+    hasExpressionShapePanels: boolean
+    hasHandsFeetAndPropsPanels: boolean
+    hasCostumePaletteMaterialAndDetailPanels: boolean
+    hasSixPosePanels: boolean
+    hasAlignmentGuides: boolean
     fullHeightViewsUncropped: boolean
     identityConsistent: boolean
     outfitConsistent: boolean
@@ -28,13 +29,14 @@ export type CharacterSheetValidation = CharacterSheetAssessment & {
 
 const REQUIRED_ASSESSMENT_FLAGS: Array<keyof Omit<CharacterSheetAssessment, 'issues'>> = [
     'isSingleImage',
-    'hasPortrait',
-    'hasFrontView',
-    'hasLeftView',
-    'hasRightView',
-    'hasBackView',
-    'hasThreeQuarterView',
-    'hasWalkingPose',
+    'isLandscape',
+    'hasFiveFullBodyViews',
+    'hasFiveHeadViews',
+    'hasExpressionShapePanels',
+    'hasHandsFeetAndPropsPanels',
+    'hasCostumePaletteMaterialAndDetailPanels',
+    'hasSixPosePanels',
+    'hasAlignmentGuides',
     'fullHeightViewsUncropped',
     'identityConsistent',
     'outfitConsistent',
@@ -47,13 +49,14 @@ export const CHARACTER_SHEET_ASSESSMENT_JSON_SCHEMA = {
     required: [...REQUIRED_ASSESSMENT_FLAGS, 'issues'],
     properties: {
         isSingleImage: { type: 'boolean' },
-        hasPortrait: { type: 'boolean' },
-        hasFrontView: { type: 'boolean' },
-        hasLeftView: { type: 'boolean' },
-        hasRightView: { type: 'boolean' },
-        hasBackView: { type: 'boolean' },
-        hasThreeQuarterView: { type: 'boolean' },
-        hasWalkingPose: { type: 'boolean' },
+        isLandscape: { type: 'boolean' },
+        hasFiveFullBodyViews: { type: 'boolean' },
+        hasFiveHeadViews: { type: 'boolean' },
+        hasExpressionShapePanels: { type: 'boolean' },
+        hasHandsFeetAndPropsPanels: { type: 'boolean' },
+        hasCostumePaletteMaterialAndDetailPanels: { type: 'boolean' },
+        hasSixPosePanels: { type: 'boolean' },
+        hasAlignmentGuides: { type: 'boolean' },
         fullHeightViewsUncropped: { type: 'boolean' },
         identityConsistent: { type: 'boolean' },
         outfitConsistent: { type: 'boolean' },
@@ -79,7 +82,12 @@ export function buildCharacterCreatorImagePrompt(input: CharacterCreatorPromptIn
         'CHARACTER REQUEST',
         request,
         '',
-        'FIXED LAYOUT CONTRACT',
+        'AUTHORITATIVE ATTACHED TEMPLATE',
+        'The attached character-sheet template image is the output-layout specification, not character-appearance inspiration.',
+        'Reproduce its complete landscape organization, anatomical alignment guides, section positions, view coverage, technical labels, note panels, and pose panels. Populate every placeholder with the requested character.',
+        'Character-source images define identity and design. The template defines layout. Do not replace it with a simplified portrait-and-turnaround strip.',
+        '',
+        'TEMPLATE LAYOUT CONTRACT',
         input.layoutInstructions.trim(),
         '',
         'PROMPT CONSTRUCTION CONTRACT',
@@ -91,9 +99,10 @@ export function buildCharacterCreatorImagePrompt(input: CharacterCreatorPromptIn
         ] : []),
         '',
         'FINAL OUTPUT CONSTRAINTS',
-        'Return one image only. Every required view must be present in the fixed grid.',
-        'Keep identity, proportions, clothing construction, accessories, materials, and colors consistent in every cell.',
-        'Do not crop any full-height view. Do not add extra characters, alternate outfits, scenery, logos, or watermarks.',
+        'Return one landscape image only. Every section from the attached template must be present in its corresponding region.',
+        'Keep identity, proportions, clothing construction, accessories, materials, and colors consistent in every character depiction.',
+        'Do not crop any full-height view. Do not omit the head, expression, hands, feet, props, notes, palette, materials, details, alignment-guide, or pose sections.',
+        'Do not add extra characters, alternate outfits, scenery, logos, or watermarks.',
     ].join('\n')
 }
 

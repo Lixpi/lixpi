@@ -11,9 +11,12 @@ import type {
 } from '@lixpi/constants'
 
 import type { ProviderState } from '../llm/graph/state.ts'
-import { CapabilityModelToolExecutor } from './capability-model-tool-executor.ts'
+import {
+    CapabilityModelToolExecutor,
+    shouldExposeCapabilityModelTools,
+} from './capability-model-tool-executor.ts'
 
-function makePlan(): SealedResolvedCapabilityPlan {
+function makePlan(executionPolicy: 'model-choice' | 'required' = 'model-choice'): SealedResolvedCapabilityPlan {
     const ref: CapabilityResourceRef = {
         resourceId: 'input',
         blobHash: 'input-hash',
@@ -32,7 +35,7 @@ function makePlan(): SealedResolvedCapabilityPlan {
             toolType: 'test',
             inputSchema: ref,
             outputSchema: ref,
-            executionPolicy: 'model-choice',
+            executionPolicy,
             workflow: { steps: [], outputs: {} },
         },
     }
@@ -97,5 +100,14 @@ describe('CapabilityModelToolExecutor', () => {
                 referenceAssetIds: ['asset-2', 'asset-1'],
             },
         }))
+    })
+
+    it('does not expose discovery tools after a required root Tool has already executed', () => {
+        const state = {
+            capabilityInvocationDepth: 0,
+            resolvedCapabilityPlan: makePlan('required'),
+        } as ProviderState
+
+        expect(shouldExposeCapabilityModelTools(state)).toBe(false)
     })
 })

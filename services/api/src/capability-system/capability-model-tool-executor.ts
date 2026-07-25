@@ -120,5 +120,10 @@ export class CapabilityModelToolExecutor {
 }
 
 export function shouldExposeCapabilityModelTools(state: ProviderState): boolean {
-    return (state.capabilityInvocationDepth ?? 0) === 0
+    if ((state.capabilityInvocationDepth ?? 0) !== 0) return false
+    const plan = state.resolvedCapabilityPlan
+    if (!plan) return true
+    return !plan.serializable.rootCapabilityIds.some(capabilityId =>
+        plan.getManifest(capabilityId)?.manifest.tool?.executionPolicy === 'required',
+    )
 }

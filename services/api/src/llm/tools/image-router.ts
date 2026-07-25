@@ -7,10 +7,15 @@ import type { ProviderState } from '../graph/state.ts'
 import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import {
+    buildCharacterFidelityRestorationPrompt,
     buildImageModelPrompt,
+    getImageSourceReferenceImages,
     normalizeImageSize,
 } from './image-generation-trace.ts'
-import { buildImageGenerationReferences } from '../image-generation-references.ts'
+import {
+    buildImageGenerationReferences,
+    type ImageGenerationReference,
+} from '../image-generation-references.ts'
 
 // Short fingerprint for a reference image URL — enough to spot duplicates
 // or wrong-image issues in logs without dumping base64.
@@ -28,6 +33,28 @@ const fingerprintRef = (url: string): string => {
     }
     if (url.startsWith('https://') || url.startsWith('http://')) return url.slice(0, 120)
     return `${url.slice(0, 60)}…`
+}
+
+const normalizeCapturedImage = (value: string): string => {
+    if (value.startsWith('data:')) return value
+    if (!/^[A-Za-z0-9+/=\r\n]+$/u.test(value)) {
+        throw new Error('IMAGE_GENERATION_CAPTURE_FORMAT_INVALID')
+    }
+    const bytes = Buffer.from(value, 'base64')
+    if (bytes.length >= 8
+        && bytes[0] === 0x89
+        && bytes[1] === 0x50
+        && bytes[2] === 0x4e
+        && bytes[3] === 0x47) {
+        return `data:image/png;base64,${value}`
+    }
+    if (bytes.length >= 3
+        && bytes[0] === 0xff
+        && bytes[1] === 0xd8
+        && bytes[2] === 0xff) {
+        return `data:image/jpeg;base64,${value}`
+    }
+    throw new Error('IMAGE_GENERATION_CAPTURE_FORMAT_INVALID')
 }
 
 type ImageRouterOptions = {
@@ -52,7 +79,10 @@ export class ImageRouter {
         const prompt = state.generatedImagePrompt ?? ''
         const workspaceId = state.workspaceId
         const aiChatThreadId = state.aiChatThreadId
-        const imageSize = normalizeImageSize(imageProvider, state.imageSize)
+        const requestedImageSize = state.capabilityUsageMode === 'character-creator'
+            ? '1536x1024'
+            : state.imageSize
+        const imageSize = normalizeImageSize(imageProvider, requestedImageSize)
         const mediaModelId = imageProvider && imageModel
             ? this.mediaGenerationRunPlanner.buildMediaModelId(imageProvider, imageMeta.model, imageModel)
             : undefined
@@ -77,7 +107,7 @@ export class ImageRouter {
             ? `${workspaceId}:${aiChatThreadId}:${generationRun.mediaRunId}`
             : `${workspaceId}:${aiChatThreadId}:image`
         const capabilityReferenceImages = state.capabilityReferenceImages ?? []
-        const sourceReferenceImages = state.referenceImages ?? []
+        const sourceReferenceImages = getImageSourceReferenceImages(state)
         const referenceImages = buildImageGenerationReferences({
             sourceReferenceImages,
             capabilityReferenceImages,
@@ -116,38 +146,106 @@ export class ImageRouter {
             warn(`[ImageRouter] No reference images attached for ${instanceKey}. If you expected the model to see workspace reference images, check the upstream extractReferenceImages() / messages payload.`)
         }
 
-        try {
+        const runProviderPass = async (args: {
+            passInstanceKey: string
+            passPrompt: string
+            passReferences: ImageGenerationReference[]
+            captureOnly: boolean
+        }): Promise<ProviderState> => {
             if (options.signal?.aborted) throw options.signal.reason ?? new DOMException('Aborted', 'AbortError')
-            const provider = this.registry.createTransient(instanceKey, imageProvider)
-            const stopForAbort = (): void => { void this.registry.stop(instanceKey) }
+            const provider = this.registry.createTransient(args.passInstanceKey, imageProvider)
+            const stopForAbort = (): void => { void this.registry.stop(args.passInstanceKey) }
             options.signal?.addEventListener('abort', stopForAbort, { once: true })
 
-            // Build a fresh request with the provider-neutral prompt and typed
-            // references. BaseProvider resolves every reference exactly once;
-            // each vendor adapter only serializes those resolved bytes.
-            // enableImageGeneration=true so the provider takes the image path
-            // and skips its own stream lifecycle.
-            const messages: ProviderState['messages'] = [{ role: 'user', content: imageModelPrompt }]
+            try {
+                return await provider.process({
+                    messages: [{ role: 'user', content: args.passPrompt }],
+                    aiModelMetaInfo: { ...imageMeta, modelVersion: imageModel },
+                    organizationId: state.eventMeta.organizationId,
+                    workspaceId,
+                    aiChatThreadId,
+                    enableImageGeneration: true,
+                    imageSize,
+                    imageGenerationReferences: args.passReferences,
+                    generationRun,
+                    eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
+                    proseMirrorContentHandler: options.onProseMirrorContent,
+                    proseMirrorSnapshotProvider: options.getProseMirrorSnapshot,
+                    captureOnlyImageGeneration: args.captureOnly,
+                    capabilityUsageMode: state.capabilityUsageMode,
+                    capabilityUsagePrompt: state.capabilityUsagePrompt,
+                })
+            } finally {
+                options.signal?.removeEventListener('abort', stopForAbort)
+                this.registry.remove?.(args.passInstanceKey)
+            }
+        }
 
-            const requestData = {
-                messages,
-                aiModelMetaInfo: { ...imageMeta, modelVersion: imageModel },
-                organizationId: state.eventMeta.organizationId,
-                workspaceId,
-                aiChatThreadId,
-                enableImageGeneration: true,
-                imageSize,
-                imageGenerationReferences: referenceImages,
-                generationRun,
-                eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
-                proseMirrorContentHandler: options.onProseMirrorContent,
-                proseMirrorSnapshotProvider: options.getProseMirrorSnapshot,
-                captureOnlyImageGeneration: options.captureOnly ?? false,
+        try {
+            let draftState: ProviderState | undefined
+            let finalState: ProviderState
+            const requiresFidelityPass = state.capabilityUsageMode === 'character-creator'
+                && sourceReferenceImages.length > 0
+
+            if (requiresFidelityPass) {
+                const draftInstanceKey = `${instanceKey}:layout-synthesis`
+                draftState = await runProviderPass({
+                    passInstanceKey: draftInstanceKey,
+                    passPrompt: imageModelPrompt,
+                    passReferences: referenceImages,
+                    captureOnly: true,
+                })
+                if (draftState.error) {
+                    err(`[ImageRouter] Character layout synthesis failed: ${draftState.error}`)
+                    return {
+                        error: draftState.error,
+                        errorCode: draftState.errorCode,
+                        errorType: draftState.errorType,
+                    }
+                }
+                const draftImage = draftState.generatedImages?.[0]
+                if (!draftImage) {
+                    const message = 'Character layout synthesis failed: provider completed without a generated image'
+                    err(`[ImageRouter] ${message}`)
+                    return { error: message }
+                }
+
+                const fidelityReferences: ImageGenerationReference[] = [
+                    {
+                        url: normalizeCapturedImage(draftImage),
+                        role: 'character-sheet-draft',
+                        fileName: 'character-sheet-draft',
+                    },
+                    ...sourceReferenceImages.map((url, index) => ({
+                        url,
+                        role: 'character-source' as const,
+                        fileName: `character-source-${index + 1}`,
+                    })),
+                ]
+                const fidelityPrompt = buildCharacterFidelityRestorationPrompt(sourceReferenceImages.length)
+                info(`[ImageRouter] Character fidelity restoration ${JSON.stringify({
+                    imageProvider,
+                    imageModel,
+                    imageSize,
+                    sourceReferenceCount: sourceReferenceImages.length,
+                    referenceRoles: fidelityReferences.map(reference => reference.role),
+                    promptLen: fidelityPrompt.length,
+                })}`)
+                finalState = await runProviderPass({
+                    passInstanceKey: instanceKey,
+                    passPrompt: fidelityPrompt,
+                    passReferences: fidelityReferences,
+                    captureOnly: options.captureOnly ?? false,
+                })
+            } else {
+                finalState = await runProviderPass({
+                    passInstanceKey: instanceKey,
+                    passPrompt: imageModelPrompt,
+                    passReferences: referenceImages,
+                    captureOnly: options.captureOnly ?? false,
+                })
             }
 
-            const finalState = await provider.process(requestData).finally(() => {
-                options.signal?.removeEventListener('abort', stopForAbort)
-            })
             if (finalState.error) {
                 err(`[ImageRouter] Image generation failed: ${finalState.error}`)
                 return {
@@ -165,19 +263,19 @@ export class ImageRouter {
             }
 
             info(`[ImageRouter] Completed successfully instanceKey=${instanceKey}`)
+            const generatedCount = (draftState?.imageUsage?.generatedCount ?? (draftState ? 1 : 0))
+                + (finalState.imageUsage?.generatedCount ?? generatedImages.length)
             return {
                 ...finalState,
                 generatedImages,
-                imageUsage: finalState.imageUsage ?? (generatedImages.length > 0
-                    ? { generatedCount: generatedImages.length, size: imageSize, quality: 'high' }
-                    : undefined),
+                imageUsage: generatedImages.length > 0
+                    ? { generatedCount, size: imageSize, quality: 'high' }
+                    : undefined,
             }
         } catch (e: any) {
             const message = e?.message ?? String(e)
             err(`[ImageRouter] Image generation failed: ${message}`)
             return { error: message }
-        } finally {
-            this.registry.remove?.(instanceKey)
         }
     }
 }

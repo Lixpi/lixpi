@@ -13,7 +13,13 @@ Preserve across every sheet cell:
 - body proportions, apparent age, and presentation;
 - garment layers, closures, seams, wear patterns, and color relationships;
 - accessories and mechanical or prosthetic construction;
-- material response and the requested illustration style.
+- material response and the requested illustration style;
+- facial construction: eye, eyebrow, nose, mouth, jaw, cheek, and ear shapes;
+- medium signature, line presence, line-weight variation, contour color, and interior linework;
+- edge behavior, mark morphology, wash or pigment behavior, shading method, and detail density;
+- substrate grain, paper or canvas texture, palette relationships, and contrast.
+
+The source medium must construct every repeated depiction, including faces, hair, garments, bodies, and props. Texture copied only onto the sheet background is a failure. Never clean up, beautify, photorealize, vectorize, smooth, airbrush, homogenize, modernize, or genericize the source rendering.
 
 When references conflict, prioritize the clearest view of the relevant detail. When a requested detail is absent from every reference, add the smallest plausible design choice consistent with the text request and repeat it identically in every view.
 

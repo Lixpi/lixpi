@@ -122,7 +122,7 @@ export function createCharacterCreatorActionDependencies(
             const result = await callStructuredVlm<CharacterSheetAssessment>({
                 provider: reasoningModel.provider as ProviderName,
                 modelVersion: reasoningModel.modelVersion,
-                systemPrompt: 'Inspect the supplied character sheet. Report every required layout and consistency check exactly through the schema.',
+                systemPrompt: 'Inspect the supplied character sheet against the complete attached-template contract: landscape canvas, five aligned full-body views, five head views, expression and feature panels, hands/feet/props panels, costume/palette/material/detail panels, six pose panels, anatomical guides, framing, labels, and identity consistency. Report every check exactly through the schema.',
                 userMessages: [{
                     role: 'user',
                     content: [
@@ -132,7 +132,7 @@ export function createCharacterCreatorActionDependencies(
                 }],
                 schema: {
                     name: 'character_sheet_assessment',
-                    description: 'Required views, framing, labels, and identity consistency.',
+                    description: 'Complete detailed-template layout, guides, panels, framing, labels, and identity consistency.',
                     schema: CHARACTER_SHEET_ASSESSMENT_JSON_SCHEMA,
                 },
                 natsService: options.natsService,

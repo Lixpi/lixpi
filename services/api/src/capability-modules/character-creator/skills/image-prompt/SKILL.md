@@ -11,9 +11,11 @@ Order the prompt as:
 
 1. State that the output is one professional character design sheet containing one repeated identity.
 2. Describe the character from stable identity traits to clothing construction, accessories, materials, and colors.
-3. State the exact fixed cell order and labels from the layout contract.
-4. State reference-fidelity requirements when reference Assets exist.
+3. State that the attached character-sheet template is the authoritative layout specification and enumerate every required turnaround, head, feature, notes, palette, material, detail, and pose section from the layout contract.
+4. State reference-fidelity requirements when reference Assets exist. Treat facial construction, medium signature, line quality, edge behavior, mark morphology, palette, shading, substrate grain, and surface texture as locked design evidence rather than optional style adjectives.
 5. State neutral lighting, background, view scale, and complete-body framing.
 6. End with explicit prohibitions against identity drift, outfit drift, missing views, cropped feet, extra characters, scenery, logos, and watermarks.
 
-Do not invent story beats, props, weapons, brands, text, or alternate costumes. Do not ask the image provider for separate outputs. The final prompt must repeatedly state that all views belong in one image.
+Do not invent story beats, weapons, brands, or alternate costumes. Props may appear only in the template's dedicated props panel when supported by the character request or source references. Do not ask the image provider for separate outputs. The final prompt must state that every required template section belongs in one landscape image and that a simplified seven-column turnaround is invalid.
+
+When a source image exists, the router performs a second bounded edit after layout synthesis. In that edit, the generated sheet is the locked composition target and the original source Assets are authoritative for character identity, construction, and rendering style. The edit may change only character pixels needed to restore fidelity; it must preserve the sheet's canvas, panels, labels, guides, notes, swatches, spacing, framing, poses, and view placement.

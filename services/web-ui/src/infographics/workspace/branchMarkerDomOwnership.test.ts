@@ -158,6 +158,25 @@ describe('branch marker DOM ownership — structural render', () => {
         expect(getMarkers(overlayEl, 'other-run')).toHaveLength(1)
     })
 
+    it('removes a completed preflight marker stranded in the viewport while retaining the planned marker', () => {
+        const viewportEl = document.createElement('div')
+        const stalePreflight = createMarker('pending-reasoning-0')
+        const plannedMarker = createMarker('branch-origin-request-1')
+        const concurrentMarker = createMarker('pending-other-run', 'conversation-2')
+        viewportEl.append(stalePreflight, plannedMarker, concurrentMarker)
+
+        const removedNodeIds = removeOrphanedBranchMarkerOverlayElements(
+            viewportEl,
+            new Set(['branch-origin-request-1', 'pending-other-run']),
+            'conversation-1',
+        )
+
+        expect(removedNodeIds).toEqual(['pending-reasoning-0'])
+        expect(getMarkers(viewportEl, 'pending-reasoning-0')).toHaveLength(0)
+        expect(getMarkers(viewportEl, 'branch-origin-request-1')).toEqual([plannedMarker])
+        expect(getMarkers(viewportEl, 'pending-other-run')).toEqual([concurrentMarker])
+    })
+
     it('hands an alias-lost overlay marker to one planned viewport marker', () => {
         const pendingMarker = createMarker('pending-single-model')
         pendingMarker.dataset.reasoningIndex = '0'

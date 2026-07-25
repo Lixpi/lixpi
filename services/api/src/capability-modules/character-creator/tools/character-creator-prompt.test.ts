@@ -10,13 +10,14 @@ import {
 function makeAssessment(overrides: Partial<CharacterSheetAssessment> = {}): CharacterSheetAssessment {
     return {
         isSingleImage: true,
-        hasPortrait: true,
-        hasFrontView: true,
-        hasLeftView: true,
-        hasRightView: true,
-        hasBackView: true,
-        hasThreeQuarterView: true,
-        hasWalkingPose: true,
+        isLandscape: true,
+        hasFiveFullBodyViews: true,
+        hasFiveHeadViews: true,
+        hasExpressionShapePanels: true,
+        hasHandsFeetAndPropsPanels: true,
+        hasCostumePaletteMaterialAndDetailPanels: true,
+        hasSixPosePanels: true,
+        hasAlignmentGuides: true,
         fullHeightViewsUncropped: true,
         identityConsistent: true,
         outfitConsistent: true,
@@ -30,15 +31,18 @@ describe('Character Creator prompt construction', () => {
     it('builds one deterministic prompt with reference fidelity only when references exist', () => {
         const prompt = buildCharacterCreatorImagePrompt({
             prompt: 'A desert courier with a rust-red scarf.',
-            layoutInstructions: 'PORTRAIT, FRONT, LEFT, RIGHT, BACK, 3/4, WALK.',
+            layoutInstructions: 'Use every section from the attached detailed landscape template.',
             referenceFidelityInstructions: 'Preserve identity from references.',
-            promptConstructionInstructions: 'Use fixed cell order.',
+            promptConstructionInstructions: 'Keep the complete template organization.',
             referenceCount: 2,
         })
 
         expect(prompt.includes('Create exactly one professional character design sheet')).toBe(true)
+        expect(prompt.includes('The attached character-sheet template image is the output-layout specification')).toBe(true)
+        expect(prompt.includes('Do not replace it with a simplified portrait-and-turnaround strip.')).toBe(true)
         expect(prompt.includes('REFERENCE ASSETS (2 authorized images)')).toBe(true)
         expect(prompt.includes('Preserve identity from references.')).toBe(true)
+        expect(prompt.includes('Every section from the attached template must be present')).toBe(true)
         expect(prompt.includes('Do not crop any full-height view.')).toBe(true)
     })
 
@@ -67,11 +71,11 @@ describe('Character Creator validation and correction', () => {
         expect(normalizeCharacterSheetAssessment(makeAssessment()).passed).toBe(true)
 
         const failed = normalizeCharacterSheetAssessment(makeAssessment({
-            hasBackView: false,
-            issues: [' Missing back view. ', ''],
+            hasFiveHeadViews: false,
+            issues: [' Missing head-turnaround row. ', ''],
         }))
         expect(failed.passed).toBe(false)
-        expect(failed.issues).toEqual(['Missing back view.'])
+        expect(failed.issues).toEqual(['Missing head-turnaround row.'])
     })
 
     it('rejects malformed assessment flags', () => {

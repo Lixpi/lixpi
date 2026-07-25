@@ -28,6 +28,74 @@ export const normalizeImageSize = (imageProvider: ProviderName | undefined, imag
     return imageSize
 }
 
+export const getImageSourceReferenceImages = (state: ProviderState): string[] => {
+    const selectedNodeIds = state.mediaBranchResolution?.referenceImageNodeIds ?? []
+    if (selectedNodeIds.length === 0) return state.referenceImages ?? []
+
+    const candidateByNodeId = new Map(
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map(candidate => [candidate.nodeId, candidate]),
+    )
+    return selectedNodeIds.map(nodeId => {
+        const imageUrl = candidateByNodeId.get(nodeId)?.imageUrl
+        if (!imageUrl) {
+            throw new Error(`IMAGE_GENERATION_SELECTED_REFERENCE_MISSING:${nodeId}`)
+        }
+        return imageUrl
+    })
+}
+
+const buildSelectedCharacterEvidence = (state: ProviderState): string | undefined => {
+    const selectedNodeIds = state.mediaBranchResolution?.referenceImageNodeIds ?? []
+    if (selectedNodeIds.length === 0) return undefined
+
+    const candidateByNodeId = new Map(
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map(candidate => [candidate.nodeId, candidate]),
+    )
+    const evidence = selectedNodeIds.flatMap((nodeId, index) => {
+        const candidate = candidateByNodeId.get(nodeId)
+        const identity = candidate?.visualEntitySummary?.trim()
+        const style = candidate?.visualStyleSummary?.trim()
+        if (!identity && !style) return []
+        return [
+            `Reference image ${index + 1}:`,
+            identity ? `- Character evidence: ${identity}` : undefined,
+            style ? `- Rendering evidence: ${style}` : undefined,
+        ].filter((line): line is string => typeof line === 'string').join('\n')
+    })
+    return evidence.length > 0 ? evidence.join('\n') : undefined
+}
+
+export const buildCharacterFidelityRestorationPrompt = (sourceReferenceCount: number): string => {
+    if (!Number.isInteger(sourceReferenceCount) || sourceReferenceCount < 1) {
+        throw new Error('CHARACTER_FIDELITY_SOURCE_REFERENCE_REQUIRED')
+    }
+    const sourceRange = sourceReferenceCount === 1 ? 'Image 2' : `Images 2-${sourceReferenceCount + 1}`
+
+    return [
+        'CHARACTER FIDELITY RESTORATION EDIT — CHANGE ONLY THE RENDERED CHARACTER APPEARANCE.',
+        '',
+        'IMAGE ROLES',
+        'Image 1 is the generated character-design sheet to edit. It is authoritative for the complete canvas, layout, panel geometry, alignment guides, labels, typography, notes, swatches, spacing, framing, poses, and view placement.',
+        `${sourceRange} ${sourceReferenceCount === 1 ? 'is' : 'are'} the authoritative source ${sourceReferenceCount === 1 ? 'image' : 'images'} for the character identity, design, and original rendering style.`,
+        '',
+        'LOCKED SHEET INVARIANTS',
+        'Preserve Image 1 at the same landscape dimensions and preserve every panel, divider, guide, label, note block, swatch, pose, view angle, figure scale, and full-body crop exactly. Do not simplify, rearrange, relabel, omit, add, or redesign any sheet element.',
+        'Keep the existing number and placement of character depictions. This is a bounded edit of those depictions, not a new sheet composition.',
+        '',
+        'AUTHORITATIVE CHARACTER INVARIANTS',
+        `Reconstruct every depiction in Image 1 from ${sourceRange}. Preserve the exact facial construction and proportions; eye, eyebrow, nose, mouth, jaw, cheek, and ear shapes; hair silhouette, curl or strand behavior, hairline, and color; skin tone; body proportions; clothing construction, seams, closures, folds, wear, and colors; accessories; materials; and distinguishing marks.`,
+        'Use one identical character design in every full-body view, head view, expression, feature panel, and pose. Change view angle or expression only where the locked sheet calls for it.',
+        '',
+        'AUTHORITATIVE RENDERING-STYLE INVARIANTS',
+        `Render every character depiction in the same visual medium as ${sourceRange}, matching its concrete medium signature, line presence and line-weight variation, contour color, interior linework, edge softness or hardness, brush or pencil mark morphology, wash behavior, pigment density, shading method, palette relationships, contrast, paper or canvas substrate, visible grain, surface texture, and detail density.`,
+        'The source medium must construct the character itself at every scale. Preserve source-specific marks on faces, hair, skin, garments, and props—not merely on the page background.',
+        'Do not clean up, beautify, photorealize, vectorize, smooth, sharpen, airbrush, homogenize, modernize, or reinterpret the source rendering. Do not replace distinctive facial construction or handmade texture with generic polished concept art or generic AI illustration.',
+        '',
+        'OUTPUT',
+        'Return the complete edited landscape sheet as one image. Keep everything from Image 1 unchanged except the minimum character pixels required to restore the exact identity, design, and rendering style from the authoritative source images.',
+    ].join('\n')
+}
+
 export const buildImageModelPrompt = (state: ProviderState): string => {
     const prompt = state.generatedImagePrompt ?? ''
     const capabilityReferenceImages = state.capabilityReferenceImages ?? []
@@ -37,15 +105,16 @@ export const buildImageModelPrompt = (state: ProviderState): string => {
     if (!hasCapabilityReferences && !capabilityUsagePrompt) return prompt
 
     if (state.capabilityUsageMode === 'character-creator') {
-        const sourceReferenceCount = state.referenceImages?.length ?? 0
+        const sourceReferenceCount = getImageSourceReferenceImages(state).length
         const capabilityReferenceCount = capabilityReferenceImages.length
         const hasSourceReferences = sourceReferenceCount > 0
+        const selectedCharacterEvidence = buildSelectedCharacterEvidence(state)
         const originalCharacterRequest = state.mediaBranchCandidateSnapshot?.promptText?.trim()
             || state.mediaBranchLineagePlan?.promptText?.trim()
             || prompt
         return [
             'MANDATORY CHARACTER CREATOR GENERATION:',
-            'Generate the requested character as one coherent multi-view character sheet using the fixed textual layout contract below.',
+            'Generate the requested character as one coherent design sheet using the attached authoritative template and its matching textual contract below.',
             capabilityUsagePrompt ? `CHARACTER CREATOR BRIEF:\n${capabilityUsagePrompt}` : undefined,
             'USER CHARACTER REQUEST:',
             originalCharacterRequest,
@@ -54,10 +123,19 @@ export const buildImageModelPrompt = (state: ProviderState): string => {
                     'REFERENCE FIDELITY OVERRIDE — HIGHEST PRIORITY:',
                     `Reference image${sourceReferenceCount === 1 ? '' : 's'} 1${sourceReferenceCount === 1 ? '' : `-${sourceReferenceCount}`} depict${sourceReferenceCount === 1 ? 's' : ''} the authoritative character to reproduce, not merely a style reference and not a request to invent a different person.`,
                     'Preserve the same apparent identity, face, hair style and color, skin tone, body proportions, clothing construction and colors, accessories, materials, and illustration style across every view.',
+                    'Preserve the source medium itself: facial construction, line presence and weight variation, contour color, interior linework, edge behavior, brush or pencil marks, wash behavior, pigment density, shading method, palette relationships, substrate grain, surface texture, and detail density.',
+                    'The source medium must construct every face, garment, body, and prop. Do not preserve texture only in the background while replacing the character with smooth generic digital concept art.',
+                    'Do not clean up, beautify, photorealize, vectorize, smooth, airbrush, homogenize, modernize, or genericize the source character or its rendering style.',
                     'Do not change the character identity, gender presentation, hair, outfit, or palette unless the original user request above explicitly asks for that exact change.',
                     'Ignore any conflicting character changes invented by an intermediate reasoning prompt.',
+                    selectedCharacterEvidence ? `SELECTED REFERENCE EVIDENCE:\n${selectedCharacterEvidence}` : '',
                     capabilityReferenceCount > 0
-                        ? `The final ${capabilityReferenceCount} attached image${capabilityReferenceCount === 1 ? '' : 's'} ${capabilityReferenceCount === 1 ? 'is' : 'are'} a CHARACTER SHEET LAYOUT EXAMPLE ONLY. Copy its sheet organization and view coverage, but never copy or blend its depicted character identity, face, hair, clothing, colors, or body.`
+                        ? [
+                            `The final ${capabilityReferenceCount} attached image${capabilityReferenceCount === 1 ? '' : 's'} ${capabilityReferenceCount === 1 ? 'is' : 'are'} the AUTHORITATIVE CHARACTER-SHEET OUTPUT TEMPLATE, not character-appearance inspiration.`,
+                            'Reproduce the complete landscape template organization: five aligned full-body turnaround views; five head-turnaround views; expression, mouth, eye, hands, feet, and props panels; costume notes, color palette, material notes, and distinguishing-details panels; six pose silhouettes; anatomical alignment guides; and technical labels.',
+                            'Populate every template section with the authoritative source character. Preserve the template geometry and view coverage while never copying or blending character identity, face, hair, clothing, colors, or body from the template.',
+                            'A simplified portrait/front/left/right/back/3/4/walk strip is invalid and must not replace the attached template.',
+                        ].join('\n')
                         : '',
                 ].join('\n')
                 : undefined,

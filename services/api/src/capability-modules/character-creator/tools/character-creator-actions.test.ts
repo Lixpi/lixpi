@@ -17,13 +17,14 @@ import {
 function makeAssessment(overrides: Partial<CharacterSheetAssessment> = {}) {
     return normalizeCharacterSheetAssessment({
         isSingleImage: true,
-        hasPortrait: true,
-        hasFrontView: true,
-        hasLeftView: true,
-        hasRightView: true,
-        hasBackView: true,
-        hasThreeQuarterView: true,
-        hasWalkingPose: true,
+        isLandscape: true,
+        hasFiveFullBodyViews: true,
+        hasFiveHeadViews: true,
+        hasExpressionShapePanels: true,
+        hasHandsFeetAndPropsPanels: true,
+        hasCostumePaletteMaterialAndDetailPanels: true,
+        hasSixPosePanels: true,
+        hasAlignmentGuides: true,
         fullHeightViewsUncropped: true,
         identityConsistent: true,
         outfitConsistent: true,
@@ -135,7 +136,7 @@ describe('Character Creator registered actions', () => {
         const output = await registry.get('character.build-prompt').execute({
             prompt: 'Create a character sheet from the attached portrait.',
             referenceAssetIds: ['asset-a'],
-            layout: { bytes: new TextEncoder().encode('PORTRAIT, FRONT, LEFT, RIGHT, BACK, 3/4, WALK') },
+            layout: { bytes: new TextEncoder().encode('Use every section from the attached detailed landscape template.') },
             referenceFidelity: { bytes: new TextEncoder().encode('Preserve the referenced identity and design.') },
             promptInstructions: { bytes: new TextEncoder().encode('Use one coherent sheet.') },
             oneShotExample: { bytes: new Uint8Array([1, 2, 3]) },
@@ -147,6 +148,7 @@ describe('Character Creator registered actions', () => {
         expect(output.referenceImageTraceUrls).toEqual([
             `/api/capabilities/${encodeURIComponent(CHARACTER_CREATOR_CAPABILITY_IDS.tool)}/resources/character-sheet-example?manifestBlobHash=manifest-hash`,
         ])
+        expect(output.visualInstructions).toContain('The attached character-sheet template image is the output-layout specification')
         expect(output.visualInstructions).toContain('Preserve the referenced identity and design.')
     })
 
@@ -186,7 +188,7 @@ describe('Character Creator final candidate selection', () => {
     it('uses one passing correction', () => {
         const original = { image: { candidate: 'original' } }
         const correction = { image: { candidate: 'correction' } }
-        const failed = makeAssessment({ hasBackView: false, issues: ['Missing back view'] })
+        const failed = makeAssessment({ hasFiveFullBodyViews: false, issues: ['Missing full-body turnaround row'] })
         const passed = makeAssessment()
 
         expect(selectFinalCharacterSheet({
@@ -205,13 +207,13 @@ describe('Character Creator final candidate selection', () => {
         const original = { image: { candidate: 'original' } }
         const correction = { image: { candidate: 'correction' } }
         const originalValidation = makeAssessment({
-            hasBackView: false,
-            issues: ['Missing back view'],
+            hasFiveFullBodyViews: false,
+            issues: ['Missing full-body turnaround row'],
         })
         const correctionValidation = makeAssessment({
-            hasBackView: false,
-            hasWalkingPose: false,
-            issues: ['Missing back view', 'Missing walking pose'],
+            hasFiveFullBodyViews: false,
+            hasSixPosePanels: false,
+            issues: ['Missing full-body turnaround row', 'Missing pose panels'],
         })
 
         expect(selectFinalCharacterSheet({

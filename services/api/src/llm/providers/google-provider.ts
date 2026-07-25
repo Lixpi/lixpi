@@ -31,6 +31,7 @@ import {
     shouldExposeCapabilityModelTools,
 } from '../../capability-system/capability-model-tool-executor.ts'
 import { asGoogleTool } from '@lixpi/capability-system/backend'
+import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -60,6 +61,25 @@ export const getGoogleImageResponseSummary = (response: any): Record<string, unk
 
 export function buildVeoReferenceImages(refs: VeoImageInput[]): Array<{ image: VeoImageInput; referenceType: 'asset' }> {
     return refs.map(image => ({ image, referenceType: 'asset' }))
+}
+
+const buildGoogleImageReferenceLabel = (
+    reference: ResolvedImageGenerationReference,
+    index: number,
+): string => {
+    const prefix = `REFERENCE IMAGE ${index + 1}`
+    switch (reference.role) {
+        case 'character-sheet-draft':
+            return `${prefix} — GENERATED SHEET TO EDIT. Preserve its exact layout, panels, labels, guides, and composition.`
+        case 'character-source':
+            return `${prefix} — AUTHORITATIVE CHARACTER SOURCE. Preserve its identity, design, facial construction, and rendering style.`
+        case 'character-layout-example':
+            return `${prefix} — AUTHORITATIVE LAYOUT TEMPLATE. Use its organization only; never copy its depicted character.`
+        case 'capability-reference':
+            return `${prefix} — CAPABILITY REFERENCE.`
+        case 'source-reference':
+            return `${prefix} — SOURCE REFERENCE.`
+    }
 }
 
 export class GoogleProvider extends BaseProvider {
@@ -131,12 +151,15 @@ export class GoogleProvider extends BaseProvider {
             const parts = Array.isArray(targetUserContent.parts) ? targetUserContent.parts : []
             targetUserContent.parts = [
                 ...parts,
-                ...resolvedImageGenerationReferences.map(reference => ({
-                    inlineData: {
-                        mimeType: reference.mediaType,
-                        data: reference.bytes.toString('base64'),
+                ...resolvedImageGenerationReferences.flatMap((reference, index) => [
+                    { text: buildGoogleImageReferenceLabel(reference, index) },
+                    {
+                        inlineData: {
+                            mimeType: reference.mediaType,
+                            data: reference.bytes.toString('base64'),
+                        },
                     },
-                })),
+                ]),
             ]
         }
 

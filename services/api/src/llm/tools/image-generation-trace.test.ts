@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+    buildCharacterFidelityRestorationPrompt,
     buildImageGenerationTrace,
     buildImageModelPrompt,
     normalizeImageSize,
@@ -141,11 +142,36 @@ describe('buildImageModelPrompt', () => {
 
         expect(prompt).toContain('Reference image 1 depicts the authoritative character to reproduce')
         expect(prompt).toContain('Preserve the same apparent identity, face, hair style and color')
-        expect(prompt).toContain('CHARACTER SHEET LAYOUT EXAMPLE ONLY')
+        expect(prompt).toContain('line presence and weight variation')
+        expect(prompt).toContain('Do not clean up, beautify, photorealize, vectorize, smooth')
+        expect(prompt).toContain('Character evidence: expressive painted portrait of the man')
+        expect(prompt).toContain('AUTHORITATIVE CHARACTER-SHEET OUTPUT TEMPLATE')
+        expect(prompt).toContain('five aligned full-body turnaround views')
+        expect(prompt).toContain('expression, mouth, eye, hands, feet, and props panels')
+        expect(prompt).toContain('A simplified portrait/front/left/right/back/3/4/walk strip is invalid')
         expect(prompt).toContain('Create a character sheet from the selected character.')
         expect(prompt).not.toContain('Invent a blonde character in green clothing.')
         expect(prompt).not.toContain('capability reference image')
         expect(prompt).not.toContain('example character')
+    })
+})
+
+describe('buildCharacterFidelityRestorationPrompt', () => {
+    it('locks the generated layout while restoring concrete identity and rendering-style invariants', () => {
+        const prompt = buildCharacterFidelityRestorationPrompt(2)
+
+        expect(prompt).toContain('Image 1 is the generated character-design sheet to edit')
+        expect(prompt).toContain('Images 2-3 are the authoritative source images')
+        expect(prompt).toContain('preserve every panel, divider, guide, label')
+        expect(prompt).toContain('exact facial construction and proportions')
+        expect(prompt).toContain('line presence and line-weight variation')
+        expect(prompt).toContain('visible grain, surface texture')
+        expect(prompt).toContain('generic polished concept art or generic AI illustration')
+    })
+
+    it('requires at least one authoritative source image', () => {
+        expect(() => buildCharacterFidelityRestorationPrompt(0))
+            .toThrow('CHARACTER_FIDELITY_SOURCE_REFERENCE_REQUIRED')
     })
 })
 

@@ -5,20 +5,18 @@ description: Fixed multi-view layout and composition instructions for one-image 
 
 # Character Sheet Layout
 
-Produce exactly one landscape character-sheet image on a plain neutral background.
+Produce exactly one detailed landscape character-design sheet. The attached `character-sheet-example.jpg` is the authoritative output-layout specification. Populate its placeholders with the requested character while preserving its complete organization, view coverage, alignment system, panel hierarchy, and labels.
 
-Use this fixed reading order:
+The template controls layout. Character-source references control identity, outfit, materials, colors, and rendering style. Never copy character appearance from the template or replace the template with a simplified turnaround strip.
 
-1. Close portrait.
-2. Front full-height neutral stance.
-3. Left profile full-height.
-4. Right profile full-height.
-5. Back full-height.
-6. Three-quarter full-height neutral pose.
-7. Full-height walking pose.
+Preserve all template sections:
 
-Keep every full-height cell at the same scale. Show the complete head, hands, clothing silhouette, and both feet with clear padding. Separate cells with a quiet grid and place one short uppercase label beneath each cell: `PORTRAIT`, `FRONT`, `LEFT`, `RIGHT`, `BACK`, `3/4`, and `WALK`.
+1. A top full-body turnaround row containing `Front`, `3/4 Front Left`, `Side Left`, `3/4 Back Left`, and `Back` views, with the template's instruction to mirror the left-side construction for right-side views. Keep all five figures at the same scale and aligned to the shared top-of-head, face, torso, hip, knee, ankle, and ground guides.
+2. A head-turnaround row containing `Front`, `3/4 Left`, `Profile Left`, `3/4 Back`, and `Back` views.
+3. Expression and construction panels for mouth shapes, eye shapes, hands, feet, and props.
+4. Design-documentation panels for costume notes, color-palette swatches, material notes, and distinguishing details.
+5. A pose-silhouette row containing relaxed standing, walking, seated, crouched, reach, and action silhouettes.
 
-Use neutral studio lighting and an orthographic-feeling camera for turnaround views. The three-quarter and walking cells may show natural depth, but must not change body proportions.
+Retain the template's clear section boundaries, dashed anatomical alignment guides, plain neutral background, and compact technical-sheet presentation. Use neutral lighting and orthographic-feeling turnaround views. Show complete heads, hands, clothing silhouettes, and feet without cropping.
 
-Do not add scenery, alternate outfits, extra characters, weapons, decorative frames, logos, watermarks, or additional panels. Do not crop full-height views. Do not replace a required view with an action pose.
+Do not omit template sections, invent a different grid, collapse the sheet to portrait plus turnaround columns, add scenery, introduce alternate outfits or extra characters, or add logos and watermarks.

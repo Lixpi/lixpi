@@ -6,7 +6,10 @@ import type {
     BranchOriginCanvasNode,
 } from '@lixpi/constants'
 import { describe, expect, it } from 'vitest'
-import { resolveBranchMarkerRenderOwnership } from './branchMarkerRenderOwnership.ts'
+import {
+    resolveBranchMarkerRenderOwnership,
+    resolvePreflightBranchMarkerScreenOwnership,
+} from './branchMarkerRenderOwnership.ts'
 
 type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 
@@ -115,5 +118,25 @@ describe('branch marker structural render ownership', () => {
         const ownership = resolveBranchMarkerRenderOwnership(nodes, new Set(['planned-2']))
 
         expect(ownership.suppressedNodeIds.size).toBe(0)
+    })
+})
+
+describe('branch marker screen-fixed ownership', () => {
+    it('does not reserve composer stack space for a superseded preflight marker from an older thread', () => {
+        const stalePreflight = makePreflight('stale-preflight', 'old-thread')
+        const startedPlanned = makePlannedOrigin('started-planned', 'old-thread')
+        const currentPreflight = makePreflight('current-preflight', 'current-thread')
+
+        const ownership = resolvePreflightBranchMarkerScreenOwnership(
+            [stalePreflight, startedPlanned, currentPreflight],
+            new Set([startedPlanned.nodeId]),
+        )
+
+        expect(ownership.visiblePreflightNodes.map(node => node.nodeId)).toEqual([
+            currentPreflight.nodeId,
+        ])
+        expect([...ownership.supersededPreflightNodeIds]).toEqual([
+            stalePreflight.nodeId,
+        ])
     })
 })

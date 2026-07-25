@@ -1,7 +1,7 @@
 'use strict'
 
 import * as process from 'process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 
 import { info, warn, err } from '@lixpi/debug-tools'
@@ -19,9 +19,12 @@ const MODEL_ENDPOINT_MAP: Record<string, string> = {
 
 const SD3_MODELS = new Set(['sd3.5-large'])
 const STYLE_CONTROL_ENDPOINT = '/v2beta/stable-image/control/style'
+const STRUCTURE_CONTROL_ENDPOINT = '/v2beta/stable-image/control/structure'
 const STYLE_TRANSFER_ENDPOINT = '/v2beta/stable-image/control/style-transfer'
 const STYLE_CONTROL_FIDELITY = 0.7
+const STRUCTURE_CONTROL_STRENGTH = 0.9
 const MAX_STABILITY_REFERENCE_PIXELS = 9_437_184
+const STABILITY_REFERENCE_TILE_SIZE = 768
 
 const resizeReferenceForStability = async (
     ref: ResolvedImageGenerationReference,
@@ -73,6 +76,54 @@ const resizeReferenceForStability = async (
     } catch (e) {
         warn(`${logPrefix} Failed to resize ${label} reference image for Stability: ${e}`)
         return ref
+    }
+}
+
+const composeCharacterSourceReferences = async (
+    references: ResolvedImageGenerationReference[],
+    logPrefix: string,
+): Promise<ResolvedImageGenerationReference | undefined> => {
+    if (references.length === 0) return undefined
+    if (references.length === 1) return references[0]
+
+    const columns = Math.ceil(Math.sqrt(references.length))
+    const rows = Math.ceil(references.length / columns)
+    const tiles = await Promise.all(references.map(async (reference, index) => ({
+        input: await sharp(reference.bytes)
+            .resize({
+                width: STABILITY_REFERENCE_TILE_SIZE,
+                height: STABILITY_REFERENCE_TILE_SIZE,
+                fit: 'contain',
+                background: '#ffffff',
+            })
+            .png()
+            .toBuffer(),
+        left: (index % columns) * STABILITY_REFERENCE_TILE_SIZE,
+        top: Math.floor(index / columns) * STABILITY_REFERENCE_TILE_SIZE,
+    })))
+    const bytes = await sharp({
+        create: {
+            width: columns * STABILITY_REFERENCE_TILE_SIZE,
+            height: rows * STABILITY_REFERENCE_TILE_SIZE,
+            channels: 3,
+            background: '#ffffff',
+        },
+    })
+        .composite(tiles)
+        .png()
+        .toBuffer()
+    const sha256 = createHash('sha256').update(bytes).digest('hex')
+
+    info(`${logPrefix} Composed ${references.length} authoritative character sources into one style-evidence board sha256=${sha256}`)
+    return {
+        url: `data:image/png;base64,${bytes.toString('base64')}`,
+        role: 'character-source',
+        fileName: 'character-source-composite.png',
+        bytes,
+        dataUrl: `data:image/png;base64,${bytes.toString('base64')}`,
+        mediaType: 'image/png',
+        byteLength: bytes.byteLength,
+        sha256,
     }
 }
 
@@ -138,24 +189,39 @@ export class StabilityProvider extends BaseProvider {
             sha256: reference.sha256,
         })))}`)
 
+        const logPrefix = `[Stability:${this.instanceKey}]`
+        const characterLayoutRef = allRefs.find(reference => reference.role === 'character-layout-example')
+        const characterDraftRef = allRefs.find(reference => reference.role === 'character-sheet-draft')
+        const characterSourceRefs = allRefs.filter(reference => reference.role === 'character-source')
+        let routingMode: 'generate' | 'style-control' | 'structure-control' | 'style-transfer' = 'generate'
         let primaryRef: ResolvedImageGenerationReference | undefined
         let styleRef: ResolvedImageGenerationReference | undefined
-        if (allRefs.length >= 2) {
-            primaryRef = allRefs.find(reference => reference.role === 'character-source')
-            styleRef = allRefs.find(reference => reference.role === 'character-layout-example')
-            if (!primaryRef || !styleRef) {
-                allRefs.sort((a, b) => b.bytes.length - a.bytes.length)
-                primaryRef = allRefs[0]
-                styleRef = allRefs[1]
+
+        if (characterLayoutRef) {
+            routingMode = 'structure-control'
+            primaryRef = characterLayoutRef
+            if (characterSourceRefs.length > 0) {
+                info(`${logPrefix} Character sources are reserved for the fidelity-restoration pass; the layout-synthesis pass uses the packaged template as structural control`)
             }
+        } else if (characterDraftRef && characterSourceRefs.length > 0) {
+            routingMode = 'style-transfer'
+            primaryRef = characterDraftRef
+            styleRef = await composeCharacterSourceReferences(characterSourceRefs, logPrefix)
+        } else if (allRefs.length >= 2) {
+            routingMode = 'style-transfer'
+            allRefs.sort((a, b) => b.bytes.length - a.bytes.length)
+            primaryRef = allRefs[0]
+            styleRef = allRefs[1]
             if (allRefs.length > 2) {
-                warn(`[Stability:${this.instanceKey}] ${allRefs.length - 2} extra references skipped`)
+                warn(`${logPrefix} ${allRefs.length - 2} extra non-character references skipped`)
             }
         } else if (allRefs.length === 1) {
+            routingMode = allRefs[0]?.role === 'character-layout-example'
+                ? 'structure-control'
+                : 'style-control'
             primaryRef = allRefs[0]
         }
 
-        const logPrefix = `[Stability:${this.instanceKey}]`
         if (primaryRef) {
             primaryRef = await resizeReferenceForStability(primaryRef, logPrefix, 'primary')
         }
@@ -171,7 +237,7 @@ export class StabilityProvider extends BaseProvider {
         formData.set('output_format', 'png')
 
         let endpoint: string
-        if (primaryRef && styleRef) {
+        if (routingMode === 'style-transfer' && primaryRef && styleRef) {
             endpoint = STYLE_TRANSFER_ENDPOINT
             const initExt = primaryRef.mediaType.split('/')[1] ?? 'png'
             const styleExt = styleRef.mediaType.split('/')[1] ?? 'png'
@@ -179,7 +245,15 @@ export class StabilityProvider extends BaseProvider {
             const styleBlob = new Blob([new Uint8Array(styleRef.bytes)], { type: styleRef.mediaType })
             formData.set('init_image', initBlob, `init.${initExt}`)
             formData.set('style_image', styleBlob, `style.${styleExt}`)
-        } else if (primaryRef) {
+            formData.set('style_strength', '1')
+        } else if (routingMode === 'structure-control' && primaryRef) {
+            endpoint = STRUCTURE_CONTROL_ENDPOINT
+            formData.set('aspect_ratio', aspectRatio)
+            formData.set('control_strength', String(STRUCTURE_CONTROL_STRENGTH))
+            const refExt = primaryRef.mediaType.split('/')[1] ?? 'png'
+            const refBlob = new Blob([new Uint8Array(primaryRef.bytes)], { type: primaryRef.mediaType })
+            formData.set('image', refBlob, `structure.${refExt}`)
+        } else if (routingMode === 'style-control' && primaryRef) {
             endpoint = STYLE_CONTROL_ENDPOINT
             formData.set('aspect_ratio', aspectRatio)
             formData.set('fidelity', String(STYLE_CONTROL_FIDELITY))
@@ -196,7 +270,7 @@ export class StabilityProvider extends BaseProvider {
 
         info(
             `[Stability:${this.instanceKey}] API request endpoint=${endpoint} model=${modelVersion} ` +
-            `aspect=${aspectRatio} refs=${allRefs.length} promptLen=${prompt.length}`,
+            `aspect=${aspectRatio} refs=${allRefs.length} mode=${routingMode} promptLen=${prompt.length}`,
         )
 
         const response = await fetch(`https://api.stability.ai${endpoint}`, {

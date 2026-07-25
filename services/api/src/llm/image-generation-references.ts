@@ -9,6 +9,7 @@ import { parseDataUrl, resolveImageUrls } from './utils/attachments.ts'
 export type ImageGenerationReferenceRole =
     | 'character-source'
     | 'character-layout-example'
+    | 'character-sheet-draft'
     | 'capability-reference'
     | 'source-reference'
 

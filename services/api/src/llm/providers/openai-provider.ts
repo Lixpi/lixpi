@@ -56,6 +56,15 @@ export const buildOpenAIImageReferenceFiles = async (
     sha256: reference.sha256,
 })))
 
+const supportsConfigurableImageInputFidelity = (modelVersion: string): boolean => {
+    if (modelVersion.startsWith('gpt-image-2')) return false
+    if (modelVersion.startsWith('gpt-image-1-mini')) return false
+    return modelVersion === 'gpt-image-1'
+        || modelVersion.startsWith('gpt-image-1-')
+        || modelVersion === 'gpt-image-1.5'
+        || modelVersion.startsWith('gpt-image-1.5-')
+}
+
 export class OpenAIProvider extends BaseProvider {
     readonly providerName: ProviderName = 'OpenAI'
     private readonly client: OpenAI
@@ -474,11 +483,15 @@ export class OpenAIProvider extends BaseProvider {
         if (!prompt) throw new Error('No user prompt found for image generation')
 
         const hasReferences = referenceFiles.length > 0
+        const inputFidelity = supportsConfigurableImageInputFidelity(args.modelVersion)
+            ? 'high'
+            : undefined
         info(`[OpenAI:${this.instanceKey}] image SDK call ${JSON.stringify({
             api: hasReferences ? 'images.edit' : 'images.generate',
             model: args.modelVersion,
             size: args.imageSize,
             quality: 'high',
+            inputFidelity: inputFidelity ?? (args.modelVersion.startsWith('gpt-image-2') ? 'automatic-high' : 'provider-default'),
             partialImages: 3,
             referenceFiles: referenceFiles.length,
             referenceFileNames: referenceFiles.map(r => r.name),
@@ -506,6 +519,7 @@ export class OpenAIProvider extends BaseProvider {
                     : referenceFiles[0]!.file,
                 prompt,
                 quality: 'high',
+                ...(inputFidelity ? { input_fidelity: inputFidelity } : {}),
                 size: resolvedSize,
                 stream: true,
                 partial_images: 3,

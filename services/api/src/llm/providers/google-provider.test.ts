@@ -362,7 +362,13 @@ describe('GoogleProvider internals', () => {
                 role: 'user',
                 parts: [
                     { text: 'show me a dog' },
+                    {
+                        text: 'REFERENCE IMAGE 1 — AUTHORITATIVE CHARACTER SOURCE. Preserve its identity, design, facial construction, and rendering style.',
+                    },
                     { inlineData: { mimeType: 'image/jpeg', data: sourceBytes.toString('base64') } },
+                    {
+                        text: 'REFERENCE IMAGE 2 — AUTHORITATIVE LAYOUT TEMPLATE. Use its organization only; never copy its depicted character.',
+                    },
                     { inlineData: { mimeType: 'image/png', data: layoutBytes.toString('base64') } },
                 ],
             }],

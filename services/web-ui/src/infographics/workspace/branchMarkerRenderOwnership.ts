@@ -13,6 +13,11 @@ export type BranchMarkerRenderOwnership = {
     visibleOwnerBySuppressedNodeId: Map<string, string>
 }
 
+export type PreflightBranchMarkerScreenOwnership = {
+    visiblePreflightNodes: BranchMarkerNode[]
+    supersededPreflightNodeIds: Set<string>
+}
+
 function getReasoningIndex(node: BranchMarkerNode): number | undefined {
     if (node.pendingState?.reasoningIndex != null) return node.pendingState.reasoningIndex
     if (node.type === 'branchFork' || node.type === 'branchLine') return node.reasoningIndex
@@ -79,4 +84,21 @@ export function resolveBranchMarkerRenderOwnership(
     }
 
     return { suppressedNodeIds, visibleOwnerBySuppressedNodeId }
+}
+
+export function resolvePreflightBranchMarkerScreenOwnership(
+    nodes: BranchMarkerNode[],
+    startedPlannedNodeIds: ReadonlySet<string>,
+): PreflightBranchMarkerScreenOwnership {
+    const ownership = resolveBranchMarkerRenderOwnership(nodes, startedPlannedNodeIds)
+    const preflightNodes = nodes.filter(node => node.pendingState?.phase === 'preflight')
+    const supersededPreflightNodeIds = new Set(
+        preflightNodes
+            .filter(node => ownership.suppressedNodeIds.has(node.nodeId))
+            .map(node => node.nodeId),
+    )
+    return {
+        visiblePreflightNodes: preflightNodes.filter(node => !supersededPreflightNodeIds.has(node.nodeId)),
+        supersededPreflightNodeIds,
+    }
 }

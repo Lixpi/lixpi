@@ -514,6 +514,26 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectExcerptNotToContain(completeHandler, 'imgEl.src', 'complete image handler')
 	})
 
+	it('arms the final original rendition before completion can release the transient frame', () => {
+		const completeStart = ts.indexOf('onImageCompleteToCanvas:')
+		const callbackEnd = ts.indexOf('onVideoPendingToCanvas:', completeStart)
+		expect(completeStart).toBeGreaterThan(-1)
+		expect(callbackEnd).toBeGreaterThan(completeStart)
+
+		const completeHandler = ts.slice(completeStart, callbackEnd)
+		const handoffIndex = completeHandler.indexOf('prepareGeneratedImageCompletionTextureHandoff(')
+		const missingGeometryBranchIndex = completeHandler.indexOf('if (!data.canvasGeometry)')
+		const transientReleaseIndex = completeHandler.lastIndexOf('pixiMediaLayer?.setTransientImageSource(pendingNodeId, null)')
+		const geometryApplyIndex = completeHandler.indexOf('applyApiCanvasGeometry(data.canvasGeometry)')
+
+		expect(handoffIndex).toBeGreaterThan(-1)
+		expect(missingGeometryBranchIndex).toBeGreaterThan(handoffIndex)
+		expect(completeHandler.slice(0, missingGeometryBranchIndex)).not.toContain('setTransientImageSource(')
+		expect(transientReleaseIndex).toBeGreaterThan(handoffIndex)
+		expect(geometryApplyIndex).toBeGreaterThan(handoffIndex)
+		expect(transientReleaseIndex).toBeGreaterThan(geometryApplyIndex)
+	})
+
 	it('shows review and regeneration controls only for AI-generated media', () => {
 		const acceptStart = ts.indexOf('function createMediaAcceptButton')
 		const regenerateStart = ts.indexOf('function createMediaRegenerationControls', acceptStart)
@@ -1208,14 +1228,14 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expect(resolveIndex).toBeGreaterThan(insertIndex)
 	})
 
-	it('persists branch marker planning and pending-state clearing instead of using transient canvas commits', () => {
+	it('keeps branch marker planning and pending-state clearing transient so they cannot overwrite API-owned media membership', () => {
 		const resolveBody = extractFunctionBody(ts, 'resolvePendingBranchMarkerWithLineagePlan')
 		const clearBody = extractFunctionBody(ts, 'clearPendingBranchMarkerStateForRun')
 
-		expectExcerptToContain(resolveBody, 'commitCanvasStatePreservingEditors({', 'pending marker promotion')
-		expectExcerptNotToContain(resolveBody, 'commitTransientCanvasStatePreservingEditors', 'pending marker promotion')
-		expectExcerptToContain(clearBody, 'commitCanvasStatePreservingEditors({', 'pending marker clearing')
-		expectExcerptNotToContain(clearBody, 'commitTransientCanvasStatePreservingEditors', 'pending marker clearing')
+		expectExcerptToContain(resolveBody, 'commitTransientCanvasStatePreservingEditors({', 'pending marker promotion')
+		expectExcerptNotToContain(resolveBody, 'commitCanvasStatePreservingEditors({', 'pending marker promotion')
+		expectExcerptToContain(clearBody, 'commitTransientCanvasStatePreservingEditors({', 'pending marker clearing')
+		expectExcerptNotToContain(clearBody, 'commitCanvasStatePreservingEditors({', 'pending marker clearing')
 	})
 
 	it('allows branch marker details once generated media has taken over stale pending state', () => {
