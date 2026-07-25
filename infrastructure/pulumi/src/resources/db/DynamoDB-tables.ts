@@ -121,33 +121,23 @@ export const getTableDefinitions = () => ({
         'provider',
         'model',
     ),
-    featuresTable: table(
-        'FEATURES',
-        [{ name: 'featureId', type: 'S' }, { name: 'version', type: 'N' }],
-        'featureId',
-        'version',
-    ),
-    featuresMetaTable: table(
-        'FEATURES_META',
-        [{ name: 'scopeAndOwner', type: 'S' }, { name: 'featureId', type: 'S' }],
+    capabilitiesTable: table('CAPABILITIES', [{ name: 'capabilityId', type: 'S' }], 'capabilityId'),
+    capabilitiesMetaTable: table(
+        'CAPABILITIES_META',
+        [{ name: 'scopeAndOwner', type: 'S' }, { name: 'searchKey', type: 'S' }],
         'scopeAndOwner',
-        'featureId',
+        'searchKey',
     ),
-    featuresAccessListTable: table(
-        'FEATURES_ACCESS_LIST',
-        [
-            { name: 'userId', type: 'S' },
-            { name: 'featureId', type: 'S' },
-            { name: 'createdAt', type: 'N' },
-        ],
-        'userId',
-        'featureId',
-        [{ name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' }],
+    capabilitiesAccessListTable: table(
+        'CAPABILITIES_ACCESS_LIST',
+        [{ name: 'capabilityId', type: 'S' }, { name: 'principalId', type: 'S' }],
+        'capabilityId',
+        'principalId',
     ),
-    extractionRunsTable: table(
-        'EXTRACTION_RUNS',
-        [{ name: 'extractionRunId', type: 'S' }, { name: 'workspaceId', type: 'S' }],
-        'extractionRunId',
+    capabilityRunsTable: table(
+        'CAPABILITY_RUNS',
+        [{ name: 'runId', type: 'S' }, { name: 'workspaceId', type: 'S' }],
+        'runId',
         'workspaceId',
     ),
     assetsTable: table('ASSETS', [{ name: 'assetId', type: 'S' }], 'assetId'),

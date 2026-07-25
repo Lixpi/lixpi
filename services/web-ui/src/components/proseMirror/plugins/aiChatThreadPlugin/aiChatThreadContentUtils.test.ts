@@ -182,7 +182,9 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent', () => {
         expect(projection?.source).toBe('thread-content')
         expect(projection?.threadId).toBe('thread-1')
 
-        const responseMessage = projection?.content?.content?.[1]?.content?.[1]
+        // projection.content is the doc node; its only child is the aiChatThread
+        // node (index 0), whose content is [userMessage, responseMessage].
+        const responseMessage = projection?.content?.content?.[0]?.content?.[1]
         const projectionImageRunIds = (responseMessage?.content?.[0]?.content ?? [])
             .filter((node: any) => node?.type === 'aiGeneratedImage')
             .map((node: any) => node?.attrs?.mediaRunId)
@@ -539,7 +541,7 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent — projection filt
         expect(projection).toBeNull()
     })
 
-    it('filters media nodes to a specific fileId when limitToLocatorMedia is enabled', () => {
+    it('filters media nodes to a specific assetId when limitToLocatorMedia is enabled', () => {
         const content = {
             type: 'doc',
             content: [
@@ -563,8 +565,8 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent — projection filt
                                     },
                                     content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Trace prompt.' }] },
                                 ]},
-                                { type: 'aiGeneratedImage', attrs: { fileId: 'file-a', mediaType: 'image', mediaRunId: 'run-a' } },
-                                { type: 'aiGeneratedImage', attrs: { fileId: 'file-b', mediaType: 'image', mediaRunId: 'run-b' } },
+                                { type: 'aiGeneratedImage', attrs: { assetId: 'file-a', mediaType: 'image', mediaRunId: 'run-a' } },
+                                { type: 'aiGeneratedImage', attrs: { assetId: 'file-b', mediaType: 'image', mediaRunId: 'run-b' } },
                             ],
                         },
                     ],
@@ -579,7 +581,7 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent — projection filt
         )
         const filteredProjection = buildGeneratedMediaTurnProjectionFromThreadContent(
             content,
-            { responseMessageId: 'response-1', fileId: 'file-b', mediaType: 'image' },
+            { responseMessageId: 'response-1', assetId: 'file-b', mediaType: 'image' },
             { limitToLocatorMedia: true },
         )
 
@@ -587,7 +589,7 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent — projection filt
             const files: any[] = []
             function walk(node: any) {
                 if (node?.type === 'aiGeneratedImage' || node?.type === 'aiGeneratedVideo') {
-                    files.push(node.attrs?.fileId)
+                    files.push(node.attrs?.assetId)
                     return
                 }
                 (node?.content ?? []).forEach((child: any) => walk(child))
@@ -602,7 +604,7 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent — projection filt
 })
 
 describe('getGeneratedImageTurnInfoFromThreadContent — locator edge cases', () => {
-    it('resolves media by fileId and variantIndex', () => {
+    it('resolves media by assetId and variantIndex', () => {
         const content = {
             type: 'doc',
             content: [
@@ -626,8 +628,8 @@ describe('getGeneratedImageTurnInfoFromThreadContent — locator edge cases', ()
                                     },
                                     content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Seed prompt one.' }] },
                                 ]},
-                                { type: 'aiGeneratedImage', attrs: { fileId: 'file-a', variantIndex: 1, mediaType: 'image', mediaRunId: 'run-a', revisedPrompt: 'variant one' } },
-                                { type: 'aiGeneratedImage', attrs: { fileId: 'file-a', variantIndex: 2, mediaType: 'image', mediaRunId: 'run-b', revisedPrompt: 'variant two' } },
+                                { type: 'aiGeneratedImage', attrs: { assetId: 'file-a', variantIndex: 1, mediaType: 'image', mediaRunId: 'run-a', revisedPrompt: 'variant one' } },
+                                { type: 'aiGeneratedImage', attrs: { assetId: 'file-a', variantIndex: 2, mediaType: 'image', mediaRunId: 'run-b', revisedPrompt: 'variant two' } },
                             ],
                         },
                     ],
@@ -637,13 +639,13 @@ describe('getGeneratedImageTurnInfoFromThreadContent — locator edge cases', ()
 
         const exactMatch = getGeneratedImageTurnInfoFromThreadContent(content, {
             responseMessageId: 'response-1',
-            fileId: 'file-a',
+            assetId: 'file-a',
             variantIndex: '2',
         })
 
         const noMatch = getGeneratedImageTurnInfoFromThreadContent(content, {
             responseMessageId: 'response-1',
-            fileId: 'file-a',
+            assetId: 'file-a',
             variantIndex: '9',
         })
 

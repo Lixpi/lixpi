@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type NatsService from '@lixpi/nats-service'
-import { err } from '@lixpi/debug-tools'
+import { err, info } from '@lixpi/debug-tools'
 import {
     getAiInteractionCanonicalResponseSubject,
     STREAM_STATUS,
@@ -20,7 +20,6 @@ import {
 import { AiChatProseMirrorStreamAssembler } from '../../prosemirror/ai-chat-stream-assembler.ts'
 import {
     logCanvasProjectionError,
-    refreshMediaGenerationRequestCanvasGeometry,
     settleMediaGenerationRequestOnCanvas,
     upsertMediaLineagePlanToCanvas,
 } from '../../services/asset-canvas-projection.ts'
@@ -30,9 +29,9 @@ import {
     settleUnfinishedGeneratedAssets,
 } from '../../services/asset-provenance-materializer.ts'
 import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
-import { getAssetRecord } from '../../models/asset.ts'
+import { attachPlannedGeneratedAssetNodes } from '../../services/generated-asset-storage.ts'
 
-const COMPLETED_PIPELINE_EVENT_RETENTION_MS = 10 * 60 * 1000
+const PIPELINE_EVENT_PURGE_RETRY_MS = 60_000
 
 const MEDIA_RESPONSE_PUBLISH_STATUSES: ReadonlySet<StreamStatus> = new Set([
     STREAM_STATUS.IMAGE_GENERATION_TRACE,
@@ -273,7 +272,6 @@ export class StreamPublisher {
     private responsePublishChain: Promise<void> = Promise.resolve()
     private readonly mediaResponsePublishChains = new Map<string, Promise<void>>()
     private canvasProjectionChain: Promise<void> = Promise.resolve()
-    private streamCanvasGeometryRefreshScheduled = false
     private readonly mediaGenerationRequestIds = new Set<string>()
     private readonly mediaLineagePlans = new Map<string, MediaBranchLineagePlan>()
     private readonly completedMediaGenerationRequestIds = new Set<string>()
@@ -329,27 +327,8 @@ export class StreamPublisher {
         if (options.mirrorProseMirror !== false) {
             this.proseMirrorAssembler?.handleContent(content)
             if (this.options.proseMirrorContentMirror && content.status !== STREAM_STATUS.END_STREAM) {
-                console.info('[StreamPublisher][prosemirror-mirror] forwarding', {
-                    workspaceId: this.workspaceId,
-                    aiChatThreadId: this.aiChatThreadId,
-                    status: content.status,
-                    textLength: content.text?.length ?? 0,
-                    generationRequestId: content.generationRun?.generationRequestId ?? this.currentGenerationRun?.generationRequestId ?? '',
-                    reasoningRunId: content.generationRun?.reasoningRunId ?? this.currentGenerationRun?.reasoningRunId ?? '',
-                    hasLocalAssembler: Boolean(this.proseMirrorAssembler),
-                })
                 this.options.proseMirrorContentMirror(content)
-            } else if (this.options.proseMirrorContentMirror) {
-                console.info('[StreamPublisher][prosemirror-mirror] skip', {
-                    workspaceId: this.workspaceId,
-                    aiChatThreadId: this.aiChatThreadId,
-                    status: content.status,
-                    reason: 'shared-matrix-publisher-owns-stream-end',
-                    generationRequestId: content.generationRun?.generationRequestId ?? this.currentGenerationRun?.generationRequestId ?? '',
-                    reasoningRunId: content.generationRun?.reasoningRunId ?? this.currentGenerationRun?.reasoningRunId ?? '',
-                })
             }
-            this.requestStreamCanvasGeometryRefresh(content)
         }
 
         this.enqueueResponsePublish({
@@ -381,14 +360,12 @@ export class StreamPublisher {
         const queueKey = this.getResponsePublishQueueKey(payload.content)
         if (!queueKey) {
             this.responsePublishChain = this.publishResponseAfterCurrent(this.responsePublishChain, payload)
-            this.logResponsePublishQueued('main', payload)
             return
         }
 
         const previous = this.mediaResponsePublishChains.get(queueKey) ?? Promise.resolve()
         const next = this.publishResponseAfterCurrent(previous, payload)
         this.mediaResponsePublishChains.set(queueKey, next)
-        this.logResponsePublishQueued(queueKey, payload)
         void this.forgetSettledMediaResponsePublishChain(queueKey, next)
     }
 
@@ -396,34 +373,6 @@ export class StreamPublisher {
         const mediaRunId = content.generationRun?.mediaRunId
         if (!mediaRunId || !MEDIA_RESPONSE_PUBLISH_STATUSES.has(content.status)) return null
         return `media:${mediaRunId}`
-    }
-
-    private logResponsePublishQueued(queueKey: string, payload: ChunkPayload): void {
-        const content = payload.content
-        const hasGenerationDebugContext = Boolean(
-            content.generationRequestId
-            || content.generationRun?.generationRequestId
-            || this.currentGenerationRun?.generationRequestId
-            || content.canvasGeometry,
-        )
-        if (queueKey === 'main' && !hasGenerationDebugContext) return
-        console.info('[StreamPublisher][pipeline-publish] queued', {
-            workspaceId: this.workspaceId,
-            aiChatThreadId: this.aiChatThreadId,
-            queueKey,
-            status: content.status,
-            textLength: content.text?.length ?? 0,
-            generationRequestId: content.generationRun?.generationRequestId ?? this.currentGenerationRun?.generationRequestId ?? '',
-            reasoningRunId: content.generationRun?.reasoningRunId ?? this.currentGenerationRun?.reasoningRunId ?? '',
-            mediaRunId: content.generationRun?.mediaRunId ?? '',
-            mediaModelId: content.generationRun?.mediaModelId ?? '',
-            partialIndex: content.partialIndex ?? null,
-            imageUrl: content.status === STREAM_STATUS.IMAGE_PARTIAL || content.status === STREAM_STATUS.IMAGE_COMPLETE
-                ? content.imageUrl ?? ''
-                : '',
-            hasCanvasGeometry: Boolean(content.canvasGeometry),
-            mediaQueueCount: this.mediaResponsePublishChains.size,
-        })
     }
 
     private async forgetSettledMediaResponsePublishChain(queueKey: string, promise: Promise<void>): Promise<void> {
@@ -513,100 +462,6 @@ export class StreamPublisher {
             })
     }
 
-    private requestStreamCanvasGeometryRefresh(content: ChunkPayload['content']): void {
-        const generationRun = content.generationRun ?? this.currentGenerationRun
-        const generationRequestId = generationRun?.generationRequestId
-        const debugBase = {
-            workspaceId: this.workspaceId,
-            aiChatThreadId: this.aiChatThreadId,
-            status: content.status,
-            textLength: content.text?.length ?? 0,
-            generationRequestId: generationRequestId ?? '',
-            trackedGenerationRequestIds: Array.from(this.mediaGenerationRequestIds),
-            completedGenerationRequestIds: Array.from(this.completedMediaGenerationRequestIds),
-            scheduled: this.streamCanvasGeometryRefreshScheduled,
-            enableProseMirrorStream: Boolean(this.options.enableProseMirrorStream),
-        }
-        if (content.status !== STREAM_STATUS.STREAMING || !content.text) {
-            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
-                ...debugBase,
-                reason: 'not-streaming-text',
-            })
-            return
-        }
-        if (!this.options.enableProseMirrorStream) {
-            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
-                ...debugBase,
-                reason: 'prosemirror-stream-disabled',
-            })
-            return
-        }
-        if (!generationRequestId) {
-            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
-                ...debugBase,
-                reason: 'missing-generation-request-id',
-            })
-            return
-        }
-        if (!this.mediaGenerationRequestIds.has(generationRequestId)) {
-            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
-                ...debugBase,
-                reason: 'generation-request-not-tracked',
-            })
-            return
-        }
-        if (this.completedMediaGenerationRequestIds.has(generationRequestId)) {
-            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
-                ...debugBase,
-                reason: 'generation-request-completed',
-            })
-            return
-        }
-        if (this.streamCanvasGeometryRefreshScheduled) {
-            console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
-                ...debugBase,
-                reason: 'refresh-already-scheduled',
-            })
-            return
-        }
-
-        this.streamCanvasGeometryRefreshScheduled = true
-        console.info('[StreamPublisher][canvas-geometry-refresh] scheduled', debugBase)
-        this.enqueueCanvasProjection(
-            async () => {
-                this.streamCanvasGeometryRefreshScheduled = false
-                const proseMirrorThreadContent = await this.getProseMirrorSnapshot()
-                if (!proseMirrorThreadContent) {
-                    console.info('[StreamPublisher][canvas-geometry-refresh] skip', {
-                        ...debugBase,
-                        reason: 'missing-prosemirror-snapshot',
-                    })
-                    return
-                }
-                console.info('[StreamPublisher][canvas-geometry-refresh] executing', {
-                    ...debugBase,
-                    proseMirrorSnapshotPresent: true,
-                })
-                const canvasGeometry = await refreshMediaGenerationRequestCanvasGeometry({
-                    workspaceId: this.workspaceId,
-                    generationRequestId,
-                    proseMirrorThreadContent,
-                })
-                console.info('[StreamPublisher][canvas-geometry-refresh] resolved', {
-                    ...debugBase,
-                    hasCanvasGeometry: Boolean(canvasGeometry),
-                    geometryNodeCount: canvasGeometry?.nodes.length ?? 0,
-                    nodeSnapshotCount: canvasGeometry?.nodeSnapshots?.length ?? 0,
-                    edgeSnapshotCount: canvasGeometry?.edgeSnapshots?.length ?? 0,
-                    removedNodeCount: canvasGeometry?.removedNodeIds?.length ?? 0,
-                    removedEdgeCount: canvasGeometry?.removedEdgeIds?.length ?? 0,
-                })
-                this.canvasGeometryResolved(canvasGeometry, generationRun)
-            },
-            'failed to refresh media generation canvas geometry from stream content',
-        )
-    }
-
     private async drainCanvasProjectionWrites(): Promise<void> {
         try {
             await this.canvasProjectionChain
@@ -631,17 +486,7 @@ export class StreamPublisher {
     }
 
     publishProseMirrorContent(content: ChunkPayload['content']): void {
-        console.info('[StreamPublisher][prosemirror-mirror] received-shared-content', {
-            workspaceId: this.workspaceId,
-            aiChatThreadId: this.aiChatThreadId,
-            status: content.status,
-            textLength: content.text?.length ?? 0,
-            generationRequestId: content.generationRun?.generationRequestId ?? this.currentGenerationRun?.generationRequestId ?? '',
-            reasoningRunId: content.generationRun?.reasoningRunId ?? this.currentGenerationRun?.reasoningRunId ?? '',
-            hasAssembler: Boolean(this.proseMirrorAssembler),
-        })
         this.proseMirrorAssembler?.handleContent(content)
-        this.requestStreamCanvasGeometryRefresh(content)
     }
 
     finishProseMirrorStream(): Promise<void> {
@@ -667,28 +512,27 @@ export class StreamPublisher {
         if (this.proseMirrorAssembler) {
             await this.proseMirrorAssembler.end()
         }
-        this.schedulePipelineEventPurge()
+        // Matrix child publishers share the request publisher's pipeline subject.
+        // Only the publisher that owns the persisted conversation lifecycle may
+        // purge after the complete request, including every sibling, has settled.
+        if (this.options.enableProseMirrorStream) {
+            await this.purgePipelineEventLog()
+        }
     }
 
-    private schedulePipelineEventPurge(delayMs = COMPLETED_PIPELINE_EVENT_RETENTION_MS): void {
+    private async purgePipelineEventLog(): Promise<void> {
+        try {
+            await this.pipelineEventLog.purgePipelineEvents(this.workspaceId, this.aiChatThreadId)
+        } catch (error) {
+            err('[StreamPublisher] Failed to purge finished pipeline event log; retrying:', error)
+            this.schedulePipelineEventPurgeRetry()
+        }
+    }
+
+    private schedulePipelineEventPurgeRetry(): void {
         const timer = setTimeout(() => {
-            const purgeCompletedPipeline = async (): Promise<void> => {
-                try {
-                    const outputAssetIds = [...this.mediaLineagePlans.values()]
-                        .flatMap((plan) => plan.runAssignments.map((assignment) => assignment.assetId))
-                    const outputAssets = await Promise.all(outputAssetIds.map(async (assetId) => await getAssetRecord(assetId)))
-                    const provenancePending = outputAssets.some((asset) => asset && !['sealed', 'failed', 'cancelled'].includes(asset.states.provenance))
-                    if (provenancePending) {
-                        this.schedulePipelineEventPurge(60_000)
-                        return
-                    }
-                    await this.pipelineEventLog.purgePipelineEvents(this.workspaceId, this.aiChatThreadId)
-                } catch (error) {
-                    err('[StreamPublisher] Failed to purge completed pipeline event log:', error)
-                }
-            }
-            void purgeCompletedPipeline()
-        }, delayMs)
+            void this.purgePipelineEventLog()
+        }, PIPELINE_EVENT_PURGE_RETRY_MS)
         if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') {
             timer.unref()
         }
@@ -757,14 +601,19 @@ export class StreamPublisher {
         this.enqueueCanvasProjection(
             async () => {
                 const proseMirrorThreadContent = await this.getProseMirrorSnapshot()
-                const canvasGeometry = await upsertMediaLineagePlanToCanvas({
+                const markerCanvasGeometry = await upsertMediaLineagePlanToCanvas({
                     workspaceId: this.workspaceId,
                     conversationAssetId: this.aiChatThreadId,
                     lineagePlan,
                     ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
                     ...(this.options.canvasVisibleArea ? { canvasVisibleArea: this.options.canvasVisibleArea } : {}),
                 })
-                this.canvasGeometryResolved(canvasGeometry, generationRun)
+                const plannedMediaCanvasGeometry = await attachPlannedGeneratedAssetNodes({
+                    lineagePlan,
+                    workspaceId: this.workspaceId,
+                    conversationAssetId: this.aiChatThreadId,
+                })
+                this.canvasGeometryResolved(plannedMediaCanvasGeometry ?? markerCanvasGeometry, generationRun)
             },
             'failed to persist media lineage plan to canvas',
         )
@@ -821,6 +670,12 @@ export class StreamPublisher {
         )
         if (alreadyCompleted) return
 
+        info(`[StreamPublisher] media generation request complete ${JSON.stringify({
+            workspaceId: this.workspaceId,
+            aiChatThreadId: this.aiChatThreadId,
+            generationRequestId,
+            generationRun: this.currentGenerationRun,
+        })}`)
         this.publishChatContent({
             status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
             aiProvider: this.provider,

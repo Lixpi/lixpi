@@ -1,10 +1,9 @@
 'use strict'
 
 import { describe, expect, it, vi } from 'vitest'
-import { afterEach, beforeEach, beforeAll } from 'vitest'
-import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
+import { afterEach, beforeEach } from 'vitest'
+import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import { EditorState } from 'prosemirror-state'
-import { documentStore } from '$src/stores/documentStore.ts'
 import { AI_CHAT_THREAD_PLUGIN_KEY, STOP_AI_CHAT_META, USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
@@ -14,7 +13,6 @@ import {
     findNodePosition,
     schema,
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
-import { nodes as sharedNodes } from '$src/components/proseMirror/components/schema.ts'
 
 vi.mock('prosemirror-transform', () => ({
     Step: {
@@ -28,14 +26,6 @@ vi.mock('prosemirror-transform', () => ({
     },
 }))
 
-const schemaWithFeatureReference = new Schema({
-    nodes: {
-        ...(schema.spec.nodes.toObject() as Record<string, any>),
-        feature_reference: sharedNodes.feature_reference,
-    },
-    marks: schema.spec.marks.toObject(),
-})
-
 function createPlugin(sendAiRequestHandler = vi.fn(), stopAiRequestHandler = vi.fn()) {
     return createAiChatThreadPlugin({
         sendAiRequestHandler,
@@ -44,14 +34,9 @@ function createPlugin(sendAiRequestHandler = vi.fn(), stopAiRequestHandler = vi.
     })
 }
 
-const alertMock = vi.fn()
 let consoleWarnSpy: { mockRestore: () => void } | null = null
 let consoleErrorSpy: { mockRestore: () => void } | null = null
-beforeAll(() => {
-    ;(globalThis as any).alert = alertMock
-})
 beforeEach(() => {
-    alertMock.mockReset()
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 })
@@ -120,15 +105,6 @@ function makeVideoRef(overrides: Record<string, unknown> = {}): ProseMirrorNode 
     })
 }
 
-function makeFeatureReference(overrides: Record<string, unknown> = {}): ProseMirrorNode {
-    return schemaWithFeatureReference.nodes.feature_reference.create({
-        featureId: 'feature-1',
-        featureName: 'Feature One',
-        category: 'default',
-        ...overrides,
-    })
-}
-
 function makeParagraphMessage(
     nodeType: 'aiUserMessage' | 'aiResponseMessage',
     text: string,
@@ -139,22 +115,6 @@ function makeParagraphMessage(
         : schema.nodes.aiResponseMessage
     return creator.create({}, [
         schema.nodes.paragraph.create(null, [schema.text(text), ...inlineChildren]),
-    ])
-}
-
-function makeFeatureReferenceParagraphMessage(
-    nodeType: 'aiUserMessage' | 'aiResponseMessage',
-    text: string,
-    inlineChildren: ProseMirrorNode[] = [],
-): ProseMirrorNode {
-    const creator = nodeType === 'aiUserMessage'
-        ? schemaWithFeatureReference.nodes.aiUserMessage
-        : schemaWithFeatureReference.nodes.aiResponseMessage
-    return creator.create({}, [
-        schemaWithFeatureReference.nodes.paragraph.create(
-            null,
-            [schemaWithFeatureReference.text(text), ...inlineChildren],
-        ),
     ])
 }
 
@@ -223,7 +183,7 @@ describe('aiChatThreadPlugin — local media response templates', () => {
                 aiImageModels: [imageModel],
                 imageGenerationSize: 'auto',
             }),
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
         }))
     })
 })
@@ -233,7 +193,7 @@ describe('aiChatThreadPlugin — local media response templates', () => {
 // =============================================================================
 
 describe('aiChatThreadPlugin — request payload construction', () => {
-    it('builds multimodal payload entries from image and video references', async () => {
+    it('builds plain-text payload messages, resolving image/video references separately from the workspace context snapshot', async () => {
         const sendAiRequestHandler = vi.fn()
         const plugin = createPlugin(sendAiRequestHandler)
 
@@ -268,24 +228,22 @@ describe('aiChatThreadPlugin — request payload construction', () => {
 
         const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
         expect(payload).toBeTruthy()
-        expect(payload.threadId).toBe('thread-featured')
+        expect(payload.conversationAssetId).toBe('thread-featured')
+        // toMessages emits plain-text content only; images/video posters are no
+        // longer inlined as image_url parts here (see ContentExtractor.toMessages
+        // comment) — they're resolved separately via the Asset-backed workspace
+        // context snapshot instead.
         expect(payload.messages).toEqual([
-                {
-                    role: 'user',
-                    content: [
-                    { type: 'text', text: 'User message with image reference' },
-                    { type: 'image_url', image_url: { url: 'nats-obj://workspace-workspace-1-files/image-file-1' } },
-                ],
+            {
+                role: 'user',
+                content: 'User message with image reference',
             },
             {
                 role: 'assistant',
-                content: [
-                    { type: 'text', text: 'Assistant message with visual context' },
-                    { type: 'image_url', image_url: { url: 'nats-obj://workspace-workspace-video-1-files/video-poster-1' } },
-                ],
+                content: 'Assistant message with visual context',
             },
         ])
-        expect(payload.referencedFeatureIds).toEqual([])
+        expect(payload.capabilityReferences).toEqual([])
     })
 
     it('forwards valid image generation config groups to imageOptions', async () => {
@@ -396,55 +354,6 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         })
     })
 
-    it('deduplicates referenced feature ids across user and assistant messages', async () => {
-        const sendAiRequestHandler = vi.fn()
-        const plugin = createPlugin(sendAiRequestHandler)
-
-        const state = EditorState.create({
-            doc: schemaWithFeatureReference.nodes.doc.create(null, [
-                schemaWithFeatureReference.nodes.aiChatThread.create(
-                    {
-                        threadId: 'thread-featured-refs',
-                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
-                    },
-                    [
-                        makeFeatureReferenceParagraphMessage(
-                            'aiUserMessage',
-                            'User message references ',
-                            [
-                                makeFeatureReference({ featureId: 'feature-a', featureName: 'Feature A' }),
-                                schemaWithFeatureReference.text(' and '),
-                                makeFeatureReference({ featureId: 'feature-b', featureName: 'Feature B' }),
-                            ],
-                        ),
-                        makeFeatureReferenceParagraphMessage(
-                            'aiResponseMessage',
-                            'Assistant message references ',
-                            [
-                                makeFeatureReference({ featureId: 'feature-a', featureName: 'Feature A' }),
-                                schemaWithFeatureReference.text(' and '),
-                                makeFeatureReference({ featureId: 'feature-c', featureName: 'Feature C' }),
-                            ],
-                        ),
-                    ],
-                ),
-            ]),
-            schema: schemaWithFeatureReference,
-            plugins: [plugin],
-        })
-
-        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
-            threadId: 'thread-featured-refs',
-            nodePos: findNodePosition(state.doc, 'aiChatThread'),
-        })
-        state.applyTransaction(trigger)
-
-        await Promise.resolve()
-
-        const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
-        expect(payload.referencedFeatureIds).toEqual(['feature-a', 'feature-b', 'feature-c'])
-    })
-
     it('extracts and merges consecutive text-only messages while preserving text order', async () => {
         const sendAiRequestHandler = vi.fn()
         const plugin = createPlugin(sendAiRequestHandler)
@@ -511,7 +420,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         await Promise.resolve()
 
         const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
-        expect(payload.threadId).toBe('thread-a')
+        expect(payload.conversationAssetId).toBe('thread-a')
 
         const content = payload.messages.map((message: any) => message.content)
         const joined = content.join('\n')
@@ -570,7 +479,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
 
         const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
         expect(payload).toBeTruthy()
-        expect(payload.threadId).toBe('thread-current')
+        expect(payload.conversationAssetId).toBe('thread-current')
         expect(payload.messages).toHaveLength(1)
 
         const messageContent = payload.messages[0].content
@@ -580,8 +489,6 @@ describe('aiChatThreadPlugin — request payload construction', () => {
     })
 
     it('updates ai reasoning model dropdown selection into thread attrs', () => {
-        const setMetaValuesSpy = vi.spyOn(documentStore, 'setMetaValues').mockImplementation(() => {})
-
         const plugin = createPlugin(vi.fn())
         const state = EditorState.create({
             doc: doc(makeThread({
@@ -608,20 +515,23 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const nextThread = nextState.doc.nodeAt(threadPos!)
 
         expect(nextThread?.attrs.aiReasoningModels).toBe('["OpenAI:o4-mini"]')
-        expect(setMetaValuesSpy).toHaveBeenCalledWith({ requiresSave: true })
-
-        setMetaValuesSpy.mockRestore()
+        // The dropdown handler returns an appended doc-changing transaction; the
+        // editor's own change pipeline (not an explicit document-store call) is
+        // what now signals the document needs saving.
+        expect(nextState.doc.eq(state.doc)).toBe(false)
     })
 
-    it('updates threadContext on thread-context dropdown selection and requires saving', () => {
-        const setMetaValuesSpy = vi.spyOn(documentStore, 'setMetaValues').mockImplementation(() => {})
-
+    it('ignores thread-context dropdown selection because threadContext is not a declared aiChatThread attr', () => {
+        // aiChatThreadNodeSpec.attrs (packages/lixpi/prosemirror/src/shared/node-specs.ts)
+        // no longer declares a `threadContext` attr, so ProseMirror's Node.create /
+        // setNodeMarkup silently drop it from any attrs object passed in. The
+        // 'thread-context-dropdown-' branch in appendTransaction still runs and
+        // calls setNodeMarkup, but it can never change stored node attrs.
         const plugin = createPlugin(vi.fn())
 
         const state = EditorState.create({
             doc: doc(makeThread({
                 threadId: 'thread-context',
-                threadContext: 'Thread',
             }, [makeUserMessage('thread context update')])),
             schema,
             plugins: [plugin],
@@ -641,17 +551,14 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const { state: nextState } = state.applyTransaction(transaction)
         const nextThread = nextState.doc.nodeAt(threadPos!)
 
-        expect(setMetaValuesSpy).toHaveBeenCalledWith({ requiresSave: true })
+        expect(nextState.doc.eq(state.doc)).toBe(true)
         expect(nextThread?.attrs.threadContext).toBeUndefined()
-
-        setMetaValuesSpy.mockRestore()
     })
 
     it('resolves ai model dropdown titles through aiModelsStore and updates thread attrs', () => {
         const getDataSpy = vi.spyOn(aiModelsStore, 'getData').mockReturnValue([
             { provider: 'OpenAI', model: 'o4-mini', title: 'OpenAI o4-mini' },
         ] as any)
-        const setMetaValuesSpy = vi.spyOn(documentStore, 'setMetaValues').mockImplementation(() => {})
 
         const plugin = createPlugin(vi.fn())
 
@@ -679,15 +586,12 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const nextThread = nextState.doc.nodeAt(threadPos!)
 
         expect(getDataSpy).toHaveBeenCalled()
-        expect(setMetaValuesSpy).toHaveBeenCalledWith({ requiresSave: true })
         expect(nextThread?.attrs.aiReasoningModels).toBe(JSON.stringify(['OpenAI:o4-mini']))
 
         getDataSpy.mockRestore()
-        setMetaValuesSpy.mockRestore()
     })
 
-    it('does not write document metadata when AI model dropdown selection is unchanged', () => {
-        const setMetaValuesSpy = vi.spyOn(documentStore, 'setMetaValues').mockImplementation(() => {})
+    it('does not append a transaction when AI model dropdown selection is unchanged', () => {
         const plugin = createPlugin(vi.fn())
 
         const state = EditorState.create({
@@ -712,10 +616,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         })
 
         const { state: nextState } = state.applyTransaction(transaction)
-        expect(setMetaValuesSpy).not.toHaveBeenCalled()
+        expect(nextState.doc.eq(state.doc)).toBe(true)
         expect(AI_CHAT_THREAD_PLUGIN_KEY.getState(nextState)?.receivingThreadIds.size).toBe(0)
-
-        setMetaValuesSpy.mockRestore()
     })
 
     it('parses string-based boolean toggles for multi-model settings', async () => {
@@ -915,7 +817,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         })
     })
 
-    it('rejects image multi-model payloads with invalid JSON and alerts the user', async () => {
+    it('rejects image multi-model payloads with invalid JSON and logs a validation error', async () => {
         const sendAiRequestHandler = vi.fn()
         const plugin = createPlugin(sendAiRequestHandler)
 
@@ -941,7 +843,9 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         })
         state.applyTransaction(trigger)
 
-        expect(alertMock).toHaveBeenCalledWith('Please select at least 1 image model.')
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+            '[AI_CHAT_THREAD] Image generation requires at least one image model.'
+        )
         expect(sendAiRequestHandler).not.toHaveBeenCalled()
     })
 
@@ -981,7 +885,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         })
     })
 
-    it('rejects video multi-model payloads with invalid JSON and alerts the user', async () => {
+    it('rejects video multi-model payloads with invalid JSON and logs a validation error', async () => {
         const sendAiRequestHandler = vi.fn()
         const plugin = createPlugin(sendAiRequestHandler)
 
@@ -1007,7 +911,9 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         })
         state.applyTransaction(trigger)
 
-        expect(alertMock).toHaveBeenCalledWith('Please select at least 1 video model.')
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+            '[AI_CHAT_THREAD] Video generation requires at least one video model.'
+        )
         expect(sendAiRequestHandler).not.toHaveBeenCalled()
     })
 
@@ -1032,7 +938,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         state.applyTransaction(stopTransaction)
 
         expect(stopAiRequestHandler).toHaveBeenCalledTimes(1)
-        expect(stopAiRequestHandler).toHaveBeenCalledWith({ threadId: 'thread-stop' })
+        expect(stopAiRequestHandler).toHaveBeenCalledWith({ conversationAssetId: 'thread-stop' })
     })
 
     it('prevents deleting the final child inside an aiChatThread', () => {

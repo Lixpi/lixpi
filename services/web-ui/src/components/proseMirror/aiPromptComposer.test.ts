@@ -89,6 +89,12 @@ beforeEach(() => {
 })
 
 describe('createAiPromptComposer', () => {
+    it('forwards the capability catalog to the editor plugin boundary', () => {
+        const capabilityCatalog = { search: vi.fn() }
+        createComposer({ capabilityCatalog })
+        expect(getLastEditor().options.capabilityCatalog).toBe(capabilityCatalog)
+    })
+
     it('builds host and mount elements with expected base and custom classes', () => {
         const composer = createComposer({
             className: 'my-composer',
@@ -140,44 +146,39 @@ describe('createAiPromptComposer', () => {
         expect(editor.options.promptControlFactories).toEqual(customFactories)
     })
 
-    it('forwards editor callbacks to composer submit/stop handlers', () => {
+    it('forwards editor submit callback to the composer onSubmit handler', () => {
+        // The composer no longer wires an onPromptStop/onReceivingStateChange
+        // editor option — aiPromptInput is a standalone floating input, and
+        // stop/receiving-state tracking lives only in aiChatThreadPlugin now.
         const onSubmit = vi.fn()
-        const onStop = vi.fn()
 
         createComposer({
             onSubmit,
-            onStop,
         })
 
         const editor = getLastEditor()
         editor.options.onPromptSubmit(baseSubmitPayload)
-        editor.options.onPromptStop()
-        editor.options.onEditorChange?.(baseSubmitPayload)
+
         expect(onSubmit).toHaveBeenCalledOnce()
         expect(onSubmit).toHaveBeenCalledWith(baseSubmitPayload)
-        expect(onStop).toHaveBeenCalledOnce()
+        expect(editor.options.onPromptStop).toBeUndefined()
+        expect(editor.options.onReceivingStateChange).toBeUndefined()
     })
 
-    it('forwards prompt content and thread receiving-state changes', () => {
+    it('forwards prompt content changes to onContentChange', () => {
         const onContentChange = vi.fn()
-        const onReceivingStateChange = vi.fn()
         const onSubmit = vi.fn()
-        const onStop = vi.fn()
 
         createComposer({
             onSubmit,
-            onStop,
             onContentChange,
-            onReceivingStateChange,
         })
 
         const editor = getLastEditor()
         const content = { type: 'doc', content: [] }
         editor.options.onEditorChange?.(content)
-        editor.options.onReceivingStateChange('thread-1', true)
 
         expect(onContentChange).toHaveBeenCalledWith(content)
-        expect(onReceivingStateChange).toHaveBeenCalledWith('thread-1', true)
     })
 
     it('creates gradient by default and suppresses it when useGradient is false', () => {

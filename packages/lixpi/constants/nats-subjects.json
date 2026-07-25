@@ -16,11 +16,12 @@
 		"CHAT_STOP": "ai.interaction.chat.stop",
 		"CHAT_ERROR": "ai.interaction.chat.error",
 		"MEDIA_DESCRIBE": "ai.interaction.media.describe",
-		"FEATURE_EXTRACT": {
-			"START": "ai.interaction.feature.extract.start",
-			"STATUS": "ai.interaction.feature.extract.status",
-			"LIST_BY_WORKSPACE": "ai.interaction.feature.extract.listByWorkspace",
-			"DELETE": "ai.interaction.feature.extract.delete"
+		"CAPABILITY_RUN": {
+			"START": "ai.interaction.capability.run.start",
+			"STOP": "ai.interaction.capability.run.stop",
+			"RESUME": "ai.interaction.capability.run.resume",
+			"EVENTS": "ai.interaction.capability.run.events",
+			"STATUS": "ai.interaction.capability.run.status"
 		}
 	},
 	"ASSET_SUBJECTS": {
@@ -49,6 +50,30 @@
 	"BLOB_PROCESSING_SUBJECTS": {
 		"GENERATE_RENDITIONS": "blob.processing.generateRenditions"
 	},
+	"CAPABILITY_SUBJECTS": {
+		"CATALOG": {
+			"SEARCH": "capability.catalog.search",
+			"LIST": "capability.catalog.list",
+			"GET": "capability.catalog.get",
+			"CREATE": "capability.catalog.create",
+			"UPDATE": "capability.catalog.update",
+			"DELETE": "capability.catalog.delete",
+			"GRANT": "capability.catalog.grant",
+			"REVOKE": "capability.catalog.revoke",
+			"SAVE": "capability.catalog.save",
+			"CATALOG_CHANGED": "capability.catalog.changed",
+			"EVENTS": "capability.catalog.changed"
+		},
+		"RUN": {
+			"START": "ai.interaction.capability.run.start",
+			"GET": "ai.interaction.capability.run.get",
+			"STOP": "ai.interaction.capability.run.stop",
+			"RESUME": "ai.interaction.capability.run.resume",
+			"STATUS": "ai.interaction.capability.run.status",
+			"REPLAY": "ai.interaction.capability.run.replay",
+			"EVENTS": "ai.interaction.capability.run.events"
+		}
+	},
 	"ASSET_MAINTENANCE_SUBJECTS": {
 		"DELETE_ASSET": "asset.maintenance.delete",
 		"DELETE_BLOB": "blob.maintenance.delete",
@@ -64,14 +89,7 @@
 		"UPDATE_WORKSPACE": "workspace.update",
 		"DELETE_WORKSPACE": "workspace.delete",
 		"GET_USER_WORKSPACES": "workspace.getUserWorkspaces",
-		"UPDATE_CANVAS_STATE": "workspace.updateCanvasState",
-		"FEATURE_SUBJECTS": {
-			"CREATE": "workspace.feature.create",
-			"GET": "workspace.feature.get",
-			"LIST_BY_SCOPE": "workspace.feature.listByScope",
-			"UPDATE": "workspace.feature.update",
-			"DELETE": "workspace.feature.delete"
-		}
+		"UPDATE_CANVAS_STATE": "workspace.updateCanvasState"
 	},
 	"ORGANIZATION_SUBJECTS": {
 		"GET_ORGANIZATION": "organization.get",

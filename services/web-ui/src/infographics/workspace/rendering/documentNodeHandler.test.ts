@@ -109,10 +109,7 @@ function makeDocumentNode(overrides: Partial<DocumentMediaCanvasNode> = {}): Doc
     return {
         nodeId: 'doc-1',
         type: 'mediaDocument',
-        fileId: 'doc-file-id',
-        posterFileId: 'poster-file-id',
-        workspaceId: 'workspace-1',
-        posterSrc: '/api/files/workspace-1/poster-1',
+        assetId: 'doc-asset-1',
         dimensions: { width: 640, height: 320 },
         position: { x: 10, y: 20 },
         ...overrides,
@@ -182,9 +179,9 @@ describe('documentNodeHandler', () => {
         expect(sprite.visible).toBe(true)
     })
 
-    it('does not load poster for document nodes without poster source', async () => {
+    it('does not load poster for document nodes without an assetId yet', async () => {
         const handler = createDocumentNodeHandler({ documentLayer, onRender })
-        const doc = makeDocumentNode({ posterSrc: '' })
+        const doc = makeDocumentNode({ assetId: '' })
 
         handler.upsert(doc, { x: 10, y: 20 }, makeCanvasState(doc))
 
@@ -197,7 +194,7 @@ describe('documentNodeHandler', () => {
     it('refreshes poster texture when source key changes', async () => {
         const handler = createDocumentNodeHandler({ documentLayer, onRender })
         const first = makeDocumentNode()
-        const second = makeDocumentNode({ posterSrc: '/api/files/workspace-1/poster-2' })
+        const second = makeDocumentNode({ assetId: 'doc-asset-2' })
 
         handler.upsert(first, { x: 10, y: 20 }, makeCanvasState(first))
         await vi.waitFor(() => expect(onRender).toHaveBeenCalledTimes(2))
@@ -248,7 +245,7 @@ describe('documentNodeHandler', () => {
     it('destroys all entries and releases textures on teardown', () => {
         const handler = createDocumentNodeHandler({ documentLayer, onRender })
         const first = makeDocumentNode()
-        const second = makeDocumentNode({ nodeId: 'doc-2', posterSrc: '/api/files/workspace-1/poster-2' })
+        const second = makeDocumentNode({ nodeId: 'doc-2', assetId: 'doc-asset-2' })
 
         handler.upsert(first, { x: 10, y: 20 }, makeCanvasState(first))
         handler.upsert(second, { x: 30, y: 40 }, makeCanvasState(second))

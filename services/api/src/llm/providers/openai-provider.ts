@@ -12,9 +12,9 @@ import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import { detectCapabilities } from './provider-capabilities.ts'
 import {
     convertAttachmentsForProvider,
-    parseDataUrl,
     resolveImageUrls,
 } from '../utils/attachments.ts'
+import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 import {
     applyImagePromptLimitToSystemPrompt,
     buildImagePromptRewriteInstruction,
@@ -33,9 +33,37 @@ import {
 import {
     asOpenAITool,
     parseCapabilityToolArguments,
-} from '../../capability-system/capability-model-tools.ts'
+} from '@lixpi/capability-system/backend'
 
-type ImageRefFile = { file: File | Awaited<ReturnType<typeof toFile>>; name: string }
+type ImageRefFile = Pick<ResolvedImageGenerationReference,
+    'role' |
+    'byteLength' |
+    'mediaType' |
+    'sha256'
+> & {
+    file: File | Awaited<ReturnType<typeof toFile>>
+    name: string
+}
+
+export const buildOpenAIImageReferenceFiles = async (
+    references: readonly ResolvedImageGenerationReference[],
+): Promise<ImageRefFile[]> => Promise.all(references.map(async reference => ({
+    file: await toFile(reference.bytes, reference.fileName, { type: reference.mediaType }),
+    name: reference.fileName,
+    role: reference.role,
+    byteLength: reference.byteLength,
+    mediaType: reference.mediaType,
+    sha256: reference.sha256,
+})))
+
+const supportsConfigurableImageInputFidelity = (modelVersion: string): boolean => {
+    if (modelVersion.startsWith('gpt-image-2')) return false
+    if (modelVersion.startsWith('gpt-image-1-mini')) return false
+    return modelVersion === 'gpt-image-1'
+        || modelVersion.startsWith('gpt-image-1-')
+        || modelVersion === 'gpt-image-1.5'
+        || modelVersion.startsWith('gpt-image-1.5-')
+}
 
 export class OpenAIProvider extends BaseProvider {
     readonly providerName: ProviderName = 'OpenAI'
@@ -70,6 +98,29 @@ export class OpenAIProvider extends BaseProvider {
             content = await resolveImageUrls(content, this.nats)
             content = convertAttachmentsForProvider(content, 'OPENAI')
             inputMessages.push({ role: msg.role, content })
+        }
+
+        const resolvedImageGenerationReferences = state.resolvedImageGenerationReferences ?? []
+        if (enableImageGeneration && !modelVersion.startsWith('gpt-image-') && resolvedImageGenerationReferences.length > 0) {
+            let lastUserMessage: { role: string; content: any } | undefined
+            for (let index = inputMessages.length - 1; index >= 0; index--) {
+                if (inputMessages[index]?.role === 'user') {
+                    lastUserMessage = inputMessages[index]
+                    break
+                }
+            }
+            if (!lastUserMessage) throw new Error('No user prompt found for image generation')
+            const existingContent = Array.isArray(lastUserMessage.content)
+                ? lastUserMessage.content
+                : [{ type: 'input_text', text: String(lastUserMessage.content ?? '') }]
+            lastUserMessage.content = [
+                ...existingContent,
+                ...resolvedImageGenerationReferences.map(reference => ({
+                    type: 'input_image',
+                    image_url: reference.dataUrl,
+                    detail: 'high',
+                })),
+            ]
         }
 
         let instructions: string | undefined
@@ -290,8 +341,10 @@ export class OpenAIProvider extends BaseProvider {
                     }
 
                     if (args.hasImageModel || args.hasVideoModel) {
-
-                        const videoCall = args.hasVideoModel ? extractVideoToolCall('OpenAI', response) : undefined
+                        const characterCreatorActive = args.state.capabilityUsageMode === 'character-creator'
+                        const videoCall = args.hasVideoModel && !characterCreatorActive
+                            ? extractVideoToolCall('OpenAI', response)
+                            : undefined
                         const imageCall = args.hasImageModel && !videoCall ? extractToolCall('OpenAI', response) : undefined
                         if (videoCall) {
                             update.generatedVideoPrompt = videoCall.prompt
@@ -401,9 +454,12 @@ export class OpenAIProvider extends BaseProvider {
     }): Promise<Partial<ProviderState>> {
         const update: Partial<ProviderState> = {}
         let prompt = ''
-        const referenceFiles: ImageRefFile[] = []
+        const referenceFiles = await buildOpenAIImageReferenceFiles(
+            args.state.resolvedImageGenerationReferences ?? [],
+        )
 
-        // Extract prompt + reference images from the last user message.
+        // Extract the prompt from the last user message. Reference images are
+        // already resolved once by BaseProvider's provider-neutral contract.
         for (let i = args.inputMessages.length - 1; i >= 0; i--) {
             const msg = args.inputMessages[i]!
             if (msg.role !== 'user') continue
@@ -417,20 +473,6 @@ export class OpenAIProvider extends BaseProvider {
                     const blockType = (block as any).type
                     if (blockType === 'text' || blockType === 'input_text') {
                         textParts.push((block as any).text ?? '')
-                    } else if (blockType === 'input_image' || blockType === 'image_url') {
-                        let url = (block as any).image_url
-                        if (typeof url === 'object' && url !== null) url = url.url ?? ''
-                        if (typeof url === 'string' && url.startsWith('data:')) {
-                            try {
-                                const { mediaType, base64 } = parseDataUrl(url)
-                                const buf = Buffer.from(base64, 'base64')
-                                const ext = mediaType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'png'
-                                const file = await toFile(buf, `reference.${ext}`, { type: mediaType })
-                                referenceFiles.push({ file, name: `reference.${ext}` })
-                            } catch (e) {
-                                warn(`Failed to convert data URL to file: ${e}`)
-                            }
-                        }
                     }
                 }
                 prompt = textParts.join(' ')
@@ -441,14 +483,25 @@ export class OpenAIProvider extends BaseProvider {
         if (!prompt) throw new Error('No user prompt found for image generation')
 
         const hasReferences = referenceFiles.length > 0
+        const inputFidelity = supportsConfigurableImageInputFidelity(args.modelVersion)
+            ? 'high'
+            : undefined
         info(`[OpenAI:${this.instanceKey}] image SDK call ${JSON.stringify({
             api: hasReferences ? 'images.edit' : 'images.generate',
             model: args.modelVersion,
             size: args.imageSize,
             quality: 'high',
+            inputFidelity: inputFidelity ?? (args.modelVersion.startsWith('gpt-image-2') ? 'automatic-high' : 'provider-default'),
             partialImages: 3,
             referenceFiles: referenceFiles.length,
             referenceFileNames: referenceFiles.map(r => r.name),
+            referenceFileMetadata: referenceFiles.map(reference => ({
+                name: reference.name,
+                role: reference.role,
+                byteLength: reference.byteLength,
+                mediaType: reference.mediaType,
+                sha256: reference.sha256,
+            })),
             promptLen: prompt.length,
             promptPreview: prompt.slice(0, 200),
         }, null, 0)}`)
@@ -466,6 +519,7 @@ export class OpenAIProvider extends BaseProvider {
                     : referenceFiles[0]!.file,
                 prompt,
                 quality: 'high',
+                ...(inputFidelity ? { input_fidelity: inputFidelity } : {}),
                 size: resolvedSize,
                 stream: true,
                 partial_images: 3,

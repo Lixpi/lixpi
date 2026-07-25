@@ -128,6 +128,8 @@ export type Asset = {
 
 export type AssetMeta = {
     scopeAndOwner: string
+    scope: AssetScope
+    scopeOwnerId: string
     assetId: string
     organizationId: string
     title: string
@@ -193,7 +195,7 @@ export type BlobRecord = {
     updatedAt: number
 }
 
-export type BlobOwnerType = 'asset' | 'feature'
+export type BlobOwnerType = 'asset' | 'capability'
 
 export type BlobReference = {
     blobKey: string

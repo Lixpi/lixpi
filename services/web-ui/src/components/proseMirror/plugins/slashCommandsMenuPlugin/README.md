@@ -55,13 +55,13 @@ type SlashCommandsPluginState = {
 The main view class that manages:
 
 - Menu DOM construction using `createEl` from `$src/utils/domTemplates.ts`
-- Transform-aware positioning that handles CSS scaled/translated ancestors
+- Transform-aware, viewport-clamped positioning that flips above a bottom composer when the menu would be cut off below
 - Command list rendering with selection highlighting
 - Keyboard event handling delegation
 
 ### Transform-aware Positioning
 
-Uses ProseMirror's `coordsAtPos()` to get screen coordinates at the `/` trigger position, then converts to local coordinates accounting for CSS transforms on ancestor elements.
+Uses ProseMirror's `coordsAtPos()` to get screen coordinates at the `/` trigger position, chooses the side with enough viewport space, clamps the popup to the viewport, then converts to local coordinates accounting for CSS transforms on ancestor elements.
 
 ## Available Commands
 
@@ -71,8 +71,6 @@ Uses ProseMirror's `coordsAtPos()` to get screen coordinates at the `/` trigger 
 | Image | image, img, picture | Insert an image |
 | Table | table | Insert a table (Phase 2) |
 | File | file, attachment | Attach a file (Phase 2) |
-| Use Feature | use, feature, features | Open the Features panel to pick a reusable feature |
-| Extract Feature | extract, extract-feature | Open the Features panel with a pending extraction confirmation |
 
 ## Adding New Commands
 

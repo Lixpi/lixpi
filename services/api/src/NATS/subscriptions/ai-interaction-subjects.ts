@@ -38,6 +38,10 @@ import { getAssetRequesterContext } from '../../services/asset-requester-context
 import { ensureAiInteractionEventRelay } from '../../services/ai-interaction-event-relay.ts'
 import AssetDocumentService from '../../services/asset-document-service.ts'
 import { buildCandidateTranscriptContext } from '../../llm/graph/media-branch-snapshot.ts'
+import {
+    resolveCharacterCreatorRouting,
+    restrictMediaRequestToCharacterImages,
+} from '../../capability-modules/character-creator/character-creator-routing.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 type PipelineResumePayload = {
@@ -146,10 +150,6 @@ const collectAuthoritativeMessageText = (node: ProseMirrorJsonNode): string => {
             text += `\n\`\`\`\n${collectAuthoritativeMessageText(child)}\n\`\`\`\n`
         } else if (child.type === aiGeneratedImageNodeType || child.type === aiGeneratedVideoNodeType) {
             continue
-        } else if (child.type === 'feature_reference') {
-            if (typeof child.attrs?.featureName === 'string' && child.attrs.featureName) {
-                text += `feature:${child.attrs.featureName}`
-            }
         } else {
             text += collectAuthoritativeMessageText(child)
         }
@@ -371,7 +371,7 @@ export const aiInteractionSubjects = [
                 videoResolution,
                 videoDuration,
                 videoSourceForExtension,
-                referencedFeatureIds,
+                capabilityReferences,
                 mediaBranchCandidateSnapshot,
                 workspaceContextSnapshot,
                 canvasVisibleArea,
@@ -560,6 +560,25 @@ export const aiInteractionSubjects = [
                 .find((message) => message.role === 'user' && message.content.trim())!
                 .content
                 .slice(0, 20_000)
+            const characterCreatorRouting = resolveCharacterCreatorRouting(
+                authoritativePromptText,
+                capabilityReferences,
+            )
+            const canonicalMediaGenerationRequest = mediaGenerationRequest
+                ? {
+                    ...mediaGenerationRequest,
+                    ...(resolvedRegeneration ? { regeneration: resolvedRegeneration } : {}),
+                }
+                : undefined
+            const routedMediaGenerationRequest = canonicalMediaGenerationRequest && characterCreatorRouting.isCharacterCreator
+                ? restrictMediaRequestToCharacterImages(canonicalMediaGenerationRequest)
+                : canonicalMediaGenerationRequest
+            if (characterCreatorRouting.isCharacterCreator) {
+                info('[CHARACTER_CREATOR] Enforcing selected reasoning/image model axes and excluding video', {
+                    reasoningModelIds: routedMediaGenerationRequest?.reasoningModelIds ?? aiReasoningModels,
+                    imageModelIds: routedMediaGenerationRequest?.imageModelIds ?? aiImageModels,
+                })
+            }
             if (resolvedMediaBranchCandidateSnapshot) {
                 resolvedMediaBranchCandidateSnapshot = {
                     ...resolvedMediaBranchCandidateSnapshot,
@@ -605,22 +624,24 @@ export const aiInteractionSubjects = [
                 }
             }
 
-            if (mediaGenerationRequest) {
+            if (routedMediaGenerationRequest) {
                 if (!await claimConversation()) return
                 infoStr([
                     chalk.cyan('🧬 [AI_INTERACTION]'),
                     ' :: Invoking media generation matrix',
                     ' :: generationRequestId:',
-                    chalk.yellow(mediaGenerationRequest.generationRequestId),
+                    chalk.yellow(routedMediaGenerationRequest.generationRequestId),
                     ' :: reasoningCount:',
-                    chalk.green(String(mediaGenerationRequest.reasoningModelIds.length)),
+                    chalk.green(String(routedMediaGenerationRequest.reasoningModelIds.length)),
                 ])
 
                 const runMediaGenerationMatrix = async (): Promise<void> => {
                     try {
                         await runWithLease(async () => await getLlmModule().processMediaGenerationMatrix({
                             ...data,
+                            aiVideoModels: characterCreatorRouting.isCharacterCreator ? [] : aiVideoModels,
                             messages: authoritativeMessages,
+                            capabilityReferences: characterCreatorRouting.capabilityReferences,
                             mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
                             workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,
                             workspaceId,
@@ -630,13 +651,14 @@ export const aiInteractionSubjects = [
                             assetLeaseHolderId: leaseHolderId,
                             proseMirrorInitialDoc: authoritativeProseMirrorInitialDoc,
                             proseMirrorBaseVersion: authoritativeProseMirrorBaseVersion,
-                            videoSourceForExtension: resolvedVideoSourceForExtension,
+                            videoSourceForExtension: characterCreatorRouting.isCharacterCreator
+                                ? undefined
+                                : resolvedVideoSourceForExtension,
                             mediaGenerationRequest: {
-                                ...mediaGenerationRequest,
-                                ...(resolvedRegeneration ? { regeneration: resolvedRegeneration } : {}),
-                                ...(mediaGenerationRequest.videoOptions ? {
+                                ...routedMediaGenerationRequest,
+                                ...(!characterCreatorRouting.isCharacterCreator && routedMediaGenerationRequest.videoOptions ? {
                                     videoOptions: {
-                                        ...mediaGenerationRequest.videoOptions,
+                                        ...routedMediaGenerationRequest.videoOptions,
                                         ...(resolvedVideoSourceForExtension ? { sourceForExtension: resolvedVideoSourceForExtension } : {}),
                                     },
                                 } : {}),
@@ -708,8 +730,9 @@ export const aiInteractionSubjects = [
                 }
 
                 let videoModelMetaInfo: any = null
-                if (aiVideoModel) {
-                    const [videoProvider, videoModel] = (aiVideoModel as string).split(':')
+                const routedAiVideoModel = characterCreatorRouting.isCharacterCreator ? undefined : aiVideoModel
+                if (routedAiVideoModel) {
+                    const [videoProvider, videoModel] = (routedAiVideoModel as string).split(':')
                     videoModelMetaInfo = await AiModel.getAiModel({
                         provider: videoProvider!,
                         model: videoModel!,
@@ -718,7 +741,7 @@ export const aiInteractionSubjects = [
                     if (videoModelMetaInfo) {
                         info(`Video model resolved: ${videoProvider}:${videoModel}`)
                     } else {
-                        warn(`Video model not found: ${aiVideoModel}, proceeding without video routing`)
+                        warn(`Video model not found: ${routedAiVideoModel}, proceeding without video routing`)
                     }
                 }
 
@@ -756,11 +779,15 @@ export const aiInteractionSubjects = [
                             assetLeaseHolderId: leaseHolderId,
                             enableImageGeneration,
                             imageSize,
-                            videoAspectRatio: normalizedVideoAspectRatio,
-                            videoResolution: normalizedVideoResolution,
-                            videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
-                            videoSourceForExtension: resolvedVideoSourceForExtension,
-                            referencedFeatureIds,
+                            videoAspectRatio: characterCreatorRouting.isCharacterCreator ? undefined : normalizedVideoAspectRatio,
+                            videoResolution: characterCreatorRouting.isCharacterCreator ? undefined : normalizedVideoResolution,
+                            videoDurationSeconds: characterCreatorRouting.isCharacterCreator || !normalizedVideoDuration
+                                ? undefined
+                                : Number(normalizedVideoDuration),
+                            videoSourceForExtension: characterCreatorRouting.isCharacterCreator
+                                ? undefined
+                                : resolvedVideoSourceForExtension,
+                            capabilityReferences: characterCreatorRouting.capabilityReferences,
                             mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
                             workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,
                             canvasVisibleArea,

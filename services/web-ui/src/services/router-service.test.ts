@@ -34,20 +34,17 @@ describe('RouterService — route data loader races', () => {
         workspaceLoads.set(workspaceId, deferred)
         return deferred.promise
     })
-    const getWorkspaceDocuments = vi.fn(async () => undefined)
-    const getWorkspaceAiChatThreads = vi.fn(async () => undefined)
+    const loadWorkspaceAssets = vi.fn(async () => undefined)
 
     beforeEach(() => {
         workspaceLoads.clear()
         getWorkspace.mockClear()
-        getWorkspaceDocuments.mockClear()
-        getWorkspaceAiChatThreads.mockClear()
+        loadWorkspaceAssets.mockClear()
         routerStore.resetStore()
         servicesStore.resetStore()
         servicesStore.setDataValues({
             workspaceService: { getWorkspace },
-            documentService: { getWorkspaceDocuments },
-            aiChatThreadService: { getWorkspaceAiChatThreads },
+            assetService: { loadWorkspaceAssets },
         })
     })
 
@@ -78,17 +75,18 @@ describe('RouterService — route data loader races', () => {
         expect(routerStore.getData('currentRoute').shouldFetchData).toBe(false)
     })
 
-    it('starts all workspace route data requests together', async () => {
+    it('loads workspace assets after the workspace itself resolves', async () => {
         routerService.navigateTo('/workspace/:workspaceId', {
             params: { workspaceId: 'workspace-slow' },
             shouldFetchData: true,
         })
 
         expect(getWorkspace).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-slow' })
-        expect(getWorkspaceDocuments).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-slow' })
-        expect(getWorkspaceAiChatThreads).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-slow' })
+        expect(loadWorkspaceAssets).not.toHaveBeenCalled()
 
         workspaceLoads.get('workspace-slow')?.resolve()
         await flushMicrotasks()
+
+        expect(loadWorkspaceAssets).toHaveBeenCalledExactlyOnceWith('workspace-slow')
     })
 })

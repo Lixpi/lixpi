@@ -6,6 +6,7 @@ import { createPixiMediaLayer } from '$src/infographics/workspace/pixiMediaLayer
 function makeImageNode(nodeId: string, overrides: Record<string, any> = {}): Record<string, any> {
     return {
         nodeId,
+        assetId: `${nodeId}-asset`,
         type: 'image',
         fileId: `${nodeId}-file`,
         workspaceId: 'workspace-1',
@@ -683,7 +684,7 @@ describe('createPixiMediaLayer runtime behavior', () => {
         expect(dump.entries).toHaveLength(1)
         expect(dump.entries[0]).toMatchObject({
             nodeId: 'debug-image',
-            fileId: 'debug-image-file',
+            assetId: 'debug-image-asset',
             worldRect: {
                 minX: 10,
                 minY: 20,
@@ -722,6 +723,68 @@ describe('createPixiMediaLayer runtime behavior', () => {
         expect(findLatestDebugEvent('ensure-texture-skip-frame-pending').details.nodeId).toBe('pending-image-api')
     })
 
+    it('retries a failed texture only when its Asset changes and stops after the texture loads', async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+        const decoder = await import('$src/infographics/workspace/pixiImageDecoder.ts')
+        vi.mocked(decoder.decodeImageInWorker)
+            .mockRejectedValueOnce(new Error('Image fetch failed with status 404'))
+            .mockResolvedValue({ width: 10, height: 10 } as ImageBitmap)
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        layer.sync(makeCanvasState({
+            nodes: [makeImageNode('uploaded-image', { assetId: 'uploaded-image-asset' })],
+        }))
+        await vi.waitFor(() => expect(decoder.decodeImageInWorker).toHaveBeenCalledTimes(1))
+
+        layer.retryAssetTextures(new Set(['unrelated-asset']))
+        await Promise.resolve()
+        expect(decoder.decodeImageInWorker).toHaveBeenCalledTimes(1)
+
+        layer.retryAssetTextures(new Set(['uploaded-image-asset']))
+        await vi.waitFor(() => expect(decoder.decodeImageInWorker).toHaveBeenCalledTimes(2))
+
+        layer.retryAssetTextures(new Set(['uploaded-image-asset']))
+        await Promise.resolve()
+        expect(decoder.decodeImageInWorker).toHaveBeenCalledTimes(2)
+        expect(errorSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('switches a completed generated image directly from its transient frame to the original rendition', async () => {
+        const decoder = await import('$src/infographics/workspace/pixiImageDecoder.ts')
+        vi.mocked(decoder.decodeImageInWorker).mockClear()
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const node = makeImageNode('completed-generated-image', {
+            assetId: 'final-generated-asset',
+            generatedBy: {
+                conversationAssetId: 'thread-1',
+                generationRequestId: 'request-1',
+            },
+        })
+        layer.setTransientImageSource(node.nodeId, '/api/transient-media/run-1/partial.png')
+        layer.sync(makeCanvasState({ nodes: [node] }))
+        await vi.waitFor(() => expect(decoder.decodeImageInWorker).toHaveBeenCalledTimes(1))
+
+        layer.setGeneratingImageNodes(new Map([
+            [node.nodeId, { shape: 'preFrameCircle', sourceRendition: 'original' }],
+        ]))
+        layer.setTransientImageSource(node.nodeId, null)
+
+        await vi.waitFor(() => expect(
+            vi.mocked(decoder.decodeImageInWorker).mock.calls.some(([url]) =>
+                url.includes('/api/assets/final-generated-asset/renditions/original')),
+        ).toBe(true))
+        const requestedUrls = vi.mocked(decoder.decodeImageInWorker).mock.calls.map(([url]) => url)
+        expect(requestedUrls).not.toContainEqual(
+            expect.stringContaining('/renditions/thumbnail'),
+        )
+        expect(requestedUrls).not.toContainEqual(
+            expect.stringContaining('/renditions/preview'),
+        )
+    })
+
     it('records verbose debug payloads only when the reproduction flag is enabled', async () => {
         const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => undefined)
         window.localStorage.setItem('lixpi.debug.pixiMedia', '1')
@@ -735,7 +798,7 @@ describe('createPixiMediaLayer runtime behavior', () => {
 
         expect(syncStart.details.imageNodes).toEqual([expect.objectContaining({
             nodeId: 'verbose-image',
-            sourceKey: 'workspace-1|verbose-image-file|/verbose-image.png',
+            sourceKey: 'verbose-image-asset',
         })])
         expect(Array.isArray(syncStart.details.entriesBefore)).toBe(true)
         expect(Array.isArray(visibilityEnd.details.entries)).toBe(true)

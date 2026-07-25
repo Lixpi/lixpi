@@ -28,7 +28,7 @@ workspace-assets-v2.zip
     └── <sha256>
 ```
 
-Blob filenames are hashes, not Asset IDs or original filenames. One hash appears once even when several Assets/Features would reuse the same bytes.
+Blob filenames are hashes, not Asset IDs or original filenames. One hash appears once even when several Assets or Capabilities reuse the same bytes.
 
 ## Manifest
 

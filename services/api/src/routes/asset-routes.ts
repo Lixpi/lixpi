@@ -4,18 +4,30 @@ import { Router } from 'express'
 import multer from 'multer'
 
 import NATS_Service from '@lixpi/nats-service'
-import { MAX_UPLOAD_FILE_SIZE, type AssetRenditionName } from '@lixpi/constants'
+import {
+    MAX_UPLOAD_FILE_SIZE,
+    type AssetDocumentRole,
+    type AssetRenditionName,
+} from '@lixpi/constants'
 
 import { jwtVerifier } from '../helpers/auth.ts'
 import AssetModel from '../models/asset.ts'
 import BlobModel from '../models/blob.ts'
 import Workspace from '../models/workspace.ts'
 import { getAssetRequesterContext } from '../services/asset-requester-context.ts'
+import AssetDocumentService from '../services/asset-document-service.ts'
 import { AssetFileRejectedError, ingestAssetFile } from '../services/asset-ingest.ts'
 import { fetchPublicRemoteFile } from '../services/public-remote-file.ts'
 
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_FILE_SIZE } })
+
+const normalizeUploadedFilename = (filename: string): string => {
+    const hasUtf8Mojibake = /[\u0080-\u009f]|Ã|Â|â/.test(filename)
+    const decoded = hasUtf8Mojibake ? Buffer.from(filename, 'latin1').toString('utf8') : filename
+    const validDecoded = decoded.includes('\uFFFD') ? filename : decoded
+    return validDecoded.normalize('NFC').replace(/[\u00a0\u202f]/g, ' ')
+}
 
 const authenticateRequest = async (req: any, res: any, next: any) => {
     const authHeader = req.headers.authorization
@@ -44,7 +56,7 @@ router.post('/workspaces/:workspaceId', authenticateRequest, upload.single('file
             workspaceId,
             ownerUserId: userId,
             buffer: req.file.buffer,
-            originalName: req.file.originalname,
+            originalName: normalizeUploadedFilename(req.file.originalname),
             ...(req.body?.expectedKind === 'image' ? { expectedKind: 'image' as const } : {}),
         }))
     } catch (error) {
@@ -121,6 +133,24 @@ router.get('/:assetId/renditions/:renditionName', authenticateRequest, async (re
     }
     res.setHeader('Content-Length', buffer.length)
     return res.end(buffer)
+})
+
+router.get('/:assetId/documents/:role/snapshot', authenticateRequest, async (req: any, res: any) => {
+    const role = req.params.role as AssetDocumentRole
+    if (role !== 'content' && role !== 'conversation' && role !== 'provenance') {
+        return res.status(400).json({ error: 'INVALID_DOCUMENT_ROLE' })
+    }
+    const requester = await getAssetRequesterContext(req.user.userId)
+    const asset = await AssetModel.get({ assetId: req.params.assetId, requester })
+    if ('error' in asset) return res.status(asset.error === 'NOT_FOUND' ? 404 : 403).json(asset)
+    const snapshot = await AssetDocumentService.loadSnapshot(asset, role)
+    if (!snapshot) return res.status(404).json({ error: 'DOCUMENT_SNAPSHOT_NOT_FOUND' })
+    const etag = `"${snapshot.blobHash ?? `${asset.assetId}:${role}:${snapshot.version}`}"`
+    if (req.headers['if-none-match'] === etag) return res.status(304).end()
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Cache-Control', 'private, no-cache')
+    res.setHeader('ETag', etag)
+    return res.json(snapshot)
 })
 
 export default router

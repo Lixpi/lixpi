@@ -5,7 +5,6 @@ import { NATS_SUBJECTS } from '@lixpi/constants'
 
 import Workspace from '../../models/workspace.ts'
 import AssetModel from '../../models/asset.ts'
-import ExtractionRun from '../../models/extraction-run.ts'
 import Organization from '../../models/organization.ts'
 import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 
@@ -103,8 +102,7 @@ export const workspaceSubjects = [
             try {
                 const requester = await getAssetRequesterContext(userId)
                 const removedAssetReferences = await AssetModel.removeAllWorkspaceReferences({ workspaceId, requester })
-                const deletedExtractionRuns = await ExtractionRun.deleteWorkspaceRuns({ workspaceId })
-                info(`Removed ${removedAssetReferences} Asset references and ${deletedExtractionRuns} extraction runs for ${workspaceId}`)
+                info(`Removed ${removedAssetReferences} Asset references for ${workspaceId}`)
             } catch (error) {
                 warn(`Workspace dependency cleanup failed for ${workspaceId}:`, error)
                 return { error: 'WORKSPACE_DEPENDENCY_CLEANUP_FAILED' }

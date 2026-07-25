@@ -1,4 +1,5 @@
 packages:
+  - "packages/lixpi/capability-system"
   - "packages/lixpi/canvas-engine"
   - "packages/lixpi/constants/ts"
   - "packages/lixpi/debug-tools/ts"

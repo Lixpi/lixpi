@@ -8,7 +8,7 @@ import {
     type ProviderName,
 } from '@lixpi/constants'
 
-import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from './extraction/vlm-client.ts'
+import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from './structured-vlm/structured-vlm-client.ts'
 import type { ChatMessage } from './graph/state.ts'
 
 // Compact, model-friendly description of a single media still. Generated and

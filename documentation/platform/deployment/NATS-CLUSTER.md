@@ -1,141 +1,109 @@
 ---
 title: NATS Cluster
-description: The AWS wiring of Lixpi's NATS cluster — ports, private CloudMap discovery, the Lambda sidecar for public client access, Caddy-in-Lambda TLS issuance, and the auth-callout security boundary.
+description: Three-node ECS EC2 NATS topology, EBS-backed JetStream, discovery, TLS, authentication, backup, restore, and failure behavior.
 ---
 
 # NATS Cluster
 
-NATS is where Lixpi makes its boldest design choice: **no load balancer, no API Gateway, browsers connect straight to Fargate tasks over WebSocket-Secure**. The whole thing is glued together by CloudMap, a Lambda sidecar, and a Caddy-based Lambda that owns the TLS certificate lifecycle.
+Lixpi runs a three-node NATS cluster on ECS EC2. Each node has an encrypted gp3 EBS volume mounted at `/data/jetstream`, and the NATS daemon stores JetStream streams and Object Store data on that host volume. Task restarts and deployments reuse the same disk.
 
-This page documents the AWS wiring of that cluster. For the conceptual auth model — what a callout is and why NATS delegates identity to the API — see [Authentication](../AUTHENTICATION.md). For how the cluster fits into the wider AWS topology, see [Infrastructure Overview](./INFRASTRUCTURE-OVERVIEW.md). The full server configuration is documented in the [NATS cluster README](../../../infrastructure/pulumi/src/resources/NATS-cluster/README.md), and the resource definitions live in [`infrastructure/pulumi/src/resources/NATS-cluster/`](../../../infrastructure/pulumi/src/resources/NATS-cluster/).
+Browsers connect directly over WebSocket Secure. API services and internal workers use NATS for commands, events, and durable logs. Browser JWTs receive only the command publish permissions and tokenized event subscriptions that the API auth callout authorizes.
 
-## Ports
-
-| Port | Purpose | Exposed to |
-|------|---------|------------|
-| `4222` | Native NATS client protocol | Internet (TCP) |
-| `443` | NATS WebSocket (WSS) | Internet (browsers) |
-| `6222` | Cluster routing (gossip) | VPC CIDR only |
-| `8222` | HTTP management / `/healthz` | VPC CIDR only |
-
-## Cluster Discovery
-
-Internal node-to-node discovery uses the **private** CloudMap namespace. Each NATS task auto-registers its private IP under `nats.cloudmap.<domain>.internal` with a 10-second TTL and `MULTIVALUE` routing. On boot, every task seeds itself with a single route URL:
-
-```
-nats://sys:<password>@nats.cloudmap.<domain>.internal:6222
-```
-
-NATS gossip then discovers the other two peers, forming a full mesh.
-
-## Public Client Access
-
-Browsers need a real public DNS name with valid TLS. CloudMap's public namespace would work, but it ties DNS to AWS internals and makes certificate management awkward. Instead, Lixpi uses a **tiny Lambda sidecar** ([`nats-service-discovery-sidecar.ts`](../../../infrastructure/pulumi/src/resources/NATS-cluster/nats-service-discovery-sidecar.ts)):
+## Topology
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
-sequenceDiagram
-    participant ECS as ECS Fargate
-    participant EB as EventBridge
-    participant Lambda as nats-sidecar Lambda
-    participant R53 as Route53
-    participant Browser as Browser
+graph TB
+    Browser[Browser]
+    API[API service]
+    Auth[NATS auth callout]
+    Backup[Scheduled backup task]
+    S3[Versioned encrypted S3 backup bucket]
 
-    rect rgb(220, 236, 233)
-        Note over ECS, Browser: PHASE 1 - TASK LIFECYCLE — NATS task starts or stops
-        ECS->>ECS: Fargate schedules task, assigns public IP
-        ECS->>EB: Task state change event
-        activate EB
+    subgraph Cluster[Three-node ECS EC2 cluster]
+        N1[NATS node 1<br/>EBS /data/jetstream]
+        N2[NATS node 2<br/>EBS /data/jetstream]
+        N3[NATS node 3<br/>EBS /data/jetstream]
     end
 
-    rect rgb(195, 222, 221)
-        Note over ECS, Browser: PHASE 2 - REGISTRATION — Sidecar syncs Route53
-        EB->>Lambda: Invoke with task event
-        activate Lambda
-        Lambda->>ECS: DescribeTasks — list running NATS IPs
-        Lambda->>R53: Upsert A record nats.{domain} with all healthy IPs
-        activate R53
-        R53-->>Lambda: ok
-        deactivate R53
-        deactivate Lambda
-        deactivate EB
-    end
-
-    rect rgb(242, 234, 224)
-        Note over ECS, Browser: PHASE 3 - CLIENT CONNECTS
-        Browser->>R53: Resolve nats.{domain}
-        activate R53
-        R53-->>Browser: Multiple A records (round-robin)
-        deactivate R53
-        Browser->>ECS: WSS :443 to one of the IPs
-        activate ECS
-        ECS-->>Browser: Upgraded WebSocket
-        deactivate ECS
-    end
+    Browser -->|WSS and user JWT| N1
+    API -->|internal NATS| N2
+    N1 <--> N2
+    N2 <--> N3
+    N3 <--> N1
+    N1 --> Auth
+    N2 --> Auth
+    N3 --> Auth
+    Backup --> Cluster
+    Backup --> S3
 ```
 
-So clients get the same load-balancing behavior as a proper ALB, but with roughly zero latency overhead and no ALB cost.
+The ECS service uses daemon scheduling so one NATS task runs on each cluster instance. Cloud Map and the service-discovery sidecar keep route membership current. The sidecar uses host networking and can fall back to the EC2 public address when ECS task attachment data is unavailable.
 
-## TLS for NATS (Caddy in Lambda)
+## EBS mounting
 
-ACM can't issue certs for endpoints that aren't behind an AWS load balancer, so Lixpi runs its own ACME client. [`certificate-manager/`](../../../infrastructure/pulumi/src/resources/certificate-manager/) packages **Caddy** inside a Lambda container:
+Each instance owns one non-ephemeral EBS volume. Bootstrap resolves the configured `/dev/xvdh` mapping through `ebsnvme-id`; it does not guess from unmounted disks. Startup fails closed if the expected volume is absent. The script avoids remounting an active filesystem and avoids duplicate `/etc/fstab` entries.
 
-1. Pulumi creates a placeholder A record at `nats.{domain}` pointing at `8.8.8.8` so the domain exists in DNS (required for the ACME DNS-01 challenge).
-2. Lambda runs Caddy with the Route53 DNS provider plugin.
-3. Caddy talks to Let's Encrypt, solves DNS-01 by creating `_acme-challenge.*` TXT records, gets the cert.
-4. The cert and key are written to Secrets Manager under a prefix like `nats-certs-<org>-<stage>`.
-5. Each NATS Fargate task pulls the cert from Secrets Manager on boot via `certificate-helper.ts`.
+The volume resource is retained when an EC2 instance terminates. Replacing an instance therefore requires an explicit recovery procedure that attaches the intended volume or restores from backup. Do not treat Auto Scaling replacement as a transparent data migration.
 
-The cert-manager Lambda has a 15-minute timeout and 1 GB of memory — plenty for issuance and renewal, cheap because it runs rarely.
+## JetStream durability
 
-## NATS Auth Callout — The Security Boundary
+Application streams and Object Store buckets use three replicas. Acknowledged data therefore has a copy on every cluster node under normal operation. EBS protects a node across task restarts, replication protects against one unavailable node, and S3 snapshots provide recovery outside the cluster.
 
-NATS doesn't store user passwords. Instead, the `api` service **is** the authority: when a browser connects with an Auth0 JWT, NATS asks the API "is this valid, and what can they subscribe to?" The conceptual model — credential types, signing, the shared verification library — is documented in [Authentication](../AUTHENTICATION.md); this section covers how that handshake is wired on AWS. See the [NATS cluster README](../../../infrastructure/pulumi/src/resources/NATS-cluster/README.md) for the full configuration.
+The API checks existing streams at startup and raises their replica count to three. New capability event streams and Blob buckets are created with replicas set to three by their owning services.
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
-sequenceDiagram
-    participant Browser
-    participant NATS
-    participant API as api service
-    participant Auth0
+## TLS and discovery
 
-    rect rgb(220, 236, 233)
-        Note over Browser, Auth0: PHASE 1 - CONNECT — Browser opens WSS with JWT
-        Browser->>NATS: WSS connect { auth_token: JWT }
-        activate NATS
-    end
+The public DNS and certificate automation remain deployment-owned infrastructure. NATS tasks load the current certificate material at startup, advertise their cluster route address, and expose WebSocket Secure to browser clients. Route membership comes from service discovery rather than a load balancer.
 
-    rect rgb(195, 222, 221)
-        Note over Browser, Auth0: PHASE 2 - CALLOUT — NATS asks API to verify
-        NATS->>NATS: Encrypt request with XKey
-        NATS->>API: Publish $SYS.REQ.USER.AUTH (encrypted)
-        activate API
-        API->>Auth0: Verify JWT signature + claims
-        activate Auth0
-        Auth0-->>API: { user, scopes }
-        deactivate Auth0
-        API->>API: Build NATS user JWT with allow/deny subjects
-        API-->>NATS: msg.respond(encrypted response)
-        deactivate API
-    end
+## Authentication boundary
 
-    rect rgb(242, 234, 224)
-        Note over Browser, Auth0: PHASE 3 - AUTHORIZED — NATS enforces subject permissions
-        NATS->>NATS: Decrypt, validate, apply permissions
-        NATS-->>Browser: Connection accepted
-        deactivate NATS
-    end
-```
+The NATS auth callout verifies user JWTs and internal service identities. Canonical service subjects stay internal. The API relays authorized events to per-user tokenized subjects for Asset documents, chat pipelines, Capability catalog invalidation, and Capability run progress.
 
-{% callout type="warning" %}
-**The `tls://` reply-path requirement.** A critical detail buried in the code: the API service **must** connect to NATS with `tls://`, not `nats://`. The auth callout reply path uses an internal NATS subject that only trusted (TLS) clients are allowed to publish to. Without TLS, subscriptions work but responses silently fail and browsers time out on connect.
-{% /callout %}
+A browser cannot subscribe to canonical Capability events or read Object Store data directly. Capability resources are returned only through authenticated API reads after catalog and manifest authorization.
 
-## Related Pages
+## Backup
 
-| Page | What it covers |
-|------|----------------|
-| [Infrastructure Overview](./INFRASTRUCTURE-OVERVIEW.md) | The high-level AWS topology, network layout, the `api` ECS service, Web UI, and DynamoDB |
-| [Scaling & Operations](./SCALING-AND-OPERATIONS.md) | NATS cluster sizing, the realistic traffic ceiling, failure modes, and scaling steps |
-| [Authentication](../AUTHENTICATION.md) | The conceptual dual-auth model and the auth callout |
+An EventBridge schedule runs `services/nats/backup-streams.sh` every six hours. The task:
+
+1. enumerates JetStream streams;
+2. writes a `nats stream backup` snapshot for each stream;
+3. records an inventory;
+4. uploads the snapshot tree to a versioned, encrypted S3 bucket;
+5. updates the `LATEST` marker only after upload succeeds.
+
+Lifecycle rules retain recent restore points and expire older versions. Backup credentials are task credentials; they are not stored in scripts or NATS data.
+
+## Restore
+
+Use an isolated recovery cluster unless the incident procedure explicitly requires an in-place restore.
+
+1. Stop application writers.
+2. Select and record the snapshot ID.
+3. Verify cluster capacity and credentials.
+4. Run `services/nats/restore-streams.sh <snapshot-id>` from the NATS image with the backup bucket, prefix, NATS URL, and system credentials configured.
+5. Compare stream names, subjects, message counts, replicas, and last sequences with the inventory.
+6. Read one known Asset document replay, one Capability manifest/resource, and one Capability run replay through their authorized API paths.
+7. Resume writers only after those checks pass.
+
+Restoring a stream whose name already exists can conflict with the live cluster. The restore script fails rather than deleting or overwriting a stream implicitly.
+
+## Failure behavior
+
+| Failure | Expected behavior |
+|---|---|
+| NATS task restart | ECS restarts the task on the same host and reuses `/data/jetstream`. |
+| One node unavailable | Three-replica streams remain available on the other nodes, subject to JetStream quorum. |
+| Instance loss | Recover the retained EBS volume onto a replacement instance or restore the cluster from S3. |
+| Missing expected EBS mapping | Bootstrap fails closed; it never formats an arbitrary disk. |
+| Corrupt or incomplete backup | Inventory and authorized read checks fail; writers remain stopped. |
+| Revoked browser access | API relays point-check authorization and stop forwarding canonical events. |
+
+## Code map
+
+- [`NATS-cluster.ts`](../../../infrastructure/pulumi/src/resources/NATS-cluster/NATS-cluster.ts)
+- [`ECS-EC2-cluster.ts`](../../../infrastructure/pulumi/src/resources/ECS-EC2-cluster.ts)
+- [`nats-service-discovery-sidecar.ts`](../../../infrastructure/pulumi/src/resources/NATS-cluster/nats-service-discovery-sidecar.ts)
+- [`services/nats/backup-streams.sh`](../../../services/nats/backup-streams.sh)
+- [`services/nats/restore-streams.sh`](../../../services/nats/restore-streams.sh)
+
+Capability-specific storage, repair, and retirement rules live in [Capability Storage and Operations](../../library/CAPABILITY-STORAGE.md).

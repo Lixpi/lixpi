@@ -70,15 +70,17 @@ const normalizeCanvasState = (canvasState: CanvasState | undefined): CanvasState
     } as CanvasState
 }
 
-const getAssetMembershipSignature = (canvasState: CanvasState): string => {
-    const membership = canvasState.nodes
+const getAssetMembershipEntries = (canvasState: CanvasState): string[] => {
+    return canvasState.nodes
         .flatMap((node) => {
             const assetId = (node as CanvasNode & { assetId?: string }).assetId
             return assetId ? [`${assetId}#${node.nodeId}`] : []
         })
         .sort()
-    return JSON.stringify(membership)
 }
+
+const getAssetMembershipSignature = (canvasState: CanvasState): string =>
+    JSON.stringify(getAssetMembershipEntries(canvasState))
 
 const LEGACY_CANVAS_STORAGE_FIELDS = new Set([
     'fileId',
@@ -342,15 +344,28 @@ export default {
             const incomingCanvasState = normalizeCanvasState(canvasState)
             const currentDate = getNextCanvasStateUpdatedAt(currentWorkspace)
             assertRevision2CanvasStorage(incomingCanvasState)
-            if (getAssetMembershipSignature(currentCanvasState) !== getAssetMembershipSignature(incomingCanvasState)) {
+            const currentAssetMembership = getAssetMembershipEntries(currentCanvasState)
+            const incomingAssetMembership = getAssetMembershipEntries(incomingCanvasState)
+            if (!persistViewport
+                && JSON.stringify(currentAssetMembership) !== JSON.stringify(incomingAssetMembership)) {
+                const currentMembershipSet = new Set(currentAssetMembership)
+                const incomingMembershipSet = new Set(incomingAssetMembership)
+                err('[Workspace.updateCanvasState] rejected asset membership mutation:', {
+                    workspaceId,
+                    expectedCanvasStateUpdatedAt: canvasStateSaveToken,
+                    persistedCanvasStateUpdatedAt: getCanvasStateUpdatedAt(currentWorkspace),
+                    currentAssetMembership,
+                    incomingAssetMembership,
+                    addedMembership: incomingAssetMembership.filter(entry => !currentMembershipSet.has(entry)),
+                    removedMembership: currentAssetMembership.filter(entry => !incomingMembershipSet.has(entry)),
+                    currentNodeCount: currentCanvasState.nodes.length,
+                    incomingNodeCount: incomingCanvasState.nodes.length,
+                })
                 throw new Error('CANVAS_ASSET_MEMBERSHIP_MUTATION_REJECTED')
             }
-            const incomingCanvasStateForSave = persistViewport
-                ? incomingCanvasState
-                : { ...incomingCanvasState, viewport: currentCanvasState.viewport }
             const nextCanvasState = persistViewport
-                ? incomingCanvasStateForSave
-                : { ...incomingCanvasStateForSave, viewport: currentCanvasState.viewport }
+                ? { ...currentCanvasState, viewport: incomingCanvasState.viewport }
+                : { ...incomingCanvasState, viewport: currentCanvasState.viewport }
 
             await dynamoDBService.transactWrite({
                 operations: [

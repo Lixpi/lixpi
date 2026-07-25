@@ -212,6 +212,8 @@ export type GeneratingMediaOutlineTargets = Set<string> | Map<string, Generating
 export type PixiMediaLayer = {
     // Reconciles canvas state into Pixi image/video/display objects.
     sync: (canvasState: CanvasState | null) => void
+    // Retries unresolved image textures after their Asset record changes.
+    retryAssetTextures: (assetIds: ReadonlySet<string>) => void
     // Updates animated generation/reference outlines for image-like media nodes.
     setGeneratingImageNodes: (nodeTargets: GeneratingMediaOutlineTargets) => void
     // Uses a run-scoped media reference while a generated Asset is still unsettled.
@@ -521,7 +523,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function logFinalGeneratedImageLifecycle(event: string, details: Record<string, unknown>): void {
-        console.info('[CANVAS][pixi-media]', event, details)
+        const host = getDebugHost()
+        if (!host || !isVerboseDebugEnabled(host)) return
+        console.debug('[CANVAS][pixi-media]', event, details)
     }
 
     // Snapshot all live image entries at the moment of the dump. The dump avoids
@@ -916,6 +920,28 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             entriesAfter: verbose ? getDebugEntrySnapshots() : entries.size,
             registryDispatchedNodes: [...registryDispatchedNodes],
         }))
+    }
+
+    function retryAssetTextures(assetIds: ReadonlySet<string>): void {
+        if (destroyed || health !== 'ready' || assetIds.size === 0) return
+
+        let shouldRetryVisibleImages = false
+        for (const entry of entries.values()) {
+            if (!assetIds.has(entry.nodeRef.assetId) || entry.textureKey !== null) continue
+
+            // Invalidate an in-flight request as well as a settled failure. An
+            // Asset event can race the 404 response from a not-yet-ready
+            // preview; the replacement request must resolve its source again
+            // against the new rendition state.
+            entry.requestId++
+            entry.requestedTier = null
+            shouldRetryVisibleImages = true
+        }
+
+        if (!shouldRetryVisibleImages) return
+        updateVisibleImages()
+        schedulePrefetch()
+        scheduleRender()
     }
 
     function clearPixiScene(): void {
@@ -2531,6 +2557,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     return {
         sync,
+        retryAssetTextures,
         setGeneratingImageNodes,
         setTransientImageSource,
         setViewport,

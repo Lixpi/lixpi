@@ -27,8 +27,7 @@ function makeReference(overrides: Partial<ImageGenerationTraceReference> = {}): 
         label: 'painted portrait of the man',
         role: 'target',
         nodeId: 'person',
-        fileId: 'person-file',
-        workspaceId: 'workspace-1',
+        assetId: 'person-asset',
         ...overrides,
     }
 }
@@ -103,20 +102,23 @@ describe('createImageGenerationTraceDetails — reference tile load contract', (
 // =============================================================================
 
 describe('createImageGenerationTraceDetails — reference source resolution', () => {
-    it('resolves a nats-obj:// reference to an authenticated /api/files URL', async () => {
+    it('treats a nats-obj:// reference as unusable and falls back to the asset rendition path', async () => {
+        // resolveReferenceImageSrc drops nats-obj:// URLs entirely (they can't be
+        // fetched by the browser), so the asset-backed rendition path is the only
+        // usable source here.
         const { image } = renderTiles([makeReference({ imageUrl: 'nats-obj://workspace-workspace-1-files/person-file' })])
-        await vi.waitFor(() => expect(image.src).toContain('/api/files/workspace-1/person-file'))
+        await vi.waitFor(() => expect(image.src).toContain('/api/assets/person-asset/renditions/preview'))
         expect(image.src).toContain('token=token-1')
     })
 
-    it('falls back to fileId/workspaceId when imageUrl is empty', async () => {
+    it('falls back to the asset rendition path when imageUrl is empty', async () => {
         const { image } = renderTiles([makeReference({ imageUrl: '' })])
-        await vi.waitFor(() => expect(image.src).toContain('/api/files/workspace-1/person-file'))
+        await vi.waitFor(() => expect(image.src).toContain('/api/assets/person-asset/renditions/preview'))
     })
 
     it('retries the next source (e.g. the canvas in-memory image) when the primary errors', async () => {
         const { image } = renderTiles(
-            [makeReference({ imageUrl: 'http://example.com/primary.png', fileId: undefined, workspaceId: undefined })],
+            [makeReference({ imageUrl: 'http://example.com/primary.png', assetId: undefined })],
             { getAdditionalReferenceImageSources: () => ['blob:canvas-fallback'] },
         )
         await vi.waitFor(() => expect(image.src).toContain('http://example.com/primary.png'))
@@ -304,7 +306,6 @@ describe('formatImageGenerationTraceRole', () => {
 describe('formatImageGenerationTraceReferenceSource', () => {
     it('maps known reference sources to stable human labels', () => {
         expect(formatImageGenerationTraceReferenceSource('branch-candidate')).toBe('Image from this branch')
-        expect(formatImageGenerationTraceReferenceSource('feature-reference')).toBe('Feature reference image')
         expect(formatImageGenerationTraceReferenceSource('message-reference')).toBe('Attached to chat message')
         expect(formatImageGenerationTraceReferenceSource('unknown-source')).toBe('Reference image')
     })

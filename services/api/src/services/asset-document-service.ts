@@ -20,7 +20,9 @@ import {
     getOrganizationAssetStepStreamName,
     type AssetDocCoordinate,
     type AssetDocSnapshot,
+    type AssetDocSnapshotReference,
     type AssetSubmitStepsPayload,
+    type LoggedAssetStepStreamEvent,
     type SubmitResult,
 } from '@lixpi/prosemirror'
 
@@ -42,6 +44,8 @@ const { ORG_NAME, STAGE } = process.env
 const assetsTableName = (): string => getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE)
 const ASSET_DOCUMENT_ROLES: AssetDocumentRole[] = ['content', 'conversation', 'provenance']
 const SETTLED_STEP_REPLAY_GRACE_MS = 5 * 60 * 1000
+const RESUME_EVENT_SCAN_LIMIT = 1_000
+const RESUME_EVENT_REPLY_BUDGET_BYTES = 256 * 1024
 
 const getDocumentType = (role: AssetDocumentRole) => {
     if (role === 'content') return DOCUMENT_TYPE.ASSET_CONTENT
@@ -67,6 +71,50 @@ const loadSnapshot = async (asset: Asset, role: AssetDocumentRole): Promise<Asse
         schemaVersion: pointer.schemaVersion,
         doc: JSON.parse(Buffer.from(bytes).toString('utf8')) as object,
     }
+}
+
+const getSnapshotReference = (asset: Asset, role: AssetDocumentRole): AssetDocSnapshotReference | null => {
+    const pointer = asset.documents[role]
+    if (!pointer) return null
+    return {
+        organizationId: asset.organizationId,
+        assetId: asset.assetId,
+        role,
+        blobHash: pointer.blobHash,
+        version: pointer.version,
+        schemaVersion: pointer.schemaVersion,
+        url: `/api/assets/${encodeURIComponent(asset.assetId)}/documents/${role}/snapshot`,
+    }
+}
+
+const buildResumeEventPage = ({
+    candidates,
+    localStreamSeq,
+    effectiveVersion,
+}: {
+    candidates: LoggedAssetStepStreamEvent[]
+    localStreamSeq: number
+    effectiveVersion: number
+}): { events: LoggedAssetStepStreamEvent[]; replayedThroughStreamSeq: number } => {
+    const events: LoggedAssetStepStreamEvent[] = []
+    let replayedThroughStreamSeq = localStreamSeq
+    let replyBytes = 2
+
+    for (const event of candidates) {
+        const include = event.kind !== 'STEP' || event.version > effectiveVersion
+        if (include) {
+            const eventBytes = Buffer.byteLength(JSON.stringify(event), 'utf8') + 1
+            if (eventBytes > RESUME_EVENT_REPLY_BUDGET_BYTES) {
+                throw new Error(`ASSET_DOCUMENT_EVENT_TOO_LARGE:${event.streamSequence}`)
+            }
+            if (events.length > 0 && replyBytes + eventBytes > RESUME_EVENT_REPLY_BUDGET_BYTES) break
+            events.push(event)
+            replyBytes += eventBytes
+        }
+        replayedThroughStreamSeq = event.streamSequence
+    }
+
+    return { events, replayedThroughStreamSeq }
 }
 
 const loadCurrentSnapshot = async (asset: Asset, role: AssetDocumentRole): Promise<AssetDocSnapshot | null> => {
@@ -535,12 +583,14 @@ const AssetDocumentService = {
         requester,
         localVersion = 0,
         localStreamSeq = 0,
+        acceptSnapshot = true,
         activateLiveRelay = false,
     }: {
         coordinate: AssetDocCoordinate
         requester: AssetRequesterContext
         localVersion?: number
         localStreamSeq?: number
+        acceptSnapshot?: boolean
         activateLiveRelay?: boolean
     }) => {
         if (!ASSET_DOCUMENT_ROLES.includes(coordinate.role)) return { error: 'INVALID_DOCUMENT_ROLE' }
@@ -556,21 +606,29 @@ const AssetDocumentService = {
         const liveSubject = activateLiveRelay
             ? ensureAssetDocumentEventRelay({ coordinate, requester })
             : undefined
-        const snapshot = await loadSnapshot(asset, coordinate.role)
+        const snapshot = getSnapshotReference(asset, coordinate.role)
         const transport = AssetProseMirrorStepTransport.fromSingleton()
         const state = await transport.getCurrentSubjectState(coordinate)
-        const events = state.streamSequence > localStreamSeq
-            ? (await transport.replay(coordinate, localStreamSeq + 1, 10_000)).filter((event) =>
-                event.kind !== 'STEP' || event.version > localVersion)
+        const candidates = state.streamSequence > localStreamSeq
+            ? await transport.replay(coordinate, localStreamSeq + 1, RESUME_EVENT_SCAN_LIMIT)
             : []
+        const page = buildResumeEventPage({
+            candidates,
+            localStreamSeq,
+            effectiveVersion: acceptSnapshot
+                ? Math.max(localVersion, snapshot?.version ?? 0)
+                : localVersion,
+        })
         return {
             snapshot,
             currentVersion: Math.max(snapshot?.version ?? 0, state.documentVersion),
-            currentStreamSeq: state.streamSequence,
+            currentStreamSeq: page.replayedThroughStreamSeq,
+            latestStreamSeq: state.streamSequence,
+            hasMore: page.replayedThroughStreamSeq < state.streamSequence,
             streamName: getOrganizationAssetStepStreamName(coordinate.organizationId),
             subject: getAssetStepSubject(coordinate),
             ...(liveSubject ? { liveSubject } : {}),
-            events,
+            events: page.events,
         }
     },
 

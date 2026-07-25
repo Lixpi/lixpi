@@ -13,48 +13,9 @@ import { attachGeneratedAssetNode, settleGeneratedAssetOriginal } from '../../se
 import { materializeAssetProvenance } from '../../services/asset-provenance-materializer.ts'
 import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
 import { TransientMediaStore, type TransientMediaMimeType } from '../../services/transient-media-store.ts'
+import { readImageIntrinsicSize } from './image-intrinsic-size.ts'
 
-// Intrinsic pixel size read straight from the PNG IHDR / JPEG SOF header bytes
-// (no image library). Lets the API persist final fitted node dimensions so
-// clients never re-fit or re-layout after load. Returns null when unreadable.
-export function readImageIntrinsicSize(buffer: Buffer): { width: number; height: number } | null {
-    // PNG: 8-byte signature, then the IHDR chunk: 4-byte length, 'IHDR',
-    // 4-byte width, 4-byte height.
-    if (buffer.length >= 24
-        && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
-        const width = buffer.readUInt32BE(16)
-        const height = buffer.readUInt32BE(20)
-        return width > 0 && height > 0 ? { width, height } : null
-    }
-
-    // JPEG: scan markers for a start-of-frame segment (SOF0-SOF15, excluding
-    // DHT/DAC/RST) which carries 2-byte height then width after the precision byte.
-    if (buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
-        let offset = 2
-        while (offset + 9 < buffer.length) {
-            if (buffer[offset] !== 0xff) {
-                offset += 1
-                continue
-            }
-            const marker = buffer[offset + 1]!
-            if (marker === 0xff) {
-                offset += 1
-                continue
-            }
-            const isStartOfFrame = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc
-            if (isStartOfFrame) {
-                const height = buffer.readUInt16BE(offset + 5)
-                const width = buffer.readUInt16BE(offset + 7)
-                return width > 0 && height > 0 ? { width, height } : null
-            }
-            const segmentLength = buffer.readUInt16BE(offset + 2)
-            if (segmentLength < 2) return null
-            offset += 2 + segmentLength
-        }
-    }
-
-    return null
-}
+export { readImageIntrinsicSize } from './image-intrinsic-size.ts'
 
 function readImageMimeType(buffer: Buffer): TransientMediaMimeType | null {
     if (buffer.length >= 8
@@ -209,6 +170,7 @@ export class ImagePublisher {
             originalName: isPng ? 'generated-image.png' : 'generated-image.jpg',
             mimeType: isPng ? 'image/png' : 'image/jpeg',
             kind: 'image',
+            ...(readImageIntrinsicSize(buffer) ?? {}),
         })
 
         const intrinsicSize = readImageIntrinsicSize(buffer)

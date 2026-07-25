@@ -29,6 +29,7 @@ type LoggedEvent = AssetStepStreamEvent & { streamSequence?: number }
 
 const BATCH_DELAY_MS = 100
 const MAX_BATCH_SIZE = 50
+const DOCUMENT_RESUME_TIMEOUT_MS = 15_000
 const sharedWorkspaceLeases = new Map<string, { leaseId: string; holderId: string; references: number }>()
 
 export class ProseMirrorAuthorityService {
@@ -44,6 +45,8 @@ export class ProseMirrorAuthorityService {
     private subscription: { unsubscribe: () => void } | null = null
     private applyingAuthorityStep = false
     private submitting = false
+    private resumeInProgress = false
+    private resumeRequested = false
     private readonly submissionWaiters: Array<() => void> = []
     private disconnected = false
     private sharedLeaseKey: string | null = null
@@ -184,39 +187,65 @@ export class ProseMirrorAuthorityService {
     }
 
     private async resume(): Promise<void> {
-        const result = await servicesStore.getData('nats').request(
-            NATS_SUBJECTS.ASSET_SUBJECTS.DOCUMENT_RESUME,
-            {
-                token: await AuthService.getTokenSilently(),
-                organizationId: this.options.organizationId,
-                assetId: this.options.assetId,
-                role: this.options.role,
-                localVersion: this.localVersion,
-                localStreamSeq: this.localStreamSeq,
-                activateLiveRelay: true,
-            },
-        ) as AssetDocResumeResult & { error?: string }
-        if (result.error) throw new Error(result.error)
-        const userId = userStore.getData('userId') as string
-        const expectedLiveSubject = getAssetDocumentEventSubject(userId, {
-            organizationId: this.options.organizationId,
-            assetId: this.options.assetId,
-            role: this.options.role,
-        })
-        if (result.liveSubject !== expectedLiveSubject) throw new Error('ASSET_DOCUMENT_LIVE_SUBJECT_MISMATCH')
-        if (result.snapshot
-            && result.snapshot.version > this.localVersion
-            && this.pendingLocalSteps.length === 0) {
-            this.applySnapshot(result.snapshot.doc, result.snapshot.version)
+        if (this.resumeInProgress) {
+            this.resumeRequested = true
+            return
         }
-        for (const event of result.events ?? []) this.handleEvent(event)
-        this.localStreamSeq = Math.max(this.localStreamSeq, result.currentStreamSeq ?? 0)
+        this.resumeInProgress = true
+        try {
+            let hasMore = true
+            while (hasMore && !this.disconnected) {
+                const acceptSnapshot = this.pendingLocalSteps.length === 0
+                const result = await servicesStore.getData('nats').request(
+                    NATS_SUBJECTS.ASSET_SUBJECTS.DOCUMENT_RESUME,
+                    {
+                        token: await AuthService.getTokenSilently(),
+                        organizationId: this.options.organizationId,
+                        assetId: this.options.assetId,
+                        role: this.options.role,
+                        localVersion: this.localVersion,
+                        localStreamSeq: this.localStreamSeq,
+                        acceptSnapshot,
+                        activateLiveRelay: true,
+                    },
+                    DOCUMENT_RESUME_TIMEOUT_MS,
+                ) as AssetDocResumeResult & { error?: string }
+                if (result.error) throw new Error(result.error)
+                const userId = userStore.getData('userId') as string
+                const expectedLiveSubject = getAssetDocumentEventSubject(userId, {
+                    organizationId: this.options.organizationId,
+                    assetId: this.options.assetId,
+                    role: this.options.role,
+                })
+                if (result.liveSubject !== expectedLiveSubject) throw new Error('ASSET_DOCUMENT_LIVE_SUBJECT_MISMATCH')
+                if (result.snapshot
+                    && result.snapshot.version > this.localVersion
+                    && acceptSnapshot) {
+                    const snapshot = await this.assetService.fetchDocumentSnapshot(result.snapshot)
+                    if (snapshot.version > this.localVersion && this.pendingLocalSteps.length === 0) {
+                        this.applySnapshot(snapshot.doc, snapshot.version)
+                    }
+                }
+                for (const event of result.events ?? []) this.handleEvent(event)
+                this.localStreamSeq = Math.max(this.localStreamSeq, result.currentStreamSeq ?? 0)
+                hasMore = result.hasMore === true
+            }
+        } finally {
+            this.resumeInProgress = false
+            if (this.resumeRequested && !this.disconnected) {
+                this.resumeRequested = false
+                await this.resume()
+            }
+        }
     }
 
     private handleEvent(event: LoggedEvent): void {
         if (event.organizationId !== this.options.organizationId || event.assetId !== this.options.assetId || event.role !== this.options.role) return
-        this.localStreamSeq = Math.max(this.localStreamSeq, event.streamSequence ?? 0)
-        if (event.kind !== 'STEP' || event.version <= this.localVersion) return
+        const streamSequence = event.streamSequence ?? 0
+        if (event.kind !== 'STEP' || event.version <= this.localVersion) {
+            this.localStreamSeq = Math.max(this.localStreamSeq, streamSequence)
+            return
+        }
         if (event.version > this.localVersion + 1) {
             this.pendingRemoteSteps.set(event.version, event)
             void this.resume()
@@ -230,6 +259,7 @@ export class ProseMirrorAuthorityService {
         } else {
             this.localVersion = event.version
         }
+        this.localStreamSeq = Math.max(this.localStreamSeq, streamSequence)
         this.drainRemoteSteps()
     }
 

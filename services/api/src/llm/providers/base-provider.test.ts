@@ -326,6 +326,43 @@ describe('BaseProvider request validation', () => {
         expect(clearTransientMedia).toHaveBeenCalledOnce()
     })
 
+    it('resolves typed image references once before every image-provider workflow', async () => {
+        const nats = makeFakeNats()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: nats.fake,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        const invoke = vi.fn(async (initialState: ProviderState) => initialState)
+        ;(provider as any).app = { invoke }
+
+        const result = await provider.process({
+            organizationId: 'organization-1',
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            aiModelMetaInfo: { provider: 'OpenAI', model: 'gpt-image-1-mini', modelVersion: 'gpt-image-1-mini' },
+            messages: [{ role: 'user', content: 'Create a character sheet.' }],
+            enableImageGeneration: true,
+            imageGenerationReferences: [{
+                url: 'data:image/png;base64,c291cmNl',
+                role: 'character-source',
+                fileName: 'character-source-1',
+            }],
+        })
+
+        expect(invoke).toHaveBeenCalledOnce()
+        expect(result.resolvedImageGenerationReferences).toEqual([
+            expect.objectContaining({
+                role: 'character-source',
+                fileName: 'character-source-1.png',
+                mediaType: 'image/png',
+                byteLength: 6,
+                bytes: Buffer.from('source'),
+            }),
+        ])
+    })
+
     it('denies metrics admission before resolving or persisting media lineage', async () => {
         const nats = makeFakeNats()
         const metricsCheck = vi.fn().mockResolvedValue({ approved: false, reason: 'metrics_unreachable' })
@@ -434,6 +471,36 @@ describe('BaseProvider routing', () => {
             .toBe('generate_video')
         expect((provider as any).routeAfterStream({ generatedImagePrompt: 'paint' } as any)).toBe('generate_image')
         expect((provider as any).routeAfterStream({} as any)).toBe('skip')
+    })
+
+    it('suppresses duplicate provider generation after a required Capability produced an output Asset', async () => {
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        })
+        const state = {
+            capabilityOutputAssetIds: ['asset-character-sheet'],
+            generationRun: {
+                requestKind: 'single-media',
+                generationRequestId: 'request-1',
+            },
+            generatedImagePrompt: 'duplicate image',
+            generatedVideoPrompt: 'duplicate video',
+            imageModelVersion: 'image-model',
+            videoModelVersion: 'video-model',
+        } as ProviderState
+        const completeRequest = vi.fn()
+        ;(provider as any).streamPublisher = {
+            mediaGenerationRequestComplete: completeRequest,
+        } as StreamPublisher
+
+        expect((provider as any).routeAfterStream(state)).toBe('skip')
+        expect(completeRequest).toHaveBeenCalledWith('request-1')
+        expect((provider as any).shouldGenerateImage(state)).toBe('skip')
     })
 
     it('emits MEDIA_GENERATION_SKIPPED when lineage is planned but no media prompt was generated', () => {

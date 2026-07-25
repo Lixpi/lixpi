@@ -5,13 +5,13 @@ description: The markdown parsing rule for runtime model text — AI chat markdo
 
 # Markdown Rendering
 
-Markdown shows up in AI chat responses, feature-extraction surfaces, Media Library instructions, and future model-output surfaces. To keep parsing behavior consistent, runtime markdown must be tokenized by `@lixpi/markdown-stream-parser`. The rendering path depends on where the text lands:
+Markdown shows up in AI chat responses, style-extraction surfaces, Media Library instructions, and future model-output surfaces. To keep parsing behavior consistent, runtime markdown must be tokenized by `@lixpi/markdown-stream-parser`. The rendering path depends on where the text lands:
 
 - AI chat text is parsed on the API and assembled into ProseMirror steps through `@lixpi/prosemirror`.
 - Non-editable browser surfaces use `MarkdownStreamRenderer`.
 
 {% callout type="note" %}
-This convention governs **runtime markdown in the web UI** (model output, feature instructions, and similar surfaces). It is distinct from the documentation site's own **build-time Markdoc renderer** in [`documentation/site/`](../site/README.md), which turns these `.md` docs into static HTML. The two do not share code or this rule.
+This convention governs **runtime markdown in the web UI** (model output, Capability instructions, and similar surfaces). It is distinct from the documentation site's own **build-time Markdoc renderer** in [`documentation/site/`](../site/README.md), which turns these `.md` docs into static HTML. The two do not share code or this rule.
 {% /callout %}
 
 ## The Rule
@@ -39,8 +39,8 @@ graph TB
 
     subgraph "Surfaces"
         Chat[AI chat threads]
-        Ext[Feature extraction<br/>prompt preview + model output]
-        Lib[Media Library<br/>feature instructions]
+        Ext[Style extraction<br/>prompt preview + model output]
+        Lib[Capability library<br/>Skill instructions]
     end
 
     MD --> Parser
@@ -118,12 +118,12 @@ renderer.push(chunk)
 renderer.finalize()
 ```
 
-**Static** (the full string is already available — e.g. a saved feature's instructions, a prompt preview):
+**Static** (the full string is already available, such as saved Skill instructions or a prompt preview):
 
 ```typescript
 import { renderMarkdownStatic } from '$src/utils/markdownStreamRenderer.ts'
 
-mountEl.appendChild(renderMarkdownStatic(feature.instructions, `feature:${feature.featureId}`, 'feature-library-instructions-body lixpi-markdown'))
+mountEl.appendChild(renderMarkdownStatic(capability.instructions, `capability:${capability.capabilityId}`, 'capability-library-instructions-body lixpi-markdown'))
 ```
 
 - The `instanceId` must be unique per concurrent render (the parser is a singleton keyed by id).
@@ -136,7 +136,7 @@ Markdown element styles are **global** and live in [`src/sass/_markdown.scss`](.
 ## Forbidden
 
 - `element.innerHTML = someMarkdown`, or any string-built markdown HTML.
-- Rendering markdown source as text (`<pre>${markdown}</pre>`, `${feature.instructions}` straight into the DOM).
+- Rendering markdown source as text (`<pre>${markdown}</pre>`, `${capability.instructions}` straight into the DOM).
 - Importing a markdown library other than `@lixpi/markdown-stream-parser`.
 - Copying the segment→DOM mapping into a new file instead of using `MarkdownStreamRenderer`.
 
@@ -145,7 +145,7 @@ Markdown element styles are **global** and live in [`src/sass/_markdown.scss`](.
 | Consumer | What it renders | How |
 |----------|-----------------|-----|
 | AI chat thread | Streamed assistant responses | API ProseMirror assembler + document step stream |
-| Feature-extraction surface | Stage prompt previews, streamed model output | `MarkdownStreamRenderer` / `renderMarkdownStatic` |
-| Media Library | Saved feature instructions ("Application notes") | `renderMarkdownStatic` |
+| Capability run progress | Safe stage reasoning and output summaries | `MarkdownStreamRenderer` / `renderMarkdownStatic` |
+| Capability library | Skill and Tool instruction resources | `renderMarkdownStatic` |
 
-See also: [Feature Extraction — Overview](../library/FEATURE-EXTRACTION-OVERVIEW.md), [Using Features](../library/USING-FEATURES.md), and [Media Library](../library/MEDIA-LIBRARY.md).
+See also: [Tools and Skills](../library/TOOLS-AND-SKILLS.md), [Style Extraction Tool](../library/STYLE-EXTRACTION-TOOL.md), and [Media Library](../library/MEDIA-LIBRARY.md).

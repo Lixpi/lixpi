@@ -137,7 +137,7 @@ describe('downloadImage — data: and blob: URLs (fetch path)', () => {
 // =============================================================================
 
 describe('downloadImage — HTTP(S) URLs (navigation path)', () => {
-    it('normalizes workspace API URLs, appends ?download=true, and sets iframe styles', async () => {
+    it('appends ?download=true and sets iframe styles for an already-tokened API URL', async () => {
         const iframe = createMockIFrame()
         vi.spyOn(document, 'createElement').mockReturnValue(iframe as unknown as HTMLIFrameElement)
 
@@ -145,7 +145,7 @@ describe('downloadImage — HTTP(S) URLs (navigation path)', () => {
 
         expect(document.createElement).toHaveBeenCalledWith('iframe')
         expect(iframe.style.display).toBe('none')
-        expect(iframe.src).toBe('http://localhost:3005/api/files/ws1/file1?token=abc&download=true')
+        expect(iframe.src).toBe('http://localhost:3005/api/images/ws1/file1?token=abc&download=true')
         expect(appendChildSpy).toHaveBeenCalledWith(iframe)
     })
 
@@ -155,7 +155,7 @@ describe('downloadImage — HTTP(S) URLs (navigation path)', () => {
 
         await downloadImage('http://localhost:3005/api/images/ws1/file1')
 
-        expect(iframe.src).toBe('http://localhost:3005/api/files/ws1/file1?download=true')
+        expect(iframe.src).toBe('http://localhost:3005/api/images/ws1/file1?download=true')
     })
 
     it('does not call fetch for HTTP URLs', async () => {
@@ -200,7 +200,7 @@ describe('downloadImage — getAuthToken', () => {
 
         expect(getAuthToken).toHaveBeenCalledOnce()
         expect(iframe.src).toBe(
-            'http://localhost:3005/api/files/ws1/file1?token=fresh-jwt-token&download=true',
+            'http://localhost:3005/api/images/ws1/file1?token=fresh-jwt-token&download=true',
         )
     })
 
@@ -213,7 +213,7 @@ describe('downloadImage — getAuthToken', () => {
         await downloadImage('http://localhost:3005/api/images/ws1/file1', { getAuthToken })
 
         expect(getAuthToken).toHaveBeenCalledOnce()
-        expect(iframe.src).toBe('http://localhost:3005/api/files/ws1/file1?token=fresh-jwt-token&download=true')
+        expect(iframe.src).toBe('http://localhost:3005/api/images/ws1/file1?token=fresh-jwt-token&download=true')
     })
 
     it('passes absolute non-API URLs through without refreshing token', async () => {

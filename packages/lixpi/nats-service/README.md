@@ -49,7 +49,6 @@ Provides a unified API for NATS messaging with support for:
    - **Status Monitoring**: TypeScript has status iterator, Python uses callbacks (inherent library difference)
    - **TLS Config**: Python has explicit `tls_ca_cert` parameter (platform difference)
    - **Type System**: Python uses type hints, TypeScript uses native types
-   - **JetStream stream helpers**: TypeScript exposes the durable-stream helpers used by API replay logs. The Python package remains focused on legacy messaging/Object Store use until a Python service needs the same replay-log surface.
 
 6. **Validation Checklist** (use this when making changes):
    ```
@@ -175,9 +174,9 @@ await natsService.deleteObject('my-bucket', 'hello.txt')
 await natsService.deleteObjectStore('my-bucket')
 ```
 
-### JetStream Streams (TypeScript)
+### JetStream Streams
 
-The TypeScript package also exposes a small wrapper over the modular `@nats-io/jetstream` client for durable replay logs such as ProseMirror document steps and chat pipeline events. These helpers use current `@nats-io/*` packages and pass JetStream config/options through without translating them to older `nats.js` APIs.
+Both packages expose equivalent wrappers over their NATS clients for durable replay logs such as ProseMirror document steps and chat pipeline events. Python uses the same method names in `snake_case` and the same option keys in `snake_case`; compatibility aliases are accepted for the TypeScript option keys where they cross a generic dictionary boundary.
 
 ```typescript
 // Create or update a stream. Existing subjects are preserved and new subjects
@@ -231,6 +230,8 @@ Relevant methods:
 | `getJetStreamMessage(streamName, request)` | Directly read messages by requests such as `last_by_subj`, `seq`, and `next_by_subj`. |
 | `ensureJetStreamConsumer(streamName, config)` / `consumeJetStreamMessages(...)` | Create or update a durable pull consumer, then consume explicitly acknowledged messages. |
 | `purgeJetStreamSubject(streamName, subject, options)` | Purge one filtered subject completely or through an inclusive stream sequence. |
+
+Python exposes the matching methods as `ensure_jetstream_stream`, `get_jetstream_stream_info`, `get_jetstream_stream_info_or_none`, `publish_jetstream`, `get_jetstream_message`, `ensure_jetstream_consumer`, `consume_jetstream_messages`, `process_jetstream_messages`, and `purge_jetstream_subject`.
 
 ### Python
 

@@ -6,7 +6,7 @@ import type {
     CanvasState,
 } from '@lixpi/constants'
 
-const RIGHT_SIDE_PANEL_MODES: CanvasRightSidePanelMode[] = ['features', 'media', 'aiThreads']
+const RIGHT_SIDE_PANEL_MODES: CanvasRightSidePanelMode[] = ['capabilities', 'media', 'aiThreads']
 
 function sanitizeTopLevelMode(mode: CanvasRightSidePanelMode | undefined): CanvasRightSidePanelMode {
     return mode && RIGHT_SIDE_PANEL_MODES.includes(mode) ? mode : 'aiThreads'
@@ -28,7 +28,7 @@ function sanitizeTabs(tabs: CanvasAiChatSidebarTab[] | undefined): CanvasAiChatS
 
     for (const tab of tabs ?? []) {
         if (!tab?.tabId || !tab.refId || seen.has(tab.tabId)) continue
-        if (tab.type !== 'thread' && tab.type !== 'extraction') continue
+        if (tab.type !== 'thread') continue
         seen.add(tab.tabId)
         sanitizedTabs.push(tab)
     }
@@ -67,8 +67,14 @@ export function getAiChatPanelState(canvasState: CanvasState | null | undefined)
 
 export function setAiChatPanelState(canvasState: CanvasState, panelState: CanvasAiChatPanelState): CanvasState {
     const normalized = getAiChatPanelState({ ...canvasState, aiChatPanel: panelState })
+    const normalizedCanvasState = { ...canvasState } as CanvasState & {
+        aiChatSidebarTabs?: unknown
+        activeAiChatSidebarTabId?: unknown
+    }
+    delete normalizedCanvasState.aiChatSidebarTabs
+    delete normalizedCanvasState.activeAiChatSidebarTabId
     return {
-        ...canvasState,
+        ...normalizedCanvasState,
         aiChatPanel: normalized,
     }
 }

@@ -19,7 +19,6 @@ import {
 import {
     AI_PROMPT_INPUT_PLUGIN_KEY,
     SUBMIT_AI_PROMPT_META,
-    STOP_AI_PROMPT_META,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
 import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPlugin.ts'
 import { settings } from '$src/settings.ts'
@@ -1066,8 +1065,8 @@ describe('createAiPromptInputNodeView — control adapters', () => {
         expect(factories.createSubmitButton).toHaveBeenCalledTimes(1)
         const [controls] = factories.createSubmitButton.mock.calls[0]
         expect(controls).toHaveProperty('onSubmit')
-        expect(controls).toHaveProperty('onStop')
-        expect(controls).toHaveProperty('isReceiving')
+        expect(controls).not.toHaveProperty('onStop')
+        expect(controls).not.toHaveProperty('isReceiving')
     })
 })
 
@@ -1225,10 +1224,6 @@ describe('aiPromptInputPluginConstants', () => {
 
     it('exports SUBMIT_AI_PROMPT_META', () => {
         expect(SUBMIT_AI_PROMPT_META).toBe('submit:aiPrompt')
-    })
-
-    it('exports STOP_AI_PROMPT_META', () => {
-        expect(STOP_AI_PROMPT_META).toBe('stop:aiPrompt')
     })
 })
 
@@ -1561,24 +1556,6 @@ describe('createAiPromptInputPlugin — appendTransaction meta handling', () => 
         expect(options.onSubmit.mock.calls[0][0].contentJSON).toBeInstanceOf(Array)
     })
 
-    it('triggers onStop when STOP_AI_PROMPT_META is dispatched', () => {
-        const { options } = createPluginOptions()
-        const plugin = createAiPromptInputPlugin(options)
-
-        const testDoc = doc(promptInput(p('Hello')))
-        const state = createEditorStateWithPlugins(testDoc, [plugin])
-
-        const tr = state.tr.setMeta(STOP_AI_PROMPT_META, true)
-        const newState = state.apply(tr)
-
-        // Reset because EditorState.create may call appendTransaction internally
-        options.onStop.mockClear()
-
-        plugin.spec.appendTransaction!([tr], state, newState)
-
-        expect(options.onStop).toHaveBeenCalledTimes(1)
-    })
-
     it('does not trigger submit on regular transactions', () => {
         const { options } = createPluginOptions()
         const plugin = createAiPromptInputPlugin(options)
@@ -1733,171 +1710,6 @@ describe('Visual — floating container SCSS expectations', () => {
 // =============================================================================
 // NODE VIEW — RECEIVING STATE SYNC
 // =============================================================================
-
-describe('createAiPromptInputNodeView — receiving state sync', () => {
-    function createNodeViewWithReceiving(isReceivingValue: boolean) {
-        const testDoc = doc(promptInput(p('Hello')))
-        const state = createBaseEditorState(testDoc)
-        const factories = createMockControlFactories()
-        const isReceiving = vi.fn(() => isReceivingValue)
-
-        const nv = createAiPromptInputNodeView({
-            onSubmit: vi.fn(),
-            onStop: vi.fn(),
-            isReceiving,
-            createModelDropdown: factories.createModelDropdown,
-            createImageModelDropdown: factories.createImageModelDropdown,
-            createImageSizeDropdown: factories.createImageSizeDropdown,
-            createVideoModelDropdown: factories.createVideoModelDropdown,
-            createVideoAspectDropdown: factories.createVideoAspectDropdown,
-            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
-            createVideoDurationDropdown: factories.createVideoDurationDropdown,
-            createSubmitButton: factories.createSubmitButton,
-        })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
-
-        return { nv, isReceiving, factories }
-    }
-
-    it('adds receiving class to controls when isReceiving returns true on init', () => {
-        const { nv } = createNodeViewWithReceiving(true)
-        const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
-        expect(controls.classList.contains('receiving')).toBe(true)
-    })
-
-    it('does not add receiving class when isReceiving returns false on init', () => {
-        const { nv } = createNodeViewWithReceiving(false)
-        const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
-        expect(controls.classList.contains('receiving')).toBe(false)
-    })
-
-    it('toggles receiving class on controls during update when isReceiving changes', () => {
-        const isReceiving = vi.fn(() => false)
-        const testDoc = doc(promptInput(p('Hello')))
-        const state = createBaseEditorState(testDoc)
-        const factories = createMockControlFactories()
-
-        const nv = createAiPromptInputNodeView({
-            onSubmit: vi.fn(),
-            onStop: vi.fn(),
-            isReceiving,
-            createModelDropdown: factories.createModelDropdown,
-            createImageModelDropdown: factories.createImageModelDropdown,
-            createImageSizeDropdown: factories.createImageSizeDropdown,
-            createVideoModelDropdown: factories.createVideoModelDropdown,
-            createVideoAspectDropdown: factories.createVideoAspectDropdown,
-            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
-            createVideoDurationDropdown: factories.createVideoDurationDropdown,
-            createSubmitButton: factories.createSubmitButton,
-        })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
-
-        const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
-        expect(controls.classList.contains('receiving')).toBe(false)
-
-        // Simulate receiving state change
-        isReceiving.mockReturnValue(true)
-        const updatedDoc = doc(promptInput(p('Hello')))
-        nv.update!(updatedDoc.firstChild!)
-
-        expect(controls.classList.contains('receiving')).toBe(true)
-    })
-
-    it('removes receiving class when isReceiving returns false after being true', () => {
-        const isReceiving = vi.fn(() => true)
-        const testDoc = doc(promptInput(p('Hello')))
-        const state = createBaseEditorState(testDoc)
-        const factories = createMockControlFactories()
-
-        const nv = createAiPromptInputNodeView({
-            onSubmit: vi.fn(),
-            onStop: vi.fn(),
-            isReceiving,
-            createModelDropdown: factories.createModelDropdown,
-            createImageModelDropdown: factories.createImageModelDropdown,
-            createImageSizeDropdown: factories.createImageSizeDropdown,
-            createVideoModelDropdown: factories.createVideoModelDropdown,
-            createVideoAspectDropdown: factories.createVideoAspectDropdown,
-            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
-            createVideoDurationDropdown: factories.createVideoDurationDropdown,
-            createSubmitButton: factories.createSubmitButton,
-        })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
-
-        const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
-        expect(controls.classList.contains('receiving')).toBe(true)
-
-        isReceiving.mockReturnValue(false)
-        const updatedDoc = doc(promptInput(p('Hello')))
-        nv.update!(updatedDoc.firstChild!)
-
-        expect(controls.classList.contains('receiving')).toBe(false)
-    })
-
-    it('sets up a polling interval that syncs receiving state', () => {
-        vi.useFakeTimers()
-        const isReceiving = vi.fn(() => false)
-        const testDoc = doc(promptInput(p('Hello')))
-        const state = createBaseEditorState(testDoc)
-        const factories = createMockControlFactories()
-
-        const nv = createAiPromptInputNodeView({
-            onSubmit: vi.fn(),
-            onStop: vi.fn(),
-            isReceiving,
-            createModelDropdown: factories.createModelDropdown,
-            createImageModelDropdown: factories.createImageModelDropdown,
-            createImageSizeDropdown: factories.createImageSizeDropdown,
-            createVideoModelDropdown: factories.createVideoModelDropdown,
-            createVideoAspectDropdown: factories.createVideoAspectDropdown,
-            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
-            createVideoDurationDropdown: factories.createVideoDurationDropdown,
-            createSubmitButton: factories.createSubmitButton,
-        })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
-
-        const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
-        expect(controls.classList.contains('receiving')).toBe(false)
-
-        // Change return value and advance timer
-        isReceiving.mockReturnValue(true)
-        vi.advanceTimersByTime(200)
-
-        expect(controls.classList.contains('receiving')).toBe(true)
-
-        nv.destroy!()
-        vi.useRealTimers()
-    })
-
-    it('clears polling interval on destroy', () => {
-        vi.useFakeTimers()
-        const isReceiving = vi.fn(() => false)
-        const testDoc = doc(promptInput(p('Hello')))
-        const state = createBaseEditorState(testDoc)
-        const factories = createMockControlFactories()
-
-        const nv = createAiPromptInputNodeView({
-            onSubmit: vi.fn(),
-            onStop: vi.fn(),
-            isReceiving,
-            createModelDropdown: factories.createModelDropdown,
-            createImageModelDropdown: factories.createImageModelDropdown,
-            createImageSizeDropdown: factories.createImageSizeDropdown,
-            createVideoModelDropdown: factories.createVideoModelDropdown,
-            createVideoAspectDropdown: factories.createVideoAspectDropdown,
-            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
-            createVideoDurationDropdown: factories.createVideoDurationDropdown,
-            createSubmitButton: factories.createSubmitButton,
-        })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
-
-        nv.destroy!()
-
-        // After destroy, changing return value and advancing timer should not toggle class
-        isReceiving.mockReturnValue(true)
-        vi.advanceTimersByTime(400)
-
-        const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
-        expect(controls.classList.contains('receiving')).toBe(false)
-
-        vi.useRealTimers()
-    })
-})
 
 // =============================================================================
 // VISUAL — RECEIVING STATE CSS CLASSES

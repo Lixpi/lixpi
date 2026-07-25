@@ -23,6 +23,7 @@ export type ProviderConstructor = new (
 type MediaRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
     getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
+    signal?: AbortSignal
 }
 
 export class ProviderRegistry {

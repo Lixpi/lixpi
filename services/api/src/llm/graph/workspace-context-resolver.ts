@@ -26,7 +26,7 @@ import {
     describeTextContent as defaultDescribeTextContent,
     type MediaDescriptorResult,
 } from '../media-descriptor.ts'
-import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from '../extraction/vlm-client.ts'
+import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from '../structured-vlm/structured-vlm-client.ts'
 import { resolveImageUrls } from '../utils/attachments.ts'
 import { buildCandidateTranscriptContext, restrictSnapshotToExplicitRefs } from './media-branch-snapshot.ts'
 import type { ChatMessage, ProviderState } from './state.ts'

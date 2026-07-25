@@ -24,6 +24,16 @@ export type MediaBranchLineagePlannerInput = {
     // reasoningCount * (imageModelIds.length + videoModelIds.length).
     imageModelIds?: AiModelId[]
     videoModelIds?: AiModelId[]
+    preassignedMediaRuns?: Array<{
+        assetId: string
+        reasoningModelId: AiModelId
+        reasoningRunId: string
+        reasoningIndex: number
+        mediaModelId: AiModelId
+        mediaType: 'image' | 'video'
+        mediaIndex: number
+        mediaRunId: string
+    }>
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
     mediaBranchResolution?: MediaBranchVlmResolution
     workspaceContextSnapshot?: WorkspaceContextSnapshot
@@ -46,6 +56,7 @@ type SourceDecision = {
 // MediaGenerationRunPlanner.buildProviderMediaRun so the planner can pre-assign
 // a marker node per generation before any provider fanout runs.
 type MediaRunSpec = {
+    assetId?: string
     reasoningModelId: AiModelId
     reasoningIndex: number
     reasoningRunId: string
@@ -177,6 +188,7 @@ export class MediaBranchLineagePlanner {
     // generation. A reasoning-only matrix has no media run assignments and
     // therefore creates no pending output Assets.
     private enumerateMediaRuns(input: MediaBranchLineagePlannerInput): MediaRunSpec[] {
+        if (input.preassignedMediaRuns) return input.preassignedMediaRuns
         const imageModelIds = input.imageModelIds ?? []
         const videoModelIds = input.videoModelIds ?? []
         const specs: MediaRunSpec[] = []
@@ -417,7 +429,7 @@ export class MediaBranchLineagePlanner {
                 ?? args.sourceDecision.sourceNodeId
                 ?? args.branchOrigin?.nodeId
             return {
-                assetId: uuid(),
+                assetId: run.assetId ?? uuid(),
                 generationRequestId: args.input.generationRequestId,
                 reasoningRunId: run.reasoningRunId,
                 reasoningModelId: run.reasoningModelId,

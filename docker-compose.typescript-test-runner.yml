@@ -52,6 +52,8 @@ services:
             - ./services/api/config:/usr/src/service/api/config:cached
             - ./packages/lixpi/auth-service/package.json:/usr/src/service/api/packages/lixpi/auth-service/package.json:ro,cached
             - ./packages/lixpi/auth-service/src:/usr/src/service/api/packages/lixpi/auth-service/src:ro,cached
+            - ./packages/lixpi/capability-system/package.json:/usr/src/service/api/packages/lixpi/capability-system/package.json:ro,cached
+            - ./packages/lixpi/capability-system/src:/usr/src/service/api/packages/lixpi/capability-system/src:ro,cached
             - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/api/packages/lixpi/canvas-engine/package.json:ro,cached
             - ./packages/lixpi/canvas-engine/src:/usr/src/service/api/packages/lixpi/canvas-engine/src:ro,cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/api/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
@@ -79,6 +81,7 @@ services:
             #     typescript-test-runner-node-modules-* comment above) ---
             - typescript-test-runner-node-modules-api:/usr/src/service/api/node_modules
             - typescript-test-runner-node-modules-api-auth-service:/usr/src/service/api/packages/lixpi/auth-service/node_modules
+            - typescript-test-runner-node-modules-api-capability-system:/usr/src/service/api/packages/lixpi/capability-system/node_modules
             - typescript-test-runner-node-modules-api-canvas-engine:/usr/src/service/api/packages/lixpi/canvas-engine/node_modules
             - typescript-test-runner-node-modules-api-constants-ts:/usr/src/service/api/packages/lixpi/constants/ts/node_modules
             - typescript-test-runner-node-modules-api-debug-tools-ts:/usr/src/service/api/packages/lixpi/debug-tools/ts/node_modules
@@ -94,6 +97,8 @@ services:
             - ./services/web-ui/pnpm-workspace.yaml:/usr/src/service/web-ui/pnpm-workspace.yaml:cached
             - ./services/web-ui/vitest.config.ts:/usr/src/service/web-ui/vitest.config.ts:cached
             - ./services/web-ui/src:/usr/src/service/web-ui/src:cached
+            - ./packages/lixpi/capability-system/package.json:/usr/src/service/web-ui/packages/lixpi/capability-system/package.json:ro,cached
+            - ./packages/lixpi/capability-system/src:/usr/src/service/web-ui/packages/lixpi/capability-system/src:ro,cached
             - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/web-ui/packages/lixpi/canvas-engine/package.json:ro,cached
             - ./packages/lixpi/canvas-engine/src:/usr/src/service/web-ui/packages/lixpi/canvas-engine/src:ro,cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/web-ui/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
@@ -117,6 +122,7 @@ services:
             # --- web-ui domain: persisted node_modules (see the
             #     typescript-test-runner-node-modules-* comment above) ---
             - typescript-test-runner-node-modules-web-ui:/usr/src/service/web-ui/node_modules
+            - typescript-test-runner-node-modules-web-ui-capability-system:/usr/src/service/web-ui/packages/lixpi/capability-system/node_modules
             - typescript-test-runner-node-modules-web-ui-canvas-engine:/usr/src/service/web-ui/packages/lixpi/canvas-engine/node_modules
             - typescript-test-runner-node-modules-web-ui-constants-ts:/usr/src/service/web-ui/packages/lixpi/constants/ts/node_modules
             - typescript-test-runner-node-modules-web-ui-debug-tools-ts:/usr/src/service/web-ui/packages/lixpi/debug-tools/ts/node_modules
@@ -165,6 +171,8 @@ services:
             - ./packages/lixpi/pnpm-workspace.yaml:/usr/src/service/shared/pnpm-workspace.yaml:cached
             - ./packages/lixpi/auth-service/package.json:/usr/src/service/shared/auth-service/package.json:cached
             - ./packages/lixpi/auth-service/src:/usr/src/service/shared/auth-service/src:cached
+            - ./packages/lixpi/capability-system/package.json:/usr/src/service/shared/capability-system/package.json:cached
+            - ./packages/lixpi/capability-system/src:/usr/src/service/shared/capability-system/src:cached
             - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/shared/canvas-engine/package.json:cached
             - ./packages/lixpi/canvas-engine/src:/usr/src/service/shared/canvas-engine/src:cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/shared/constants/ai-interaction-constants.json:cached
@@ -174,6 +182,7 @@ services:
             - ./packages/lixpi/constants/ts/metrics-contracts.ts:/usr/src/service/shared/constants/ts/metrics-contracts.ts:cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/shared/constants/ts/index.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/shared/constants/ts/media-generation-layout-settings.ts:cached
+            - ./packages/lixpi/constants/ts/workspace-persistence-settings.test.ts:/usr/src/service/shared/constants/ts/workspace-persistence-settings.test.ts:cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/shared/constants/ts/workspace-persistence-settings.ts:cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/shared/constants/ts/package.json:cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/shared/constants/ts/types.ts:cached
@@ -193,6 +202,7 @@ services:
             # --- shared domain: persisted node_modules (see the
             #     typescript-test-runner-node-modules-* comment above) ---
             - typescript-test-runner-node-modules-shared-auth-service:/usr/src/service/shared/auth-service/node_modules
+            - typescript-test-runner-node-modules-shared-capability-system:/usr/src/service/shared/capability-system/node_modules
             - typescript-test-runner-node-modules-shared-canvas-engine:/usr/src/service/shared/canvas-engine/node_modules
             - typescript-test-runner-node-modules-shared-constants:/usr/src/service/shared/constants/node_modules
             - typescript-test-runner-node-modules-shared-debug-tools-ts:/usr/src/service/shared/debug-tools/ts/node_modules
@@ -214,6 +224,7 @@ volumes:
     # domain root plus each bind-mounted packages/lixpi/* member.
     typescript-test-runner-node-modules-api:
     typescript-test-runner-node-modules-api-auth-service:
+    typescript-test-runner-node-modules-api-capability-system:
     typescript-test-runner-node-modules-api-canvas-engine:
     typescript-test-runner-node-modules-api-constants-ts:
     typescript-test-runner-node-modules-api-debug-tools-ts:
@@ -222,6 +233,7 @@ volumes:
     typescript-test-runner-node-modules-api-nats-auth-callout-service:
     typescript-test-runner-node-modules-api-prosemirror:
     typescript-test-runner-node-modules-web-ui:
+    typescript-test-runner-node-modules-web-ui-capability-system:
     typescript-test-runner-node-modules-web-ui-canvas-engine:
     typescript-test-runner-node-modules-web-ui-constants-ts:
     typescript-test-runner-node-modules-web-ui-debug-tools-ts:
@@ -233,6 +245,7 @@ volumes:
     typescript-test-runner-node-modules-nex-dynamodb-service:
     typescript-test-runner-node-modules-nex-nats-service-ts:
     typescript-test-runner-node-modules-shared-auth-service:
+    typescript-test-runner-node-modules-shared-capability-system:
     typescript-test-runner-node-modules-shared-canvas-engine:
     typescript-test-runner-node-modules-shared-constants:
     typescript-test-runner-node-modules-shared-debug-tools-ts:

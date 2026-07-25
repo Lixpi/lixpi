@@ -1,96 +1,98 @@
 ---
-title: Anti-Leakage Strategy
-description: How feature extraction preserves a reference's medium with pixel fidelity while preventing its subject from leaking into downstream generations.
+title: Style Reference Isolation
+description: How Style Extraction preserves visual evidence while reducing accidental subject and composition reuse.
 ---
 
-# Anti-Leakage Strategy
+# Style Reference Isolation
 
-Feature extraction has one headline anti-feature to defeat and one quality bar it must hold at the same time:
+Style Extraction must preserve enough source evidence for a media model to reproduce a visual treatment without treating the source scene as the requested output. The implementation reduces that risk with bounded crops, neutral probes, explicit instructions, and traceable Capability resources.
 
-- **No subject leakage.** If you extract a watercolor style from a picture of your cat, generations that `/use` that feature must not contain cats unless the user explicitly asks.
-- **No texture loss.** Those same generations must still carry the cat's paper tooth, dry-brush direction, and deckle-edge frame — not a generic, smooth, "watercolor-flavored" output.
+This is risk reduction, not a mathematical guarantee. The current implementation also keeps a downscaled composition sample when composition is part of the extracted style. That sample intentionally preserves the full frame and can carry recognizable source structure. Consumers that require strict subject isolation must exclude resources whose `cropRegion.purpose` is `composition-evidence`.
 
-Both halves are non-negotiable (this is design principle #1 in the [Feature Extraction Overview](./FEATURE-EXTRACTION-OVERVIEW.md)). The strategy that satisfies both is **content-free pixel cropping**: withhold the subject layout, forward the medium evidence as deliberately sub-frame crops of the original pixels.
+## Evidence created during extraction
 
-## Why naive approaches fail
+The Style Extraction router receives every authorized source image and returns:
 
-Naive style-transfer pipelines pass the **full reference image** into the downstream model and instruct it to "use this style." The model routinely reproduces objects, identities, compositions, or backgrounds from the reference — direct subject leakage.
+- normalized subject bounding boxes and salience ranks
+- normalized non-subject region bounding boxes
+- a medium classification
+- per-axis dominance scores
+- intent resolution and concrete negative constraints
 
-An earlier Lixpi iteration tried the opposite extreme: **withhold the source pixels entirely**, so the image-gen call only ever saw the agent's text summary of the style.
+The crop stage uses that assessment to create four kinds of evidence:
 
-{% callout type="warning" %}
-**Withholding all pixels produces no leakage and also no fidelity.** A text reconstruction of "loose cold-press watercolor with dry-brush fur strokes and a ragged deckle edge" is interpreted by the image model as a *generic* watercolor; the source's actual paper tooth, dry-brush direction, and edge frequency are lost the moment they are flattened to prose. The procedural-SVG "texture specimen" failure and the generic-smooth-watercolor downstream generations were the direct consequences (see ["What worked, what didn't"](./EXTRACTION-PIPELINE.md)).
-{% /callout %}
+| Evidence | Source area | Purpose |
+|---|---|---|
+| Subject-detail crop | A deterministic square inside a subject box | Preserve line, shading, mark, anatomy, and rendering details without always carrying the whole subject. |
+| Region crop | A deterministic square inside a background or other region | Preserve texture, material, palette, and edge behavior. |
+| Composition sample | The full source frame, downscaled to fit within 512 by 512 pixels | Preserve composition when composition is part of the requested style. |
+| Generated sample | A deterministic palette or texture board, or a provider-rendered neutral probe | Demonstrate the synthesized style contract. |
 
-## What the literature converges on
+Subject and region crops must have at least 128 pixels on each axis. Crop positions are deterministic for the Style Extraction run ID and source reference. Large detail crops are resized to fit within 1024 by 1024 pixels. Every materialized crop is encoded as PNG and stored as an organization Blob.
 
-The disentanglement work surveyed here points in the same practical direction: **style fidelity depends on source pixels, not only on a prose reconstruction of those pixels.** Leakage is usually handled in the model architecture or through reference-image augmentation, rather than by throwing the image away and keeping only text.
+The stored metadata includes the source image reference, pixel rectangle, label, and one of these purposes:
 
-| Approach | Mechanism |
-|---|---|
-| **StyleDecoupler** ([arXiv:2601.17697](https://arxiv.org/html/2601.17697v1)) | Information-theoretic separation of style from content on the encoded reference image; plug-and-play on frozen VLMs. |
-| **DICE** ([arXiv:2602.08059](https://arxiv.org/html/2602.08059v1)) | Contrastive subspace decomposition on encoded references; training-free. |
-| **StyleGallery** ([arXiv:2603.10354](https://arxiv.org/html/2603.10354v2)) | "Supports arbitrary reference images as input"; semantic-region masking on the diffusion features of the actual reference pixels to constrain style features to matched regions and prevent subject copy. |
-| **UniCSG** ([arXiv:2604.17850](https://arxiv.org/html/2604.17850v1)) | Staged training combining latent-space semantic disentanglement with frequency-aware detail reconstruction on the actual reference; explicitly engineered to prevent reference-content leakage. |
-| **StyleBrush** ([arXiv:2408.09496](https://arxiv.org/html/2408.09496v1)) | Dual-branch (ReferenceNet extracts style; Structure Guider extracts structure). Leakage is prevented by a **random cropping strategy** that stops ReferenceNet from learning the content image's structure. |
+- `texture-evidence`
+- `applied-medium-evidence`
+- `subject-detail-evidence`
+- `composition-evidence`
 
-The product references surveyed for this design follow the same pattern: custom styles are grounded in uploaded reference images. That does not prove every product works this way forever, but it is the safer assumption for Lixpi's design than relying on a text-only reconstruction.
+## Applied-medium probes
 
-These SOTA approaches require **model-architecture or training access that is not available against closed model APIs**. The closest practical equivalent — and what Lixpi implements — is **pixel-grounded anti-leakage via deterministic content-free cropping of the source, combined with prompt-level subject suppression: StyleBrush's training-time random-crop strategy lifted to inference time.**
+When the request includes an image model, the sample stage can ask that selected model to render a neutral subject. The provider-neutral image router receives:
 
-## How the strategy works
+- the synthesized style instructions
+- the synthesized category, name, and summary
+- the neutral sample prompt
+- up to four materialized source crops
+- an instruction that forbids copying subject identity, pose, layout, or composition from the crops
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
-graph LR
-    Src[Full source image<br/>seen ONLY by the analysis model] --> Crops[Agent-chosen content-free crops<br/>paper-edge, background, fur-detail, deckle-edge]
-    Crops --> Mat[Backend materializes via sharp<br/>clamp, validate &ge; 128px, store, read back]
-    Mat --> Probe[Applied-medium probes<br/>neutral subject + crops as style refs]
-    Mat --> Use["/use forwarding<br/>crops + probes + strict instruction"]
-    Probe --> Use
-    Use --> Gen[Downstream image-gen<br/>medium evidence, never the full frame]
-```
+The router converts the same `referenceImages` collection into the provider-specific request format. Style Extraction does not select a hidden provider or model. If no image model is selected, applied-medium probes are skipped. Palette boards and texture specimens remain deterministic `sharp` output.
 
-1. **During extraction**, the analysis model (Claude Opus or an equivalent vision-LLM) receives the full reference inputs (images / docs / threads) and produces the feature's `instructions`, `parameters`, and — critically — a `sourceImageCrops` list of bounded rectangles on the source images: regions labeled `paper-edge`, `background`, `corner`, `deckle-edge`, `texture-detail`, `subject-detail`. The agent picks 3–6 regions that carry the medium's marks (paper tooth, dry-brush fibre, deckle edge) without showing the full subject layout. **The agent's analysis call is the only step that ever sees the unredacted originals.**
+## Persisted visual-style Tool
 
-2. **The backend deterministically materializes those crops** from the source bytes via `sharp`. Each crop is clamped to source dimensions, validated as ≥ 128 px on each axis, stored as an organization content-addressed Blob with `kind: 'source-crop'` metadata on the Feature sample, and read back to verify integrity. Feature persistence adds the durable Blob reference; failed runs leave only staging Blobs for GC. For `surface-texture`, the first sample (the texture specimen) is built deterministically by compositing 4 of those crops into a 2×2 labeled tile via `sharp`. **The v0 procedural SVG renderer is deleted; there is no synthetic mark generation.** The texture specimen is real source pixels.
+The persistence stage stores these resources in stable order:
 
-3. **When generating model-rendered "applied medium" probes** (sphere on a plank, cube + cloth, etc.), the image-router call receives the agent's `instructions` and `parameters`, the neutral-subject prompt, 2–3 of the extracted source crops as visual style references (NOT the full source images), and the strict anti-leakage instruction:
+1. all source crops, including composition samples
+2. all generated samples
 
-   > Render the requested subject using the medium evidenced by the attached reference crops. The crops are evidence of the medium's marks, palette, paper tooth, edges, and density — do NOT reproduce any subject, identity, object, pose, or composition. Treat them as a style swatch, not a scene. A fragment of fur in a crop is not permission to draw a cat.
+It then creates an organization-scoped Tool whose `toolType` is `visual-style`. The Tool also stores the synthesized Markdown instructions and JSON configuration. The configuration records source Asset IDs and sample metadata, but downstream consumers receive only the sealed resources, not arbitrary browser paths or source bytes.
 
-4. **When the feature is later applied via `/use`**, the `resolveFeatures` pre-stage (see [Feature Storage](./FEATURE-STORAGE.md)) fetches the feature record and forwards to the downstream image-gen call: the feature `instructions` + `parameters`, the texture-specimen sample, 1–2 model-generated applied-medium probes, **and 2–3 of the original content-free source crops** (downscaled to ≤ 512 px on the longest edge). The strict anti-leakage instruction is included verbatim. The downstream model has pixel evidence of what the medium looks like — both as crops of the original and as applied probes — without ever receiving the full source layout, the source subject's pose, or the source composition.
+Running the Tool invokes `visual-style.apply`. That action returns:
 
-This bar is **stronger than the early "withhold all pixels" approach** (which produced text-only reconstruction and lost all textural fidelity) and **weaker than latent-space disentanglement** (which cannot run against closed model APIs). It is Lixpi's API-only approximation of the same idea: keep pixel evidence of style while stripping the source subject, pose, and composition as aggressively as possible.
+- `visualInstructions`, built from the stored instructions and configuration
+- `referenceImages`, built from every stored sample resource
+- `referenceImageTraceUrls`, which identify the exact Capability resource and manifest hash used
 
-## Why content-free cropping works
+The normal media-generation pipeline consumes this provider-neutral result. Provider adapters do not implement separate Style Extraction behavior.
 
-A 256–512 px square crop of the cat's paper-edge or background corner carries: paper tooth, deckle behavior, palette restraint, edge frequency, mark density. It does **not** carry: cat face, cat pose, cat composition. The model latches onto the texture-frequency content but cannot reproduce the subject because no pixel of the subject is in the crop. This is the same disentanglement that StyleBrush's random-crop training enforces, achieved here at inference time by deliberate spatial selection rather than random data augmentation.
+## Isolation limits
 
-For source images where the subject occupies most of the frame and there is no content-free background (e.g. a tightly-cropped portrait), the agent is instructed to pick **sub-anatomical crops**: a 256 px square of "fur close-up showing dry-brush direction" carries the brushwork without carrying the cat's pose, eyes, or recognizable outline. **The constraint is the spatial extent of the crop, not its content** — a small enough crop of fur reads as "watercolor on hairy texture," not as "cat."
+The following constraints matter when evaluating the result:
 
-{% callout type="important" %}
-If the agent cannot identify any content-free or sub-anatomical region (e.g. an iconic painting where the subject IS the style — Mona Lisa, The Scream), the validator **fails the extraction** with a clear error rather than risk leakage. The [v2 escalation path](#v2-escalation-path) applies for those cases.
-{% /callout %}
+- A subject-detail crop can still contain identifiable traits.
+- A composition sample deliberately contains the complete source layout.
+- A provider can follow visual references differently even when it receives the same normalized reference set.
+- Prompt instructions reduce copying pressure but cannot guarantee disentanglement in a closed provider model.
+- A generated neutral probe can inherit source traits and is itself stored as later reference evidence.
 
-## Sample preview correctness and QA
+For strict isolation, filter out `composition-evidence`, inspect subject-detail crops, and use only region crops or approved probes. The current `visual-style.apply` action does not apply that filter automatically.
 
-The referenced papers converge on the same warning: style cannot be reliably inferred, demonstrated, or evaluated from a text description; the pixel data must reach the model. The current bar is stricter sample plumbing plus content-free source forwarding:
+## Verification points
 
-1. **A feature thumbnail is only real when a sample image object exists and can be read.** The library must treat a missing `sampleZeroKey` / `sampleZeroUrl` as "no preview yet," not as evidence that previews are identical.
-2. **The image router must return the final generated image data to Stage 5 (`generateSamples`).** Publishing `IMAGE_COMPLETE` to the chat stream is not enough; the sample stage needs the generated bytes so it can store a content-addressed Blob and populate `sampleImages` with its `blobHash` and metadata.
-3. **Sample prompts must attach source crops as visual references**, not only the neutral-subject text prompt. `generatedImagePrompt` carries the anti-leakage instruction, `instructions`, `parameters`, and the neutral subject; the image-router request additionally attaches the agent-selected `source-crop` samples as `input_image` blocks. The full original source images are never attached to either sample generation or downstream `/use` calls.
-4. **Sample metadata must be preserved.** `FeatureSampleRef` stores `idx`, `kind` (`source-crop` | `texture-specimen` | `applied-medium-probe`), `subject`, `rationale`, `aspectRatio`, `ext`, and (for source crops) `cropRegion: { imageRef, x, y, width, height, label, purpose }`, so later UI, audits, and regeneration can explain why each sample exists.
-5. **Sample order must be stable by `idx`.** Parallel generation may finish out of order, but persistence and metadata sort by sample index before creating the feature.
+Use Capability run traces and persisted configuration to verify the full path:
 
-The current implementation accepts that visual diversity is provider-dependent. A follow-up could add a preview QA loop: compute perceptual hashes and CLIP-similarity scores between the source crops and the model-rendered probes (probes should score *similar* in texture-frequency space, *dissimilar* in subject space). The DICE / StyleGallery / UniCSG metrics inspire that evaluator.
+1. `style.initialize` resolved the expected source Asset IDs.
+2. `style.route` returned one assessment entry per reference.
+3. `style.materialize-crops` produced Blob-backed evidence with crop metadata.
+4. `style.generate-samples` attached source crops when it called the selected image model.
+5. `style.persist` stored the ordered resources in the generated Tool.
+6. `visual-style.apply` returned the expected reference count and trace URLs.
+7. The media provider received the normalized references returned by the Tool.
 
-## v2 escalation path
+## Related pages
 
-For pathological subjects where content-free cropping is impossible (an iconic painting, a celebrity, a brand mascot where the subject IS the style), route sample generation and feature application through a specialized style-only model — the Recraft custom-style API or a self-hosted disentanglement model — that performs latent-space separation. The current architecture isolates the choice of sample-generation backend behind the existing `runImageRouter`, so swapping in a different backend later is a single-file change.
-
-## Where to go next
-
-- **[Extraction Pipeline](./EXTRACTION-PIPELINE.md)** — the six-stage pipeline that produces the crops and samples this strategy depends on.
-- **[Using Features](./USING-FEATURES.md)** — how `/use` forwards the crops, probes, and strict instruction at send time.
-- **[Feature Extraction Overview](./FEATURE-EXTRACTION-OVERVIEW.md)** — design principle #1 and the feature data model.
+- [Style Extraction Pipeline](./STYLE-EXTRACTION-PIPELINE.md)
+- [Style Extraction Tool](./STYLE-EXTRACTION-TOOL.md)
+- [Tools, Skills, and Capability Modules](./TOOLS-AND-SKILLS.md)
+- [Capability Storage and Operations](./CAPABILITY-STORAGE.md)

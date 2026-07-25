@@ -134,6 +134,8 @@ export const settleGeneratedAssetOriginal = async ({
     originalName,
     mimeType,
     kind,
+    width,
+    height,
 }: {
     generationRun: MediaGenerationRunMeta
     workspaceId: string
@@ -141,6 +143,8 @@ export const settleGeneratedAssetOriginal = async ({
     originalName: string
     mimeType: string
     kind: 'image' | 'video'
+    width?: number
+    height?: number
 }): Promise<{ assetId: string; organizationId: string; url: string }> => {
     const assetId = generationRun.lineageAssignment?.assetId
     if (!assetId) throw new Error('Generated media run is missing assetId')
@@ -168,6 +172,7 @@ export const settleGeneratedAssetOriginal = async ({
         originalName,
         sourceMimeType: mimeType,
         modelSafe: true,
+        ...(width && height ? { width, height, aspectRatio: width / height } : {}),
         renditions: {
             original: {
                 name: 'original',
@@ -278,6 +283,21 @@ export const attachGeneratedAssetNode = async ({
             pendingBeforeFirstFrame: asset.media?.renditions.original?.status !== 'ready',
         })
         const persistedCanvasRevision = workspace.canvasStateUpdatedAt ?? workspace.updatedAt ?? 0
+        const existingProjectedNode = workspace.canvasState.nodes.find(node => node.nodeId === projection.nodeId)
+        if (
+            asset.media?.renditions.original?.status !== 'ready'
+            && existingProjectedNode
+            && (existingProjectedNode.type === 'image' || existingProjectedNode.type === 'video')
+            && existingProjectedNode.assetId === assetId
+            && existingProjectedNode.mediaGenerationPhase === 'pending-before-first-frame'
+        ) {
+            return buildAssetCanvasGeometryUpdate({
+                state: workspace.canvasState,
+                layoutRevision: persistedCanvasRevision,
+                generationRequestId: generationRun.generationRequestId,
+                geometryNodes: [],
+            })
+        }
         const canvasStateUpdatedAt = Math.max(Date.now(), persistedCanvasRevision + 1)
 
         try {
@@ -312,4 +332,49 @@ export const attachGeneratedAssetNode = async ({
     }
 
     throw lastError ?? new Error(`Generated Asset canvas attach exhausted retries: ${assetId}`)
+}
+
+export const attachPlannedGeneratedAssetNodes = async ({
+    lineagePlan,
+    workspaceId,
+    conversationAssetId,
+}: {
+    lineagePlan: MediaBranchLineagePlan
+    workspaceId: string
+    conversationAssetId: string
+}): Promise<CanvasGeometryUpdate | null> => {
+    let canvasGeometry: CanvasGeometryUpdate | null = null
+
+    for (const assignment of lineagePlan.runAssignments) {
+        if (!assignment.assetId
+            || !assignment.mediaType
+            || !assignment.reasoningRunId
+            || !assignment.reasoningModelId) continue
+        const generationRun: MediaGenerationRunMeta = {
+            requestKind: 'media-generation-matrix',
+            generationRequestId: assignment.generationRequestId,
+            reasoningRunId: assignment.reasoningRunId,
+            reasoningModelId: assignment.reasoningModelId,
+            reasoningIndex: assignment.reasoningIndex ?? 0,
+            ...(assignment.mediaRunId ? { mediaRunId: assignment.mediaRunId } : {}),
+            ...(assignment.mediaModelId ? { mediaModelId: assignment.mediaModelId } : {}),
+            mediaType: assignment.mediaType,
+            ...(typeof assignment.mediaIndex === 'number' ? {
+                mediaIndex: assignment.mediaIndex,
+                variantIndex: assignment.mediaIndex,
+            } : {}),
+            lineageAssignment: assignment,
+        }
+        const asset = await getAssetRecord(assignment.assetId)
+        canvasGeometry = await attachGeneratedAssetNode({
+            assetId: assignment.assetId,
+            workspaceId,
+            kind: assignment.mediaType,
+            aspectRatio: asset?.media?.aspectRatio ?? 1,
+            generationRun,
+            conversationAssetId,
+        })
+    }
+
+    return canvasGeometry
 }

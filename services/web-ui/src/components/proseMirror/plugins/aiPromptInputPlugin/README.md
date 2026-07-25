@@ -8,7 +8,7 @@
 2. Cmd/Ctrl+Enter, the injected submit button, or `SUBMIT_AI_PROMPT_META` starts submission.
 3. `extractContentJSON()` returns the input node children as ProseMirror JSON.
 4. `getInputAttrs()` reads reasoning, image, video, and multi-model attrs from the input node.
-5. `onSubmit()` receives `{ contentJSON, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }` (where `imageOptions.aiImageModels` / `videoOptions.aiVideoModels` are ordered arrays). Each section's array is collapsed to its first model when its multi flag is off. Media options include API-authored configuration matrix group selections when image or video multi-model mode is active.
+5. `onSubmit()` receives `{ contentJSON, capabilityReferences, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }` (where `imageOptions.aiImageModels` / `videoOptions.aiVideoModels` are ordered arrays). Each section's array is collapsed to its first model when its multi flag is off. Media options include API-authored configuration matrix group selections when image or video multi-model mode is active. When the host provides a `CapabilityCatalogClient`, the per-instance async `@` picker inserts Tool/Skill atoms into the draft and `capabilityReferences` preserves their stable IDs in first-occurrence order. An empty `@` query ranks the newest locally selected metadata before deterministic server recommendations, deduplicates by capability ID, and remains capped at 20 rows.
 6. Keyboard and button submission clear the input to one empty paragraph and place the cursor at the start.
 7. The host routes the payload. The canvas-wide host creates a standalone hidden AI chat thread for the submitted user message and projects its pending branch marker.
 
@@ -227,7 +227,7 @@ Settings hooks:
 ## Related Modules
 
 - `$src/services/ai-prompt-input-controller.ts`: routes submitted prompt content to AI chat threads, creates threads for non-thread targets, queues pending messages, and tracks thread receiving state for transcript projection.
-- `$src/components/aiModelControls/`: reusable model, media, multi-select, and submit controls shared by the prompt input and feature extraction.
+- `$src/components/aiModelControls/`: reusable model, media, multi-select, and submit controls shared by prompt surfaces.
 - `$src/components/proseMirror/plugins/aiChatThreadPlugin/`: thread log and streaming response plugin.
 - `$src/infographics/workspace/WorkspaceCanvas.ts`: mounts the bottom-center prompt composer, creates standalone message runs, and renders per-marker stop controls.
 - `$src/components/proseMirror/components/editor.ts`: creates the `aiPromptInput` schema and plugin stack.

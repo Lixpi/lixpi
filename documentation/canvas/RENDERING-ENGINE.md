@@ -43,7 +43,8 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 |------|---------|
 | `workspace/WorkspaceCanvas.ts` | Main canvas orchestrator: DOM nodes, ProseMirror integration, drag/resize/selection, viewport, and PIXI media sync points |
 | `workspace/aiChatPanelState.ts` | Persisted AI Chat panel defaults and context-chip sanitization |
-| `workspace/mediaLibraryPanel.ts` | Framework-agnostic Media Library surface: Feature adapter, saved image/video browsing, scope filters, and insertion actions |
+| `workspace/mediaLibraryPanel.ts` | Framework-agnostic Media Library surface for saved image/video browsing, scope filters, and insertion actions |
+| `workspace/capabilityLibraryPanel.ts` | Framework-agnostic Capability catalog and Tool/Skill detail surface |
 | `workspace/media-library-panel.scss` | Right-side Media Library layout and full-content wrapping rules |
 | `packages/lixpi/canvas-engine/src/shared/collision/resolve-collisions.ts` | Shared geometry-agnostic rectangle collision resolver used by workspace insertion, generated image commit, and drag-release cleanup paths |
 | `workspace/pixiMediaLayer.ts` | PIXI v8 media layer for image pixels, video posters/placeholders, and generated-image outline synchronization — sprite registry, texture cache, LoD-tier loader, visibility scanner, prefetch scheduler |

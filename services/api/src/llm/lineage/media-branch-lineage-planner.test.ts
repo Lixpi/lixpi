@@ -25,6 +25,69 @@ const candidate = (overrides: Partial<MediaBranchCandidateImage>): MediaBranchCa
 })
 
 describe('MediaBranchLineagePlanner', () => {
+    it('places a preassigned Capability output through the normal lineage topology without creating another Asset', () => {
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-character',
+            reasoningModelIds: ['capability:character-creator'],
+            preassignedMediaRuns: [{
+                assetId: 'asset-character-sheet',
+                reasoningModelId: 'capability:character-creator',
+                reasoningRunId: 'capability-run-1',
+                reasoningIndex: 0,
+                mediaModelId: 'Google:imagen',
+                mediaType: 'image',
+                mediaIndex: 0,
+                mediaRunId: 'capability-run-1:image:0',
+            }],
+            mediaBranchCandidateSnapshot: {
+                resolverVersion: 'image-branch-vlm-v1',
+                threadId: 'thread-1',
+                regionNodeId: 'region-root',
+                promptText: 'create a character',
+                transcriptContext: '',
+                candidates: [candidate({
+                    nodeId: 'source-character',
+                    roleHints: ['generated-variant', 'branch-leaf'],
+                    branchId: 'branch-character',
+                })],
+            },
+            mediaBranchResolution: {
+                resolverKind: 'structured-vlm',
+                resolverVersion: 'image-branch-vlm-v1',
+                resolverModelProvider: 'OpenAI',
+                resolverModelId: 'gpt-4.1',
+                mode: 'edit-active-branch',
+                operationKind: 'edit_existing',
+                targetImageNodeId: 'source-character',
+                branchId: 'branch-character',
+                includeGeneratedNodeIds: [],
+                referenceImageNodeIds: ['source-character'],
+                sourceContextNodeIds: ['source-character'],
+                styleReferenceNodeIds: [],
+                excludedNodeIds: [],
+                visualEntitySummary: 'character',
+                entityTags: ['character'],
+                styleTags: [],
+                confidence: 1,
+                rationale: 'explicit source',
+                decisions: [],
+                visualStyleSummary: '',
+            },
+            createdAt: 1700000000000,
+        })
+
+        expect(plan.runAssignments).toHaveLength(1)
+        expect(plan.runAssignments[0]).toMatchObject({
+            assetId: 'asset-character-sheet',
+            generationRequestId: 'request-character',
+            reasoningRunId: 'capability-run-1',
+            mediaRunId: 'capability-run-1:image:0',
+            parentMediaNodeId: 'source-character',
+            branchLineNodeId: 'branch-line-request-character-r0-image-0',
+            lineageParentNodeId: 'branch-line-request-character-r0-image-0',
+        })
+    })
+
     it('uses a generated lineage source when VLM target points to an eligible generated node', () => {
         const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',

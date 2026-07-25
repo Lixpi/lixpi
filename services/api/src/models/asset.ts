@@ -89,6 +89,8 @@ export const buildAssetMeta = (asset: Asset, scopeAndOwner?: string): AssetMeta 
 
     return {
         scopeAndOwner: scopeAndOwner ?? buildAssetScopeAndOwnerKey(asset.scope, asset.scopeOwnerId),
+        scope: asset.scope,
+        scopeOwnerId: asset.scopeOwnerId,
         assetId: asset.assetId,
         organizationId: asset.organizationId,
         title: asset.title,
@@ -1511,6 +1513,7 @@ const AssetModel = {
                 },
                 ...await buildAssetProjectionOperations(nextAsset),
             ],
+            logConditionalCheckFailures: false,
             origin: 'Asset.attachWorkspaceReference',
         })
         publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, nextAsset)

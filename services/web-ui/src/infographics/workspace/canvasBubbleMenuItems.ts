@@ -23,14 +23,10 @@ export const CANVAS_DOCUMENT_CONTEXT = 'canvasDocument'
 export const CANVAS_AUDIO_CONTEXT = 'canvasAudio'
 export const CANVAS_EDGE_CONTEXT = 'canvasEdge'
 
-const magicIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>'
-// const libraryIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v4H4z"/><path d="M4 11h16v8H4z"/><path d="M12 13v4"/><path d="M10 15h4"/></svg>'
-
 type CanvasBubbleMenuCallbacks = {
     onDeleteNode: (nodeId: string) => void
     onDeleteEdge: (edgeId: string) => void
     onChangeConnectorCurve: (edgeId: string) => void
-    onAskAi: (nodeId: string) => void
     onDownloadMedia: (nodeId: string) => void
     onReplaceMedia: (nodeId: string) => void
     onOpenAsset: (nodeId: string) => void
@@ -74,18 +70,6 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
 } {
     let activeNodeId: string | null = null
     let activeEdgeId: string | null = null
-
-    const askAiButton = createCanvasButton({
-        icon: magicIcon,
-        title: 'Ask AI',
-        iconSize: 17,
-        onClick: () => {
-            if (activeNodeId) {
-                callbacks.onAskAi(activeNodeId)
-                callbacks.onHide()
-            }
-        },
-    })
 
     const downloadButton = createCanvasButton({
         icon: downloadIcon,
@@ -205,7 +189,6 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
     })
 
     const items: BubbleMenuItem[] = [
-        { element: askAiButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: replaceButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT] },
         { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT] },
         { element: assetDetailsButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT] },

@@ -129,7 +129,7 @@ describe('settings - grouped configuration', () => {
 		expectFiniteNumber(settings.connector.scaling.zoomScaling.minZoom, 'settings.connector.scaling.zoomScaling.minZoom')
 		expectFiniteNumber(settings.canvasBubbleMenu.zoomScaling.minZoom, 'settings.canvasBubbleMenu.zoomScaling.minZoom')
 		expectFiniteNumber(settings.mediaNode.generatedMediaChrome.iconSize, 'settings.mediaNode.generatedMediaChrome.iconSize')
-		expectFiniteNumber(settings.mediaNode.generatedMediaChrome.topGap, 'settings.mediaNode.generatedMediaChrome.topGap')
+		expectFiniteNumber(settings.mediaNode.generatedMediaChrome.gap, 'settings.mediaNode.generatedMediaChrome.gap')
 		expectFiniteNumber(settings.mediaNode.generatedMediaChrome.zoomScaling.minZoom, 'settings.mediaNode.generatedMediaChrome.zoomScaling.minZoom')
 		expectFiniteNumber(settings.mediaNode.resizeHandle.size, 'settings.mediaNode.resizeHandle.size')
 		expectFiniteNumber(settings.mediaNode.resizeHandle.offset, 'settings.mediaNode.resizeHandle.offset')

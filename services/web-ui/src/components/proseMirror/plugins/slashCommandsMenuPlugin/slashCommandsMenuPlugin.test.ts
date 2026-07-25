@@ -1,5 +1,8 @@
 'use strict'
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { EditorState, TextSelection } from 'prosemirror-state'
 import {
@@ -14,6 +17,8 @@ import {
     slashCommandsMenuPluginKey,
     SlashCommandsMenuView,
 } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/slashCommandsMenuPlugin.ts'
+
+const slashMenuStyles = readFileSync(resolve(__dirname, 'slashCommandsMenu.scss'), 'utf-8')
 
 const mockCommands = vi.hoisted(() => ({
         firstCommand: vi.fn(),
@@ -78,6 +83,12 @@ function createPluginState() {
 describe('slashCommandsMenuPlugin — input and key handling', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+    })
+
+    it('uses the same light sidebar surface and selection palette', () => {
+        expect(slashMenuStyles.includes('background: rgba(255, 255, 255, 0.94)')).toBe(true)
+        expect(slashMenuStyles.includes('color: #1a2744')).toBe(true)
+        expect(slashMenuStyles.includes('background-color: rgba(95, 143, 207, 0.11)')).toBe(true)
     })
 
     it('opens slash menu at the start of paragraph when / typed', () => {

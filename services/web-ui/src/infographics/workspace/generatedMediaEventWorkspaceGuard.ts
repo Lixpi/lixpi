@@ -20,9 +20,17 @@ export function hasCurrentWorkspaceThread({
 }: GeneratedMediaEventWorkspaceGuardState & { threadId: string }): boolean {
     if (currentAiChatThreads.some((thread) => thread.threadId === threadId)) return true
 
-    return Boolean(currentCanvasState?.aiChatPanel?.tabs?.some((tab) =>
+    if (currentCanvasState?.aiChatPanel?.tabs?.some((tab) =>
         tab.type === 'thread' && tab.refId === threadId
-    ))
+    )) return true
+
+    return Boolean(currentCanvasState?.nodes.some((node) => {
+        if ((node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine')
+            && node.conversationAssetId === threadId) return true
+        if ((node.type === 'image' || node.type === 'video')
+            && node.generatedBy?.conversationAssetId === threadId) return true
+        return false
+    }))
 }
 
 export function shouldAcceptGeneratedMediaEvent({

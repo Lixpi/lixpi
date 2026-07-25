@@ -176,8 +176,8 @@ graph LR
 - Emits full doc JSON on any doc-changing transaction unless `skipDispatch` is set.
 - Legacy titled schemas may detect first-child title changes. Asset `content`, `conversation`, and `provenance` roles are title-free; global titles update through Asset metadata.
 - Skips persistence callbacks for AI chat thread documents. AI chat final snapshots are written by the API when the authoritative stream ends; the live callback still mirrors in-flight docs for canvas previews.
-- Authority-backed editors call `asset.document.resume` on mount and use the returned organization Asset-step stream sequence only as a replay cursor. Document freshness is tracked through role versions from step/control payloads.
-- Settled step history remains replayable for five minutes before the API purges through the incorporated stream sequence. When local steps are still pending, resume replays and rebases those events instead of replacing the editor with the newer settled snapshot.
+- Authority-backed editors call `asset.document.resume` on mount. The NATS reply contains only a small authenticated HTTP reference to the Object-Store snapshot plus a byte-bounded event page; the authority fetches snapshot JSON over HTTP and drains replay pages until its cursor reaches the returned latest sequence. Document freshness is tracked through role versions from step/control payloads.
+- The server-authored AI response path purges its conversation step subject immediately after the final snapshot and `END` event are persisted. General mutable-document settlement keeps incorporated client-edit steps replayable for five minutes before purging through that sequence. When local steps are still pending, resume replays and rebases those events instead of replacing the editor with the newer settled snapshot.
 
 ### focusPlugin (`plugins/focusPlugin.js`)
 - Listens to DOM focus/blur and sets plugin meta. Callback toggles `editable` prop based on `isDisabled`.

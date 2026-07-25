@@ -1373,7 +1373,7 @@
     }
 }
 
-// Top-level Features / Media / AI Threads switch at the top of the right side panel.
+// Top-level Capabilities / Media / AI Threads switch at the top of the right side panel.
 .workspace-right-panel-mode-switch {
     position: relative;
     z-index: 3;
@@ -1639,11 +1639,6 @@
     box-shadow: var(--workspace-ai-chat-panel-session-thread-marker-box-shadow, 0 0 0 3px rgba(95, 143, 207, 0.14));
 }
 
-.workspace-ai-chat-panel-session-marker-extraction {
-    background: #d4956a;
-    box-shadow: 0 0 0 3px rgba(212, 149, 106, 0.14);
-}
-
 .workspace-ai-chat-panel-session-content {
     display: grid;
     flex: 1 1 auto;
@@ -1758,11 +1753,6 @@
 
 .workspace-ai-chat-panel-body-pane-hidden {
     display: none !important;
-}
-
-.workspace-ai-chat-panel-extraction {
-    padding: 0 0 12px;
-    color: #1a2744;
 }
 
 // Screen-fixed, canvas-wide composer at the bottom-center of the viewport.

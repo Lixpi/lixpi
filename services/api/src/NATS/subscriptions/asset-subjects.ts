@@ -428,6 +428,7 @@ export const assetSubjects = [
             requester: await getRequesterContext(data.user.userId),
             localVersion: data.localVersion,
             localStreamSeq: data.localStreamSeq,
+            acceptSnapshot: data.acceptSnapshot !== false,
             activateLiveRelay: data.activateLiveRelay === true,
         }),
     },

@@ -126,7 +126,7 @@ flowchart TB
 
     subgraph API["API Service LangGraph"]
         Relevance[resolveWorkspaceContext<br/>rank + self-heal + assemble]
-        Features[resolveFeatures]
+        Capabilities[resolveCapabilities<br/>sealed Tools and Skills]
         Branch[resolveMediaBranch<br/>structured VLM media roles]
         Stream[StreamPublisher<br/>context + branch events]
         Describe[describeMediaStill<br/>text descriptor generation]
@@ -146,8 +146,8 @@ flowchart TB
     Relevance -->|CONTEXT_RELEVANCE_RESOLVED| Stream
     Stream --> AIS
     AIS --> Panel
-    Relevance --> Features
-    Features --> Branch
+    Relevance --> Capabilities
+    Capabilities --> Branch
     Branch -->|MEDIA_BRANCH_RESOLVED| Stream
     Branch --> Canvas
     Canvas --> DDB
@@ -158,6 +158,7 @@ flowchart TB
 | `buildWorkspaceContextSnapshot` | Builds the descriptors-only index from live canvas nodes |
 | `AiInteractionService` | Sends the snapshot with the chat turn and applies streamed resolution back to the panel |
 | `resolveWorkspaceContext` | Ranks descriptors, self-heals once, force-includes, assembles selected content |
+| `resolveCapabilities` | Authorizes prompt Capability IDs and seals their manifests and resources for the turn |
 | `describeMediaStill` | Generates text descriptors during self-heal |
 | `resolveMediaBranch` | Structured VLM media-role authority over the narrowed media set |
 | `StreamPublisher` | Emits `CONTEXT_RELEVANCE_RESOLVED` and branch events |

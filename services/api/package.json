@@ -21,6 +21,7 @@
         "adm-zip": "*",
         "archiver": "*",
         "@lixpi/auth-service": "workspace:*",
+        "@lixpi/capability-system": "workspace:*",
         "@lixpi/canvas-engine": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/dynamodb-service": "workspace:*",

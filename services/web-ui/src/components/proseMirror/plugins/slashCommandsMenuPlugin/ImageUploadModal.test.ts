@@ -161,8 +161,6 @@ function createModal() {
 
 describe('ImageUploadModal', () => {
     let originalXmlHttpRequest: typeof XMLHttpRequest | undefined
-    let originalAlert: any
-    let alertSpy: ReturnType<typeof vi.fn> | null = null
     let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null
 
     beforeEach(() => {
@@ -178,10 +176,6 @@ describe('ImageUploadModal', () => {
             workspaceId: 'workspace-id',
         })
 
-        originalAlert = (globalThis as any).alert
-        alertSpy = vi.fn()
-        ;(globalThis as any).alert = alertSpy
-
         consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     })
 
@@ -190,12 +184,6 @@ describe('ImageUploadModal', () => {
         if (originalXmlHttpRequest) {
             globalThis.XMLHttpRequest = originalXmlHttpRequest
         }
-        if (originalAlert === undefined) {
-            delete (globalThis as any).alert
-        } else {
-            ;(globalThis as any).alert = originalAlert
-        }
-        alertSpy = null
         consoleErrorSpy?.mockRestore()
         consoleErrorSpy = null
     })
@@ -253,8 +241,13 @@ describe('ImageUploadModal', () => {
         })
     })
 
-    it('inserts a URL and closes the modal', () => {
+    it('inserts a URL and closes the modal', async () => {
         const { modal, onComplete } = createModal()
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ assetId: 'asset-1', originalUrl: '/api/assets/asset-1/renditions/original' }),
+        })
+        vi.stubGlobal('fetch', fetchMock)
 
         modal.show()
 
@@ -267,11 +260,23 @@ describe('ImageUploadModal', () => {
         urlInput.value = 'https://example.com/photo.jpg '
         insertButton.dispatchEvent(new MouseEvent('click'))
 
+        await vi.waitFor(() => expect(onComplete).toHaveBeenCalled())
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining('/api/assets/workspaces/workspace-id/import-url'),
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({ url: 'https://example.com/photo.jpg', expectedKind: 'image' }),
+            }),
+        )
         expect(onComplete).toHaveBeenCalledWith({
             success: true,
-            src: 'https://example.com/photo.jpg',
+            assetId: 'asset-1',
+            src: '/api/assets/asset-1/renditions/original',
         })
         expect(document.querySelector('.image-upload-modal-overlay')).toBeNull()
+
+        vi.unstubAllGlobals()
     })
 
     it('calls onCancel when overlay or URL cancel is clicked', () => {
@@ -300,7 +305,7 @@ describe('ImageUploadModal', () => {
         expect(document.querySelector('.image-upload-modal-overlay')).toBeNull()
     })
 
-    it('blocks non-image uploads with an alert', async () => {
+    it('blocks non-image uploads with a logged validation error', async () => {
         const { modal, onComplete } = createModal()
         const badFile = {
             type: 'text/plain',
@@ -310,21 +315,21 @@ describe('ImageUploadModal', () => {
 
         await (modal as any).handleFileSelect(badFile)
 
-        expect(alertSpy).toHaveBeenCalledWith('Please select an image file')
+        expect(consoleErrorSpy).toHaveBeenCalledWith('[IMAGE_UPLOAD] No image file selected.')
         expect(onComplete).not.toHaveBeenCalled()
     })
 
-    it('blocks oversized image uploads with an alert', async () => {
+    it('blocks oversized image uploads with a logged validation error', async () => {
         const { modal, onComplete } = createModal()
         const oversizedFile = createImageFile({ size: MAX_UPLOAD_FILE_SIZE + 1 })
 
         await (modal as any).handleFileSelect(oversizedFile)
 
-        expect(alertSpy).toHaveBeenCalledWith('File size exceeds 1GB limit')
+        expect(consoleErrorSpy).toHaveBeenCalledWith('[IMAGE_UPLOAD] File size exceeds the 1GB limit.')
         expect(onComplete).not.toHaveBeenCalled()
     })
 
-    it('uploads files via XMLHttpRequest, applies progress updates, and returns tokenized src', async () => {
+    it('uploads files via XMLHttpRequest, applies progress updates, and returns the asset-backed src', async () => {
         const { modal, onComplete } = createModal()
         const file = createImageFile()
 
@@ -334,7 +339,7 @@ describe('ImageUploadModal', () => {
 
         const request = MockXMLHttpRequest.getActiveRequests()[0] as MockXMLHttpRequest
         expect(request.method).toBe('POST')
-        expect(request.requestUrl).toContain('/api/files/workspace-id')
+        expect(request.requestUrl).toContain('/api/assets/workspaces/workspace-id')
         expect(request.headers.Authorization).toBe('Bearer token-1')
 
         expect(request.sentBody).toBeInstanceOf(FormData)
@@ -352,7 +357,7 @@ describe('ImageUploadModal', () => {
         expect(progressLabel.textContent).toBe('Uploading... 50%')
 
         request.status = 200
-        request.responseText = JSON.stringify({ fileId: 'file-abc', url: '/api/files/workspace-id/image.png' })
+        request.responseText = JSON.stringify({ assetId: 'asset-abc', originalUrl: '/api/assets/asset-abc/renditions/original' })
         request.triggerLoad()
 
         const result = await uploadResult
@@ -360,11 +365,11 @@ describe('ImageUploadModal', () => {
         expect(result).toBeUndefined()
         expect(onComplete).toHaveBeenCalledWith({
             success: true,
-            fileId: 'file-abc',
-            src: `${import.meta.env.VITE_API_URL || ''}/api/files/workspace-id/image.png?token=token-1`,
+            assetId: 'asset-abc',
+            src: '/api/assets/asset-abc/renditions/original',
         })
         expect(document.querySelector('.image-upload-modal-overlay')).toBeNull()
-        expect(vi.mocked(AuthService.getTokenSilently)).toHaveBeenCalledTimes(2)
+        expect(vi.mocked(AuthService.getTokenSilently)).toHaveBeenCalledTimes(1)
     })
 
     it('handles upload server errors by rejecting and surfacing the server error message', async () => {
@@ -398,11 +403,12 @@ describe('ImageUploadModal', () => {
         await expect(uploadPromise).rejects.toThrow('Network error during upload')
     })
 
-    it('handles upload failures in handleFileSelect by showing alert and remaining mounted', async () => {
+    it('handles upload failures in handleFileSelect by logging the error and remaining mounted', async () => {
         const { modal, onComplete } = createModal()
         const file = createImageFile()
+        const uploadError = new Error('Upload failed hard')
 
-        vi.spyOn(modal as any, 'uploadFile').mockRejectedValue(new Error('Upload failed hard'))
+        vi.spyOn(modal as any, 'uploadFile').mockRejectedValue(uploadError)
 
         modal.show()
 
@@ -410,14 +416,13 @@ describe('ImageUploadModal', () => {
         await (modal as any).handleFileSelect(file)
 
         expect(progressContainer.style.display).toBe('none')
-        expect(alertSpy).toHaveBeenCalledTimes(1)
-        expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Upload failed:'))
-        expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Upload failed hard'))
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Upload failed:', uploadError)
+        expect(consoleErrorSpy).toHaveBeenCalledWith('[IMAGE_UPLOAD] Upload failed:', uploadError)
         expect(document.querySelector('.image-upload-modal-overlay')).not.toBeNull()
         expect(onComplete).not.toHaveBeenCalled()
     })
 
-    it('falls back to Unknown error when upload rejection is not an Error object', async () => {
+    it('logs the raw rejection value when upload rejection is not an Error object', async () => {
         const { modal, onComplete } = createModal()
         const file = createImageFile()
 
@@ -428,7 +433,7 @@ describe('ImageUploadModal', () => {
         await (modal as any).handleFileSelect(file)
 
         expect(progressContainer.style.display).toBe('none')
-        expect(alertSpy).toHaveBeenCalledWith('Upload failed: Unknown error')
+        expect(consoleErrorSpy).toHaveBeenCalledWith('[IMAGE_UPLOAD] Upload failed:', 'upload service unavailable')
         expect(document.querySelector('.image-upload-modal-overlay')).not.toBeNull()
         expect(onComplete).not.toHaveBeenCalled()
     })

@@ -141,6 +141,7 @@ describe('DynamoDBService', () => {
             expect((sendMock.mock.calls[0][0] as { input: Record<string, unknown> }).input).toEqual({
                 TableName: 'users',
                 Key: { userId: 'u1' },
+                ConsistentRead: false,
                 ReturnConsumedCapacity: 'TOTAL',
             })
             expect(consoleInfoSpy).toHaveBeenCalledWith(
@@ -201,6 +202,7 @@ describe('DynamoDBService', () => {
                 items: [{ id: 'u1' }, { id: 'u2' }],
                 consumedCapacities: [{ CapacityUnits: 2 }],
                 readIterations: 1,
+                lastEvaluatedKey: { pk: 'u2' },
             })
             expect((sendMock.mock.calls[0][0] as { input: Record<string, unknown> }).input).toEqual({
                 TableName: 'users',
@@ -209,6 +211,7 @@ describe('DynamoDBService', () => {
                 ExpressionAttributeNames: { '#pk': 'pk' },
                 Limit: 2,
                 ScanIndexForward: true,
+                ConsistentRead: false,
                 ReturnConsumedCapacity: 'TOTAL',
             })
             expect(sendMock.mock.calls[0][0]).not.toHaveProperty('input.ExclusiveStartKey')
@@ -246,6 +249,35 @@ describe('DynamoDBService', () => {
             })
             expect(consoleInfoSpy).toHaveBeenCalledOnce()
         })
+
+        it('builds a typed begins_with sort-key condition for prefix queries', async () => {
+            const service = new DynamoDBService({ region: 'us-east-1' })
+            const sendMock = vi.fn().mockResolvedValue({ Items: [] })
+            setDocumentClientSend(service, sendMock)
+
+            await service.queryItems({
+                tableName: 'capabilities-meta',
+                keyConditions: { scopeAndOwner: 'global#system' },
+                sortKeyCondition: {
+                    key: 'searchKey',
+                    operator: 'begins_with',
+                    value: 'tool#character',
+                },
+                limit: 20,
+            })
+
+            expect((sendMock.mock.calls[0][0] as { input: Record<string, unknown> }).input).toEqual(expect.objectContaining({
+                KeyConditionExpression: '#scopeAndOwner = :scopeAndOwner AND begins_with(#sortKey, :sortKeyValue)',
+                ExpressionAttributeNames: {
+                    '#scopeAndOwner': 'scopeAndOwner',
+                    '#sortKey': 'searchKey',
+                },
+                ExpressionAttributeValues: {
+                    ':scopeAndOwner': 'global#system',
+                    ':sortKeyValue': 'tool#character',
+                },
+            }))
+        })
     })
 
     // =============================================================================
@@ -280,10 +312,12 @@ describe('DynamoDBService', () => {
                 items: [{ id: 'a' }, { id: 'b' }],
                 consumedCapacities: [{ CapacityUnits: 1 }],
                 scanIterations: 1,
+                lastEvaluatedKey: { pk: 'a' },
             })
             expect((sendMock.mock.calls[0][0] as { input: Record<string, unknown> }).input).toEqual({
                 TableName: 'users',
                 Limit: 2,
+                ConsistentRead: false,
                 ReturnConsumedCapacity: 'TOTAL',
             })
             expect((sendMock.mock.calls[0][0] as { input: Record<string, unknown> }).input).not.toHaveProperty('ExclusiveStartKey')
@@ -690,6 +724,35 @@ describe('DynamoDBService', () => {
 
             expect((sendMock.mock.calls[0][0] as { input: Record<string, unknown> }).input).toMatchObject({
                 ConditionExpression: 'attribute_exists(id)',
+            })
+        })
+
+        it('preserves condition placeholders when updates build the update expression', async () => {
+            const service = new DynamoDBService({ region: 'us-east-1' })
+            const sendMock = vi.fn().mockResolvedValue({
+                Attributes: { updated: true },
+                ConsumedCapacity: { CapacityUnits: 2 },
+            })
+            setDocumentClientSend(service, sendMock)
+
+            await service.updateItem({
+                tableName: 'capability-runs',
+                key: { runId: 'run-1', workspaceId: 'workspace-1' },
+                updates: { status: 'running', updatedAt: 2 },
+                conditionExpression: '#status IN (:expectedStatus0)',
+                expressionAttributeNames: { '#status': 'status' },
+                expressionAttributeValues: { ':expectedStatus0': 'pending' },
+            })
+
+            expect((sendMock.mock.calls[0][0] as { input: Record<string, unknown> }).input).toMatchObject({
+                UpdateExpression: 'SET #status = :status, #updatedAt = :updatedAt',
+                ConditionExpression: '#status IN (:expectedStatus0)',
+                ExpressionAttributeNames: { '#status': 'status', '#updatedAt': 'updatedAt' },
+                ExpressionAttributeValues: {
+                    ':status': 'running',
+                    ':updatedAt': 2,
+                    ':expectedStatus0': 'pending',
+                },
             })
         })
     })

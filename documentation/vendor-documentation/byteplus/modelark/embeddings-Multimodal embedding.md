@@ -421,7 +421,7 @@ Vectorization is the process of representing unstructured data, such as text or 
 
 The dimensionality of a vector refers to the number of dimensions that the vector contains for annotating word meanings or image features.
 
-In multimodal vectorization scenarios, each dimension corresponds to a feature of the text or to visual features such as the pixels, colors, and so on of the image.
+In multimodal vectorization scenarios, each dimension corresponds to a feature of the text or to visual styles such as the pixels, colors, and so on of the image.
 
 <div data-tips="true" data-tips-type="warning" data-tips-is-title="true">Note</div>
 

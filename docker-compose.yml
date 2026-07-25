@@ -382,6 +382,8 @@ services:
             - ./services/web-ui/tsconfig.json:/usr/src/service/tsconfig.json:cached
 
 
+            - ./packages/lixpi/capability-system/package.json:/usr/src/service/packages/lixpi/capability-system/package.json:ro,cached
+            - ./packages/lixpi/capability-system/src:/usr/src/service/packages/lixpi/capability-system/src:ro,cached
             - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/packages/lixpi/canvas-engine/package.json:ro,cached
             - ./packages/lixpi/canvas-engine/src:/usr/src/service/packages/lixpi/canvas-engine/src:ro,cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
@@ -513,6 +515,8 @@ services:
 
             - ./packages/lixpi/auth-service/package.json:/usr/src/service/packages/lixpi/auth-service/package.json:ro,cached
             - ./packages/lixpi/auth-service/src:/usr/src/service/packages/lixpi/auth-service/src:ro,cached
+            - ./packages/lixpi/capability-system/package.json:/usr/src/service/packages/lixpi/capability-system/package.json:ro,cached
+            - ./packages/lixpi/capability-system/src:/usr/src/service/packages/lixpi/capability-system/src:ro,cached
             - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/packages/lixpi/canvas-engine/package.json:ro,cached
             - ./packages/lixpi/canvas-engine/src:/usr/src/service/packages/lixpi/canvas-engine/src:ro,cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached

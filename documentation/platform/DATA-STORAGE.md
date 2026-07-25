@@ -5,7 +5,7 @@ description: The revision-2 Asset and Blob storage model: DynamoDB tables, conte
 
 # Data Storage
 
-Lixpi stores every user-created document, standalone conversation, upload, and generated media result as an **Asset**. Immutable media bytes, Feature samples, and ProseMirror snapshots are content-addressed **Blobs** in one Object Store bucket per organization. Workspaces store local geometry and panel state; they never own media bytes or duplicate global Asset metadata.
+Lixpi stores every user-created document, standalone conversation, upload, and generated media result as an **Asset**. Immutable media bytes, Capability manifests and resources, and ProseMirror snapshots are content-addressed **Blobs**. Workspaces store local geometry and panel state; they never own media bytes or duplicate global Asset metadata.
 
 The active runtime has no document table, chat-thread table, media-library table, workspace file registry, or workspace-specific Object Store bucket.
 
@@ -19,8 +19,9 @@ The active runtime has no document table, chat-thread table, media-library table
 | `Asset-Access-List` | Per-principal grants | Workspace membership |
 | `Asset-References` | Catalog membership and workspace placements/surfaces | Blob ownership |
 | `Blob` | Organization-scoped hash, object address, MIME, byte size, status, reference count | Product semantics |
-| `Blob-References` | Asset/Feature ownership of a Blob | Asset scope or ACL |
-| `Feature` | Feature definition and sample Blob hashes | Sample bytes |
+| `Blob-References` | Asset or Capability ownership of a Blob | Product scope or ACL |
+| `Capability` | Kind, scope, owners, status, and current manifest hash | Manifest and resource bytes |
+| `Capability Run` | Sealed manifest hashes, owner, origin, state, steps, and output Asset IDs | Event payload bytes |
 
 ## DynamoDB tables
 
@@ -37,7 +38,7 @@ The six revision-2 tables are defined in [`DynamoDB-tables.ts`](../../infrastruc
 
 There are no GSIs on these tables. Listing queries bounded `Assets-Meta` partitions. Authorization and ordinary maintenance use point reads or one Asset/Blob partition. Maintenance-only orphan collection scans staging Blob rows and organization IDs; request paths do not.
 
-Existing Workspace, Feature, Extraction Run, organization, user, model, and billing tables remain. Workspaces include `organizationId`; every Asset or Feature created from a workspace uses that organization instead of selecting an arbitrary organization from the user account.
+Capability storage uses `Capabilities`, `Capabilities-Meta`, `Capabilities-Access-List`, and `Capability-Runs` alongside the Asset/Blob tables. Workspaces include `organizationId`; every Asset or organization-owned Capability created from a workspace uses that organization rather than selecting an arbitrary organization from the user account.
 
 ## Asset aggregate
 
@@ -129,7 +130,9 @@ Object Store writes cannot participate in DynamoDB transactions. Recovery theref
 - a daily sweep that removes aged hash-addressed objects with no Blob registry row, covering an Object Store success followed by a DynamoDB failure;
 - idempotent object and row deletion.
 
-Feature sample references use `feature#<featureId>#sample#<index>`. Asset document and rendition references use `asset#<assetId>#document#<role>` and `asset#<assetId>#rendition#<name>`.
+Capability package references use `capability#<capabilityId>#manifest` and `capability#<capabilityId>#resource#<resourceId>`. Asset document and rendition references use `asset#<assetId>#document#<role>` and `asset#<assetId>#rendition#<name>`.
+
+Capability manifests and resources use the system Blob bucket for deployment-owned global entries and the owning organization bucket for user or organization entries. Catalog edits store and verify new resources first, store canonical manifest JSON, then conditionally swap the catalog pointer. A sealed run keeps its captured hashes, so superseded Blob references remain readable through the retirement grace period. See [Capability Storage and Operations](../library/CAPABILITY-STORAGE.md).
 
 ## Renditions
 
@@ -146,7 +149,7 @@ NEX writes immutable hash-addressed output objects and returns hashes, MIME type
 
 An Asset is `ready` only when required renditions are ready. It is `degraded` when a playable/model-safe source exists but a derived rendition failed. Bounded durable retries repair degraded Assets; repeated failure remains visible with stable error codes.
 
-Provenance rebuild failures use self-renewing durable maintenance messages with exponential backoff capped at five minutes. The pipeline log is not purged while an output Asset remains in `provenance: 'building'`, so a transient snapshot or event-log race cannot exhaust one short retry burst and lose the materialization source.
+Provenance rebuild failures use self-renewing durable maintenance messages with exponential backoff capped at five minutes. Rebuilds read the persisted conversation snapshot and fall back to a minimal terminal projection after bounded retries, so the response-specific pipeline subject can be purged immediately after the final conversation and canvas writes settle.
 
 ## Asset documents and leases
 

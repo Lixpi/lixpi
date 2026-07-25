@@ -77,8 +77,7 @@ function createImageGenerationTrace(overrides: Partial<ImageGenerationTrace> = {
                 label: 'painted portrait of the man',
                 role: 'target',
                 nodeId: 'person-generated',
-                fileId: 'person-file',
-                workspaceId: 'workspace-1',
+                assetId: 'person-asset',
                 branchId: 'branch-person',
                 reason: 'selected generated portrait branch',
             },
@@ -520,7 +519,7 @@ describe('aiChatThreadPlugin — image generation trace', () => {
 
         SegmentsReceiver.receiveSegment({
             type: 'image_generation_trace',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageGenerationTrace: trace,
         })
 
@@ -551,7 +550,7 @@ describe('aiChatThreadPlugin — image generation trace', () => {
 
         SegmentsReceiver.receiveSegment({
             type: 'image_generation_trace',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageGenerationTrace: trace,
         })
 
@@ -638,10 +637,9 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         SegmentsReceiver.receiveSegment({
             type: 'image_partial',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageUrl: '',
-            fileId: '',
-            workspaceId: 'workspace-1',
+            assetId: '',
             partialIndex: 0,
             aiProvider: 'OpenAI',
         })
@@ -651,8 +649,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
         expect(imageNodes).toHaveLength(1)
         expect(imageNodes[0].attrs).toMatchObject({
             imageData: '',
-            fileId: '',
-            workspaceId: 'workspace-1',
+            assetId: '',
             aiModel: 'OpenAI',
             isPartial: true,
             partialIndex: 0,
@@ -675,19 +672,17 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         SegmentsReceiver.receiveSegment({
             type: 'image_partial',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageUrl: '',
-            fileId: '',
-            workspaceId: 'workspace-1',
+            assetId: '',
             partialIndex: 0,
             aiProvider: 'OpenAI',
         })
         SegmentsReceiver.receiveSegment({
             type: 'image_partial',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageUrl: '/api/images/workspace-1/file-partial',
-            fileId: 'file-partial',
-            workspaceId: 'workspace-1',
+            assetId: 'file-partial',
             partialIndex: 2,
             aiProvider: 'OpenAI',
         })
@@ -699,14 +694,14 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         expect(imageNodes.find((node) => node.attrs.partialIndex === 0)?.attrs).toMatchObject({
             imageData: '',
-            fileId: '',
+            assetId: '',
             isPartial: true,
             partialIndex: 0,
             alignment: 'right',
         })
         expect(imageNodes.find((node) => node.attrs.partialIndex === 2)?.attrs).toMatchObject({
             imageData: '/api/images/workspace-1/file-partial',
-            fileId: 'file-partial',
+            assetId: 'file-partial',
             isPartial: true,
             partialIndex: 2,
             alignment: 'right',
@@ -734,17 +729,16 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         SegmentsReceiver.receiveSegment({
             type: 'image_generation_trace',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageGenerationTrace: trace,
         })
 
         for (const partialIndex of [0, 1, 2]) {
             SegmentsReceiver.receiveSegment({
                 type: 'image_partial',
-                aiChatThreadId: 'thread-1',
+                conversationAssetId: 'thread-1',
                 imageUrl: `/api/images/workspace-1/file-partial-${partialIndex}`,
-                fileId: `file-partial-${partialIndex}`,
-                workspaceId: 'workspace-1',
+                assetId: `file-partial-${partialIndex}`,
                 partialIndex,
                 aiProvider: 'OpenAI',
                 generationRun,
@@ -753,10 +747,9 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         SegmentsReceiver.receiveSegment({
             type: 'image_complete',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageUrl: '/api/images/workspace-1/file-final',
-            fileId: 'file-final',
-            workspaceId: 'workspace-1',
+            assetId: 'file-final',
             responseId: 'response-1',
             revisedPrompt: 'A revised prompt',
             aiProvider: 'OpenAI',
@@ -773,7 +766,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         expect(imageNodes).toHaveLength(1)
         expect(imageNodes[0].attrs).toMatchObject({
-            fileId: 'file-final',
+            assetId: 'file-final',
             isPartial: false,
             partialIndex: 2,
         })
@@ -790,10 +783,9 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         SegmentsReceiver.receiveSegment({
             type: 'image_complete',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageUrl: '/api/images/workspace-1/file-1',
-            fileId: 'file-1',
-            workspaceId: 'workspace-1',
+            assetId: 'file-1',
             responseId: 'response-1',
             revisedPrompt: 'A revised prompt',
             aiProvider: 'OpenAI',
@@ -805,8 +797,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
         expect(imageNodes).toHaveLength(1)
         expect(imageNodes[0].attrs).toMatchObject({
             imageData: '/api/images/workspace-1/file-1',
-            fileId: 'file-1',
-            workspaceId: 'workspace-1',
+            assetId: 'file-1',
             responseId: 'response-1',
             revisedPrompt: 'A revised prompt',
             isPartial: false,
@@ -824,19 +815,17 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         SegmentsReceiver.receiveSegment({
             type: 'image_partial',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageUrl: '',
-            fileId: '',
-            workspaceId: 'workspace-1',
+            assetId: '',
             partialIndex: 0,
             aiProvider: 'OpenAI',
         })
         SegmentsReceiver.receiveSegment({
             type: 'image_complete',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageUrl: '/api/images/workspace-1/file-1',
-            fileId: 'file-1',
-            workspaceId: 'workspace-1',
+            assetId: 'file-1',
             responseId: 'response-1',
             revisedPrompt: 'A revised prompt',
             aiProvider: 'OpenAI',
@@ -848,8 +837,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
         expect(imageNodes).toHaveLength(1)
         expect(imageNodes[0].attrs).toMatchObject({
             imageData: '/api/images/workspace-1/file-1',
-            fileId: 'file-1',
-            workspaceId: 'workspace-1',
+            assetId: 'file-1',
             responseId: 'response-1',
             revisedPrompt: 'A revised prompt',
             isPartial: false,
@@ -901,20 +889,18 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         SegmentsReceiver.receiveSegment({
             type: 'image_partial',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageUrl: '',
-            fileId: '',
-            workspaceId: 'workspace-1',
+            assetId: '',
             partialIndex: 0,
             aiProvider: 'Anthropic',
             generationRun: run0,
         })
         SegmentsReceiver.receiveSegment({
             type: 'image_partial',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageUrl: '',
-            fileId: '',
-            workspaceId: 'workspace-1',
+            assetId: '',
             partialIndex: 0,
             aiProvider: 'Anthropic',
             generationRun: run1,
@@ -927,7 +913,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         SegmentsReceiver.receiveSegment({
             type: 'image_error',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             error: 'Google image model returned no inline image data.',
             generationRun: run0,
         })
@@ -951,10 +937,9 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         SegmentsReceiver.receiveSegment({
             type: 'image_complete',
-            aiChatThreadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             imageUrl: '/api/images/workspace-1/file-1',
-            fileId: 'file-1',
-            workspaceId: 'workspace-1',
+            assetId: 'file-1',
             responseId: 'response-1',
             revisedPrompt: 'A revised prompt',
             aiProvider: 'OpenAI',
@@ -963,8 +948,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
         expect(onImageCompleteToCanvas).toHaveBeenCalledWith(expect.objectContaining({
             imageUrl: '/api/images/workspace-1/file-1',
-            fileId: 'file-1',
-            workspaceId: 'workspace-1',
+            assetId: 'file-1',
             responseMessageId: 'resp-1',
         }))
 

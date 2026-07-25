@@ -1,14 +1,16 @@
 'use strict'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
+import { NATS_SUBJECTS, STREAM_STATUS, getAiInteractionResponseSubject } from '@lixpi/constants'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 
 const workspaceId = 'workspace-1'
-const aiChatThreadId = 'thread-1'
-const responseSubject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`
+const organizationId = 'org-1'
+const conversationAssetId = 'thread-1'
+const userId = 'user-1'
+const responseSubject = getAiInteractionResponseSubject(userId, organizationId, conversationAssetId)
 
 const getDataMock = vi.hoisted(() => vi.fn())
 const natsPublishMock = vi.hoisted(() => vi.fn())
@@ -18,7 +20,6 @@ const natsRequestMock = vi.hoisted(() => vi.fn())
 const getTokenSilentlyMock = vi.hoisted(() => vi.fn())
 const receiveSegmentMock = vi.hoisted(() => vi.fn())
 const uuidMock = vi.hoisted(() => vi.fn(() => 'matrix-request-id'))
-const organizationGetMock = vi.hoisted(() => vi.fn())
 const userGetMock = vi.hoisted(() => vi.fn())
 
 let consoleErrorSpy: { mockRestore: () => void } | null = null
@@ -49,12 +50,6 @@ vi.mock('$src/stores/servicesStore.ts', () => ({
     },
 }))
 
-vi.mock('$src/stores/organizationStore.ts', () => ({
-    organizationStore: {
-        getData: organizationGetMock,
-    },
-}))
-
 vi.mock('$src/stores/userStore.ts', () => ({
     userStore: {
         getData: userGetMock,
@@ -77,14 +72,14 @@ describe('AiInteractionService', () => {
             request: natsRequestMock,
         })
         getTokenSilentlyMock.mockResolvedValue('auth-token')
-        organizationGetMock.mockReturnValue('org-1')
-        userGetMock.mockReturnValue({ userId: 'user-1' })
+        userGetMock.mockReturnValue(userId)
         natsGetSubscriptionsMock.mockReturnValue([])
         natsRequestMock.mockResolvedValue({ events: [] })
 
         service = new AiInteractionService({
             workspaceId,
-            aiChatThreadId,
+            conversationAssetId,
+            organizationId,
         })
 
         await flushPromises()
@@ -111,7 +106,7 @@ describe('AiInteractionService', () => {
             expect.objectContaining({
                 token: 'auth-token',
                 workspaceId,
-                aiChatThreadId,
+                conversationAssetId,
                 localStreamSeq: 0,
             }),
         )
@@ -119,7 +114,7 @@ describe('AiInteractionService', () => {
 
     it('computes run keys, chat subject, and generation-run detection', () => {
         expect(service.getRunKey({ reasoningRunId: 'reasoning-run' } as any)).toBe('reasoning-run')
-        expect(service.getRunKey()).toBe(aiChatThreadId)
+        expect(service.getRunKey()).toBe(conversationAssetId)
         expect(service.getGenerationRun({ generationRun: { reasoningRunId: 'trace-run' } } as any)).toEqual({ reasoningRunId: 'trace-run' })
         expect(service.getGenerationRun({ imageGenerationTrace: { generationRun: { reasoningRunId: 'image-run' } } } as any)).toEqual({ reasoningRunId: 'image-run' })
         expect(service.getGenerationRun({ videoGenerationTrace: { generationRun: { reasoningRunId: 'video-run' } } } as any)).toEqual({ reasoningRunId: 'video-run' })
@@ -134,7 +129,7 @@ describe('AiInteractionService', () => {
                 status: STREAM_STATUS.IMAGE_PARTIAL,
                 generationRun: { reasoningRunId: 'reasoning-run' },
                 imageUrl: 'https://images.example/one.png',
-                fileId: 'file-1',
+                assetId: 'asset-1',
                 partialIndex: 0,
             },
         })
@@ -144,7 +139,7 @@ describe('AiInteractionService', () => {
                 status: STREAM_STATUS.IMAGE_PARTIAL,
                 generationRun: { reasoningRunId: 'reasoning-run' },
                 imageUrl: 'https://images.example/two.png',
-                fileId: 'file-2',
+                assetId: 'asset-2',
                 partialIndex: 1,
             },
         })
@@ -176,7 +171,7 @@ describe('AiInteractionService', () => {
             content: {
                 status: STREAM_STATUS.IMAGE_PARTIAL,
                 imageUrl: 'first',
-                fileId: 'file-1',
+                assetId: 'asset-1',
                 partialIndex: 1,
             },
         })
@@ -187,7 +182,7 @@ describe('AiInteractionService', () => {
             content: {
                 status: STREAM_STATUS.IMAGE_PARTIAL,
                 imageUrl: 'duplicate',
-                fileId: 'file-2',
+                assetId: 'asset-2',
                 partialIndex: 2,
             },
         })
@@ -255,7 +250,7 @@ describe('AiInteractionService', () => {
             content: {
                 status: STREAM_STATUS.IMAGE_COMPLETE,
                 imageUrl: 'https://img.example/final.png',
-                fileId: 'file-final',
+                assetId: 'asset-final',
                 responseId: 'img-response',
                 revisedPrompt: 'sunset',
                 aiProvider: 'image-provider',
@@ -281,7 +276,7 @@ describe('AiInteractionService', () => {
             content: {
                 status: STREAM_STATUS.VIDEO_COMPLETE,
                 videoUrl: 'https://vid.example/final.mp4',
-                fileId: 'video-file',
+                assetId: 'video-asset',
                 responseId: 'video-response',
                 revisedPrompt: 'city',
                 durationSeconds: 9,
@@ -296,7 +291,7 @@ describe('AiInteractionService', () => {
 
         expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
             type: 'image_complete',
-            fileId: 'file-final',
+            assetId: 'asset-final',
             responseId: 'img-response',
             revisedPrompt: 'sunset',
             aiProvider: 'image-provider',
@@ -304,7 +299,7 @@ describe('AiInteractionService', () => {
         }))
         expect(receiveSegmentMock).toHaveBeenCalledWith(expect.objectContaining({
             type: 'video_complete',
-            fileId: 'video-file',
+            assetId: 'video-asset',
             responseId: 'video-response',
             videoModel: 'v-model',
             videoModelProvider: 'provider-X',
@@ -313,16 +308,11 @@ describe('AiInteractionService', () => {
         }))
     })
 
-    it('alerts on transport errors and does not create segments', () => {
-        const windowAlert = vi.fn()
-        const originalAlert = (globalThis as { alert?: (...args: unknown[]) => void }).alert
-        ;(globalThis as { alert?: (...args: unknown[]) => void }).alert = windowAlert
-
+    it('logs and does not create segments when the transport reports an error', () => {
         service.onChatMessageResponse({ error: { message: 'transport failed' } })
 
-        expect(windowAlert).toHaveBeenCalledWith('Failed to receive chat message: \n{"message":"transport failed"}')
+        expect(consoleErrorSpy).toHaveBeenCalledWith('[AI_INTERACTION] Failed to receive chat message:', { message: 'transport failed' })
         expect(receiveSegmentMock).not.toHaveBeenCalled()
-        ;(globalThis as { alert?: (...args: unknown[]) => void }).alert = originalAlert
     })
 
     it('replays pipeline resume events through the same handling path', async () => {
@@ -380,7 +370,7 @@ describe('AiInteractionService', () => {
             expect.objectContaining({
                 token: 'auth-token',
                 workspaceId,
-                aiChatThreadId,
+                conversationAssetId,
                 localStreamSeq: 0,
             }),
         )
@@ -465,10 +455,10 @@ describe('AiInteractionService', () => {
             videoSourceForExtension: 's3://video-source',
             useMultipleVideoModels: true,
             videoConfigGroups: [{ id: 'quality', configs: [] }],
-            referencedFeatureIds: ['feat-1'],
+            capabilityReferences: [{ capabilityId: 'tool-1', kind: 'tool' }],
             mediaBranchCandidateSnapshot: {
                 resolverVersion: 'image-branch-v1',
-                threadId: aiChatThreadId,
+                conversationAssetId,
                 regionNodeId: 'node-1',
                 promptText: 'film',
                 candidates: [],
@@ -478,12 +468,10 @@ describe('AiInteractionService', () => {
             workspaceContextSnapshot: {
                 resolverVersion: 'workspace-context-v1',
                 workspaceId,
-                threadId: aiChatThreadId,
+                conversationAssetId,
                 promptText: 'film',
                 nodes: [],
             },
-            proseMirrorInitialDoc: { type: 'doc' },
-            proseMirrorBaseVersion: 12,
             canvasVisibleArea: { x: 5, y: 6 },
         })
 
@@ -493,12 +481,12 @@ describe('AiInteractionService', () => {
             aiImageModels: ['image-a', 'image-b'],
             aiVideoModels: ['video-a', 'video-b'],
             imageSize: '768x768',
-            mediaBranchCandidateSnapshot: { resolverVersion: 'image-branch-v1', threadId: aiChatThreadId },
+            mediaBranchCandidateSnapshot: { resolverVersion: 'image-branch-v1', conversationAssetId },
             workspaceContextSnapshot: {
                 workspaceId,
                 nodes: [],
             },
-            referencedFeatureIds: ['feat-1'],
+            capabilityReferences: [{ capabilityId: 'tool-1', kind: 'tool' }],
             mediaGenerationRequest: {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: 'matrix-request-id',
@@ -517,10 +505,8 @@ describe('AiInteractionService', () => {
                     configGroups: [{ id: 'quality', configs: [] }],
                 },
             },
-            proseMirrorBaseVersion: 12,
-            proseMirrorInitialDoc: { type: 'doc' },
             canvasVisibleArea: { x: 5, y: 6 },
-            organizationId: 'org-1',
+            organizationId,
         })
         expect(payload.token).toBe('auth-token')
     })
@@ -550,15 +536,15 @@ describe('AiInteractionService', () => {
         expect(payload.mediaGenerationRequest).not.toHaveProperty('videoOptions')
     })
 
-    it('publishes stop event through NATS', async () => {
+    it('publishes stop event through NATS via a request/response call', async () => {
         await service.stopChatMessage()
 
-        expect(natsPublishMock).toHaveBeenCalledWith(
+        expect(natsRequestMock).toHaveBeenCalledWith(
             AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE,
             {
                 token: 'auth-token',
                 workspaceId,
-                aiChatThreadId,
+                conversationAssetId,
             },
         )
     })
@@ -567,7 +553,7 @@ describe('AiInteractionService', () => {
         const unsubscribeMock = vi.fn()
         natsGetSubscriptionsMock.mockReturnValue([{ unsubscribe: unsubscribeMock }])
 
-        service.updateRunProvider(aiChatThreadId, 'provider-x')
+        service.updateRunProvider(conversationAssetId, 'provider-x')
         service.shouldProcessPipelinePayload({
             pipelineEventId: 'event-to-forget',
             pipelineStreamSeq: 7,

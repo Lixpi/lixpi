@@ -12,6 +12,7 @@ export type AiResponseMessageShell = {
     messageEl: HTMLElement
     contentEl: HTMLElement
     loadingEl: HTMLElement | null
+    capabilityProgressEl: HTMLElement
     setMessageId: (messageId: string) => void
 }
 
@@ -53,6 +54,7 @@ export function createAiResponseMessageShell(options: ResponseMessageShellOption
             <div className="ai-response-message">
                 ${loadingIndicator}
                 <div className="ai-response-message-content"></div>
+                <div className="ai-response-capability-progress" contenteditable="false"></div>
             </div>
         </div>
     ` as HTMLElement
@@ -62,6 +64,7 @@ export function createAiResponseMessageShell(options: ResponseMessageShellOption
         messageEl: wrapper.querySelector('.ai-response-message') as HTMLElement,
         contentEl: wrapper.querySelector('.ai-response-message-content') as HTMLElement,
         loadingEl: wrapper.querySelector('.ai-response-loading-spinner') as HTMLElement | null,
+        capabilityProgressEl: wrapper.querySelector('.ai-response-capability-progress') as HTMLElement,
         setMessageId: (messageId: string) => {
             wrapper.dataset.messageId = messageId
         },

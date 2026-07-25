@@ -35,12 +35,12 @@ For VEO reference images that are not a first frame, treat them as asset/content
 For video extension, continue from the final second of the source video. Preserve the existing motion direction, camera momentum, lighting, identity, setting, and audio bed. Do not restart the scene or summarize the original clip.
 
 ═══════════════════════════════════════════════════════════════
-/use FEATURES AND SAVED VISUAL FEATURES
+VISUAL-STYLE TOOL OUTPUTS
 ═══════════════════════════════════════════════════════════════
 
-When the user uses a saved feature, it is mandatory. The feature definition and sample images are not optional inspiration. They define a reusable visual property such as medium, texture, palette, edge behavior, mark-making, lighting, or material finish.
+When resolved Capability context includes visual-style Tool instructions or reference images, they are mandatory. The Tool output is not optional inspiration. It defines a reusable visual property such as medium, texture, palette, edge behavior, mark-making, lighting, or material finish.
 
-For video prompts, transfer the feature into the moving subject itself. The subject should be constructed from the feature's medium or material across motion: brush strokes, paper tooth, grain, wash behavior, sculpted clay edges, glossy product finish, or whatever the feature specifies must remain visible while the subject moves. Do not place a clean digital subject on top of a styled backdrop. Do not copy the sample subject, pose, composition, or layout unless the user explicitly asks.
+For video prompts, transfer the visual capability into the moving subject itself. The subject should be constructed from the specified medium or material across motion: brush strokes, paper tooth, grain, wash behavior, sculpted clay edges, glossy product finish, or whatever the Tool instructions require to remain visible while the subject moves. Do not place a clean digital subject on top of a styled backdrop. Do not copy the reference subject, pose, composition, or layout unless the user explicitly asks.
 
 ═══════════════════════════════════════════════════════════════
 PROMPT STRUCTURE - WRITE LIKE A FILM DIRECTOR

@@ -18,14 +18,19 @@ import AiModelModel from '../../models/ai-model.ts'
 import { settlePersistedAiChatGenerationRequest } from '../../prosemirror/ai-chat-stream-assembler.ts'
 import { settleMediaGenerationRequestOnCanvas } from '../../services/asset-canvas-projection.ts'
 import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
-import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import type { ProviderState } from '../graph/state.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
+import { resolveCapabilityOutputMediaRuns } from '../lineage/capability-output-media-runs.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
+import { getCapabilityDispatcher } from '../../capability-system/capability-runtime.ts'
+import {
+    executeRequiredCapabilitiesForState,
+    resolveCapabilitiesForState,
+} from '../../capability-system/capability-state-resolver.ts'
 
 export type MatrixRequestData = Record<string, any> & {
     workspaceId: string
@@ -304,8 +309,8 @@ export class MediaGenerationMatrixOrchestrator {
                     ...admissions[reasoningIndex],
 
                     // ── Shared-preflight → fanout propagation (CRITICAL INVARIANT) ──
-                    // `runSharedPreflight()` resolves workspace context, `/use`
-                    // features, the image branch (which ALSO selects the video
+                    // `runSharedPreflight()` resolves workspace context, sealed
+                    // Capabilities and required Tools, the image branch (which also selects the video
                     // first-frame / reference images), and media lineage EXACTLY ONCE,
                     // then every reasoning child is dispatched with
                     // `preflightResolved: true`. That flag makes each child's provider
@@ -675,7 +680,14 @@ export class MediaGenerationMatrixOrchestrator {
             workspaceContextSnapshot: requestData.workspaceContextSnapshot,
             mediaBranchCandidateSnapshot: requestData.mediaBranchCandidateSnapshot,
             canvasVisibleArea: requestData.canvasVisibleArea,
-            referencedFeatureIds: requestData.referencedFeatureIds,
+            capabilityReferences: requestData.capabilityReferences,
+            capabilityInputs: requestData.capabilityInputs,
+            capabilityInvocationDepth: requestData.capabilityInvocationDepth ?? 0,
+            capabilityOutputAssetIds: requestData.capabilityOutputAssetIds,
+            capabilityReferenceImages: requestData.capabilityReferenceImages,
+            capabilityReferenceImageTraceUrls: requestData.capabilityReferenceImageTraceUrls,
+            capabilityUsageMode: requestData.capabilityUsageMode,
+            capabilityUsagePrompt: requestData.capabilityUsagePrompt,
             enableVideoGeneration: requestData.enableVideoGeneration ?? false,
             videoModelMetaInfo: primaryVideoModel?.meta,
             videoModelVersion: primaryVideoModel?.meta.modelVersion,
@@ -689,7 +701,7 @@ export class MediaGenerationMatrixOrchestrator {
 
         // Each resolver runs against the accumulating `state` because later
         // resolvers depend on earlier outputs (e.g. the media-branch resolver
-        // reads the `messages` rewritten by `/use` feature resolution). Separately
+        // reads the messages rewritten by required Capability execution). Separately
         // we capture the RAW resolver patches into `resolved`: this is the exact,
         // complete set of fields the shared preflight produced and is the single
         // source of truth forwarded to every reasoning child in `process()`.
@@ -719,17 +731,34 @@ export class MediaGenerationMatrixOrchestrator {
             publisher,
             abortSignal: abortController.signal,
         }))
-        applyResolved(await resolveFeatures(state))
+        applyResolved(await resolveCapabilitiesForState(state, abortController.signal))
+        applyResolved(await executeRequiredCapabilitiesForState(
+            state,
+            getCapabilityDispatcher(),
+            abortController.signal,
+        ))
         applyResolved(await resolveMediaBranch(state, {
             natsService: this.natsService,
             publisher,
             abortSignal: abortController.signal,
         }))
+        const capabilityOutputAssetIds = state.capabilityOutputAssetIds ?? []
+        const preassignedMediaRuns = capabilityOutputAssetIds.length > 0
+            ? await resolveCapabilityOutputMediaRuns(capabilityOutputAssetIds)
+            : undefined
         const mediaBranchLineagePlan = this.lineagePlanner.buildPlan({
             generationRequestId: normalized.generationRequestId,
-            reasoningModelIds: normalized.reasoningModelIds,
-            imageModelIds: normalized.imageModelIds,
-            videoModelIds: normalized.videoModelIds,
+            reasoningModelIds: preassignedMediaRuns
+                ? [...new Set(preassignedMediaRuns.map(run => run.reasoningModelId))]
+                : normalized.reasoningModelIds,
+            ...(preassignedMediaRuns
+                ? { preassignedMediaRuns }
+                : {
+                    imageModelIds: normalized.imageModelIds,
+                    videoModelIds: state.capabilityUsageMode === 'character-creator'
+                        ? []
+                        : normalized.videoModelIds,
+                }),
             mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
             mediaBranchResolution: state.mediaBranchResolution,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
@@ -758,7 +787,9 @@ export class MediaGenerationMatrixOrchestrator {
             mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
         })
-        const firstLineageAssignment = this.getRunLineageAssignment(mediaBranchLineagePlan, generationRun.reasoningRunId)
+        const firstLineageAssignment = preassignedMediaRuns
+            ? mediaBranchLineagePlan.runAssignments[0]
+            : this.getRunLineageAssignment(mediaBranchLineagePlan, generationRun.reasoningRunId)
         const lineageGenerationRun = firstLineageAssignment
             ? { ...generationRun, lineageAssignment: firstLineageAssignment }
             : generationRun

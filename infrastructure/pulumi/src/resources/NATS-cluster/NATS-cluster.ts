@@ -22,8 +22,7 @@ const {
     DOMAIN_NAME,
 } = process.env
 
-// Configuration interface for the NATS cluster service
-export interface NatsClusterServiceArgs {
+export type NatsClusterServiceArgs = {
     // Infrastructure
     cloudMapNamespace: aws.servicediscovery.PrivateDnsNamespace
     cloudMapNamespaceName: string
@@ -37,6 +36,8 @@ export interface NatsClusterServiceArgs {
         arn: pulumi.Output<string>
         name: pulumi.Output<string>
     }
+    capacityProviderName: pulumi.Input<string>
+    ec2SecurityGroup: aws.ec2.SecurityGroup
     vpc: aws.ec2.Vpc
     publicSubnets: aws.ec2.Subnet[]
     privateSubnets: aws.ec2.Subnet[]
@@ -84,6 +85,8 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         parentHostedZoneId,
         natsRecordName,
         ecsCluster,
+        capacityProviderName,
+        ec2SecurityGroup,
         vpc,
         publicSubnets,
         privateSubnets,
@@ -188,6 +191,49 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         }),
     })
 
+    const backupBucket = new aws.s3.BucketV2(`${serviceName}-backups`, {
+        forceDestroy: false,
+        tags: { Workload: 'NATS', Purpose: 'JetStream backups' },
+    })
+    new aws.s3.BucketVersioningV2(`${serviceName}-backup-versioning`, {
+        bucket: backupBucket.id,
+        versioningConfiguration: { status: 'Enabled' },
+    })
+    new aws.s3.BucketServerSideEncryptionConfigurationV2(`${serviceName}-backup-encryption`, {
+        bucket: backupBucket.id,
+        rules: [{ applyServerSideEncryptionByDefault: { sseAlgorithm: 'AES256' } }],
+    })
+    new aws.s3.BucketPublicAccessBlock(`${serviceName}-backup-public-access`, {
+        bucket: backupBucket.id,
+        blockPublicAcls: true,
+        blockPublicPolicy: true,
+        ignorePublicAcls: true,
+        restrictPublicBuckets: true,
+    })
+    new aws.s3.BucketLifecycleConfigurationV2(`${serviceName}-backup-lifecycle`, {
+        bucket: backupBucket.id,
+        rules: [{
+            id: 'expire-old-jetstream-snapshots',
+            status: 'Enabled',
+            expiration: { days: 35 },
+            noncurrentVersionExpiration: { noncurrentDays: 7 },
+        }],
+    })
+    const backupPolicy = new aws.iam.Policy(`${serviceName}-backup-policy`, {
+        policy: backupBucket.arn.apply((bucketArn) => JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [{
+                Effect: 'Allow',
+                Action: ['s3:GetObject', 's3:ListBucket', 's3:PutObject'],
+                Resource: [bucketArn, `${bucketArn}/*`],
+            }],
+        })),
+    })
+    new aws.iam.RolePolicyAttachment(`${serviceName}-backup-policy-attachment`, {
+        role: taskRole.name,
+        policyArn: backupPolicy.arn,
+    })
+
     // Allow CloudWatch Logs
     const logsPolicy = new aws.iam.Policy(`${serviceName}-logs-policy`, {
         policy: JSON.stringify({
@@ -232,55 +278,19 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         })
     }
 
-    // Security group for NATS tasks (CloudMap approach - no load balancer)
-    const natsSecurityGroup = new aws.ec2.SecurityGroup(`${serviceName}-sg`, {
-        vpcId: vpc.id,
-        description: 'Security group for NATS cluster',
-        ingress: [
-            {
-                // Allow NATS client connections from anywhere
-                protocol: 'tcp',
-                fromPort: clientPort,
-                toPort: clientPort,
-                cidrBlocks: ['0.0.0.0/0'],
-                description: 'Allow NATS client connections from internet',
-            },
-            {
-                // Allow NATS WebSocket connections from anywhere
-                protocol: 'tcp',
-                fromPort: 443,
-                toPort: 443,
-                cidrBlocks: ['0.0.0.0/0'],
-                description: 'Allow NATS WebSocket connections from internet',
-            },
-            {
-                // Allow HTTP management/info from VPC
-                protocol: 'tcp',
-                fromPort: httpManagementPort,
-                toPort: httpManagementPort,
-                cidrBlocks: [vpc.cidrBlock],
-                description: 'Allow HTTP management/info from VPC',
-            },
-            {
-                // Allow NATS cluster routing within VPC
-                protocol: 'tcp',
-                fromPort: clusterRoutingPort,
-                toPort: clusterRoutingPort,
-                cidrBlocks: [vpc.cidrBlock],
-                description: 'Allow cluster routing within VPC',
-            },
-        ],
-        egress: [
-            {
-                protocol: '-1',
-                fromPort: 0,
-                toPort: 0,
-                cidrBlocks: ['0.0.0.0/0'],
-                description: 'Allow all outbound traffic',
-            },
-        ],
-        tags: { Name: `${serviceName}-SG` },
-    })
+    const ingressRules = [
+        { name: 'client', fromPort: clientPort, toPort: clientPort, cidrBlocks: ['0.0.0.0/0'] },
+        { name: 'websocket', fromPort: 443, toPort: 443, cidrBlocks: ['0.0.0.0/0'] },
+        { name: 'management', fromPort: httpManagementPort, toPort: httpManagementPort, cidrBlocks: [vpc.cidrBlock] },
+        { name: 'routing', fromPort: clusterRoutingPort, toPort: clusterRoutingPort, cidrBlocks: [vpc.cidrBlock] },
+    ].map((rule) => new aws.ec2.SecurityGroupRule(`${serviceName}-${rule.name}-ingress`, {
+        type: 'ingress',
+        securityGroupId: ec2SecurityGroup.id,
+        protocol: 'tcp',
+        fromPort: rule.fromPort,
+        toPort: rule.toPort,
+        cidrBlocks: rule.cidrBlocks,
+    }))
 
     // Create CloudWatch Log Group for Container
     const logGroup = new aws.cloudwatch.LogGroup(`${serviceName}-logs`, {
@@ -303,8 +313,8 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         family: serviceName,
         cpu: `${cpu}`,
         memory: `${memory}`,
-        networkMode: 'awsvpc',
-        requiresCompatibilities: ['FARGATE'],  // Changed from ['EC2'] to ['FARGATE']
+        networkMode: 'host',
+        requiresCompatibilities: ['EC2'],
         executionRoleArn: executionRole.arn,
         taskRoleArn: taskRole.arn,
         containerDefinitions: pulumi.all([
@@ -318,11 +328,16 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
                 memory: memory,
                 essential: true,
                 portMappings: [
-                    { containerPort: clientPort, protocol: 'tcp' },                    // Removed hostPort for Fargate
-                    { containerPort: httpManagementPort, protocol: 'tcp' },           // Removed hostPort for Fargate
-                    { containerPort: 443, protocol: 'tcp' },                         // Removed hostPort for Fargate
-                    { containerPort: clusterRoutingPort, protocol: 'tcp' },           // Removed hostPort for Fargate
+                    { containerPort: clientPort, hostPort: clientPort, protocol: 'tcp' },
+                    { containerPort: httpManagementPort, hostPort: httpManagementPort, protocol: 'tcp' },
+                    { containerPort: 443, hostPort: 443, protocol: 'tcp' },
+                    { containerPort: clusterRoutingPort, hostPort: clusterRoutingPort, protocol: 'tcp' },
                 ],
+                mountPoints: [{
+                    sourceVolume: 'jetstream-data',
+                    containerPath: '/data/jetstream',
+                    readOnly: false,
+                }],
                 environment: [
                     {
                         name: 'NATS_CLUSTER_NAME',
@@ -406,6 +421,87 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
                 },
             }])
         ),
+        volumes: [{
+            name: 'jetstream-data',
+            hostPath: '/data/jetstream',
+        }],
+    })
+
+    const backupTaskDefinition = new aws.ecs.TaskDefinition(`${serviceName}-backup-task`, {
+        family: `${serviceName}-backup`,
+        networkMode: 'bridge',
+        requiresCompatibilities: ['EC2'],
+        executionRoleArn: executionRole.arn,
+        taskRoleArn: taskRole.arn,
+        containerDefinitions: pulumi.all([imageRef, backupBucket.bucket, logGroup.name]).apply(([
+            imageReference,
+            bucketName,
+            logGroupName,
+        ]) => JSON.stringify([{
+            name: 'nats-backup',
+            image: imageReference,
+            essential: true,
+            cpu: 128,
+            memory: 256,
+            entryPoint: ['/opt/nats/backup-streams.sh'],
+            environment: [
+                { name: 'NATS_BACKUP_BUCKET', value: bucketName },
+                { name: 'NATS_BACKUP_PREFIX', value: 'jetstream' },
+                { name: 'NATS_URL', value: `tls://nats.${cloudMapNamespaceName}:${clientPort}` },
+                { name: 'NATS_SYS_USER', value: 'regular_user' },
+                { name: 'NATS_SYS_PASSWORD', value: environment.NATS_REGULAR_USER_PASSWORD },
+            ],
+            logConfiguration: {
+                logDriver: 'awslogs',
+                options: {
+                    'awslogs-group': logGroupName,
+                    'awslogs-region': aws.config.region,
+                    'awslogs-stream-prefix': 'backup',
+                },
+            },
+        }])),
+    })
+
+    const backupScheduleRole = new aws.iam.Role(`${serviceName}-backup-schedule-role`, {
+        assumeRolePolicy: JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [{
+                Effect: 'Allow',
+                Action: 'sts:AssumeRole',
+                Principal: { Service: 'events.amazonaws.com' },
+            }],
+        }),
+    })
+    const backupSchedulePolicy = new aws.iam.Policy(`${serviceName}-backup-schedule-policy`, {
+        policy: pulumi.all([backupTaskDefinition.arn, executionRole.arn, taskRole.arn]).apply(([
+            taskDefinitionArn,
+            executionRoleArn,
+            taskRoleArn,
+        ]) => JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [
+                { Effect: 'Allow', Action: 'ecs:RunTask', Resource: taskDefinitionArn },
+                { Effect: 'Allow', Action: 'iam:PassRole', Resource: [executionRoleArn, taskRoleArn] },
+            ],
+        })),
+    })
+    new aws.iam.RolePolicyAttachment(`${serviceName}-backup-schedule-attachment`, {
+        role: backupScheduleRole.name,
+        policyArn: backupSchedulePolicy.arn,
+    })
+    const backupSchedule = new aws.cloudwatch.EventRule(`${serviceName}-backup-schedule`, {
+        scheduleExpression: 'cron(17 */6 * * ? *)',
+        description: 'Back up every JetStream stream to versioned S3 storage every six hours',
+    })
+    new aws.cloudwatch.EventTarget(`${serviceName}-backup-target`, {
+        rule: backupSchedule.name,
+        arn: ecsCluster.arn,
+        roleArn: backupScheduleRole.arn,
+        ecsTarget: {
+            launchType: 'EC2',
+            taskCount: 1,
+            taskDefinitionArn: backupTaskDefinition.arn,
+        },
     })
 
     // Create SINGLE ECS Service registered with public CloudMap
@@ -413,23 +509,18 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
     const ecsService = new aws.ecs.Service(`${serviceName}-service`, {
         cluster: ecsCluster.id,
         taskDefinition: taskDefinition.arn,
-        desiredCount: desiredCount,
-        launchType: 'FARGATE',
-        schedulingStrategy: 'REPLICA',
-        deploymentMinimumHealthyPercent: 50,
-        deploymentMaximumPercent: 200,
+        capacityProviderStrategies: [{ capacityProvider: capacityProviderName, weight: 1 }],
+        schedulingStrategy: 'DAEMON',
+        deploymentMinimumHealthyPercent: 100,
+        deploymentMaximumPercent: 100,
         deploymentCircuitBreaker: {
             enable: true,
             rollback: true
         },
-        networkConfiguration: {
-            subnets: publicSubnets.map(subnet => subnet.id), // Use public subnets to get both private and public IPs
-            securityGroups: [natsSecurityGroup.id],
-            assignPublicIp: true, // Assign public IPs for external access
-        },
         serviceRegistries: {
             registryArn: privateDiscoveryService.arn,  // Auto-register private IP with private CloudMap
             containerName: serviceName,
+            containerPort: clientPort,
         },
         forceNewDeployment: true,
         enableExecuteCommand: true, // Enable for debugging
@@ -445,6 +536,7 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         ],
         dependsOn: [
             serviceDiscoverySidecar.lambdaFunction, // Ensure Lambda is ready to handle events
+            ...ingressRules,
             ...dependencies,  // CRITICAL: Wait for certificate generation before starting NATS
         ],
     })
@@ -503,11 +595,13 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         privateDiscoveryService,
         serviceDiscoverySidecar,
         taskDefinition,
+        backupTaskDefinition,
+        backupBucket,
         executionRole,
         taskRole,
         logGroup,
         ecsService,
-        natsSecurityGroup,
+        natsSecurityGroup: ec2SecurityGroup,
 
         // Outputs
         outputs: {

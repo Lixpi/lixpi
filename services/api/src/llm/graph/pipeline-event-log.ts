@@ -3,10 +3,9 @@
 import { NATS_SUBJECTS } from '@lixpi/constants'
 import NATS_Service from '@lixpi/nats-service'
 
-// Explicit terminal-state cleanup normally purges completed pipelines after all
-// output provenance is sealed. This age limit is only the crash/orphan backstop;
-// it must outlive long media jobs and API restarts so provenance retries retain
-// their authoritative source log.
+// Explicit terminal-state cleanup purges a pipeline after its final response and
+// conversation snapshot are persisted. This age limit is only the crash/orphan
+// backstop for processes that terminate before the explicit purge runs.
 const DEFAULT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 const DEFAULT_MAX_MSGS_PER_SUBJECT = 10000

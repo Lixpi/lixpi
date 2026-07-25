@@ -1,17 +1,5 @@
 'use strict'
 
-/**
- * ⚠️ DEPRECATED - NOT USED ANYMORE ⚠️
- *
- * This file creates an ECS cluster with EC2 instances for container hosting.
- * The infrastructure has been migrated to Fargate-only deployment.
- *
- * See: ECS-cluster.ts for the current Fargate-only implementation.
- *
- * This file is kept for reference purposes only. If EC2 support is needed
- * in the future, this code can be used as a starting point.
- */
-
 import * as process from 'process'
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
@@ -27,7 +15,7 @@ const {
     STAGE
 } = process.env
 
-export interface EcsEc2ClusterInfrastructureArgs {
+export type EcsEc2ClusterInfrastructureArgs = {
     // Network infrastructure
     vpc: aws.ec2.Vpc
     publicSubnets: aws.ec2.Subnet[]
@@ -39,6 +27,7 @@ export interface EcsEc2ClusterInfrastructureArgs {
     minCapacity?: number
     maxCapacity?: number
     desiredCapacity?: number
+    dataVolumeSizeGiB?: number
 
     // Tags
     tags?: { [key: string]: string }
@@ -56,6 +45,7 @@ export const createEcsEc2Cluster = async (
         minCapacity = 1,
         maxCapacity = 1,
         desiredCapacity = 1,
+        dataVolumeSizeGiB = 150,
         tags = {},
     } = args
 
@@ -204,6 +194,25 @@ export const createEcsEc2Cluster = async (
 echo "ECS_CLUSTER=${cluster.name}" >> /etc/ecs/ecs.config
 echo "ECS_ENABLE_CONTAINER_METADATA=true" >> /etc/ecs/ecs.config
 echo 'ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]' >> /etc/ecs/ecs.config
+DATA_DEVICE=/dev/xvdh
+if [ ! -b "${'$'}{DATA_DEVICE}" ]; then
+    DATA_DEVICE=''
+    for DEVICE in /dev/nvme*n1; do
+        [ -b "${'$'}{DEVICE}" ] || continue
+        if ebsnvme-id -u "${'$'}{DEVICE}" 2>/dev/null | grep -qx '/dev/xvdh'; then
+            DATA_DEVICE="${'$'}{DEVICE}"
+            break
+        fi
+    done
+fi
+[ -b "${'$'}{DATA_DEVICE}" ] || { echo 'JetStream EBS device not found' >&2; exit 1; }
+if ! blkid "${'$'}{DATA_DEVICE}"; then mkfs -t xfs "${'$'}{DATA_DEVICE}"; fi
+mkdir -p /data/jetstream
+mountpoint -q /data/jetstream || mount "${'$'}{DATA_DEVICE}" /data/jetstream
+DATA_UUID=$(blkid -s UUID -o value "${'$'}{DATA_DEVICE}")
+grep -q "^UUID=${'$'}{DATA_UUID} " /etc/fstab \
+    || echo "UUID=${'$'}{DATA_UUID} /data/jetstream xfs defaults,nofail 0 2" >> /etc/fstab
+chmod 700 /data/jetstream
 `
 
     // Create launch template
@@ -223,14 +232,25 @@ echo 'ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]' >> /etc/ecs/ecs.con
             deleteOnTermination: true,
         }],
         userData: userData.apply(data => Buffer.from(data).toString('base64')),
-        blockDeviceMappings: [{
-            deviceName: '/dev/xvda',
-            ebs: {
-                volumeSize: 30,
-                volumeType: 'gp3',
-                deleteOnTermination: true,
+        blockDeviceMappings: [
+            {
+                deviceName: '/dev/xvda',
+                ebs: {
+                    volumeSize: 30,
+                    volumeType: 'gp3',
+                    deleteOnTermination: true,
+                },
             },
-        }],
+            {
+                deviceName: '/dev/xvdh',
+                ebs: {
+                    volumeSize: dataVolumeSizeGiB,
+                    volumeType: 'gp3',
+                    encrypted: true,
+                    deleteOnTermination: false,
+                },
+            },
+        ],
         monitoring: {
             enabled: true,
         },

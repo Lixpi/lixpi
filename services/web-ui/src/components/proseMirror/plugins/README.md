@@ -6,6 +6,10 @@ If you want a concrete example, check `aiChatThreadPlugin/README.md`.
 
 Direct link: `$src/components/proseMirror/plugins/aiChatThreadPlugin/README.md`.
 
+## Capability mentions
+
+`capabilityMentionPlugin/` owns one async `@` picker per editor instance. It queries the authorized thin capability catalog, ignores stale responses, supports arrow/Enter/Tab/Escape navigation, and replaces the typed query with a stable `capability_reference` atom. Prompt submission deduplicates those atoms by `capabilityId`; the visible name remains cosmetic so restored drafts survive renames safely. The picker shares viewport-aware placement with the slash-command menu, flipping above a bottom composer and clamping to the viewport after async result height changes.
+
 ## Folder layout (typical)
 
 ```

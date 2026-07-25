@@ -48,6 +48,25 @@ describe('generated media event workspace guard', () => {
         })).toBe(true)
     })
 
+    it('accepts a detached thread represented by a lineage marker on the current canvas', () => {
+        expect(hasCurrentWorkspaceThread({
+            threadId: 'thread-detached',
+            currentCanvasState: makeCanvasState({
+                nodes: [{
+                    nodeId: 'marker-1',
+                    type: 'branchOrigin',
+                    position: { x: 0, y: 0 },
+                    width: 240,
+                    height: 72,
+                    conversationAssetId: 'thread-detached',
+                    generationRequestId: 'request-1',
+                }],
+            }),
+            currentAiChatThreads: [],
+            workspaceId: 'workspace-1',
+        })).toBe(true)
+    })
+
     it('rejects an event from another workspace even when the thread id is known locally', () => {
         expect(shouldAcceptGeneratedMediaEvent({
             threadId: 'thread-current',

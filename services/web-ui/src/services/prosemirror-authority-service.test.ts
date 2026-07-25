@@ -2,23 +2,22 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NATS_SUBJECTS } from '@lixpi/constants'
-import {
-    DOCUMENT_TYPE,
-    getDocumentStepSubject,
-    type StepEnvelope,
-    type StepStreamEvent,
-    type SubmitResult,
-} from '@lixpi/prosemirror'
+import { getAssetDocumentEventSubject, type AssetStepStreamEvent, type SubmitResult } from '@lixpi/prosemirror'
 
 import { ProseMirrorAuthorityService } from '$src/services/prosemirror-authority-service.ts'
 
-const { DOC_SUBMIT_STEPS, DOC_RESUME } = NATS_SUBJECTS.DOCUMENT_STEP_SUBJECTS
+const { DOCUMENT_SUBMIT_STEPS: DOC_SUBMIT_STEPS, DOCUMENT_RESUME: DOC_RESUME } = NATS_SUBJECTS.ASSET_SUBJECTS
 
 const mocks = vi.hoisted(() => ({
     getData: vi.fn(),
     getTokenSilently: vi.fn(),
     uuid: vi.fn(() => 'client-uuid'),
     stepFromJSON: vi.fn(),
+    acquireLease: vi.fn(),
+    renewLease: vi.fn(),
+    releaseLease: vi.fn(),
+    get: vi.fn(),
+    fetchDocumentSnapshot: vi.fn(),
 }))
 
 let consoleErrorSpy: { mockRestore: () => void } | null = null
@@ -31,9 +30,25 @@ vi.mock('$src/services/auth-service.ts', () => ({
     },
 }))
 
+vi.mock('$src/services/asset-service.ts', () => ({
+    default: class MockAssetService {
+        acquireLease = mocks.acquireLease
+        renewLease = mocks.renewLease
+        releaseLease = mocks.releaseLease
+        get = mocks.get
+        fetchDocumentSnapshot = mocks.fetchDocumentSnapshot
+    },
+}))
+
 vi.mock('$src/stores/servicesStore.ts', () => ({
     servicesStore: {
         getData: mocks.getData,
+    },
+}))
+
+vi.mock('$src/stores/userStore.ts', () => ({
+    userStore: {
+        getData: vi.fn(() => 'user-1'),
     },
 }))
 
@@ -111,18 +126,25 @@ function createNats() {
 
 function createEvent(overrides: Record<string, unknown>) {
     return {
-        workspaceId: 'workspace-1',
-        docType: DOCUMENT_TYPE.DOCUMENT,
-        docId: 'thread-1',
+        organizationId: 'org-1',
+        assetId: 'asset-1',
+        role: 'content',
         ...overrides,
     }
 }
 
 const coordinate = {
+    organizationId: 'org-1',
     workspaceId: 'workspace-1',
-    docType: DOCUMENT_TYPE.DOCUMENT,
-    docId: 'thread-1',
+    assetId: 'asset-1',
+    role: 'content' as const,
 }
+
+const eventSubject = getAssetDocumentEventSubject('user-1', {
+    organizationId: coordinate.organizationId,
+    assetId: coordinate.assetId,
+    role: coordinate.role,
+})
 
 describe('ProseMirrorAuthorityService', () => {
     beforeEach(() => {
@@ -135,6 +157,11 @@ describe('ProseMirrorAuthorityService', () => {
             invert: vi.fn(() => ({})),
             getMap: vi.fn(() => ({})),
         })
+        mocks.acquireLease.mockResolvedValue({ leaseId: 'lease-1', workspaceId: coordinate.workspaceId, expiresAt: 999 })
+        mocks.renewLease.mockResolvedValue({ leaseId: 'lease-1' })
+        mocks.releaseLease.mockResolvedValue(undefined)
+        mocks.get.mockResolvedValue({ editLease: undefined })
+        mocks.fetchDocumentSnapshot.mockImplementation(async (reference: any) => reference)
     })
 
     afterEach(() => {
@@ -143,55 +170,57 @@ describe('ProseMirrorAuthorityService', () => {
         consoleErrorSpy = null
     })
 
-    it('subscribes to the document step subject and resumes authority state', async () => {
+    it('acquires a lease, subscribes to the asset document event subject, and resumes authority state', async () => {
         const nats = createNats()
         nats.request.mockResolvedValue({
             snapshot: null,
             currentVersion: 0,
             currentStreamSeq: 0,
             events: [],
+            liveSubject: eventSubject,
         })
         mocks.getData.mockReturnValue(nats)
 
         const { view } = createView()
-        const onReceivingChange = vi.fn()
+        const onLeaseStateChange = vi.fn()
 
         const service = new ProseMirrorAuthorityService({
             ...coordinate,
             baseVersion: 0,
             getView: () => view,
-            onReceivingChange,
+            onLeaseStateChange,
         })
 
         await flushPromises()
 
-        expect(nats.subscribe).toHaveBeenCalledWith(
-            getDocumentStepSubject(coordinate),
-            expect.any(Function),
-        )
+        expect(mocks.acquireLease).toHaveBeenCalledWith(coordinate.assetId, coordinate.workspaceId, 'client-uuid')
+        expect(onLeaseStateChange).toHaveBeenCalledWith({ readOnly: false })
+        expect(nats.subscribe).toHaveBeenCalledWith(eventSubject, expect.any(Function))
         expect(nats.request).toHaveBeenCalledWith(
             DOC_RESUME,
             expect.objectContaining({
                 token: 'auth-token',
-                workspaceId: coordinate.workspaceId,
-                docType: coordinate.docType,
-                docId: coordinate.docId,
-                baseVersion: 0,
+                organizationId: coordinate.organizationId,
+                assetId: coordinate.assetId,
+                role: coordinate.role,
                 localVersion: 0,
                 localStreamSeq: 0,
+                acceptSnapshot: true,
+                activateLiveRelay: true,
             }),
+            expect.any(Number),
         )
         service.disconnect()
-        expect(onReceivingChange).not.toHaveBeenCalled()
     })
 
-    it('does not submit local transactions in receive-only mode', async () => {
+    it('does not acquire a lease or submit local transactions in receive-only mode', async () => {
         const nats = createNats()
         nats.request.mockResolvedValue({
             snapshot: null,
             currentVersion: 0,
             currentStreamSeq: 0,
             events: [],
+            liveSubject: eventSubject,
         })
         mocks.getData.mockReturnValue(nats)
         const { view } = createView()
@@ -205,6 +234,8 @@ describe('ProseMirrorAuthorityService', () => {
 
         await flushPromises()
 
+        expect(mocks.acquireLease).not.toHaveBeenCalled()
+
         service.submitLocalTransaction({
             docChanged: true,
             getMeta: vi.fn(() => false),
@@ -217,177 +248,6 @@ describe('ProseMirrorAuthorityService', () => {
         service.disconnect()
     })
 
-    it('accepts END stream events even when local version is already ahead', async () => {
-        const nats = createNats()
-        nats.request.mockResolvedValue({
-            snapshot: null,
-            currentVersion: 5,
-            currentStreamSeq: 5,
-            events: [],
-        })
-        mocks.getData.mockReturnValue(nats)
-
-        let subscriptionHandler: (event: StepStreamEvent) => void = () => undefined
-        const onReceivingChange = vi.fn()
-        nats.subscribe.mockImplementation((_subject: string, handler: (event: StepStreamEvent) => void) => {
-            subscriptionHandler = handler
-            return { unsubscribe: vi.fn() }
-        })
-
-        const { view } = createView()
-
-        const service = new ProseMirrorAuthorityService({
-            ...coordinate,
-            baseVersion: 5,
-            docType: DOCUMENT_TYPE.AI_CHAT_THREAD,
-            getView: () => view,
-            onReceivingChange,
-        })
-
-        await Promise.resolve()
-
-        subscriptionHandler(createEvent({
-            kind: 'END',
-            docType: DOCUMENT_TYPE.AI_CHAT_THREAD,
-            baseVersion: 3,
-            finalVersion: 3,
-            version: 3,
-            subjectSeq: 1,
-            streamSequence: 1,
-        }) as StepEnvelope)
-        await Promise.resolve()
-
-        expect(onReceivingChange).toHaveBeenCalledWith(false, expect.objectContaining({
-            kind: 'END',
-            finalVersion: 3,
-        }))
-        expect(view.dispatch).toHaveBeenCalledTimes(1)
-        const dispatchedTransaction = view.dispatch.mock.calls[0]?.[0] as MockTransaction | undefined
-        expect(dispatchedTransaction?.metadata.get('setReceiving')).toEqual({
-            threadId: 'thread-1',
-            receiving: false,
-            runKey: 'thread-1',
-        })
-        service.disconnect()
-    })
-
-    it('batches multiple local steps and submits one request after the debounce window', async () => {
-        vi.useFakeTimers()
-        const nats = createNats()
-        nats.request
-            .mockResolvedValueOnce({
-                snapshot: null,
-                currentVersion: 0,
-                currentStreamSeq: 0,
-                events: [],
-            })
-            .mockResolvedValueOnce({
-                status: 'ACCEPTED',
-                version: 2,
-            })
-        mocks.getData.mockReturnValue(nats)
-
-        const { view } = createView()
-
-        const service = new ProseMirrorAuthorityService({
-            ...coordinate,
-            baseVersion: 0,
-            getView: () => view,
-        })
-
-        await vi.advanceTimersByTimeAsync(0)
-
-        service.submitLocalTransaction({
-            docChanged: true,
-            getMeta: vi.fn(() => false),
-            steps: [
-                { toJSON: () => ({ type: 'replace', index: 1 }) },
-                { toJSON: () => ({ type: 'replace', index: 2 }) },
-            ],
-            docs: [{}, {}],
-        } as any)
-
-        expect(nats.request).toHaveBeenCalledTimes(1)
-
-        await vi.advanceTimersByTimeAsync(100)
-        await Promise.resolve()
-
-        expect(nats.request).toHaveBeenCalledTimes(2)
-        expect(nats.request).toHaveBeenNthCalledWith(
-            2,
-            DOC_SUBMIT_STEPS,
-            expect.objectContaining({
-                token: 'auth-token',
-                workspaceId: coordinate.workspaceId,
-                docType: coordinate.docType,
-                docId: coordinate.docId,
-                expectedVersion: 0,
-                steps: [
-                    expect.objectContaining({
-                        msgId: expect.stringContaining('pm-client-client-uuid-'),
-                        clientId: 'client-uuid',
-                    }),
-                    expect.objectContaining({
-                        msgId: expect.stringContaining('pm-client-client-uuid-'),
-                        clientId: 'client-uuid',
-                    }),
-                ],
-            }),
-        )
-
-        service.disconnect()
-    })
-
-    it('flushes immediately when local batch reaches max size', async () => {
-        vi.useFakeTimers()
-        const nats = createNats()
-        const submitResponse: SubmitResult = { status: 'ACCEPTED', version: 50 }
-        nats.request
-            .mockResolvedValueOnce({
-                snapshot: null,
-                currentVersion: 0,
-                currentStreamSeq: 0,
-                events: [],
-            })
-            .mockResolvedValueOnce(submitResponse)
-        mocks.getData.mockReturnValue(nats)
-
-        const { view } = createView()
-
-        const service = new ProseMirrorAuthorityService({
-            ...coordinate,
-            baseVersion: 0,
-            getView: () => view,
-        })
-
-        await vi.advanceTimersByTimeAsync(0)
-
-        const steps = Array.from({ length: 50 }, (_, index) => ({ toJSON: () => ({ type: 'replace', index }) }))
-        service.submitLocalTransaction({
-            docChanged: true,
-            getMeta: vi.fn(() => false),
-            steps,
-            docs: Array.from({ length: 50 }, () => ({})),
-        } as any)
-
-        await Promise.resolve()
-
-        expect(nats.request).toHaveBeenCalledTimes(2)
-        expect(nats.request).toHaveBeenNthCalledWith(
-            2,
-            DOC_SUBMIT_STEPS,
-            expect.objectContaining({
-                expectedVersion: 0,
-                steps: expect.arrayContaining([
-                    expect.objectContaining({
-                        clientId: 'client-uuid',
-                    }),
-                ]),
-            }),
-        )
-        service.disconnect()
-    })
-
     it('applies out-of-order steps once replayed and drains backlog', async () => {
         vi.useFakeTimers()
         const nats = createNats()
@@ -397,17 +257,18 @@ describe('ProseMirrorAuthorityService', () => {
                 currentVersion: 0,
                 currentStreamSeq: 0,
                 events: [],
+                liveSubject: eventSubject,
             })
             .mockResolvedValueOnce({
                 snapshot: null,
                 currentVersion: 1,
                 currentStreamSeq: 2,
+                liveSubject: eventSubject,
                 events: [
                     createEvent({
                         kind: 'STEP',
                         version: 1,
                         step: { stepType: 'replace' },
-                        subjectSeq: 1,
                         streamSequence: 2,
                     }),
                 ],
@@ -416,8 +277,8 @@ describe('ProseMirrorAuthorityService', () => {
 
         const { view } = createView()
         const onRemoteDocumentChange = vi.fn()
-        let subscriptionHandler: (event: StepStreamEvent) => void = () => undefined
-        nats.subscribe.mockImplementation((_subject: string, handler: (event: StepStreamEvent) => void) => {
+        let subscriptionHandler: (event: AssetStepStreamEvent) => void = () => undefined
+        nats.subscribe.mockImplementation((_subject: string, handler: (event: AssetStepStreamEvent) => void) => {
             subscriptionHandler = handler
             return { unsubscribe: vi.fn() }
         })
@@ -435,106 +296,43 @@ describe('ProseMirrorAuthorityService', () => {
             kind: 'STEP',
             version: 2,
             step: { stepType: 'replace' },
-            subjectSeq: 2,
             streamSequence: 2,
-        }) as StepEnvelope)
+        }) as AssetStepStreamEvent)
         await vi.advanceTimersByTimeAsync(0)
         await Promise.resolve()
 
         expect(onRemoteDocumentChange).toHaveBeenCalledTimes(2)
         expect(nats.request).toHaveBeenCalledTimes(2)
+        // The out-of-order STEP is only queued (not applied) at the moment resume()
+        // is re-triggered, so localStreamSeq has not advanced past the initial value yet.
         expect(nats.request).toHaveBeenNthCalledWith(
             2,
             DOC_RESUME,
             expect.objectContaining({
                 localVersion: 0,
-                localStreamSeq: 2,
+                localStreamSeq: 0,
             }),
+            expect.any(Number),
         )
 
         service.disconnect()
     })
 
-    it('retries snapshot recovery until a settled snapshot arrives', async () => {
-        vi.useFakeTimers()
-        const nats = createNats()
-        nats.request
-            .mockResolvedValueOnce({
-                snapshot: null,
-                currentVersion: 0,
-                currentStreamSeq: 0,
-                events: [],
-            })
-            .mockResolvedValueOnce({
-                snapshot: null,
-                currentVersion: 0,
-                currentStreamSeq: 2,
-                events: [],
-            })
-            .mockResolvedValueOnce({
-                snapshot: {
-                    ...coordinate,
-                    version: 1,
-                    schemaVersion: 'prosemirror-v1',
-                    doc: { type: 'doc', content: [] },
-                },
-                currentVersion: 1,
-                currentStreamSeq: 2,
-                events: [],
-            })
-        mocks.getData.mockReturnValue(nats)
-
-        let subscriptionHandler: (event: StepStreamEvent) => void = () => undefined
-        nats.subscribe.mockImplementation((_subject: string, handler: (event: StepStreamEvent) => void) => {
-            subscriptionHandler = handler
-            return { unsubscribe: vi.fn() }
-        })
-
-        const { view } = createView()
-
-        mocks.stepFromJSON.mockImplementation(() => {
-            throw new Error('failed to parse step')
-        })
-
-        const service = new ProseMirrorAuthorityService({
-            ...coordinate,
-            baseVersion: 0,
-            getView: () => view,
-        })
-
-        await vi.advanceTimersByTimeAsync(0)
-
-        subscriptionHandler(createEvent({
-            kind: 'STEP',
-            version: 1,
-            step: { stepType: 'replace' },
-            subjectSeq: 1,
-            streamSequence: 1,
-        }) as StepEnvelope)
-
-        await vi.advanceTimersByTimeAsync(0)
-        expect(nats.request).toHaveBeenCalledTimes(2)
-
-        await vi.advanceTimersByTimeAsync(1000)
-        expect(nats.request).toHaveBeenCalledTimes(3)
-
-        expect(view.state.schema.nodeFromJSON).toHaveBeenCalledWith({ type: 'doc', content: [] })
-        service.disconnect()
-    })
-
-    it('applies snapshots and updates expected version for future local submits', async () => {
+    it('applies a snapshot from resume and updates expected version for future local submits', async () => {
         vi.useFakeTimers()
         const nats = createNats()
         nats.request
             .mockResolvedValueOnce({
                 snapshot: {
-                    ...coordinate,
+                    assetId: coordinate.assetId,
+                    organizationId: coordinate.organizationId,
+                    role: coordinate.role,
                     version: 2,
-                    schemaVersion: 'prosemirror-v1',
                     doc: { type: 'doc', content: [] },
                 },
                 currentVersion: 2,
                 currentStreamSeq: 3,
+                liveSubject: eventSubject,
                 events: [],
             })
             .mockResolvedValueOnce({
@@ -576,7 +374,173 @@ describe('ProseMirrorAuthorityService', () => {
         service.disconnect()
     })
 
-    it('prevents new work and unsubscribes when disconnected', async () => {
+    it('batches multiple local steps and submits one request after the debounce window', async () => {
+        vi.useFakeTimers()
+        const nats = createNats()
+        nats.request
+            .mockResolvedValueOnce({
+                snapshot: null,
+                currentVersion: 0,
+                currentStreamSeq: 0,
+                events: [],
+                liveSubject: eventSubject,
+            })
+            .mockResolvedValueOnce({
+                status: 'ACCEPTED',
+                version: 2,
+            })
+        mocks.getData.mockReturnValue(nats)
+
+        const { view } = createView()
+
+        const service = new ProseMirrorAuthorityService({
+            ...coordinate,
+            baseVersion: 0,
+            getView: () => view,
+        })
+
+        await vi.advanceTimersByTimeAsync(0)
+
+        service.submitLocalTransaction({
+            docChanged: true,
+            getMeta: vi.fn(() => false),
+            steps: [
+                { toJSON: () => ({ type: 'replace', index: 1 }) },
+                { toJSON: () => ({ type: 'replace', index: 2 }) },
+            ],
+            docs: [{}, {}],
+        } as any)
+
+        expect(nats.request).toHaveBeenCalledTimes(1)
+
+        await vi.advanceTimersByTimeAsync(100)
+        await Promise.resolve()
+
+        expect(nats.request).toHaveBeenCalledTimes(2)
+        expect(nats.request).toHaveBeenNthCalledWith(
+            2,
+            DOC_SUBMIT_STEPS,
+            expect.objectContaining({
+                token: 'auth-token',
+                organizationId: coordinate.organizationId,
+                assetId: coordinate.assetId,
+                role: coordinate.role,
+                workspaceId: coordinate.workspaceId,
+                leaseId: 'lease-1',
+                expectedVersion: 0,
+                steps: [
+                    expect.objectContaining({
+                        msgId: expect.stringContaining('asset-pm-client-uuid-'),
+                        clientId: 'client-uuid',
+                    }),
+                    expect.objectContaining({
+                        msgId: expect.stringContaining('asset-pm-client-uuid-'),
+                        clientId: 'client-uuid',
+                    }),
+                ],
+            }),
+        )
+
+        service.disconnect()
+    })
+
+    it('flushes immediately when local batch reaches max size', async () => {
+        vi.useFakeTimers()
+        const nats = createNats()
+        const submitResponse: SubmitResult = { status: 'ACCEPTED', version: 50 }
+        nats.request
+            .mockResolvedValueOnce({
+                snapshot: null,
+                currentVersion: 0,
+                currentStreamSeq: 0,
+                events: [],
+                liveSubject: eventSubject,
+            })
+            .mockResolvedValueOnce(submitResponse)
+        mocks.getData.mockReturnValue(nats)
+
+        const { view } = createView()
+
+        const service = new ProseMirrorAuthorityService({
+            ...coordinate,
+            baseVersion: 0,
+            getView: () => view,
+        })
+
+        await vi.advanceTimersByTimeAsync(0)
+
+        const steps = Array.from({ length: 50 }, (_, index) => ({ toJSON: () => ({ type: 'replace', index }) }))
+        service.submitLocalTransaction({
+            docChanged: true,
+            getMeta: vi.fn(() => false),
+            steps,
+            docs: Array.from({ length: 50 }, () => ({})),
+        } as any)
+
+        await vi.advanceTimersByTimeAsync(0)
+        await Promise.resolve()
+
+        expect(nats.request).toHaveBeenCalledTimes(2)
+        expect(nats.request).toHaveBeenNthCalledWith(
+            2,
+            DOC_SUBMIT_STEPS,
+            expect.objectContaining({
+                expectedVersion: 0,
+                steps: expect.arrayContaining([
+                    expect.objectContaining({
+                        clientId: 'client-uuid',
+                    }),
+                ]),
+            }),
+        )
+        service.disconnect()
+    })
+
+    it('retries resume until events stop arriving faster than local processing (hasMore drains in a loop)', async () => {
+        vi.useFakeTimers()
+        const nats = createNats()
+        nats.request
+            .mockResolvedValueOnce({
+                snapshot: null,
+                currentVersion: 0,
+                currentStreamSeq: 1,
+                liveSubject: eventSubject,
+                hasMore: true,
+                events: [
+                    createEvent({ kind: 'STEP', version: 1, step: { stepType: 'replace' }, streamSequence: 1 }),
+                ],
+            })
+            .mockResolvedValueOnce({
+                snapshot: null,
+                currentVersion: 2,
+                currentStreamSeq: 2,
+                liveSubject: eventSubject,
+                hasMore: false,
+                events: [
+                    createEvent({ kind: 'STEP', version: 2, step: { stepType: 'replace' }, streamSequence: 2 }),
+                ],
+            })
+        mocks.getData.mockReturnValue(nats)
+
+        const { view } = createView()
+
+        const service = new ProseMirrorAuthorityService({
+            ...coordinate,
+            baseVersion: 0,
+            getView: () => view,
+        })
+
+        await vi.advanceTimersByTimeAsync(0)
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(nats.request).toHaveBeenCalledTimes(2)
+        expect(view.dispatch).toHaveBeenCalledTimes(2)
+
+        service.disconnect()
+    })
+
+    it('releases the lease and unsubscribes on disconnect, preventing further submission', async () => {
         vi.useFakeTimers()
         const nats = createNats()
         nats.request.mockResolvedValue({
@@ -584,6 +548,7 @@ describe('ProseMirrorAuthorityService', () => {
             currentVersion: 0,
             currentStreamSeq: 0,
             events: [],
+            liveSubject: eventSubject,
         })
         const unsubscribeMock = vi.fn()
         nats.subscribe.mockReturnValue({ unsubscribe: unsubscribeMock })
@@ -597,7 +562,12 @@ describe('ProseMirrorAuthorityService', () => {
         })
 
         await vi.advanceTimersByTimeAsync(0)
+        await Promise.resolve()
+        await Promise.resolve()
         service.disconnect()
+
+        expect(unsubscribeMock).toHaveBeenCalled()
+        expect(mocks.releaseLease).toHaveBeenCalledWith(coordinate.assetId, coordinate.workspaceId, 'lease-1', 'client-uuid')
 
         service.submitLocalTransaction({
             docChanged: true,
@@ -607,8 +577,6 @@ describe('ProseMirrorAuthorityService', () => {
         } as any)
 
         await vi.advanceTimersByTimeAsync(100)
-        expect(unsubscribeMock).toHaveBeenCalled()
         expect(nats.request).toHaveBeenCalledTimes(1)
-        service.disconnect()
     })
 })
