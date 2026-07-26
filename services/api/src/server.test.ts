@@ -56,7 +56,10 @@ const mocks = vi.hoisted(() => {
     const workspaceSubjects = ['workspace-subject']
     const assetSubjects = ['asset-subject']
     const capabilitySubjects = ['capability-subject']
+    const promptReferenceSubjects = ['prompt-reference-subject']
     const setCapabilityRunDispatcher = vi.fn()
+    const setPromptReferenceModuleCatalog = vi.fn()
+    const capabilityModuleCatalog = {}
     const capabilityDispatcher = {
         startDetached: vi.fn(),
         stopDetached: vi.fn(),
@@ -124,7 +127,10 @@ const mocks = vi.hoisted(() => {
         workspaceSubjects,
         assetSubjects,
         capabilitySubjects,
+        promptReferenceSubjects,
         setCapabilityRunDispatcher,
+        setPromptReferenceModuleCatalog,
+        capabilityModuleCatalog,
         capabilityDispatcher,
         startNatsAuthCalloutService,
         assetRoutes,
@@ -133,6 +139,7 @@ const mocks = vi.hoisted(() => {
         transientMediaRoutes,
         createLlmModule: createLlmModule.mockImplementation(() => {
             const module = {
+                capabilityModuleCatalog,
                 seedCapabilities: vi.fn(async () => undefined),
                 shutdown: vi.fn(),
             }
@@ -218,6 +225,10 @@ vi.mock('./NATS/subscriptions/asset-subjects.ts', () => ({ assetSubjects: mocks.
 vi.mock('./NATS/subscriptions/capability-subjects.ts', () => ({
     capabilitySubjects: mocks.capabilitySubjects,
     setCapabilityRunDispatcher: mocks.setCapabilityRunDispatcher,
+}))
+vi.mock('./NATS/subscriptions/prompt-reference-subjects.ts', () => ({
+    promptReferenceSubjects: mocks.promptReferenceSubjects,
+    setPromptReferenceModuleCatalog: mocks.setPromptReferenceModuleCatalog,
 }))
 vi.mock('./capability-system/capability-runtime.ts', () => ({
     getCapabilityDispatcher: () => mocks.capabilityDispatcher,
@@ -305,6 +316,7 @@ function resetMockState(): void {
     mocks.startNatsAuthCalloutService.mockClear()
     mocks.createLlmModule.mockClear()
     mocks.setLlmModule.mockClear()
+    mocks.setPromptReferenceModuleCatalog.mockClear()
     mocks.startAssetMaintenanceWorker.mockClear()
     mocks.metricsConfigFromEnv.mockClear()
     mocks.MetricsClient.mockClear()
@@ -332,6 +344,7 @@ describe('services/api server startup', () => {
         ...mocks.workspaceSubjects,
         ...mocks.assetSubjects,
         ...mocks.capabilitySubjects,
+        ...mocks.promptReferenceSubjects,
     ]
 
     beforeEach(() => {
@@ -387,6 +400,7 @@ describe('services/api server startup', () => {
             metrics: expect.anything(),
         })
         expect(mocks.getLlmModule()?.seedCapabilities).toHaveBeenCalledTimes(1)
+        expect(mocks.setPromptReferenceModuleCatalog).toHaveBeenCalledWith(mocks.capabilityModuleCatalog)
 
         expect(mocks.warn).toHaveBeenCalledWith(
             'NATS_NEX_NODE_NKEY_PUBLIC is not configured; NEX clients cannot authenticate through auth callout',

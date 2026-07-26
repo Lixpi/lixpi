@@ -45,6 +45,8 @@ export type CreateContextPreviewTileOptions = {
     getNode?: () => CanvasNode | undefined
     environment: ContextPreviewEnvironment
     preferredPlacement?: 'top' | 'bottom' | 'left' | 'right'
+    triggerContent?: HTMLElement
+    titleOverride?: string
     // When true the hover card is kept as a DOM descendant of the tile (shown via a
     // CSS class on hover) instead of being portaled to document.body. This makes the
     // card live inside its surrounding context and scale with any CSS zoom transform
@@ -94,6 +96,14 @@ function getContextPreviewTitle(node: CanvasNode, environment: ContextPreviewEnv
     }
     if (node.type === 'image' || node.type === 'video') return ''
     return getContextChipLabel(node)
+}
+
+function resolveContextPreviewTitle(
+    node: CanvasNode,
+    environment: ContextPreviewEnvironment,
+    titleOverride?: string,
+): string {
+    return getContextPreviewTitle(node, environment) || titleOverride?.trim() || ''
 }
 
 function getContextPreviewText(node: CanvasNode, environment: ContextPreviewEnvironment): string {
@@ -303,13 +313,15 @@ function createInlineContextPreviewTile({
     getNode,
     environment,
     preferredPlacement = 'top',
+    triggerContent,
+    titleOverride,
 }: CreateContextPreviewTileOptions): ContextPreviewTileInstance {
     const resolveNode = (): CanvasNode => getNode?.() ?? node
     const renderState = () => {
         const latestNode = resolveNode()
-        const title = getContextPreviewTitle(latestNode, environment)
+        const title = resolveContextPreviewTitle(latestNode, environment, titleOverride)
         const text = getContextPreviewText(latestNode, environment)
-        const accessibleLabel = getContextPreviewAccessibleLabel(latestNode, environment)
+        const accessibleLabel = title || getContextPreviewTypeLabel(latestNode)
         return { latestNode, title, text, accessibleLabel }
     }
 
@@ -324,7 +336,7 @@ function createInlineContextPreviewTile({
         className="workspace-ai-chat-panel-context-preview-trigger context-preview-inline-trigger"
         tabindex="0"
         aria-label=${accessibleLabel}
-    >${renderContextPreviewVisual(latestNode, accessibleLabel, text, environment, 'mini')}</div>` as HTMLElement
+    >${triggerContent ?? renderContextPreviewVisual(latestNode, accessibleLabel, text, environment, 'mini')}</div>` as HTMLElement
     const popover = html`<div className=${getInlinePopoverClassName(latestNode, Boolean(title || text), false)} role="tooltip">
         ${renderContextPreviewPopoverContent(latestNode, title, text, accessibleLabel, environment)}
     </div>` as HTMLElement
@@ -372,24 +384,40 @@ export function createContextPreviewTile({
     environment,
     preferredPlacement = 'top',
     inlinePopover = false,
+    triggerContent,
+    titleOverride,
 }: CreateContextPreviewTileOptions): ContextPreviewTileInstance {
     if (inlinePopover) {
-        return createInlineContextPreviewTile({ node, getNode, environment, preferredPlacement })
+        return createInlineContextPreviewTile({
+            node,
+            getNode,
+            environment,
+            preferredPlacement,
+            triggerContent,
+            titleOverride,
+        })
     }
 
     const resolveNode = (): CanvasNode => getNode?.() ?? node
     const currentNode = resolveNode()
-    const title = getContextPreviewTitle(currentNode, environment)
+    const title = resolveContextPreviewTitle(currentNode, environment, titleOverride)
     const text = getContextPreviewText(currentNode, environment)
-    const accessibleLabel = getContextPreviewAccessibleLabel(currentNode, environment)
+    const accessibleLabel = title || getContextPreviewTypeLabel(currentNode)
     const popoverContent = renderContextPreviewPopoverContent(currentNode, title, text, accessibleLabel, environment)
+    const usesInlineLabelTrigger = Boolean(triggerContent)
     const previewTooltip: HelpTooltipInstance = createHelpTooltip({
         label: accessibleLabel,
-        triggerContent: renderContextPreviewVisual(currentNode, accessibleLabel, text, environment, 'mini'),
+        triggerContent: triggerContent ?? renderContextPreviewVisual(currentNode, accessibleLabel, text, environment, 'mini'),
         content: popoverContent,
         preferredPlacement,
-        className: 'workspace-ai-chat-panel-context-preview-tooltip',
-        triggerClassName: 'workspace-ai-chat-panel-context-preview-trigger',
+        className: [
+            'workspace-ai-chat-panel-context-preview-tooltip',
+            usesInlineLabelTrigger ? 'workspace-ai-chat-panel-context-preview-tooltip-inline-label' : '',
+        ].filter(Boolean).join(' '),
+        triggerClassName: [
+            'workspace-ai-chat-panel-context-preview-trigger',
+            usesInlineLabelTrigger ? 'workspace-ai-chat-panel-context-preview-trigger-inline-label' : '',
+        ].filter(Boolean).join(' '),
         contentClassName: getContextPreviewPopoverClassName(currentNode, Boolean(title || text)),
         contentCssVariableNames: CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,
         interactive: true,
@@ -398,9 +426,9 @@ export function createContextPreviewTile({
     const trigger = previewTooltip.dom.querySelector<HTMLElement>('.help-tooltip-trigger')
     const syncLatestContent = (): void => {
         const latestNode = resolveNode()
-        const latestTitle = getContextPreviewTitle(latestNode, environment)
+        const latestTitle = resolveContextPreviewTitle(latestNode, environment, titleOverride)
         const latestText = getContextPreviewText(latestNode, environment)
-        const latestAccessibleLabel = getContextPreviewAccessibleLabel(latestNode, environment)
+        const latestAccessibleLabel = latestTitle || getContextPreviewTypeLabel(latestNode)
         const latestContent = renderContextPreviewPopoverContent(latestNode, latestTitle, latestText, latestAccessibleLabel, environment)
         tooltipContent?.replaceChildren(latestContent)
         if (tooltipContent) {
@@ -416,7 +444,9 @@ export function createContextPreviewTile({
     }
     trigger?.addEventListener('pointerenter', syncLatestContent, true)
     trigger?.addEventListener('focusin', syncLatestContent, true)
-    const dom = html`<div className="workspace-ai-chat-panel-context-preview-main">${previewTooltip.dom}</div>` as HTMLElement
+    const dom = usesInlineLabelTrigger
+        ? previewTooltip.dom
+        : html`<div className="workspace-ai-chat-panel-context-preview-main">${previewTooltip.dom}</div>` as HTMLElement
     return {
         dom,
         destroy: () => {

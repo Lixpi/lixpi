@@ -53,6 +53,7 @@ describe('MediaGenerationRunPlanner', () => {
             reasoningRunId: 'request-3:reasoning:0',
             branchId: 'branch-3',
             referenceNodeIds: ['a'],
+            referenceAssetIds: [],
             sourceContextNodeIds: ['b'],
             promptText: 'create a painting',
             createdAt: 1700000000000,

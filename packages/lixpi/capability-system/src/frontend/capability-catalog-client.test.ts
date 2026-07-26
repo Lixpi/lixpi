@@ -32,7 +32,7 @@ function item(capabilityId: string, options: Partial<CapabilityCatalogItem> = {}
         summary: '',
         tags: [],
         manifestBlobHash: `hash-${capabilityId}`,
-        catalogVisibility: 'listed',
+        catalogExposure: 'standalone',
         status: 'active',
         updatedAt: 1,
         ...options,
@@ -97,7 +97,7 @@ describe('CapabilityCatalogClient', () => {
             record: {
                 capabilityId: 'tool-1', kind: 'tool', scope: 'global', scopeOwnerId: 'system',
                 storageOwnerId: 'system', manifestBlobHash: 'hash-1', status: 'active', ownerUserId: 'system',
-                catalogVisibility: 'listed',
+                catalogExposure: 'standalone',
                 createdAt: 1, updatedAt: 2,
             },
             manifest: {
@@ -139,7 +139,7 @@ describe('CapabilityCatalogClient', () => {
         const record: CapabilityCatalogRecord = {
             capabilityId: 'skill-1', kind: 'skill', scope: 'user', scopeOwnerId: 'user-1',
             storageOwnerId: 'org-1', manifestBlobHash: 'hash-1', status: 'active', ownerUserId: 'user-1',
-            catalogVisibility: 'listed',
+            catalogExposure: 'standalone',
             createdAt: 1, updatedAt: 2,
         }
         const manifest: CapabilityManifest = {

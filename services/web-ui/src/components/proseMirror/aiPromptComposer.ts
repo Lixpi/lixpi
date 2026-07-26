@@ -1,8 +1,9 @@
 'use strict'
 
 import type { EditorView } from 'prosemirror-view'
-import type { CapabilityPromptReference, MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
-import type { CapabilityCatalogClient } from '$src/services/capability-catalog-client.ts'
+import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
+import type { PromptReferenceCatalogClient } from '$src/services/prompt-reference-catalog-client.ts'
+import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { createAiPromptInputNodeView } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
@@ -27,7 +28,6 @@ import { settings } from '$src/settings.ts'
 // SubmitHandler shape in aiPromptInputPlugin.ts so every host consumes one type.
 export type AiPromptComposerSubmitData = {
     contentJSON: any[]
-    capabilityReferences: CapabilityPromptReference[]
     aiReasoningModels: string[]
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
@@ -75,7 +75,8 @@ export type AiPromptComposerConfig = {
     // Render a shifting gradient background behind the input.
     useGradient?: boolean
     placeholderText?: string
-    capabilityCatalog?: Pick<CapabilityCatalogClient, 'search'> & Partial<Pick<CapabilityCatalogClient, 'rememberSelection'>>
+    promptReferenceCatalog?: PromptReferenceCatalogClient
+    promptReferencePreviewRenderer?: PromptReferencePreviewRenderer
     controlFactories?: PromptControlFactories
     onSubmit: (data: AiPromptComposerSubmitData) => void | Promise<void>
     onContentChange?: (value: object) => void
@@ -147,7 +148,8 @@ class AiPromptComposer implements AiPromptComposerInstance {
             onAiChatStop: () => {},
             onPromptSubmit: (data: AiPromptComposerSubmitData) => config.onSubmit(data),
             promptControlFactories: controlFactories,
-            capabilityCatalog: config.capabilityCatalog,
+            promptReferenceCatalog: config.promptReferenceCatalog,
+            promptReferencePreviewRenderer: config.promptReferencePreviewRenderer,
         })
     }
 

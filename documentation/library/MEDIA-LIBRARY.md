@@ -24,6 +24,14 @@ Meta rows contain only list-card data: title, category, scope/owner/origin, life
 
 The workspace Media picker filters this authorized catalog to Assets attachable to its current workspace. Workspace-scoped Assets owned by another workspace remain available through that workspace but are not offered as insertion targets elsewhere.
 
+## Prompt-reference search
+
+The inline `@` picker uses the separate `Assets-Search` projection for bounded prefix autocomplete rather than loading the full library. Search rows are keyed by authorized scope and `<media-kind>#<normalized-title>#<assetId>`, contain thin display/rendition metadata, and exclude conversation Assets. Scope and principal-grant rows mirror `Assets-Meta`; create, title/scope update, grant/revoke, repair, and deletion maintain both projections.
+
+Deployment backfill uses the existing `asset.maintenance.repairProjections` job: enqueue one repair for each active Asset so the same authoritative projection repair populates missing search rows and deletes stale ones.
+
+Search rows are advisory and never authorize content. The API point-authorizes every selected Asset when it reads `prompt_reference` atoms from the submitted conversation. If the Asset also has a current-canvas placement, that placement ranks first and may carry its real `nodeId`; otherwise the reference remains Asset-only. Selecting either form does not call `asset.reference.attach` and does not mutate the canvas.
+
 ## Library cards
 
 Cards render global Asset metadata and the authorized thumbnail rendition:

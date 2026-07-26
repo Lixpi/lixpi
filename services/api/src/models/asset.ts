@@ -16,6 +16,7 @@ import {
     type AssetPrimaryCategory,
     type AssetReference,
     type AssetRequesterContext,
+    type AssetSearchRecord,
     type AssetScope,
     type BlobRecord,
     type BlobReference,
@@ -31,9 +32,13 @@ const { ORG_NAME, STAGE } = process.env
 
 const assetsTableName = (): string => getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE)
 const assetsMetaTableName = (): string => getDynamoDbTableStageName('ASSETS_META', ORG_NAME, STAGE)
+const assetsSearchTableName = (): string => getDynamoDbTableStageName('ASSETS_SEARCH', ORG_NAME, STAGE)
 const assetsAccessListTableName = (): string => getDynamoDbTableStageName('ASSETS_ACCESS_LIST', ORG_NAME, STAGE)
 const assetReferencesTableName = (): string => getDynamoDbTableStageName('ASSET_REFERENCES', ORG_NAME, STAGE)
-const MAX_ASSET_META_PROJECTIONS = 90
+// Title changes atomically delete one old search row and write Meta + Search
+// rows per scope. Keeping the structural scope cap at 32 leaves room for the
+// authoritative Asset update inside DynamoDB's 100-operation transaction cap.
+const MAX_ASSET_PROJECTION_SCOPES = 32
 
 export const publishAssetEvent = (subject: string, asset: Asset): void => {
     try {
@@ -65,6 +70,15 @@ const derivePrimaryCategory = (asset: Asset): AssetPrimaryCategory => {
     return 'document'
 }
 
+export const normalizeAssetTitle = (title: string): string =>
+    title.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US')
+
+export const buildAssetSearchKey = (
+    primaryCategory: Exclude<AssetPrimaryCategory, 'conversation'>,
+    normalizedTitle: string,
+    assetId: string,
+): string => `${primaryCategory}#${normalizedTitle}#${assetId}`
+
 const isValidDescriptor = (descriptor: unknown): descriptor is NonNullable<Asset['descriptor']> => {
     if (!descriptor || typeof descriptor !== 'object') return false
     const candidate = descriptor as NonNullable<Asset['descriptor']>
@@ -82,6 +96,12 @@ const isValidDescriptor = (descriptor: unknown): descriptor is NonNullable<Asset
 
 export const buildAssetMeta = (asset: Asset, scopeAndOwner?: string): AssetMeta => {
     const thumbnail = asset.media?.renditions.thumbnail
+    const representativeFrame = asset.media?.kind === 'video'
+        ? asset.media.renditions.representativeFrame
+        : undefined
+    const pickerThumbnail = thumbnail?.status === 'ready' && thumbnail.blobHash
+        ? thumbnail
+        : representativeFrame
     const preview = asset.media?.renditions.preview
     const original = asset.media?.renditions.original
     const canonical = asset.media?.renditions.canonical
@@ -99,7 +119,9 @@ export const buildAssetMeta = (asset: Asset, scopeAndOwner?: string): AssetMeta 
         originWorkspaceId: asset.originWorkspaceId,
         lifecycleStatus: asset.states.lifecycle,
         mediaStatus: asset.states.media,
-        ...(thumbnail?.status === 'ready' && thumbnail.blobHash ? { thumbnailBlobHash: thumbnail.blobHash } : {}),
+        ...(pickerThumbnail?.status === 'ready' && pickerThumbnail.blobHash
+            ? { thumbnailBlobHash: pickerThumbnail.blobHash }
+            : {}),
         ...(preview?.status === 'ready' && preview.blobHash ? { previewBlobHash: preview.blobHash } : {}),
         ...(preferredMedia?.status === 'ready' && preferredMedia.mimeType ? { mimeType: preferredMedia.mimeType } : {}),
         ...(preferredMedia?.status === 'ready' && typeof preferredMedia.byteSize === 'number' ? { byteSize: preferredMedia.byteSize } : {}),
@@ -113,6 +135,27 @@ export const buildAssetMeta = (asset: Asset, scopeAndOwner?: string): AssetMeta 
         createdAt: asset.createdAt,
         updatedAt: asset.updatedAt,
     }
+}
+
+export const buildAssetSearchRecord = (asset: Asset, scopeAndOwner?: string): AssetSearchRecord | null => {
+    const meta = buildAssetMeta(asset, scopeAndOwner)
+    if (meta.primaryCategory === 'conversation') return null
+    const normalizedTitle = normalizeAssetTitle(meta.title)
+    return {
+        ...meta,
+        primaryCategory: meta.primaryCategory,
+        searchKey: buildAssetSearchKey(meta.primaryCategory, normalizedTitle, meta.assetId),
+        normalizedTitle,
+    }
+}
+
+const buildAssetSearchDelete = (asset: Asset, scopeAndOwner: string): TransactOperation[] => {
+    const record = buildAssetSearchRecord(asset, scopeAndOwner)
+    return record ? [{
+        type: 'delete',
+        tableName: assetsSearchTableName(),
+        key: { scopeAndOwner, searchKey: record.searchKey },
+    }] : []
 }
 
 export const getAssetRecord = async (assetId: string): Promise<Asset | undefined> =>
@@ -284,6 +327,58 @@ const decodeCursor = (cursor?: string): AssetListCursor => {
 const encodeCursor = (cursor: AssetListCursor): string =>
     Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url')
 
+type AssetSearchCursor = AssetListCursor & {
+    query: string
+    categories: Array<Exclude<AssetPrimaryCategory, 'conversation'>>
+    buffered?: Array<Pick<AssetSearchRecord, 'scopeAndOwner' | 'searchKey'>>
+    completed?: string[]
+}
+
+const decodeSearchCursor = (
+    cursor: string | undefined,
+    query: string,
+    categories: Array<Exclude<AssetPrimaryCategory, 'conversation'>>,
+    allowedCursorKeys: Map<string, { scopeAndOwner: string; searchPrefix: string }>,
+): AssetSearchCursor => {
+    if (!cursor) return { partitions: {}, query, categories }
+    try {
+        const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as AssetSearchCursor
+        if (!parsed || typeof parsed !== 'object' || !parsed.partitions
+            || typeof parsed.partitions !== 'object' || Array.isArray(parsed.partitions)
+            || parsed.query !== query
+            || JSON.stringify(parsed.categories) !== JSON.stringify(categories)) {
+            throw new Error('INVALID_ASSET_SEARCH_CURSOR')
+        }
+        for (const [cursorKey, lastKey] of Object.entries(parsed.partitions)) {
+            const expected = allowedCursorKeys.get(cursorKey)
+            if (!expected || !lastKey || typeof lastKey !== 'object' || Array.isArray(lastKey)
+                || lastKey.scopeAndOwner !== expected.scopeAndOwner
+                || typeof lastKey.searchKey !== 'string'
+                || !lastKey.searchKey.startsWith(expected.searchPrefix)) {
+                throw new Error('INVALID_ASSET_SEARCH_CURSOR')
+            }
+        }
+        if (parsed.completed && (!Array.isArray(parsed.completed)
+            || parsed.completed.some((cursorKey) => typeof cursorKey !== 'string' || !allowedCursorKeys.has(cursorKey)))) {
+            throw new Error('INVALID_ASSET_SEARCH_CURSOR')
+        }
+        if (parsed.buffered && (!Array.isArray(parsed.buffered) || parsed.buffered.length > 2_000
+            || parsed.buffered.some((key) => {
+                if (!key || typeof key !== 'object' || Array.isArray(key)
+                    || typeof key.scopeAndOwner !== 'string' || typeof key.searchKey !== 'string') return true
+                return ![...allowedCursorKeys.values()].some((expected) => (
+                    key.scopeAndOwner === expected.scopeAndOwner
+                    && key.searchKey.startsWith(expected.searchPrefix)
+                ))
+            }))) {
+            throw new Error('INVALID_ASSET_SEARCH_CURSOR')
+        }
+        return parsed
+    } catch {
+        throw new Error('INVALID_ASSET_SEARCH_CURSOR')
+    }
+}
+
 type AssetCanvasNode = {
     nodeId: string
     assetId?: string
@@ -342,10 +437,10 @@ const assertSingleAssetMembershipMutation = ({
     }
 }
 
-export const buildAssetProjectionOperations = async (
+const getAssetProjectionScopeKeys = async (
     asset: Asset,
     options: { includeBaseScope?: boolean; excludePrincipalIds?: string[] } = {},
-): Promise<TransactOperation[]> => {
+): Promise<string[]> => {
     const accessRows = await listAccess(asset.assetId)
     const excludedPrincipalIds = new Set(options.excludePrincipalIds ?? [])
     const scopeKeys = [
@@ -358,13 +453,47 @@ export const buildAssetProjectionOperations = async (
             .map((row) => buildAssetPrincipalScopeKey(row.principalId)),
     ]
     const uniqueScopeKeys = [...new Set(scopeKeys)]
-    if (uniqueScopeKeys.length > MAX_ASSET_META_PROJECTIONS) {
+    if (uniqueScopeKeys.length > MAX_ASSET_PROJECTION_SCOPES) {
         throw new Error('ASSET_PROJECTION_LIMIT_EXCEEDED')
     }
-    return uniqueScopeKeys.map((scopeAndOwner) => ({
-        type: 'put',
-        tableName: assetsMetaTableName(),
-        item: buildAssetMeta(asset, scopeAndOwner),
+    return uniqueScopeKeys
+}
+
+export const buildAssetProjectionOperations = async (
+    asset: Asset,
+    options: { includeBaseScope?: boolean; excludePrincipalIds?: string[] } = {},
+): Promise<TransactOperation[]> => {
+    const uniqueScopeKeys = await getAssetProjectionScopeKeys(asset, options)
+    return uniqueScopeKeys.flatMap((scopeAndOwner): TransactOperation[] => {
+        const searchRecord = buildAssetSearchRecord(asset, scopeAndOwner)
+        return [
+            {
+                type: 'put',
+                tableName: assetsMetaTableName(),
+                item: buildAssetMeta(asset, scopeAndOwner),
+            },
+            ...(searchRecord ? [{
+                type: 'put' as const,
+                tableName: assetsSearchTableName(),
+                item: searchRecord,
+            }] : []),
+        ]
+    })
+}
+
+const buildChangedAssetSearchKeyDeletes = async (
+    previous: Asset,
+    next: Asset,
+    options: { includeBaseScope?: boolean } = {},
+): Promise<TransactOperation[]> => {
+    const previousRecord = buildAssetSearchRecord(previous)
+    const nextRecord = buildAssetSearchRecord(next)
+    if (!previousRecord || previousRecord.searchKey === nextRecord?.searchKey) return []
+    const scopeKeys = await getAssetProjectionScopeKeys(previous, options)
+    return scopeKeys.map((scopeAndOwner) => ({
+        type: 'delete',
+        tableName: assetsSearchTableName(),
+        key: { scopeAndOwner, searchKey: previousRecord.searchKey },
     }))
 }
 
@@ -661,6 +790,11 @@ const AssetModel = {
                     expressionAttributeNames: { '#assetId': 'assetId' },
                 },
                 { type: 'put', tableName: assetsMetaTableName(), item: buildAssetMeta(asset) },
+                ...(buildAssetSearchRecord(asset) ? [{
+                    type: 'put' as const,
+                    tableName: assetsSearchTableName(),
+                    item: buildAssetSearchRecord(asset)!,
+                }] : []),
                 { type: 'put', tableName: assetsAccessListTableName(), item: ownerAccess },
                 { type: 'put', tableName: assetReferencesTableName(), item: catalogReference },
                 ...(initialWorkspaceReference
@@ -754,6 +888,109 @@ const AssetModel = {
         }
     },
 
+    searchAvailable: async ({
+        scopeAndOwners,
+        principalId,
+        organizationIds,
+        query = '',
+        categories = ['image', 'video', 'audio', 'document'],
+        limit = 20,
+        cursor,
+    }: {
+        scopeAndOwners: string[]
+        principalId: string
+        organizationIds: string[]
+        query?: string
+        categories?: Array<Exclude<AssetPrimaryCategory, 'conversation'>>
+        limit?: number
+        cursor?: string
+    }): Promise<{ items: AssetSearchRecord[]; cursor?: string }> => {
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new Error('INVALID_ASSET_SEARCH_LIMIT')
+        if (categories.length === 0 || categories.some((category) => !['image', 'video', 'audio', 'document'].includes(category))) {
+            throw new Error('INVALID_ASSET_SEARCH_CATEGORY')
+        }
+        const normalizedQuery = normalizeAssetTitle(query)
+        const uniqueCategories = [...new Set(categories)]
+        const partitions = [...new Set([...scopeAndOwners, buildAssetPrincipalScopeKey(principalId)])]
+        const allowedCursorKeys = new Map(partitions.flatMap((partition) => uniqueCategories.map((category) => [
+            `${partition}|${category}`,
+            { scopeAndOwner: partition, searchPrefix: `${category}#${normalizedQuery}` },
+        ] as const)))
+        const decoded = decodeSearchCursor(cursor, normalizedQuery, uniqueCategories, allowedCursorKeys)
+        const bufferedRows = await Promise.all((decoded.buffered ?? []).map(async (key) =>
+            await dynamoDBService.getItem({
+                tableName: assetsSearchTableName(),
+                key,
+                consistentRead: true,
+                origin: 'Asset.searchAvailable.buffered',
+            }) as AssetSearchRecord | undefined))
+        const requests = partitions.flatMap((partition) => uniqueCategories.map(async (category) => {
+            const cursorKey = `${partition}|${category}`
+            if (decoded.completed?.includes(cursorKey)) {
+                return { cursorKey, items: [] as AssetSearchRecord[], completed: true, lastKey: undefined }
+            }
+            const result = await dynamoDBService.queryItems({
+                tableName: assetsSearchTableName(),
+                keyConditions: { scopeAndOwner: partition },
+                sortKeyCondition: {
+                    key: 'searchKey',
+                    operator: 'begins_with',
+                    value: `${category}#${normalizedQuery}`,
+                },
+                exclusiveStartKey: decoded.partitions[cursorKey],
+                limit,
+                scanIndexForward: true,
+                consistentRead: true,
+                origin: `Asset.searchAvailable(${cursorKey})`,
+            })
+            return {
+                cursorKey,
+                items: (result?.items ?? []) as AssetSearchRecord[],
+                completed: !result?.lastEvaluatedKey,
+                lastKey: result?.lastEvaluatedKey as Record<string, unknown> | undefined,
+            }
+        }))
+        const pages = await Promise.all(requests)
+        const allowedOrganizationIds = new Set(organizationIds)
+        const candidates = bufferedRows.filter((row): row is AssetSearchRecord => row !== undefined)
+        const nextPartitions: Record<string, Record<string, unknown>> = {}
+        const completed = new Set(decoded.completed ?? [])
+        for (const page of pages) {
+            candidates.push(...page.items)
+            if (page.lastKey) nextPartitions[page.cursorKey] = page.lastKey
+            if (page.completed) completed.add(page.cursorKey)
+        }
+        const byAssetId = new Map<string, AssetSearchRecord>()
+        for (const item of candidates) {
+            if (!allowedOrganizationIds.has(item.organizationId)
+                || item.lifecycleStatus !== 'active'
+                || (item.primaryCategory !== 'document' && !['ready', 'degraded'].includes(item.mediaStatus))) continue
+            const existing = byAssetId.get(item.assetId)
+            if (!existing || item.scopeAndOwner.startsWith('principal#')) byAssetId.set(item.assetId, item)
+        }
+        const sorted = [...byAssetId.values()].sort((left, right) =>
+            left.normalizedTitle.localeCompare(right.normalizedTitle)
+            || right.updatedAt - left.updatedAt
+            || left.assetId.localeCompare(right.assetId))
+        const items = sorted.slice(0, limit)
+        const buffered = sorted.slice(limit)
+        const hasMore = Object.keys(nextPartitions).length > 0 || buffered.length > 0
+        return {
+            items,
+            ...(hasMore ? {
+                cursor: Buffer.from(JSON.stringify({
+                    partitions: nextPartitions,
+                    query: normalizedQuery,
+                    categories: uniqueCategories,
+                    completed: [...completed],
+                    ...(buffered.length ? {
+                        buffered: buffered.map(({ scopeAndOwner, searchKey }) => ({ scopeAndOwner, searchKey })),
+                    } : {}),
+                } satisfies AssetSearchCursor), 'utf8').toString('base64url'),
+            } : {}),
+        }
+    },
+
     updateMetadata: async ({
         assetId,
         requester,
@@ -798,6 +1035,7 @@ const AssetModel = {
                     expressionAttributeNames: { '#revision': 'revision' },
                     expressionAttributeValues: { ':expectedRevision': expectedRevision },
                 },
+                ...await buildChangedAssetSearchKeyDeletes(authorized, next),
                 ...await buildAssetProjectionOperations(next),
             ],
             origin: 'Asset.updateMetadata',
@@ -942,6 +1180,7 @@ const AssetModel = {
             updatedAt: now,
         }
         const oldScopeKey = buildAssetScopeAndOwnerKey(authorized.scope, authorized.scopeOwnerId)
+        const oldSearchRecord = buildAssetSearchRecord(authorized, oldScopeKey)
         const oldCatalogKey = buildAssetCatalogReferenceKey(authorized.scope, authorized.scopeOwnerId)
         const oldCatalogReference = references.find((reference) => reference.referenceKey === oldCatalogKey)
         if (!oldCatalogReference) return { error: 'ASSET_NOT_CATALOGED' }
@@ -967,6 +1206,11 @@ const AssetModel = {
                     expressionAttributeValues: { ':expectedRevision': expectedRevision },
                 },
                 { type: 'delete', tableName: assetsMetaTableName(), key: { scopeAndOwner: oldScopeKey, assetId } },
+                ...(oldSearchRecord ? [{
+                    type: 'delete' as const,
+                    tableName: assetsSearchTableName(),
+                    key: { scopeAndOwner: oldScopeKey, searchKey: oldSearchRecord.searchKey },
+                }] : []),
                 ...await buildAssetProjectionOperations(next, { includeBaseScope: true }),
                 { type: 'delete', tableName: assetReferencesTableName(), key: { assetId, referenceKey: oldCatalogKey } },
                 { type: 'put', tableName: assetReferencesTableName(), item: newCatalogReference },
@@ -1007,7 +1251,7 @@ const AssetModel = {
             updatedAt: now,
         }
         const projectionOperations = await buildAssetProjectionOperations(next)
-        if (!existing && projectionOperations.length >= MAX_ASSET_META_PROJECTIONS) {
+        if (!existing && projectionOperations.length >= MAX_ASSET_PROJECTION_SCOPES * 2) {
             return { error: 'ASSET_PROJECTION_LIMIT_EXCEEDED' }
         }
         await dynamoDBService.transactWrite({
@@ -1036,6 +1280,11 @@ const AssetModel = {
                     type: 'put',
                     tableName: assetsMetaTableName(),
                     item: buildAssetMeta(next, buildAssetPrincipalScopeKey(principalId)),
+                } as TransactOperation] : []),
+                ...(!existing && buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId)) ? [{
+                    type: 'put',
+                    tableName: assetsSearchTableName(),
+                    item: buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId))!,
                 } as TransactOperation] : []),
             ],
             origin: 'Asset.grantAccess',
@@ -1090,6 +1339,14 @@ const AssetModel = {
                     tableName: assetsMetaTableName(),
                     key: { scopeAndOwner: buildAssetPrincipalScopeKey(principalId), assetId },
                 },
+                ...(buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId)) ? [{
+                    type: 'delete' as const,
+                    tableName: assetsSearchTableName(),
+                    key: {
+                        scopeAndOwner: buildAssetPrincipalScopeKey(principalId),
+                        searchKey: buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId))!.searchKey,
+                    },
+                }] : []),
                 ...await buildAssetProjectionOperations(next, { excludePrincipalIds: [principalId] }),
             ],
             origin: 'Asset.revokeAccess',
@@ -1699,6 +1956,10 @@ const AssetModel = {
                         assetId,
                     },
                 },
+                ...buildAssetSearchDelete(
+                    authorized,
+                    buildAssetScopeAndOwnerKey(authorized.scope, authorized.scopeOwnerId),
+                ),
                 ...await buildAssetProjectionOperations(nextAsset, { includeBaseScope: false }),
             ],
             origin: 'Asset.detachCatalogReference',
@@ -1829,6 +2090,7 @@ const AssetModel = {
                     tableName: assetsMetaTableName(),
                     key: { scopeAndOwner: buildAssetScopeAndOwnerKey('workspace', workspaceId), assetId },
                 },
+                ...buildAssetSearchDelete(asset, buildAssetScopeAndOwnerKey('workspace', workspaceId)),
                 ...await buildAssetProjectionOperations(next, { includeBaseScope: false }),
             ],
             origin: 'Asset.removeWorkspaceCatalogForImport',
@@ -1959,6 +2221,7 @@ const AssetModel = {
                             assetId,
                         },
                     },
+                    ...buildAssetSearchDelete(asset, buildAssetScopeAndOwnerKey(asset.scope, asset.scopeOwnerId)),
                     ...await buildAssetProjectionOperations(next, { includeBaseScope: false }),
                 ],
                 origin: 'Asset.removeWorkspaceCatalogForDeletion',
@@ -2083,7 +2346,7 @@ const AssetModel = {
     repairProjections: async ({ assetId }: { assetId: string }): Promise<Asset | null> => {
         const asset = await getAssetRecord(assetId)
         if (!asset) return null
-        const [references, accessRows, metaResult] = await Promise.all([
+        const [references, accessRows, metaResult, searchResult] = await Promise.all([
             listReferences(assetId),
             listAccess(assetId),
             dynamoDBService.scanItems({
@@ -2092,6 +2355,13 @@ const AssetModel = {
                 fetchAllItems: true,
                 consistentRead: true,
                 origin: 'Asset.repairProjections.listActualMeta',
+            }),
+            dynamoDBService.scanItems({
+                tableName: assetsSearchTableName(),
+                limit: 1000,
+                fetchAllItems: true,
+                consistentRead: true,
+                origin: 'Asset.repairProjections.listActualSearch',
             }),
         ])
         const referenceCount = references.length
@@ -2119,6 +2389,12 @@ const AssetModel = {
             .filter((meta) => meta.assetId === assetId)
         const actualMetaByScope = new Map(actualMetaRows.map((meta) => [meta.scopeAndOwner, meta]))
         const expectedMetaRows = [...expectedScopeKeys].map((scopeAndOwner) => buildAssetMeta(next, scopeAndOwner))
+        const expectedSearchRows = [...expectedScopeKeys]
+            .map((scopeAndOwner) => buildAssetSearchRecord(next, scopeAndOwner))
+            .filter((row): row is AssetSearchRecord => row !== null)
+        const actualSearchRows = ((searchResult?.items ?? []) as AssetSearchRecord[])
+            .filter((row) => row.assetId === assetId)
+        const expectedSearchKeys = new Set(expectedSearchRows.map((row) => `${row.scopeAndOwner}\u0000${row.searchKey}`))
         const staleMetaDeletes: TransactOperation[] = actualMetaRows
             .filter((meta) => !expectedScopeKeys.has(meta.scopeAndOwner))
             .map((meta) => ({
@@ -2132,7 +2408,21 @@ const AssetModel = {
         const expectedMetaPuts: TransactOperation[] = expectedMetaRows
             .filter((meta) => JSON.stringify(actualMetaByScope.get(meta.scopeAndOwner)) !== JSON.stringify(meta))
             .map((meta) => ({ type: 'put', tableName: assetsMetaTableName(), item: meta }))
-        if (1 + staleMetaDeletes.length + expectedMetaPuts.length > 100) {
+        const staleSearchDeletes: TransactOperation[] = actualSearchRows
+            .filter((row) => !expectedSearchKeys.has(`${row.scopeAndOwner}\u0000${row.searchKey}`))
+            .map((row) => ({
+                type: 'delete',
+                tableName: assetsSearchTableName(),
+                key: { scopeAndOwner: row.scopeAndOwner, searchKey: row.searchKey },
+            }))
+        const actualSearchByKey = new Map(actualSearchRows.map((row) => [
+            `${row.scopeAndOwner}\u0000${row.searchKey}`,
+            row,
+        ]))
+        const expectedSearchPuts: TransactOperation[] = expectedSearchRows
+            .filter((row) => JSON.stringify(actualSearchByKey.get(`${row.scopeAndOwner}\u0000${row.searchKey}`)) !== JSON.stringify(row))
+            .map((row) => ({ type: 'put', tableName: assetsSearchTableName(), item: row }))
+        if (1 + staleMetaDeletes.length + expectedMetaPuts.length + staleSearchDeletes.length + expectedSearchPuts.length > 100) {
             throw new Error('ASSET_PROJECTION_REPAIR_TOO_LARGE')
         }
         await dynamoDBService.transactWrite({
@@ -2153,6 +2443,8 @@ const AssetModel = {
                 },
                 ...staleMetaDeletes,
                 ...expectedMetaPuts,
+                ...staleSearchDeletes,
+                ...expectedSearchPuts,
             ],
             origin: 'Asset.repairProjections',
         })

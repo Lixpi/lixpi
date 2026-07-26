@@ -1,5 +1,5 @@
 export * from './shared/base-schema.ts'
-export * from './shared/capability-reference.ts'
+export * from './shared/prompt-reference.ts'
 export * from './shared/generated-media-turn-projection.ts'
 export * from './shared/lineage-events.ts'
 export * from './shared/model-selection-attrs.ts'

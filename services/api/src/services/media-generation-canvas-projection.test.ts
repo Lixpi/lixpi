@@ -48,6 +48,7 @@ const assignment = {
     branchOriginNodeId: 'origin-1',
     branchForkNodeId: 'fork-1',
     lineageParentNodeId: 'fork-1',
+    referenceAssetIds: [],
     referenceNodeIds: [],
     sourceContextNodeIds: [],
     operationKind: 'fresh_branch',
@@ -72,6 +73,7 @@ const lineagePlan = (): MediaBranchLineagePlan => ({
     generationRequestId: 'request-1',
     branchId: 'branch-1',
     promptText: 'draw a goat',
+    referenceAssetIds: [],
     referenceNodeIds: [],
     sourceContextNodeIds: [],
     branchOrigin: {
@@ -114,6 +116,7 @@ const selectedMediaFanoutPlan = (): MediaBranchLineagePlan => {
         promptText: 'make it a mountain omelet',
         sourceNodeId: 'selected-media',
         placementAnchorNodeId: 'selected-media',
+        referenceAssetIds: ['selected-media-asset'],
         referenceNodeIds: ['selected-media'],
         sourceContextNodeIds: ['selected-media'],
         branchForks: [{

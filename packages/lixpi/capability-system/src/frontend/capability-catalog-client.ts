@@ -177,6 +177,8 @@ export class CapabilityCatalogClient {
             summary: catalogItem?.summary ?? response.manifest.description,
             tags: catalogItem?.tags ?? [],
             manifestBlobHash: response.record.manifestBlobHash,
+            ...(response.record.parentModuleId ? { parentModuleId: response.record.parentModuleId } : {}),
+            catalogExposure: response.record.catalogExposure,
             status: response.record.status,
             updatedAt: response.record.updatedAt,
             references: response.references.map((reference) => ({

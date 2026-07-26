@@ -50,6 +50,8 @@ The shared schema builder does two important things:
 
 Custom nodes are intentionally split by responsibility:
 
+- Inline prompt references use the typed `prompt_reference` atom. The shared schema also parses `capability_reference` atoms in stored drafts and conversation snapshots; insertion paths create only `prompt_reference`.
+
 - Base custom nodes (exported by `@lixpi/prosemirror`, re-exported through `customNodes/index.js`):
   - `code_block` override (`codeBlockNode`): extends the base `code_block` with attrs (e.g. theme) used by the CodeMirror NodeView.
   - `taskRowNode`: placeholder for future Svelte-backed rendering.
@@ -100,7 +102,7 @@ Notes
     - `createCodeBlockPlugin` + `codeBlockInputRule` (CodeMirror integration and ``` fences)
     - `activeNodePlugin`
     - AI stack (Asset conversation and provenance roles): `createAiChatThreadPlugin`
-    - Floating prompt stack: `@` capability mentions, then `createAiPromptInputPlugin`
+    - Floating prompt stack: media-first `@` references, `/` Capability modules, then `createAiPromptInputPlugin`
 
 
 ## Transaction meta signaling: contract

@@ -74,6 +74,17 @@ const builderResult = builders(testSchema, {
         imageGenerationSize: 'auto',
     },
 
+    promptReference: {
+        nodeType: 'prompt_reference',
+        referenceType: 'media',
+        assetId: 'test-asset-id',
+        nodeId: '',
+        mediaKind: 'image',
+        moduleId: '',
+        capabilityId: '',
+        displayName: 'Test reference',
+    },
+
     // Other blocks
     blockquote: { nodeType: 'blockquote' },
     codeBlock: { nodeType: 'code_block' },
@@ -81,7 +92,24 @@ const builderResult = builders(testSchema, {
 })
 
 // Export individual builders
-export const { doc, p, h1, h2, h3, img, aiImg, thread, response, reasoningSection, userMsg, promptInput, blockquote, codeBlock, hr } = builderResult
+export const {
+    doc,
+    p,
+    h1,
+    h2,
+    h3,
+    img,
+    aiImg,
+    thread,
+    response,
+    reasoningSection,
+    userMsg,
+    promptInput,
+    promptReference,
+    blockquote,
+    codeBlock,
+    hr,
+} = builderResult
 export const schema = builderResult.schema
 
 // Helper to find position of a node by type

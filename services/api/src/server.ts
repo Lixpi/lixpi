@@ -26,6 +26,10 @@ import {
     capabilitySubjects,
     setCapabilityRunDispatcher,
 } from './NATS/subscriptions/capability-subjects.ts'
+import {
+    promptReferenceSubjects,
+    setPromptReferenceModuleCatalog,
+} from './NATS/subscriptions/prompt-reference-subjects.ts'
 import assetRoutes from './routes/asset-routes.ts'
 import transientMediaRoutes from './routes/transient-media-routes.ts'
 import workspaceExportRoutes from './routes/workspace-export-routes.ts'
@@ -86,6 +90,7 @@ const subscriptions = [
 
     // Capability catalog commands and generic Tool run transport.
     ...capabilitySubjects,
+    ...promptReferenceSubjects,
 ]
 
 // Registered NATS-internal identities that the auth callout can authenticate
@@ -245,6 +250,7 @@ const llmModule = createLlmModule({
     natsService: await NATS_Service.getInstance(),
     metrics,
 })
+setPromptReferenceModuleCatalog(llmModule.capabilityModuleCatalog)
 await llmModule.seedCapabilities()
 const capabilityDispatcher = getCapabilityDispatcher()
 setCapabilityRunDispatcher({

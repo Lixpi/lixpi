@@ -19,6 +19,7 @@ import {
 
 import BlobModel, { buildBlobReferenceBatchOperations } from '../models/blob.ts'
 import {
+    buildAssetSearchRecord,
     buildAssetPrincipalScopeKey,
     buildAssetScopeAndOwnerKey,
     publishAssetEvent,
@@ -30,6 +31,7 @@ const { ORG_NAME, STAGE } = process.env
 
 const assetsTableName = (): string => getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE)
 const assetsMetaTableName = (): string => getDynamoDbTableStageName('ASSETS_META', ORG_NAME, STAGE)
+const assetsSearchTableName = (): string => getDynamoDbTableStageName('ASSETS_SEARCH', ORG_NAME, STAGE)
 const assetsAccessListTableName = (): string => getDynamoDbTableStageName('ASSETS_ACCESS_LIST', ORG_NAME, STAGE)
 const assetReferencesTableName = (): string => getDynamoDbTableStageName('ASSET_REFERENCES', ORG_NAME, STAGE)
 
@@ -121,7 +123,14 @@ const deleteAccessProjections = async (asset: Asset, accessRows: AssetAccessList
                 type: 'delete' as const,
                 tableName: assetsMetaTableName(),
                 key: { scopeAndOwner: buildAssetPrincipalScopeKey(access.principalId), assetId: asset.assetId },
-            }]
+            }, ...(buildAssetSearchRecord(asset, buildAssetPrincipalScopeKey(access.principalId)) ? [{
+                type: 'delete' as const,
+                tableName: assetsSearchTableName(),
+                key: {
+                    scopeAndOwner: buildAssetPrincipalScopeKey(access.principalId),
+                    searchKey: buildAssetSearchRecord(asset, buildAssetPrincipalScopeKey(access.principalId))!.searchKey,
+                },
+            }] : [])]
             : []),
     ])
     for (let index = 0; index < operations.length; index += 100) {
@@ -171,6 +180,14 @@ const AssetMaintenance = {
                     assetId,
                 },
             },
+            ...(buildAssetSearchRecord(asset) ? [{
+                type: 'delete' as const,
+                tableName: assetsSearchTableName(),
+                key: {
+                    scopeAndOwner: buildAssetScopeAndOwnerKey(asset.scope, asset.scopeOwnerId),
+                    searchKey: buildAssetSearchRecord(asset)!.searchKey,
+                },
+            }] : []),
             {
                 type: 'delete' as const,
                 tableName: assetsTableName(),

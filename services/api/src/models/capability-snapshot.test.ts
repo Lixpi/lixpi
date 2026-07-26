@@ -31,7 +31,7 @@ const capturedRecord: CapabilityCatalogRecord = {
     scopeOwnerId: 'org-1',
     storageOwnerId: 'org-1',
     manifestBlobHash: 'a'.repeat(64),
-    catalogVisibility: 'listed',
+    catalogExposure: 'standalone',
     status: 'active',
     ownerUserId: 'owner-1',
     createdAt: 1,

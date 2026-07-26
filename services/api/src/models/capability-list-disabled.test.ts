@@ -7,7 +7,7 @@ import type { CapabilityCatalogRecord, CapabilityMeta } from '@lixpi/constants'
 vi.mock('./blob.ts', () => ({ default: {}, buildBlobReferenceBatchOperations: vi.fn() }))
 vi.mock('../services/blob-storage.ts', () => ({ getContentAddressedBlob: vi.fn() }))
 
-import { listAuthorizedCapabilities } from './capability.ts'
+import { authorizeCapability, listAuthorizedCapabilities } from './capability.ts'
 
 const record: CapabilityCatalogRecord = {
     capabilityId: 'tool-disabled',
@@ -16,7 +16,7 @@ const record: CapabilityCatalogRecord = {
     scopeOwnerId: 'org-1',
     storageOwnerId: 'org-1',
     manifestBlobHash: 'a'.repeat(64),
-    catalogVisibility: 'listed',
+    catalogExposure: 'standalone',
     status: 'disabled',
     ownerUserId: 'owner-1',
     createdAt: 1,
@@ -35,7 +35,7 @@ const meta: CapabilityMeta = {
     summary: 'Disabled for editing.',
     tags: [],
     manifestBlobHash: record.manifestBlobHash,
-    catalogVisibility: 'listed',
+    catalogExposure: 'standalone',
     status: 'disabled',
     updatedAt: 2,
 }
@@ -47,7 +47,8 @@ const internalMeta: CapabilityMeta = {
     name: 'Bundled Internal Skill',
     normalizedName: 'bundled internal skill',
     searchKey: 'skill#bundled internal skill#skill-internal',
-    catalogVisibility: 'internal',
+    parentModuleId: 'test-module',
+    catalogExposure: 'module-internal',
     status: 'active',
 }
 
@@ -122,5 +123,57 @@ describe('disabled Capability catalog visibility', () => {
 
         expect(result.items).toEqual([meta])
         expect(result.items.some(item => item.capabilityId === internalMeta.capabilityId)).toBe(false)
+    })
+
+    it('binds standalone catalog cursors to the query and package kind', async () => {
+        ;(globalThis as any).dynamoDBService.queryItems.mockImplementation(async ({
+            keyConditions,
+        }: {
+            keyConditions: { scopeAndOwner: string }
+        }) => keyConditions.scopeAndOwner === 'organization#org-1'
+            ? {
+                items: [meta],
+                lastEvaluatedKey: {
+                    scopeAndOwner: meta.scopeAndOwner,
+                    searchKey: meta.searchKey,
+                },
+            }
+            : { items: [] })
+
+        const first = await listAuthorizedCapabilities({
+            requester: { userId: 'owner-1', organizationIds: ['org-1'] },
+            query: 'disabled',
+            kinds: ['tool'],
+            limit: 1,
+        })
+
+        await expect(listAuthorizedCapabilities({
+            requester: { userId: 'owner-1', organizationIds: ['org-1'] },
+            query: 'different',
+            kinds: ['tool'],
+            cursor: first.cursor,
+        })).rejects.toThrow('INVALID_CURSOR')
+        await expect(listAuthorizedCapabilities({
+            requester: { userId: 'owner-1', organizationIds: ['org-1'] },
+            query: 'disabled',
+            kinds: ['skill'],
+            cursor: first.cursor,
+        })).rejects.toThrow('INVALID_CURSOR')
+    })
+
+    it('maps legacy listed records to standalone exposure', async () => {
+        const legacyListed = {
+            ...record,
+            catalogExposure: undefined,
+            catalogVisibility: 'listed',
+        }
+        ;(globalThis as any).dynamoDBService.getItem.mockResolvedValue(legacyListed)
+
+        await expect(authorizeCapability({
+            capabilityId: legacyListed.capabilityId,
+            requester: { userId: 'owner-1', organizationIds: ['org-1'] },
+        })).resolves.toEqual(expect.objectContaining({
+            catalogExposure: 'standalone',
+        }))
     })
 })

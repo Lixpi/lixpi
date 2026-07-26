@@ -4,10 +4,12 @@ import { resolve } from 'path'
 import { selection } from 'd3-selection'
 import { EditorState, Transaction } from 'prosemirror-state'
 import { EditorView, DecorationSet } from 'prosemirror-view'
+import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import {
     doc,
     p,
     promptInput,
+    promptReference,
     createEditorState as createBaseEditorState,
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
@@ -709,6 +711,28 @@ describe('createAiPromptInputNodeView — empty state tracking', () => {
         expect(nv.dom.getAttribute('data-empty')).toBe('false')
     })
 
+    it('sets data-empty="false" when content contains only a prompt reference', () => {
+        const testDoc = doc(promptInput(p(promptReference({ displayName: 'Shelby' }))))
+        const state = createBaseEditorState(testDoc)
+        const inputNode = state.doc.firstChild!
+        const mockView = { state, dispatch: vi.fn() } as unknown as EditorView
+        const factories = createMockControlFactories()
+        const nv = createAiPromptInputNodeView({
+            onSubmit: vi.fn(),
+            createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
+            createSubmitButton: factories.createSubmitButton,
+        })(inputNode, mockView, () => 0)
+
+        expect(nv.dom.getAttribute('data-empty')).toBe('false')
+        nv.destroy!()
+    })
+
     it('updates data-empty on node update', () => {
         const { nv } = createNodeViewForEmpty('Hello')
         expect(nv.dom.getAttribute('data-empty')).toBe('false')
@@ -1317,6 +1341,17 @@ describe('createAiPromptInputPlugin — placeholder decoration', () => {
         const found = decorations.find()
 
         expect(found.length).toBe(0)
+    })
+
+    it('does not add placeholder when input contains only a prompt reference', () => {
+        const { options } = createPluginOptions({ placeholderText: 'Type a prompt…' })
+        const plugin = createAiPromptInputPlugin(options)
+        const testDoc = doc(promptInput(p(promptReference({ displayName: 'Shelby' }))))
+        const state = createEditorStateWithPlugins(testDoc, [plugin])
+
+        const decorations = plugin.props.decorations!(state) as DecorationSet
+
+        expect(decorations.find()).toHaveLength(0)
     })
 
     it('uses the configured placeholderText', () => {

@@ -342,6 +342,7 @@ export abstract class BaseProvider {
             mediaBranchCandidateSnapshot: requestData.mediaBranchCandidateSnapshot,
             mediaBranchResolution: requestData.mediaBranchResolution,
             mediaBranchLineagePlan: requestData.mediaBranchLineagePlan,
+            promptReferenceAssetIds: requestData.promptReferenceAssetIds,
             canvasVisibleArea: requestData.canvasVisibleArea,
             capabilityReferences: requestData.capabilityReferences,
             capabilityInputs: requestData.capabilityInputs,
@@ -466,6 +467,7 @@ export abstract class BaseProvider {
                 }),
             mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
             mediaBranchResolution: state.mediaBranchResolution,
+            referenceAssetIds: state.promptReferenceAssetIds,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
             createdAt: Date.now(),
         })

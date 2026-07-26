@@ -13,10 +13,12 @@ import type {
 export function buildCandidateTranscriptContext(
     candidates: MediaBranchCandidateImage[],
     promptText: string,
-    activeTargetNodeId: string | undefined,
+    activeTargetCandidateId: string | undefined,
 ): string {
     const candidateLines = candidates.map((candidate) => [
-        `nodeId=${candidate.nodeId}`,
+        `candidateId=${candidate.candidateId}`,
+        candidate.nodeId ? `nodeId=${candidate.nodeId}` : undefined,
+        `assetId=${candidate.assetId}`,
         `kind=${candidate.mediaKind ?? 'image'}`,
         `roles=${candidate.roleHints.join(',')}`,
         candidate.branchId ? `branchId=${candidate.branchId}` : undefined,
@@ -27,7 +29,7 @@ export function buildCandidateTranscriptContext(
 
     return [
         `Current user prompt: ${promptText}`,
-        activeTargetNodeId ? `Active target nodeId: ${activeTargetNodeId}` : undefined,
+        activeTargetCandidateId ? `Active target candidateId: ${activeTargetCandidateId}` : undefined,
         'Candidate media labels:',
         ...candidateLines,
     ].filter((line): line is string => typeof line === 'string').join('\n')
@@ -40,21 +42,21 @@ export function buildCandidateTranscriptContext(
 export function restrictSnapshotToExplicitRefs(
     snapshot: MediaBranchCandidateSnapshot | undefined,
 ): MediaBranchCandidateSnapshot | undefined {
-    if (!snapshot?.explicitReferenceNodeIds?.length) return snapshot
+    if (!snapshot?.explicitReferenceCandidateIds?.length) return snapshot
 
-    const explicitNodeIds = new Set(snapshot.explicitReferenceNodeIds)
-    const candidates = snapshot.candidates.filter((candidate) => explicitNodeIds.has(candidate.nodeId))
+    const explicitCandidateIds = new Set(snapshot.explicitReferenceCandidateIds)
+    const candidates = snapshot.candidates.filter((candidate) => explicitCandidateIds.has(candidate.candidateId))
     if (candidates.length === snapshot.candidates.length) return snapshot
 
-    const activeTargetNodeId = snapshot.activeTargetNodeId && explicitNodeIds.has(snapshot.activeTargetNodeId)
-        ? snapshot.activeTargetNodeId
+    const activeTargetCandidateId = snapshot.activeTargetCandidateId && explicitCandidateIds.has(snapshot.activeTargetCandidateId)
+        ? snapshot.activeTargetCandidateId
         : undefined
     const restricted: MediaBranchCandidateSnapshot = {
         ...snapshot,
         candidates,
-        transcriptContext: buildCandidateTranscriptContext(candidates, snapshot.promptText, activeTargetNodeId),
+        transcriptContext: buildCandidateTranscriptContext(candidates, snapshot.promptText, activeTargetCandidateId),
     }
-    if (activeTargetNodeId) restricted.activeTargetNodeId = activeTargetNodeId
-    else delete restricted.activeTargetNodeId
+    if (activeTargetCandidateId) restricted.activeTargetCandidateId = activeTargetCandidateId
+    else delete restricted.activeTargetCandidateId
     return restricted
 }

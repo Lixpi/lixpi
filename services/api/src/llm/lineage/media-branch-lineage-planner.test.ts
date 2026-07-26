@@ -12,17 +12,20 @@ import { MediaBranchLineagePlanner } from './media-branch-lineage-planner.ts'
 
 const planner = new MediaBranchLineagePlanner()
 
-const candidate = (overrides: Partial<MediaBranchCandidateImage>): MediaBranchCandidateImage => ({
-    nodeId: 'node-1',
-    fileId: 'file-1',
-    workspaceId: 'workspace-1',
-    imageUrl: 'nats://workspace-workspace-1-files/file-1',
-    roleHints: [],
-    ancestorNodeIds: ['node-1'],
-    sourceContextNodeIds: ['node-1'],
-    visualEntitySummary: 'base image',
-    ...overrides,
-})
+const candidate = (overrides: Partial<MediaBranchCandidateImage>): MediaBranchCandidateImage => {
+    const nodeId = overrides.nodeId ?? 'node-1'
+    return {
+        candidateId: overrides.candidateId ?? nodeId,
+        nodeId,
+        assetId: overrides.assetId ?? `asset:${nodeId}`,
+        imageUrl: `nats-obj://assets/${nodeId}`,
+        roleHints: [],
+        ancestorNodeIds: [nodeId],
+        sourceContextNodeIds: [nodeId],
+        visualEntitySummary: 'base image',
+        ...overrides,
+    }
+}
 
 describe('MediaBranchLineagePlanner', () => {
     it('places a preassigned Capability output through the normal lineage topology without creating another Asset', () => {
@@ -41,9 +44,10 @@ describe('MediaBranchLineagePlanner', () => {
             }],
             mediaBranchCandidateSnapshot: {
                 resolverVersion: 'image-branch-vlm-v1',
-                threadId: 'thread-1',
+                conversationAssetId: 'thread-1',
                 regionNodeId: 'region-root',
                 promptText: 'create a character',
+                promptFingerprint: 'character-fp',
                 transcriptContext: '',
                 candidates: [candidate({
                     nodeId: 'source-character',
@@ -58,13 +62,13 @@ describe('MediaBranchLineagePlanner', () => {
                 resolverModelId: 'gpt-4.1',
                 mode: 'edit-active-branch',
                 operationKind: 'edit_existing',
-                targetImageNodeId: 'source-character',
+                targetCandidateId: 'source-character',
                 branchId: 'branch-character',
-                includeGeneratedNodeIds: [],
-                referenceImageNodeIds: ['source-character'],
+                includeGeneratedCandidateIds: [],
+                referenceCandidateIds: ['source-character'],
                 sourceContextNodeIds: ['source-character'],
-                styleReferenceNodeIds: [],
-                excludedNodeIds: [],
+                styleReferenceCandidateIds: [],
+                excludedCandidateIds: [],
                 visualEntitySummary: 'character',
                 entityTags: ['character'],
                 styleTags: [],
@@ -91,7 +95,7 @@ describe('MediaBranchLineagePlanner', () => {
     it('uses a generated lineage source when VLM target points to an eligible generated node', () => {
         const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             regionNodeId: 'region-root',
             promptText: 'stylize the portrait',
             promptFingerprint: 'prompt-fp',
@@ -103,7 +107,7 @@ describe('MediaBranchLineagePlanner', () => {
                     branchId: 'branch-person',
                     parentImageNodeId: 'parent-person',
                 }),
-                candidate({ nodeId: 'portrait-source', roleHints: ['base-context'], fileId: 'portrait-source' }),
+                candidate({ nodeId: 'portrait-source', roleHints: ['base-context'], assetId: 'portrait-source' }),
             ],
         }
 
@@ -114,14 +118,14 @@ describe('MediaBranchLineagePlanner', () => {
             resolverModelId: 'gpt-4.1',
             mode: 'edit-active-branch',
             operationKind: 'edit_existing',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'parent-person',
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'parent-person',
             branchId: 'branch-person',
-            includeGeneratedNodeIds: [],
-            referenceImageNodeIds: ['person-generated'],
+            includeGeneratedCandidateIds: [],
+            referenceCandidateIds: ['person-generated'],
             sourceContextNodeIds: ['parent-person'],
-            styleReferenceNodeIds: [],
-            excludedNodeIds: [],
+            styleReferenceCandidateIds: [],
+            excludedCandidateIds: [],
             visualEntitySummary: 'portrait',
             entityTags: ['person'],
             styleTags: [],
@@ -183,13 +187,14 @@ describe('MediaBranchLineagePlanner', () => {
     it('uses explicit placement from a non-standalone region node when no lineage source is matched', () => {
         const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             regionNodeId: 'region-1',
             promptText: 'create a landscape',
+            promptFingerprint: 'landscape-fp',
             transcriptContext: 'context',
             candidates: [
-                candidate({ nodeId: 'portrait-source', roleHints: ['base-context'], fileId: 'portrait-source' }),
-                candidate({ nodeId: 'duplicate-source', roleHints: ['base-context'], fileId: 'duplicate-source' }),
+                candidate({ nodeId: 'portrait-source', roleHints: ['base-context'], assetId: 'portrait-source' }),
+                candidate({ nodeId: 'duplicate-source', roleHints: ['base-context'], assetId: 'duplicate-source' }),
             ],
         }
 
@@ -224,13 +229,14 @@ describe('MediaBranchLineagePlanner', () => {
     it('constructs branch forks and uses them as lineage parents for multi-reasoning runs', () => {
         const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             regionNodeId: 'standalone:region-1',
             promptText: 'paint four skies',
+            promptFingerprint: 'skies-fp',
             transcriptContext: 'context',
             candidates: [
-                candidate({ nodeId: 'portrait-source', roleHints: ['base-context'], fileId: 'portrait-source' }),
-                candidate({ nodeId: 'landscape-source', roleHints: ['base-context'], fileId: 'landscape-source' }),
+                candidate({ nodeId: 'portrait-source', roleHints: ['base-context'], assetId: 'portrait-source' }),
+                candidate({ nodeId: 'landscape-source', roleHints: ['base-context'], assetId: 'landscape-source' }),
             ],
         }
 
@@ -241,13 +247,13 @@ describe('MediaBranchLineagePlanner', () => {
             resolverModelId: 'gpt-4.1',
             mode: 'context-only',
             operationKind: 'new_image',
-            targetImageNodeId: null,
+            targetCandidateId: null,
             branchId: null,
-            includeGeneratedNodeIds: [],
-            referenceImageNodeIds: ['portrait-source', 'portrait-source', 'landscape-source'],
+            includeGeneratedCandidateIds: [],
+            referenceCandidateIds: ['portrait-source', 'portrait-source', 'landscape-source'],
             sourceContextNodeIds: ['portrait-source'],
-            styleReferenceNodeIds: [],
-            excludedNodeIds: [],
+            styleReferenceCandidateIds: [],
+            excludedCandidateIds: [],
             visualEntitySummary: 'sky',
             entityTags: ['sky'],
             styleTags: ['painting'],
@@ -321,14 +327,15 @@ describe('MediaBranchLineagePlanner', () => {
     it('deduplicates candidate/reference nodes and records explicit reference provenance', () => {
         const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
-            threadId: 'thread-2',
+            conversationAssetId: 'thread-2',
             regionNodeId: 'standalone:region-2',
             promptText: 'compose a poster',
+            promptFingerprint: 'poster-fp',
             transcriptContext: 'context',
             candidates: [
-                candidate({ nodeId: 'candidate-1', roleHints: ['base-context'], fileId: 'candidate-1' }),
-                candidate({ nodeId: 'candidate-2', roleHints: ['base-context'], fileId: 'candidate-2' }),
-                candidate({ nodeId: 'candidate-1', roleHints: ['base-context'], fileId: 'candidate-1' }),
+                candidate({ nodeId: 'candidate-1', roleHints: ['base-context'], assetId: 'candidate-1' }),
+                candidate({ nodeId: 'candidate-2', roleHints: ['base-context'], assetId: 'candidate-2' }),
+                candidate({ nodeId: 'candidate-1', roleHints: ['base-context'], assetId: 'candidate-1' }),
             ],
         }
 
@@ -341,7 +348,7 @@ describe('MediaBranchLineagePlanner', () => {
                 ...(resolutionForCandidate(snapshot) as any),
             },
             workspaceContextSnapshot: {
-                threadId: 'thread-2',
+                conversationAssetId: 'thread-2',
                 workspaceId: 'workspace-1',
                 nodes: [
                     { nodeId: 'chip-1', isExplicitChip: true },
@@ -370,9 +377,10 @@ describe('MediaBranchLineagePlanner', () => {
     it('forks per media run when a single reasoning model fans out to multiple image models', () => {
         const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
-            threadId: 'thread-5',
+            conversationAssetId: 'thread-5',
             regionNodeId: 'standalone:region-5',
             promptText: 'two angry pigs',
+            promptFingerprint: 'pigs-fp',
             transcriptContext: 'context',
             candidates: [],
         }
@@ -418,13 +426,14 @@ describe('MediaBranchLineagePlanner', () => {
     it('falls back placement anchor to the first reference node for standalone regions without lineage source', () => {
         const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',
-            threadId: 'thread-6',
+            conversationAssetId: 'thread-6',
             regionNodeId: 'standalone:region-6',
             promptText: 'a tiny portrait',
+            promptFingerprint: 'portrait-fp',
             transcriptContext: 'context',
             candidates: [
-                candidate({ nodeId: 'reference-a', roleHints: ['base-context'], fileId: 'reference-a' }),
-                candidate({ nodeId: 'reference-b', roleHints: ['base-context'], fileId: 'reference-b' }),
+                candidate({ nodeId: 'reference-a', roleHints: ['base-context'], assetId: 'reference-a' }),
+                candidate({ nodeId: 'reference-b', roleHints: ['base-context'], assetId: 'reference-b' }),
             ],
         }
 
@@ -435,13 +444,13 @@ describe('MediaBranchLineagePlanner', () => {
             resolverModelId: 'gpt-4.1',
             mode: 'context-only',
             operationKind: 'new_image',
-            targetImageNodeId: null,
+            targetCandidateId: null,
             branchId: null,
-            includeGeneratedNodeIds: [],
-            referenceImageNodeIds: ['reference-b', 'reference-a'],
+            includeGeneratedCandidateIds: [],
+            referenceCandidateIds: ['reference-b', 'reference-a'],
             sourceContextNodeIds: [],
-            styleReferenceNodeIds: [],
-            excludedNodeIds: [],
+            styleReferenceCandidateIds: [],
+            excludedCandidateIds: [],
             visualEntitySummary: 'portrait',
             visualStyleSummary: 'minimal style',
             entityTags: ['portrait'],
@@ -479,14 +488,14 @@ describe('MediaBranchLineagePlanner', () => {
                 resolverModelId: 'gpt-4.1',
                 mode: 'edit-active-branch',
                 operationKind: 'edit_existing',
-                targetImageNodeId: 'resolver-selected-media',
-                parentImageNodeId: 'resolver-selected-parent',
+                targetCandidateId: 'resolver-selected-media',
+                parentCandidateId: 'resolver-selected-parent',
                 branchId: 'resolver-selected-branch',
-                includeGeneratedNodeIds: [],
-                referenceImageNodeIds: ['resolver-selected-media'],
+                includeGeneratedCandidateIds: [],
+                referenceCandidateIds: ['resolver-selected-media'],
                 sourceContextNodeIds: [],
-                styleReferenceNodeIds: [],
-                excludedNodeIds: [],
+                styleReferenceCandidateIds: [],
+                excludedCandidateIds: [],
                 visualEntitySummary: 'ignored topology candidate',
                 entityTags: [],
                 styleTags: [],
@@ -523,6 +532,63 @@ describe('MediaBranchLineagePlanner', () => {
             }),
         ]))
     })
+
+    it('records Asset-only references without inventing canvas lineage or placement anchors', () => {
+        const snapshot: MediaBranchCandidateSnapshot = {
+            resolverVersion: 'image-branch-vlm-v1',
+            conversationAssetId: 'conversation-asset-only',
+            regionNodeId: 'standalone:conversation-asset-only',
+            promptText: 'use the library portrait',
+            promptFingerprint: 'asset-only-fp',
+            transcriptContext: '',
+            candidates: [{
+                candidateId: 'asset:portrait-library',
+                assetId: 'portrait-library',
+                imageUrl: 'nats-obj://assets/portrait-library',
+                roleHints: ['base-context'],
+                ancestorNodeIds: [],
+                sourceContextNodeIds: [],
+            }],
+        }
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-asset-only',
+            reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1'],
+            referenceAssetIds: ['document-library'],
+            mediaBranchCandidateSnapshot: snapshot,
+            mediaBranchResolution: {
+                resolverKind: 'structured-vlm',
+                resolverVersion: 'image-branch-vlm-v1',
+                resolverModelProvider: 'OpenAI',
+                resolverModelId: 'gpt-4.1',
+                mode: 'context-only',
+                operationKind: 'new_image',
+                targetCandidateId: null,
+                branchId: 'branch-asset-only',
+                includeGeneratedCandidateIds: [],
+                referenceCandidateIds: ['asset:portrait-library'],
+                sourceContextNodeIds: [],
+                styleReferenceCandidateIds: [],
+                excludedCandidateIds: [],
+                entityTags: [],
+                styleTags: [],
+                confidence: 1,
+                rationale: 'authorized library reference',
+                decisions: [],
+            },
+            createdAt: 1700000008000,
+        })
+
+        expect(plan.referenceAssetIds).toEqual(['document-library', 'portrait-library'])
+        expect(plan.referenceNodeIds).toEqual([])
+        expect(plan.sourceNodeId).toBeUndefined()
+        expect(plan.placementAnchorNodeId).toBeUndefined()
+        expect(plan.runAssignments[0]).toMatchObject({
+            referenceAssetIds: ['document-library', 'portrait-library'],
+            referenceNodeIds: [],
+        })
+        expect(plan.runAssignments[0]?.parentMediaNodeId).toBeUndefined()
+    })
 })
 
 const resolutionForCandidate = (snapshot: MediaBranchCandidateSnapshot) => {
@@ -534,13 +600,13 @@ const resolutionForCandidate = (snapshot: MediaBranchCandidateSnapshot) => {
         resolverModelId: 'gpt-4.1',
         mode: 'context-only',
         operationKind: 'new_image',
-        targetImageNodeId: firstCandidate?.nodeId,
+        targetCandidateId: firstCandidate?.candidateId ?? null,
         branchId: firstCandidate?.branchId ?? null,
-        includeGeneratedNodeIds: [],
-        referenceImageNodeIds: ['candidate-1', 'candidate-1', 'candidate-2'],
+        includeGeneratedCandidateIds: [],
+        referenceCandidateIds: ['candidate-1', 'candidate-1', 'candidate-2'],
         sourceContextNodeIds: ['chip-1', 'chip-3'],
-        styleReferenceNodeIds: [],
-        excludedNodeIds: [],
+        styleReferenceCandidateIds: [],
+        excludedCandidateIds: [],
         visualEntitySummary: 'poster',
         entityTags: ['poster'],
         styleTags: ['graphic'],

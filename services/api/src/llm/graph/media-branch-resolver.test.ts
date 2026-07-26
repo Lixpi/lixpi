@@ -49,9 +49,9 @@ function getImageUrls(messages: ChatMessage[]): string[] {
 
 const baseCandidates: NonNullable<ProviderState['mediaBranchCandidateSnapshot']>['candidates'] = [
     {
+        candidateId: 'portrait-source',
         nodeId: 'portrait-source',
-        fileId: 'portrait-file',
-        workspaceId: 'workspace-1',
+        assetId: 'portrait-file',
         imageUrl: portraitUrl,
         roleHints: ['base-context'],
         ancestorNodeIds: ['portrait-source'],
@@ -60,9 +60,9 @@ const baseCandidates: NonNullable<ProviderState['mediaBranchCandidateSnapshot']>
         entityTags: ['person'],
     },
     {
+        candidateId: 'landscape-source',
         nodeId: 'landscape-source',
-        fileId: 'landscape-file',
-        workspaceId: 'workspace-1',
+        assetId: 'landscape-file',
         imageUrl: landscapeUrl,
         roleHints: ['base-context'],
         ancestorNodeIds: ['landscape-source'],
@@ -71,9 +71,9 @@ const baseCandidates: NonNullable<ProviderState['mediaBranchCandidateSnapshot']>
         styleTags: ['post-impressionist'],
     },
     {
+        candidateId: 'person-generated',
         nodeId: 'person-generated',
-        fileId: 'person-file',
-        workspaceId: 'workspace-1',
+        assetId: 'person-file',
         imageUrl: personUrl,
         roleHints: ['generated-variant', 'branch-leaf'],
         branchId: 'branch-person',
@@ -87,9 +87,9 @@ const baseCandidates: NonNullable<ProviderState['mediaBranchCandidateSnapshot']>
 ]
 
 const goatCandidate: NonNullable<ProviderState['mediaBranchCandidateSnapshot']>['candidates'][number] = {
+    candidateId: 'goat-generated',
     nodeId: 'goat-generated',
-    fileId: 'goat-file',
-    workspaceId: 'workspace-1',
+    assetId: 'goat-file',
     imageUrl: goatUrl,
     roleHints: ['generated-variant', 'branch-leaf', 'active-target'],
     branchId: 'branch-goat',
@@ -103,9 +103,9 @@ const goatCandidate: NonNullable<ProviderState['mediaBranchCandidateSnapshot']>[
 // reference cap (which replaced the old hardcoded .slice(0, 3)).
 function buildCapReferenceCandidates(): NonNullable<ProviderState['mediaBranchCandidateSnapshot']>['candidates'] {
     return Array.from({ length: 5 }, (_, i) => ({
+        candidateId: `cap-src-${i}`,
         nodeId: `cap-src-${i}`,
-        fileId: `cap-file-${i}`,
-        workspaceId: 'workspace-1',
+        assetId: `cap-file-${i}`,
         imageUrl: `nats-obj://workspace-workspace-1-files/cap-file-${i}`,
         roleHints: ['base-context'],
         ancestorNodeIds: [`cap-src-${i}`],
@@ -117,7 +117,7 @@ function buildCapReferenceCandidates(): NonNullable<ProviderState['mediaBranchCa
 
 function createState(overrides: {
     promptText?: string
-    activeTargetNodeId?: string
+    activeTargetCandidateId?: string
     candidates?: NonNullable<ProviderState['mediaBranchCandidateSnapshot']>['candidates']
 } = {}): ProviderState {
     const promptText = overrides.promptText ?? 'draw a goat in the style of that landscape painting'
@@ -168,9 +168,9 @@ function createState(overrides: {
         imagePromptRetryCount: 0,
         mediaBranchCandidateSnapshot: {
             resolverVersion: 'image-branch-vlm-v1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             regionNodeId: 'region-1',
-            ...(overrides.activeTargetNodeId ? { activeTargetNodeId: overrides.activeTargetNodeId } : {}),
+            ...(overrides.activeTargetCandidateId ? { activeTargetCandidateId: overrides.activeTargetCandidateId } : {}),
             promptText,
             promptFingerprint: 'prompt-test',
             transcriptContext: 'candidate labels',
@@ -195,14 +195,14 @@ function createParsedResolution(overrides: Partial<Record<string, unknown>> = {}
     return {
         mode: 'context-only',
         operationKind: 'new_image',
-        targetImageNodeId: '',
-        parentImageNodeId: '',
+        targetCandidateId: '',
+        parentCandidateId: '',
         branchId: '',
-        includeGeneratedNodeIds: [],
-        referenceImageNodeIds: [],
+        includeGeneratedCandidateIds: [],
+        referenceCandidateIds: [],
         sourceContextNodeIds: [],
-        styleReferenceNodeIds: [],
-        excludedNodeIds: [],
+        styleReferenceCandidateIds: [],
+        excludedCandidateIds: [],
         visualEntitySummary: '',
         visualStyleSummary: '',
         entityTags: [],
@@ -263,14 +263,14 @@ describe('resolveMediaBranch', () => {
         const { deps, publisher, callVlm } = createDeps({
             mode: 'context-only',
             operationKind: 'new_image',
-            targetImageNodeId: '',
-            parentImageNodeId: '',
+            targetCandidateId: '',
+            parentCandidateId: '',
             branchId: '',
-            includeGeneratedNodeIds: [],
-            referenceImageNodeIds: ['portrait-source', 'landscape-source'],
+            includeGeneratedCandidateIds: [],
+            referenceCandidateIds: ['portrait-source', 'landscape-source'],
             sourceContextNodeIds: ['portrait-source', 'landscape-source'],
-            styleReferenceNodeIds: ['landscape-source'],
-            excludedNodeIds: ['person-generated'],
+            styleReferenceCandidateIds: ['landscape-source'],
+            excludedCandidateIds: ['person-generated'],
             visualEntitySummary: 'new goat',
             visualStyleSummary: 'landscape painting style',
             entityTags: ['goat'],
@@ -290,7 +290,7 @@ describe('resolveMediaBranch', () => {
         expect(callVlm).toHaveBeenCalledOnce()
         expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
         expect(update.mediaBranchResolution?.resolverKind).toBe('structured-vlm')
-        expect(update.mediaBranchResolution?.referenceImageNodeIds).toEqual(['portrait-source', 'landscape-source'])
+        expect(update.mediaBranchResolution?.referenceCandidateIds).toEqual(['portrait-source', 'landscape-source'])
         expect(getImageUrls(callVlm.mock.calls[0]?.[0].userMessages ?? [])).toEqual([
             resolvedTinyPngUrl,
             resolvedTinyPngUrl,
@@ -307,13 +307,13 @@ describe('resolveMediaBranch', () => {
         const { deps, publisher } = createDeps(createParsedResolution({
             mode: 'fresh-branch',
             operationKind: 'new_image',
-            targetImageNodeId: '',
-            parentImageNodeId: '',
+            targetCandidateId: '',
+            parentCandidateId: '',
             branchId: 'branch-invented-by-vlm',
-            referenceImageNodeIds: ['portrait-source', 'landscape-source', 'person-generated'],
+            referenceCandidateIds: ['portrait-source', 'landscape-source', 'person-generated'],
             sourceContextNodeIds: ['portrait-source', 'landscape-source'],
-            styleReferenceNodeIds: ['landscape-source'],
-            excludedNodeIds: ['goat-generated'],
+            styleReferenceCandidateIds: ['landscape-source'],
+            excludedCandidateIds: ['goat-generated'],
             visualEntitySummary: 'orange painted portrait of the same man',
             visualStyleSummary: 'orange monochrome portrait variant',
             entityTags: ['person'],
@@ -329,7 +329,7 @@ describe('resolveMediaBranch', () => {
 
         const update = await resolveMediaBranch(createState({
             promptText: 'make that guy that used landscape as a source orange monochromatic',
-            activeTargetNodeId: 'goat-generated',
+            activeTargetCandidateId: 'goat-generated',
             candidates: [...baseCandidates, goatCandidate],
         }), deps)
         const resolution = update.mediaBranchResolution
@@ -338,11 +338,11 @@ describe('resolveMediaBranch', () => {
         expect(resolution).toMatchObject({
             mode: 'edit-active-branch',
             operationKind: 'style_transfer',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
             branchId: 'branch-person',
-            referenceImageNodeIds: ['portrait-source', 'landscape-source', 'person-generated'],
-            excludedNodeIds: ['goat-generated'],
+            referenceCandidateIds: ['portrait-source', 'landscape-source', 'person-generated'],
+            excludedCandidateIds: ['goat-generated'],
         })
         expect(resolution?.rationale).toContain('Resolver guard continued generated branch')
         expect(getImageUrls(update.messages ?? []).filter((url) => url === resolvedTinyPngUrl)).toHaveLength(3)
@@ -355,9 +355,9 @@ describe('resolveMediaBranch', () => {
             mode: 'fresh-branch',
             operationKind: 'new_image',
             branchId: 'branch-new-subject',
-            referenceImageNodeIds: ['person-generated'],
+            referenceCandidateIds: ['person-generated'],
             sourceContextNodeIds: [],
-            styleReferenceNodeIds: ['person-generated'],
+            styleReferenceCandidateIds: ['person-generated'],
             visualEntitySummary: 'new ceramic horse',
             visualStyleSummary: 'style borrowed from a generated portrait',
             entityTags: ['horse'],
@@ -374,8 +374,8 @@ describe('resolveMediaBranch', () => {
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'fresh-branch',
             operationKind: 'new_image',
-            targetImageNodeId: null,
-            parentImageNodeId: undefined,
+            targetCandidateId: null,
+            parentCandidateId: undefined,
             branchId: 'branch-new-subject',
         })
     })
@@ -384,10 +384,10 @@ describe('resolveMediaBranch', () => {
         const { deps } = createDeps(createParsedResolution({
             mode: 'edit-active-branch',
             operationKind: 'edit_existing',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
             branchId: 'branch-invented-by-vlm',
-            referenceImageNodeIds: ['person-generated'],
+            referenceCandidateIds: ['person-generated'],
             sourceContextNodeIds: ['portrait-source'],
             visualEntitySummary: 'more artistic portrait of the man',
             entityTags: ['person'],
@@ -398,13 +398,13 @@ describe('resolveMediaBranch', () => {
 
         const update = await resolveMediaBranch(createState({
             promptText: 'make it very artistic',
-            activeTargetNodeId: 'person-generated',
+            activeTargetCandidateId: 'person-generated',
         }), deps)
 
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'edit-active-branch',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
             branchId: 'branch-person',
         })
     })
@@ -414,10 +414,10 @@ describe('resolveMediaBranch', () => {
             mode: 'fresh-branch',
             operationKind: 'new_image',
             branchId: 'branch-goat-request',
-            referenceImageNodeIds: ['landscape-source'],
+            referenceCandidateIds: ['landscape-source'],
             sourceContextNodeIds: ['landscape-source'],
-            styleReferenceNodeIds: ['landscape-source'],
-            excludedNodeIds: ['person-generated'],
+            styleReferenceCandidateIds: ['landscape-source'],
+            excludedCandidateIds: ['person-generated'],
             visualEntitySummary: 'new goat',
             visualStyleSummary: 'landscape painting style',
             entityTags: ['goat'],
@@ -430,16 +430,16 @@ describe('resolveMediaBranch', () => {
 
         const update = await resolveMediaBranch(createState({
             promptText: 'draw a goat in the style of that landscape painting',
-            activeTargetNodeId: 'person-generated',
+            activeTargetCandidateId: 'person-generated',
         }), deps)
 
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'fresh-branch',
             operationKind: 'new_image',
-            targetImageNodeId: null,
+            targetCandidateId: null,
             branchId: 'branch-goat-request',
-            referenceImageNodeIds: ['landscape-source'],
-            excludedNodeIds: ['person-generated'],
+            referenceCandidateIds: ['landscape-source'],
+            excludedCandidateIds: ['person-generated'],
         })
     })
 
@@ -447,33 +447,33 @@ describe('resolveMediaBranch', () => {
         const { deps, publisher } = createDeps(createParsedResolution({
             mode: 'edit-active-branch',
             operationKind: 'edit_existing',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
-            referenceImageNodeIds: ['person-generated'],
-            excludedNodeIds: ['person-generated'],
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
+            referenceCandidateIds: ['person-generated'],
+            excludedCandidateIds: ['person-generated'],
             decisions: [
                 { nodeId: 'person-generated', role: 'target', reason: 'target' },
             ],
         }))
 
-        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('excluded its own targetImageNodeId')
+        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('excluded its own targetCandidateId')
         expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
         expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
     })
 
-    it('fails when the VLM target is not included in referenceImageNodeIds', async () => {
+    it('fails when the VLM target is not included in referenceCandidateIds', async () => {
         const { deps, publisher } = createDeps(createParsedResolution({
             mode: 'edit-active-branch',
             operationKind: 'edit_existing',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
-            referenceImageNodeIds: ['portrait-source'],
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
+            referenceCandidateIds: ['portrait-source'],
             decisions: [
                 { nodeId: 'person-generated', role: 'target', reason: 'target' },
             ],
         }))
 
-        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('targetImageNodeId is not in referenceImageNodeIds')
+        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('targetCandidateId is not in referenceCandidateIds')
         expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
         expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
     })
@@ -482,14 +482,14 @@ describe('resolveMediaBranch', () => {
         const { deps, publisher } = createDeps({
             mode: 'ambiguous',
             operationKind: 'new_image',
-            targetImageNodeId: '',
-            parentImageNodeId: '',
+            targetCandidateId: '',
+            parentCandidateId: '',
             branchId: '',
-            includeGeneratedNodeIds: [],
-            referenceImageNodeIds: [],
+            includeGeneratedCandidateIds: [],
+            referenceCandidateIds: [],
             sourceContextNodeIds: [],
-            styleReferenceNodeIds: [],
-            excludedNodeIds: [],
+            styleReferenceCandidateIds: [],
+            excludedCandidateIds: [],
             visualEntitySummary: '',
             visualStyleSummary: '',
             entityTags: [],
@@ -509,9 +509,9 @@ describe('resolveMediaBranch', () => {
         const { deps, publisher } = createDeps(createParsedResolution({
             mode: 'edit-active-branch',
             operationKind: 'edit_existing',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
-            referenceImageNodeIds: ['person-generated'],
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
+            referenceCandidateIds: ['person-generated'],
             sourceContextNodeIds: ['portrait-source'],
             decisions: [
                 { nodeId: 'person-generated', role: 'target', reason: 'animate this generated portrait' },
@@ -520,13 +520,13 @@ describe('resolveMediaBranch', () => {
 
         const update = await resolveMediaBranch(createVideoState({
             promptText: 'animate that portrait, slow zoom in with ambient sound',
-            activeTargetNodeId: 'person-generated',
+            activeTargetCandidateId: 'person-generated',
         }), deps)
 
         // The resolver must run off videoModelVersion alone (no image model selected)
         // and feed the chosen target identity into VEO as the first frame.
         expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
-        expect(update.mediaBranchResolution?.targetImageNodeId).toBe('person-generated')
+        expect(update.mediaBranchResolution?.targetCandidateId).toBe('person-generated')
         expect(update.videoFirstFrameImage).toBe(resolvedTinyPngUrl)
         expect(update.videoReferenceImages).toBeUndefined()
     })
@@ -536,9 +536,9 @@ describe('resolveMediaBranch', () => {
         const { deps, publisher } = createDeps(createParsedResolution({
             mode: 'context-only',
             operationKind: 'new_image',
-            referenceImageNodeIds: ['landscape-source'],
+            referenceCandidateIds: ['landscape-source'],
             sourceContextNodeIds: ['landscape-source'],
-            styleReferenceNodeIds: ['landscape-source'],
+            styleReferenceCandidateIds: ['landscape-source'],
             decisions: [
                 { nodeId: 'landscape-source', role: 'style-reference', reason: 'style and mood reference' },
             ],
@@ -549,7 +549,7 @@ describe('resolveMediaBranch', () => {
         }), deps)
 
         expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
-        expect(update.mediaBranchResolution?.targetImageNodeId).toBeNull()
+        expect(update.mediaBranchResolution?.targetCandidateId).toBeNull()
         expect(update.videoReferenceImages).toEqual([resolvedTinyPngUrl])
         expect(update.videoFirstFrameImage).toBeUndefined()
     })
@@ -561,9 +561,9 @@ describe('resolveMediaBranch', () => {
         const { deps } = createDeps(createParsedResolution({
             mode: 'context-only',
             operationKind: 'new_image',
-            referenceImageNodeIds: refNodeIds,
+            referenceCandidateIds: refNodeIds,
             sourceContextNodeIds: refNodeIds,
-            styleReferenceNodeIds: refNodeIds,
+            styleReferenceCandidateIds: refNodeIds,
             decisions: refNodeIds.map((nodeId) => ({ nodeId, role: 'style-reference', reason: 'cap test reference' })),
         }))
 
@@ -581,9 +581,9 @@ describe('resolveMediaBranch', () => {
         const { deps } = createDeps(createParsedResolution({
             mode: 'context-only',
             operationKind: 'new_image',
-            referenceImageNodeIds: refNodeIds,
+            referenceCandidateIds: refNodeIds,
             sourceContextNodeIds: refNodeIds,
-            styleReferenceNodeIds: refNodeIds,
+            styleReferenceCandidateIds: refNodeIds,
             decisions: refNodeIds.map((nodeId) => ({ nodeId, role: 'style-reference', reason: 'cap test reference' })),
         }))
 
@@ -679,7 +679,7 @@ describe('resolveMediaBranch', () => {
         const { deps, publisher } = createDeps(createParsedResolution({
             mode: 'fresh-branch',
             operationKind: 'new_image',
-            referenceImageNodeIds: ['person-generated'],
+            referenceCandidateIds: ['person-generated'],
             sourceContextNodeIds: ['portrait-source'],
             decisions: [],
         }))
@@ -690,8 +690,8 @@ describe('resolveMediaBranch', () => {
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'edit-active-branch',
             operationKind: 'style_transfer',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
             branchId: 'branch-person',
         })
     })
@@ -700,9 +700,9 @@ describe('resolveMediaBranch', () => {
         const { deps } = createDeps(createParsedResolution({
             mode: 'fresh-branch',
             operationKind: 'new_image',
-            referenceImageNodeIds: ['person-generated'],
+            referenceCandidateIds: ['person-generated'],
             sourceContextNodeIds: [],
-            styleReferenceNodeIds: ['person-generated'],
+            styleReferenceCandidateIds: ['person-generated'],
             decisions: [],
         }))
 
@@ -710,7 +710,7 @@ describe('resolveMediaBranch', () => {
 
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'fresh-branch',
-            targetImageNodeId: null,
+            targetCandidateId: null,
             operationKind: 'new_image',
         })
     })
@@ -720,9 +720,9 @@ describe('resolveMediaBranch', () => {
         const { deps } = createDeps(createParsedResolution({
             mode: 'edit-active-branch',
             operationKind: 'edit_existing',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
-            referenceImageNodeIds: ['landscape-source', 'person-generated'],
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
+            referenceCandidateIds: ['landscape-source', 'person-generated'],
             sourceContextNodeIds: ['landscape-source'],
             decisions: [
                 { nodeId: 'person-generated', role: 'target', reason: 'target image should win first-frame order' },
@@ -738,11 +738,11 @@ describe('resolveMediaBranch', () => {
     it('normalizes candidate node-id arrays by trimming whitespace and deduplicating', async () => {
         const { deps, publisher } = createDeps({
             ...createParsedResolution({
-                referenceImageNodeIds: ['  portrait-source', 'landscape-source ', 'portrait-source', '', 'landscape-source'],
+                referenceCandidateIds: ['  portrait-source', 'landscape-source ', 'portrait-source', '', 'landscape-source'],
                 sourceContextNodeIds: [' landscape-source', 'landscape-source  ', ''],
-                styleReferenceNodeIds: ['person-generated', ' person-generated', '', 'person-generated'],
-                excludedNodeIds: ['', 'person-generated', 'person-generated', ''],
-                includeGeneratedNodeIds: ['goat-generated', 'goat-generated', ''],
+                styleReferenceCandidateIds: ['person-generated', ' person-generated', '', 'person-generated'],
+                excludedCandidateIds: ['', 'person-generated', 'person-generated', ''],
+                includeGeneratedCandidateIds: ['goat-generated', 'goat-generated', ''],
             }),
         })
 
@@ -750,11 +750,11 @@ describe('resolveMediaBranch', () => {
 
         expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
         expect(update.mediaBranchResolution).toMatchObject({
-            referenceImageNodeIds: ['portrait-source', 'landscape-source'],
+            referenceCandidateIds: ['portrait-source', 'landscape-source'],
             sourceContextNodeIds: ['landscape-source'],
-            styleReferenceNodeIds: ['person-generated'],
-            excludedNodeIds: ['person-generated'],
-            includeGeneratedNodeIds: ['goat-generated'],
+            styleReferenceCandidateIds: ['person-generated'],
+            excludedCandidateIds: ['person-generated'],
+            includeGeneratedCandidateIds: ['goat-generated'],
         })
     })
 
@@ -762,10 +762,10 @@ describe('resolveMediaBranch', () => {
         const { deps } = createDeps(createParsedResolution({
             mode: 'context-only',
             operationKind: 'new_image',
-            referenceImageNodeIds: ['portrait-source'],
+            referenceCandidateIds: ['portrait-source'],
             sourceContextNodeIds: ['portrait-source'],
-            styleReferenceNodeIds: [],
-            excludedNodeIds: [],
+            styleReferenceCandidateIds: [],
+            excludedCandidateIds: [],
             decisions: [
                 { nodeId: 'missing-node', role: 'style-reference', reason: 'should be ignored' },
                 { nodeId: 'portrait-source', role: 'base-context', reason: 'portrait is the intended source' },
@@ -776,23 +776,23 @@ describe('resolveMediaBranch', () => {
 
         expect(update.mediaBranchResolution?.decisions).toEqual([
             {
-                nodeId: 'portrait-source',
+                candidateId: 'portrait-source',
                 role: 'base-context',
                 reason: 'portrait is the intended source',
             },
         ])
     })
 
-    it('restricts candidates to explicitReferenceNodeIds so the VLM never sees non-explicit media', async () => {
+    it('restricts candidates to explicitReferenceCandidateIds so the VLM never sees non-explicit media', async () => {
         const { deps, callVlm } = createDeps(createParsedResolution({
-            referenceImageNodeIds: ['landscape-source'],
+            referenceCandidateIds: ['landscape-source'],
             sourceContextNodeIds: ['landscape-source'],
         }))
 
         const state = createState()
         state.mediaBranchCandidateSnapshot = {
             ...state.mediaBranchCandidateSnapshot!,
-            explicitReferenceNodeIds: ['landscape-source'],
+            explicitReferenceCandidateIds: ['landscape-source'],
         }
         const update = await resolveMediaBranch(state, deps)
 
@@ -804,16 +804,16 @@ describe('resolveMediaBranch', () => {
         expect(metadataText).toContain('landscape-source')
         expect(metadataText).not.toContain('portrait-source')
         expect(metadataText).not.toContain('person-generated')
-        expect(update.mediaBranchResolution?.referenceImageNodeIds).toEqual(['landscape-source'])
+        expect(update.mediaBranchResolution?.referenceCandidateIds).toEqual(['landscape-source'])
     })
 
-    it('resolves a fresh branch when explicitReferenceNodeIds exclude every candidate', async () => {
+    it('resolves a fresh branch when explicitReferenceCandidateIds exclude every candidate', async () => {
         const { deps, callVlm, publisher } = createDeps(createParsedResolution())
 
         const state = createState()
         state.mediaBranchCandidateSnapshot = {
             ...state.mediaBranchCandidateSnapshot!,
-            explicitReferenceNodeIds: ['not-a-candidate'],
+            explicitReferenceCandidateIds: ['not-a-candidate'],
         }
         const update = await resolveMediaBranch(state, deps)
 

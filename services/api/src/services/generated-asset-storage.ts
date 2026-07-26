@@ -10,6 +10,7 @@ import {
     type MediaBranchCandidateSnapshot,
     type MediaBranchLineagePlan,
     type MediaGenerationRunMeta,
+    type MediaRunLineageAssignment,
     type WorkspaceContextSnapshot,
 } from '@lixpi/constants'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
@@ -35,6 +36,24 @@ const isRetryableCanvasAttachmentConflict = (error: unknown): boolean => {
         || (error instanceof Error && error.message === 'STALE_CANVAS_STATE')
 }
 
+export function collectGeneratedAssetSourceIds(
+    assignment: MediaRunLineageAssignment,
+    mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot,
+    workspaceContextSnapshot?: WorkspaceContextSnapshot,
+): string[] {
+    const assetIdByNodeId = new Map<string, string>()
+    for (const candidate of mediaBranchCandidateSnapshot?.candidates ?? []) {
+        if (candidate.nodeId) assetIdByNodeId.set(candidate.nodeId, candidate.assetId)
+    }
+    for (const contextNode of workspaceContextSnapshot?.nodes ?? []) {
+        if (contextNode.assetId) assetIdByNodeId.set(contextNode.nodeId, contextNode.assetId)
+    }
+    return [...new Set([
+        ...assignment.referenceAssetIds,
+        ...assignment.sourceContextNodeIds.flatMap((nodeId) => assetIdByNodeId.get(nodeId) ?? []),
+    ])]
+}
+
 export const ensurePendingGeneratedAssets = async ({
     lineagePlan,
     workspaceId,
@@ -54,7 +73,7 @@ export const ensurePendingGeneratedAssets = async ({
 }): Promise<void> => {
     const assetIdByNodeId = new Map<string, string>()
     for (const candidate of mediaBranchCandidateSnapshot?.candidates ?? []) {
-        if (candidate.assetId) assetIdByNodeId.set(candidate.nodeId, candidate.assetId)
+        if (candidate.nodeId) assetIdByNodeId.set(candidate.nodeId, candidate.assetId)
     }
     for (const contextNode of workspaceContextSnapshot?.nodes ?? []) {
         if (contextNode.assetId) assetIdByNodeId.set(contextNode.nodeId, contextNode.assetId)
@@ -64,10 +83,11 @@ export const ensurePendingGeneratedAssets = async ({
         const parentAssetId = assignment.parentMediaNodeId
             ? assetIdByNodeId.get(assignment.parentMediaNodeId)
             : undefined
-        const sourceAssetIds = [...new Set([
-            ...assignment.referenceNodeIds,
-            ...assignment.sourceContextNodeIds,
-        ].flatMap((nodeId) => assetIdByNodeId.get(nodeId) ?? []))]
+        const sourceAssetIds = collectGeneratedAssetSourceIds(
+            assignment,
+            mediaBranchCandidateSnapshot,
+            workspaceContextSnapshot,
+        )
         const lineage = {
             sourceConversationAssetId: conversationAssetId,
             ...(parentAssetId ? { parentAssetId } : {}),

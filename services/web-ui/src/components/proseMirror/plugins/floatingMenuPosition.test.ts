@@ -24,6 +24,19 @@ describe('floating menu positioning', () => {
         )).toEqual({ left: 200, top: 474, placement: 'above' })
     })
 
+    it('retains an above placement while the menu shrinks so its bottom edge stays anchored', () => {
+        const position = resolveFloatingMenuScreenPosition(
+            { left: 200, right: 210, top: 500, bottom: 520 },
+            { width: 300, height: 80 },
+            { width: 1000, height: 800 },
+            6,
+            { preferredPlacement: 'above' },
+        )
+
+        expect(position).toEqual({ left: 200, top: 414, placement: 'above' })
+        expect(position.top + 80).toBe(494)
+    })
+
     it('clamps oversized horizontal and vertical coordinates to the viewport', () => {
         expect(resolveFloatingMenuScreenPosition(
             { left: 950, right: 960, top: 10, bottom: 30 },

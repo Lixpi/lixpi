@@ -97,6 +97,7 @@ async function saveCatalog(data: any, operation: 'create' | 'update' | 'save'): 
             storageOwnerId: data.storageOwnerId,
             summary: data.summary ?? '',
             tags: data.tags ?? [],
+            catalogExposure: 'standalone',
             expectedManifestBlobHash: data.expectedManifestBlobHash,
             grants: data.grants,
             requester,

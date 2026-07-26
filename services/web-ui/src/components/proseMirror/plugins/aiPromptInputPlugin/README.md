@@ -8,7 +8,7 @@
 2. Cmd/Ctrl+Enter, the injected submit button, or `SUBMIT_AI_PROMPT_META` starts submission.
 3. `extractContentJSON()` returns the input node children as ProseMirror JSON.
 4. `getInputAttrs()` reads reasoning, image, video, and multi-model attrs from the input node.
-5. `onSubmit()` receives `{ contentJSON, capabilityReferences, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }` (where `imageOptions.aiImageModels` / `videoOptions.aiVideoModels` are ordered arrays). Each section's array is collapsed to its first model when its multi flag is off. Media options include API-authored configuration matrix group selections when image or video multi-model mode is active. When the host provides a `CapabilityCatalogClient`, the per-instance async `@` picker inserts Tool/Skill atoms into the draft and `capabilityReferences` preserves their stable IDs in first-occurrence order. An empty `@` query ranks the newest locally selected metadata before deterministic server recommendations, deduplicates by capability ID, and remains capped at 20 rows.
+5. `onSubmit()` receives `{ contentJSON, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }` (where `imageOptions.aiImageModels` / `videoOptions.aiVideoModels` are ordered arrays). Each section's array is collapsed to its first model when its multi flag is off. Media options include API-authored configuration matrix group selections when image or video multi-model mode is active. `contentJSON` retains typed `prompt_reference` atoms; the browser does not derive or send a second reference list.
 6. Keyboard and button submission clear the input to one empty paragraph and place the cursor at the start.
 7. The host routes the payload. The canvas-wide host creates a standalone hidden AI chat thread for the submitted user message and projects its pending branch marker.
 
@@ -17,6 +17,8 @@ The plugin boundary is the submit callback surface. Run cancellation belongs to 
 ## Runtime Wiring
 
 `ProseMirrorEditor` adds this plugin for `documentType: 'aiPromptInput'`.
+
+When the host provides a `PromptReferenceCatalogClient`, the editor also mounts the per-instance prompt-reference pickers. `@` starts in Media and can switch to Capabilities, standalone Tools, or standalone Skills. `/` searches Capability modules only. Empty queries receive API-ordered, reauthorized recents before broader results; typed queries are debounced, cursor-paginated, and protected against stale responses.
 
 ```ts
 createAiPromptInputPlugin({
@@ -167,7 +169,7 @@ Decoration output:
 
 The visible placeholder is rendered by `.ai-prompt-input-content::before`. The NodeView also writes the placeholder text to `.ai-prompt-input-content` so injected context trays can occupy wrapper space without moving placeholder ownership away from the editable area.
 
-The NodeView mirrors empty state with `data-empty="true"` or `data-empty="false"` on the wrapper.
+The NodeView mirrors empty state with `data-empty="true"` or `data-empty="false"` on the wrapper. Inline `prompt_reference` atoms count as content even when no text is present, so reference-only prompts suppress the placeholder and enable the active controls.
 
 ## NodeView Lifecycle
 

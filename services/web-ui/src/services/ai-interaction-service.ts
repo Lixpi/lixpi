@@ -505,7 +505,6 @@ export default class AiInteractionService {
     }
 
     async sendChatMessage({
-        messages,
         aiReasoningModels,
         useMultipleReasoningModels,
         useMultipleImageModels,
@@ -520,7 +519,6 @@ export default class AiInteractionService {
         videoConfigGroups,
         regeneration,
         videoSourceForExtension,
-        capabilityReferences,
         mediaBranchCandidateSnapshot,
         workspaceContextSnapshot,
         canvasVisibleArea,
@@ -543,13 +541,8 @@ export default class AiInteractionService {
             token: await AuthService.getTokenSilently(),
             workspaceId: this.workspaceId,
             conversationAssetId: this.conversationAssetId,
-            messages,
             aiReasoningModels: reasoningModelIds,
             organizationId: this.organizationId
-        }
-
-        if (capabilityReferences?.length) {
-            payload.capabilityReferences = capabilityReferences
         }
 
         if (mediaBranchCandidateSnapshot) {
@@ -618,12 +611,10 @@ export default class AiInteractionService {
             workspaceId: this.workspaceId,
             conversationAssetId: this.conversationAssetId,
             reasoningModelCount: reasoningModelIds.length,
-            messageCount: messages.length,
             imageModelCount: imageModelIds.length,
             videoModelCount: videoModelIds.length,
             hasImageModel: imageModelIds.length > 0,
             hasVideoModel: videoModelIds.length > 0,
-            capabilityReferenceCount: capabilityReferences?.length ?? 0,
             mediaBranchCandidateCount: mediaBranchCandidateSnapshot?.candidates.length ?? 0,
             workspaceContextNodeCount: workspaceContextSnapshot?.nodes.length ?? 0,
         })

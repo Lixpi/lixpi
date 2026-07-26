@@ -6,6 +6,7 @@ import {
     type CapabilityResourceRef,
     type CapabilityResourceRole,
 } from '@lixpi/constants'
+import type { CapabilityPackageSeedContext } from '@lixpi/capability-system/backend'
 
 import {
     seedBuiltInCapability,
@@ -61,17 +62,19 @@ const exampleSource: ResourceSource = {
 }
 
 export async function seedCharacterCreatorTool(
-    allowedActions: ReadonlySet<string>,
+    context: CapabilityPackageSeedContext,
     storageOwnerId = 'system',
 ): Promise<void> {
     const inputSchema = await storeToolResource(storageOwnerId, inputSchemaSource)
     const outputSchema = await storeToolResource(storageOwnerId, outputSchemaSource)
     const example = await storeToolResource(storageOwnerId, exampleSource)
     await seedBuiltInCapability({
-        allowedActions,
+        allowedActions: context.allowedActions,
         manifest: buildCharacterCreatorManifest({ inputSchema, outputSchema, example }),
         summary: 'Creates or designs characters through a structured multi-view character-sheet workflow using the selected image-model matrix.',
         tags: ['character', 'image', 'turnaround', 'global'],
+        parentModuleId: context.parentModuleId,
+        catalogExposure: context.catalogExposure,
         storageOwnerId,
     })
 }

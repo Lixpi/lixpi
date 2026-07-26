@@ -53,6 +53,7 @@ const generationRun = {
         branchId: 'branch-1',
         branchForkNodeId: 'branch-fork-1',
         lineageParentNodeId: 'branch-fork-1',
+        referenceAssetIds: [],
         referenceNodeIds: [],
         sourceContextNodeIds: [],
         promptText: 'animate the subject',

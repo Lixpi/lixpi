@@ -145,9 +145,61 @@ export const nodes = {
         toDOM() { return brDOM },
     } as NodeSpec,
 
+    prompt_reference: {
+        inline: true,
+        atom: true,
+        selectable: false,
+        group: 'inline',
+        attrs: {
+            referenceType: { default: 'skill' },
+            assetId: { default: '' },
+            nodeId: { default: '' },
+            mediaKind: { default: '' },
+            moduleId: { default: '' },
+            capabilityId: { default: '' },
+            displayName: { default: '' },
+        },
+        parseDOM: [{
+            tag: 'span[data-prompt-reference-type]',
+            getAttrs(dom: HTMLElement) {
+                return {
+                    referenceType: dom.getAttribute('data-prompt-reference-type') ?? 'skill',
+                    assetId: dom.getAttribute('data-asset-id') ?? '',
+                    nodeId: dom.getAttribute('data-node-id') ?? '',
+                    mediaKind: dom.getAttribute('data-media-kind') ?? '',
+                    moduleId: dom.getAttribute('data-module-id') ?? '',
+                    capabilityId: dom.getAttribute('data-capability-id') ?? '',
+                    displayName: dom.getAttribute('data-prompt-reference-display-name') ?? '',
+                }
+            },
+        }],
+        toDOM(node) {
+            const referenceType = ['media', 'capability-module', 'tool', 'skill'].includes(node.attrs.referenceType)
+                ? node.attrs.referenceType
+                : 'skill'
+            return ['span', {
+                'data-prompt-reference-type': referenceType,
+                'data-asset-id': node.attrs.assetId,
+                'data-node-id': node.attrs.nodeId,
+                'data-media-kind': node.attrs.mediaKind,
+                'data-module-id': node.attrs.moduleId,
+                'data-capability-id': node.attrs.capabilityId,
+                'data-prompt-reference-display-name': node.attrs.displayName,
+                class: `prompt-reference-chip prompt-reference-chip-${referenceType}`,
+            },
+                ['span', { class: 'prompt-reference-chip-name' }, node.attrs.displayName],
+            ]
+        },
+    } as NodeSpec,
+
+    // Read-only compatibility for persisted drafts and conversation snapshots
+    // written before prompt_reference replaced the Tool/Skill-only atom. New
+    // editors never create this node type, but keeping it in schema v1 prevents
+    // old documents from becoming unparseable.
     capability_reference: {
         inline: true,
         atom: true,
+        selectable: false,
         group: 'inline',
         attrs: {
             capabilityId: { default: '' },
@@ -157,10 +209,9 @@ export const nodes = {
         parseDOM: [{
             tag: 'span[data-capability-id]',
             getAttrs(dom: HTMLElement) {
-                const kind = dom.getAttribute('data-capability-kind')
                 return {
                     capabilityId: dom.getAttribute('data-capability-id') ?? '',
-                    kind: kind === 'tool' ? 'tool' : 'skill',
+                    kind: dom.getAttribute('data-capability-kind') === 'tool' ? 'tool' : 'skill',
                     displayName: dom.getAttribute('data-capability-display-name') ?? '',
                 }
             },
@@ -171,10 +222,9 @@ export const nodes = {
                 'data-capability-id': node.attrs.capabilityId,
                 'data-capability-kind': kind,
                 'data-capability-display-name': node.attrs.displayName,
-                class: `capability-reference-chip capability-reference-chip-${kind}`,
+                class: `prompt-reference-chip prompt-reference-chip-${kind}`,
             },
-                ['span', { class: 'capability-reference-chip-prefix' }, '@'],
-                ['span', { class: 'capability-reference-chip-name' }, node.attrs.displayName],
+                ['span', { class: 'prompt-reference-chip-name' }, node.attrs.displayName],
             ]
         },
     } as NodeSpec,

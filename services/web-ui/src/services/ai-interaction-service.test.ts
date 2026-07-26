@@ -418,7 +418,6 @@ describe('AiInteractionService', () => {
 
     it('collapses model selections when multiple-mode is disabled', async () => {
         await service.sendChatMessage({
-            messages: [{ role: 'user', content: 'paint' }],
             aiReasoningModels: ['reasoner-a', 'reasoner-b'],
             useMultipleReasoningModels: false,
             aiImageModels: ['image-a', 'image-b'],
@@ -441,12 +440,11 @@ describe('AiInteractionService', () => {
 
     it('sends media matrix payload when multi-model mode is enabled', async () => {
         await service.sendChatMessage({
-            messages: [{ role: 'user', content: 'film' }],
             aiReasoningModels: ['reasoner-a', 'reasoner-b'],
             useMultipleReasoningModels: true,
             aiImageModels: ['image-a', 'image-b'],
             imageSize: '768x768',
-            imageConfigGroups: [{ id: 'size', configs: [] }],
+            imageConfigGroups: [{ groupId: 'size', modelIds: [], values: {} }],
             useMultipleImageModels: true,
             aiVideoModels: ['video-a', 'video-b'],
             videoAspectRatio: '16:9',
@@ -454,8 +452,7 @@ describe('AiInteractionService', () => {
             videoDuration: '6',
             videoSourceForExtension: 's3://video-source',
             useMultipleVideoModels: true,
-            videoConfigGroups: [{ id: 'quality', configs: [] }],
-            capabilityReferences: [{ capabilityId: 'tool-1', kind: 'tool' }],
+            videoConfigGroups: [{ groupId: 'quality', modelIds: [], values: {} }],
             mediaBranchCandidateSnapshot: {
                 resolverVersion: 'image-branch-v1',
                 conversationAssetId,
@@ -472,7 +469,7 @@ describe('AiInteractionService', () => {
                 promptText: 'film',
                 nodes: [],
             },
-            canvasVisibleArea: { x: 5, y: 6 },
+            canvasVisibleArea: { width: 5, height: 6 },
         })
 
         const payload = natsPublishMock.mock.calls.at(-1)?.[1] as Record<string, unknown>
@@ -486,7 +483,6 @@ describe('AiInteractionService', () => {
                 workspaceId,
                 nodes: [],
             },
-            capabilityReferences: [{ capabilityId: 'tool-1', kind: 'tool' }],
             mediaGenerationRequest: {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: 'matrix-request-id',
@@ -495,25 +491,26 @@ describe('AiInteractionService', () => {
                 videoModelIds: ['video-a', 'video-b'],
                 imageOptions: {
                     imageSize: '768x768',
-                    configGroups: [{ id: 'size', configs: [] }],
+                    configGroups: [{ groupId: 'size', modelIds: [], values: {} }],
                 },
                 videoOptions: {
                     aspectRatio: '16:9',
                     resolution: '720p',
                     duration: '6',
                     sourceForExtension: 's3://video-source',
-                    configGroups: [{ id: 'quality', configs: [] }],
+                    configGroups: [{ groupId: 'quality', modelIds: [], values: {} }],
                 },
             },
-            canvasVisibleArea: { x: 5, y: 6 },
+            canvasVisibleArea: { width: 5, height: 6 },
             organizationId,
         })
+        expect(payload).not.toHaveProperty('capabilityReferences')
+        expect(payload).not.toHaveProperty('messages')
         expect(payload.token).toBe('auth-token')
     })
 
     it('excludes a disabled scalar video model from image matrix planning', async () => {
         await service.sendChatMessage({
-            messages: [{ role: 'user', content: 'paint' }],
             aiReasoningModels: ['reasoner-a'],
             useMultipleReasoningModels: false,
             aiImageModels: ['image-a', 'image-b'],

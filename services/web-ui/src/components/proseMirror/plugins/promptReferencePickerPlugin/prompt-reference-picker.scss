@@ -1,0 +1,207 @@
+@import '$src/sass/_transitions.scss';
+
+.prompt-reference-picker {
+    position: absolute;
+    z-index: 150;
+    display: flex;
+    flex-direction: column;
+    width: min(440px, calc(100vw - 24px));
+    max-height: min(390px, calc(100vh - 16px));
+    padding: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(26, 39, 68, 0.12);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 20px 60px rgba(26, 39, 68, 0.18), 0 1px 0 rgba(255, 255, 255, 0.75) inset;
+    color: #1a2744;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
+.prompt-reference-picker-header {
+    flex: 0 0 auto;
+    padding: 6px 6px 8px;
+    background: rgba(255, 255, 255, 0.96);
+}
+
+.prompt-reference-picker-switch {
+    display: block;
+    width: 100%;
+    height: 32px;
+}
+
+.prompt-reference-picker-list {
+    display: grid;
+    flex: 1 1 auto;
+    gap: 4px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.prompt-reference-picker-item {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    min-height: 48px;
+    padding: 6px 9px;
+    border: 0;
+    border-radius: 9px;
+    background: rgba(95, 143, 207, 0.05);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: hoverTransition(background-color);
+
+    &:hover,
+    &.is-selected {
+        background: rgba(95, 143, 207, 0.12);
+    }
+}
+
+.prompt-reference-picker-thumbnail,
+.prompt-reference-picker-glyph {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+}
+
+.prompt-reference-picker-thumbnail {
+    object-fit: cover;
+}
+
+.prompt-reference-picker-glyph {
+    display: grid;
+    place-items: center;
+    background: rgba(95, 143, 207, 0.12);
+    color: rgba(61, 100, 156, 0.92);
+    font-size: 13px;
+    font-weight: 850;
+}
+
+.prompt-reference-picker-glyph-capability-module {
+    background: rgba(229, 143, 78, 0.14);
+    color: #a55324;
+}
+
+.prompt-reference-picker-glyph-skill {
+    background: rgba(115, 87, 184, 0.12);
+    color: #7357b8;
+}
+
+.prompt-reference-picker-copy {
+    display: grid;
+    min-width: 0;
+
+    strong,
+    small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    strong {
+        font-size: 13px;
+        font-weight: 800;
+        line-height: 1.3;
+    }
+
+    small {
+        color: rgba(26, 39, 68, 0.58);
+        font-size: 11px;
+        line-height: 1.35;
+    }
+}
+
+.prompt-reference-picker-badge {
+    color: rgba(61, 100, 156, 0.9);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.prompt-reference-picker-badge-capability-module {
+    color: #a55324;
+}
+
+.prompt-reference-picker-badge-skill {
+    color: #7357b8;
+}
+
+.prompt-reference-picker-status,
+.prompt-reference-picker-load-more {
+    padding: 12px;
+    color: rgba(26, 39, 68, 0.58);
+    font-size: 12px;
+    text-align: center;
+}
+
+.prompt-reference-picker-load-more {
+    width: 100%;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    cursor: pointer;
+    transition: hoverTransition(background-color);
+
+    &:hover {
+        background: rgba(95, 143, 207, 0.09);
+    }
+}
+
+.prompt-reference-chip {
+    display: inline-flex;
+    gap: 0;
+    align-items: baseline;
+    margin-inline: 1px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #3d649c;
+    font-size: 0.9375em;
+    line-height: 1;
+    vertical-align: baseline;
+    white-space: nowrap;
+}
+
+.prompt-reference-chip-content {
+    display: inline-flex;
+    gap: 2px;
+    align-items: baseline;
+}
+
+.prompt-reference-chip-capability-module {
+    color: #a55324;
+}
+
+.prompt-reference-chip-tool {
+    color: #39766f;
+}
+
+.prompt-reference-chip-skill {
+    color: #6d4fb2;
+}
+
+.prompt-reference-chip-icon {
+    display: inline-flex;
+    flex: 0 0 14px;
+    align-self: center;
+    width: 14px;
+    height: 14px;
+}
+
+.prompt-reference-chip-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.prompt-reference-chip-name {
+    font-weight: 500;
+    line-height: 1;
+}

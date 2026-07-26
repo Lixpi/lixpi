@@ -18,7 +18,14 @@ export type FloatingMenuViewport = {
 export type FloatingMenuScreenPosition = {
     left: number
     top: number
-    placement: 'above' | 'below'
+    placement: FloatingMenuPlacement
+}
+
+export type FloatingMenuPlacement = 'above' | 'below'
+
+export type FloatingMenuPositionOptions = {
+    viewportMargin?: number
+    preferredPlacement?: FloatingMenuPlacement
 }
 
 export function resolveFloatingMenuScreenPosition(
@@ -26,13 +33,16 @@ export function resolveFloatingMenuScreenPosition(
     menu: FloatingMenuSize,
     viewport: FloatingMenuViewport,
     gap: number,
-    viewportMargin = 8,
+    options: FloatingMenuPositionOptions = {},
 ): FloatingMenuScreenPosition {
+    const { viewportMargin = 8, preferredPlacement } = options
     const spaceAbove = anchor.top - viewportMargin
     const spaceBelow = viewport.height - anchor.bottom - viewportMargin
-    const placement = spaceBelow < menu.height + gap && spaceAbove > spaceBelow
-        ? 'above'
-        : 'below'
+    const placement = preferredPlacement ?? (
+        spaceBelow < menu.height + gap && spaceAbove > spaceBelow
+            ? 'above'
+            : 'below'
+    )
     const desiredTop = placement === 'above'
         ? anchor.top - menu.height - gap
         : anchor.bottom + gap

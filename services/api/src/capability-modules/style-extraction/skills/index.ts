@@ -1,9 +1,9 @@
 'use strict'
 
-import type { SkillModule } from '@lixpi/capability-system/backend'
-import { createStyleExtractionAxesSkillModule } from './axes/index.ts'
-import { createStyleExtractionRouterSkillModule } from './router/index.ts'
-import { createStyleExtractionSynthesisSkillModule } from './synthesis/index.ts'
+import type { CapabilitySkillPackageInstaller } from '@lixpi/capability-system/backend'
+import { createStyleExtractionAxesSkillPackage } from './axes/index.ts'
+import { createStyleExtractionRouterSkillPackage } from './router/index.ts'
+import { createStyleExtractionSynthesisSkillPackage } from './synthesis/index.ts'
 
 export {
     STYLE_EXTRACTION_AXES_RESOURCE_ID,
@@ -18,10 +18,10 @@ export {
     STYLE_EXTRACTION_SYNTHESIS_SKILL_ID,
 } from './synthesis/index.ts'
 
-export function createStyleExtractionSkillModules(): SkillModule[] {
+export function createStyleExtractionSkillPackages(): CapabilitySkillPackageInstaller[] {
     return [
-        createStyleExtractionRouterSkillModule(),
-        createStyleExtractionAxesSkillModule(),
-        createStyleExtractionSynthesisSkillModule(),
+        createStyleExtractionRouterSkillPackage(),
+        createStyleExtractionAxesSkillPackage(),
+        createStyleExtractionSynthesisSkillPackage(),
     ]
 }

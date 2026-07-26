@@ -89,10 +89,30 @@ beforeEach(() => {
 })
 
 describe('createAiPromptComposer', () => {
-    it('forwards the capability catalog to the editor plugin boundary', () => {
-        const capabilityCatalog = { search: vi.fn() }
-        createComposer({ capabilityCatalog })
-        expect(getLastEditor().options.capabilityCatalog).toBe(capabilityCatalog)
+    it('forwards the prompt-reference catalog to the editor plugin boundary', () => {
+        const promptReferenceCatalog = {
+            list: vi.fn(),
+            listModules: vi.fn(),
+            getModule: vi.fn(),
+        }
+        createComposer({ promptReferenceCatalog })
+        expect(getLastEditor().options.promptReferenceCatalog).toBe(promptReferenceCatalog)
+    })
+
+    it('forwards the prompt-reference preview renderer to the editor plugin boundary', () => {
+        const promptReferencePreviewRenderer = {
+            getNode: vi.fn(),
+            environment: {
+                getDocuments: vi.fn(() => []),
+                getThreads: vi.fn(() => []),
+                getApiBaseUrl: vi.fn(() => ''),
+                getAuthToken: vi.fn(async () => ''),
+            },
+        }
+
+        createComposer({ promptReferencePreviewRenderer })
+
+        expect(getLastEditor().options.promptReferencePreviewRenderer).toBe(promptReferencePreviewRenderer)
     })
 
     it('builds host and mount elements with expected base and custom classes', () => {

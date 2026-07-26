@@ -36,6 +36,7 @@ export type MediaBranchLineagePlannerInput = {
     }>
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
     mediaBranchResolution?: MediaBranchVlmResolution
+    referenceAssetIds?: string[]
     workspaceContextSnapshot?: WorkspaceContextSnapshot
     regenerationTarget?: {
         branchId: string
@@ -108,7 +109,14 @@ export class MediaBranchLineagePlanner {
                 ?? `branch-${input.generationRequestId}`)
         const promptText = snapshot?.promptText ?? input.workspaceContextSnapshot?.promptText ?? ''
         const promptFingerprint = snapshot?.promptFingerprint
-        const referenceNodeIds = this.getReferenceNodeIds(referenceResolution, snapshot)
+        const referenceCandidates = this.getReferenceCandidates(referenceResolution, snapshot)
+        const referenceAssetIds = Array.from(new Set([
+            ...(input.referenceAssetIds ?? []),
+            ...referenceCandidates.map(candidate => candidate.assetId),
+        ]))
+        const referenceNodeIds = Array.from(new Set(
+            referenceCandidates.flatMap(candidate => candidate.nodeId ? [candidate.nodeId] : []),
+        ))
         const providedReferenceNodeIds = this.getProvidedReferenceNodeIds(input.workspaceContextSnapshot)
         const sourceContextNodeIds = referenceResolution?.sourceContextNodeIds ?? []
         const createdAt = input.createdAt ?? Date.now()
@@ -152,6 +160,7 @@ export class MediaBranchLineagePlanner {
             branchId,
             promptText,
             promptFingerprint,
+            referenceAssetIds,
             referenceNodeIds,
             sourceContextNodeIds,
             sourceDecision,
@@ -173,6 +182,7 @@ export class MediaBranchLineagePlanner {
             ...(promptFingerprint ? { promptFingerprint } : {}),
             ...(sourceDecision.sourceNodeId ? { sourceNodeId: sourceDecision.sourceNodeId } : {}),
             ...(sourceDecision.placementAnchorNodeId ? { placementAnchorNodeId: sourceDecision.placementAnchorNodeId } : {}),
+            referenceAssetIds,
             referenceNodeIds,
             sourceContextNodeIds,
             ...(input.regenerationTarget ? { regenerationTarget: input.regenerationTarget } : {}),
@@ -229,12 +239,17 @@ export class MediaBranchLineagePlanner {
         return reasoningRuns.length > 1 || reasoningRuns.some(run => run.mediaRunCount > 1)
     }
 
-    private getReferenceNodeIds(
+    private getReferenceCandidates(
         resolution: MediaBranchVlmResolution | undefined,
         snapshot: MediaBranchCandidateSnapshot | undefined,
-    ): string[] {
-        const nodeIds = resolution?.referenceImageNodeIds ?? snapshot?.candidates.map(candidate => candidate.nodeId) ?? []
-        return Array.from(new Set(nodeIds.filter(Boolean)))
+    ): MediaBranchCandidateImage[] {
+        const candidates = snapshot?.candidates ?? []
+        if (!resolution) return candidates
+        const candidateById = new Map(candidates.map(candidate => [candidate.candidateId ?? candidate.nodeId ?? `asset:${candidate.assetId}`, candidate]))
+        return (resolution.referenceCandidateIds ?? []).flatMap(candidateId => {
+            const candidate = candidateById.get(candidateId)
+            return candidate ? [candidate] : []
+        })
     }
 
     private getProvidedReferenceNodeIds(snapshot: WorkspaceContextSnapshot | undefined): string[] {
@@ -278,17 +293,18 @@ export class MediaBranchLineagePlanner {
         resolution: MediaBranchVlmResolution,
         snapshot: MediaBranchCandidateSnapshot | undefined,
     ): string | undefined {
-        const candidateByNodeId = new Map<string, MediaBranchCandidateImage>(
-            snapshot?.candidates.map(candidate => [candidate.nodeId, candidate]) ?? [],
+        const candidateById = new Map<string, MediaBranchCandidateImage>(
+            snapshot?.candidates.map(candidate => [candidate.candidateId ?? candidate.nodeId ?? `asset:${candidate.assetId}`, candidate]) ?? [],
         )
-        for (const nodeId of [resolution.targetImageNodeId, resolution.parentImageNodeId]) {
-            if (!nodeId) continue
-            const candidate = candidateByNodeId.get(nodeId)
+        for (const candidateId of [resolution.targetCandidateId, resolution.parentCandidateId]) {
+            if (!candidateId) continue
+            const candidate = candidateById.get(candidateId)
             if (!this.isGeneratedLineageCandidate(candidate)) continue
+            if (!candidate.nodeId) continue
             const continuesSelectedBranch = resolution.mode === 'edit-active-branch'
                 || resolution.operationKind === 'edit_existing'
                 || Boolean(resolution.branchId && candidate?.branchId === resolution.branchId)
-            if (continuesSelectedBranch) return nodeId
+            if (continuesSelectedBranch) return candidate.nodeId
         }
         return undefined
     }
@@ -404,6 +420,7 @@ export class MediaBranchLineagePlanner {
         branchId: string
         promptText: string
         promptFingerprint?: string
+        referenceAssetIds: string[]
         referenceNodeIds: string[]
         sourceContextNodeIds: string[]
         sourceDecision: SourceDecision
@@ -458,6 +475,7 @@ export class MediaBranchLineagePlanner {
                     ? { branchLineNodeId: args.regenerationLineageParentNodeId }
                     : {}),
                 ...(lineageParentNodeId ? { lineageParentNodeId } : {}),
+                referenceAssetIds: args.referenceAssetIds,
                 referenceNodeIds: args.referenceNodeIds,
                 sourceContextNodeIds: args.sourceContextNodeIds,
                 ...(args.input.mediaBranchResolution?.operationKind

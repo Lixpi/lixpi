@@ -2,6 +2,7 @@
 
 import type NatsService from '@lixpi/nats-service'
 import type { ProviderName } from '@lixpi/constants'
+import type { CapabilityModuleCatalog } from '@lixpi/capability-system/backend'
 
 import { ProviderRegistry } from './providers/provider-registry.ts'
 import { OpenAIProvider } from './providers/openai-provider.ts'
@@ -23,6 +24,7 @@ export type LlmModule = {
     stopMediaGenerationMatrix: (params: { workspaceId: string; aiChatThreadId: string; generationRequestId?: string }) => Promise<void>
     shutdown: () => Promise<void>
     seedCapabilities: () => Promise<void>
+    capabilityModuleCatalog: CapabilityModuleCatalog
     // Currently empty — gateway invokes in-process. For a future llm-workers split,
     // a worker process registers these on its own NATS connection.
     getSubscriptions: () => any[]
@@ -66,6 +68,7 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
     const mediaGenerationMatrixOrchestrator = new MediaGenerationMatrixOrchestrator(registry, deps.natsService)
 
     return {
+        capabilityModuleCatalog: capabilityModules,
         process: (instanceKey, providerName, requestData) =>
             registry.process(instanceKey, providerName, requestData),
         processMediaGenerationMatrix: (requestData) =>

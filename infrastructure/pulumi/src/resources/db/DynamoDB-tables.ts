@@ -152,6 +152,12 @@ export const getTableDefinitions = () => ({
         'assetId',
         [{ name: 'updatedAt', rangeKey: 'updatedAt', projectionType: 'ALL' }],
     ),
+    assetsSearchTable: table(
+        'ASSETS_SEARCH',
+        [{ name: 'scopeAndOwner', type: 'S' }, { name: 'searchKey', type: 'S' }],
+        'scopeAndOwner',
+        'searchKey',
+    ),
     assetsAccessListTable: table(
         'ASSETS_ACCESS_LIST',
         [{ name: 'assetId', type: 'S' }, { name: 'principalId', type: 'S' }],
@@ -163,6 +169,17 @@ export const getTableDefinitions = () => ({
         [{ name: 'assetId', type: 'S' }, { name: 'referenceKey', type: 'S' }],
         'assetId',
         'referenceKey',
+    ),
+    promptReferenceRecentsTable: table(
+        'PROMPT_REFERENCE_RECENTS',
+        [
+            { name: 'userId', type: 'S' },
+            { name: 'referenceKey', type: 'S' },
+            { name: 'updatedAt', type: 'N' },
+        ],
+        'userId',
+        'referenceKey',
+        [{ name: 'updatedAt', rangeKey: 'updatedAt', projectionType: 'ALL' }],
     ),
     blobsTable: table('BLOBS', [{ name: 'blobKey', type: 'S' }], 'blobKey'),
     blobReferencesTable: table(

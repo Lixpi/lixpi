@@ -44,13 +44,14 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
         capabilityUsagePrompt: 'Use rough watercolor paper and visible brush texture.',
         mediaBranchCandidateSnapshot: {
             resolverVersion: 'image-branch-vlm-v1',
-            threadId: 'thread-1',
+            conversationAssetId: 'thread-1',
             regionNodeId: 'region-1',
             promptText: 'animate that portrait',
             promptFingerprint: 'prompt-test',
             transcriptContext: 'candidate labels',
             candidates: [
                 {
+                    candidateId: 'person-generated',
                     nodeId: 'person-generated',
                     assetId: 'person-file',
                     imageUrl: 'data:image/png;base64,branch-inline',
@@ -61,6 +62,7 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
                     visualEntitySummary: 'painted portrait of the man',
                 },
                 {
+                    candidateId: 'goat-generated',
                     nodeId: 'goat-generated',
                     assetId: 'goat-file',
                     imageUrl: 'data:image/png;base64,goat-inline',
@@ -79,14 +81,14 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
             resolverModelId: 'claude-sonnet-4-6',
             mode: 'edit-active-branch',
             operationKind: 'edit_existing',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
             branchId: 'branch-person',
-            includeGeneratedNodeIds: ['person-generated'],
-            referenceImageNodeIds: ['person-generated'],
+            includeGeneratedCandidateIds: ['person-generated'],
+            referenceCandidateIds: ['person-generated'],
             sourceContextNodeIds: ['portrait-source'],
-            styleReferenceNodeIds: [],
-            excludedNodeIds: ['goat-generated'],
+            styleReferenceCandidateIds: [],
+            excludedCandidateIds: ['goat-generated'],
             visualEntitySummary: 'same portrait animated',
             visualStyleSummary: 'watercolor portrait',
             entityTags: ['person'],
@@ -94,8 +96,8 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
             confidence: 0.94,
             rationale: 'Animate the portrait branch and exclude the goat branch.',
             decisions: [
-                { nodeId: 'person-generated', role: 'target', reason: 'selected generated portrait branch' },
-                { nodeId: 'goat-generated', role: 'excluded', reason: 'different subject and branch' },
+                { candidateId: 'person-generated', role: 'target', reason: 'selected generated portrait branch' },
+                { candidateId: 'goat-generated', role: 'excluded', reason: 'different subject and branch' },
             ],
         },
         ...overrides,
@@ -228,8 +230,8 @@ describe('buildVideoGenerationTrace', () => {
         expect(trace?.resolver).toMatchObject({
             mode: 'edit-active-branch',
             operationKind: 'edit_existing',
-            targetImageNodeId: 'person-generated',
-            parentImageNodeId: 'person-generated',
+            targetCandidateId: 'person-generated',
+            parentCandidateId: 'person-generated',
             branchId: 'branch-person',
         })
     })

@@ -549,6 +549,7 @@ const generatedByLineage = (assignment: MediaRunLineageAssignment) => ({
     ...(assignment.branchForkNodeId ? { branchForkNodeId: assignment.branchForkNodeId } : {}),
     ...(assignment.branchLineNodeId ? { branchLineNodeId: assignment.branchLineNodeId } : {}),
     ...(assignment.lineageParentNodeId ? { lineageParentNodeId: assignment.lineageParentNodeId } : {}),
+    referenceAssetIds: assignment.referenceAssetIds,
     referenceImageNodeIds: assignment.referenceNodeIds,
     sourceContextNodeIds: assignment.sourceContextNodeIds,
     ...(assignment.operationKind ? { operationKind: assignment.operationKind } : {}),
@@ -569,6 +570,7 @@ const markerNodesFromAssignment = (
         branchId: assignment.branchId,
         promptText,
         ...(assignment.promptFingerprint ? { promptFingerprint: assignment.promptFingerprint } : {}),
+        referenceAssetIds: assignment.referenceAssetIds,
         referenceNodeIds: assignment.referenceNodeIds,
         sourceContextNodeIds: assignment.sourceContextNodeIds,
         ...(assignment.branchOriginNodeId ? {

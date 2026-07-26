@@ -275,8 +275,8 @@ function mergeCandidate(existing: MediaBranchCandidateImage, incoming: MediaBran
 
 function addCandidate(candidatesById: Map<string, MediaBranchCandidateImage>, candidate: MediaBranchCandidateImage): void {
     if (!candidate.imageUrl) return
-    const existing = candidatesById.get(candidate.nodeId)
-    candidatesById.set(candidate.nodeId, existing ? mergeCandidate(existing, candidate) : candidate)
+    const existing = candidatesById.get(candidate.candidateId)
+    candidatesById.set(candidate.candidateId, existing ? mergeCandidate(existing, candidate) : candidate)
 }
 
 function addActiveTargetHint(roleHints: MediaBranchCandidateRoleHint[], imageNodeId: string, activeTargetNodeId: string | undefined): MediaBranchCandidateRoleHint[] {
@@ -290,6 +290,7 @@ function createBaseContextCandidate(media: MediaCanvasNode, activeTargetNodeId: 
     if (generatedBy) roleHints.push('generated-variant')
 
     return {
+        candidateId: `node:${media.nodeId}`,
         nodeId: media.nodeId,
         assetId: media.assetId,
         imageUrl: getMediaUrl(media),
@@ -327,6 +328,7 @@ function createGeneratedCandidate(args: {
     roleHints.push(args.leafNodeIds.has(args.media.nodeId) ? 'branch-leaf' : 'branch-ancestor')
 
     return {
+        candidateId: `node:${args.media.nodeId}`,
         nodeId: args.media.nodeId,
         assetId: args.media.assetId,
         imageUrl: getMediaUrl(args.media),
@@ -347,9 +349,11 @@ function createGeneratedCandidate(args: {
     }
 }
 
-function buildTranscriptContext(candidates: MediaBranchCandidateImage[], prompt: string, activeTargetNodeId: string | undefined): string {
+function buildTranscriptContext(candidates: MediaBranchCandidateImage[], prompt: string, activeTargetCandidateId: string | undefined): string {
     const candidateLines = candidates.map((candidate) => [
-        `nodeId=${candidate.nodeId}`,
+        `candidateId=${candidate.candidateId}`,
+        candidate.nodeId ? `nodeId=${candidate.nodeId}` : undefined,
+        `assetId=${candidate.assetId}`,
         `kind=${candidate.mediaKind ?? 'image'}`,
         `roles=${candidate.roleHints.join(',')}`,
         candidate.branchId ? `branchId=${candidate.branchId}` : undefined,
@@ -360,7 +364,7 @@ function buildTranscriptContext(candidates: MediaBranchCandidateImage[], prompt:
 
     return [
         `Current user prompt: ${prompt}`,
-        activeTargetNodeId ? `Active target nodeId: ${activeTargetNodeId}` : undefined,
+        activeTargetCandidateId ? `Active target candidateId: ${activeTargetCandidateId}` : undefined,
         'Candidate media labels:',
         ...candidateLines,
     ].filter((line): line is string => typeof line === 'string').join('\n')
@@ -404,18 +408,21 @@ export function buildMediaBranchCandidateSnapshot({
     }
 
     const candidates = Array.from(candidatesById.values())
+    const activeTargetCandidateId = activeTargetNodeId ? `node:${activeTargetNodeId}` : undefined
     return {
         resolverVersion: RESOLVER_VERSION,
         conversationAssetId,
         regionNodeId,
-        ...(activeTargetNodeId ? { activeTargetNodeId } : {}),
+        ...(activeTargetCandidateId ? { activeTargetCandidateId } : {}),
         // Explicit refs are carried as data only — the candidate list stays
         // unfiltered and the API enforces explicit-context exclusivity.
-        ...(contextMediaNodeIds.length ? { explicitReferenceNodeIds: [...contextMediaNodeIds] } : {}),
+        ...(contextMediaNodeIds.length ? {
+            explicitReferenceCandidateIds: contextMediaNodeIds.map(nodeId => `node:${nodeId}`),
+        } : {}),
         promptText: prompt,
         promptFingerprint: fingerprintPrompt(prompt),
         candidates,
-        transcriptContext: buildTranscriptContext(candidates, prompt, activeTargetNodeId),
+        transcriptContext: buildTranscriptContext(candidates, prompt, activeTargetCandidateId),
     }
 }
 
@@ -449,6 +456,7 @@ export function buildCanvasWideCandidateSnapshot({
     }
 
     const candidates = Array.from(candidatesById.values())
+    const activeTargetCandidateId = activeTargetNodeId ? `node:${activeTargetNodeId}` : undefined
     return {
         resolverVersion: RESOLVER_VERSION,
         conversationAssetId: generationRunId,
@@ -456,14 +464,16 @@ export function buildCanvasWideCandidateSnapshot({
         // generation (no real source node) and plans a branchOrigin marker — a
         // thread-less canvas run has no chat/source node to root on.
         regionNodeId: `standalone:${generationRunId}`,
-        ...(activeTargetNodeId ? { activeTargetNodeId } : {}),
+        ...(activeTargetCandidateId ? { activeTargetCandidateId } : {}),
         // Explicit refs are carried as data only — the candidate list stays
         // unfiltered and the API enforces explicit-context exclusivity.
-        ...(referenceNodeIds.length ? { explicitReferenceNodeIds: [...referenceNodeIds] } : {}),
+        ...(referenceNodeIds.length ? {
+            explicitReferenceCandidateIds: referenceNodeIds.map(nodeId => `node:${nodeId}`),
+        } : {}),
         promptText: prompt,
         promptFingerprint: fingerprintPrompt(prompt),
         candidates,
-        transcriptContext: buildTranscriptContext(candidates, prompt, activeTargetNodeId),
+        transcriptContext: buildTranscriptContext(candidates, prompt, activeTargetCandidateId),
     }
 }
 

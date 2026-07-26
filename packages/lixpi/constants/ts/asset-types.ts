@@ -153,6 +153,13 @@ export type AssetMeta = {
     updatedAt: number
 }
 
+export type AssetSearchRecord = Omit<AssetMeta, 'assetId' | 'primaryCategory'> & {
+    assetId: string
+    primaryCategory: Exclude<AssetPrimaryCategory, 'conversation'>
+    searchKey: string
+    normalizedTitle: string
+}
+
 export type AssetAccessList = {
     assetId: string
     principalId: string

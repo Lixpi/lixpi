@@ -3,24 +3,29 @@ import { describe, expect, it } from 'vitest'
 import { createDefaultCapabilityModuleCatalog } from './installed-capabilities.ts'
 
 describe('installed Capability composition', () => {
-    it('installs instruction Skills and executable Tools as separate module kinds', () => {
+    it('installs first-class modules with their internal Skill and Tool packages', () => {
         const catalog = createDefaultCapabilityModuleCatalog({
             natsService: {} as never,
             imageRouter: { execute: async () => ({}) } as never,
         })
 
-        expect(catalog.listModuleIds()).toEqual({
+        expect(catalog.listModuleIds()).toEqual(['character-creator', 'style-extraction'])
+        expect(catalog.getModule('character-creator')).toMatchObject({
+            entry: { capabilityId: 'global.character-creator', kind: 'tool' },
+            tools: [{ capabilityId: 'global.character-creator', kind: 'tool' }],
             skills: [
-                'character-sheet-layout',
-                'reference-fidelity',
-                'character-image-prompt',
-                'style-extraction-router',
-                'style-extraction-axes',
-                'style-extraction-synthesis',
+                { capabilityId: 'global.character-sheet-layout', kind: 'skill' },
+                { capabilityId: 'global.reference-fidelity', kind: 'skill' },
+                { capabilityId: 'global.character-image-prompt', kind: 'skill' },
             ],
-            tools: [
-                'character-creator',
-                'style-extraction',
+        })
+        expect(catalog.getModule('style-extraction')).toMatchObject({
+            entry: { capabilityId: 'global.style-extraction', kind: 'tool' },
+            tools: [{ capabilityId: 'global.style-extraction', kind: 'tool' }],
+            skills: [
+                { capabilityId: 'global.style-extraction-router', kind: 'skill' },
+                { capabilityId: 'global.style-extraction-axes', kind: 'skill' },
+                { capabilityId: 'global.style-extraction-synthesis', kind: 'skill' },
             ],
         })
     })

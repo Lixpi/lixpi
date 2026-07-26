@@ -500,7 +500,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
             capabilityReferenceImages: ['data:image/png;base64,CAPABILITY-REF'],
         } as any)
         vi.spyOn(mediaBranchResolver, 'resolveMediaBranch').mockResolvedValue({
-            mediaBranchResolution: { mode: 'fresh-branch', referenceImageNodeIds: ['node-a', 'node-b'] },
+            mediaBranchResolution: { mode: 'fresh-branch', referenceCandidateIds: ['node-a', 'node-b'] },
             videoReferenceImages: ['data:image/png;base64,VIDEO-REF-1', 'data:image/png;base64,VIDEO-REF-2'],
         } as any)
 
@@ -516,7 +516,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         // Image-side + visual-capability resolution ride along too (covers all media types).
         expect(childState.referenceImages).toEqual(['data:image/png;base64,IMG-REF'])
         expect(childState.capabilityReferenceImages).toEqual(['data:image/png;base64,CAPABILITY-REF'])
-        expect(childState.mediaBranchResolution?.referenceImageNodeIds).toEqual(['node-a', 'node-b'])
+        expect(childState.mediaBranchResolution?.referenceCandidateIds).toEqual(['node-a', 'node-b'])
         // Per-child identity still wins over the spread; preflight stays marked done.
         expect(childState.preflightResolved).toBe(true)
         expect(childState.videoModelMetaInfo?.model).toBe('veo-3.1-generate-preview')

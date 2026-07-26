@@ -31,6 +31,8 @@ asset.events.{created|updated|deleted|renditionUpdated}
 asset.events.{created|updated|deleted|renditionUpdated}.{userIdToken}
 capability.catalog.{search|list|get|create|update|delete|grant|revoke|save}
 capability.catalog.changed
+capability.modules.{list|get}
+prompt.reference.list
 ai.interaction.capability.run.{start|stop|resume|get|replay}
 ai.interaction.capability.run.events.{workspaceId}.{runId}
 ai.interaction.capability.run.status.{userIdToken}.{workspaceId}.{runId}
@@ -50,6 +52,8 @@ ai.interaction.capability.run.status.{userIdToken}.{workspaceId}.{runId}
 | Browser Asset invalidations | `asset.events.{created|updated|deleted|renditionUpdated}.{userIdToken}` | Every active API replica re-evaluates current organization, scope/reference, and ACL authorization before relaying. Previously authorized IDs are remembered so revocation/deletion can remove cache entries; duplicate/out-of-order refreshes are revision-guarded. |
 | Capability catalog commands | `capability.catalog.*` | Browser commands reach authenticated API handlers. Search and list return thin authorized metadata; full manifests and resources require separate authorization. |
 | Capability catalog invalidation | `capability.catalog.changed` plus user-tokenized relay | Catalog mutations invalidate affected user, organization, global, and explicit-principal query caches. |
+| Capability module reads | `capability.modules.{list|get}` | Workspace-authorized source-registry reads return top-level module metadata and entry identity. They never serialize module-internal Tool or Skill packages as standalone rows. |
+| Prompt-reference catalog | `prompt.reference.list` | Workspace-authorized category search for Media, Capability modules, standalone Tools, or standalone Skills. Empty queries merge per-user reauthorized recents. The internal `prompt.reference.acceptedUse` handler records only already-authorized references from an accepted submit. |
 | Capability run commands | `ai.interaction.capability.run.{start|stop|resume|get|replay}` | Start validates ownership and Tool input. Stop requires the run owner. Resume authorizes the run, activates the live relay, and returns replay state plus the exact tokenized subject. |
 | Durable Capability run events | `ai.interaction.capability.run.events.{workspaceId}.{runId}` | The runner writes safe ordered events before live publication. Raw prompts, resource bytes, and unrestricted action output are excluded. |
 | Browser Capability run status | `ai.interaction.capability.run.status.{userIdToken}.{workspaceId}.{runId}` | Authorized per-user relay. The browser subscribes before replay, buffers live events, deduplicates by run sequence, then drains the buffer to close the replay/live race. |

@@ -6,9 +6,9 @@ If you want a concrete example, check `aiChatThreadPlugin/README.md`.
 
 Direct link: `$src/components/proseMirror/plugins/aiChatThreadPlugin/README.md`.
 
-## Capability mentions
+## Prompt references
 
-`capabilityMentionPlugin/` owns one async `@` picker per editor instance. It queries the authorized thin capability catalog, ignores stale responses, supports arrow/Enter/Tab/Escape navigation, and replaces the typed query with a stable `capability_reference` atom. Prompt submission deduplicates those atoms by `capabilityId`; the visible name remains cosmetic so restored drafts survive renames safely. The picker shares viewport-aware placement with the slash-command menu, flipping above a bottom composer and clamping to the viewport after async result height changes.
+`promptReferencePickerPlugin/` owns two async pickers per AI prompt editor. `@` defaults to Media and switches among Media, Capabilities, Tools, and Skills with the shared SVG sliding switch. `/` is hard-locked to top-level Capability modules and contains no formatting or upload commands. Both pickers ignore stale responses, keep settled rows mounted while a debounced query is pending, and retain their anchor side while the settled result count resizes the popup. The category navigation remains fixed while only the bounded results container scrolls; wheel input is excluded from canvas pan/zoom. A visible-state class lets each host lift the popup above adjacent chrome without permanently changing the editor's stacking order. They support cursor pagination and arrow/Enter/Tab/Escape navigation, and replace the typed query with a typed `prompt_reference` atom. The atom renders as a borderless existing SVG icon and semibold colored name. Left/Right skips directly across the non-selectable atom so the text caret remains visible, and Media atoms reuse the shared context/lineage preview card on hover. Display names are cosmetic; the stable Asset, module, Tool, or Skill identity survives renames and is reauthorized from the authoritative conversation snapshot after submit.
 
 ## Folder layout (typical)
 

@@ -3,8 +3,8 @@
 import { readFile } from 'node:fs/promises'
 
 import {
-    type CapabilityCatalogVisibility,
     type CapabilityManifest,
+    type CapabilityPackageExposure,
     type CapabilityReference,
     type CapabilityResourceMediaType,
     type CapabilityResourceRef,
@@ -12,17 +12,15 @@ import {
 } from '@lixpi/constants'
 
 import type {
-    CapabilityModuleSeedContext,
-    SkillModule,
+    CapabilityPackageSeedContext,
+    CapabilitySkillPackageInstaller,
 } from './capability-module.ts'
 export type InstructionSkillDefinition = {
-    moduleId: string
     capabilityId: string
     name: string
     description: string
     summary: string
     tags: string[]
-    catalogVisibility?: CapabilityCatalogVisibility
     exportName: string
     resourceId: string
     resourceName: string
@@ -45,19 +43,20 @@ export type InstructionSkillStorage = {
         tags: string[]
         storageOwnerId?: string
         allowedActions: ReadonlySet<string>
-        catalogVisibility?: CapabilityCatalogVisibility
+        parentModuleId?: string
+        catalogExposure: CapabilityPackageExposure
     }) => Promise<unknown>
 }
 
-export function createInstructionSkillModule(
+export function createInstructionSkillPackage(
     definition: InstructionSkillDefinition,
     storage: InstructionSkillStorage,
-): SkillModule {
+): CapabilitySkillPackageInstaller {
     return {
         kind: 'skill',
-        moduleId: definition.moduleId,
-        seed: async (context: CapabilityModuleSeedContext): Promise<void> => {
-            await seedInstructionSkill(definition, storage, context.allowedActions)
+        capabilityId: definition.capabilityId,
+        seed: async (context: CapabilityPackageSeedContext): Promise<void> => {
+            await seedInstructionSkill(definition, storage, context)
         },
     }
 }
@@ -65,7 +64,7 @@ export function createInstructionSkillModule(
 async function seedInstructionSkill(
     definition: InstructionSkillDefinition,
     storage: InstructionSkillStorage,
-    allowedActions: ReadonlySet<string>,
+    context: CapabilityPackageSeedContext,
     storageOwnerId = 'system',
 ): Promise<void> {
     const resource = await storage.storeResource({
@@ -77,11 +76,12 @@ async function seedInstructionSkill(
         name: definition.resourceName,
     })
     await storage.seedBuiltInCapability({
-        allowedActions,
+        allowedActions: context.allowedActions,
         manifest: buildInstructionSkillManifest(definition, resource),
         summary: definition.summary,
         tags: definition.tags,
-        catalogVisibility: definition.catalogVisibility,
+        parentModuleId: context.parentModuleId,
+        catalogExposure: context.catalogExposure,
         storageOwnerId,
     })
 }
