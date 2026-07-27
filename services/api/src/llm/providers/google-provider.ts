@@ -331,12 +331,18 @@ export class GoogleProvider extends BaseProvider {
                     const currentStreamConfig = functionDeclarations.length > 0
                         ? { ...streamConfigWithoutTools, tools: [{ functionDeclarations }] }
                         : streamConfigWithoutTools
+                    const completionSystemInstruction = capabilityToolExecutor?.withCompletionInstruction(
+                        currentStreamConfig.systemInstruction,
+                    )
+                    const currentStreamConfigWithInstruction = completionSystemInstruction
+                        ? { ...currentStreamConfig, systemInstruction: completionSystemInstruction }
+                        : currentStreamConfig
                     const effectiveStreamConfig = pendingRequiredToolName
                         ? {
-                            ...currentStreamConfig,
+                            ...currentStreamConfigWithInstruction,
                             toolConfig: buildGoogleRequiredCapabilityToolConfig(pendingRequiredToolName),
                         }
-                        : currentStreamConfig
+                        : currentStreamConfigWithInstruction
                     assessProviderInputBudget({
                         state,
                         request: { model: modelVersion, contents, config: effectiveStreamConfig },
@@ -510,7 +516,9 @@ export class GoogleProvider extends BaseProvider {
                 }
             }
 
-            if (!effectiveImageGen && !effectiveVideoGen) this.publisher.end()
+            if (!effectiveImageGen
+                && !effectiveVideoGen
+                && !state.pendingCapabilityOutputFinalizations?.length) this.publisher.end()
         } catch (e: any) {
             err(`Google streaming failed: ${e?.message ?? e}`)
             update.error = e?.message ?? String(e)

@@ -109,6 +109,10 @@ type PublishChatContentOptions = {
     mirrorProseMirror?: boolean
 }
 
+type EndStreamOptions = {
+    deferPipelineFinish?: boolean
+}
+
 // A collapsible-wrapped prompt tag pair. The text model wraps the enhanced
 // image/video prompt it is about to send in these XML tags so the UI can render
 // it inside a collapsible instead of as raw inline text.
@@ -270,6 +274,7 @@ export class StreamPublisher {
     private currentGenerationRun: MediaGenerationRunMeta | undefined
     private hasStarted = false
     private hasEnded = false
+    private proseMirrorConversationFinishPromise: Promise<void> | null = null
     private proseMirrorFinishPromise: Promise<void> | null = null
     private responsePublishChain: Promise<void> = Promise.resolve()
     private readonly mediaResponsePublishChains = new Map<string, Promise<void>>()
@@ -477,6 +482,7 @@ export class StreamPublisher {
 
         this.hasStarted = true
         this.hasEnded = false
+        this.proseMirrorConversationFinishPromise = null
         this.proseMirrorFinishPromise = null
         this.tagBuffer.reset()
         const content: ChunkPayload['content'] = {
@@ -498,6 +504,13 @@ export class StreamPublisher {
         return this.proseMirrorFinishPromise
     }
 
+    finishProseMirrorConversation(): Promise<void> {
+        if (this.proseMirrorConversationFinishPromise) return this.proseMirrorConversationFinishPromise
+
+        this.proseMirrorConversationFinishPromise = this.proseMirrorAssembler?.end() ?? Promise.resolve()
+        return this.proseMirrorConversationFinishPromise
+    }
+
     async drainPendingWrites(): Promise<void> {
         await this.drainResponsePublishes()
         await this.drainCanvasProjectionWrites()
@@ -511,9 +524,7 @@ export class StreamPublisher {
 
     private async finishPipelineStream(): Promise<void> {
         await this.drainPendingWrites()
-        if (this.proseMirrorAssembler) {
-            await this.proseMirrorAssembler.end()
-        }
+        await this.finishProseMirrorConversation()
         // Matrix child publishers share the request publisher's pipeline subject.
         // Only the publisher that owns the persisted conversation lifecycle may
         // purge after the complete request, including every sibling, has settled.
@@ -544,19 +555,20 @@ export class StreamPublisher {
         this.tagBuffer.push(text)
     }
 
-    end(): void {
+    end(options: EndStreamOptions = {}): void {
         if (!this.hasStarted || this.hasEnded) return
 
         this.hasEnded = true
         this.tagBuffer.flush()
+        const deferPipelineFinish = this.options.deferProseMirrorEnd || options.deferPipelineFinish === true
         const content: ChunkPayload['content'] = {
             text: '',
             status: STREAM_STATUS.END_STREAM,
             aiProvider: this.provider,
             ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         }
-        this.publishChatContent(content, { mirrorProseMirror: !this.options.deferProseMirrorEnd })
-        if (this.options.deferProseMirrorEnd) {
+        this.publishChatContent(content, { mirrorProseMirror: !deferPipelineFinish })
+        if (deferPipelineFinish) {
             void this.proseMirrorAssembler?.finishTextPhase()
         } else {
             void this.finishProseMirrorStream()

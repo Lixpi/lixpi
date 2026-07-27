@@ -33,6 +33,13 @@ export type CapabilityModelToolExecutorOptions = {
     onGenerationTrace?: (trace: CapabilityGenerationTrace) => void
 }
 
+const CAPABILITY_ONLY_COMPLETION_INSTRUCTION = [
+    'A capability-only Tool has completed successfully and its generated Artifact is the result.',
+    'Reply with one brief plain-language confirmation of what was created.',
+    'Do not include code, pseudocode, code fences, imports, data literals, diagrams, visualizations, implementation steps, or a copy of the Artifact content.',
+    'Do not propose unrelated follow-up work.',
+].join(' ')
+
 export function buildAnthropicRequiredCapabilityToolChoice(name: string): Record<string, string> {
     return { type: 'tool', name }
 }
@@ -83,6 +90,18 @@ export class CapabilityModelToolExecutor {
             && definition.capabilityId
             && !completedCapabilityIds.has(definition.capabilityId)
         ))?.name
+    }
+
+    completionInstruction(): string | undefined {
+        return this.completedModelRequiredCapabilityOnlyOutput()
+            ? CAPABILITY_ONLY_COMPLETION_INSTRUCTION
+            : undefined
+    }
+
+    withCompletionInstruction(systemPrompt: string | undefined): string | undefined {
+        const instruction = this.completionInstruction()
+        if (!instruction) return systemPrompt
+        return systemPrompt ? `${systemPrompt}\n\n${instruction}` : instruction
     }
 
     private completedModelRequiredCapabilityOnlyOutput(): boolean {
@@ -150,6 +169,7 @@ export class CapabilityModelToolExecutor {
             && toolInputDeclaresProperty(sealedPlan, capabilityId, 'referenceAssetIds')) {
             args.referenceAssetIds = collectExplicitReferenceAssetIds(this.state)
         }
+        const variant = resolveModelToolVariant(this.state, sealedPlan, capabilityId)
         const execution = await this.dispatcher.use({
             capabilityId,
             arguments: args,
@@ -160,7 +180,7 @@ export class CapabilityModelToolExecutor {
             invocationDepth: this.state.capabilityInvocationDepth,
             invocationGenerationRequestId: this.state.generationRun?.generationRequestId,
             signal,
-            variant: resolveModelToolVariant(this.state, sealedPlan, capabilityId),
+            variant,
         })
         applyModelCapabilityExecutionToState({
             state: this.state,
@@ -169,6 +189,23 @@ export class CapabilityModelToolExecutor {
             output: execution.output,
             outputAssetIds: execution.run.outputAssetIds,
         })
+        const outputAssetId = execution.output.outputKind === 'capabilityArtifact'
+            && typeof execution.output.assetId === 'string'
+            ? execution.output.assetId
+            : undefined
+        if (outputAssetId && variant.axis === 'reasoning-model' && this.state.generationRun) {
+            this.state.pendingCapabilityOutputFinalizations = [
+                ...(this.state.pendingCapabilityOutputFinalizations ?? []),
+                {
+                    capabilityId,
+                    capabilityRunId: execution.run.runId,
+                    assetId: outputAssetId,
+                    input: structuredClone(args),
+                    variant,
+                    generationRun: structuredClone(this.state.generationRun),
+                },
+            ]
+        }
         this.options.onGenerationTrace?.({
             traceVersion: 'capability-generation-trace-v1',
             generationRun: this.state.generationRun,

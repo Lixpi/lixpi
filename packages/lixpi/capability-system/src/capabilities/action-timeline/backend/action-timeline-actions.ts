@@ -1,9 +1,6 @@
 'use strict'
 
-import type {
-    CanvasGeometryUpdate,
-    CapabilityJsonValue,
-} from '@lixpi/constants'
+import type { CapabilityJsonValue } from '@lixpi/constants'
 
 import {
     type CapabilityActionExecutionContext,
@@ -36,7 +33,6 @@ export type ActionTimelinePersistRequest = {
 
 export type ActionTimelinePersistResult = {
     assetId: string
-    canvasGeometry: CanvasGeometryUpdate
 }
 
 export type ActionTimelineBackendDependencies = {
@@ -162,7 +158,6 @@ export function registerActionTimelineActions(
             return {
                 outputKind: 'capabilityArtifact',
                 assetId: persisted.assetId,
-                canvasGeometry: persisted.canvasGeometry,
             }
         },
         classifyRetry: error => isRetryablePersistenceError(error) ? 'retryable' : 'terminal',
@@ -172,7 +167,6 @@ export function registerActionTimelineActions(
             const assetId = asRecord(output)?.assetId
             return typeof assetId === 'string' ? [assetId] : []
         },
-        collectCanvasGeometry: output => asRecord(output)?.canvasGeometry as CanvasGeometryUpdate | undefined,
     })
 }
 
@@ -397,7 +391,6 @@ function validatePersistOutput(value: unknown): CapabilityActionValidationResult
     const record = asRecord(value)
     return record?.outputKind === 'capabilityArtifact'
         && typeof record.assetId === 'string'
-        && Boolean(asRecord(record.canvasGeometry))
         ? { valid: true }
         : { valid: false, message: 'Persisted Action Timeline output is invalid' }
 }

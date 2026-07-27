@@ -104,7 +104,7 @@ export class AnthropicProvider extends BaseProvider {
                     model: modelVersion,
                     messages: roundMessages,
                     max_tokens: maxTokens,
-                    system: systemPrompt,
+                    system: capabilityToolExecutor?.withCompletionInstruction(systemPrompt) ?? systemPrompt,
                 }
                 const roundTools = [
                     ...tools,
@@ -211,7 +211,7 @@ export class AnthropicProvider extends BaseProvider {
                 update.aiVendorRequestId = finalMessage.id
             }
 
-            this.publisher.end()
+            if (!state.pendingCapabilityOutputFinalizations?.length) this.publisher.end()
         } catch (e: any) {
             err(`Anthropic streaming failed: ${e?.message ?? e}`)
             update.error = e?.message ?? String(e)

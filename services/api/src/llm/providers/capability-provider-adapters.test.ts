@@ -318,6 +318,7 @@ describe('Capability provider adapters', () => {
             }]), { finalMessage: vi.fn(async () => secondFinal) }))
         const use = vi.fn(async () => ({
             ...capabilityRunResult(),
+            output: { outputKind: 'capabilityArtifact', assetId: 'asset-1' },
             events: [],
         }))
         const provider = new AnthropicProvider('instance', {
@@ -343,12 +344,14 @@ describe('Capability provider adapters', () => {
         }))
         expect(anthropicMocks.messagesStream.mock.calls[1]?.[0]?.tool_choice).toBeUndefined()
         expect(anthropicMocks.messagesStream.mock.calls[1]?.[0]?.tools).toBeUndefined()
+        expect(anthropicMocks.messagesStream.mock.calls[1]?.[0]?.system).toContain('Do not include code')
+        expect(anthropicMocks.messagesStream.mock.calls[0]?.[0]?.system).not.toContain('Do not include code')
         expect(use).toHaveBeenCalledWith(expect.objectContaining({
             arguments: expect.objectContaining({ durationMs: 15_000, precisionMs: 2_000 }),
         }))
         expect(publisher.capabilityGenerationTrace).toHaveBeenCalledOnce()
         expect(publisher.chunk).toHaveBeenCalledWith('The action timeline is ready.')
-        expect(publisher.end).toHaveBeenCalledOnce()
+        expect(publisher.end).not.toHaveBeenCalled()
     })
 
     it('dispatches use_capability visibly and returns its run output to OpenAI', async () => {
@@ -430,6 +433,7 @@ describe('Capability provider adapters', () => {
             ]))
         const use = vi.fn(async () => ({
             ...capabilityRunResult(),
+            output: { outputKind: 'capabilityArtifact', assetId: 'asset-1' },
             events: [],
         }))
         const provider = new OpenAIProvider('instance', {
@@ -452,11 +456,13 @@ describe('Capability provider adapters', () => {
         }))
         expect(openaiMocks.responsesCreate.mock.calls[1]?.[0]?.tool_choice).toBeUndefined()
         expect(openaiMocks.responsesCreate.mock.calls[1]?.[0]?.tools).toBeUndefined()
+        expect(openaiMocks.responsesCreate.mock.calls[1]?.[0]?.instructions).toContain('Do not include code')
+        expect(openaiMocks.responsesCreate.mock.calls[0]?.[0]?.instructions).not.toContain('Do not include code')
         expect(use).toHaveBeenCalledWith(expect.objectContaining({
             arguments: expect.objectContaining({ durationMs: 15_000, precisionMs: 2_000 }),
         }))
         expect(publisher.capabilityGenerationTrace).toHaveBeenCalledOnce()
         expect(publisher.chunk).toHaveBeenCalledWith('The action timeline is ready.')
-        expect(publisher.end).toHaveBeenCalledOnce()
+        expect(publisher.end).not.toHaveBeenCalled()
     })
 })

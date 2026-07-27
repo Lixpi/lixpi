@@ -762,6 +762,9 @@ export type GeneratedOutputVariantMetadata = {
     branchLineNodeId?: string
     lineageParentNodeId?: string
     referenceAssetIds?: string[]
+    // Durable fallback for generated-output chrome when the conversation
+    // document has not resumed yet or its lineage marker is unavailable.
+    promptText?: string
 }
 
 export type GeneratedMediaVariantMetadata = GeneratedOutputVariantMetadata
@@ -813,7 +816,6 @@ export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]
     operationKind?: ImageGenerationOperationKind
-    promptText?: string
     promptFingerprint?: string
     entitySummary?: string
     visualEntitySummary?: string
@@ -891,7 +893,6 @@ export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]
     operationKind?: ImageGenerationOperationKind
-    promptText?: string
     promptFingerprint?: string
     entitySummary?: string
     visualEntitySummary?: string

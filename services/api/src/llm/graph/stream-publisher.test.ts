@@ -883,6 +883,34 @@ describe('StreamPublisher ProseMirror integration options', () => {
         expect(nonDeferredEnd).toHaveBeenCalledTimes(1)
     })
 
+    it('can finish the response before a post-response canvas event without purging early', async () => {
+        const nats = makeFakeNats()
+        const finishTextPhase = vi.fn(() => Promise.resolve())
+        const end = vi.fn(() => Promise.resolve())
+        const publisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+            undefined,
+            { enableProseMirrorStream: false },
+        )
+        ;(publisher as any).proseMirrorAssembler = {
+            handleContent: vi.fn(),
+            finishTextPhase,
+            end,
+        }
+
+        publisher.start()
+        publisher.end({ deferPipelineFinish: true })
+        await publisher.drainPendingWrites()
+        await publisher.finishProseMirrorConversation()
+
+        expect(finishTextPhase).toHaveBeenCalledTimes(1)
+        expect(end).toHaveBeenCalledTimes(1)
+        expect(nats.published.at(-1)?.payload?.content?.status).toBe(STREAM_STATUS.END_STREAM)
+    })
+
     it('returns immediately from finishProseMirrorStream when prose mirror assembler is absent', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(

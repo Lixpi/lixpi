@@ -208,8 +208,22 @@ describe('CapabilityModelToolExecutor', () => {
         }))
         expect(executor.pendingRequiredToolName()).toBeUndefined()
         expect(executor.definitions()).toEqual([])
+        expect(executor.completionInstruction()).toContain('Do not include code')
+        expect(executor.withCompletionInstruction('Base system prompt')).toContain('Base system prompt')
+        expect(executor.withCompletionInstruction('Base system prompt')).toContain('generated Artifact is the result')
         expect(state.capabilityOutputAssetIds).toEqual(['timeline-asset'])
         expect(state.capabilityOutputMediaAssetIds).toEqual([])
+        expect(state.pendingCapabilityOutputFinalizations).toEqual([expect.objectContaining({
+            capabilityId: 'discovered-tool',
+            capabilityRunId: 'run-timeline',
+            assetId: 'timeline-asset',
+            input: expect.objectContaining({
+                prompt: 'Create a 15 second timeline with 2 second gaps',
+                durationMs: 15_000,
+                precisionMs: 2_000,
+            }),
+            generationRun: expect.objectContaining({ generationRequestId: 'request-1' }),
+        })])
         expect(trace).toHaveBeenCalledWith(expect.objectContaining({
             capabilityRunId: 'run-timeline',
             outputAssetIds: ['timeline-asset'],

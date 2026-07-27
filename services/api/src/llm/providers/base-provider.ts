@@ -39,6 +39,10 @@ import {
 } from '../../capability-system/capability-state-resolver.ts'
 import { isCharacterCreatorCapabilitySelected } from '@lixpi/capability-system'
 import { resolveImageGenerationReferences } from '../image-generation-references.ts'
+import {
+    discardPendingCapabilityOutputsForState,
+    finalizePendingCapabilityOutputsForState,
+} from '../../capability-system/capability-output-finalizer.ts'
 
 export type BaseProviderDeps = {
     natsService: NatsService
@@ -614,6 +618,7 @@ export abstract class BaseProvider {
                 }
             }
             const implResult = await this.streamImpl(state)
+            await this.completePendingCapabilityOutputsAfterStream(state, Boolean(implResult.error))
             return {
                 ...update,
                 generationRun: state.generationRun,
@@ -621,6 +626,7 @@ export abstract class BaseProvider {
                 capabilityToolResults: state.capabilityToolResults,
                 capabilityOutputAssetIds: state.capabilityOutputAssetIds,
                 capabilityOutputMediaAssetIds: state.capabilityOutputMediaAssetIds,
+                pendingCapabilityOutputFinalizations: state.pendingCapabilityOutputFinalizations,
                 capabilityReferenceImages: state.capabilityReferenceImages,
                 capabilityReferenceImageTraceUrls: state.capabilityReferenceImageTraceUrls,
                 capabilityUsageMode: state.capabilityUsageMode,
@@ -633,6 +639,8 @@ export abstract class BaseProvider {
             const message = e?.message ?? String(e)
             err(`Streaming error (${this.providerName}): ${message}`)
             try {
+                await discardPendingCapabilityOutputsForState(state)
+                state.pendingCapabilityOutputFinalizations = []
                 this.streamPublisher?.error(message)
                 if (state.generationRun?.requestKind !== 'media-generation-matrix') {
                     this.streamPublisher?.completeKnownMediaGenerationRequests()
@@ -646,6 +654,35 @@ export abstract class BaseProvider {
                 aiRequestFinishedAt: Date.now(),
                 error: message,
             }
+        }
+    }
+
+    protected async completePendingCapabilityOutputsAfterStream(
+        state: ProviderState,
+        streamFailed: boolean,
+    ): Promise<void> {
+        if (!state.pendingCapabilityOutputFinalizations?.length) return
+        await this.streamPublisher?.drainPendingWrites()
+        this.publisher.end({ deferPipelineFinish: true })
+        await this.streamPublisher?.drainPendingWrites()
+        if (streamFailed || this.shouldStop) {
+            await discardPendingCapabilityOutputsForState(state)
+            state.pendingCapabilityOutputFinalizations = []
+            return
+        }
+
+        try {
+            await this.streamPublisher?.finishProseMirrorConversation()
+            const finalized = await finalizePendingCapabilityOutputsForState(state)
+            for (const output of finalized) {
+                this.publisher.canvasGeometryResolved(output.canvasGeometry, output.generationRun)
+            }
+            state.pendingCapabilityOutputFinalizations = []
+            await this.streamPublisher?.drainPendingWrites()
+        } catch (error) {
+            await discardPendingCapabilityOutputsForState(state)
+            state.pendingCapabilityOutputFinalizations = []
+            throw error
         }
     }
 

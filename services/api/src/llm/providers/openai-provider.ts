@@ -187,7 +187,9 @@ export class OpenAIProvider extends BaseProvider {
                 capabilityToolExecutor,
             })
 
-            if (!enableImageGeneration && !enableVideoGeneration) this.publisher.end()
+            if (!enableImageGeneration
+                && !enableVideoGeneration
+                && !state.pendingCapabilityOutputFinalizations?.length) this.publisher.end()
             return update
         } catch (e: any) {
             err(`OpenAI streaming failed: ${e?.message ?? e}`)
@@ -238,7 +240,8 @@ export class OpenAIProvider extends BaseProvider {
         const requestKwargs: Record<string, any> = {
             model: args.modelVersion,
             input: args.inputMessages,
-            instructions: args.instructions,
+            instructions: args.capabilityToolExecutor?.withCompletionInstruction(args.instructions)
+                ?? args.instructions,
             stream: true,
             store: false,
         }

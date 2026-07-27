@@ -3,6 +3,7 @@
 import type {
     CapabilityJsonValue,
     CapabilityPromptReference,
+    CapabilityReasoningModelVariant,
     MediaBranchCandidateSnapshot,
     MediaBranchVlmResolution,
     MediaBranchLineagePlan,
@@ -89,6 +90,15 @@ export type ReplayMediaPrompt = {
     mediaModelId: string
     mediaType: 'image' | 'video'
     finalPrompt: string
+}
+
+export type PendingCapabilityOutputFinalization = {
+    capabilityId: string
+    capabilityRunId: string
+    assetId: string
+    input: Record<string, CapabilityJsonValue>
+    variant: CapabilityReasoningModelVariant
+    generationRun: MediaGenerationRunMeta
 }
 
 // Reference-image cap for the selected video model. VEO accepts 3, Seedance 9.
@@ -194,6 +204,7 @@ export type ProviderState = {
     }> | undefined
     capabilityOutputAssetIds?: string[] | undefined
     capabilityOutputMediaAssetIds?: string[] | undefined
+    pendingCapabilityOutputFinalizations?: PendingCapabilityOutputFinalization[] | undefined
 
     capabilityUsagePrompt?: string | undefined
 
@@ -280,6 +291,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     capabilityToolResults: { reducer: keep },
     capabilityOutputAssetIds: { reducer: keep },
     capabilityOutputMediaAssetIds: { reducer: keep },
+    pendingCapabilityOutputFinalizations: { reducer: keep },
     capabilityUsagePrompt: { reducer: keep },
     workflowId: { reducer: keep },
     workflowSeq: { reducer: keep },

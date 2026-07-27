@@ -682,6 +682,10 @@ describe('GoogleProvider internals', () => {
             config: expect.not.objectContaining({ toolConfig: expect.anything() }),
         }))
         expect(googleMocks.generateContentStream.mock.calls[1]?.[0]?.config?.tools).toBeUndefined()
+        expect(googleMocks.generateContentStream.mock.calls[1]?.[0]?.config?.systemInstruction)
+            .toContain('Do not include code')
+        expect(googleMocks.generateContentStream.mock.calls[0]?.[0]?.config?.systemInstruction)
+            .not.toContain('Do not include code')
         expect(use).toHaveBeenCalledWith(expect.objectContaining({
             arguments: expect.objectContaining({
                 durationMs: 15_000,
@@ -693,7 +697,7 @@ describe('GoogleProvider internals', () => {
             capabilityRunId: 'timeline-run',
         }))
         expect(internals.chunk).toHaveBeenCalledWith('The action timeline is ready.')
-        expect(internals.end).toHaveBeenCalledOnce()
+        expect(internals.end).not.toHaveBeenCalled()
     })
 
     it('falls back to forced function calling when fanout is enabled and no initial tool call is emitted', async () => {

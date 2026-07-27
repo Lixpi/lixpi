@@ -5,6 +5,16 @@ import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@
 
 import * as debugTools from '@lixpi/debug-tools'
 
+const capabilityOutputFinalizerMocks = vi.hoisted(() => ({
+    finalize: vi.fn(),
+    discard: vi.fn(),
+}))
+
+vi.mock('../../capability-system/capability-output-finalizer.ts', () => ({
+    finalizePendingCapabilityOutputsForState: capabilityOutputFinalizerMocks.finalize,
+    discardPendingCapabilityOutputsForState: capabilityOutputFinalizerMocks.discard,
+}))
+
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
 import { ImagePublisher } from '../graph/image-publisher.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
@@ -47,6 +57,9 @@ let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
 let consoleInfoSpy: ReturnType<typeof vi.spyOn> | null = null
 
 beforeEach(() => {
+    capabilityOutputFinalizerMocks.finalize.mockReset()
+    capabilityOutputFinalizerMocks.discard.mockReset()
+    capabilityOutputFinalizerMocks.discard.mockResolvedValue(undefined)
     debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
     debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
     debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
@@ -579,6 +592,86 @@ describe('BaseProvider routing', () => {
             generationRun: state.generationRun,
         }))
         expect(update).toMatchObject({ generationRun: state.generationRun })
+    })
+
+    it('publishes a staged Capability Artifact only after the response stream has drained', async () => {
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: { publish: vi.fn() } as any,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        })
+        const order: string[] = []
+        capabilityOutputFinalizerMocks.finalize.mockImplementation(async () => {
+            order.push('finalize')
+            return [{
+                canvasGeometry: { layoutRevision: 2, nodes: [] },
+                generationRun: { generationRequestId: 'request-1' },
+            }]
+        })
+        ;(provider as any).streamPublisher = {
+            drainPendingWrites: vi.fn(async () => { order.push('drain') }),
+            finishProseMirrorConversation: vi.fn(async () => { order.push('finish-conversation') }),
+            canvasGeometryResolved: vi.fn(() => { order.push('publish') }),
+            end: vi.fn(() => { order.push('end') }),
+        }
+        const state = {
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            eventMeta: { userId: 'user-1', organizationId: 'organization-1' },
+            pendingCapabilityOutputFinalizations: [{
+                capabilityId: 'action-timeline',
+                capabilityRunId: 'run-1',
+                assetId: 'artifact-1',
+                input: {},
+                variant: { axis: 'reasoning-model' },
+                generationRun: { generationRequestId: 'request-1' },
+            }],
+        } as ProviderState
+
+        await (provider as any).streamTokens(state)
+
+        expect(order).toEqual([
+            'drain',
+            'end',
+            'drain',
+            'finish-conversation',
+            'finalize',
+            'publish',
+            'drain',
+        ])
+        expect(state.pendingCapabilityOutputFinalizations).toEqual([])
+    })
+
+    it('discards a staged Capability Artifact when the response continuation fails', async () => {
+        const provider = new FailingStreamProvider('ws-1:thread-1', {
+            natsService: { publish: vi.fn() } as any,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        })
+        ;(provider as any).streamPublisher = {
+            error: vi.fn(),
+            end: vi.fn(),
+            drainPendingWrites: vi.fn(),
+            completeKnownMediaGenerationRequests: vi.fn(),
+        }
+        const state = {
+            pendingCapabilityOutputFinalizations: [{
+                capabilityId: 'action-timeline',
+                capabilityRunId: 'run-1',
+                assetId: 'artifact-1',
+                input: {},
+                variant: { axis: 'reasoning-model' },
+                generationRun: { generationRequestId: 'request-1' },
+            }],
+        } as ProviderState
+
+        await (provider as any).streamTokens(state)
+
+        expect(capabilityOutputFinalizerMocks.discard).toHaveBeenCalledWith(state)
+        expect(capabilityOutputFinalizerMocks.finalize).not.toHaveBeenCalled()
+        expect(state.pendingCapabilityOutputFinalizations).toEqual([])
     })
 
     it('emits MEDIA_GENERATION_SKIPPED when lineage is planned but no media prompt was generated', () => {

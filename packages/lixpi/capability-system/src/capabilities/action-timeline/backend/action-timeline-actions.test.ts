@@ -68,10 +68,7 @@ function makeDependencies(
             call: vi.fn(async () => validBatch(0, 'next')),
             ...modelOverrides,
         },
-        persistArtifact: vi.fn(async () => ({
-            assetId: 'artifact-1',
-            canvasGeometry: { layoutRevision: 1, nodes: [] },
-        })),
+        persistArtifact: vi.fn(async () => ({ assetId: 'artifact-1' })),
     }
 }
 
@@ -208,7 +205,7 @@ describe('Action Timeline registered actions', () => {
         expect(dependencies.persistArtifact).not.toHaveBeenCalled()
     })
 
-    it('persists only the fully merged document and exposes Asset and geometry collectors', async () => {
+    it('stages only the fully merged document and exposes the output Asset collector', async () => {
         const dependencies = makeDependencies()
         const registry = new CapabilityActionRegistry()
         registerActionTimelineActions(registry, dependencies)
@@ -234,6 +231,6 @@ describe('Action Timeline registered actions', () => {
         }))
         expect(output).toMatchObject({ outputKind: 'capabilityArtifact', assetId: 'artifact-1' })
         expect(action.collectOutputAssetIds?.(output)).toEqual(['artifact-1'])
-        expect(action.collectCanvasGeometry?.(output)).toEqual({ layoutRevision: 1, nodes: [] })
+        expect(action.collectCanvasGeometry).toBeUndefined()
     })
 })

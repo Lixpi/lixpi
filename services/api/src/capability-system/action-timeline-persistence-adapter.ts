@@ -6,6 +6,7 @@ import type {
     AssetDocumentPointer,
     CanvasGeometryUpdate,
     CapabilityJsonValue,
+    CapabilityReasoningModelVariant,
     MediaGenerationRunMeta,
     Workspace,
 } from '@lixpi/constants'
@@ -20,7 +21,7 @@ import {
 } from '@lixpi/capability-system/backend'
 import { PROSEMIRROR_SCHEMA_VERSION } from '@lixpi/prosemirror'
 
-import AssetModel from '../models/asset.ts'
+import AssetModel, { getAssetRecord } from '../models/asset.ts'
 import BlobModel from '../models/blob.ts'
 import WorkspaceModel from '../models/workspace.ts'
 import { getAssetRequesterContext } from '../services/asset-requester-context.ts'
@@ -147,14 +148,7 @@ export async function persistActionTimelineArtifact(
             if ('error' in attached) throw new Error(`EMBEDDED_ASSET_ATTACH_FAILED:${sourceAssetId}:${attached.error}`)
             attachedSourceAssetIds.push(sourceAssetId)
         }
-        const canvasGeometry = await attachArtifactToCanvas({
-            assetId,
-            generationRun,
-            request,
-            requester,
-            dimensions: definition.initialCanvasDimensions,
-        })
-        return { assetId, canvasGeometry }
+        return { assetId }
     } catch (error) {
         await Promise.allSettled(attachedSourceAssetIds.map(async sourceAssetId => {
             await AssetModel.detachWorkspaceReference({
@@ -175,18 +169,122 @@ export async function persistActionTimelineArtifact(
     }
 }
 
+export async function finalizeActionTimelineArtifact(request: {
+    assetId: string
+    capabilityRunId: string
+    input: Record<string, CapabilityJsonValue>
+    variant: CapabilityReasoningModelVariant
+    generationRun: MediaGenerationRunMeta
+    workspaceId: string
+    userId: string
+    organizationId: string
+    conversationAssetId: string
+}): Promise<{
+    canvasGeometry: CanvasGeometryUpdate
+    generationRun: MediaGenerationRunMeta
+}> {
+    const asset = await getAssetRecord(request.assetId)
+    if (!asset) throw new Error(`ACTION_TIMELINE_STAGED_ASSET_NOT_FOUND:${request.assetId}`)
+    const lineage = asset.lineage
+    if (asset.organizationId !== request.organizationId
+        || asset.originWorkspaceId !== request.workspaceId
+        || lineage?.sourceConversationAssetId !== request.conversationAssetId
+        || asset.artifact?.artifactTypeId !== ACTION_TIMELINE_ARTIFACT_TYPE_ID) {
+        throw new Error(`ACTION_TIMELINE_STAGED_ASSET_MISMATCH:${request.assetId}`)
+    }
+    if (asset.states.lifecycle !== 'creating') {
+        throw new Error(`ACTION_TIMELINE_STAGED_ASSET_NOT_CREATING:${request.assetId}`)
+    }
+    if (lineage.generationRequestId !== request.generationRun.generationRequestId
+        || lineage.reasoningRunId !== request.generationRun.reasoningRunId
+        || lineage.reasoningModelId !== request.variant.reasoningModelId) {
+        throw new Error(`ACTION_TIMELINE_STAGED_LINEAGE_MISMATCH:${request.assetId}`)
+    }
+
+    const prompt = requireCapabilityInputString(request.input.prompt, 'ACTION_TIMELINE_PROMPT_REQUIRED')
+    const referenceAssetIds = [...new Set(requireCapabilityInputStringArray(
+        request.input.referenceAssetIds,
+        'ACTION_TIMELINE_REFERENCE_ASSET_IDS_INVALID',
+    ))]
+    if (!sameStringArray(referenceAssetIds, lineage.sourceAssetIds)) {
+        throw new Error(`ACTION_TIMELINE_STAGED_REFERENCES_MISMATCH:${request.assetId}`)
+    }
+    const generationRun: MediaGenerationRunMeta = {
+        ...request.generationRun,
+        requestKind: 'capability-output',
+        generationRequestId: lineage.generationRequestId,
+        reasoningRunId: lineage.reasoningRunId,
+        reasoningModelId: request.variant.reasoningModelId,
+        reasoningIndex: request.variant.reasoningIndex,
+        variantIndex: request.variant.reasoningIndex,
+        lineageAssignment: buildActionTimelineLineageAssignment({
+            assetId: request.assetId,
+            generationRequestId: lineage.generationRequestId,
+            reasoningRunId: lineage.reasoningRunId,
+            variant: request.variant,
+            prompt,
+            referenceAssetIds,
+            createdAt: asset.createdAt,
+        }),
+    }
+
+    const requester = await getAssetRequesterContext(request.userId)
+    if (!requester.editableWorkspaceIds.includes(request.workspaceId)) throw new Error('PERMISSION_DENIED')
+    const definition = capabilityArtifactBackendRegistry.require(ACTION_TIMELINE_ARTIFACT_TYPE_ID)
+    const canvasGeometry = await attachArtifactToCanvas({
+        assetId: request.assetId,
+        generationRun,
+        workspaceId: request.workspaceId,
+        userId: request.userId,
+        conversationAssetId: request.conversationAssetId,
+        capabilityRunId: request.capabilityRunId,
+        input: request.input,
+        requester,
+        dimensions: definition.initialCanvasDimensions,
+    })
+    return { canvasGeometry, generationRun }
+}
+
+export async function discardStagedActionTimelineArtifact(request: {
+    assetId: string
+    workspaceId: string
+    userId: string
+    organizationId: string
+}): Promise<void> {
+    const asset = await getAssetRecord(request.assetId)
+    if (!asset || asset.states.lifecycle !== 'creating') return
+    if (asset.organizationId !== request.organizationId || asset.originWorkspaceId !== request.workspaceId) {
+        throw new Error(`ACTION_TIMELINE_STAGED_ASSET_MISMATCH:${request.assetId}`)
+    }
+    const requester = await getAssetRequesterContext(request.userId)
+    const embeddedSurfaceId = `capabilityArtifact#${request.assetId}`
+    await Promise.allSettled((asset.lineage.sourceAssetIds ?? []).map(async sourceAssetId => {
+        await AssetModel.detachWorkspaceReference({
+            assetId: sourceAssetId,
+            workspaceId: request.workspaceId,
+            requester,
+            surfaceId: embeddedSurfaceId,
+        })
+    }))
+    await AssetModel.detachCatalogReference({ assetId: request.assetId, requester })
+}
+
 async function attachArtifactToCanvas(args: {
     assetId: string
     generationRun: MediaGenerationRunMeta
-    request: ActionTimelinePersistRequest
+    workspaceId: string
+    userId: string
+    conversationAssetId: string
+    capabilityRunId: string
+    input: Record<string, CapabilityJsonValue>
     requester: Awaited<ReturnType<typeof getAssetRequesterContext>>
     dimensions: { width: number; height: number }
 }): Promise<CanvasGeometryUpdate> {
     let lastError: unknown
     for (let attempt = 0; attempt < MAX_CANVAS_ATTACH_ATTEMPTS; attempt += 1) {
         const workspace = await WorkspaceModel.getWorkspace({
-            workspaceId: args.request.context.workspaceId,
-            userId: args.request.context.userId,
+            workspaceId: args.workspaceId,
+            userId: args.userId,
         })
         if ('error' in workspace) throw new Error(workspace.error)
         const persistedRevision = getWorkspaceCanvasRevision(workspace)
@@ -195,18 +293,18 @@ async function attachArtifactToCanvas(args: {
             assetId: args.assetId,
             artifactTypeId: ACTION_TIMELINE_ARTIFACT_TYPE_ID,
             generationRun: args.generationRun,
-            conversationAssetId: requireString(args.request.context.conversationAssetId, 'CONVERSATION_ASSET_ID_REQUIRED'),
-            capabilityRunId: args.request.context.runId,
+            conversationAssetId: args.conversationAssetId,
+            capabilityRunId: args.capabilityRunId,
             capabilityId: ACTION_TIMELINE_TOOL_ID,
             toolId: ACTION_TIMELINE_TOOL_ID,
-            input: toCapabilityInput(args.request),
+            input: args.input,
             dimensions: args.dimensions,
         })
         const nextRevision = Math.max(Date.now(), persistedRevision + 1)
         try {
             const attached = await AssetModel.attachWorkspaceReference({
                 assetId: args.assetId,
-                workspaceId: args.request.context.workspaceId,
+                workspaceId: args.workspaceId,
                 requester: args.requester,
                 nodeId: projection.nodeId,
                 activateOnAttach: true,
@@ -283,15 +381,6 @@ function buildDocumentPointer(
     return { role, blobHash, version: 0, schemaVersion, byteSize, updatedAt }
 }
 
-function toCapabilityInput(request: ActionTimelinePersistRequest): Record<string, CapabilityJsonValue> {
-    return {
-        prompt: request.input.prompt,
-        referenceAssetIds: request.input.referenceAssetIds,
-        durationMs: request.input.durationMs,
-        precisionMs: request.input.precisionMs,
-    }
-}
-
 function getWorkspaceCanvasRevision(workspace: Workspace): number {
     const withCanvasRevision = workspace as Workspace & { canvasStateUpdatedAt?: number }
     return withCanvasRevision.canvasStateUpdatedAt ?? workspace.updatedAt
@@ -300,4 +389,18 @@ function getWorkspaceCanvasRevision(workspace: Workspace): number {
 function requireString(value: string | undefined, error: string): string {
     if (!value) throw new Error(error)
     return value
+}
+
+function requireCapabilityInputString(value: CapabilityJsonValue | undefined, error: string): string {
+    if (typeof value !== 'string' || !value.trim()) throw new Error(error)
+    return value.trim()
+}
+
+function requireCapabilityInputStringArray(value: CapabilityJsonValue | undefined, error: string): string[] {
+    if (!Array.isArray(value) || !value.every(item => typeof item === 'string')) throw new Error(error)
+    return value
+}
+
+function sameStringArray(left: readonly string[], right: readonly string[]): boolean {
+    return left.length === right.length && left.every((value, index) => value === right[index])
 }
