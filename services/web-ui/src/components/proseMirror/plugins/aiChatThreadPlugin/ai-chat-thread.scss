@@ -143,6 +143,9 @@ $userMessageTextColor: #fff;
     }
 
     .ai-user-message {
+        --prompt-reference-color: #d7e6ff;
+        --prompt-reference-capability-module-color: #eca983;
+
         display: table;
         max-width: 85%;
         margin-left: auto;
@@ -724,7 +727,8 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     .ai-image-generation-tool-prompt-section,
     .ai-image-generation-final-prompt-section,
     .ai-image-generation-reference-section,
-    .ai-image-generation-resolver-section {
+    .ai-image-generation-resolver-section,
+    .ai-capability-generation-details-section {
         margin: 0;
 
         // Fading gradient separator between sections — mirrors the branch lineage
@@ -764,6 +768,76 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     .ai-image-generation-reference-section .ai-image-generation-section-label,
     .ai-image-generation-resolver-section .ai-image-generation-section-label {
         display: block;
+    }
+
+    .ai-capability-generation-details-section .ai-image-generation-section-label {
+        display: block;
+    }
+
+    .ai-capability-generation-metadata {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: 0.35rem 0.75rem;
+        margin: 0 0 0.85rem;
+    }
+
+    .ai-capability-generation-metadata dt,
+    .ai-capability-generation-metadata dd {
+        margin: 0;
+        font-size: 0.74rem;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+    }
+
+    .ai-capability-generation-metadata dt {
+        color: rgba(0, 0, 0, 0.48);
+        font-weight: 650;
+    }
+
+    .ai-capability-generation-metadata dd {
+        color: rgba(0, 0, 0, 0.72);
+    }
+
+    .ai-capability-generation-steps {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .ai-capability-generation-step {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) max-content;
+        gap: 0.15rem 0.75rem;
+        padding: 0.48rem 0.56rem;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.035);
+    }
+
+    .ai-capability-generation-step-title {
+        color: rgba(0, 0, 0, 0.68);
+        font-size: 0.72rem;
+        font-weight: 650;
+    }
+
+    .ai-capability-generation-step-status {
+        color: rgba(0, 0, 0, 0.48);
+        font-size: 0.68rem;
+    }
+
+    .ai-capability-generation-step-summary,
+    .ai-capability-generation-step-error {
+        grid-column: 1 / -1;
+        color: rgba(0, 0, 0, 0.52);
+        font-size: 0.7rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .ai-capability-generation-step-error {
+        color: #a63f3f;
     }
 
     .ai-image-generation-reference-grid {

@@ -29,6 +29,8 @@ import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import { getCapabilityDispatcher } from '../../capability-system/capability-runtime.ts'
 import {
     executeRequiredCapabilitiesForState,
+    hasPendingModelRequiredCapabilityOnlyOutput,
+    requiredCapabilityProducedCapabilityOnlyOutput,
     resolveCapabilitiesForState,
 } from '../../capability-system/capability-state-resolver.ts'
 
@@ -492,7 +494,10 @@ export class MediaGenerationMatrixOrchestrator {
         if (reasoningModelIds.length === 0) {
             throw new Error('mediaGenerationRequest requires at least one reasoning model')
         }
-        if (imageModelIds.length === 0 && videoModelIds.length === 0) {
+        const hasCapabilityTool = requestData.capabilityReferences?.some((reference: { kind?: string }) => (
+            reference.kind === 'tool'
+        )) === true
+        if (imageModelIds.length === 0 && videoModelIds.length === 0 && !hasCapabilityTool) {
             throw new Error('mediaGenerationRequest requires at least one image or video generation model')
         }
 
@@ -685,6 +690,7 @@ export class MediaGenerationMatrixOrchestrator {
             capabilityInputs: requestData.capabilityInputs,
             capabilityInvocationDepth: requestData.capabilityInvocationDepth ?? 0,
             capabilityOutputAssetIds: requestData.capabilityOutputAssetIds,
+            capabilityOutputMediaAssetIds: requestData.capabilityOutputMediaAssetIds,
             capabilityReferenceImages: requestData.capabilityReferenceImages,
             capabilityReferenceImageTraceUrls: requestData.capabilityReferenceImageTraceUrls,
             capabilityUsageMode: requestData.capabilityUsageMode,
@@ -737,15 +743,37 @@ export class MediaGenerationMatrixOrchestrator {
             state,
             getCapabilityDispatcher(),
             abortController.signal,
+            normalized.reasoningModels.map((model, reasoningIndex) => ({
+                axis: 'reasoning-model',
+                variantKey: `reasoning:${reasoningIndex}:${model.modelId}`,
+                reasoningIndex,
+                reasoningModelId: model.modelId,
+                provider: model.provider,
+                modelVersion: model.meta.modelVersion,
+                contextWindow: model.meta.contextWindow,
+                maxCompletionSize: model.meta.maxCompletionSize,
+            })),
         ))
+        const capabilityOnlyOutput = requiredCapabilityProducedCapabilityOnlyOutput(state)
+            || hasPendingModelRequiredCapabilityOnlyOutput(state)
+        if (capabilityOnlyOutput) {
+            const matrixProseMirrorContentHandler: ProseMirrorContentHandler = content => publisher.publishProseMirrorContent(content)
+            const matrixProseMirrorSnapshotProvider: ProseMirrorSnapshotProvider = () => publisher.getProseMirrorSnapshot()
+            resolvedRecord.proseMirrorContentHandler = matrixProseMirrorContentHandler
+            resolvedRecord.proseMirrorSnapshotProvider = matrixProseMirrorSnapshotProvider
+            await publisher.drainPendingWrites()
+            return { state: resolved, publisher }
+        }
         applyResolved(await resolveMediaBranch(state, {
             natsService: this.natsService,
             publisher,
             abortSignal: abortController.signal,
         }))
-        const capabilityOutputAssetIds = state.capabilityOutputAssetIds ?? []
-        const preassignedMediaRuns = capabilityOutputAssetIds.length > 0
-            ? await resolveCapabilityOutputMediaRuns(capabilityOutputAssetIds)
+        const capabilityOutputMediaAssetIds = state.capabilityOutputMediaAssetIds
+            ?? state.capabilityOutputAssetIds
+            ?? []
+        const preassignedMediaRuns = capabilityOutputMediaAssetIds.length > 0
+            ? await resolveCapabilityOutputMediaRuns(capabilityOutputMediaAssetIds)
             : undefined
         const mediaBranchLineagePlan = this.lineagePlanner.buildPlan({
             generationRequestId: normalized.generationRequestId,

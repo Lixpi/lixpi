@@ -97,7 +97,7 @@ export const assetSubjects = [
                 return { error: 'CONVERSATION_IDENTITY_MISMATCH' }
             }
             AssetDocumentService.assertAssetBackedMediaNodes(initialDoc)
-            if (AssetDocumentService.getEmbeddedAssetIds(initialDoc).length > 0) {
+            if (AssetDocumentService.getEmbeddedAssetIds(initialDoc, role).length > 0) {
                 return { error: 'INITIAL_EMBEDDED_ASSETS_REQUIRE_ATTACH' }
             }
             const snapshot = new HeadlessProseMirrorEngine({
@@ -244,9 +244,9 @@ export const assetSubjects = [
             sub: { allow: [] },
         },
         handler: async (data: any) => {
-            if (!['media-node', 'branch-lineage'].includes(data.scope)) return { error: 'INVALID_REVIEW_SCOPE' }
+            if (!['output-node', 'branch-lineage'].includes(data.scope)) return { error: 'INVALID_REVIEW_SCOPE' }
             if (!['accept', 'supersede'].includes(data.action)) return { error: 'INVALID_REVIEW_ACTION' }
-            if (data.action === 'supersede' && data.scope === 'media-node' && data.preserveLineage !== true) {
+            if (data.action === 'supersede' && data.scope === 'output-node' && data.preserveLineage !== true) {
                 return { error: 'MEDIA_NODE_PROMPT_REGENERATION_NOT_SUPPORTED' }
             }
             if (typeof data.workspaceId !== 'string' || typeof data.nodeId !== 'string') {

@@ -49,6 +49,15 @@ describe('mountReadOnlyAiChatThreadProjection', () => {
 	it('mounts a projected read-only chat thread editor with host classes and options', () => {
 		const mount = makeMount()
 		const content = makeContent()
+		const promptReferencePreviewRenderer = {
+			getNode: vi.fn(),
+			environment: {
+				getDocuments: () => [],
+				getThreads: () => [],
+				getApiBaseUrl: () => '',
+				getAuthToken: async () => '',
+			},
+		}
 
 		const projection = mountReadOnlyAiChatThreadProjection({
 			mount,
@@ -56,6 +65,7 @@ describe('mountReadOnlyAiChatThreadProjection', () => {
 			threadId: 'thread-1',
 			className: 'custom-thread-projection',
 			traceDetailsOptions: { className: 'trace-projection' },
+			promptReferencePreviewRenderer,
 		})
 
 		const host = mount.querySelector('.read-only-ai-chat-thread-projection') as HTMLElement | null
@@ -77,6 +87,7 @@ describe('mountReadOnlyAiChatThreadProjection', () => {
 			readOnly: true,
 			traceDetailsOptions: { className: 'trace-projection' },
 		})
+		expect(editorOptions.options.promptReferencePreviewRenderer).toBe(promptReferencePreviewRenderer)
 
 		projection.destroy()
 		expect(editorOptions.destroy).toHaveBeenCalledTimes(1)

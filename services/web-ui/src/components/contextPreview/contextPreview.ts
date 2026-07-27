@@ -1,5 +1,6 @@
 import type {
     Asset,
+    CapabilityArtifactCanvasNode,
     CanvasNode,
     DocumentCanvasNode,
     ImageCanvasNode,
@@ -8,7 +9,8 @@ import type {
 import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
 import { extractContentFromProseMirror } from '$src/utils/prosemirrorText.ts'
 import { documentIcon, videoPlayGlyphIcon } from '$src/svgIcons/index.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
+import { applyStyle, html } from '$src/utils/domTemplates.ts'
 import {
     buildAssetRenditionPath,
     resolveAuthenticatedMediaUrl,
@@ -47,16 +49,23 @@ export type CreateContextPreviewTileOptions = {
     preferredPlacement?: 'top' | 'bottom' | 'left' | 'right'
     triggerContent?: HTMLElement
     titleOverride?: string
-    // When true the hover card is kept as a DOM descendant of the tile (shown via a
-    // CSS class on hover) instead of being portaled to document.body. This makes the
-    // card live inside its surrounding context and scale with any CSS zoom transform
-    // applied to an ancestor (e.g. the zoomable canvas AI chat thread projection).
+    // When true, canvas hover cards are projected to the owning pane while open and
+    // receive the viewport scale. Non-canvas cards stay inline. This preserves canvas
+    // sizing without trapping the card inside clamped node text or node stacking.
     inlinePopover?: boolean
 }
 
 type ContextPreviewPopoverOrientation = 'landscape' | 'portrait'
+type ContextPreviewPlacement = NonNullable<CreateContextPreviewTileOptions['preferredPlacement']>
+
+type ContextPreviewCanvasPortal = {
+    pane: HTMLElement
+    scale: number
+}
 
 const TRANSPARENT_PIXEL_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+const CONTEXT_PREVIEW_POPOVER_GAP = 10
+const CONTEXT_PREVIEW_POPOVER_CLOSE_DELAY_MS = 80
 
 export const CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
     '--workspace-ai-chat-panel-context-preview-tooltip-background',
@@ -75,11 +84,25 @@ export const CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
     '--workspace-ai-chat-panel-context-preview-popover-text-color',
 ]
 
+const CONTEXT_PREVIEW_PORTAL_CSS_VARIABLES = [
+    ...CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,
+    '--help-tooltip-width',
+    '--help-tooltip-max-width',
+    '--help-tooltip-padding',
+    '--help-tooltip-background',
+    '--help-tooltip-border-radius',
+    '--help-tooltip-box-shadow',
+    '--help-tooltip-color',
+    '--help-tooltip-content-z-index',
+]
+
 function getContextChipLabel(node: CanvasNode): string {
     switch (node.type) {
         case 'document': return 'Document'
+        case 'audio': return 'Audio'
         case 'image':
         case 'video': return ''
+        case 'capabilityArtifact': return 'Artifact'
         default: return node.type
     }
 }
@@ -127,6 +150,7 @@ function getContextPreviewTypeLabel(node: CanvasNode): string {
         case 'document': return 'Document'
         case 'image': return 'Image'
         case 'video': return 'Video'
+        case 'audio': return 'Audio'
         default: return node.type
     }
 }
@@ -254,6 +278,19 @@ function renderContextDocumentPreview(
     </div>` as HTMLElement
 }
 
+function renderContextArtifactPreview(
+    node: CapabilityArtifactCanvasNode,
+    title: string,
+    size: 'mini' | 'large',
+): HTMLElement {
+    return html`<div className=${`workspace-ai-chat-panel-context-preview-artifact workspace-ai-chat-panel-context-preview-artifact-${size}`}>
+        <span className="workspace-ai-chat-panel-context-preview-artifact-icon" innerHTML=${getCapabilityArtifactIcon(node.artifactTypeId)}></span>
+        ${size === 'large'
+            ? html`<span className="workspace-ai-chat-panel-context-preview-artifact-title">${title || 'Artifact'}</span>`
+            : ''}
+    </div>` as HTMLElement
+}
+
 function renderContextPreviewVisual(
     node: CanvasNode,
     title: string,
@@ -264,6 +301,7 @@ function renderContextPreviewVisual(
     if (node.type === 'image') return renderContextImagePreview(node, title, environment, size)
     if (node.type === 'video') return renderContextVideoPreview(node, title, environment, size)
     if (node.type === 'document') return renderContextDocumentPreview(node, title, text, size)
+    if (node.type === 'capabilityArtifact') return renderContextArtifactPreview(node, title, size)
     return html`<div className="workspace-ai-chat-panel-context-preview-document">${title}</div>` as HTMLElement
 }
 
@@ -305,9 +343,97 @@ function getContextPreviewPopoverClassName(node: CanvasNode, hasPopoverMeta: boo
     return `${baseClassName} ${baseClassName}-${getContextPreviewPopoverOrientation(node)}`
 }
 
-// Inline variant: the hover card stays a DOM descendant of the tile so it inherits
-// any ancestor CSS zoom transform and lives inside its context (used on the zoomable
-// canvas). Shown by toggling `is-open` on hover/focus instead of body-portaling.
+function parseContextPreviewScale(transform: string): number {
+    const matrixMatch = transform.match(/^matrix\(([^)]+)\)$/u)
+    if (matrixMatch?.[1]) {
+        const values = matrixMatch[1].split(',').map(value => Number.parseFloat(value.trim()))
+        const scale = Math.hypot(values[0] ?? 1, values[1] ?? 0)
+        if (Number.isFinite(scale) && scale > 0) return scale
+    }
+
+    const matrix3dMatch = transform.match(/^matrix3d\(([^)]+)\)$/u)
+    if (matrix3dMatch?.[1]) {
+        const values = matrix3dMatch[1].split(',').map(value => Number.parseFloat(value.trim()))
+        const scale = Math.hypot(values[0] ?? 1, values[1] ?? 0)
+        if (Number.isFinite(scale) && scale > 0) return scale
+    }
+
+    const scaleMatch = transform.match(/scale\(\s*([\d.+-]+)/u)
+    const scale = scaleMatch?.[1] ? Number.parseFloat(scaleMatch[1]) : 1
+    return Number.isFinite(scale) && scale > 0 ? scale : 1
+}
+
+function getContextPreviewCanvasPortal(dom: HTMLElement): ContextPreviewCanvasPortal | null {
+    const pane = dom.closest<HTMLElement>('.workspace-pane')
+    if (!pane) return null
+    const viewport = dom.closest<HTMLElement>('.workspace-viewport')
+    const transform = viewport
+        ? getComputedStyle(viewport).transform || viewport.style.transform
+        : ''
+    return {
+        pane,
+        scale: parseContextPreviewScale(transform),
+    }
+}
+
+function copyContextPreviewPortalCssVariables(source: HTMLElement, popover: HTMLElement): void {
+    const styles = getComputedStyle(source)
+    for (const name of CONTEXT_PREVIEW_PORTAL_CSS_VARIABLES) {
+        const value = styles.getPropertyValue(name).trim()
+        if (value) popover.style.setProperty(name, value)
+    }
+}
+
+function positionContextPreviewCanvasPopover(
+    trigger: HTMLElement,
+    popover: HTMLElement,
+    portal: ContextPreviewCanvasPortal,
+    placement: ContextPreviewPlacement,
+): void {
+    const triggerRect = trigger.getBoundingClientRect()
+    const paneRect = portal.pane.getBoundingClientRect()
+    const triggerLeft = triggerRect.left - paneRect.left
+    const triggerTop = triggerRect.top - paneRect.top
+    const triggerRight = triggerRect.right - paneRect.left
+    const triggerBottom = triggerRect.bottom - paneRect.top
+    const scaledGap = `${CONTEXT_PREVIEW_POPOVER_GAP}px`
+    const positionByPlacement: Record<ContextPreviewPlacement, {
+        left: string
+        top: string
+        transform: string
+    }> = {
+        top: {
+            left: `${triggerLeft}px`,
+            top: `${triggerTop}px`,
+            transform: `scale(${portal.scale}) translateY(calc(-100% - ${scaledGap}))`,
+        },
+        bottom: {
+            left: `${triggerLeft}px`,
+            top: `${triggerBottom}px`,
+            transform: `scale(${portal.scale}) translateY(${scaledGap})`,
+        },
+        left: {
+            left: `${triggerLeft}px`,
+            top: `${triggerTop}px`,
+            transform: `scale(${portal.scale}) translateX(calc(-100% - ${scaledGap}))`,
+        },
+        right: {
+            left: `${triggerRight}px`,
+            top: `${triggerTop}px`,
+            transform: `scale(${portal.scale}) translateX(${scaledGap})`,
+        },
+    }
+    applyStyle(popover, {
+        ...positionByPlacement[placement],
+        right: 'auto',
+        bottom: 'auto',
+        transformOrigin: 'top left',
+    })
+}
+
+// The compact trigger stays inline. On canvas surfaces its hover card moves to the
+// pane-level overlay and receives the viewport scale, escaping node text clipping
+// and sibling chrome stacking without changing its visual canvas size.
 function createInlineContextPreviewTile({
     node,
     getNode,
@@ -344,35 +470,109 @@ function createInlineContextPreviewTile({
         ${trigger}
         ${popover}
     </div>` as HTMLElement
+    let portal: ContextPreviewCanvasPortal | null = null
+    let portalPositionFrame: number | null = null
+    let closeTimer: ReturnType<typeof setTimeout> | null = null
 
     const syncLatestContent = (): void => {
         const next = renderState()
+        const isPortaled = popover.classList.contains('context-preview-inline-popover-portaled')
         popover.className = getInlinePopoverClassName(next.latestNode, Boolean(next.title || next.text), dom.classList.contains('is-open'))
+        popover.classList.toggle('context-preview-inline-popover-portaled', isPortaled)
         popover.replaceChildren(renderContextPreviewPopoverContent(next.latestNode, next.title, next.text, next.accessibleLabel, environment))
         trigger.setAttribute('aria-label', next.accessibleLabel)
     }
+    const stopPortalPositionSync = (): void => {
+        if (portalPositionFrame === null) return
+        cancelAnimationFrame(portalPositionFrame)
+        portalPositionFrame = null
+    }
+    const cancelScheduledClose = (): void => {
+        if (closeTimer === null) return
+        clearTimeout(closeTimer)
+        closeTimer = null
+    }
+    const restorePopoverToTile = (): void => {
+        stopPortalPositionSync()
+        portal = null
+        popover.classList.remove('context-preview-inline-popover-portaled')
+        popover.removeAttribute('style')
+        if (dom.isConnected) {
+            dom.appendChild(popover)
+            return
+        }
+        popover.remove()
+    }
+    const syncPortalPosition = (): void => {
+        if (!portal || !dom.isConnected) return
+        portal = getContextPreviewCanvasPortal(dom) ?? portal
+        positionContextPreviewCanvasPopover(trigger, popover, portal, preferredPlacement)
+    }
+    const startPortalPositionSync = (): void => {
+        stopPortalPositionSync()
+        const update = (): void => {
+            if (!dom.isConnected) {
+                restorePopoverToTile()
+                return
+            }
+            syncPortalPosition()
+            portalPositionFrame = requestAnimationFrame(update)
+        }
+        portalPositionFrame = requestAnimationFrame(update)
+    }
+    const portalPopoverToCanvasPane = (): void => {
+        const nextPortal = getContextPreviewCanvasPortal(dom)
+        if (!nextPortal) return
+        portal = nextPortal
+        copyContextPreviewPortalCssVariables(dom, popover)
+        popover.classList.add('context-preview-inline-popover-portaled')
+        nextPortal.pane.appendChild(popover)
+        syncPortalPosition()
+        startPortalPositionSync()
+    }
     const open = (): void => {
+        cancelScheduledClose()
         syncLatestContent()
         dom.classList.add('is-open')
         popover.classList.add('is-open')
+        portalPopoverToCanvasPane()
     }
     const close = (): void => {
+        cancelScheduledClose()
         dom.classList.remove('is-open')
         popover.classList.remove('is-open')
+        if (popover.parentElement !== dom) restorePopoverToTile()
+    }
+    const scheduleCloseUnlessMovingBetweenTileAndPopover = (event: PointerEvent | FocusEvent): void => {
+        const nextTarget = event.relatedTarget
+        if (nextTarget instanceof Node && (dom.contains(nextTarget) || popover.contains(nextTarget))) return
+        cancelScheduledClose()
+        closeTimer = setTimeout(close, CONTEXT_PREVIEW_POPOVER_CLOSE_DELAY_MS)
     }
 
     dom.addEventListener('pointerenter', open)
-    dom.addEventListener('pointerleave', close)
+    dom.addEventListener('pointerleave', scheduleCloseUnlessMovingBetweenTileAndPopover)
     dom.addEventListener('focusin', open)
-    dom.addEventListener('focusout', close)
+    dom.addEventListener('focusout', scheduleCloseUnlessMovingBetweenTileAndPopover)
+    popover.addEventListener('pointerenter', cancelScheduledClose)
+    popover.addEventListener('focusin', cancelScheduledClose)
+    popover.addEventListener('pointerleave', scheduleCloseUnlessMovingBetweenTileAndPopover)
+    popover.addEventListener('focusout', scheduleCloseUnlessMovingBetweenTileAndPopover)
 
     return {
         dom,
         destroy: () => {
+            cancelScheduledClose()
+            stopPortalPositionSync()
             dom.removeEventListener('pointerenter', open)
-            dom.removeEventListener('pointerleave', close)
+            dom.removeEventListener('pointerleave', scheduleCloseUnlessMovingBetweenTileAndPopover)
             dom.removeEventListener('focusin', open)
-            dom.removeEventListener('focusout', close)
+            dom.removeEventListener('focusout', scheduleCloseUnlessMovingBetweenTileAndPopover)
+            popover.removeEventListener('pointerenter', cancelScheduledClose)
+            popover.removeEventListener('focusin', cancelScheduledClose)
+            popover.removeEventListener('pointerleave', scheduleCloseUnlessMovingBetweenTileAndPopover)
+            popover.removeEventListener('focusout', scheduleCloseUnlessMovingBetweenTileAndPopover)
+            popover.remove()
             dom.remove()
         },
     }

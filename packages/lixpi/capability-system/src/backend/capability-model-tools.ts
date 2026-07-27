@@ -20,6 +20,8 @@ export type CapabilityModelToolDefinition = {
     description: string
     inputSchema: Record<string, unknown>
     capabilityId?: string
+    capabilityName?: string
+    executionPolicy?: 'model-required' | 'model-choice'
 }
 
 export function getStandingCapabilityModelTools(): CapabilityModelToolDefinition[] {
@@ -86,7 +88,8 @@ export function getAttachedCapabilityModelTools(
     return plan.serializable.rootCapabilityIds.flatMap(capabilityId => {
         const capability = plan.getManifest(capabilityId)
         if (capability?.kind !== 'tool'
-            || capability.manifest.tool?.executionPolicy !== 'model-choice') return []
+            || (capability.manifest.tool?.executionPolicy !== 'model-choice'
+                && capability.manifest.tool?.executionPolicy !== 'model-required')) return []
         const schema = plan.getResource(capabilityId, capability.manifest.tool.inputSchema.resourceId)
         if (!schema) return []
         try {
@@ -96,6 +99,8 @@ export function getAttachedCapabilityModelTools(
                 description: capability.manifest.description,
                 inputSchema,
                 capabilityId,
+                capabilityName: capability.manifest.name,
+                executionPolicy: capability.manifest.tool.executionPolicy,
             }]
         } catch {
             return []

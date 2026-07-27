@@ -12,7 +12,7 @@ import { getAssetRequesterContext } from '../../services/asset-requester-context
 import { PromptReferenceCatalogService } from '../../services/prompt-reference-catalog-service.ts'
 
 const { CAPABILITY_SUBJECTS, PROMPT_REFERENCE_SUBJECTS } = NATS_SUBJECTS
-const VALID_CATEGORIES = new Set<PromptReferenceCategory>(['media', 'capabilities', 'tools', 'skills'])
+const VALID_CATEGORIES = new Set<PromptReferenceCategory>(['media', 'artifacts', 'capabilities', 'tools', 'skills'])
 
 let moduleCatalog: CapabilityModuleCatalog | undefined
 

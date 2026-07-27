@@ -2,7 +2,7 @@
 
 import {
     estimateBranchMarkerDimensions,
-    getGeneratedMediaChromeCollisionHeight,
+    getGeneratedOutputChromeCollisionHeight,
     getPendingGeneratedMediaNodeId,
     rebalanceBranchTreesAndResolve,
     resizeBranchMarkerToDimensions,
@@ -19,6 +19,8 @@ import type {
     CanvasNode,
     CanvasNodeGeometry,
     CanvasState,
+    CapabilityArtifactCanvasNode,
+    CapabilityJsonValue,
     ImageCanvasNode,
     MediaBranchLineagePlan,
     MediaGenerationRunMeta,
@@ -38,6 +40,7 @@ import { settings } from '../settings.ts'
 
 type MarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
+type GeneratedOutputNode = ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode
 type CanvasVisibleArea = { width: number; height: number }
 type ProjectionContext = { proseMirrorThreadContent?: unknown }
 
@@ -335,8 +338,8 @@ const rebalance = (
             y: position.y,
             width: node.dimensions.width,
             height: node.dimensions.height + (
-                node.type === 'image' || node.type === 'video'
-                    ? getGeneratedMediaChromeCollisionHeight(node.type)
+                node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact'
+                    ? getGeneratedOutputChromeCollisionHeight(node.type)
                     : 0
             ),
         }),
@@ -396,7 +399,7 @@ export const buildAssetCanvasGeometryUpdate = ({
         && (
             geometryNodeIds.has(node.nodeId)
             || (isMarkerNode(node) && node.generationRequestId === generationRequestId)
-            || ((node.type === 'image' || node.type === 'video')
+            || ((node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact')
                 && node.generatedBy?.generationRequestId === generationRequestId)
         )
     )
@@ -725,25 +728,94 @@ export const projectGeneratedAssetNode = ({
     return { canvasState: next, nodeId, geometryNodes: geometryDiff(canvasState, next) }
 }
 
+export const projectGeneratedArtifactNode = ({
+    canvasState,
+    assetId,
+    artifactTypeId,
+    generationRun,
+    conversationAssetId,
+    capabilityRunId,
+    capabilityId,
+    toolId,
+    input,
+    dimensions,
+}: {
+    canvasState: CanvasState
+    assetId: string
+    artifactTypeId: string
+    generationRun: MediaGenerationRunMeta
+    conversationAssetId: string
+    capabilityRunId: string
+    capabilityId: string
+    toolId: string
+    input: Record<string, CapabilityJsonValue>
+    dimensions: { width: number; height: number }
+}): { canvasState: CanvasState; nodeId: string; geometryNodes: CanvasNodeGeometry[] } => {
+    const assignment = generationRun.lineageAssignment
+    if (!assignment) throw new Error('Generated Artifact canvas projection requires a lineage assignment')
+    const existingLineageParent = findNode(canvasState.nodes, assignment.lineageParentNodeId)
+    const markerResult = ensureMarkers(
+        canvasState,
+        existingLineageParent && isMarkerNode(existingLineageParent)
+            ? []
+            : markerNodesFromAssignment(assignment, conversationAssetId, canvasState),
+    )
+    const nodeId = `capability-artifact-${assetId}`
+    const existing = markerResult.state.nodes.find(node => node.nodeId === nodeId)
+    const lineageParentNodeId = assignment.lineageParentNodeId
+        ?? assignment.branchLineNodeId
+        ?? assignment.branchForkNodeId
+        ?? assignment.parentMediaNodeId
+        ?? assignment.branchOriginNodeId
+    const source = findNode(markerResult.state.nodes, lineageParentNodeId)
+    const position = existing?.position
+        ?? positionRightOf(source, markerResult.state, dimensions, markerResult.state.nodes.length)
+    const node: CapabilityArtifactCanvasNode = {
+        nodeId,
+        type: 'capabilityArtifact',
+        artifactTypeId,
+        assetId,
+        position,
+        dimensions,
+        generatedBy: {
+            outputKind: 'capabilityArtifact',
+            conversationAssetId,
+            capabilityRunId,
+            capabilityId,
+            toolId,
+            input,
+            ...generatedByLineage(assignment),
+        },
+    }
+    const withoutSameAsset = markerResult.state.nodes.filter(candidate =>
+        candidate.nodeId === nodeId || !('assetId' in candidate) || candidate.assetId !== assetId)
+    const nodes = existing
+        ? withoutSameAsset.map(candidate => candidate.nodeId === nodeId ? node : candidate)
+        : [...withoutSameAsset, node]
+    const edgeResult = addEdge(markerResult.state.edges ?? [], lineageParentNodeId, nodeId)
+    const next = rebalance({ ...markerResult.state, nodes, edges: edgeResult.edges }).state
+    return { canvasState: next, nodeId, geometryNodes: geometryDiff(canvasState, next) }
+}
+
 export const detachReviewedGeneratedOutputsFromCanvas = ({
     canvasState,
     scope,
     nodeId,
 }: {
     canvasState: CanvasState
-    scope: 'media-node' | 'branch-lineage'
+    scope: 'output-node' | 'branch-lineage'
     nodeId: string
 }): {
     canvasState: CanvasState
-    affectedNodes: GeneratedMediaNode[]
+    affectedNodes: GeneratedOutputNode[]
     geometryNodes: CanvasNodeGeometry[]
     removedNodeIds: string[]
     removedEdgeIds: string[]
 } => {
-    const affectedNodes = canvasState.nodes.filter((candidate): candidate is GeneratedMediaNode => {
-        if (candidate.type !== 'image' && candidate.type !== 'video') return false
+    const affectedNodes = canvasState.nodes.filter((candidate): candidate is GeneratedOutputNode => {
+        if (candidate.type !== 'image' && candidate.type !== 'video' && candidate.type !== 'capabilityArtifact') return false
         if (!candidate.generatedBy?.branchId) return false
-        if (scope === 'media-node') return candidate.nodeId === nodeId
+        if (scope === 'output-node') return candidate.nodeId === nodeId
         return candidate.generatedBy.branchOriginNodeId === nodeId
             || candidate.generatedBy.branchForkNodeId === nodeId
             || candidate.generatedBy.branchLineNodeId === nodeId
@@ -761,20 +833,21 @@ export const detachReviewedGeneratedOutputsFromCanvas = ({
         node.generatedBy?.branchLineNodeId,
     ].filter((value): value is string => Boolean(value))))
     const detachedNodes = canvasState.nodes.map((candidate): CanvasNode => {
-        if ((candidate.type !== 'image' && candidate.type !== 'video') || !affectedNodeIds.has(candidate.nodeId)) return candidate
+        if ((candidate.type !== 'image' && candidate.type !== 'video' && candidate.type !== 'capabilityArtifact')
+            || !affectedNodeIds.has(candidate.nodeId)) return candidate
         const generatedBy = candidate.generatedBy
         if (!generatedBy) return candidate
-        const {
-            branchId: _branchId,
-            parentMediaNodeId: _parentMediaNodeId,
-            parentImageNodeId: _parentImageNodeId,
-            branchOriginNodeId: _branchOriginNodeId,
-            branchForkNodeId: _branchForkNodeId,
-            branchLineNodeId: _branchLineNodeId,
-            lineageParentNodeId: _lineageParentNodeId,
-            ...provenanceLocator
-        } = generatedBy
-        return { ...candidate, generatedBy: provenanceLocator }
+        const provenanceLocator = { ...generatedBy } as Record<string, unknown>
+        for (const field of [
+            'branchId',
+            'parentMediaNodeId',
+            'parentImageNodeId',
+            'branchOriginNodeId',
+            'branchForkNodeId',
+            'branchLineNodeId',
+            'lineageParentNodeId',
+        ]) delete provenanceLocator[field]
+        return { ...candidate, generatedBy: provenanceLocator } as CanvasNode
     })
     const edgesWithoutDetachedLineage = (canvasState.edges ?? []).filter((edge) =>
         !(affectedNodeIds.has(edge.targetNodeId) && detachedLineageParentIds.has(edge.sourceNodeId))
@@ -787,7 +860,7 @@ export const detachReviewedGeneratedOutputsFromCanvas = ({
         .filter((node): node is MarkerNode => isMarkerNode(node))
         .map(node => [node.nodeId, node.type]))
     for (const candidate of detachedNodes) {
-        if (candidate.type !== 'image' && candidate.type !== 'video') continue
+        if (candidate.type !== 'image' && candidate.type !== 'video' && candidate.type !== 'capabilityArtifact') continue
         if (candidate.generatedBy?.branchOriginNodeId) referencedOriginNodeIds.add(candidate.generatedBy.branchOriginNodeId)
         if (candidate.generatedBy?.branchForkNodeId) referencedForkNodeIds.add(candidate.generatedBy.branchForkNodeId)
         if (candidate.generatedBy?.branchLineNodeId) referencedLineNodeIds.add(candidate.generatedBy.branchLineNodeId)
@@ -847,7 +920,7 @@ export const removeGeneratedOutputCandidateFromCanvas = ({
         .filter((node): node is MarkerNode => isMarkerNode(node))
         .map(node => [node.nodeId, node.type]))
     for (const candidate of withoutCandidate) {
-        if (candidate.type !== 'image' && candidate.type !== 'video') continue
+        if (candidate.type !== 'image' && candidate.type !== 'video' && candidate.type !== 'capabilityArtifact') continue
         if (candidate.generatedBy?.branchOriginNodeId) referencedOriginNodeIds.add(candidate.generatedBy.branchOriginNodeId)
         if (candidate.generatedBy?.branchForkNodeId) referencedForkNodeIds.add(candidate.generatedBy.branchForkNodeId)
         if (candidate.generatedBy?.branchLineNodeId) referencedLineNodeIds.add(candidate.generatedBy.branchLineNodeId)

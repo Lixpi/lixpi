@@ -17,7 +17,6 @@ import {
 import {
     TOOL_NAME,
     applyImagePromptLimitToSystemPrompt,
-    buildImagePromptRewriteInstruction,
     extractReferenceImages,
     getToolForProvider,
 } from '../tools/image-generation.ts'
@@ -27,11 +26,14 @@ import {
 } from '../tools/video-generation.ts'
 import { VEO_POLL_INTERVAL_MS } from '../config.ts'
 import {
+    buildGoogleRequiredCapabilityToolConfig,
     CapabilityModelToolExecutor,
     shouldExposeCapabilityModelTools,
 } from '../../capability-system/capability-model-tool-executor.ts'
 import { asGoogleTool } from '@lixpi/capability-system/backend'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
+import { assertProviderMessageInputKinds } from './provider-capabilities.ts'
+import { assessProviderInputBudget } from './provider-input-budget.ts'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -94,6 +96,7 @@ export class GoogleProvider extends BaseProvider {
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
+        assertProviderMessageInputKinds('Google', state.modelVersion, state.messages)
         const messages = state.messages
         const modelVersion = state.modelVersion
         const maxTokens = state.maxCompletionSize
@@ -120,8 +123,11 @@ export class GoogleProvider extends BaseProvider {
         const hasVideoModel = !!state.videoModelVersion
         const injectVideoTool = hasVideoModel && !enableImageGeneration && !enableVideoGeneration
         let mediaFanoutAllowedFunctionNames: string[] = []
+        const providerFunctionDeclarations: Array<Record<string, any>> = []
         const capabilityToolExecutor = shouldExposeCapabilityModelTools(state)
-            ? new CapabilityModelToolExecutor(state, this.capabilityDispatcher)
+            ? new CapabilityModelToolExecutor(state, this.capabilityDispatcher, {
+                onGenerationTrace: trace => this.publisher.capabilityGenerationTrace(trace),
+            })
             : undefined
 
         // Resolve message content (so reference-image extraction sees data URLs)
@@ -174,21 +180,23 @@ export class GoogleProvider extends BaseProvider {
         }
 
         if (injectTool || injectVideoTool || capabilityToolExecutor) {
-            const functionDeclarations: Array<Record<string, any>> = []
             if (injectTool) {
                 const toolDef = getToolForProvider('Google', state.imageModelMetaInfo, state.imageProviderName)
-                functionDeclarations.push({ name: TOOL_NAME, description: toolDef.description, parameters: toolDef.parameters })
+                providerFunctionDeclarations.push({ name: TOOL_NAME, description: toolDef.description, parameters: toolDef.parameters })
                 mediaFanoutAllowedFunctionNames.push(TOOL_NAME)
             }
             if (injectVideoTool) {
                 const videoToolDef = getVideoToolForProvider('Google')
-                functionDeclarations.push({ name: VIDEO_TOOL_NAME, description: videoToolDef.description, parameters: videoToolDef.parameters })
+                providerFunctionDeclarations.push({ name: VIDEO_TOOL_NAME, description: videoToolDef.description, parameters: videoToolDef.parameters })
                 mediaFanoutAllowedFunctionNames.push(VIDEO_TOOL_NAME)
             }
-            if (capabilityToolExecutor) {
-                functionDeclarations.push(...capabilityToolExecutor.definitions().map(asGoogleTool))
+            const initialFunctionDeclarations = [
+                ...providerFunctionDeclarations,
+                ...(capabilityToolExecutor?.definitions().map(asGoogleTool) ?? []),
+            ]
+            if (initialFunctionDeclarations.length > 0) {
+                config.tools = [{ functionDeclarations: initialFunctionDeclarations }]
             }
-            config.tools = [{ functionDeclarations }]
         }
 
         let systemInstruction: string | undefined
@@ -251,6 +259,10 @@ export class GoogleProvider extends BaseProvider {
                     })),
                 }, null, 0)}`)
                 await this.imagePub.partial('', 0)
+                assessProviderInputBudget({
+                    state,
+                    request: { model: modelVersion, contents, config },
+                })
                 const response = await this.client.models.generateContent({
                     model: modelVersion,
                     contents: contents as any,
@@ -309,10 +321,36 @@ export class GoogleProvider extends BaseProvider {
                     capabilityCalls: Array<{ callId: string; name: string; arguments: Record<string, any>; part: any }>
                     usageMetadata?: any
                 }> => {
+                    const pendingRequiredToolName = capabilityToolExecutor?.pendingRequiredToolName()
+                    const functionDeclarations = [
+                        ...providerFunctionDeclarations,
+                        ...(capabilityToolExecutor?.definitions().map(asGoogleTool) ?? []),
+                    ]
+                    const streamConfigWithoutTools = { ...streamConfig }
+                    delete streamConfigWithoutTools.tools
+                    const currentStreamConfig = functionDeclarations.length > 0
+                        ? { ...streamConfigWithoutTools, tools: [{ functionDeclarations }] }
+                        : streamConfigWithoutTools
+                    const completionSystemInstruction = capabilityToolExecutor?.withCompletionInstruction(
+                        currentStreamConfig.systemInstruction,
+                    )
+                    const currentStreamConfigWithInstruction = completionSystemInstruction
+                        ? { ...currentStreamConfig, systemInstruction: completionSystemInstruction }
+                        : currentStreamConfig
+                    const effectiveStreamConfig = pendingRequiredToolName
+                        ? {
+                            ...currentStreamConfigWithInstruction,
+                            toolConfig: buildGoogleRequiredCapabilityToolConfig(pendingRequiredToolName),
+                        }
+                        : currentStreamConfigWithInstruction
+                    assessProviderInputBudget({
+                        state,
+                        request: { model: modelVersion, contents, config: effectiveStreamConfig },
+                    })
                     const stream = await this.client.models.generateContentStream({
                         model: modelVersion,
                         contents: contents as any,
-                        config: streamConfig as any,
+                        config: effectiveStreamConfig as any,
                     })
                     let detectedImage: string | undefined
                     let detectedVideo: string | undefined
@@ -426,6 +464,10 @@ export class GoogleProvider extends BaseProvider {
                 }
             } else {
                 // Pure text streaming
+                assessProviderInputBudget({
+                    state,
+                    request: { model: modelVersion, contents, config },
+                })
                 const stream = await this.client.models.generateContentStream({
                     model: modelVersion,
                     contents: contents as any,
@@ -474,10 +516,16 @@ export class GoogleProvider extends BaseProvider {
                 }
             }
 
-            if (!effectiveImageGen && !effectiveVideoGen) this.publisher.end()
+            if (!effectiveImageGen
+                && !effectiveVideoGen
+                && !state.pendingCapabilityOutputFinalizations?.length) this.publisher.end()
         } catch (e: any) {
             err(`Google streaming failed: ${e?.message ?? e}`)
             update.error = e?.message ?? String(e)
+            if (!effectiveImageGen && !effectiveVideoGen) {
+                this.publisher.error(update.error)
+                this.publisher.end()
+            }
         }
 
         return update
@@ -499,35 +547,6 @@ export class GoogleProvider extends BaseProvider {
             }
         }
         return parts.length > 0 ? parts : [{ text: '' }]
-    }
-
-    protected override async rewriteImagePromptToFitLimit(
-        state: ProviderState,
-        prompt: string,
-        maxChars: number,
-    ): Promise<string | undefined> {
-        const response = await this.client.models.generateContent({
-            model: state.modelVersion,
-            contents: [{ role: 'user', parts: [{ text: `Original image prompt:\n${prompt}` }] }] as any,
-            config: {
-                temperature: 0.2,
-                maxOutputTokens: Math.max(256, Math.ceil((maxChars + 3) / 4) + 128),
-                systemInstruction: buildImagePromptRewriteInstruction(maxChars),
-            } as any,
-        })
-
-        const direct = (response as any).text
-        if (typeof direct === 'string' && direct.trim()) return direct.trim()
-
-        const parts: string[] = []
-        for (const candidate of response.candidates ?? []) {
-            if (!candidate.content?.parts) continue
-            for (const part of candidate.content.parts) {
-                if ((part as any).text) parts.push(((part as any).text as string).trim())
-            }
-        }
-        const out = parts.filter(Boolean).join('\n').trim()
-        return out || undefined
     }
 
     // Synchronous submit + poll loop for VEO video generation. Emits

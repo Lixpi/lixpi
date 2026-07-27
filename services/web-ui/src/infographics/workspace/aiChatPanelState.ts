@@ -6,7 +6,7 @@ import type {
     CanvasState,
 } from '@lixpi/constants'
 
-const RIGHT_SIDE_PANEL_MODES: CanvasRightSidePanelMode[] = ['capabilities', 'media', 'aiThreads']
+const RIGHT_SIDE_PANEL_MODES: CanvasRightSidePanelMode[] = ['capabilities', 'artifacts', 'media', 'aiThreads']
 
 function sanitizeTopLevelMode(mode: CanvasRightSidePanelMode | undefined): CanvasRightSidePanelMode {
     return mode && RIGHT_SIDE_PANEL_MODES.includes(mode) ? mode : 'aiThreads'

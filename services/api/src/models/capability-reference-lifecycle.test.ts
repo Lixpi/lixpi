@@ -40,6 +40,7 @@ import {
     CAPABILITY_BLOB_RETIREMENT_GRACE_MS,
     retireSupersededCapabilityBlobReferences,
     saveCapability,
+    seedBuiltInCapability,
 } from './capability.ts'
 
 const oldResourceHash = '1'.repeat(64)
@@ -71,6 +72,54 @@ const nextManifest: CapabilityManifest = {
         mediaType: 'text/markdown',
         role: 'instructions',
     }],
+}
+
+const builtInInputSchema = {
+    resourceId: 'input-schema',
+    blobHash: '3'.repeat(64),
+    mediaType: 'application/schema+json' as const,
+    role: 'schema' as const,
+}
+
+const builtInOutputSchema = {
+    resourceId: 'output-schema',
+    blobHash: '4'.repeat(64),
+    mediaType: 'application/schema+json' as const,
+    role: 'schema' as const,
+}
+
+const upgradedBuiltInManifest: CapabilityManifest = {
+    schemaVersion: 1,
+    capabilityId: 'global.legacy-tool',
+    kind: 'tool',
+    name: 'Legacy Tool',
+    description: 'A built-in Tool upgraded to the current manifest contract.',
+    references: [],
+    resources: [builtInInputSchema, builtInOutputSchema],
+    tool: {
+        toolType: 'legacy-tool',
+        inputSchema: builtInInputSchema,
+        outputSchema: builtInOutputSchema,
+        executionPolicy: 'required',
+        executionMultiplicity: 'once',
+        modelAxisPolicy: {
+            reasoning: 'first-selected',
+            image: 'ignore',
+            video: 'ignore',
+            outputMode: 'capability-only',
+        },
+        workflow: {
+            steps: [{
+                stepId: 'execute',
+                title: 'Execute',
+                action: 'legacy-tool.execute',
+                dependsOn: [],
+                input: {},
+                progress: {},
+            }],
+            outputs: {},
+        },
+    },
 }
 
 const record: CapabilityCatalogRecord = {
@@ -373,6 +422,80 @@ describe('Capability Blob reference lifecycle', () => {
         })).rejects.toThrow('INVALID_CAPABILITY_MANIFEST')
 
         expect(mocks.store).not.toHaveBeenCalled()
+        expect(transactWrite).not.toHaveBeenCalled()
+    })
+
+    it('replaces an invalid pre-upgrade manifest only through trusted built-in seeding', async () => {
+        const legacyManifest = structuredClone(upgradedBuiltInManifest) as Record<string, any>
+        delete legacyManifest.tool.executionMultiplicity
+        delete legacyManifest.tool.modelAxisPolicy
+        const builtInRecord: CapabilityCatalogRecord = {
+            ...record,
+            capabilityId: upgradedBuiltInManifest.capabilityId,
+            kind: 'tool',
+            scope: 'global',
+            scopeOwnerId: 'system',
+            storageOwnerId: 'system',
+            catalogExposure: 'module-internal',
+            parentModuleId: 'legacy-module',
+            ownerUserId: 'system',
+        }
+        ;(globalThis as any).dynamoDBService.getItem.mockResolvedValue(builtInRecord)
+        mocks.getContentAddressedBlob.mockResolvedValue(
+            new TextEncoder().encode(JSON.stringify(legacyManifest)),
+        )
+        mocks.store.mockResolvedValue({
+            ...storedManifestBlob,
+            blobKey: `system#${newManifestHash}`,
+            organizationId: 'system',
+        })
+
+        await seedBuiltInCapability({
+            manifest: upgradedBuiltInManifest,
+            summary: 'Upgraded built-in',
+            tags: ['global'],
+            storageOwnerId: 'system',
+            allowedActions: new Set(['legacy-tool.execute']),
+            parentModuleId: 'legacy-module',
+            catalogExposure: 'module-internal',
+        })
+
+        expect(transactWrite).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps ordinary saves fail-closed when the previous manifest is invalid', async () => {
+        const builtInRecord: CapabilityCatalogRecord = {
+            ...record,
+            capabilityId: upgradedBuiltInManifest.capabilityId,
+            kind: 'tool',
+            scope: 'global',
+            scopeOwnerId: 'system',
+            storageOwnerId: 'system',
+            catalogExposure: 'module-internal',
+            parentModuleId: 'legacy-module',
+            ownerUserId: 'system',
+        }
+        ;(globalThis as any).dynamoDBService.getItem.mockResolvedValue(builtInRecord)
+        mocks.getContentAddressedBlob.mockResolvedValue(new TextEncoder().encode('{invalid'))
+
+        await expect(saveCapability({
+            manifest: upgradedBuiltInManifest,
+            scope: 'global',
+            scopeOwnerId: 'system',
+            storageOwnerId: 'system',
+            summary: 'Upgraded built-in',
+            tags: ['global'],
+            parentModuleId: 'legacy-module',
+            catalogExposure: 'module-internal',
+            expectedManifestBlobHash: oldManifestHash,
+            requester: {
+                userId: 'system',
+                organizationIds: [],
+                canManageGlobalCapabilities: true,
+            },
+            allowedActions: new Set(['legacy-tool.execute']),
+        })).rejects.toThrow('INVALID_CAPABILITY_MANIFEST_JSON')
+
         expect(transactWrite).not.toHaveBeenCalled()
     })
 })

@@ -21,6 +21,7 @@ const getTokenSilentlyMock = vi.hoisted(() => vi.fn())
 const receiveSegmentMock = vi.hoisted(() => vi.fn())
 const uuidMock = vi.hoisted(() => vi.fn(() => 'matrix-request-id'))
 const userGetMock = vi.hoisted(() => vi.fn())
+const onErrorMock = vi.hoisted(() => vi.fn())
 
 let consoleErrorSpy: { mockRestore: () => void } | null = null
 let consoleLogSpy: { mockRestore: () => void } | null = null
@@ -80,6 +81,7 @@ describe('AiInteractionService', () => {
             workspaceId,
             conversationAssetId,
             organizationId,
+            onError: onErrorMock,
         })
 
         await flushPromises()
@@ -118,7 +120,16 @@ describe('AiInteractionService', () => {
         expect(service.getGenerationRun({ generationRun: { reasoningRunId: 'trace-run' } } as any)).toEqual({ reasoningRunId: 'trace-run' })
         expect(service.getGenerationRun({ imageGenerationTrace: { generationRun: { reasoningRunId: 'image-run' } } } as any)).toEqual({ reasoningRunId: 'image-run' })
         expect(service.getGenerationRun({ videoGenerationTrace: { generationRun: { reasoningRunId: 'video-run' } } } as any)).toEqual({ reasoningRunId: 'video-run' })
+        expect(service.getGenerationRun({ capabilityGenerationTrace: { generationRun: { reasoningRunId: 'capability-run' } } } as any)).toEqual({ reasoningRunId: 'capability-run' })
         expect(service.getChatResponseSubject()).toBe(responseSubject)
+    })
+
+    it('reports a top-level API rejection to its owner without forwarding a segment', () => {
+        service.onChatMessageResponse({ error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED' })
+
+        expect(onErrorMock).toHaveBeenCalledOnce()
+        expect(onErrorMock).toHaveBeenCalledWith('ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED')
+        expect(receiveSegmentMock).not.toHaveBeenCalled()
     })
 
     it('tracks provider per run key and falls back when events omit aiProvider', () => {
@@ -306,6 +317,45 @@ describe('AiInteractionService', () => {
             hasAudio: true,
             durationSeconds: 9,
         }))
+    })
+
+    it('maps Capability generation traces into the authoritative chat history stream', () => {
+        const generationRun = {
+            requestKind: 'media-generation-matrix',
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            reasoningModelId: 'Anthropic:claude-haiku-4-5',
+            reasoningIndex: 0,
+        }
+        const capabilityGenerationTrace = {
+            traceVersion: 'capability-generation-trace-v1',
+            generationRun,
+            capabilityId: 'action-timeline',
+            capabilityName: 'Action Timeline',
+            capabilityRunId: 'timeline-run',
+            chatModelProvider: 'Anthropic',
+            chatModelId: 'Anthropic:claude-haiku-4-5',
+            input: { durationMs: 15_000, precisionMs: 2_000 },
+            outputAssetIds: ['timeline-asset'],
+            steps: [],
+        }
+
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.CAPABILITY_GENERATION_TRACE,
+                aiProvider: 'Anthropic',
+                capabilityGenerationTrace,
+            },
+        })
+
+        expect(receiveSegmentMock).toHaveBeenCalledWith({
+            type: 'capability_generation_trace',
+            capabilityGenerationTrace,
+            aiProvider: 'Anthropic',
+            conversationAssetId,
+            usesServerProseMirror: true,
+            generationRun,
+        })
     })
 
     it('logs and does not create segments when the transport reports an error', () => {

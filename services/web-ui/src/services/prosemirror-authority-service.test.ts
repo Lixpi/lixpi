@@ -75,6 +75,20 @@ function flushPromises(): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, 0))
 }
 
+function createDeferred<T>(): {
+    promise: Promise<T>
+    resolve: (value: T) => void
+} {
+    let resolvePromise: ((value: T) => void) | undefined
+    const promise = new Promise<T>((resolve) => {
+        resolvePromise = resolve
+    })
+    return {
+        promise,
+        resolve: (value: T) => resolvePromise?.(value),
+    }
+}
+
 function createTransaction(): MockTransaction {
     const transaction: MockTransaction = {
         metadata: new Map(),
@@ -246,6 +260,35 @@ describe('ProseMirrorAuthorityService', () => {
         expect(view.dispatch).not.toHaveBeenCalled()
         expect(nats.request).toHaveBeenCalledTimes(1)
         service.disconnect()
+    })
+
+    it('releases a lease resolved after disconnect without notifying or subscribing', async () => {
+        const nats = createNats()
+        mocks.getData.mockReturnValue(nats)
+        const deferredLease = createDeferred<{ leaseId: string; workspaceId: string; expiresAt: number }>()
+        mocks.acquireLease.mockReturnValue(deferredLease.promise)
+        const { view } = createView()
+        const onLeaseStateChange = vi.fn()
+
+        const service = new ProseMirrorAuthorityService({
+            ...coordinate,
+            baseVersion: 0,
+            getView: () => view,
+            onLeaseStateChange,
+        })
+        service.disconnect()
+        deferredLease.resolve({ leaseId: 'late-lease', workspaceId: coordinate.workspaceId, expiresAt: 999 })
+        await flushPromises()
+
+        expect(mocks.releaseLease).toHaveBeenCalledWith(
+            coordinate.assetId,
+            coordinate.workspaceId,
+            'late-lease',
+            'client-uuid',
+        )
+        expect(onLeaseStateChange).not.toHaveBeenCalled()
+        expect(nats.subscribe).not.toHaveBeenCalled()
+        expect(nats.request).not.toHaveBeenCalled()
     })
 
     it('applies out-of-order steps once replayed and drains backlog', async () => {

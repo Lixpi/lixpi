@@ -37,6 +37,7 @@ The active Asset editor modes have different document shapes:
 - Asset content (`documentType: 'assetContent'`): `block+`
 - Asset conversation (`documentType: 'assetConversation'`): `aiChatThread+`
 - Sealed Asset provenance (`documentType: 'assetProvenance'`): `aiChatThread+`, mounted read-only
+- Registered Capability Artifact (`documentType: 'capabilityArtifact'`): module-owned document shape supplied through an injected schema and plugin set
 - Asset title (`documentType: 'assetTitle'`): `documentTitle`, an ephemeral title-only editor used above media nodes
 - Asset metadata (`documentType: 'assetMetadata'`): `documentTitle paragraph`, an ephemeral editor that maps edits to `Asset.title` and the media descriptor summary
 - Floating prompt input (`documentType: 'aiPromptInput'`): `aiPromptInput`
@@ -50,7 +51,7 @@ The shared schema builder does two important things:
 
 Custom nodes are intentionally split by responsibility:
 
-- Inline prompt references use the typed `prompt_reference` atom. The shared schema also parses `capability_reference` atoms in stored drafts and conversation snapshots; insertion paths create only `prompt_reference`.
+- Inline prompt references use the typed `prompt_reference` atom. The shared schema also parses `capability_reference` atoms in stored drafts and conversation snapshots; insertion paths create only `prompt_reference`. One shared prompt-reference preview renderer resolves Asset identity, labels, authenticated media, and hover cards. Canvas hosts select its inline-popover mode so cards remain inside the canvas transform; ordinary app surfaces retain body-portaled placement.
 
 - Base custom nodes (exported by `@lixpi/prosemirror`, re-exported through `customNodes/index.js`):
   - `code_block` override (`codeBlockNode`): extends the base `code_block` with attrs (e.g. theme) used by the CodeMirror NodeView.
@@ -65,6 +66,8 @@ Custom nodes are intentionally split by responsibility:
 
 - AI prompt input (schema spec exported by `@lixpi/prosemirror`; browser NodeView stays in `plugins/aiPromptInputPlugin/`):
   - `aiPromptInputNode` (`aiPromptInput`): floating composer used to send messages to any selected canvas node. Content: `(paragraph | block)+`. Renders as a floating element below the active node.
+  - Model controls reconcile the API-configured default into the node attrs before button submission and whenever restored prompt state clears a required selection; the label shown in the selector therefore matches the model IDs emitted in the submit payload.
+  - Submission is rejected locally without clearing the draft when the required reasoning-model attr is still empty.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -89,6 +92,7 @@ Notes
 ## Editor construction (`components/editor.ts`)
 
 - Creates a `Schema` through `createProseMirrorSchema(documentType)` from `@lixpi/prosemirror`:
+- Uses an explicitly injected registered Artifact schema when one is supplied; generic package modules do not add their document nodes to the global schema switch.
   - Regular documents use only base `customNodes`.
   - AI chat threads extend base `customNodes` with AI chat node specs from `aiChatThreadPlugin`.
 - Initializes `EditorView` with:
@@ -179,7 +183,7 @@ graph LR
 - Emits full doc JSON on any doc-changing transaction unless `skipDispatch` is set.
 - Legacy titled schemas may detect first-child title changes. Asset `content`, `conversation`, and `provenance` roles are title-free; global titles update through Asset metadata.
 - Skips persistence callbacks for AI chat thread documents. AI chat final snapshots are written by the API when the authoritative stream ends; the live callback still mirrors in-flight docs for canvas previews.
-- Authority-backed editors call `asset.document.resume` on mount. The NATS reply contains only a small authenticated HTTP reference to the Object-Store snapshot plus a byte-bounded event page; the authority fetches snapshot JSON over HTTP and drains replay pages until its cursor reaches the returned latest sequence. Document freshness is tracked through role versions from step/control payloads.
+- Authority-backed editors call `asset.document.resume` on mount. The NATS reply contains only a small authenticated HTTP reference to the Object-Store snapshot plus a byte-bounded event page; the authority fetches snapshot JSON over HTTP and drains replay pages until its cursor reaches the returned latest sequence. Document freshness is tracked through role versions from step/control payloads. Disconnect is authoritative over in-flight lease acquisition: a late lease is released without notifying or remounting the destroyed editor.
 - The server-authored AI response path purges its conversation step subject immediately after the final snapshot and `END` event are persisted. General mutable-document settlement keeps incorporated client-edit steps replayable for five minutes before purging through that sequence. When local steps are still pending, resume replays and rebases those events instead of replacing the editor with the newer settled snapshot.
 
 ### focusPlugin (`plugins/focusPlugin.js`)

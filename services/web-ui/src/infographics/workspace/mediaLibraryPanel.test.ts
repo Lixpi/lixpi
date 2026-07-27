@@ -35,9 +35,9 @@ describe('Media Library panel contract', () => {
         expectSourceNotToContain(panelSource, 'role="tablist"')
     })
 
-    it('loads cataloged Assets and excludes conversation records', () => {
+    it('loads cataloged Assets and excludes conversation and Artifact records', () => {
         expectSourceToContain(panelSource, 'await this.assetService.list({ limit: 100, cursor })')
-        expectSourceToContain(panelSource, "filter((asset) => asset.primaryCategory !== 'conversation')")
+        expectSourceToContain(panelSource, "asset.primaryCategory !== 'conversation' && asset.primaryCategory !== 'capabilityArtifact'")
         expectSourceToContain(panelSource, 'for (const asset of this.allAssets)')
     })
 
@@ -80,10 +80,11 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(panelStyles, '.media-library-panel-images .media-library-inspector')
     })
 
-    it('drives the right side panel surface from a top-level Capabilities / Media / AI Threads switch', () => {
+    it('drives the right side panel surface from the four top-level modes', () => {
         expectSourceToContain(canvasSource, 'createSlidingSwitch<CanvasRightSidePanelMode>')
         expectSourceToContain(canvasSource, 'workspace-right-panel-mode-switch')
         expectSourceToContain(canvasSource, "{ label: 'Capabilities', value: 'capabilities' }")
+        expectSourceToContain(canvasSource, "{ label: 'Artifacts', value: 'artifacts' }")
         expectSourceToContain(canvasSource, "{ label: 'Media', value: 'media' }")
         expectSourceToContain(canvasSource, "{ label: 'AI Threads', value: 'aiThreads' }")
         expectSourceToContain(canvasSource, 'function openRightSidePanelToMode')

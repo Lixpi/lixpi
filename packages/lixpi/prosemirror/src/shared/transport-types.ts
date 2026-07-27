@@ -1,6 +1,11 @@
-import { NATS_SUBJECTS, getNatsUserSubjectToken, type MediaGenerationRunMeta } from '@lixpi/constants'
+import {
+    NATS_SUBJECTS,
+    getNatsUserSubjectToken,
+    type AssetDocumentRole,
+    type MediaGenerationRunMeta,
+} from '@lixpi/constants'
 
-export type AssetDocumentRole = 'content' | 'conversation' | 'provenance'
+export type { AssetDocumentRole } from '@lixpi/constants'
 
 export type AssetDocCoordinate = {
     organizationId: string

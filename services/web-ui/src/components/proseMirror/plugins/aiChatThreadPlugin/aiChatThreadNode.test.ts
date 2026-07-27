@@ -1,7 +1,7 @@
 'use strict'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { EditorState } from 'prosemirror-state'
+import { EditorState, TextSelection } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
 import { applyStyle } from '$src/utils/domTemplates.ts'
 import {
@@ -9,6 +9,7 @@ import {
     p,
     reasoningSection,
     thread,
+    userMsg,
     response,
     schema,
     createEditorState,
@@ -270,6 +271,30 @@ describe('aiChatThreadNodeView — DOM structure', () => {
         const { nodeView } = createThreadNodeView()
 
         expect(nodeView.dom.contains(nodeView.contentDOM!)).toBe(true)
+    })
+})
+
+describe('aiChatThreadNodeView — content focus', () => {
+    it('places the caret inside message text instead of on the block-only thread container', () => {
+        const documentNode = doc(thread(userMsg(p('hello'))))
+        const state = EditorState.create({ doc: documentNode, schema })
+        const mockView = {
+            state,
+            editable: true,
+            dispatch: vi.fn((transaction) => {
+                mockView.state = mockView.state.apply(transaction)
+            }),
+            focus: vi.fn(),
+        }
+        const threadNode = documentNode.firstChild!
+        const nodeView = aiChatThreadNodeView(threadNode, mockView, () => 0)
+
+        nodeView.contentDOM!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+
+        expect(mockView.focus).toHaveBeenCalledOnce()
+        expect(mockView.state.selection).toBeInstanceOf(TextSelection)
+        expect(mockView.state.selection.$from.parent.inlineContent).toBe(true)
+        expect(mockView.state.selection.$from.parent.type.name).toBe('paragraph')
     })
 })
 

@@ -391,7 +391,10 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
     }
 
     update(): void {
-        this.syncSelection(false)
+        // A restored/remote prompt document can replace attrs after the control
+        // first mounts. Required selectors must re-commit the API-owned default
+        // instead of leaving the visible control and submitted attrs divergent.
+        this.syncSelection(true)
     }
 
     destroy(): void {

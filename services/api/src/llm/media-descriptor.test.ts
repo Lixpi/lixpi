@@ -113,6 +113,35 @@ describe('describeTextContent', () => {
         expect(result).toEqual({ title: '', summary: '', entityTags: [], styleTags: [] })
     })
 
+    it('sends text beyond the former 20,000-character boundary without clipping', async () => {
+        const text = `prefix-${'x'.repeat(25_000)}-suffix`
+        const callVlm = vi.fn(async (args: any) => {
+            expect(args.userMessages[0].content.map((block: any) => block.text).join('')).toContain(text)
+            return {
+                parsed: { title: 'Long Notes', summary: 'Complete notes.', entityTags: [], styleTags: [] },
+                rawText: '',
+                modelName: 'gpt-4.1',
+            }
+        })
+
+        await describeTextContent({ ...baseArgs, text, callVlm })
+
+        expect(callVlm).toHaveBeenCalledOnce()
+    })
+
+    it('rejects an oversized descriptor result instead of shortening it', async () => {
+        const summary = 'x'.repeat(10_000)
+        const callVlm = vi.fn(async () => ({
+            parsed: { title: 'Long Notes', summary, entityTags: [], styleTags: [] },
+            rawText: '',
+            modelName: 'gpt-4.1',
+        }))
+
+        await expect(describeTextContent({ ...baseArgs, text: 'content', callVlm }))
+            .rejects.toThrow('MEDIA_DESCRIPTOR_SUMMARY_TOO_LONG')
+        expect(summary).toHaveLength(10_000)
+    })
+
     it('returns empty fields when the model yields nothing usable', async () => {
         const callVlm = vi.fn(async () => ({ parsed: {} as any, rawText: '', modelName: 'gpt-4.1' }))
         const result = await describeTextContent({ ...baseArgs, text: 'some content', callVlm })

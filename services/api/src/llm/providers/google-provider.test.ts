@@ -1,6 +1,15 @@
 'use strict'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    directCapabilityToolName,
+    SealedResolvedCapabilityPlan,
+} from '@lixpi/capability-system/backend'
+import type {
+    CapabilityManifest,
+    CapabilityResourceRef,
+    ResolvedCapabilityPlan,
+} from '@lixpi/constants'
 
 const debugTools = vi.hoisted(() => ({
     info: vi.fn(),
@@ -111,6 +120,56 @@ const baseGoogleState = () => ({
     temperature: 0.7,
 })
 
+const makeModelRequiredPlan = (): SealedResolvedCapabilityPlan => {
+    const schemaRef: CapabilityResourceRef = {
+        resourceId: 'input',
+        blobHash: 'input-hash',
+        mediaType: 'application/schema+json',
+        role: 'schema',
+    }
+    const manifest: CapabilityManifest = {
+        schemaVersion: 1,
+        capabilityId: 'action-timeline',
+        kind: 'tool',
+        name: 'Action Timeline',
+        description: 'Create a timed action timeline.',
+        references: [],
+        resources: [schemaRef],
+        tool: {
+            toolType: 'action-timeline',
+            inputSchema: schemaRef,
+            outputSchema: schemaRef,
+            executionPolicy: 'model-required',
+            executionMultiplicity: 'per-reasoning-model',
+            modelAxisPolicy: {
+                reasoning: 'all-selected',
+                image: 'ignore',
+                video: 'ignore',
+                outputMode: 'capability-only',
+            },
+            workflow: { steps: [], outputs: {} },
+        },
+    }
+    const serializable: ResolvedCapabilityPlan = {
+        rootCapabilityIds: ['action-timeline'],
+        capabilities: [{ capabilityId: 'action-timeline', kind: 'tool', manifestBlobHash: 'manifest-hash', manifest }],
+        resolvedManifests: [{ capabilityId: 'action-timeline', manifestBlobHash: 'manifest-hash' }],
+    }
+    return new SealedResolvedCapabilityPlan(serializable, [{
+        capabilityId: 'action-timeline',
+        ref: schemaRef,
+        bytes: new TextEncoder().encode(JSON.stringify({
+            type: 'object',
+            required: ['durationMs', 'precisionMs'],
+            properties: {
+                durationMs: { type: 'number' },
+                precisionMs: { type: 'number' },
+            },
+            additionalProperties: false,
+        })),
+    }])
+}
+
 describe('buildVeoReferenceImages', () => {
     it('uses the VEO 3.1 asset reference type for every reference image', () => {
         const refs = [
@@ -170,7 +229,7 @@ describe('getGoogleImageResponseSummary', () => {
     })
 })
 
-describe('GoogleProvider rewrite flow', () => {
+describe('GoogleProvider construction', () => {
     const createDeps = (): BaseProviderDeps => ({
         natsService: { publish: vi.fn() } as any,
         storeWorkspaceImage: vi.fn(),
@@ -196,31 +255,6 @@ describe('GoogleProvider rewrite flow', () => {
             .toThrow('GOOGLE_API_KEY environment variable is required')
     })
 
-    it('rewrites image prompts from direct model text responses', async () => {
-        generateContent.mockResolvedValueOnce({ text: '  concise rephrase  ' })
-        const provider = new GoogleProvider('ws-1:thread-1', createDeps())
-        const state = { modelVersion: 'gemini-2.5-flash-image' } as any
-
-        const rewritten = await (provider as any).rewriteImagePromptToFitLimit(state, 'Too verbose prompt', 64)
-
-        expect(rewritten).toBe('concise rephrase')
-        expect(generateContent).toHaveBeenCalledTimes(1)
-    })
-
-    it('falls back to collecting text parts when direct text is missing', async () => {
-        generateContent.mockResolvedValueOnce({
-            candidates: [
-                { content: { parts: [{ text: 'first' }, { text: 'second', extra: true }] } },
-            ],
-        })
-        const provider = new GoogleProvider('ws-1:thread-1', createDeps())
-        const state = { modelVersion: 'gemini-2.5-flash-image' } as any
-
-        const rewritten = await (provider as any).rewriteImagePromptToFitLimit(state, 'Too verbose prompt', 64)
-
-        expect(rewritten).toBe('first\nsecond')
-        expect(generateContent).toHaveBeenCalledTimes(1)
-    })
 })
 
 describe('GoogleProvider internals', () => {
@@ -574,6 +608,96 @@ describe('GoogleProvider internals', () => {
             completionTokens: 5,
             totalTokens: 10,
         }))
+    })
+
+    it('forces the attached Action Timeline Tool, then streams the reasoning response after execution', async () => {
+        const toolName = directCapabilityToolName('action-timeline')
+        googleMocks.generateContentStream.mockResolvedValueOnce(makeAsyncStream([{
+            candidates: [{
+                content: {
+                    parts: [{
+                        functionCall: {
+                            name: toolName,
+                            args: { durationMs: 1, precisionMs: 1 },
+                        },
+                    }],
+                },
+            }],
+        }]))
+        googleMocks.generateContentStream.mockResolvedValueOnce(makeAsyncStream([{
+            candidates: [{ content: { parts: [{ text: 'The action timeline is ready.' }] } }],
+        }]))
+        const use = vi.fn(async () => ({
+            run: { runId: 'timeline-run', status: 'completed', outputAssetIds: ['timeline-asset'] },
+            output: { outputKind: 'capabilityArtifact', assetId: 'timeline-asset' },
+            stepOutputs: {},
+            events: [],
+        }))
+        const provider = new GoogleProvider('ws-1:thread-1', {
+            ...createProviderDeps(),
+            capabilityDispatcher: { use },
+        } as any)
+        const internals = configureProviderInternals(provider)
+        const capabilityGenerationTrace = vi.fn()
+        ;(provider as any).streamPublisher.capabilityGenerationTrace = capabilityGenerationTrace
+
+        const state = {
+            ...baseGoogleState(),
+            eventMeta: { userId: 'user-1', organizationId: 'organization-1' },
+            resolvedCapabilityPlan: makeModelRequiredPlan(),
+            capabilityInputs: {
+                'action-timeline': { durationMs: 15_000, precisionMs: 2_000 },
+            },
+            generationRun: {
+                requestKind: 'media-generation-matrix',
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                reasoningModelId: 'Google:gemini-2.5-flash',
+                reasoningIndex: 0,
+            },
+        } as any
+
+        await (provider as any).streamImpl(state)
+
+        expect(googleMocks.generateContentStream).toHaveBeenCalledTimes(2)
+        expect(googleMocks.generateContentStream.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+            config: expect.objectContaining({
+                toolConfig: {
+                    functionCallingConfig: {
+                        mode: 'ANY',
+                        allowedFunctionNames: [toolName],
+                    },
+                },
+            }),
+        }))
+        expect(googleMocks.generateContentStream.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+            contents: expect.arrayContaining([
+                expect.objectContaining({
+                    role: 'user',
+                    parts: [expect.objectContaining({
+                        functionResponse: expect.objectContaining({ name: toolName }),
+                    })],
+                }),
+            ]),
+            config: expect.not.objectContaining({ toolConfig: expect.anything() }),
+        }))
+        expect(googleMocks.generateContentStream.mock.calls[1]?.[0]?.config?.tools).toBeUndefined()
+        expect(googleMocks.generateContentStream.mock.calls[1]?.[0]?.config?.systemInstruction)
+            .toContain('Do not include code')
+        expect(googleMocks.generateContentStream.mock.calls[0]?.[0]?.config?.systemInstruction)
+            .not.toContain('Do not include code')
+        expect(use).toHaveBeenCalledWith(expect.objectContaining({
+            arguments: expect.objectContaining({
+                durationMs: 15_000,
+                precisionMs: 2_000,
+            }),
+        }))
+        expect(capabilityGenerationTrace).toHaveBeenCalledWith(expect.objectContaining({
+            capabilityName: 'Action Timeline',
+            capabilityRunId: 'timeline-run',
+        }))
+        expect(internals.chunk).toHaveBeenCalledWith('The action timeline is ready.')
+        expect(internals.end).not.toHaveBeenCalled()
     })
 
     it('falls back to forced function calling when fanout is enabled and no initial tool call is emitted', async () => {

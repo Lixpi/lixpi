@@ -13,6 +13,7 @@ import {
     aiResponseMessageNodeType,
     aiUserMessageNodeType,
     findAiChatThreadContentNode,
+    parseCapabilityInputsAttr,
     parseProseMirrorJsonContent,
     type ProseMirrorJsonNode,
 } from '@lixpi/prosemirror'
@@ -21,12 +22,22 @@ import {
     getAiInteractionResponseSubject,
     NATS_SUBJECTS,
     type AiInteractionChatSendMessagePayload,
+    type CapabilityJsonValue,
     type CanvasNode,
     type MediaBranchCandidateRoleHint,
     type MediaBranchCandidateSnapshot,
     type ProviderName,
     type WorkspaceContextSnapshot,
 } from '@lixpi/constants'
+import {
+    ACTION_TIMELINE_TOOL_ID,
+    resolveCharacterCreatorRouting,
+    restrictMediaRequestToCharacterImages,
+} from '@lixpi/capability-system'
+import {
+    resolveCapabilities,
+    validateJsonSchemaValue,
+} from '@lixpi/capability-system/backend'
 
 import AiModel from '../../models/ai-model.ts'
 import type { LlmModule } from '../../llm/index.ts'
@@ -39,15 +50,15 @@ import { ensureAiInteractionEventRelay } from '../../services/ai-interaction-eve
 import AssetDocumentService from '../../services/asset-document-service.ts'
 import { buildCandidateTranscriptContext } from '../../llm/graph/media-branch-snapshot.ts'
 import {
-    resolveCharacterCreatorRouting,
-    restrictMediaRequestToCharacterImages,
-} from '../../capability-modules/character-creator/character-creator-routing.ts'
-import {
+    addPromptReferenceAudioToLatestUserMessage,
     addPromptReferenceMediaToLatestUserMessage,
     authorizePromptReferences,
     extractLatestUserPromptReferences,
 } from '../../services/prompt-reference-resolver.ts'
 import PromptReferenceRecentModel from '../../models/prompt-reference-recent.ts'
+import { CapabilityModelResolverStore } from '../../capability-system/capability-runtime-adapters.ts'
+import { capabilityActionRegistry } from '../../capability-system/capability-runtime.ts'
+import { resolveActionTimelineInput } from '../../capability-system/action-timeline-input.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 type PipelineResumePayload = {
@@ -185,6 +196,62 @@ const buildAuthoritativeConversationMessages = (
     return messages
 }
 
+const readAuthoritativeCapabilityInputs = (
+    doc: object,
+    conversationAssetId: string,
+): Record<string, Record<string, CapabilityJsonValue>> => {
+    const root = parseProseMirrorJsonContent(doc)
+    const thread = root ? findAiChatThreadContentNode(root, conversationAssetId) : null
+    if (!thread) throw new Error('CONVERSATION_THREAD_NOT_FOUND')
+    return parseCapabilityInputsAttr(thread.attrs?.capabilityInputs)
+}
+
+const validateCapabilityInputs = async ({
+    inputs,
+    references,
+    requester,
+    workspaceId,
+    organizationId,
+}: {
+    inputs: Record<string, Record<string, CapabilityJsonValue>>
+    references: Array<{ capabilityId: string; kind: 'tool' | 'skill' }>
+    requester: Awaited<ReturnType<typeof getAssetRequesterContext>>
+    workspaceId: string
+    organizationId: string
+}): Promise<void> => {
+    if (Object.keys(inputs).length === 0) return
+    const allowedToolIds = new Set(references.filter(reference => reference.kind === 'tool')
+        .map(reference => reference.capabilityId))
+    for (const capabilityId of Object.keys(inputs)) {
+        if (!allowedToolIds.has(capabilityId)) throw new Error(`CAPABILITY_INPUT_NOT_AUTHORIZED:${capabilityId}`)
+    }
+    const plan = await resolveCapabilities(references, {
+        store: new CapabilityModelResolverStore(),
+        requester: {
+            userId: requester.userId,
+            workspaceId,
+            organizationId,
+        },
+        allowedActions: capabilityActionRegistry.allowedActionKeys(),
+    })
+    for (const [capabilityId, input] of Object.entries(inputs)) {
+        const manifest = plan.getManifest(capabilityId)?.manifest
+        const schemaRef = manifest?.tool?.inputSchema
+        const resource = schemaRef ? plan.getResource(capabilityId, schemaRef.resourceId) : undefined
+        if (!manifest?.tool || !resource) throw new Error(`CAPABILITY_INPUT_SCHEMA_NOT_FOUND:${capabilityId}`)
+        let schema: unknown
+        try {
+            schema = JSON.parse(new TextDecoder().decode(resource.bytes))
+        } catch {
+            throw new Error(`CAPABILITY_INPUT_SCHEMA_INVALID:${capabilityId}`)
+        }
+        const validation = validateJsonSchemaValue(schema, input)
+        if (!validation.valid) {
+            throw new Error(`CAPABILITY_INPUT_INVALID:${capabilityId}:${validation.errors.join('; ')}`)
+        }
+    }
+}
+
 const resolveAuthorizedCandidateSnapshot = async ({
     snapshot,
     requester,
@@ -284,7 +351,7 @@ const resolveAuthorizedCandidateSnapshot = async ({
             ...(generatedBy?.createdAt ? { createdAt: generatedBy.createdAt } : {}),
         }
     }))
-    const promptText = typeof snapshot.promptText === 'string' ? snapshot.promptText.slice(0, 20_000) : ''
+    const promptText = typeof snapshot.promptText === 'string' ? snapshot.promptText : ''
     return {
         resolverVersion: 'image-branch-vlm-v1',
         conversationAssetId,
@@ -299,6 +366,17 @@ const resolveAuthorizedCandidateSnapshot = async ({
         transcriptContext: buildCandidateTranscriptContext(candidates, promptText, snapshot.activeTargetCandidateId),
     }
 }
+
+type AuthorizedWorkspaceContextCanvasNode = Extract<CanvasNode, {
+    type: 'document' | 'image' | 'video' | 'capabilityArtifact'
+}>
+
+const isAuthorizedWorkspaceContextCanvasNode = (
+    node: CanvasNode | undefined,
+): node is AuthorizedWorkspaceContextCanvasNode => node?.type === 'document'
+    || node?.type === 'image'
+    || node?.type === 'video'
+    || node?.type === 'capabilityArtifact'
 
 const resolveAuthorizedWorkspaceContextSnapshot = ({
     snapshot,
@@ -322,19 +400,23 @@ const resolveAuthorizedWorkspaceContextSnapshot = ({
         if (seen.has(node.nodeId)) throw new Error(`DUPLICATE_WORKSPACE_CONTEXT_NODE:${node.nodeId}`)
         seen.add(node.nodeId)
         const workspaceNode = workspaceNodeById.get(node.nodeId)
-        if (!workspaceNode
-            || (workspaceNode.type !== 'document' && workspaceNode.type !== 'image' && workspaceNode.type !== 'video')
+        if (!isAuthorizedWorkspaceContextCanvasNode(workspaceNode)
             || workspaceNode.type !== node.type
             || workspaceNode.assetId !== node.assetId) {
             throw new Error(`WORKSPACE_CONTEXT_NODE_NOT_IN_WORKSPACE:${node.nodeId}`)
         }
-        const generatedBy = workspaceNode.type === 'image' || workspaceNode.type === 'video'
+        const generatedBy = workspaceNode.type === 'image'
+            || workspaceNode.type === 'video'
+            || workspaceNode.type === 'capabilityArtifact'
             ? workspaceNode.generatedBy
             : undefined
         return {
             nodeId: workspaceNode.nodeId,
             type: workspaceNode.type,
             assetId: workspaceNode.assetId,
+            ...(workspaceNode.type === 'capabilityArtifact' ? {
+                artifactTypeId: workspaceNode.artifactTypeId,
+            } : {}),
             ...(node.descriptorStatus ? { descriptorStatus: node.descriptorStatus } : {}),
             ...(node.title ? { title: node.title } : {}),
             ...(node.descriptorSummary ? { descriptorSummary: node.descriptorSummary } : {}),
@@ -351,7 +433,7 @@ const resolveAuthorizedWorkspaceContextSnapshot = ({
         resolverVersion: 'workspace-context-v1',
         workspaceId,
         conversationAssetId,
-        promptText: typeof snapshot.promptText === 'string' ? snapshot.promptText.slice(0, 20_000) : '',
+        promptText: typeof snapshot.promptText === 'string' ? snapshot.promptText : '',
         nodes,
     }
 }
@@ -622,16 +704,63 @@ export const aiInteractionSubjects = [
             if (!latestAuthoritativeUserMessage.content.trim() && authorizedPromptReferences.references.length > 0) {
                 latestAuthoritativeUserMessage.content = 'Use the selected prompt references.'
             }
-            const authoritativePromptText = latestAuthoritativeUserMessage.content.slice(0, 20_000)
+            const authoritativePromptText = latestAuthoritativeUserMessage.content
             if (authorizedPromptReferences.documentContext.length > 0) {
                 latestAuthoritativeUserMessage.content = [
                     latestAuthoritativeUserMessage.content,
                     ...authorizedPromptReferences.documentContext,
                 ].filter(Boolean).join('\n\n')
             }
+            const moduleCatalog = getLlmModule().capabilityModuleCatalog
+            const routedModule = typeof moduleCatalog?.routePrompt === 'function'
+                ? moduleCatalog.routePrompt(authoritativePromptText)
+                : undefined
+            const routedCapabilityReferences = routedModule
+                && !authorizedPromptReferences.capabilityReferences.some(reference => (
+                    reference.kind === routedModule.kind && reference.capabilityId === routedModule.capabilityId
+                ))
+                ? [
+                    ...authorizedPromptReferences.capabilityReferences,
+                    { capabilityId: routedModule.capabilityId, kind: routedModule.kind },
+                ]
+                : authorizedPromptReferences.capabilityReferences
+            const submittedCapabilityInputs = readAuthoritativeCapabilityInputs(
+                authoritativeProseMirrorInitialDoc,
+                conversationAssetId,
+            )
+            const actionTimelineSelected = routedCapabilityReferences.some(reference => (
+                reference.kind === 'tool' && reference.capabilityId === ACTION_TIMELINE_TOOL_ID
+            ))
+            const capabilityInputs = { ...submittedCapabilityInputs }
+            if (actionTimelineSelected) {
+                const submittedTiming = submittedCapabilityInputs[ACTION_TIMELINE_TOOL_ID] ?? {}
+                const routedTiming = routedModule?.capabilityId === ACTION_TIMELINE_TOOL_ID
+                    ? routedModule.input
+                    : {}
+                const resolution = resolveActionTimelineInput({
+                    prompt: authoritativePromptText,
+                    referenceAssetIds: authorizedPromptReferences.modelInputs.map(input => input.assetId),
+                    routedInput: routedTiming,
+                    submittedInput: submittedTiming,
+                })
+                if (!resolution.valid) return rejectSend(resolution.error)
+                capabilityInputs[ACTION_TIMELINE_TOOL_ID] = {
+                    prompt: resolution.input.prompt,
+                    referenceAssetIds: resolution.input.referenceAssetIds,
+                    durationMs: resolution.input.durationMs,
+                    precisionMs: resolution.input.precisionMs,
+                }
+            }
+            await validateCapabilityInputs({
+                inputs: capabilityInputs,
+                references: routedCapabilityReferences,
+                requester,
+                workspaceId,
+                organizationId: workspace.organizationId,
+            })
             const characterCreatorRouting = resolveCharacterCreatorRouting(
                 authoritativePromptText,
-                authorizedPromptReferences.capabilityReferences,
+                routedCapabilityReferences,
             )
             const canonicalMediaGenerationRequest = mediaGenerationRequest
                 ? {
@@ -639,21 +768,39 @@ export const aiInteractionSubjects = [
                     ...(resolvedRegeneration ? { regeneration: resolvedRegeneration } : {}),
                 }
                 : undefined
-            const routedMediaGenerationRequest = canonicalMediaGenerationRequest && characterCreatorRouting.isCharacterCreator
-                ? restrictMediaRequestToCharacterImages(canonicalMediaGenerationRequest)
-                : canonicalMediaGenerationRequest
+            const routedMediaGenerationRequest = canonicalMediaGenerationRequest
+                ? actionTimelineSelected
+                    ? {
+                        ...canonicalMediaGenerationRequest,
+                        useMultipleImageModels: false,
+                        useMultipleVideoModels: false,
+                        imageModelIds: [],
+                        videoModelIds: [],
+                    }
+                    : characterCreatorRouting.isCharacterCreator
+                        ? restrictMediaRequestToCharacterImages(canonicalMediaGenerationRequest)
+                        : canonicalMediaGenerationRequest
+                : undefined
+            const routedAiImageModel = actionTimelineSelected ? undefined : aiImageModel
+            const routedAiVideoModel = actionTimelineSelected || characterCreatorRouting.isCharacterCreator
+                ? undefined
+                : aiVideoModel
             const hasMediaModelSelection = Boolean(
                 routedMediaGenerationRequest?.imageModelIds.length
                 || routedMediaGenerationRequest?.videoModelIds.length
-                || aiImageModel
-                || (!characterCreatorRouting.isCharacterCreator && aiVideoModel),
+                || routedAiImageModel
+                || routedAiVideoModel,
             )
-            const providerMessages = hasMediaModelSelection
+            const providerMessagesWithoutAudio = hasMediaModelSelection
                 ? authoritativeMessages
                 : addPromptReferenceMediaToLatestUserMessage(
                     authoritativeMessages,
                     authorizedPromptReferences.mediaCandidates,
                 )
+            const providerMessages = addPromptReferenceAudioToLatestUserMessage(
+                providerMessagesWithoutAudio,
+                authorizedPromptReferences.modelInputs,
+            )
             if (characterCreatorRouting.isCharacterCreator) {
                 info('[CHARACTER_CREATOR] Enforcing selected reasoning/image model axes and excluding video', {
                     reasoningModelIds: routedMediaGenerationRequest?.reasoningModelIds ?? aiReasoningModels,
@@ -722,9 +869,13 @@ export const aiInteractionSubjects = [
                     try {
                         await runWithLease(async () => await getLlmModule().processMediaGenerationMatrix({
                             ...data,
-                            aiVideoModels: characterCreatorRouting.isCharacterCreator ? [] : aiVideoModels,
+                            aiImageModels: actionTimelineSelected ? [] : aiImageModels,
+                            aiVideoModels: actionTimelineSelected || characterCreatorRouting.isCharacterCreator
+                                ? []
+                                : aiVideoModels,
                             messages: providerMessages,
                             capabilityReferences: characterCreatorRouting.capabilityReferences,
+                            capabilityInputs,
                             promptReferenceAssetIds: authorizedPromptReferences.assetIds,
                             mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
                             workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,
@@ -799,8 +950,8 @@ export const aiInteractionSubjects = [
                 }
 
                 let imageModelMetaInfo: any = null
-                if (aiImageModel) {
-                    const [imageProvider, imageModel] = (aiImageModel as string).split(':')
+                if (routedAiImageModel) {
+                    const [imageProvider, imageModel] = (routedAiImageModel as string).split(':')
                     imageModelMetaInfo = await AiModel.getAiModel({
                         provider: imageProvider!,
                         model: imageModel!,
@@ -809,12 +960,11 @@ export const aiInteractionSubjects = [
                     if (imageModelMetaInfo) {
                         info(`Image model resolved: ${imageProvider}:${imageModel}`)
                     } else {
-                        warn(`Image model not found: ${aiImageModel}, proceeding without image routing`)
+                        warn(`Image model not found: ${routedAiImageModel}, proceeding without image routing`)
                     }
                 }
 
                 let videoModelMetaInfo: any = null
-                const routedAiVideoModel = characterCreatorRouting.isCharacterCreator ? undefined : aiVideoModel
                 if (routedAiVideoModel) {
                     const [videoProvider, videoModel] = (routedAiVideoModel as string).split(':')
                     videoModelMetaInfo = await AiModel.getAiModel({
@@ -862,17 +1012,18 @@ export const aiInteractionSubjects = [
                             organizationId,
                             assetLeaseId: lease.leaseId,
                             assetLeaseHolderId: leaseHolderId,
-                            enableImageGeneration,
+                            enableImageGeneration: actionTimelineSelected ? false : enableImageGeneration,
                             imageSize,
-                            videoAspectRatio: characterCreatorRouting.isCharacterCreator ? undefined : normalizedVideoAspectRatio,
-                            videoResolution: characterCreatorRouting.isCharacterCreator ? undefined : normalizedVideoResolution,
-                            videoDurationSeconds: characterCreatorRouting.isCharacterCreator || !normalizedVideoDuration
-                                ? undefined
-                                : Number(normalizedVideoDuration),
-                            videoSourceForExtension: characterCreatorRouting.isCharacterCreator
-                                ? undefined
-                                : resolvedVideoSourceForExtension,
+                            videoAspectRatio: routedAiVideoModel ? normalizedVideoAspectRatio : undefined,
+                            videoResolution: routedAiVideoModel ? normalizedVideoResolution : undefined,
+                            videoDurationSeconds: routedAiVideoModel && normalizedVideoDuration
+                                ? Number(normalizedVideoDuration)
+                                : undefined,
+                            videoSourceForExtension: routedAiVideoModel
+                                ? resolvedVideoSourceForExtension
+                                : undefined,
                             capabilityReferences: characterCreatorRouting.capabilityReferences,
+                            capabilityInputs,
                             promptReferenceAssetIds: authorizedPromptReferences.assetIds,
                             mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
                             workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,

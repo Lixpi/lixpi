@@ -91,6 +91,17 @@
     color: #7357b8;
 }
 
+.prompt-reference-picker-glyph-capability-artifact {
+    background: rgba(229, 143, 78, 0.14);
+    color: #a55324;
+}
+
+.prompt-reference-picker-glyph-capability-artifact svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
 .prompt-reference-picker-copy {
     display: grid;
     min-width: 0;
@@ -113,6 +124,16 @@
         font-size: 11px;
         line-height: 1.35;
     }
+}
+
+.prompt-reference-picker-artifact-host .action-timeline-reference {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: inherit;
+    font: 800 13px/1.3 system-ui, sans-serif;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .prompt-reference-picker-badge {
@@ -161,8 +182,8 @@
     padding: 0;
     border: 0;
     background: transparent;
-    color: #3d649c;
-    font-size: 0.9375em;
+    color: var(--prompt-reference-color, #3d649c);
+    font-size: inherit;
     line-height: 1;
     vertical-align: baseline;
     white-space: nowrap;
@@ -175,7 +196,7 @@
 }
 
 .prompt-reference-chip-capability-module {
-    color: #a55324;
+    color: var(--prompt-reference-capability-module-color, #a55324);
 }
 
 .prompt-reference-chip-tool {
@@ -203,5 +224,5 @@
 
 .prompt-reference-chip-name {
     font-weight: 500;
-    line-height: 1;
+    line-height: inherit;
 }

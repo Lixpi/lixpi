@@ -7,6 +7,7 @@ import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
 import {
     STREAM_STATUS,
+    type CapabilityGenerationTrace,
     type ImageGenerationTrace,
     type MarkdownParsedSegment,
     type MarkdownStreamToken,
@@ -64,6 +65,7 @@ type AiStreamContent = {
     hasAudio?: boolean
     imageGenerationTrace?: ImageGenerationTrace
     videoGenerationTrace?: VideoGenerationTrace
+    capabilityGenerationTrace?: CapabilityGenerationTrace
 }
 
 type AiChatProseMirrorStreamAssemblerConfig = {
@@ -336,6 +338,10 @@ export class AiChatProseMirrorStreamAssembler {
             return
         }
         if (content.status === STREAM_STATUS.VIDEO_GENERATION_TRACE) {
+            this.upsertGenerationTrace(content)
+            return
+        }
+        if (content.status === STREAM_STATUS.CAPABILITY_GENERATION_TRACE) {
             this.upsertGenerationTrace(content)
             return
         }
@@ -808,7 +814,9 @@ export class AiChatProseMirrorStreamAssembler {
     }
 
     private upsertGenerationTrace(content: AiStreamContent): void {
-        if (!content.imageGenerationTrace && !content.videoGenerationTrace) return
+        if (!content.imageGenerationTrace
+            && !content.videoGenerationTrace
+            && !content.capabilityGenerationTrace) return
         if (!this.isStarted) this.start()
 
         this.enqueue(async () => {
@@ -830,12 +838,19 @@ export class AiChatProseMirrorStreamAssembler {
                     imageGenerationTrace: content.imageGenerationTrace,
                     imageGenerationTraceId: null,
                 }
-                : {
+                : content.videoGenerationTrace
+                    ? {
                     title: 'Video generation details',
                     isOpen: false,
                     isStreaming: false,
                     videoGenerationTrace: content.videoGenerationTrace,
-                }
+                    }
+                    : {
+                        title: `${content.capabilityGenerationTrace!.capabilityName} generation details`,
+                        isOpen: false,
+                        isStreaming: false,
+                        capabilityGenerationTrace: content.capabilityGenerationTrace,
+                    }
             // A reasoning run can fan out into several media runs. Each media run
             // owns a different final prompt and trace, so key the trace block by
             // the full run instead of letting sibling variants overwrite it.
@@ -1522,7 +1537,8 @@ export class AiChatProseMirrorStreamAssembler {
                 }
                 if (!child.attrs?.mediaRunId
                     && !child.attrs?.imageGenerationTrace
-                    && !child.attrs?.videoGenerationTrace) {
+                    && !child.attrs?.videoGenerationTrace
+                    && !child.attrs?.capabilityGenerationTrace) {
                     templateResult = result
                 }
             })

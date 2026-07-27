@@ -3,8 +3,11 @@
 import type { AccessLevel, ContentDescriptor } from './types.ts'
 
 export type AssetScope = 'workspace' | 'user' | 'organization'
-export type AssetPrimaryCategory = 'image' | 'video' | 'audio' | 'document' | 'conversation'
-export type AssetDocumentRole = 'content' | 'conversation' | 'provenance'
+export type AssetPrimaryCategory = 'image' | 'video' | 'audio' | 'document' | 'conversation' | 'capabilityArtifact'
+export const ASSET_DOCUMENT_ROLES = ['content', 'conversation', 'provenance', 'capabilityArtifact'] as const
+export type AssetDocumentRole = typeof ASSET_DOCUMENT_ROLES[number]
+export const isAssetDocumentRole = (value: unknown): value is AssetDocumentRole =>
+    typeof value === 'string' && ASSET_DOCUMENT_ROLES.some(role => role === value)
 export type AssetMediaKind = 'image' | 'video' | 'audio' | 'document'
 
 export type AssetLifecycleStatus = 'creating' | 'active' | 'deleting' | 'failed'
@@ -57,6 +60,11 @@ export type AssetMedia = {
     durationSeconds?: number
     hasAudio?: boolean
     pageCount?: number
+}
+
+export type AssetCapabilityArtifact = {
+    artifactTypeId: string
+    schemaVersion: string
 }
 
 export type AssetLineage = {
@@ -114,6 +122,7 @@ export type Asset = {
     ownerUserId: string
     documents: Partial<Record<AssetDocumentRole, AssetDocumentPointer>>
     media?: AssetMedia
+    artifact?: AssetCapabilityArtifact
     lineage?: AssetLineage
     generatedOutputReview?: GeneratedOutputReview
     descriptor?: ContentDescriptor
@@ -147,6 +156,8 @@ export type AssetMeta = {
     durationSeconds?: number
     aspectRatio?: number
     descriptorSummary?: string
+    artifactTypeId?: string
+    artifactSchemaVersion?: string
     entityTags?: string[]
     styleTags?: string[]
     createdAt: number

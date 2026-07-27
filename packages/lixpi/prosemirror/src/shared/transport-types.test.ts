@@ -31,4 +31,12 @@ describe('asset document subject composition', () => {
         })
         expect(subject).toBe('asset.document.steps.org_one_two.asset_1_2.conversation')
     })
+
+    it('uses the shared Capability Artifact document role', () => {
+        expect(getAssetStepSubject({
+            organizationId: 'organization-1',
+            assetId: 'artifact-1',
+            role: 'capabilityArtifact',
+        })).toBe('asset.document.steps.organization-1.artifact-1.capabilityArtifact')
+    })
 })

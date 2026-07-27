@@ -61,6 +61,16 @@ describe('AI chat panel persisted state', () => {
         expect(state.activeTabId).toBeUndefined()
     })
 
+    it('persists the separate Artifacts top-level mode', () => {
+        const state = getAiChatPanelState(setAiChatPanelState(makeCanvasState(), {
+            ...createDefaultAiChatPanelState(),
+            isOpen: true,
+            topLevelMode: 'artifacts',
+        }))
+
+        expect(state.topLevelMode).toBe('artifacts')
+    })
+
     it('keeps session history closed by default and persists an explicit open state', () => {
         expect(getAiChatPanelState(makeCanvasState()).isSessionHistoryOpen).toBe(false)
 

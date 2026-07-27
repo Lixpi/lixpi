@@ -5,6 +5,7 @@ import * as process from 'node:process'
 import NATS_Service from '@lixpi/nats-service'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 import {
+    ASSET_DOCUMENT_ROLES,
     getDynamoDbTableStageName,
     NATS_SUBJECTS,
     type Asset,
@@ -39,10 +40,14 @@ import BlobModel, {
 import { AssetProseMirrorStepTransport } from '../prosemirror/asset-prosemirror-step-transport.ts'
 import { enqueueAssetSurfaceCleanup, enqueueBlobDeletion } from './asset-maintenance-queue.ts'
 import { ensureAssetDocumentEventRelay } from './asset-document-event-relay.ts'
+import { capabilityArtifactBackendRegistry } from '../capability-system/capability-artifacts.ts'
+import {
+    collectEmbeddedAssetIds,
+    type AssetReferenceDocumentRole,
+} from './prosemirror-asset-references.ts'
 
 const { ORG_NAME, STAGE } = process.env
 const assetsTableName = (): string => getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE)
-const ASSET_DOCUMENT_ROLES: AssetDocumentRole[] = ['content', 'conversation', 'provenance']
 const SETTLED_STEP_REPLAY_GRACE_MS = 5 * 60 * 1000
 const RESUME_EVENT_SCAN_LIMIT = 1_000
 const RESUME_EVENT_REPLY_BUDGET_BYTES = 256 * 1024
@@ -50,8 +55,27 @@ const RESUME_EVENT_REPLY_BUDGET_BYTES = 256 * 1024
 const getDocumentType = (role: AssetDocumentRole) => {
     if (role === 'content') return DOCUMENT_TYPE.ASSET_CONTENT
     if (role === 'conversation') return DOCUMENT_TYPE.ASSET_CONVERSATION
-    return DOCUMENT_TYPE.ASSET_PROVENANCE
+    if (role === 'provenance') return DOCUMENT_TYPE.ASSET_PROVENANCE
+    return 'capabilityArtifact'
 }
+
+const getArtifactDefinition = (asset: Asset) => asset.artifact
+    ? capabilityArtifactBackendRegistry.require(asset.artifact.artifactTypeId).shared
+    : undefined
+
+const getHeadlessEngineConfig = (
+    asset: Asset,
+    role: AssetDocumentRole,
+    doc: object | undefined,
+    version: number,
+) => ({
+    documentType: getDocumentType(role),
+    ...(role === 'capabilityArtifact'
+        ? { schema: getArtifactDefinition(asset)?.createDocumentSchema() }
+        : {}),
+    doc,
+    version,
+})
 
 const loadSnapshot = async (asset: Asset, role: AssetDocumentRole): Promise<AssetDocSnapshot | null> => {
     const pointer = asset.documents[role]
@@ -126,9 +150,7 @@ const loadCurrentSnapshot = async (asset: Asset, role: AssetDocumentRole): Promi
     }, 1, 10_000)
     if (!settledSnapshot && events.length === 0) return null
     const engine = new HeadlessProseMirrorEngine({
-        documentType: getDocumentType(role),
-        doc: settledSnapshot?.doc,
-        version: settledSnapshot?.version ?? 0,
+        ...getHeadlessEngineConfig(asset, role, settledSnapshot?.doc, settledSnapshot?.version ?? 0),
     })
     for (const event of events) {
         if (event.kind !== 'STEP' || event.version <= engine.version) continue
@@ -140,7 +162,9 @@ const loadCurrentSnapshot = async (asset: Asset, role: AssetDocumentRole): Promi
         role,
         ...(settledSnapshot?.blobHash ? { blobHash: settledSnapshot.blobHash } : {}),
         version: engine.version,
-        schemaVersion: PROSEMIRROR_SCHEMA_VERSION,
+        schemaVersion: role === 'capabilityArtifact'
+            ? getArtifactDefinition(asset)?.schemaVersion ?? settledSnapshot?.schemaVersion ?? PROSEMIRROR_SCHEMA_VERSION
+            : PROSEMIRROR_SCHEMA_VERSION,
         doc: engine.snapshot(),
     }
 }
@@ -155,16 +179,6 @@ const verifyLease = (asset: Asset, workspaceId: string, leaseId: string, holderI
             holder.holderId === holderId && holder.expiresAt > Date.now()
         )),
     )
-
-const collectEmbeddedAssetIds = (node: unknown, assetIds = new Set<string>()): Set<string> => {
-    if (!node || typeof node !== 'object') return assetIds
-    const record = node as { attrs?: { assetId?: unknown }; content?: unknown }
-    if (typeof record.attrs?.assetId === 'string' && record.attrs.assetId) assetIds.add(record.attrs.assetId)
-    if (Array.isArray(record.content)) {
-        for (const child of record.content) collectEmbeddedAssetIds(child, assetIds)
-    }
-    return assetIds
-}
 
 const isMatchingAssetRenditionUrl = (value: unknown, assetId: string): boolean => {
     if (typeof value !== 'string' || !value.startsWith('/api/assets/')) return false
@@ -222,9 +236,9 @@ const validateEmbeddedAssetReferences = async ({
 }: {
     hostAsset: Asset
     doc: object
-    role: 'content' | 'conversation'
+    role: 'content' | 'conversation' | 'capabilityArtifact'
 }): Promise<void> => {
-    for (const embeddedAssetId of collectEmbeddedAssetIds(doc)) {
+    for (const embeddedAssetId of collectEmbeddedAssetIds(doc, role)) {
         if (embeddedAssetId === hostAsset.assetId) throw new Error('SELF_REFERENTIAL_ASSET_DOCUMENT')
         const embeddedAsset = await getAssetRecord(embeddedAssetId)
         if (!embeddedAsset || embeddedAsset.organizationId !== hostAsset.organizationId) {
@@ -233,9 +247,11 @@ const validateEmbeddedAssetReferences = async ({
         const references = await AssetModel.listReferences(embeddedAssetId)
         const surfacePrefix = role === 'content'
             ? `document#${hostAsset.assetId}#content`
-            : `conversation#${hostAsset.assetId}#media#`
+            : role === 'capabilityArtifact'
+                ? `capabilityArtifact#${hostAsset.assetId}`
+                : `conversation#${hostAsset.assetId}#media#`
         const referenced = references.some((reference) => reference.type === 'workspace'
-            && (role === 'content'
+            && (role === 'content' || role === 'capabilityArtifact'
                 ? reference.surfaceIds?.includes(surfacePrefix)
                 : reference.surfaceIds?.some((surfaceId) => surfaceId.startsWith(surfacePrefix))))
         if (!referenced) throw new Error(`EMBEDDED_ASSET_REFERENCE_MISSING:${embeddedAssetId}`)
@@ -270,9 +286,7 @@ const settle = async ({
         0,
     )
     const engine = new HeadlessProseMirrorEngine({
-        documentType: getDocumentType(role),
-        doc: snapshot?.doc,
-        version: snapshot?.version ?? 0,
+        ...getHeadlessEngineConfig(asset, role, snapshot?.doc, snapshot?.version ?? 0),
     })
     for (const event of events) {
         if (event.kind !== 'STEP') continue
@@ -283,14 +297,27 @@ const settle = async ({
 
     const json = engine.snapshot()
     assertAssetBackedMediaNodes(json)
-    const tracksEmbeddedAssets = role === 'content' || role === 'conversation'
-    const previousEmbeddedAssetIds = tracksEmbeddedAssets
-        ? collectEmbeddedAssetIds(snapshot?.doc)
+    if (role === 'capabilityArtifact') {
+        const definition = getArtifactDefinition(asset)
+        if (!definition) throw new Error('CAPABILITY_ARTIFACT_DEFINITION_REQUIRED')
+        if (snapshot?.doc) definition.assertEditableMutation(snapshot.doc, json)
+        else definition.assertInitialDocument(json)
+    }
+    const embeddedReferenceRole: AssetReferenceDocumentRole | undefined = role === 'content'
+        || role === 'conversation'
+        || role === 'capabilityArtifact'
+        ? role
+        : undefined
+    const tracksEmbeddedAssets = Boolean(embeddedReferenceRole)
+    const previousEmbeddedAssetIds = embeddedReferenceRole
+        ? collectEmbeddedAssetIds(snapshot?.doc, embeddedReferenceRole)
         : new Set<string>()
-    const nextEmbeddedAssetIds = tracksEmbeddedAssets
-        ? collectEmbeddedAssetIds(json)
+    const nextEmbeddedAssetIds = embeddedReferenceRole
+        ? collectEmbeddedAssetIds(json, embeddedReferenceRole)
         : new Set<string>()
-    const embeddedSurfaceId = `document#${asset.assetId}#content`
+    const embeddedSurfaceId = role === 'capabilityArtifact'
+        ? `capabilityArtifact#${asset.assetId}`
+        : `document#${asset.assetId}#content`
     const newlyAttachedEmbeddedAssetIds: string[] = []
     const bytes = Buffer.from(JSON.stringify(json), 'utf8')
     const blob = await BlobModel.store({
@@ -304,7 +331,9 @@ const settle = async ({
         role,
         blobHash: blob.blobHash,
         version: engine.version,
-        schemaVersion: PROSEMIRROR_SCHEMA_VERSION,
+        schemaVersion: role === 'capabilityArtifact'
+            ? getArtifactDefinition(asset)?.schemaVersion ?? PROSEMIRROR_SCHEMA_VERSION
+            : PROSEMIRROR_SCHEMA_VERSION,
         byteSize: bytes.byteLength,
         updatedAt: now,
         ...(role === 'provenance' ? { sealedAt: now } : {}),
@@ -367,8 +396,8 @@ const settle = async ({
     }, ...projectionOperations)
     try {
         if (tracksEmbeddedAssets) {
-            if (role === 'content') {
-                if (!requester) throw new Error('CONTENT_SETTLEMENT_REQUESTER_REQUIRED')
+            if (role === 'content' || role === 'capabilityArtifact') {
+                if (!requester) throw new Error('DOCUMENT_SETTLEMENT_REQUESTER_REQUIRED')
                 for (const embeddedAssetId of nextEmbeddedAssetIds) {
                     if (previousEmbeddedAssetIds.has(embeddedAssetId)) continue
                     const attached = await AssetModel.attachWorkspaceReference({
@@ -413,7 +442,7 @@ const settle = async ({
     }
     for (const embeddedAssetId of previousEmbeddedAssetIds) {
         if (nextEmbeddedAssetIds.has(embeddedAssetId)) continue
-        if (role === 'content') {
+        if (role === 'content' || role === 'capabilityArtifact') {
             await enqueueAssetSurfaceCleanup({
                 assetId: embeddedAssetId,
                 organizationId: asset.organizationId,
@@ -448,7 +477,14 @@ const replaceSystemSnapshot = async ({
     version: number
 }): Promise<AssetDocumentPointer> => {
     if (role === 'provenance') throw new Error('USE_PROVENANCE_MATERIALIZER')
-    new HeadlessProseMirrorEngine({ documentType: getDocumentType(role), doc, version })
+    new HeadlessProseMirrorEngine(getHeadlessEngineConfig(asset, role, doc, version))
+    if (role === 'capabilityArtifact') {
+        const definition = getArtifactDefinition(asset)
+        if (!definition) throw new Error('CAPABILITY_ARTIFACT_DEFINITION_REQUIRED')
+        const previous = await loadSnapshot(asset, role)
+        if (previous?.doc) definition.assertEditableMutation(previous.doc, doc)
+        else definition.assertInitialDocument(doc)
+    }
     assertAssetBackedMediaNodes(doc)
     const bytes = Buffer.from(JSON.stringify(doc), 'utf8')
     const blob = await BlobModel.store({
@@ -462,7 +498,9 @@ const replaceSystemSnapshot = async ({
         role,
         blobHash: blob.blobHash,
         version,
-        schemaVersion: PROSEMIRROR_SCHEMA_VERSION,
+        schemaVersion: role === 'capabilityArtifact'
+            ? getArtifactDefinition(asset)?.schemaVersion ?? PROSEMIRROR_SCHEMA_VERSION
+            : PROSEMIRROR_SCHEMA_VERSION,
         byteSize: bytes.byteLength,
         updatedAt: now,
     }
@@ -520,7 +558,9 @@ const replaceSystemSnapshot = async ({
 const AssetDocumentService = {
     loadSnapshot,
     loadCurrentSnapshot,
-    getEmbeddedAssetIds: (doc: object): string[] => [...collectEmbeddedAssetIds(doc)],
+    getEmbeddedAssetIds: (doc: object, role: AssetReferenceDocumentRole): string[] => [
+        ...collectEmbeddedAssetIds(doc, role),
+    ],
     replaceSystemSnapshot,
     assertAssetBackedMediaNodes,
     submitSteps: async ({

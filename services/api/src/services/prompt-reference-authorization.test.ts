@@ -7,8 +7,12 @@ const mocks = vi.hoisted(() => ({
     getBlob: vi.fn(),
     authorizeCapability: vi.fn(),
     loadSnapshot: vi.fn(),
+    getObject: vi.fn(),
 }))
 
+vi.mock('@lixpi/nats-service', () => ({
+    default: { getInstance: () => ({ getObject: mocks.getObject }) },
+}))
 vi.mock('../models/asset.ts', () => ({ default: { get: mocks.getAsset } }))
 vi.mock('../models/blob.ts', () => ({ default: { get: mocks.getBlob } }))
 vi.mock('../models/capability.ts', () => ({ default: { authorize: mocks.authorizeCapability } }))
@@ -70,6 +74,7 @@ beforeEach(() => {
     vi.clearAllMocks()
     mocks.getAsset.mockResolvedValue(imageAsset)
     mocks.getBlob.mockResolvedValue({ bucketName: 'org-assets', objectKey: 'portrait.png' })
+    mocks.getObject.mockResolvedValue(Uint8Array.from([0x89, 0x50, 0x4e, 0x47]))
     mocks.authorizeCapability.mockImplementation(async ({ capabilityId }: { capabilityId: string }) => {
         if (capabilityId === 'global.character-creator') return {
             capabilityId,
@@ -135,10 +140,17 @@ describe('authorizePromptReferences', () => {
                 imageUrl: 'nats-obj://org-assets/portrait.png',
             }),
         ])
+        expect(result.modelInputs).toEqual([
+            expect.objectContaining({
+                kind: 'image',
+                assetId: 'asset-1',
+                title: 'Portrait',
+            }),
+        ])
         expect(result.mediaCandidates[0]).not.toHaveProperty('nodeId')
     })
 
-    it('materializes document text, grounds video by representative frame, and rejects unsupported audio before spend', async () => {
+    it('materializes document text, grounds video by representative frame, and retains audio for per-model admission', async () => {
         mocks.getAsset.mockResolvedValueOnce({
             ...imageAsset,
             assetId: 'document-1',
@@ -192,14 +204,73 @@ describe('authorizePromptReferences', () => {
         mocks.getAsset.mockResolvedValueOnce({
             ...imageAsset,
             assetId: 'audio-1',
-            media: { kind: 'audio', renditions: {} },
+            media: {
+                kind: 'audio',
+                renditions: {
+                    original: {
+                        status: 'ready',
+                        blobHash: 'c'.repeat(64),
+                        mimeType: 'audio/wav',
+                        byteSize: 100,
+                    },
+                },
+            },
         })
-        await expect(authorizePromptReferences({
+        mocks.getObject.mockResolvedValueOnce(Uint8Array.from([0x52, 0x49, 0x46, 0x46]))
+        const audioResult = await authorizePromptReferences({
             references: [{ referenceType: 'media', assetId: 'audio-1', mediaKind: 'audio' }],
             requester,
             workspace: workspace as any,
             moduleCatalog: moduleCatalog as any,
-        })).rejects.toThrow('PROMPT_REFERENCE_AUDIO_INPUT_UNSUPPORTED:audio-1')
+        })
+        expect(audioResult.modelInputs).toEqual([
+            expect.objectContaining({ kind: 'audio', assetId: 'audio-1', mimeType: 'audio/wav' }),
+        ])
+    })
+
+    it('serializes a registered Artifact losslessly and expands its cited media once', async () => {
+        const longText = 'Complete beat. '.repeat(1_100)
+        const artifactAsset = {
+            ...imageAsset,
+            assetId: 'timeline-1',
+            title: 'Action Timeline',
+            media: undefined,
+            artifact: { artifactTypeId: 'action-timeline', schemaVersion: 'action-timeline-v1' },
+            documents: { capabilityArtifact: { role: 'capabilityArtifact' } },
+            states: { ...imageAsset.states, media: 'none' },
+        }
+        mocks.getAsset.mockImplementation(async ({ assetId }: { assetId: string }) => (
+            assetId === 'timeline-1' ? artifactAsset : imageAsset
+        ))
+        mocks.loadSnapshot.mockResolvedValue({
+            doc: {
+                type: 'doc',
+                attrs: { schemaVersion: 'action-timeline-v1', durationMs: 1_000, precisionMs: 1_000 },
+                content: [{
+                    type: 'actionTimelineSegment',
+                    attrs: { startMs: 0, endMs: 1_000 },
+                    content: [{ type: 'paragraph', content: [
+                        { type: 'text', text: longText },
+                        { type: 'prompt_reference', attrs: { referenceType: 'media', assetId: 'asset-1' } },
+                    ] }],
+                }],
+            },
+        })
+
+        const result = await authorizePromptReferences({
+            references: [{
+                referenceType: 'capability-artifact',
+                assetId: 'timeline-1',
+                artifactTypeId: 'action-timeline',
+            }],
+            requester,
+            workspace: workspace as any,
+            moduleCatalog: moduleCatalog as any,
+        })
+
+        expect(result.documentContext.join('\n')).toContain(longText)
+        expect(result.assetIds).toEqual(['timeline-1', 'asset-1'])
+        expect(result.modelInputs).toEqual([expect.objectContaining({ kind: 'image', assetId: 'asset-1' })])
     })
 
     it('rejects forged node/Asset pairs and stale media-kind claims', async () => {

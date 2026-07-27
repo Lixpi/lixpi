@@ -132,6 +132,22 @@ describe('createGenericAiModelMultiSelect', () => {
         expect(removeListenerSpy).toHaveBeenCalledWith('mousedown', expect.any(Function), true)
     })
 
+    it('restores the required default after prompt attrs are replaced with an empty selection', () => {
+        const controls = createAiModelControls()
+        const control = createGenericAiModelMultiSelect(controls, 'reasoning-multi-select-restored')
+        vi.runAllTimers()
+        expect(controls.selectedModels).toEqual(['openai:reasoning-a'])
+
+        controls.selectedModels.length = 0
+        controls.setAiModels.mockClear()
+        control.update()
+
+        expect(controls.setAiModels).toHaveBeenCalledWith(['openai:reasoning-a'])
+        expect(controls.selectedModels).toEqual(['openai:reasoning-a'])
+        expect(control.dom.querySelector('.title')?.textContent).toBe('1 model')
+        control.destroy()
+    })
+
     it('does not auto-select when API default reasoning model is missing from available options', () => {
         aiModelsStore.setAiModelsCatalog({
             models: [...reasoningModels],

@@ -18,6 +18,11 @@
     },
     "dependencies": {
         "@lixpi/constants": "file:../constants/ts",
+        "@lixpi/debug-tools": "file:../debug-tools/ts",
+        "htm": "*",
+        "prosemirror-model": "*",
+        "prosemirror-state": "*",
+        "prosemirror-view": "*",
         "uuid": "*"
     }
 }

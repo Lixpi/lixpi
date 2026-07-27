@@ -15,7 +15,6 @@ import {
 } from '../utils/attachments.ts'
 import {
     applyImagePromptLimitToSystemPrompt,
-    buildImagePromptRewriteInstruction,
     extractToolCall,
     extractReferenceImages,
     getToolForProvider,
@@ -24,12 +23,14 @@ import {
     extractVideoToolCall,
     getVideoToolForProvider,
 } from '../tools/video-generation.ts'
-import { detectCapabilities } from './provider-capabilities.ts'
+import { assertProviderMessageInputKinds, detectCapabilities } from './provider-capabilities.ts'
 import {
+    buildAnthropicRequiredCapabilityToolChoice,
     CapabilityModelToolExecutor,
     shouldExposeCapabilityModelTools,
 } from '../../capability-system/capability-model-tool-executor.ts'
 import { asAnthropicTool } from '@lixpi/capability-system/backend'
+import { assessProviderInputBudget } from './provider-input-budget.ts'
 
 export class AnthropicProvider extends BaseProvider {
     readonly providerName: ProviderName = 'Anthropic'
@@ -43,6 +44,7 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
+        assertProviderMessageInputKinds('Anthropic', state.modelVersion, state.messages)
         const update: Partial<ProviderState> = {}
 
         const messages = state.messages
@@ -75,11 +77,10 @@ export class AnthropicProvider extends BaseProvider {
             tools.push(getVideoToolForProvider('Anthropic'))
         }
         const capabilityToolExecutor = shouldExposeCapabilityModelTools(state)
-            ? new CapabilityModelToolExecutor(state, this.capabilityDispatcher)
+            ? new CapabilityModelToolExecutor(state, this.capabilityDispatcher, {
+                onGenerationTrace: trace => this.publisher.capabilityGenerationTrace(trace),
+            })
             : undefined
-        if (capabilityToolExecutor) {
-            tools.push(...capabilityToolExecutor.definitions().map(asAnthropicTool))
-        }
 
         let systemPrompt = getSystemPrompt(hasImageModel, hasVideoModel)
         if (hasImageModel) {
@@ -103,9 +104,18 @@ export class AnthropicProvider extends BaseProvider {
                     model: modelVersion,
                     messages: roundMessages,
                     max_tokens: maxTokens,
-                    system: systemPrompt,
+                    system: capabilityToolExecutor?.withCompletionInstruction(systemPrompt) ?? systemPrompt,
                 }
-                if (tools.length > 0) streamArgs.tools = tools
+                const roundTools = [
+                    ...tools,
+                    ...(capabilityToolExecutor?.definitions().map(asAnthropicTool) ?? []),
+                ]
+                if (roundTools.length > 0) streamArgs.tools = roundTools
+                const pendingRequiredToolName = capabilityToolExecutor?.pendingRequiredToolName()
+                if (pendingRequiredToolName) {
+                    streamArgs.tool_choice = buildAnthropicRequiredCapabilityToolChoice(pendingRequiredToolName)
+                }
+                assessProviderInputBudget({ state, request: streamArgs })
                 const stream = this.client.messages.stream(streamArgs as any, { signal: this.signal })
                 for await (const event of stream) {
                     if (this.shouldStop) {
@@ -201,39 +211,15 @@ export class AnthropicProvider extends BaseProvider {
                 update.aiVendorRequestId = finalMessage.id
             }
 
-            this.publisher.end()
+            if (!state.pendingCapabilityOutputFinalizations?.length) this.publisher.end()
         } catch (e: any) {
             err(`Anthropic streaming failed: ${e?.message ?? e}`)
             update.error = e?.message ?? String(e)
+            this.publisher.error(update.error)
+            this.publisher.end()
         }
 
         return update
     }
 
-    protected override async rewriteImagePromptToFitLimit(
-        state: ProviderState,
-        prompt: string,
-        maxChars: number,
-    ): Promise<string | undefined> {
-        const request: Record<string, any> = {
-            model: state.modelVersion,
-            messages: [{ role: 'user', content: `Original image prompt:\n${prompt}` }],
-            max_tokens: Math.max(256, Math.ceil((maxChars + 3) / 4) + 128),
-            system: buildImagePromptRewriteInstruction(maxChars),
-        }
-        if (detectCapabilities('Anthropic', state.modelVersion).supportsTemperature) {
-            request.temperature = 0.2
-        }
-
-        const response = await this.client.messages.create(request as any)
-
-        const texts: string[] = []
-        for (const block of response.content ?? []) {
-            if ((block as any).type !== 'text') continue
-            const text = (block as any).text
-            if (typeof text === 'string' && text.trim()) texts.push(text.trim())
-        }
-        const out = texts.join('\n').trim()
-        return out || undefined
-    }
 }

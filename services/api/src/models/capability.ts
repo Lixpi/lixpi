@@ -77,6 +77,7 @@ type SaveCapabilityInput = {
     expectedManifestBlobHash?: string
     grants?: Array<{ principalId: string; accessLevel: CapabilityAccessLevel }>
     allowedActions: ReadonlySet<string>
+    allowInvalidPreviousBuiltInManifest?: boolean
 }
 
 const textEncoder = new TextEncoder()
@@ -750,13 +751,18 @@ export async function saveCapability(input: SaveCapabilityInput): Promise<Capabi
         if (!input.expectedManifestBlobHash) throw new Error('EXPECTED_MANIFEST_BLOB_HASH_REQUIRED')
     }
 
-    const previousDefinition = existing
-        ? await readAuthorizedCapabilityManifest({
-            capabilityId: existing.capabilityId,
-            requester: input.requester,
-            expectedManifestBlobHash: existing.manifestBlobHash,
-        })
-        : undefined
+    let previousDefinition: Awaited<ReturnType<typeof readAuthorizedCapabilityManifest>> | undefined
+    if (existing) {
+        try {
+            previousDefinition = await readAuthorizedCapabilityManifest({
+                capabilityId: existing.capabilityId,
+                requester: input.requester,
+                expectedManifestBlobHash: existing.manifestBlobHash,
+            })
+        } catch (error) {
+            if (!canReplaceInvalidBuiltInManifest({ input, existing, error })) throw error
+        }
+    }
     const existingGrantResult = existing
         ? await dynamoDBService.queryItems({
             tableName: capabilitiesAccessListTableName(),
@@ -981,8 +987,31 @@ export async function seedBuiltInCapability({
         catalogExposure,
         requester,
         allowedActions,
+        allowInvalidPreviousBuiltInManifest: true,
         ...(!('error' in current) ? { expectedManifestBlobHash: current.manifestBlobHash } : {}),
     })
+}
+
+function canReplaceInvalidBuiltInManifest({
+    input,
+    existing,
+    error,
+}: {
+    input: SaveCapabilityInput
+    existing: CapabilityCatalogRecord
+    error: unknown
+}): boolean {
+    const message = error instanceof Error ? error.message : ''
+    return input.allowInvalidPreviousBuiltInManifest === true
+        && (message === 'INVALID_CAPABILITY_MANIFEST' || message === 'INVALID_CAPABILITY_MANIFEST_JSON')
+        && input.requester.userId === 'system'
+        && input.requester.canManageGlobalCapabilities === true
+        && input.scope === 'global'
+        && input.scopeOwnerId === 'system'
+        && input.storageOwnerId === 'system'
+        && existing.scope === 'global'
+        && existing.scopeOwnerId === 'system'
+        && existing.storageOwnerId === 'system'
 }
 
 async function getAuthoritativeCapabilityMeta(

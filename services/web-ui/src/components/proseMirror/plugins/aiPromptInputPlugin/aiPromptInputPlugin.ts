@@ -1,7 +1,10 @@
 import { Plugin, EditorState, Transaction, TextSelection } from 'prosemirror-state'
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
-import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
+import type {
+    CapabilityJsonValue,
+    MediaGenerationConfigSelectionGroup,
+} from '@lixpi/constants'
 
 import { AI_PROMPT_INPUT_PLUGIN_KEY, SUBMIT_AI_PROMPT_META } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
 import {
@@ -9,6 +12,7 @@ import {
     createAiPromptInputNodeView,
     hasAiPromptInputContent,
     parseAiModelSelectionAttr,
+    parseCapabilityInputsAttr,
     parseMediaGenerationConfigSelectionAttr,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 
@@ -30,6 +34,7 @@ type SubmitHandler = (data: {
         videoDuration?: string
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
+    capabilityInputs: Record<string, Record<string, CapabilityJsonValue>>
 }) => void
 
 type AiPromptInputPluginOptions = {
@@ -46,6 +51,7 @@ type AiPromptInputPluginOptions = {
     createVideoResolutionDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createVideoResolutionDropdown']
     createVideoDurationDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createVideoDurationDropdown']
     createSubmitButton: Parameters<typeof createAiPromptInputNodeView>[0]['createSubmitButton']
+    createCapabilityControls?: Parameters<typeof createAiPromptInputNodeView>[0]['createCapabilityControls']
     placeholderText: string
 }
 
@@ -90,6 +96,7 @@ type InputAttrs = {
     videoResolution: string
     videoDuration: string
     videoGenerationConfigGroups: MediaGenerationConfigSelectionGroup[]
+    capabilityInputs: Record<string, Record<string, CapabilityJsonValue>>
 }
 
 function getInputAttrs(state: EditorState): InputAttrs {
@@ -106,6 +113,7 @@ function getInputAttrs(state: EditorState): InputAttrs {
         videoResolution: '',
         videoDuration: '',
         videoGenerationConfigGroups: [],
+        capabilityInputs: {},
     }
     state.doc.descendants((node: ProseMirrorNode) => {
         if (node.type.name === aiPromptInputNodeType) {
@@ -122,6 +130,7 @@ function getInputAttrs(state: EditorState): InputAttrs {
                 videoResolution: node.attrs.videoResolution || '',
                 videoDuration: node.attrs.videoDuration || '',
                 videoGenerationConfigGroups: parseMediaGenerationConfigSelectionAttr(node.attrs.videoGenerationConfigGroups),
+                capabilityInputs: parseCapabilityInputsAttr(node.attrs.capabilityInputs),
             }
             return false
         }
@@ -176,6 +185,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         createVideoResolutionDropdown,
         createVideoDurationDropdown,
         createSubmitButton,
+        createCapabilityControls,
         placeholderText,
     } = options
 
@@ -211,6 +221,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                 videoDuration: attrs.videoDuration,
                 ...(videoGenerationConfigGroups.length > 0 ? { configGroups: videoGenerationConfigGroups } : {}),
             },
+            capabilityInputs: attrs.capabilityInputs,
         }
     }
 
@@ -219,6 +230,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         if (!contentJSON) return
 
         const attrs = getInputAttrs(view.state)
+        if (!attrs.aiReasoningModels[0]) return
 
         onSubmit(buildSubmitPayload(contentJSON, attrs))
 
@@ -286,6 +298,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                     createVideoResolutionDropdown,
                     createVideoDurationDropdown,
                     createSubmitButton,
+                    createCapabilityControls,
                 }),
             },
         },
@@ -307,6 +320,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                 const contentJSON = extractContentJSON(newState)
                 if (contentJSON) {
                     const attrs = getInputAttrs(newState)
+                    if (!attrs.aiReasoningModels[0]) return null
                     onSubmit(buildSubmitPayload(contentJSON, attrs))
                 }
             }

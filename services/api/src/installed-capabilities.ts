@@ -1,17 +1,26 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import { CapabilityModuleCatalog } from '@lixpi/capability-system/backend'
+import {
+    CapabilityModuleCatalog,
+    createActionTimelineModule,
+    createCharacterCreatorModule,
+    createStyleExtractionModule,
+} from '@lixpi/capability-system/backend'
 
 import type { MetricsClient } from './metrics/metrics-client.ts'
 import type { ImageRouter } from './llm/tools/image-router.ts'
 import {
-    createCharacterCreatorActionDependencies,
-    createCharacterCreatorModule,
-} from './capability-modules/character-creator/index.ts'
+    seedBuiltInCapability,
+    storeCapabilityResource,
+} from './models/capability.ts'
 import {
-    createStyleExtractionModule,
-} from './capability-modules/style-extraction/index.ts'
+    createCapabilityStructuredModelPort,
+    resolveCapabilityModelInputs,
+} from './capability-system/capability-model-input-adapter.ts'
+import { persistActionTimelineArtifact } from './capability-system/action-timeline-persistence-adapter.ts'
+import { createCharacterCreatorActionDependencies } from './capability-system/character-creator-runtime-adapter.ts'
+import { createStyleExtractionRuntimePort } from './capability-system/style-extraction-runtime/style-extraction-actions.ts'
 
 export type InstalledCapabilityDependencies = {
     natsService: NatsService
@@ -23,15 +32,29 @@ export function createDefaultCapabilityModuleCatalog(
     dependencies: InstalledCapabilityDependencies,
 ): CapabilityModuleCatalog {
     const catalog = new CapabilityModuleCatalog()
-    catalog.registerModule(createCharacterCreatorModule(
-        createCharacterCreatorActionDependencies({
+    const capabilityStorage = {
+        storeResource: storeCapabilityResource,
+        seedBuiltInCapability,
+    }
+    catalog.registerModule(createCharacterCreatorModule({
+        ...createCharacterCreatorActionDependencies({
             natsService: dependencies.natsService,
             imageRouter: dependencies.imageRouter,
             metrics: dependencies.metrics,
         }),
-    ))
+        capabilityStorage,
+    }))
     catalog.registerModule(createStyleExtractionModule({
-        runImageRouter: state => dependencies.imageRouter.execute(state),
+        runtime: createStyleExtractionRuntimePort({
+            runImageRouter: state => dependencies.imageRouter.execute(state),
+        }),
+        capabilityStorage,
+    }))
+    catalog.registerModule(createActionTimelineModule({
+        resolveModelInputs: resolveCapabilityModelInputs,
+        model: createCapabilityStructuredModelPort(),
+        persistArtifact: persistActionTimelineArtifact,
+        capabilityStorage,
     }))
     return catalog
 }

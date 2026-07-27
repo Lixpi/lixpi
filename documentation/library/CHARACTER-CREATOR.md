@@ -9,7 +9,7 @@ Character Creator is a built-in Capability module for character design requests.
 
 ## Module composition
 
-The module lives at `services/api/src/capability-modules/character-creator/` and installs four runtime Capability packages:
+The module lives at `packages/lixpi/capability-system/src/capabilities/character-creator/` and installs four runtime Capability packages through API-owned adapters:
 
 | Package | Visibility | Responsibility |
 |---|---|---|

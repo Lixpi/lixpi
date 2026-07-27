@@ -92,7 +92,7 @@ describe('GeneratedOutputReviewService', () => {
         const result = await new GeneratedOutputReviewService().review({
             request: {
                 workspaceId: 'workspace-1',
-                scope: 'media-node',
+                scope: 'output-node',
                 action: 'supersede',
                 nodeId: 'media-1',
                 preserveLineage: false,
@@ -130,7 +130,7 @@ describe('GeneratedOutputReviewService', () => {
         const result = await new GeneratedOutputReviewService().review({
             request: {
                 workspaceId: 'workspace-1',
-                scope: 'media-node',
+                scope: 'output-node',
                 action: 'supersede',
                 nodeId: 'media-1',
                 preserveLineage: true,
@@ -194,7 +194,7 @@ describe('GeneratedOutputReviewService', () => {
         const result = await new GeneratedOutputReviewService().review({
             request: {
                 workspaceId: 'workspace-1',
-                scope: 'media-node',
+                scope: 'output-node',
                 action: 'accept',
                 nodeId: 'media-1',
             },

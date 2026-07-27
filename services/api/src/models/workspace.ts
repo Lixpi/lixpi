@@ -97,7 +97,7 @@ const assertRevision2CanvasStorage = (canvasState: CanvasState): void => {
         for (const field of LEGACY_CANVAS_STORAGE_FIELDS) {
             if (field in node) throw new Error(`LEGACY_CANVAS_STORAGE_FIELD_REJECTED:${field}`)
         }
-        if (['image', 'video', 'audio', 'mediaDocument', 'document'].includes(String(node.type)) && !node.assetId) {
+        if (['image', 'video', 'audio', 'mediaDocument', 'document', 'capabilityArtifact'].includes(String(node.type)) && !node.assetId) {
             throw new Error('CANVAS_ASSET_ID_REQUIRED')
         }
     }

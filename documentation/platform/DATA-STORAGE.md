@@ -5,7 +5,7 @@ description: The revision-2 Asset and Blob storage model: DynamoDB tables, conte
 
 # Data Storage
 
-Lixpi stores every user-created document, standalone conversation, upload, and generated media result as an **Asset**. Immutable media bytes, Capability manifests and resources, and ProseMirror snapshots are content-addressed **Blobs**. Workspaces store local geometry and panel state; they never own media bytes or duplicate global Asset metadata.
+Lixpi stores every user-created document, standalone conversation, upload, generated media result, and Capability Artifact as an **Asset**. Immutable media bytes, Capability manifests and resources, and ProseMirror snapshots are content-addressed **Blobs**. Workspaces store local geometry and panel state; they never own media bytes or duplicate global Asset metadata.
 
 The active runtime has no document table, chat-thread table, media-library table, workspace file registry, or workspace-specific Object Store bucket.
 
@@ -40,7 +40,7 @@ The Asset/Blob tables and their prompt-reference projections are defined in [`Dy
 | `Blob-References` | `blobKey` | `referenceKey` | none |
 | `Prompt-Reference-Recents` | `userId` | `referenceKey` | LSI `updatedAt` |
 
-There are no GSIs on these tables. Listing queries bounded `Assets-Meta` partitions. Prompt autocomplete queries authorized `Assets-Search` partitions by `begins_with(<media-kind>#<normalized-title>)`, merges and deduplicates thin rows, and still point-authorizes the selected Asset before use. Conversation Assets are not projected into media search. Authorization and ordinary maintenance use point reads or one Asset/Blob partition. Maintenance-only orphan collection scans staging Blob rows and organization IDs; request paths do not.
+There are no GSIs on these tables. Listing queries bounded `Assets-Meta` partitions. Prompt autocomplete queries authorized `Assets-Search` partitions by media-category or `capabilityArtifact#<artifactTypeId>` prefixes, merges and deduplicates thin rows, and still point-authorizes the selected Asset before use. Conversation Assets are not projected into search. Authorization and ordinary maintenance use point reads or one Asset/Blob partition. Maintenance-only orphan collection scans staging Blob rows and organization IDs; request paths do not.
 
 Capability-package storage uses `Capabilities`, `Capabilities-Meta`, `Capabilities-Access-List`, and `Capability-Runs` alongside the Asset/Blob tables. Source-registered top-level Capability modules remain authoritative in the module registry; their contained packages carry `parentModuleId` plus `catalogExposure: 'module-internal'`. Workspaces include `organizationId`; every Asset or organization-owned Capability package created from a workspace uses that organization rather than selecting an arbitrary organization from the user account.
 
@@ -57,8 +57,9 @@ type Asset = {
   scopeOwnerId: string
   originWorkspaceId: string
   ownerUserId: string
-  documents: Partial<Record<'content' | 'conversation' | 'provenance', AssetDocumentPointer>>
+  documents: Partial<Record<'content' | 'conversation' | 'capabilityArtifact' | 'provenance', AssetDocumentPointer>>
   media?: AssetMedia
+  artifact?: { artifactTypeId: string; schemaVersion: string }
   lineage?: AssetLineage
   descriptor?: ContentDescriptor
   states: AssetStates
@@ -70,7 +71,7 @@ type Asset = {
 }
 ```
 
-`primaryCategory` is computed in `Asset-Meta`: media kind wins; otherwise conversation wins over content; otherwise the Asset is a document. Invalid component combinations are rejected by the model.
+`primaryCategory` is computed in `Asset-Meta`: media kind wins; otherwise conversation, Capability Artifact, then content determine the category. Artifact Meta/Search rows include `artifactTypeId` and schema version. Invalid component combinations are rejected by the model.
 
 All global mutations use the integer `revision` as their concurrency token. Timestamps are display/order data, not compare-and-swap tokens.
 
@@ -98,6 +99,8 @@ Reference keys are typed:
 
 - `catalog#<scope>#<scopeOwnerId>` keeps an Asset in a catalog.
 - `workspace#<workspaceId>` stores `nodeIds[]` and `surfaceIds[]` for that workspace.
+
+Document and conversation surfaces use their existing typed IDs. A Capability Artifact uses `capabilityArtifact#<hostAssetId>` on every embedded Asset. Settlement reconciles these surfaces from the registered Artifact document; host deletion sweeps only that exact prefix. Maintenance treats the surface as live only while the host Artifact Asset remains live.
 
 One workspace row counts once regardless of how many canvas nodes or document/panel surfaces it contains. Attach/detach transactions update the Workspace canvas and Asset reference row together when a canvas node is involved. A normal full canvas save must preserve the exact `(assetId, nodeId)` membership signature; it may change geometry, edges, viewport, and panel metadata only.
 
@@ -159,7 +162,7 @@ Provenance rebuild failures use self-renewing durable maintenance messages with 
 
 ## Asset documents and leases
 
-Asset document roles are `content`, `conversation`, and `provenance`. Each pointer references an immutable JSON Blob and records ProseMirror version/schema metadata. Titles exist only on the Asset.
+Asset document roles are `content`, `conversation`, `capabilityArtifact`, and `provenance`. Each pointer references an immutable JSON Blob and records ProseMirror version/schema metadata. Titles exist only on the Asset.
 
 Live steps use the organization stream `ASSET_STEPS_<organizationId>` and subjects:
 
@@ -167,7 +170,7 @@ Live steps use the organization stream `ASSET_STEPS_<organizationId>` and subjec
 asset.document.steps.<organizationId>.<assetId>.<role>
 ```
 
-Client editing requires a 30-second workspace lease renewed every 10 seconds. Active holder records let multiple editors and API writers in the lease-owning workspace share it; releasing the last holder removes it immediately. Other workspaces mount read-only. Settlement replays accepted steps onto the latest snapshot, stores a new JSON Blob, and swaps the pointer/reference under both Asset revision and lease-token conditions. Provenance rejects client steps and is written only by the provenance materializer.
+Client editing requires a 30-second workspace lease renewed every 10 seconds. Active holder records let multiple editors and API writers in the lease-owning workspace share it; releasing the last holder removes it immediately. Other workspaces mount read-only. Settlement replays accepted steps onto the latest snapshot, stores a new JSON Blob, and swaps the pointer/reference under both Asset revision and lease-token conditions. Provenance rejects client steps and is written only by the provenance materializer. Capability Artifact settlement resolves the schema from `Asset.artifact`, rejects structural mutations through the module definition, and reconciles embedded Asset surfaces.
 
 ## HTTP byte routes
 

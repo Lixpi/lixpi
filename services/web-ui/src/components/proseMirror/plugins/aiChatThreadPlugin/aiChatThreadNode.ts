@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { v4 as uuidv4 } from 'uuid'
-import { TextSelection } from 'prosemirror-state'
+import { Selection } from 'prosemirror-state'
 import { html } from '$src/utils/domTemplates.ts'
 import {
     aiChatThreadNodeSpec,
@@ -91,7 +91,7 @@ function setupContentFocus(contentDOM, view, getPos) {
         const pos = getPos()
         if (pos !== undefined) {
             const $pos = view.state.doc.resolve(pos + 1)
-            const selection = TextSelection.create(view.state.doc, $pos.pos)
+            const selection = Selection.near($pos, 1)
             view.dispatch(view.state.tr.setSelection(selection))
         }
     })

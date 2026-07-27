@@ -6,6 +6,7 @@ import {
 } from './lineage-events.ts'
 import {
     normalizeAiModelSelectionAttr,
+    normalizeCapabilityInputsAttr,
     normalizeMediaGenerationConfigSelectionAttr,
     parseBooleanAttr,
 } from './model-selection-attrs.ts'
@@ -101,6 +102,7 @@ export const aiChatThreadNodeSpec = {
         videoDuration: { default: '' },
         videoGenerationConfigGroups: { default: '' },
         sourceVideoNodeId: { default: '' },
+        capabilityInputs: { default: '' },
     },
     parseDOM: [
         {
@@ -124,6 +126,7 @@ export const aiChatThreadNodeSpec = {
                     videoDuration: dom.getAttribute('data-video-duration') || '',
                     videoGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-video-generation-config-groups')),
                     sourceVideoNodeId: dom.getAttribute('data-source-video-node-id') || '',
+                    capabilityInputs: normalizeCapabilityInputsAttr(dom.getAttribute('data-capability-inputs')),
                 }
             },
         },
@@ -153,6 +156,7 @@ export const aiChatThreadNodeSpec = {
                 'data-video-duration': node.attrs.videoDuration,
                 'data-video-generation-config-groups': normalizeMediaGenerationConfigSelectionAttr(node.attrs.videoGenerationConfigGroups),
                 'data-source-video-node-id': node.attrs.sourceVideoNodeId,
+                'data-capability-inputs': normalizeCapabilityInputsAttr(node.attrs.capabilityInputs),
             },
             0,
         ]
@@ -296,6 +300,7 @@ export const aiPromptInputNodeSpec = {
         videoResolution: { default: '' },
         videoDuration: { default: '' },
         videoGenerationConfigGroups: { default: '' },
+        capabilityInputs: { default: '' },
     },
     parseDOM: [
         {
@@ -321,6 +326,7 @@ export const aiPromptInputNodeSpec = {
                     videoGenerationConfigGroups: useMultipleVideoModels
                         ? normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-video-generation-config-groups'))
                         : '',
+                    capabilityInputs: normalizeCapabilityInputsAttr(dom.getAttribute('data-capability-inputs')),
                 }
             },
         },
@@ -349,6 +355,7 @@ export const aiPromptInputNodeSpec = {
                 'data-video-generation-config-groups': useMultipleVideoModels
                     ? normalizeMediaGenerationConfigSelectionAttr(node.attrs.videoGenerationConfigGroups)
                     : '',
+                'data-capability-inputs': normalizeCapabilityInputsAttr(node.attrs.capabilityInputs),
             },
             0,
         ]
@@ -563,6 +570,7 @@ export const aiCollapsibleBlockNodeSpec = {
         imageGenerationTrace: { default: null },
         imageGenerationTraceId: { default: null },
         videoGenerationTrace: { default: null },
+        capabilityGenerationTrace: { default: null },
         generationRequestId: { default: '' },
         reasoningRunId: { default: '' },
         mediaRunId: { default: '' },
@@ -729,6 +737,7 @@ function parseTraceBlockAttrs(dom: HTMLElement, title: string) {
         imageGenerationTrace: null,
         imageGenerationTraceId: null,
         videoGenerationTrace: null,
+        capabilityGenerationTrace: null,
         generationRequestId: dom.getAttribute('data-generation-request-id') || '',
         reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
         mediaRunId: dom.getAttribute('data-media-run-id') || '',

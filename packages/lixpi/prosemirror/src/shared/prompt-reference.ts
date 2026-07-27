@@ -47,6 +47,18 @@ export function normalizePromptReferenceAttrs(input: unknown): PromptReferenceAt
             displayName,
         }
     }
+    if (candidate.referenceType === 'capability-artifact') {
+        if (!isNonEmptyString(candidate.assetId) || !isNonEmptyString(candidate.artifactTypeId)
+            || hasNonEmptyString(candidate.mediaKind) || hasNonEmptyString(candidate.moduleId)
+            || hasNonEmptyString(candidate.capabilityId)) return null
+        return {
+            referenceType: 'capability-artifact',
+            artifactTypeId: candidate.artifactTypeId.trim(),
+            assetId: candidate.assetId.trim(),
+            ...(isNonEmptyString(candidate.nodeId) ? { nodeId: candidate.nodeId.trim() } : {}),
+            displayName,
+        }
+    }
     if (candidate.referenceType === 'tool' || candidate.referenceType === 'skill') {
         if (!isNonEmptyString(candidate.capabilityId)
             || hasNonEmptyString(candidate.assetId) || hasNonEmptyString(candidate.nodeId)
@@ -72,12 +84,21 @@ export function toPromptReference(attrs: PromptReferenceAtomAttrs): PromptRefere
     if (attrs.referenceType === 'capability-module') {
         return { referenceType: 'capability-module', moduleId: attrs.moduleId }
     }
+    if (attrs.referenceType === 'capability-artifact') {
+        return {
+            referenceType: 'capability-artifact',
+            artifactTypeId: attrs.artifactTypeId,
+            assetId: attrs.assetId,
+            ...(attrs.nodeId ? { nodeId: attrs.nodeId } : {}),
+        }
+    }
     return { referenceType: attrs.referenceType, capabilityId: attrs.capabilityId }
 }
 
 export function getPromptReferenceStableId(reference: PromptReference): string {
     if (reference.referenceType === 'media') return reference.assetId
     if (reference.referenceType === 'capability-module') return reference.moduleId
+    if (reference.referenceType === 'capability-artifact') return reference.assetId
     return reference.capabilityId
 }
 

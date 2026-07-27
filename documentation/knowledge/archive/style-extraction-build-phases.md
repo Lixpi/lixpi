@@ -48,22 +48,22 @@ rather than from the phase sequence below.
 
 **Style Extraction Capability package (the six-stage pipeline):**
 
-- [`services/api/src/capability-modules/style-extraction/tools/index.ts`](../../../services/api/src/capability-modules/style-extraction/tools/index.ts) — standalone Tool-module entry point and six-stage runner wiring.
-- [`services/api/src/capability-modules/style-extraction/tools/pipeline/types.ts`](../../../services/api/src/capability-modules/style-extraction/tools/pipeline/types.ts) — extraction input, state, logger, extractor, and dependency contracts.
-- [`services/api/src/capability-modules/style-extraction/tools/pipeline/trace.ts`](../../../services/api/src/capability-modules/style-extraction/tools/pipeline/trace.ts) — stage trace construction and event delivery.
+- [`packages/lixpi/capability-system/src/capabilities/style-extraction/tools/index.ts`](../../../packages/lixpi/capability-system/src/capabilities/style-extraction/tools/index.ts) — current self-contained Tool-package entry point; the API binds service runtime ports.
+- [`services/api/src/capability-system/style-extraction-runtime/pipeline/types.ts`](../../../services/api/src/capability-system/style-extraction-runtime/pipeline/types.ts) — API adapter input, state, logger, extractor, and dependency contracts.
+- [`services/api/src/capability-system/style-extraction-runtime/pipeline/trace.ts`](../../../services/api/src/capability-system/style-extraction-runtime/pipeline/trace.ts) — API stage trace construction and event delivery.
 - [`services/api/src/llm/structured-vlm/structured-vlm-client.ts`](../../../services/api/src/llm/structured-vlm/structured-vlm-client.ts) — shared, capability-aware structured-output caller.
 - [`services/api/src/llm/providers/provider-capabilities.ts`](../../../services/api/src/llm/providers/provider-capabilities.ts) — provider/model capability detection used by structured VLM calls.
-- [`services/api/src/capability-modules/style-extraction/tools/pipeline/stage1-router.ts`](../../../services/api/src/capability-modules/style-extraction/tools/pipeline/stage1-router.ts) — scene assessment, axis dominance scoring, and intent resolution.
-- [`services/api/src/capability-modules/style-extraction/tools/pipeline/stage2-extractors.ts`](../../../services/api/src/capability-modules/style-extraction/tools/pipeline/stage2-extractors.ts) — parallel extractor fan-out with isolated failures.
-- [`services/api/src/capability-modules/style-extraction/tools/pipeline/stage3-crops.ts`](../../../services/api/src/capability-modules/style-extraction/tools/pipeline/stage3-crops.ts) — deterministic crop materialization and validation.
-- [`services/api/src/capability-modules/style-extraction/tools/pipeline/stage4-synthesis.ts`](../../../services/api/src/capability-modules/style-extraction/tools/pipeline/stage4-synthesis.ts) — dominance-weighted synthesis.
-- [`services/api/src/capability-modules/style-extraction/tools/pipeline/stage5-samples.ts`](../../../services/api/src/capability-modules/style-extraction/tools/pipeline/stage5-samples.ts) — palette, texture, and applied-medium sample generation.
-- [`services/api/src/capability-modules/style-extraction/tools/pipeline/stage6-persist.ts`](../../../services/api/src/capability-modules/style-extraction/tools/pipeline/stage6-persist.ts) — persistence as a generated `visual-style` Capability.
+- [`services/api/src/capability-system/style-extraction-runtime/pipeline/stage1-router.ts`](../../../services/api/src/capability-system/style-extraction-runtime/pipeline/stage1-router.ts) — scene assessment, axis dominance scoring, and intent resolution.
+- [`services/api/src/capability-system/style-extraction-runtime/pipeline/stage2-extractors.ts`](../../../services/api/src/capability-system/style-extraction-runtime/pipeline/stage2-extractors.ts) — parallel extractor fan-out with isolated failures.
+- [`services/api/src/capability-system/style-extraction-runtime/pipeline/stage3-crops.ts`](../../../services/api/src/capability-system/style-extraction-runtime/pipeline/stage3-crops.ts) — deterministic crop materialization and validation.
+- [`services/api/src/capability-system/style-extraction-runtime/pipeline/stage4-synthesis.ts`](../../../services/api/src/capability-system/style-extraction-runtime/pipeline/stage4-synthesis.ts) — dominance-weighted synthesis.
+- [`services/api/src/capability-system/style-extraction-runtime/pipeline/stage5-samples.ts`](../../../services/api/src/capability-system/style-extraction-runtime/pipeline/stage5-samples.ts) — palette, texture, and applied-medium sample generation.
+- [`services/api/src/capability-system/style-extraction-runtime/pipeline/stage6-persist.ts`](../../../services/api/src/capability-system/style-extraction-runtime/pipeline/stage6-persist.ts) — persistence as a generated `visual-style` Capability.
 
 **Extractor registry (modular, one file per axis):**
 
-- [`services/api/src/capability-modules/style-extraction/tools/pipeline/extractors/registry.ts`](../../../services/api/src/capability-modules/style-extraction/tools/pipeline/extractors/registry.ts) — `registerExtractor`, `getExtractors`, `getExtractor`, `getRegisteredAxes`.
-- [`services/api/src/capability-modules/style-extraction/tools/pipeline/extractors/_helpers.ts`](../../../services/api/src/capability-modules/style-extraction/tools/pipeline/extractors/_helpers.ts) — shared `runAxisVlm` wrapper and schema envelope.
+- [`services/api/src/capability-system/style-extraction-runtime/pipeline/extractors/registry.ts`](../../../services/api/src/capability-system/style-extraction-runtime/pipeline/extractors/registry.ts) — `registerExtractor`, `getExtractors`, `getExtractor`, `getRegisteredAxes`.
+- [`services/api/src/capability-system/style-extraction-runtime/pipeline/extractors/_helpers.ts`](../../../services/api/src/capability-system/style-extraction-runtime/pipeline/extractors/_helpers.ts) — shared `runAxisVlm` wrapper and schema envelope.
 - One file per axis: `palette-extractor.ts`, `medium-signature-extractor.ts`, `character-design-extractor.ts`, `lighting-extractor.ts`, `composition-extractor.ts`, `mood-extractor.ts`, `background-treatment-extractor.ts`, `edge-treatment-extractor.ts`, `line-quality-extractor.ts`, `surface-texture-extractor.ts`. New axes are added by dropping a file here and importing it from `orchestrator.ts`.
 
 **Chat graph integration (for `/use` chip resolution):**

@@ -7,6 +7,7 @@ import {
     STREAM_STATUS,
     type AiInteractionChatSendMessagePayload,
     type AiInteractionMediaGenerationRequest,
+    type CapabilityGenerationTrace,
     type CapabilityRunEventStreamPayload,
     type ImageGenerationTrace,
     type ImageGenerationSize,
@@ -75,6 +76,13 @@ type StopAiChatMessageTarget = {
     generationRequestId?: string
 }
 
+type AiInteractionServiceOptions = {
+    workspaceId: string
+    conversationAssetId: string
+    organizationId?: string
+    onError?: (error: unknown) => void
+}
+
 export async function stopAiChatMessageForThread({
     workspaceId,
     conversationAssetId,
@@ -103,16 +111,14 @@ export default class AiInteractionService {
     providersByRunKey: Map<string, string>
     pipelineEventIds: Set<string>
     pipelineLocalStreamSeq: number
+    onError: ((error: unknown) => void) | null
 
     constructor({
         workspaceId,
         conversationAssetId,
         organizationId,
-    }: {
-        workspaceId: string
-        conversationAssetId: string
-        organizationId?: string
-    }) {
+        onError,
+    }: AiInteractionServiceOptions) {
         this.workspaceId = workspaceId
         this.conversationAssetId = conversationAssetId
         this.organizationId = organizationId ?? ''
@@ -121,6 +127,7 @@ export default class AiInteractionService {
         this.providersByRunKey = new Map()
         this.pipelineEventIds = new Set()
         this.pipelineLocalStreamSeq = 0
+        this.onError = onError ?? null
 
         this.initNatsSubscriptions()
     }
@@ -133,6 +140,7 @@ export default class AiInteractionService {
         return content?.generationRun
             ?? content?.imageGenerationTrace?.generationRun
             ?? content?.videoGenerationTrace?.generationRun
+            ?? content?.capabilityGenerationTrace?.generationRun
     }
 
     getChatResponseSubject(): string {
@@ -238,6 +246,7 @@ export default class AiInteractionService {
 
             if (data?.error) {
                 console.error('[AI_INTERACTION] Failed to receive chat message:', data.error)
+                this.onError?.(data.error)
                 return
             }
 
@@ -301,6 +310,21 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'image_generation_trace',
                     imageGenerationTrace,
+                    ...segmentBase,
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.CAPABILITY_GENERATION_TRACE) {
+                const capabilityGenerationTrace = content.capabilityGenerationTrace as CapabilityGenerationTrace
+                debugAiInteractionLog('[AI_INTERACTION] CAPABILITY_GENERATION_TRACE received:', {
+                    capabilityId: capabilityGenerationTrace?.capabilityId,
+                    capabilityRunId: capabilityGenerationTrace?.capabilityRunId,
+                    stepCount: capabilityGenerationTrace?.steps.length ?? 0,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'capability_generation_trace',
+                    capabilityGenerationTrace,
                     ...segmentBase,
                 })
                 return

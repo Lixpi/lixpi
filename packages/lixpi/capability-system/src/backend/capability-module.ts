@@ -1,6 +1,7 @@
 'use strict'
 
 import type {
+    CapabilityJsonValue,
     CapabilityKind,
     CapabilityModuleMeta,
 } from '@lixpi/constants'
@@ -26,6 +27,17 @@ export type CapabilityToolPackageInstaller = {
     seed: (context: CapabilityPackageSeedContext) => Promise<void>
 }
 
+export type CapabilityModuleRoute = {
+    capabilityId: string
+    kind: 'tool'
+    input: Record<string, CapabilityJsonValue>
+    missingInputFields: string[]
+}
+
+export type CapabilityModuleRoutingDefinition = {
+    resolve: (prompt: string) => CapabilityModuleRoute | undefined
+}
+
 export type CapabilityModuleDefinition = Omit<CapabilityModuleMeta, 'status'> & {
     entry: {
         capabilityId: string
@@ -33,6 +45,7 @@ export type CapabilityModuleDefinition = Omit<CapabilityModuleMeta, 'status'> & 
     }
     tools: CapabilityToolPackageInstaller[]
     skills: CapabilitySkillPackageInstaller[]
+    routing?: CapabilityModuleRoutingDefinition
 }
 
 export class CapabilityModuleCatalog {
@@ -103,6 +116,15 @@ export class CapabilityModuleCatalog {
     resolveEntry(moduleId: string): { capabilityId: string; kind: CapabilityKind } | undefined {
         const definition = this.modules.get(moduleId)
         return definition ? { ...definition.entry } : undefined
+    }
+
+    routePrompt(prompt: string): CapabilityModuleRoute | undefined {
+        const matches = [...this.modules.values()].flatMap(definition => {
+            const route = definition.routing?.resolve(prompt)
+            return route ? [route] : []
+        })
+        if (matches.length > 1) throw new Error('CAPABILITY_MODULE_ROUTE_AMBIGUOUS')
+        return matches[0]
     }
 
     private validateDefinition(definition: CapabilityModuleDefinition): void {

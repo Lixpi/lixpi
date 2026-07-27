@@ -7,7 +7,7 @@ description: The Asset-backed media catalog, scope-aware listing, attachment, gl
 
 The Media surface is an Asset catalog. It is not a separate media-library entity, table, copy, or Object Store bucket.
 
-Every uploaded/generated media item, document, and conversation is already an Asset with an initial catalog reference. Reuse adds Workspace references or changes scope; it does not copy bytes.
+Every uploaded/generated media item, document, and conversation is already an Asset with an initial catalog reference. Reuse adds Workspace references or changes scope; it does not copy bytes. Capability Artifact Assets use the separate Artifacts surface and are intentionally excluded from Media.
 
 ## Listing
 
@@ -18,7 +18,7 @@ Every uploaded/generated media item, document, and conversation is already an As
 - every `organization#<organizationId>`;
 - `principal#<userId>` for explicit grants.
 
-Pages are merged by `updatedAt`, deduplicated by `assetId`, filtered by lifecycle/category, and returned with an opaque cursor. The UI can filter `primaryCategory` to image, video, audio, document, or conversation.
+Pages are merged by `updatedAt`, deduplicated by `assetId`, filtered by lifecycle/category, and returned with an opaque cursor. The API can filter `primaryCategory` to image, video, audio, document, conversation, or `capabilityArtifact`. The Media panel explicitly excludes conversations and Capability Artifacts; the Artifacts panel exclusively requests `capabilityArtifact`.
 
 Meta rows contain only list-card data: title, category, scope/owner/origin, lifecycle/media state, thumbnail/preview hashes, MIME/size/dimensions, and descriptor summary/tags.
 
@@ -26,7 +26,7 @@ The workspace Media picker filters this authorized catalog to Assets attachable 
 
 ## Prompt-reference search
 
-The inline `@` picker uses the separate `Assets-Search` projection for bounded prefix autocomplete rather than loading the full library. Search rows are keyed by authorized scope and `<media-kind>#<normalized-title>#<assetId>`, contain thin display/rendition metadata, and exclude conversation Assets. Scope and principal-grant rows mirror `Assets-Meta`; create, title/scope update, grant/revoke, repair, and deletion maintain both projections.
+The inline `@` picker uses the separate `Assets-Search` projection for bounded prefix autocomplete rather than loading the full library. Media search rows are keyed by authorized scope and `<media-kind>#<normalized-title>#<assetId>`. Artifact rows use `capabilityArtifact#<artifactTypeId>#<normalized-title>#<assetId>` and carry the registered type/schema discriminators. Both contain thin display metadata and exclude conversation Assets. Scope and principal-grant rows mirror `Assets-Meta`; create, title/scope update, grant/revoke, repair, and deletion maintain both projections.
 
 Deployment backfill uses the existing `asset.maintenance.repairProjections` job: enqueue one repair for each active Asset so the same authoritative projection repair populates missing search rows and deletes stale ones.
 
@@ -75,9 +75,12 @@ Removing the catalog reference is explicit. The final reference transition marks
 
 Generated outputs are Assets from preflight, before bytes exist. They appear with creating/processing state and settle to ready/degraded/failed/cancelled. Their original and derived renditions are attached to the same Asset identity; no “save generated image to library” copy is required.
 
+Generated Capability Artifacts use the same candidate/accepted/superseded output review contract, but readiness comes from a valid Artifact document plus sealed provenance rather than a media rendition. They appear only in Artifacts. See [Action Timeline](./ACTION-TIMELINE.md).
+
 ## Related code
 
 - [`services/api/src/models/asset.ts`](../../services/api/src/models/asset.ts)
 - [`services/api/src/NATS/subscriptions/asset-subjects.ts`](../../services/api/src/NATS/subscriptions/asset-subjects.ts)
 - [`services/web-ui/src/services/asset-service.ts`](../../services/web-ui/src/services/asset-service.ts)
 - [`services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts)
+- [`services/web-ui/src/infographics/workspace/artifactLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/artifactLibraryPanel.ts)

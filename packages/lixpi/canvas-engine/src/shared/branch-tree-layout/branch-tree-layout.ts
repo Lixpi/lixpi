@@ -33,11 +33,11 @@ import {
     getStartedLineageMarkerState,
     isBranchLineageMarkerNode,
     type BranchLineageMarkerNode,
-    type GeneratedMediaNode,
+    type GeneratedOutputNode,
 } from './branch-lineage-state.ts'
 
 type BranchTreeMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
-type BranchTreeMemberNode = GeneratedMediaNode | BranchTreeMarkerNode
+type BranchTreeMemberNode = GeneratedOutputNode | BranchTreeMarkerNode
 type Point = { x: number; y: number }
 type Rect = { x: number; y: number; width: number; height: number }
 type CollisionEnvelope = Rect & { overlapThreshold?: number }
@@ -94,8 +94,10 @@ export type BranchTreeLayoutOptions = {
 // completion-handler behavior that was in place before tree rebalancing.
 const DEFAULT_COLLISION_MARGIN = 20
 
-function isGeneratedMediaBranchMember(node: CanvasNode): node is GeneratedMediaNode {
-    return (node.type === 'image' || node.type === 'video') && !node.parentId && Boolean(node.generatedBy?.branchId)
+function isGeneratedMediaBranchMember(node: CanvasNode): node is GeneratedOutputNode {
+    return (node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact')
+        && !node.parentId
+        && Boolean(node.generatedBy?.branchId)
 }
 
 function isBranchOriginMember(node: CanvasNode): node is BranchOriginCanvasNode {
@@ -125,7 +127,7 @@ function isMidpointMarker(node: CanvasNode | undefined): node is BranchForkCanva
     return Boolean(node) && (node!.type === 'branchFork' || node!.type === 'branchLine')
 }
 
-function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<string | undefined> {
+function getGeneratedMediaParentCandidates(node: GeneratedOutputNode): Array<string | undefined> {
     return [
         node.generatedBy?.parentMediaNodeId,
         node.generatedBy?.branchOriginNodeId,
@@ -584,9 +586,9 @@ function positionLineageMarkers(
     nextPositionById: Map<string, Point>,
     options: BranchTreeLayoutOptions,
 ): void {
-    const childrenByMarkerId = new Map<string, GeneratedMediaNode[]>()
+    const childrenByMarkerId = new Map<string, GeneratedOutputNode[]>()
     for (const node of nodes) {
-        if (node.type !== 'image' && node.type !== 'video') continue
+        if (node.type !== 'image' && node.type !== 'video' && node.type !== 'capabilityArtifact') continue
         const markerId = getGeneratedMediaMidpointMarkerId(node)
         if (!markerId) continue
         const children = childrenByMarkerId.get(markerId) ?? []

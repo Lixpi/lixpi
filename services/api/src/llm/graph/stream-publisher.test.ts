@@ -334,6 +334,36 @@ describe('StreamPublisher extraction progress', () => {
         expect(nats.published).toHaveLength(2)
     })
 
+    it('publishes Action Timeline execution metadata as a first-class generation trace', async () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', generationRun)
+
+        publisher.capabilityGenerationTrace({
+            traceVersion: 'capability-generation-trace-v1',
+            generationRun,
+            capabilityId: 'action-timeline',
+            capabilityName: 'Action Timeline',
+            capabilityRunId: 'timeline-run',
+            chatModelProvider: 'Anthropic',
+            chatModelId: 'Anthropic:claude-sonnet-4-6',
+            input: { durationMs: 15_000, precisionMs: 2_000 },
+            outputAssetIds: ['timeline-asset'],
+            steps: [{ stepId: 'persist', title: 'Persist timeline', status: 'completed' }],
+        })
+        await flushPipelinePublishes()
+
+        expect(nats.published).toHaveLength(1)
+        expect(nats.published[0]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.CAPABILITY_GENERATION_TRACE,
+            generationRun,
+            capabilityGenerationTrace: expect.objectContaining({
+                capabilityName: 'Action Timeline',
+                capabilityRunId: 'timeline-run',
+                outputAssetIds: ['timeline-asset'],
+            }),
+        })
+    })
+
     it('persists pipeline content before live publishing with replay metadata', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
@@ -851,6 +881,34 @@ describe('StreamPublisher ProseMirror integration options', () => {
         await flushPipelinePublishes()
         expect(nonDeferredFinishTextPhase).toHaveBeenCalledTimes(0)
         expect(nonDeferredEnd).toHaveBeenCalledTimes(1)
+    })
+
+    it('can finish the response before a post-response canvas event without purging early', async () => {
+        const nats = makeFakeNats()
+        const finishTextPhase = vi.fn(() => Promise.resolve())
+        const end = vi.fn(() => Promise.resolve())
+        const publisher = new StreamPublisher(
+            nats.fake,
+            'ws1',
+            'thread1',
+            'Anthropic',
+            undefined,
+            { enableProseMirrorStream: false },
+        )
+        ;(publisher as any).proseMirrorAssembler = {
+            handleContent: vi.fn(),
+            finishTextPhase,
+            end,
+        }
+
+        publisher.start()
+        publisher.end({ deferPipelineFinish: true })
+        await publisher.drainPendingWrites()
+        await publisher.finishProseMirrorConversation()
+
+        expect(finishTextPhase).toHaveBeenCalledTimes(1)
+        expect(end).toHaveBeenCalledTimes(1)
+        expect(nats.published.at(-1)?.payload?.content?.status).toBe(STREAM_STATUS.END_STREAM)
     })
 
     it('returns immediately from finishProseMirrorStream when prose mirror assembler is absent', async () => {

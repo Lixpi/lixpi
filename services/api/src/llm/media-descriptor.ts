@@ -2,7 +2,6 @@
 
 import type NatsService from '@lixpi/nats-service'
 import {
-    CONTENT_DESCRIPTOR_TEXT_INPUT_MAX_LENGTH,
     MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH,
     MEDIA_DESCRIPTOR_TITLE_MAX_WORDS,
     type ProviderName,
@@ -55,10 +54,12 @@ export const buildMediaDescriptorSchema = (): VlmJsonSchema => ({
         properties: {
             title: {
                 type: 'string',
+                maxLength: 120,
                 description: 'A specific two-to-three-word title in title case, with no punctuation.',
             },
             summary: {
                 type: 'string',
+                maxLength: MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH,
                 description: `One to two sentences naming the dominant subjects and overall look. Under ${MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH} characters.`,
             },
             entityTags: {
@@ -96,16 +97,19 @@ const sanitizeTags = (tags: unknown): string[] => {
     ))
 }
 
-// Clamp whatever the model returned into the descriptor contract: trimmed summary
-// capped at the max length, deduped non-empty tag arrays. Shared by the media and
-// text describe paths so both produce an identical, bounded shape.
 const normalizeDescriptorResult = (parsed: MediaDescriptorResult | undefined): MediaDescriptorResult => {
     const safe = parsed ?? ({} as MediaDescriptorResult)
+    const title = typeof safe.title === 'string' ? safe.title.trim() : ''
+    const summary = typeof safe.summary === 'string' ? safe.summary.trim() : ''
+    if (title.split(/\s+/).filter(Boolean).length > MEDIA_DESCRIPTOR_TITLE_MAX_WORDS) {
+        throw new Error('MEDIA_DESCRIPTOR_TITLE_TOO_LONG')
+    }
+    if (summary.length > MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH) {
+        throw new Error('MEDIA_DESCRIPTOR_SUMMARY_TOO_LONG')
+    }
     return {
-        title: typeof safe.title === 'string'
-            ? safe.title.trim().split(/\s+/).filter(Boolean).slice(0, MEDIA_DESCRIPTOR_TITLE_MAX_WORDS).join(' ')
-            : '',
-        summary: typeof safe.summary === 'string' ? safe.summary.trim().slice(0, MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH) : '',
+        title,
+        summary,
         entityTags: sanitizeTags(safe.entityTags),
         styleTags: sanitizeTags(safe.styleTags),
     }
@@ -166,10 +170,12 @@ export const buildTextDescriptorSchema = (): VlmJsonSchema => ({
         properties: {
             title: {
                 type: 'string',
+                maxLength: 120,
                 description: 'A specific two-to-three-word title in title case, with no punctuation.',
             },
             summary: {
                 type: 'string',
+                maxLength: MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH,
                 description: `One to two sentences describing what the text is about. Under ${MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH} characters.`,
             },
             entityTags: {
@@ -202,7 +208,7 @@ const buildTextDescriptorMessages = (text: string, title?: string): ChatMessage[
 // Summarize a document/thread node from its plain text. Returns empty fields when
 // there is nothing to summarize (caller treats that as "skip", not "failed").
 export const describeTextContent = async (args: DescribeTextContentArgs): Promise<MediaDescriptorResult> => {
-    const text = args.text.trim().slice(0, CONTENT_DESCRIPTOR_TEXT_INPUT_MAX_LENGTH)
+    const text = args.text.trim()
     if (!text) return { title: '', summary: '', entityTags: [], styleTags: [] }
 
     const callVlm = args.callVlm ?? ((vlmArgs: VlmCallArgs) => callStructuredVlm<MediaDescriptorResult>(vlmArgs))

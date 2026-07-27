@@ -10,7 +10,7 @@
 4. `getInputAttrs()` reads reasoning, image, video, and multi-model attrs from the input node.
 5. `onSubmit()` receives `{ contentJSON, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }` (where `imageOptions.aiImageModels` / `videoOptions.aiVideoModels` are ordered arrays). Each section's array is collapsed to its first model when its multi flag is off. Media options include API-authored configuration matrix group selections when image or video multi-model mode is active. `contentJSON` retains typed `prompt_reference` atoms; the browser does not derive or send a second reference list.
 6. Keyboard and button submission clear the input to one empty paragraph and place the cursor at the start.
-7. The host routes the payload. The canvas-wide host creates a standalone hidden AI chat thread for the submitted user message and projects its pending branch marker.
+7. The host routes the payload. The canvas-wide host creates a standalone hidden AI chat thread for the submitted user message and projects its pending branch marker. Capability-module atoms remain in the stored user message, and the marker renders them through the same `prompt-reference-chip-capability-module` factory used by the editable composer.
 
 The plugin boundary is the submit callback surface. Run cancellation belongs to the branch-lineage marker projected from the submitted user message, not to the composer.
 

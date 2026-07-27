@@ -15,6 +15,7 @@ import { DOCUMENT_TYPE, HeadlessProseMirrorEngine } from '@lixpi/prosemirror'
 import {
     ASSET_REQUIRED_RENDITIONS,
     getDynamoDbTableStageName,
+    isAssetDocumentRole,
     type Asset,
     type AssetDocumentRole,
     type AssetMeta,
@@ -23,6 +24,7 @@ import {
     type CanvasState,
 } from '@lixpi/constants'
 
+import { capabilityArtifactBackendRegistry } from '../capability-system/capability-artifacts.ts'
 import { jwtVerifier } from '../helpers/auth.ts'
 import AssetModel, { buildAssetScopeAndOwnerKey } from '../models/asset.ts'
 import BlobModel from '../models/blob.ts'
@@ -30,6 +32,10 @@ import Organization from '../models/organization.ts'
 import Workspace from '../models/workspace.ts'
 import { getAssetRequesterContext } from '../services/asset-requester-context.ts'
 import AssetDocumentService from '../services/asset-document-service.ts'
+import {
+    collectEmbeddedAssetIds,
+    collectReferencedAssetIds,
+} from '../services/prosemirror-asset-references.ts'
 import {
     enqueueBlobDeletion,
     enqueueRenditionRetry,
@@ -129,16 +135,6 @@ const getAssetLineageIds = (asset: Asset): string[] => asset.lineage
     ].filter((assetId): assetId is string => Boolean(assetId))
     : []
 
-const collectEmbeddedAssetIds = (node: unknown, assetIds = new Set<string>()): Set<string> => {
-    if (!node || typeof node !== 'object') return assetIds
-    const record = node as { attrs?: { assetId?: unknown }; content?: unknown }
-    if (typeof record.attrs?.assetId === 'string' && record.attrs.assetId) assetIds.add(record.attrs.assetId)
-    if (Array.isArray(record.content)) {
-        for (const child of record.content) collectEmbeddedAssetIds(child, assetIds)
-    }
-    return assetIds
-}
-
 const collectExportAssets = async ({
     initialAssetIds,
     requester,
@@ -157,11 +153,11 @@ const collectExportAssets = async ({
         for (const lineageAssetId of getAssetLineageIds(asset)) {
             if (!assets.has(lineageAssetId)) pending.push(lineageAssetId)
         }
-        for (const role of ['content', 'conversation'] as const) {
+        for (const role of ['content', 'conversation', 'capabilityArtifact'] as const) {
             if (!asset.documents[role]) continue
             const snapshot = await AssetDocumentService.loadCurrentSnapshot(asset, role)
-            for (const embeddedAssetId of collectEmbeddedAssetIds(snapshot?.doc)) {
-                if (!assets.has(embeddedAssetId)) pending.push(embeddedAssetId)
+            for (const referencedAssetId of collectReferencedAssetIds(snapshot?.doc)) {
+                if (!assets.has(referencedAssetId)) pending.push(referencedAssetId)
             }
         }
     }
@@ -207,12 +203,16 @@ const buildPortableWorkspaceReferences = async ({
     }
 
     for (const hostAsset of assets) {
-        for (const role of ['content', 'conversation'] as const) {
+        for (const role of ['content', 'conversation', 'capabilityArtifact'] as const) {
             if (!hostAsset.documents[role]) continue
             const snapshot = await AssetDocumentService.loadCurrentSnapshot(hostAsset, role)
-            for (const embeddedAssetId of collectEmbeddedAssetIds(snapshot?.doc)) {
+            for (const embeddedAssetId of collectEmbeddedAssetIds(snapshot?.doc, role)) {
                 if (role === 'content') {
                     addSurface(embeddedAssetId, `document#${hostAsset.assetId}#content`)
+                    continue
+                }
+                if (role === 'capabilityArtifact') {
+                    addSurface(embeddedAssetId, `capabilityArtifact#${hostAsset.assetId}`)
                     continue
                 }
                 const surfacePrefix = `conversation#${hostAsset.assetId}#media#`
@@ -246,7 +246,9 @@ const getDocumentType = (role: AssetDocumentRole): string => role === 'content'
     ? DOCUMENT_TYPE.ASSET_CONTENT
     : role === 'conversation'
         ? DOCUMENT_TYPE.ASSET_CONVERSATION
-        : DOCUMENT_TYPE.ASSET_PROVENANCE
+        : role === 'provenance'
+            ? DOCUMENT_TYPE.ASSET_PROVENANCE
+            : 'capabilityArtifact'
 
 const buildPortableAssets = async (assets: Asset[], exportedAt: number): Promise<{
     assets: Asset[]
@@ -386,7 +388,7 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
     const embeddedReferenceRequirements: Array<{
         embeddedAssetId: string
         hostAssetId: string
-        role: 'content' | 'conversation'
+        role: 'content' | 'conversation' | 'capabilityArtifact'
     }> = []
     const blobHashes = new Set<string>()
     let totalBlobBytes = 0
@@ -412,9 +414,21 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
         }
     }
     for (const asset of candidate.assets) {
+        const hasArtifactDocument = Boolean(asset.documents.capabilityArtifact)
+        if (hasArtifactDocument !== Boolean(asset.artifact)) {
+            throw new Error(`INVALID_ASSET_ARTIFACT_COMPONENTS:${asset.assetId}`)
+        }
+        const artifactDefinition = asset.artifact
+            ? capabilityArtifactBackendRegistry.get(asset.artifact.artifactTypeId)
+            : undefined
+        if (asset.artifact && (!artifactDefinition
+            || asset.documents.capabilityArtifact?.schemaVersion !== asset.artifact.schemaVersion
+            || artifactDefinition.shared.schemaVersion !== asset.artifact.schemaVersion)) {
+            throw new Error(`INVALID_ASSET_ARTIFACT:${asset.assetId}`)
+        }
         for (const [role, pointer] of Object.entries(asset.documents)) {
             if (!pointer) continue
-            if (!['content', 'conversation', 'provenance'].includes(role)) {
+            if (!isAssetDocumentRole(role)) {
                 throw new Error(`INVALID_DOCUMENT_ROLE:${asset.assetId}:${role}`)
             }
             if (pointer.role !== role || !Number.isSafeInteger(pointer.version) || !Number.isSafeInteger(pointer.byteSize)) {
@@ -433,20 +447,30 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
             } catch {
                 throw new Error(`INVALID_DOCUMENT_JSON:${asset.assetId}:${role}`)
             }
+            if (role === 'capabilityArtifact' && !artifactDefinition) {
+                throw new Error(`INVALID_ASSET_ARTIFACT:${asset.assetId}`)
+            }
             new HeadlessProseMirrorEngine({
-                documentType: getDocumentType(role as AssetDocumentRole),
+                documentType: getDocumentType(role),
+                ...(role === 'capabilityArtifact'
+                    ? { schema: artifactDefinition.shared.createDocumentSchema() }
+                    : {}),
                 doc,
                 version: pointer.version,
             })
+            if (role === 'capabilityArtifact') artifactDefinition.shared.assertInitialDocument(doc)
             AssetDocumentService.assertAssetBackedMediaNodes(doc)
-            for (const embeddedAssetId of collectEmbeddedAssetIds(doc)) {
-                if (!assetIds.has(embeddedAssetId)) {
-                    throw new Error(`MISSING_EMBEDDED_ASSET:${asset.assetId}:${embeddedAssetId}`)
+            for (const referencedAssetId of collectReferencedAssetIds(doc)) {
+                if (!assetIds.has(referencedAssetId)) {
+                    throw new Error(`MISSING_EMBEDDED_ASSET:${asset.assetId}:${referencedAssetId}`)
                 }
-                if ((role === 'content' || role === 'conversation') && embeddedAssetId === asset.assetId) {
+                if ((role === 'content' || role === 'conversation' || role === 'capabilityArtifact')
+                    && referencedAssetId === asset.assetId) {
                     throw new Error(`SELF_REFERENTIAL_ASSET_DOCUMENT:${asset.assetId}:${role}`)
                 }
-                if (role === 'content' || role === 'conversation') {
+            }
+            if (role === 'content' || role === 'conversation' || role === 'capabilityArtifact') {
+                for (const embeddedAssetId of collectEmbeddedAssetIds(doc, role)) {
                     embeddedReferenceRequirements.push({
                         embeddedAssetId,
                         hostAssetId: asset.assetId,
@@ -509,8 +533,10 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
         const reference = candidate.references.find((entry) => entry.assetId === requirement.embeddedAssetId)
         const expectedPrefix = requirement.role === 'content'
             ? `document#${requirement.hostAssetId}#content`
-            : `conversation#${requirement.hostAssetId}#media#`
-        const hasSurface = requirement.role === 'content'
+            : requirement.role === 'capabilityArtifact'
+                ? `capabilityArtifact#${requirement.hostAssetId}`
+                : `conversation#${requirement.hostAssetId}#media#`
+        const hasSurface = requirement.role === 'content' || requirement.role === 'capabilityArtifact'
             ? reference?.surfaceIds?.includes(expectedPrefix)
             : reference?.surfaceIds?.some((surfaceId) => surfaceId.startsWith(expectedPrefix))
         if (!hasSurface) {
@@ -832,18 +858,22 @@ router.post('/:workspaceId/import', authenticateRequest, validateWorkspaceAccess
 
         for (const sourceAsset of manifest.assets) {
             const hostAssetId = assetIdMap.get(sourceAsset.assetId)!
-            const contentBytes = remappedDocumentBytes.get(`${sourceAsset.assetId}#content`)
-            if (!contentBytes) continue
-            const contentDocument = JSON.parse(contentBytes.toString('utf8'))
-            for (const embeddedAssetId of collectEmbeddedAssetIds(contentDocument)) {
-                if (embeddedAssetId === hostAssetId) throw new Error('SELF_REFERENTIAL_ASSET_DOCUMENT')
-                const attached = await AssetModel.attachWorkspaceReference({
-                    assetId: embeddedAssetId,
-                    workspaceId,
-                    requester,
-                    surfaceId: `document#${hostAssetId}#content`,
-                })
-                if ('error' in attached) throw new Error(attached.error)
+            for (const role of ['content', 'capabilityArtifact'] as const) {
+                const documentBytes = remappedDocumentBytes.get(`${sourceAsset.assetId}#${role}`)
+                if (!documentBytes) continue
+                const document = JSON.parse(documentBytes.toString('utf8'))
+                for (const embeddedAssetId of collectEmbeddedAssetIds(document, role)) {
+                    if (embeddedAssetId === hostAssetId) throw new Error('SELF_REFERENTIAL_ASSET_DOCUMENT')
+                    const attached = await AssetModel.attachWorkspaceReference({
+                        assetId: embeddedAssetId,
+                        workspaceId,
+                        requester,
+                        surfaceId: role === 'content'
+                            ? `document#${hostAssetId}#content`
+                            : `capabilityArtifact#${hostAssetId}`,
+                    })
+                    if ('error' in attached) throw new Error(attached.error)
+                }
             }
         }
 

@@ -3,6 +3,12 @@
 import type { CanvasNode } from '@lixpi/constants'
 
 export type GeneratedMediaCanvasNode = Extract<CanvasNode, { type: 'image' | 'video' }>
+export type GeneratedOutputCanvasNode = Extract<CanvasNode, { type: 'image' | 'video' | 'capabilityArtifact' }>
+
+export function isGeneratedOutputCanvasNode(node: CanvasNode): node is GeneratedOutputCanvasNode {
+    return (node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact')
+        && Boolean(node.generatedBy)
+}
 
 export function isGeneratedMediaCanvasNode(node: CanvasNode): node is GeneratedMediaCanvasNode {
     return (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy)
@@ -53,5 +59,20 @@ export function getGeneratedMediaRunIdentity(node: CanvasNode): string {
         generatedBy.variantIndex ?? '',
         generatedBy.branchForkNodeId ?? '',
         generatedBy.branchLineNodeId ?? '',
+    ].join(':')
+}
+
+export function getGeneratedOutputRunIdentity(node: CanvasNode): string {
+    if (!isGeneratedOutputCanvasNode(node)) return ''
+    if (node.type !== 'capabilityArtifact') return getGeneratedMediaRunIdentity(node)
+    const generatedBy = node.generatedBy
+    if (!generatedBy) return ''
+    return [
+        node.type,
+        generatedBy.generationRequestId,
+        generatedBy.reasoningRunId,
+        generatedBy.reasoningModelId,
+        generatedBy.variantIndex,
+        generatedBy.capabilityRunId,
     ].join(':')
 }

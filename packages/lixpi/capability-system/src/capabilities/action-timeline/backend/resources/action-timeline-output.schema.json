@@ -1,0 +1,10 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["outputKind", "assetId"],
+    "properties": {
+        "outputKind": { "const": "capabilityArtifact" },
+        "assetId": { "type": "string", "minLength": 1 }
+    }
+}

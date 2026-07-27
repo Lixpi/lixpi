@@ -778,11 +778,28 @@
 }
 
 .media-history-button-text {
+    --prompt-reference-capability-module-color: #eca983;
+
     display: block;
     min-width: 0;
     overflow: hidden;
     text-overflow: clip;
     white-space: nowrap;
+}
+
+.media-history-button:has(.context-preview-inline.is-open),
+.media-history-button-text:has(.context-preview-inline.is-open) {
+    overflow: visible;
+}
+
+.media-history-button-text .prompt-reference-chip {
+    color: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.media-history-button-text .prompt-reference-chip-capability-module {
+    color: var(--prompt-reference-capability-module-color);
 }
 
 @keyframes workspace-media-analyzing-pulse {
@@ -2464,6 +2481,21 @@
 
 .workspace-branch-marker-message.is-pending {
     opacity: 0.96;
+}
+
+.workspace-branch-marker-message-text .prompt-reference-chip {
+    color: var(--prompt-reference-color);
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.workspace-branch-marker-message-text {
+    --prompt-reference-color: #d7e6ff;
+    --prompt-reference-capability-module-color: #eca983;
+}
+
+.workspace-branch-marker-message-text .prompt-reference-chip-capability-module {
+    color: var(--prompt-reference-capability-module-color);
 }
 
 .workspace-branch-marker-message-icon {

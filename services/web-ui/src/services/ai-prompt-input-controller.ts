@@ -5,6 +5,7 @@ import { Fragment } from 'prosemirror-model'
 import type {
     CanvasState,
     CanvasNode,
+    CapabilityJsonValue,
     ImageGenerationSize,
     MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
@@ -12,6 +13,7 @@ import type {
 import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import {
     serializeAiModelSelectionAttr,
+    serializeCapabilityInputsAttr,
     serializeMediaGenerationConfigSelectionAttr,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 
@@ -44,6 +46,7 @@ type AiSubmitPayload = {
     imageOptions?: ImageOptions
     videoOptions?: VideoOptions
     referenceNodeIds?: string[]
+    capabilityInputs?: Record<string, Record<string, CapabilityJsonValue>>
 }
 
 type TargetNode = {
@@ -62,6 +65,7 @@ type PendingMessage = {
     imageOptions?: ImageOptions
     videoOptions?: VideoOptions
     referenceNodeIds?: string[]
+    capabilityInputs?: Record<string, Record<string, CapabilityJsonValue>>
 }
 
 type AiPromptInputControllerOptions = {
@@ -159,6 +163,7 @@ export class AiPromptInputController {
         imageOptions?: ImageOptions
         videoOptions?: VideoOptions
         referenceNodeIds?: string[]
+        capabilityInputs?: Record<string, Record<string, CapabilityJsonValue>>
     }): Promise<void> {
         const {
             contentJSON,
@@ -169,6 +174,7 @@ export class AiPromptInputController {
             imageOptions,
             videoOptions,
             referenceNodeIds,
+            capabilityInputs,
         } = params
 
         if (!this.target) {
@@ -193,6 +199,7 @@ export class AiPromptInputController {
                 imageOptions,
                 videoOptions,
                 referenceNodeIds,
+                capabilityInputs,
             })
         } else {
             // Target is a document or image — auto-create a new AI chat thread
@@ -205,6 +212,7 @@ export class AiPromptInputController {
                 imageOptions,
                 videoOptions,
                 referenceNodeIds,
+                capabilityInputs,
             })
         }
     }
@@ -290,6 +298,7 @@ export class AiPromptInputController {
                 pendingUseMultipleVideoModels ? pending.videoOptions.configGroups ?? [] : []
             )
             : undefined
+        const pendingCapabilityInputs = serializeCapabilityInputsAttr(pending.capabilityInputs ?? {})
         const currentUseMultipleReasoningModels = currentAttrs.useMultipleReasoningModels === true
             || currentAttrs.useMultipleReasoningModels === 'true'
         const currentUseMultipleImageModels = currentAttrs.useMultipleImageModels === true
@@ -308,6 +317,7 @@ export class AiPromptInputController {
             || (pending.videoOptions?.videoResolution && currentAttrs.videoResolution !== pending.videoOptions.videoResolution)
             || (pending.videoOptions?.videoDuration && currentAttrs.videoDuration !== pending.videoOptions.videoDuration)
             || (pendingVideoConfigGroups !== undefined && currentAttrs.videoGenerationConfigGroups !== pendingVideoConfigGroups)
+            || currentAttrs.capabilityInputs !== pendingCapabilityInputs
 
         if (needsUpdate) {
             const mappedThreadPos = tr.mapping.map(threadPos)
@@ -328,7 +338,8 @@ export class AiPromptInputController {
                     videoResolution: pending.videoOptions.videoResolution || '',
                     videoDuration: pending.videoOptions.videoDuration || '',
                     ...(pendingVideoConfigGroups !== undefined ? { videoGenerationConfigGroups: pendingVideoConfigGroups } : {}),
-                } : {})
+                } : {}),
+                capabilityInputs: pendingCapabilityInputs,
             })
         }
 
@@ -350,6 +361,7 @@ export class AiPromptInputController {
         imageOptions?: PendingMessage['imageOptions']
         videoOptions?: PendingMessage['videoOptions']
         referenceNodeIds?: string[]
+        capabilityInputs?: Record<string, Record<string, CapabilityJsonValue>>
     }): Promise<void> {
         const {
             contentJSON,
@@ -360,6 +372,7 @@ export class AiPromptInputController {
             imageOptions,
             videoOptions,
             referenceNodeIds,
+            capabilityInputs,
         } = params
         if (!this.target) return
 
@@ -405,6 +418,7 @@ export class AiPromptInputController {
                         ...(videoOptions?.videoResolution ? { videoResolution: videoOptions.videoResolution } : {}),
                         ...(videoOptions?.videoDuration ? { videoDuration: videoOptions.videoDuration } : {}),
                         ...(threadVideoConfigGroups ? { videoGenerationConfigGroups: threadVideoConfigGroups } : {}),
+                        capabilityInputs: serializeCapabilityInputsAttr(capabilityInputs ?? {}),
                     },
                     content: [
                         {
@@ -445,6 +459,7 @@ export class AiPromptInputController {
                 imageOptions,
                 videoOptions,
                 referenceNodeIds,
+                capabilityInputs,
             })
 
             // Update target to point to the new thread (panel-only, no canvas node).

@@ -1,6 +1,11 @@
 'use strict'
 
-import type { CanvasGeometryUpdate, CapabilityJsonValue, CapabilityRunEvent } from '@lixpi/constants'
+import type {
+    CanvasGeometryUpdate,
+    CapabilityJsonValue,
+    CapabilityReasoningModelVariant,
+    CapabilityRunEvent,
+} from '@lixpi/constants'
 
 import { CapabilityError } from '../shared/capability-errors.ts'
 import type { LoadedCapabilityResource, SealedResolvedCapabilityPlan } from './capability-resolver.ts'
@@ -14,6 +19,7 @@ export type CapabilityActionAuthorizationContext = {
     runId: string
     origin: 'prompt' | 'model' | 'panel'
     invocationGenerationRequestId?: string
+    variant: { axis: 'request'; variantKey: 'request' } | CapabilityReasoningModelVariant
 }
 
 export type CapabilityActionExecutionContext = CapabilityActionAuthorizationContext & {

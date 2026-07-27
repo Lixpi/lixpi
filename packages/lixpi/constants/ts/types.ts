@@ -121,14 +121,14 @@ export const MAX_UPLOAD_FILE_SIZE = 1024 * 1024 * 1024
 // NOTE: 'document' is an editable content-Asset node (server-authoritative ProseMirror).
 // Uploaded documents use the distinct 'mediaDocument' type to avoid colliding
 // with it. 'audio' is the uploaded-audio node.
-export type CanvasNodeType = 'document' | 'mediaDocument' | 'image' | 'video' | 'audio' | 'uploadPlaceholder' | 'branchOrigin' | 'branchFork' | 'branchLine'
+export type CanvasNodeType = 'document' | 'mediaDocument' | 'image' | 'video' | 'audio' | 'uploadPlaceholder' | 'branchOrigin' | 'branchFork' | 'branchLine' | 'capabilityArtifact'
 
-type CanvasNodePosition = {
+export type CanvasNodePosition = {
     x: number
     y: number
 }
 
-type CanvasNodeDimensions = {
+export type CanvasNodeDimensions = {
     width: number
     height: number
 }
@@ -286,6 +286,7 @@ export type WorkspaceContextNode = {
     nodeId: string
     type: CanvasNodeType
     assetId?: string
+    artifactTypeId?: string
     descriptorStatus?: ContentDescriptorStatus
     title?: string
     descriptorSummary?: string
@@ -700,8 +701,37 @@ export type VideoGenerationTraceStreamPayload = {
     videoGenerationTrace: VideoGenerationTrace
 }
 
+export type CapabilityGenerationTraceStep = {
+    stepId: string
+    title: string
+    status: 'completed' | 'skipped' | 'failed' | 'cancelled'
+    inputSummary?: string
+    outputSummary?: string
+    errorMessage?: string
+}
+
+export type CapabilityGenerationTrace = {
+    traceVersion: 'capability-generation-trace-v1'
+    generationRun?: MediaGenerationRunMeta
+    capabilityId: string
+    capabilityName: string
+    capabilityRunId: string
+    chatModelProvider: string
+    chatModelId: string
+    input: Record<string, CapabilityJsonValue>
+    outputAssetIds: string[]
+    steps: CapabilityGenerationTraceStep[]
+}
+
+export type CapabilityGenerationTraceStreamPayload = {
+    status: 'CAPABILITY_GENERATION_TRACE'
+    aiProvider: string
+    generationRun?: MediaGenerationRunMeta
+    capabilityGenerationTrace: CapabilityGenerationTrace
+}
+
 export type MediaGenerationRunMeta = {
-    requestKind?: 'single-media' | 'media-generation-matrix'
+    requestKind?: 'single-media' | 'media-generation-matrix' | 'capability-output'
     generationRequestId: string
     reasoningRunId: string
     mediaRunId?: string
@@ -714,7 +744,8 @@ export type MediaGenerationRunMeta = {
     lineageAssignment?: MediaRunLineageAssignment
 }
 
-export type GeneratedMediaVariantMetadata = {
+export type GeneratedOutputVariantMetadata = {
+    outputKind?: 'image' | 'video' | 'capabilityArtifact'
     generationRequestId?: string
     reasoningRunId?: string
     mediaRunId?: string
@@ -732,11 +763,16 @@ export type GeneratedMediaVariantMetadata = {
     branchLineNodeId?: string
     lineageParentNodeId?: string
     referenceAssetIds?: string[]
+    // Durable fallback for generated-output chrome when the conversation
+    // document has not resumed yet or its lineage marker is unavailable.
+    promptText?: string
 }
+
+export type GeneratedMediaVariantMetadata = GeneratedOutputVariantMetadata
 
 export type MediaGenerationCanvasPhase = 'pending-before-first-frame' | 'ready'
 
-export type GeneratedOutputReviewScope = 'media-node' | 'branch-lineage'
+export type GeneratedOutputReviewScope = 'output-node' | 'branch-lineage'
 
 export type GeneratedOutputReviewAction = 'accept' | 'supersede'
 
@@ -747,7 +783,7 @@ export type GeneratedOutputReviewRequest = {
     nodeId: string
 } | {
     workspaceId: string
-    scope: 'media-node'
+    scope: 'output-node'
     action: 'supersede'
     nodeId: string
     preserveLineage: true
@@ -781,7 +817,6 @@ export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]
     operationKind?: ImageGenerationOperationKind
-    promptText?: string
     promptFingerprint?: string
     entitySummary?: string
     visualEntitySummary?: string
@@ -859,7 +894,6 @@ export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]
     operationKind?: ImageGenerationOperationKind
-    promptText?: string
     promptFingerprint?: string
     entitySummary?: string
     visualEntitySummary?: string
@@ -895,6 +929,26 @@ export type AudioCanvasNode = CanvasNodeParentingFields & {
     assetId: string
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
+}
+
+export type CapabilityArtifactGeneratedByMetadata = GeneratedOutputVariantMetadata & {
+    outputKind: 'capabilityArtifact'
+    conversationAssetId: string
+    responseMessageId?: string
+    capabilityRunId: string
+    capabilityId: string
+    toolId: string
+    input: Record<string, CapabilityJsonValue>
+}
+
+export type CapabilityArtifactCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'capabilityArtifact'
+    artifactTypeId: string
+    assetId: string
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    generatedBy?: CapabilityArtifactGeneratedByMetadata
 }
 
 export type DocumentMediaCanvasNode = CanvasNodeParentingFields & {
@@ -972,7 +1026,7 @@ export type BranchLineCanvasNode = CanvasNodeParentingFields & {
     temporary: true
 }
 
-export type CanvasNode = DocumentCanvasNode | DocumentMediaCanvasNode | ImageCanvasNode | VideoCanvasNode | AudioCanvasNode | UploadPlaceholderCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
+export type CanvasNode = DocumentCanvasNode | DocumentMediaCanvasNode | ImageCanvasNode | VideoCanvasNode | AudioCanvasNode | UploadPlaceholderCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode | CapabilityArtifactCanvasNode
 
 export type CanvasViewport = {
     x: number
@@ -1016,7 +1070,7 @@ export type CapabilityPromptReference = {
     kind: CapabilityKind
 }
 
-export type PromptReferenceType = 'media' | 'capability-module' | 'tool' | 'skill'
+export type PromptReferenceType = 'media' | 'capability-artifact' | 'capability-module' | 'tool' | 'skill'
 
 export type MediaPromptReference = {
     referenceType: 'media'
@@ -1030,6 +1084,13 @@ export type CapabilityModulePromptReference = {
     moduleId: string
 }
 
+export type CapabilityArtifactPromptReference = {
+    referenceType: 'capability-artifact'
+    artifactTypeId: string
+    assetId: string
+    nodeId?: string
+}
+
 export type StandaloneCapabilityPromptReference = {
     referenceType: CapabilityKind
     capabilityId: string
@@ -1037,6 +1098,7 @@ export type StandaloneCapabilityPromptReference = {
 
 export type PromptReference =
     | MediaPromptReference
+    | CapabilityArtifactPromptReference
     | CapabilityModulePromptReference
     | StandaloneCapabilityPromptReference
 
@@ -1044,7 +1106,7 @@ export type PromptReferenceAtomAttrs = PromptReference & {
     displayName: string
 }
 
-export type PromptReferenceCategory = 'media' | 'capabilities' | 'tools' | 'skills'
+export type PromptReferenceCategory = 'media' | 'artifacts' | 'capabilities' | 'tools' | 'skills'
 
 export type MediaPromptReferenceCatalogItem = MediaPromptReference & {
     referenceId: string
@@ -1060,6 +1122,16 @@ export type CapabilityModulePromptReferenceCatalogItem = CapabilityModuleMeta & 
     referenceId: string
 }
 
+export type CapabilityArtifactPromptReferenceCatalogItem = CapabilityArtifactPromptReference & {
+    referenceId: string
+    source: 'canvas' | 'library'
+    title: string
+    scope: 'workspace' | 'user' | 'organization'
+    updatedAt: number
+    displayMetadata: Record<string, CapabilityJsonValue>
+    referenceThumbnailAssetIds: string[]
+}
+
 export type StandaloneCapabilityPromptReferenceCatalogItem = CapabilityMeta & {
     referenceType: CapabilityKind
     referenceId: string
@@ -1067,6 +1139,7 @@ export type StandaloneCapabilityPromptReferenceCatalogItem = CapabilityMeta & {
 
 export type PromptReferenceCatalogItem =
     | MediaPromptReferenceCatalogItem
+    | CapabilityArtifactPromptReferenceCatalogItem
     | CapabilityModulePromptReferenceCatalogItem
     | StandaloneCapabilityPromptReferenceCatalogItem
 
@@ -1212,8 +1285,30 @@ export type CapabilityToolDefinition = {
     toolType: string
     inputSchema: CapabilityResourceRef
     outputSchema: CapabilityResourceRef
-    executionPolicy: 'required' | 'model-choice'
+    executionPolicy: 'required' | 'model-required' | 'model-choice'
+    executionMultiplicity: CapabilityExecutionMultiplicity
+    modelAxisPolicy: CapabilityModelAxisPolicy
     workflow: CapabilityWorkflow
+}
+
+export type CapabilityExecutionMultiplicity = 'once' | 'per-reasoning-model'
+
+export type CapabilityModelAxisPolicy = {
+    reasoning: 'all-selected' | 'first-selected' | 'ignore'
+    image: 'all-selected' | 'ignore'
+    video: 'all-selected' | 'ignore'
+    outputMode: 'capability-only' | 'continue-media-generation'
+}
+
+export type CapabilityReasoningModelVariant = {
+    axis: 'reasoning-model'
+    variantKey: string
+    reasoningIndex: number
+    reasoningModelId: AiModelId
+    provider: ProviderName
+    modelVersion: string
+    contextWindow: number
+    maxCompletionSize: number
 }
 
 export type CapabilityManifest = {
@@ -1258,6 +1353,7 @@ export type CapabilityRun = {
     workspaceId: string
     conversationAssetId?: string
     origin: CapabilityRunOrigin
+    variant?: { axis: 'request'; variantKey: 'request' } | CapabilityReasoningModelVariant
     status: CapabilityRunStatus
     currentStepIds: string[]
     outputAssetIds: string[]
@@ -1337,7 +1433,7 @@ export type CanvasAiChatSidebarTab = {
 
 // Right side panel top-level surface: the Capability library, the unified Asset
 // library, or conversation Assets.
-export type CanvasRightSidePanelMode = 'capabilities' | 'media' | 'aiThreads'
+export type CanvasRightSidePanelMode = 'capabilities' | 'artifacts' | 'media' | 'aiThreads'
 
 export type CanvasAiChatPanelState = {
     isOpen: boolean

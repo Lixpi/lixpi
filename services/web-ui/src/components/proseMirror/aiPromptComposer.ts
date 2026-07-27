@@ -1,7 +1,10 @@
 'use strict'
 
 import type { EditorView } from 'prosemirror-view'
-import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
+import type {
+    CapabilityJsonValue,
+    MediaGenerationConfigSelectionGroup,
+} from '@lixpi/constants'
 import type { PromptReferenceCatalogClient } from '$src/services/prompt-reference-catalog-client.ts'
 import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 
@@ -23,6 +26,7 @@ import {
 import { createShiftingGradientBackground } from '@lixpi/canvas-engine'
 import { html } from '$src/utils/domTemplates.ts'
 import { settings } from '$src/settings.ts'
+import { createInstalledCapabilityControls } from '$src/installed-capabilities.ts'
 
 // The single payload the prompt input plugin emits on submit. Mirrors the
 // SubmitHandler shape in aiPromptInputPlugin.ts so every host consumes one type.
@@ -44,6 +48,7 @@ export type AiPromptComposerSubmitData = {
         videoDuration?: string
         configGroups?: MediaGenerationConfigSelectionGroup[]
     }
+    capabilityInputs: Record<string, Record<string, CapabilityJsonValue>>
 }
 
 // The control-factory bundle the prompt input node view expects. Derived from
@@ -62,6 +67,7 @@ export type PromptControlFactories = {
     createVideoResolutionDropdown: NodeViewOptions['createVideoResolutionDropdown']
     createVideoDurationDropdown: NodeViewOptions['createVideoDurationDropdown']
     createSubmitButton: NodeViewOptions['createSubmitButton']
+    createCapabilityControls?: NodeViewOptions['createCapabilityControls']
 }
 
 export type AiPromptComposerConfig = {
@@ -106,6 +112,7 @@ export function createDefaultPromptControlFactories(): PromptControlFactories {
         createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
         createVideoDurationDropdown: createGenericVideoDurationDropdown,
         createSubmitButton: createGenericSubmitButton,
+        createCapabilityControls: createInstalledCapabilityControls,
     }
 }
 

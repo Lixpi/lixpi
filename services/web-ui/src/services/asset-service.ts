@@ -70,6 +70,18 @@ async function mapWithConcurrency<T, R>(
 }
 
 export class AssetService {
+    private async loadAssetsById(assetIds: readonly string[]): Promise<Asset[]> {
+        const results = await mapWithConcurrency([...assetIds], ASSET_LOAD_CONCURRENCY, async (assetId) => {
+            try {
+                return await this.get(assetId)
+            } catch (error) {
+                console.warn('[AssetService] Asset load failed; synchronization will retry it', { assetId, error })
+                return { error: 'ASSET_LOAD_FAILED' }
+            }
+        })
+        return results.filter((result): result is Asset => !('error' in result))
+    }
+
     async fetchDocumentSnapshot(reference: AssetDocSnapshotReference): Promise<AssetDocSnapshot> {
         const response = await fetch(`${API_BASE_URL}${reference.url}`, {
             headers: { Authorization: `Bearer ${await AuthService.getTokenSilently()}` },
@@ -86,6 +98,14 @@ export class AssetService {
 
     async get(assetId: string): Promise<Asset | { error: string }> {
         return await request(ASSET_SUBJECTS.GET, { assetId })
+    }
+
+    async ensureAssetsLoaded(assetIds: readonly string[]): Promise<Asset[]> {
+        const missingAssetIds = [...new Set(assetIds)]
+            .filter(assetId => assetId && !assetsStore.get(assetId))
+        const loadedAssets = await this.loadAssetsById(missingAssetIds)
+        for (const asset of loadedAssets) assetsStore.upsert(asset)
+        return loadedAssets
     }
 
     async refresh(assetId: string): Promise<Asset | { error: string }> {
@@ -178,7 +198,7 @@ export class AssetService {
             if (typeof workspace?.canvasState?.lastActiveConversationAssetId === 'string') {
                 assetIds.add(workspace.canvasState.lastActiveConversationAssetId)
             }
-            for (const primaryCategory of ['document', 'conversation'] as const) {
+            for (const primaryCategory of ['document', 'conversation', 'capabilityArtifact'] as const) {
                 let cursor: string | undefined
                 do {
                     const page = await this.list({ primaryCategory, limit: 100, cursor })
@@ -194,15 +214,12 @@ export class AssetService {
                 if (right === activeConversationAssetId) return 1
                 return 0
             })
-            const results = await mapWithConcurrency(prioritizedAssetIds, ASSET_LOAD_CONCURRENCY, async (assetId) => {
-                try {
-                    return await this.get(assetId)
-                } catch (error) {
-                    console.warn('[AssetService] Asset load failed; synchronization will retry it', { assetId, error })
-                    return { error: 'ASSET_LOAD_FAILED' }
-                }
-            })
-            const assets = results.filter((result): result is Asset => !('error' in result))
+            const directAssets = await this.loadAssetsById(prioritizedAssetIds)
+            const directAssetIds = new Set(directAssets.map(asset => asset.assetId))
+            const lineageSourceAssetIds = [...new Set(directAssets.flatMap(asset => asset.lineage?.sourceAssetIds ?? []))]
+                .filter(assetId => !directAssetIds.has(assetId))
+            const lineageSourceAssets = await this.loadAssetsById(lineageSourceAssetIds)
+            const assets = [...directAssets, ...lineageSourceAssets]
             assetsStore.setAssets(workspaceId, Array.isArray(assets) ? assets : [])
             const documentCoordinates = assets
                 .flatMap((asset) => (Object.keys(asset.documents) as AssetDocumentRole[]).map((role) => ({
@@ -339,7 +356,7 @@ export class AssetService {
         initialDoc?: object
         assetId?: string
     }): Promise<Asset> {
-        const asset = await request<Asset>(ASSET_SUBJECTS.CREATE, {
+        const result = await request<Asset | { error: string }>(ASSET_SUBJECTS.CREATE, {
             organizationId,
             originWorkspaceId: workspaceId,
             scope: 'workspace',
@@ -349,8 +366,9 @@ export class AssetService {
             ...(assetId ? { assetId } : {}),
             ...(initialDoc ? { initialDoc } : {}),
         })
-        assetsStore.upsert(asset)
-        return asset
+        if ('error' in result) throw new Error(`Asset creation failed: ${result.error}`)
+        assetsStore.upsert(result)
+        return result
     }
 
     async updateMetadata(assetId: string, expectedRevision: number, updates: {

@@ -635,7 +635,7 @@ describe('asset canvas projection', () => {
             edges: [{ edgeId: 'edge-fork-1-media-1', sourceNodeId: 'fork-1', targetNodeId: 'media-1', sourceHandle: 'right', targetHandle: 'left' }],
         }
 
-        const accepted = detachReviewedGeneratedOutputsFromCanvas({ canvasState: state, scope: 'media-node', nodeId: 'media-1' })
+        const accepted = detachReviewedGeneratedOutputsFromCanvas({ canvasState: state, scope: 'output-node', nodeId: 'media-1' })
         const superseded = removeGeneratedOutputCandidateFromCanvas({
             canvasState: state,
             nodeId: 'media-1',
