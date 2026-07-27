@@ -162,19 +162,19 @@ export async function resolveAuthorizedAssetModelInput(
     if (asset.media?.kind === 'image') {
         const loaded = await loadRendition(asset, ['canonical', 'preview', 'original'])
         assertImagePayload(loaded.bytes, loaded.mimeType, asset.assetId)
-        return { kind: 'image', marker, assetId: asset.assetId, ...loaded }
+        return { kind: 'image', marker, assetId: asset.assetId, title: asset.title, ...loaded }
     }
     if (asset.media?.kind === 'video') {
         const loaded = await loadRendition(asset, ['representativeFrame', 'poster', 'thumbnail'])
         assertImagePayload(loaded.bytes, loaded.mimeType, asset.assetId)
-        return { kind: 'video-frame', marker, assetId: asset.assetId, ...loaded }
+        return { kind: 'video-frame', marker, assetId: asset.assetId, title: asset.title, ...loaded }
     }
     if (asset.media?.kind === 'audio') {
         const loaded = await loadRendition(asset, ['original'])
         if (!loaded.mimeType.startsWith('audio/') || loaded.bytes.byteLength === 0) {
             throw inputFailure(asset.assetId, 'CORRUPT_AUDIO_INPUT')
         }
-        return { kind: 'audio', marker, assetId: asset.assetId, ...loaded }
+        return { kind: 'audio', marker, assetId: asset.assetId, title: asset.title, ...loaded }
     }
     if (asset.media?.kind === 'document' || asset.documents.content) {
         const authorized = await AssetModel.get({ assetId: asset.assetId, requester })

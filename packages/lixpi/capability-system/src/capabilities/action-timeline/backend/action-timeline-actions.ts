@@ -148,7 +148,11 @@ export function registerActionTimelineActions(
         execute: async (input, context) => {
             const prepared = readValidatedRequest(input.prepared)
             const written = readWrittenOutput(input.written)
-            const document = buildActionTimelineDocument(prepared.input, written.segments)
+            const document = buildActionTimelineDocument(
+                prepared.input,
+                written.segments,
+                buildReferenceMetadata(prepared.modelInputs),
+            )
             const persisted = await dependencies.persistArtifact({
                 input: prepared.input,
                 document,
@@ -356,6 +360,28 @@ function collectReferencedAssetIds(segments: readonly ActionTimelineGeneratedSeg
         }
     }
     return assetIds
+}
+
+function buildReferenceMetadata(
+    modelInputs: readonly CapabilityResolvedModelInput[],
+): ReadonlyMap<string, {
+    mediaKind: 'image' | 'video' | 'audio' | 'document'
+    displayName: string
+}> {
+    return new Map(modelInputs.map(input => [input.assetId, {
+        mediaKind: input.kind === 'video-frame'
+            ? 'video'
+            : input.kind === 'document-text'
+                ? 'document'
+                : input.kind,
+        displayName: resolveModelInputTitle(input),
+    }]))
+}
+
+function resolveModelInputTitle(input: CapabilityResolvedModelInput): string {
+    if (typeof input.title === 'string' && input.title.trim()) return input.title.trim()
+    const markerTitle = input.marker.match(/^<ref asset:\S+ "((?:\\.|[^"])*)">$/u)?.[1]
+    return markerTitle?.replaceAll('\\"', '"').trim() || input.assetId
 }
 
 function authorizeActionTimeline(context: { rootCapabilityId: string }): boolean {

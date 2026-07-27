@@ -54,6 +54,19 @@ export type PromptReferenceChipDescriptor = {
 export type PromptReferencePreviewRenderer = {
     getNode: (reference: MediaPromptReference) => CanvasNode | undefined
     environment: ContextPreviewEnvironment
+    inlinePopover?: boolean
+    preferredPlacement?: 'top' | 'bottom' | 'left' | 'right'
+}
+
+export type PromptReferencePreviewInstance = {
+    dom: HTMLElement
+    destroy: () => void
+}
+
+export type CreatePromptReferencePreviewOptions = {
+    inlinePopover?: boolean
+    preferredPlacement?: 'top' | 'bottom' | 'left' | 'right'
+    variant?: 'inline' | 'thumbnail'
 }
 
 const mediaPromptReferenceIcons: Record<MediaKind, string> = {
@@ -82,10 +95,28 @@ function isPromptReferenceNode(node: ProseMirrorNode | null | undefined): node i
         || node?.type.name === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
 }
 
-function getMediaPromptReference(node: ProseMirrorNode): MediaPromptReference | null {
+function getMediaPromptReference(
+    node: ProseMirrorNode,
+    previewRenderer?: PromptReferencePreviewRenderer,
+): MediaPromptReference | null {
     if (node.type.name !== PROMPT_REFERENCE_NODE_TYPE) return null
     const attrs = normalizePromptReferenceAttrs(node.attrs)
-    return attrs?.referenceType === 'media' ? attrs : null
+    if (attrs?.referenceType === 'media') return attrs
+    if (node.attrs.referenceType !== 'media' || typeof node.attrs.assetId !== 'string' || !node.attrs.assetId.trim()) {
+        return null
+    }
+    const mediaKind = previewRenderer?.environment.getAsset?.(node.attrs.assetId)?.media?.kind
+    if (mediaKind !== 'image' && mediaKind !== 'video' && mediaKind !== 'audio' && mediaKind !== 'document') {
+        return null
+    }
+    return {
+        referenceType: 'media',
+        assetId: node.attrs.assetId,
+        ...(typeof node.attrs.nodeId === 'string' && node.attrs.nodeId.trim()
+            ? { nodeId: node.attrs.nodeId }
+            : {}),
+        mediaKind,
+    }
 }
 
 export function getPromptReferenceIcon(
@@ -111,6 +142,52 @@ function createPromptReferenceChipContent(descriptor: PromptReferenceChipDescrip
             <span className="prompt-reference-chip-name">${descriptor.displayName}</span>
         </span>
     ` as HTMLSpanElement
+}
+
+function resolveMediaPromptReferenceDisplayName(
+    reference: MediaPromptReference & { displayName: string },
+    previewRenderer: PromptReferencePreviewRenderer,
+): string {
+    return previewRenderer.environment.getAsset?.(reference.assetId)?.title?.trim()
+        || reference.displayName.trim()
+        || reference.assetId
+}
+
+export function createMediaPromptReferencePreview(
+    reference: MediaPromptReference & { displayName: string },
+    previewRenderer: PromptReferencePreviewRenderer,
+    options: CreatePromptReferencePreviewOptions = {},
+): PromptReferencePreviewInstance | null {
+    const previewNode = previewRenderer.getNode(reference)
+    if (!previewNode) return null
+
+    const displayName = resolveMediaPromptReferenceDisplayName(reference, previewRenderer)
+    const triggerContent = options.variant === 'thumbnail'
+        ? undefined
+        : createPromptReferenceChipContent({
+            referenceType: 'media',
+            displayName,
+            mediaKind: reference.mediaKind,
+        })
+    const previewTile = createContextPreviewTile({
+        node: previewNode,
+        getNode: () => previewRenderer.getNode(reference) ?? previewNode,
+        environment: previewRenderer.environment,
+        preferredPlacement: options.preferredPlacement ?? previewRenderer.preferredPlacement ?? 'top',
+        inlinePopover: options.inlinePopover ?? previewRenderer.inlinePopover,
+        triggerContent,
+        titleOverride: displayName,
+    })
+    if (options.variant !== 'thumbnail') {
+        previewTile.dom.classList.add(
+            'prompt-reference-chip',
+            'prompt-reference-chip-media',
+            'context-preview-inline-label',
+        )
+    } else {
+        previewTile.dom.classList.add('context-preview-thumbnail')
+    }
+    return previewTile
 }
 
 export function createPromptReferenceChipElement(
@@ -164,24 +241,17 @@ export class PromptReferenceNodeView implements NodeView {
             return
         }
         this.artifactView = null
+        const mediaReference = getMediaPromptReference(node, previewRenderer)
         const descriptor: PromptReferenceChipDescriptor = {
             referenceType,
             displayName: String(node.attrs.displayName ?? ''),
-            mediaKind: node.attrs.mediaKind,
+            mediaKind: mediaReference?.mediaKind ?? node.attrs.mediaKind,
         }
-        const content = createPromptReferenceChipContent(descriptor)
-        const mediaReference = getMediaPromptReference(node)
-        const previewNode = mediaReference ? previewRenderer?.getNode(mediaReference) : undefined
-
-        this.previewTile = mediaReference && previewRenderer && previewNode
-            ? createContextPreviewTile({
-                node: previewNode,
-                getNode: () => previewRenderer.getNode(mediaReference) ?? previewNode,
-                environment: previewRenderer.environment,
-                preferredPlacement: 'top',
-                triggerContent: content,
-                titleOverride: String(node.attrs.displayName ?? ''),
-            })
+        this.previewTile = mediaReference && previewRenderer
+            ? createMediaPromptReferencePreview({
+                ...mediaReference,
+                displayName: descriptor.displayName,
+            }, previewRenderer)
             : null
         this.dom = this.previewTile?.dom
             ?? createPromptReferenceChipElement(descriptor)

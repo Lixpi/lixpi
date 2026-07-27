@@ -140,6 +140,13 @@ describe('authorizePromptReferences', () => {
                 imageUrl: 'nats-obj://org-assets/portrait.png',
             }),
         ])
+        expect(result.modelInputs).toEqual([
+            expect.objectContaining({
+                kind: 'image',
+                assetId: 'asset-1',
+                title: 'Portrait',
+            }),
+        ])
         expect(result.mediaCandidates[0]).not.toHaveProperty('nodeId')
     })
 

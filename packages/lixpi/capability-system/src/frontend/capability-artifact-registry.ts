@@ -23,8 +23,7 @@ export type CapabilityArtifactCanvasHost = {
     container: HTMLElement
     node: CapabilityArtifactCanvasNode
     document: object
-    resolveAssetTitle: (assetId: string) => string
-    resolveThumbnailUrl: (assetId: string) => string | undefined
+    createAssetReferenceView: (request: CapabilityArtifactAssetReferenceRequest) => CapabilityArtifactAssetReferenceView | undefined
     onHeightChange: (height: number) => void
     mountEditor?: (request: {
         container: HTMLElement
@@ -35,6 +34,17 @@ export type CapabilityArtifactCanvasHost = {
         destroy: () => void
         updateDocument: (document: object) => void
     }
+}
+
+export type CapabilityArtifactAssetReferenceRequest = {
+    assetId: string
+    displayName?: string
+    variant: 'inline' | 'thumbnail'
+}
+
+export type CapabilityArtifactAssetReferenceView = {
+    dom: HTMLElement
+    destroy: () => void
 }
 
 export type CapabilityArtifactCanvasView = {

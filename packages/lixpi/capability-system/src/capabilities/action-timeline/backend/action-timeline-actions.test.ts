@@ -220,7 +220,14 @@ describe('Action Timeline registered actions', () => {
                     referenceAssetIds: ['asset-a'],
                 },
                 grid: [{ slotIndex: 0, startMs: 0, endMs: 1_000 }],
-                modelInputs: [],
+                modelInputs: [{
+                    kind: 'video-frame',
+                    assetId: 'asset-a',
+                    title: 'Slop Train',
+                    marker: '<asset-a>',
+                    bytes: new Uint8Array([1, 2, 3]),
+                    mimeType: 'image/jpeg',
+                }],
             },
             written: { segments: [{ slotIndex: 0, runs: [{ text: 'Show ' }, { assetId: 'asset-a' }] }] },
         }, context)
@@ -229,6 +236,12 @@ describe('Action Timeline registered actions', () => {
             referencedAssetIds: ['asset-a'],
             context,
         }))
+        const persistRequest = dependencies.persistArtifact.mock.calls[0]?.[0]
+        const persistedDocument = persistRequest?.document as {
+            content?: Array<{ content?: Array<{ content?: Array<{ attrs?: Record<string, unknown> }> }> }>
+        }
+        expect(persistedDocument.content?.[0]?.content?.[0]?.content?.[1]?.attrs?.mediaKind).toBe('video')
+        expect(persistedDocument.content?.[0]?.content?.[0]?.content?.[1]?.attrs?.displayName).toBe('Slop Train')
         expect(output).toMatchObject({ outputKind: 'capabilityArtifact', assetId: 'artifact-1' })
         expect(action.collectOutputAssetIds?.(output)).toEqual(['artifact-1'])
         expect(action.collectCanvasGeometry).toBeUndefined()

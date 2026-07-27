@@ -5,9 +5,14 @@ import {
     type ProseMirrorJsonNode,
 } from '@lixpi/prosemirror'
 
-import { createPromptReferenceChipElement } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
+import {
+    createMediaPromptReferencePreview,
+    createPromptReferenceChipElement,
+    type PromptReferencePreviewRenderer,
+} from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 
 type CapabilityModuleReference = Extract<PromptReferenceAtomAttrs, { referenceType: 'capability-module' }>
+type MediaReference = Extract<PromptReferenceAtomAttrs, { referenceType: 'media' }>
 
 export type BranchMarkerPromptPart = {
     type: 'text'
@@ -15,6 +20,9 @@ export type BranchMarkerPromptPart = {
 } | {
     type: 'capability-module'
     reference: CapabilityModuleReference
+} | {
+    type: 'media'
+    reference: MediaReference
 }
 
 function appendText(parts: BranchMarkerPromptPart[], text: string): void {
@@ -43,6 +51,8 @@ function collectRawPromptParts(node: ProseMirrorJsonNode | undefined): BranchMar
             const reference = normalizePromptReferenceAttrs(candidate.attrs)
             if (reference?.referenceType === 'capability-module') {
                 parts.push({ type: 'capability-module', reference })
+            } else if (reference?.referenceType === 'media') {
+                parts.push({ type: 'media', reference })
             }
             return
         }
@@ -58,7 +68,7 @@ function normalizePromptParts(parts: readonly BranchMarkerPromptPart[]): BranchM
     let pendingWhitespace = false
 
     for (const part of parts) {
-        if (part.type === 'capability-module') {
+        if (part.type === 'capability-module' || part.type === 'media') {
             if (pendingWhitespace && hasVisibleContent) appendText(normalized, ' ')
             normalized.push(part)
             hasVisibleContent = true
@@ -110,7 +120,7 @@ export function truncateBranchMarkerPromptParts(
             remainingCharacters -= partText.length
             continue
         }
-        if (part.type === 'capability-module') break
+        if (part.type === 'capability-module' || part.type === 'media') break
         appendText(truncated, partText.slice(0, remainingCharacters))
         remainingCharacters = 0
     }
@@ -120,8 +130,19 @@ export function truncateBranchMarkerPromptParts(
 
 export function renderBranchMarkerPromptParts(
     parts: readonly BranchMarkerPromptPart[],
-): Array<string | HTMLSpanElement> {
-    return parts.map((part) => part.type === 'text'
-        ? part.text
-        : createPromptReferenceChipElement(part.reference))
+    options: {
+        previewRenderer?: PromptReferencePreviewRenderer
+        inlinePopover?: boolean
+    } = {},
+): Array<string | HTMLElement> {
+    return parts.map((part) => {
+        if (part.type === 'text') return part.text
+        if (part.type === 'media' && options.previewRenderer) {
+            return createMediaPromptReferencePreview(part.reference, options.previewRenderer, {
+                inlinePopover: options.inlinePopover,
+                preferredPlacement: 'top',
+            })?.dom ?? createPromptReferenceChipElement(part.reference)
+        }
+        return createPromptReferenceChipElement(part.reference)
+    })
 }

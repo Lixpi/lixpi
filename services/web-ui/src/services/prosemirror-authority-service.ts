@@ -105,8 +105,9 @@ export class ProseMirrorAuthorityService {
 
     private async connect(): Promise<void> {
         const nats = servicesStore.getData('nats')
-        if (!nats) return
+        if (!nats || this.disconnected) return
         if (!this.options.receiveOnly) await this.acquireLease()
+        if (this.disconnected) return
         const userId = userStore.getData('userId') as string
         if (!userId) throw new Error('USER_ID_REQUIRED')
         const subject = getAssetDocumentEventSubject(userId, {
@@ -119,30 +120,38 @@ export class ProseMirrorAuthorityService {
     }
 
     private async acquireLease(): Promise<void> {
+        if (this.disconnected) return
         const leaseKey = `${this.options.workspaceId}#${this.options.assetId}`
         const sharedLease = sharedWorkspaceLeases.get(leaseKey)
         if (sharedLease) {
             sharedLease.references += 1
             this.sharedLeaseKey = leaseKey
             this.leaseId = sharedLease.leaseId
-            this.options.onLeaseStateChange?.({ readOnly: false })
+            this.notifyLeaseState({ readOnly: false })
             this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10_000)
             return
         }
         const result = await this.assetService.acquireLease(this.options.assetId, this.options.workspaceId, this.clientId)
+        if (this.disconnected) {
+            if (result && !('error' in result)) {
+                await this.releaseLeaseSilently(result.leaseId, this.clientId)
+            }
+            return
+        }
         if (!result || 'error' in result) {
             const concurrentlyAcquired = sharedWorkspaceLeases.get(leaseKey)
             if (concurrentlyAcquired) {
                 concurrentlyAcquired.references += 1
                 this.sharedLeaseKey = leaseKey
                 this.leaseId = concurrentlyAcquired.leaseId
-                this.options.onLeaseStateChange?.({ readOnly: false })
+                this.notifyLeaseState({ readOnly: false })
                 this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10_000)
                 return
             }
             const asset = await this.assetService.get(this.options.assetId)
+            if (this.disconnected) return
             const lease = 'error' in asset ? undefined : asset.editLease
-            this.options.onLeaseStateChange?.({
+            this.notifyLeaseState({
                 readOnly: true,
                 holderWorkspaceId: lease?.workspaceId,
                 expiresAt: lease?.expiresAt,
@@ -152,22 +161,18 @@ export class ProseMirrorAuthorityService {
         const concurrentlyAcquired = sharedWorkspaceLeases.get(leaseKey)
         if (concurrentlyAcquired) {
             concurrentlyAcquired.references += 1
-            await this.assetService.releaseLease(
-                this.options.assetId,
-                this.options.workspaceId,
-                result.leaseId,
-                this.clientId,
-            ).catch(() => undefined)
             this.sharedLeaseKey = leaseKey
             this.leaseId = concurrentlyAcquired.leaseId
-            this.options.onLeaseStateChange?.({ readOnly: false })
+            await this.releaseLeaseSilently(result.leaseId, this.clientId)
+            if (this.disconnected) return
+            this.notifyLeaseState({ readOnly: false })
             this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10_000)
             return
         }
         sharedWorkspaceLeases.set(leaseKey, { leaseId: result.leaseId, holderId: this.clientId, references: 1 })
         this.sharedLeaseKey = leaseKey
         this.leaseId = result.leaseId
-        this.options.onLeaseStateChange?.({ readOnly: false })
+        this.notifyLeaseState({ readOnly: false })
         this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10_000)
     }
 
@@ -182,7 +187,25 @@ export class ProseMirrorAuthorityService {
             this.sharedLeaseKey = null
             this.leaseId = null
             if (this.leaseRenewalTimer) clearInterval(this.leaseRenewalTimer)
-            this.options.onLeaseStateChange?.({ readOnly: true })
+            this.notifyLeaseState({ readOnly: true })
+        }
+    }
+
+    private notifyLeaseState(state: { readOnly: boolean; holderWorkspaceId?: string; expiresAt?: number }): void {
+        if (this.disconnected) return
+        this.options.onLeaseStateChange?.(state)
+    }
+
+    private async releaseLeaseSilently(leaseId: string, holderId: string): Promise<void> {
+        try {
+            await this.assetService.releaseLease(
+                this.options.assetId,
+                this.options.workspaceId,
+                leaseId,
+                holderId,
+            )
+        } catch {
+            // Lease release is best-effort during an interrupted connection attempt.
         }
     }
 

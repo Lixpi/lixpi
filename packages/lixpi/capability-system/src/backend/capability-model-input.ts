@@ -10,6 +10,7 @@ export type CapabilityResolvedModelInput =
         kind: 'image'
         marker: string
         assetId: string
+        title: string
         bytes: Uint8Array
         mimeType: string
     }
@@ -17,6 +18,7 @@ export type CapabilityResolvedModelInput =
         kind: 'video-frame'
         marker: string
         assetId: string
+        title: string
         bytes: Uint8Array
         mimeType: string
     }
@@ -24,6 +26,7 @@ export type CapabilityResolvedModelInput =
         kind: 'audio'
         marker: string
         assetId: string
+        title: string
         bytes: Uint8Array
         mimeType: string
     }

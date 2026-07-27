@@ -50,7 +50,7 @@
     let canvasState = $derived(isRouteWorkspaceLoaded && $workspaceStore.meta.loadingStatus === LoadingStatus.success ? $workspaceStore.data.canvasState : null)
     let isRightSidePanelOpen = $derived(Boolean(isRouteWorkspaceLoaded && (canvasState?.aiChatPanel?.isOpen ?? canvasState?.lastActiveConversationAssetId)))
     let documents = $derived(isRouteWorkspaceLoaded ? Array.from($assetsStore.items.values())
-        .filter((asset) => Boolean(asset.documents.content))
+        .filter((asset) => Boolean(asset?.documents?.content))
         .map((asset) => ({
             documentId: asset.assetId,
             assetId: asset.assetId,
@@ -62,7 +62,7 @@
             organizationId: asset.organizationId,
         })) : [])
     let aiChatThreads = $derived(isRouteWorkspaceLoaded ? Array.from($assetsStore.items.values())
-        .filter((asset) => Boolean(asset.documents.conversation))
+        .filter((asset) => Boolean(asset?.documents?.conversation))
         .map((asset) => ({
             threadId: asset.assetId,
             assetId: asset.assetId,

@@ -97,6 +97,17 @@ function createVideoNode(overrides: any = {}) {
     }
 }
 
+function createAudioNode(overrides: any = {}) {
+    return {
+        type: 'audio',
+        nodeId: 'audio-node',
+        assetId: 'audio-node',
+        position: { x: 0, y: 0 },
+        dimensions: { width: 320, height: 80 },
+        ...overrides,
+    }
+}
+
 function createTextDoc(text: string): string {
     return JSON.stringify({
         type: 'doc',
@@ -124,7 +135,7 @@ beforeEach(() => {
 // =============================================================================
 
 describe('context preview labels', () => {
-    it('uses the Asset title when available and falls back to the node type label for image/video', () => {
+    it('uses the Asset title when available and falls back to the node type label for media', () => {
         const env = createMockEnvironment({
             assets: [makeAsset({ assetId: 'document-node', title: 'Project Notes' })],
         })
@@ -132,6 +143,7 @@ describe('context preview labels', () => {
         expect(getContextPreviewAccessibleLabel(createDocumentNode(), env)).toBe('Project Notes')
         expect(getContextPreviewAccessibleLabel(createImageNode(), env)).toBe('Image')
         expect(getContextPreviewAccessibleLabel(createVideoNode(), env)).toBe('Video')
+        expect(getContextPreviewAccessibleLabel(createAudioNode(), env)).toBe('Audio')
     })
 
     it('falls back to the node type label when title and metadata are missing', () => {
@@ -510,6 +522,37 @@ describe('createContextPreviewTile — popover layout', () => {
 // =============================================================================
 
 describe('createContextPreviewTile — live updates', () => {
+    it('portals a canvas preview to the pane and preserves the viewport scale', async () => {
+        const pane = document.createElement('div')
+        pane.className = 'workspace-pane'
+        const viewport = document.createElement('div')
+        viewport.className = 'workspace-viewport'
+        viewport.style.transform = 'matrix(1.5, 0, 0, 1.5, 0, 0)'
+        const node = document.createElement('div')
+        node.className = 'workspace-document-node'
+        pane.appendChild(viewport)
+        viewport.appendChild(node)
+        document.body.appendChild(pane)
+
+        const { dom, destroy } = createContextPreviewTile({
+            node: createImageNode(),
+            environment: createMockEnvironment(),
+            inlinePopover: true,
+        })
+        node.appendChild(dom)
+
+        const popover = dom.querySelector('.context-preview-inline-popover') as HTMLElement
+        dom.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
+        await waitForMicrotasks()
+
+        expect(popover.parentElement).toBe(pane)
+        expect(popover.classList.contains('context-preview-inline-popover-portaled')).toBe(true)
+        expect(popover.style.transform).toContain('scale(1.5)')
+
+        destroy()
+        expect(popover.isConnected).toBe(false)
+    })
+
     it('reruns preview rendering when getNode returns changed content', async () => {
         // Thread (and any other non-image/video/document) nodes fall through to the
         // generic preview branch, which renders only the title — never descriptor
@@ -588,7 +631,7 @@ describe('createContextPreviewTile — live updates', () => {
         expect(popover.querySelector('.workspace-ai-chat-panel-context-preview-document-text')?.textContent).toContain('Second summary')
 
         dom.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }))
-        await waitForMicrotasks()
+        await new Promise(resolve => setTimeout(resolve, 100))
         expect(popover.classList.contains('is-open')).toBe(false)
         destroy()
         expect(popover.isConnected).toBe(false)

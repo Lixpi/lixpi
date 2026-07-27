@@ -121,6 +121,20 @@ describe('Action Timeline shared contract', () => {
         })
     })
 
+    it('persists canonical Asset titles on reference atoms', () => {
+        const document = buildActionTimelineDocument(
+            { durationMs: 1_000, precisionMs: 1_000 },
+            [{ slotIndex: 0, runs: [{ text: 'Board ' }, { assetId: 'asset-train' }] }],
+            new Map([['asset-train', { mediaKind: 'image', displayName: 'Slop Train' }]]),
+        )
+
+        expect(document.content?.[0]?.content?.[0]?.content?.[1]?.attrs).toMatchObject({
+            assetId: 'asset-train',
+            mediaKind: 'image',
+            displayName: 'Slop Train',
+        })
+    })
+
     it('rejects nested Artifact references and malformed timing grids', () => {
         const document = buildActionTimelineDocument({ durationMs: 1_000, precisionMs: 1_000 }, [
             { slotIndex: 0, runs: [{ text: 'Only beat' }] },

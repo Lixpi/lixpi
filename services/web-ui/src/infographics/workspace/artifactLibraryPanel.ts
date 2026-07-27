@@ -19,6 +19,8 @@ import AssetService from '$src/services/asset-service.ts'
 import { assetDocumentsStore } from '$src/stores/assetDocumentsStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 import { html } from '$src/utils/domTemplates.ts'
+import type { AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
+import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 
 type ArtifactLibraryEntry = {
     meta: AssetMeta
@@ -29,6 +31,8 @@ export type ArtifactLibraryPanelOptions = {
     workspaceId: string
     onInsertAsset?: (item: AssetMeta) => Promise<boolean>
     onAcceptAsset?: (item: Asset) => Promise<boolean>
+    contextPreview?: AiUserMessageContextPreviewRenderer
+    promptReferencePreviewRenderer?: PromptReferencePreviewRenderer
 }
 
 export type ArtifactLibraryPanelInstance = {
@@ -296,6 +300,8 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
             content: snapshot.doc as never,
             threadId: asset.lineage?.sourceConversationAssetId ?? asset.assetId,
             documentType: 'assetProvenance',
+            contextPreview: this.options.contextPreview,
+            promptReferencePreviewRenderer: this.options.promptReferencePreviewRenderer,
         })
     }
 

@@ -307,6 +307,15 @@ describe('ProseMirrorEditor — state/editability and lifecycle', () => {
         })
     })
 
+    it('ignores a lease-state callback after the editor view is destroyed', () => {
+        const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
+        const onLeaseStateChange = vi.fn()
+        editor.editorView = null
+
+        expect(() => editor.handleLeaseStateChange({ readOnly: false }, onLeaseStateChange)).not.toThrow()
+        expect(onLeaseStateChange).not.toHaveBeenCalled()
+    })
+
     it('destroys editor view and clears schema state', () => {
         const editor = createEditorShim(DOCUMENT_TYPE.ASSET_CONTENT)
         const destroyMock = vi.fn()

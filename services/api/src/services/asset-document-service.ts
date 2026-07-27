@@ -41,6 +41,10 @@ import { AssetProseMirrorStepTransport } from '../prosemirror/asset-prosemirror-
 import { enqueueAssetSurfaceCleanup, enqueueBlobDeletion } from './asset-maintenance-queue.ts'
 import { ensureAssetDocumentEventRelay } from './asset-document-event-relay.ts'
 import { capabilityArtifactBackendRegistry } from '../capability-system/capability-artifacts.ts'
+import {
+    collectEmbeddedAssetIds,
+    type AssetReferenceDocumentRole,
+} from './prosemirror-asset-references.ts'
 
 const { ORG_NAME, STAGE } = process.env
 const assetsTableName = (): string => getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE)
@@ -176,16 +180,6 @@ const verifyLease = (asset: Asset, workspaceId: string, leaseId: string, holderI
         )),
     )
 
-const collectEmbeddedAssetIds = (node: unknown, assetIds = new Set<string>()): Set<string> => {
-    if (!node || typeof node !== 'object') return assetIds
-    const record = node as { attrs?: { assetId?: unknown }; content?: unknown }
-    if (typeof record.attrs?.assetId === 'string' && record.attrs.assetId) assetIds.add(record.attrs.assetId)
-    if (Array.isArray(record.content)) {
-        for (const child of record.content) collectEmbeddedAssetIds(child, assetIds)
-    }
-    return assetIds
-}
-
 const isMatchingAssetRenditionUrl = (value: unknown, assetId: string): boolean => {
     if (typeof value !== 'string' || !value.startsWith('/api/assets/')) return false
     try {
@@ -244,7 +238,7 @@ const validateEmbeddedAssetReferences = async ({
     doc: object
     role: 'content' | 'conversation' | 'capabilityArtifact'
 }): Promise<void> => {
-    for (const embeddedAssetId of collectEmbeddedAssetIds(doc)) {
+    for (const embeddedAssetId of collectEmbeddedAssetIds(doc, role)) {
         if (embeddedAssetId === hostAsset.assetId) throw new Error('SELF_REFERENTIAL_ASSET_DOCUMENT')
         const embeddedAsset = await getAssetRecord(embeddedAssetId)
         if (!embeddedAsset || embeddedAsset.organizationId !== hostAsset.organizationId) {
@@ -309,12 +303,17 @@ const settle = async ({
         if (snapshot?.doc) definition.assertEditableMutation(snapshot.doc, json)
         else definition.assertInitialDocument(json)
     }
-    const tracksEmbeddedAssets = role === 'content' || role === 'conversation' || role === 'capabilityArtifact'
-    const previousEmbeddedAssetIds = tracksEmbeddedAssets
-        ? collectEmbeddedAssetIds(snapshot?.doc)
+    const embeddedReferenceRole: AssetReferenceDocumentRole | undefined = role === 'content'
+        || role === 'conversation'
+        || role === 'capabilityArtifact'
+        ? role
+        : undefined
+    const tracksEmbeddedAssets = Boolean(embeddedReferenceRole)
+    const previousEmbeddedAssetIds = embeddedReferenceRole
+        ? collectEmbeddedAssetIds(snapshot?.doc, embeddedReferenceRole)
         : new Set<string>()
-    const nextEmbeddedAssetIds = tracksEmbeddedAssets
-        ? collectEmbeddedAssetIds(json)
+    const nextEmbeddedAssetIds = embeddedReferenceRole
+        ? collectEmbeddedAssetIds(json, embeddedReferenceRole)
         : new Set<string>()
     const embeddedSurfaceId = role === 'capabilityArtifact'
         ? `capabilityArtifact#${asset.assetId}`
@@ -559,7 +558,9 @@ const replaceSystemSnapshot = async ({
 const AssetDocumentService = {
     loadSnapshot,
     loadCurrentSnapshot,
-    getEmbeddedAssetIds: (doc: object): string[] => [...collectEmbeddedAssetIds(doc)],
+    getEmbeddedAssetIds: (doc: object, role: AssetReferenceDocumentRole): string[] => [
+        ...collectEmbeddedAssetIds(doc, role),
+    ],
     replaceSystemSnapshot,
     assertAssetBackedMediaNodes,
     submitSteps: async ({

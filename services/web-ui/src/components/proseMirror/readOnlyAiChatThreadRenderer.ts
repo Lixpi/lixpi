@@ -2,6 +2,7 @@ import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor
 import type { ProseMirrorJsonNode } from '@lixpi/prosemirror/shared/thread-doc'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import type { AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
+import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 import { html } from '$src/utils/domTemplates.ts'
 
 export type ReadOnlyAiChatThreadRenderOptions = {
@@ -12,6 +13,7 @@ export type ReadOnlyAiChatThreadRenderOptions = {
     className?: string
     traceDetailsOptions?: ImageGenerationTraceDetailsOptions
     contextPreview?: AiUserMessageContextPreviewRenderer
+    promptReferencePreviewRenderer?: PromptReferencePreviewRenderer
 }
 
 export type ReadOnlyAiChatThreadRendererInstance = {
@@ -46,6 +48,7 @@ class ReadOnlyAiChatThreadRenderer implements ReadOnlyAiChatThreadRendererInstan
                 traceDetailsOptions: options.traceDetailsOptions,
                 contextPreview: options.contextPreview,
             },
+            promptReferencePreviewRenderer: options.promptReferencePreviewRenderer,
             onEditorChange: () => {},
             onAiChatSubmit: () => {},
             onAiChatStop: () => {},

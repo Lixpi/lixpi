@@ -137,6 +137,102 @@ describe('PromptReferenceNodeView', () => {
         expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
     })
 
+    it('uses the canonical Asset title instead of a persisted UUID display label', () => {
+        const node = promptReference({
+            referenceType: 'media',
+            assetId: 'asset-1',
+            mediaKind: 'image',
+            displayName: 'asset-1',
+        })
+        const nodeView = new PromptReferenceNodeView(node, {
+            getNode: () => ({
+                type: 'image',
+                nodeId: 'image-node-1',
+                assetId: 'asset-1',
+                position: { x: 0, y: 0 },
+                dimensions: { width: 640, height: 480 },
+            }),
+            environment: {
+                getDocuments: () => [],
+                getThreads: () => [],
+                getAsset: () => ({ title: 'Shelby' }) as never,
+                getApiBaseUrl: () => '',
+                getAuthToken: async () => '',
+            },
+        })
+
+        expect(nodeView.dom.querySelector('.prompt-reference-chip-name')?.textContent).toBe('Shelby')
+        expect(nodeView.dom.textContent).not.toContain('asset-1')
+        nodeView.destroy()
+    })
+
+    it('uses the renderer inline-popover policy for canvas-scaled references', () => {
+        const node = promptReference({
+            referenceType: 'media',
+            assetId: 'asset-1',
+            mediaKind: 'image',
+            displayName: 'Character Sheet',
+        })
+        const nodeView = new PromptReferenceNodeView(node, {
+            inlinePopover: true,
+            getNode: () => ({
+                type: 'image',
+                nodeId: 'image-node-1',
+                assetId: 'asset-1',
+                position: { x: 0, y: 0 },
+                dimensions: { width: 640, height: 480 },
+            }),
+            environment: {
+                getDocuments: () => [],
+                getThreads: () => [],
+                getAsset: () => undefined,
+                getApiBaseUrl: () => '',
+                getAuthToken: async () => '',
+            },
+        })
+
+        expect(nodeView.dom.classList.contains('context-preview-inline')).toBe(true)
+        expect(nodeView.dom.classList.contains('context-preview-inline-label')).toBe(true)
+        expect(nodeView.dom.querySelector('.context-preview-inline-popover')).not.toBeNull()
+        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+        nodeView.destroy()
+    })
+
+    it('repairs legacy Timeline references with an empty media kind from Asset metadata', () => {
+        const node = promptReference({
+            referenceType: 'media',
+            assetId: 'asset-video',
+            mediaKind: '',
+            displayName: 'asset-video',
+        })
+        const nodeView = new PromptReferenceNodeView(node, {
+            getNode: reference => reference.mediaKind === 'video'
+                ? {
+                    type: 'video',
+                    nodeId: 'video-node-1',
+                    assetId: 'asset-video',
+                    position: { x: 0, y: 0 },
+                    dimensions: { width: 640, height: 360 },
+                }
+                : undefined,
+            environment: {
+                getDocuments: () => [],
+                getThreads: () => [],
+                getAsset: () => ({
+                    title: 'Slop Train',
+                    media: { kind: 'video' },
+                }) as never,
+                getApiBaseUrl: () => '',
+                getAuthToken: async () => '',
+            },
+        })
+
+        expect(nodeView.dom.querySelector('.prompt-reference-chip-name')?.textContent).toBe('Slop Train')
+        expect(nodeView.dom.querySelector('.prompt-reference-chip-icon')?.innerHTML).toContain('M8 5v14l11-7z')
+        expect(nodeView.dom.classList.contains('workspace-ai-chat-panel-context-preview-tooltip-inline-label')).toBe(true)
+        nodeView.destroy()
+    })
+
     it('registers renderers for current and persisted legacy reference atoms', () => {
         const nodeViews = createPromptReferenceNodeViewPlugin().props.nodeViews
 

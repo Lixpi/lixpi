@@ -51,7 +51,7 @@ The shared schema builder does two important things:
 
 Custom nodes are intentionally split by responsibility:
 
-- Inline prompt references use the typed `prompt_reference` atom. The shared schema also parses `capability_reference` atoms in stored drafts and conversation snapshots; insertion paths create only `prompt_reference`.
+- Inline prompt references use the typed `prompt_reference` atom. The shared schema also parses `capability_reference` atoms in stored drafts and conversation snapshots; insertion paths create only `prompt_reference`. One shared prompt-reference preview renderer resolves Asset identity, labels, authenticated media, and hover cards. Canvas hosts select its inline-popover mode so cards remain inside the canvas transform; ordinary app surfaces retain body-portaled placement.
 
 - Base custom nodes (exported by `@lixpi/prosemirror`, re-exported through `customNodes/index.js`):
   - `code_block` override (`codeBlockNode`): extends the base `code_block` with attrs (e.g. theme) used by the CodeMirror NodeView.
@@ -181,7 +181,7 @@ graph LR
 - Emits full doc JSON on any doc-changing transaction unless `skipDispatch` is set.
 - Legacy titled schemas may detect first-child title changes. Asset `content`, `conversation`, and `provenance` roles are title-free; global titles update through Asset metadata.
 - Skips persistence callbacks for AI chat thread documents. AI chat final snapshots are written by the API when the authoritative stream ends; the live callback still mirrors in-flight docs for canvas previews.
-- Authority-backed editors call `asset.document.resume` on mount. The NATS reply contains only a small authenticated HTTP reference to the Object-Store snapshot plus a byte-bounded event page; the authority fetches snapshot JSON over HTTP and drains replay pages until its cursor reaches the returned latest sequence. Document freshness is tracked through role versions from step/control payloads.
+- Authority-backed editors call `asset.document.resume` on mount. The NATS reply contains only a small authenticated HTTP reference to the Object-Store snapshot plus a byte-bounded event page; the authority fetches snapshot JSON over HTTP and drains replay pages until its cursor reaches the returned latest sequence. Document freshness is tracked through role versions from step/control payloads. Disconnect is authoritative over in-flight lease acquisition: a late lease is released without notifying or remounting the destroyed editor.
 - The server-authored AI response path purges its conversation step subject immediately after the final snapshot and `END` event are persisted. General mutable-document settlement keeps incorporated client-edit steps replayable for five minutes before purging through that sequence. When local steps are still pending, resume replays and rebases those events instead of replacing the editor with the newer settled snapshot.
 
 ### focusPlugin (`plugins/focusPlugin.js`)

@@ -287,9 +287,8 @@
     pointer-events: auto;
 }
 
-// Inline hover card (not body-portaled): stays a DOM descendant of the tile so it
-// inherits any ancestor CSS zoom transform and lives inside its surrounding context.
-// Replicates the help-tooltip-content chrome that the portaled variant relies on.
+// Compact inline trigger. Canvas cards are temporarily moved to the pane-level
+// overlay by contextPreview.ts so they escape clamped node text and sibling chrome.
 .context-preview-inline {
     --help-tooltip-width: 280px;
     --help-tooltip-max-width: min(280px, calc(100vw - 24px));
@@ -308,6 +307,26 @@
     cursor: pointer;
 }
 
+.context-preview-inline.context-preview-inline-label {
+    display: inline-flex;
+    width: auto;
+    height: auto;
+    vertical-align: baseline;
+}
+
+.context-preview-inline-label .context-preview-inline-trigger {
+    display: inline-flex;
+    align-items: baseline;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    border-radius: 0;
+    overflow: visible;
+}
+
 .context-preview-inline-popover {
     position: absolute;
     z-index: var(--help-tooltip-content-z-index, 10120);
@@ -320,6 +339,11 @@
     color: var(--help-tooltip-color, #1a3a47);
     box-sizing: border-box;
     pointer-events: none;
+}
+
+.context-preview-inline-popover-portaled {
+    z-index: var(--help-tooltip-content-z-index, 10120);
+    transform-origin: top left;
 }
 
 .context-preview-inline-popover-top {

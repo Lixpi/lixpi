@@ -33,6 +33,10 @@ import Workspace from '../models/workspace.ts'
 import { getAssetRequesterContext } from '../services/asset-requester-context.ts'
 import AssetDocumentService from '../services/asset-document-service.ts'
 import {
+    collectEmbeddedAssetIds,
+    collectReferencedAssetIds,
+} from '../services/prosemirror-asset-references.ts'
+import {
     enqueueBlobDeletion,
     enqueueRenditionRetry,
     enqueueWorkspaceReferenceCleanup,
@@ -131,16 +135,6 @@ const getAssetLineageIds = (asset: Asset): string[] => asset.lineage
     ].filter((assetId): assetId is string => Boolean(assetId))
     : []
 
-const collectEmbeddedAssetIds = (node: unknown, assetIds = new Set<string>()): Set<string> => {
-    if (!node || typeof node !== 'object') return assetIds
-    const record = node as { attrs?: { assetId?: unknown }; content?: unknown }
-    if (typeof record.attrs?.assetId === 'string' && record.attrs.assetId) assetIds.add(record.attrs.assetId)
-    if (Array.isArray(record.content)) {
-        for (const child of record.content) collectEmbeddedAssetIds(child, assetIds)
-    }
-    return assetIds
-}
-
 const collectExportAssets = async ({
     initialAssetIds,
     requester,
@@ -162,8 +156,8 @@ const collectExportAssets = async ({
         for (const role of ['content', 'conversation', 'capabilityArtifact'] as const) {
             if (!asset.documents[role]) continue
             const snapshot = await AssetDocumentService.loadCurrentSnapshot(asset, role)
-            for (const embeddedAssetId of collectEmbeddedAssetIds(snapshot?.doc)) {
-                if (!assets.has(embeddedAssetId)) pending.push(embeddedAssetId)
+            for (const referencedAssetId of collectReferencedAssetIds(snapshot?.doc)) {
+                if (!assets.has(referencedAssetId)) pending.push(referencedAssetId)
             }
         }
     }
@@ -212,7 +206,7 @@ const buildPortableWorkspaceReferences = async ({
         for (const role of ['content', 'conversation', 'capabilityArtifact'] as const) {
             if (!hostAsset.documents[role]) continue
             const snapshot = await AssetDocumentService.loadCurrentSnapshot(hostAsset, role)
-            for (const embeddedAssetId of collectEmbeddedAssetIds(snapshot?.doc)) {
+            for (const embeddedAssetId of collectEmbeddedAssetIds(snapshot?.doc, role)) {
                 if (role === 'content') {
                     addSurface(embeddedAssetId, `document#${hostAsset.assetId}#content`)
                     continue
@@ -466,15 +460,17 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
             })
             if (role === 'capabilityArtifact') artifactDefinition.shared.assertInitialDocument(doc)
             AssetDocumentService.assertAssetBackedMediaNodes(doc)
-            for (const embeddedAssetId of collectEmbeddedAssetIds(doc)) {
-                if (!assetIds.has(embeddedAssetId)) {
-                    throw new Error(`MISSING_EMBEDDED_ASSET:${asset.assetId}:${embeddedAssetId}`)
+            for (const referencedAssetId of collectReferencedAssetIds(doc)) {
+                if (!assetIds.has(referencedAssetId)) {
+                    throw new Error(`MISSING_EMBEDDED_ASSET:${asset.assetId}:${referencedAssetId}`)
                 }
                 if ((role === 'content' || role === 'conversation' || role === 'capabilityArtifact')
-                    && embeddedAssetId === asset.assetId) {
+                    && referencedAssetId === asset.assetId) {
                     throw new Error(`SELF_REFERENTIAL_ASSET_DOCUMENT:${asset.assetId}:${role}`)
                 }
-                if (role === 'content' || role === 'conversation' || role === 'capabilityArtifact') {
+            }
+            if (role === 'content' || role === 'conversation' || role === 'capabilityArtifact') {
+                for (const embeddedAssetId of collectEmbeddedAssetIds(doc, role)) {
                     embeddedReferenceRequirements.push({
                         embeddedAssetId,
                         hostAssetId: asset.assetId,
@@ -866,7 +862,7 @@ router.post('/:workspaceId/import', authenticateRequest, validateWorkspaceAccess
                 const documentBytes = remappedDocumentBytes.get(`${sourceAsset.assetId}#${role}`)
                 if (!documentBytes) continue
                 const document = JSON.parse(documentBytes.toString('utf8'))
-                for (const embeddedAssetId of collectEmbeddedAssetIds(document)) {
+                for (const embeddedAssetId of collectEmbeddedAssetIds(document, role)) {
                     if (embeddedAssetId === hostAssetId) throw new Error('SELF_REFERENTIAL_ASSET_DOCUMENT')
                     const attached = await AssetModel.attachWorkspaceReference({
                         assetId: embeddedAssetId,

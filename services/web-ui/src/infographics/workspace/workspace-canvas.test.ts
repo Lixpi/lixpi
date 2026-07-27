@@ -871,25 +871,79 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceNotToContain(ts, 'function createCapabilityArtifactBranchHistoryPanel')
 	})
 
+	it('routes Timeline, lineage, and historical message references through the shared preview renderer', () => {
+		const capabilityReferenceView = extractFunctionBody(ts, 'createCapabilityArtifactAssetReferenceView')
+		const refreshCapabilityArtifact = extractFunctionBody(ts, 'refreshCapabilityArtifactNode')
+		const createCapabilityArtifact = extractFunctionBody(ts, 'createCapabilityArtifactNode')
+		const previewNodeResolver = extractFunctionBody(ts, 'getPromptReferencePreviewNode')
+		const markerContent = extractFunctionBody(ts, 'createBranchMarkerContent')
+		const historyButton = extractFunctionBody(ts, 'createGeneratedOutputHistoryButton')
+
+		expectExcerptToContain(capabilityReferenceView, 'createMediaPromptReferencePreview({', 'Timeline references')
+		expectExcerptToContain(capabilityReferenceView, 'displayName: asset.title.trim()', 'Timeline reference title')
+		expectExcerptToContain(capabilityReferenceView, 'getPromptReferencePreviewRenderer({ inlinePopover: true })', 'Timeline reference hover')
+		expectExcerptNotToContain(capabilityReferenceView, "mediaKind === 'audio'", 'Timeline audio references')
+		expectExcerptToContain(previewNodeResolver, "reference.mediaKind === 'audio'", 'audio preview nodes')
+		expectSourceToContain(ts, 'createAssetReferenceView: createCapabilityArtifactAssetReferenceView')
+		expectSourceNotToContain(ts, 'resolveThumbnailUrl: assetId =>')
+		expectExcerptToContain(
+			refreshCapabilityArtifact,
+			'await assetService.ensureAssetsLoaded(result.lineage?.sourceAssetIds ?? [])',
+			'Timeline reference metadata hydration',
+		)
+		expectExcerptToContain(
+			createCapabilityArtifact,
+			'shared.collectReferencedAssetIds(snapshot.doc)',
+			'Timeline persisted reference hydration',
+		)
+		expectExcerptToContain(
+			createCapabilityArtifact,
+			'void ensureCapabilityArtifactReferenceAssetsLoaded(node, referencedAssetIds)',
+			'Timeline persisted reference hydration',
+		)
+		expectExcerptToContain(markerContent, 'previewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true })', 'branch marker references')
+		expectExcerptToContain(historyButton, 'previewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true })', 'history trigger references')
+		expectSourceToContain(ts, 'promptReferencePreviewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true }),')
+		expectSourceNotToContain(loadScss(), '.workspace-branch-marker-message-text:has(.context-preview-inline.is-open)')
+	})
+
 	it('uses one prompt-derived history trigger for every generated output', () => {
-		const messageResolver = extractFunctionBody(ts, 'getGeneratedOutputUserMessage')
+		const messagePartsResolver = extractFunctionBody(ts, 'getGeneratedOutputUserMessageParts')
+		const messageResolver = extractFunctionBody(ts, 'getGeneratedOutputUserMessageText')
 		const historyButton = extractFunctionBody(ts, 'createGeneratedOutputHistoryButton')
 		const artifactChrome = extractFunctionBody(ts, 'createGeneratedCapabilityArtifactChrome')
 
-		expectExcerptToContain(messageResolver, "node.type === 'capabilityArtifact'", 'generated output history message')
-		expectExcerptToContain(messageResolver, 'buildCapabilityArtifactTurnProjectionContent(node)', 'generated output history message')
-		expectExcerptToContain(messageResolver, 'findAiChatThreadContentNode(root, generatedBy.conversationAssetId)', 'generated output history message')
-		expectExcerptToContain(messageResolver, 'userMessage', 'generated output history message')
-		expectExcerptToContain(messageResolver, 'generatedBy.promptText?.trim() || inputPrompt', 'generated output history message')
-		expectExcerptToContain(messageResolver, 'getBranchMarkerPromptDisplayText(getBranchMarkerPromptParts(', 'generated output history message')
-		expectExcerptToContain(historyButton, 'getGeneratedOutputUserMessage(node)', 'generated output history trigger')
-		expectExcerptToContain(historyButton, 'getGeneratedOutputUserMessagePreview(message)', 'generated output history trigger')
+		expectExcerptToContain(messagePartsResolver, "node.type === 'capabilityArtifact'", 'generated output history message')
+		expectExcerptToContain(messagePartsResolver, 'buildCapabilityArtifactTurnProjectionContent(node)', 'generated output history message')
+		expectExcerptToContain(messagePartsResolver, 'findAiChatThreadContentNode(root, generatedBy.conversationAssetId)', 'generated output history message')
+		expectExcerptToContain(messagePartsResolver, 'userMessage', 'generated output history message')
+		expectExcerptToContain(messagePartsResolver, 'generatedBy.promptText?.trim() || inputPrompt', 'generated output history message')
+		expectExcerptToContain(messagePartsResolver, 'return getBranchMarkerPromptParts(', 'generated output history message')
+		expectExcerptToContain(messageResolver, 'getBranchMarkerPromptDisplayText(getGeneratedOutputUserMessageParts(node))', 'generated output history message')
+		expectExcerptToContain(historyButton, 'getGeneratedOutputUserMessageParts(node)', 'generated output history trigger')
+		expectExcerptToContain(historyButton, 'getGeneratedOutputUserMessagePreview(messageParts)', 'generated output history trigger')
+		expectExcerptToContain(historyButton, 'renderBranchMarkerPromptParts(previewParts, {', 'generated output history trigger')
 		expectExcerptToContain(historyButton, 'workspace-branch-marker-message-icon media-history-reasoning-icon', 'generated output history trigger')
 		expectExcerptToContain(historyButton, 'title=${message}', 'generated output history trigger')
+		expectSourceToContain(ts, 'GENERATED_OUTPUT_HISTORY_PREVIEW_MAX_CHARACTERS = 22')
 		expectSourceToContain(ts, '${createGeneratedOutputHistoryButton(node)}')
 		expectExcerptToContain(artifactChrome, 'createGeneratedOutputHistoryButton(node)', 'generated Artifact chrome')
 		expectSourceNotToContain(ts, 'function createCapabilityArtifactHistoryButton')
 		expectSourceNotToContain(ts, '<span className="media-history-button-text">History</span>')
+	})
+
+	it('uses the submitted Capability accent inside accepted-output history triggers', () => {
+		const scss = loadScss()
+		const historyTextRule = extractBlock(scss, '.media-history-button-text')
+		const historyChipRule = extractBlock(scss, '.media-history-button-text .prompt-reference-chip')
+		const historyCapabilityRule = extractBlock(
+			scss,
+			'.media-history-button-text .prompt-reference-chip-capability-module',
+		)
+
+		expectExcerptToContain(historyTextRule, '--prompt-reference-capability-module-color: #eca983;', 'history trigger badge')
+		expectExcerptToContain(historyChipRule, 'font-size: inherit;', 'history trigger badge')
+		expectExcerptToContain(historyCapabilityRule, 'color: var(--prompt-reference-capability-module-color);', 'history trigger badge')
 	})
 
 	it('renders the info panel in a viewport-transformed decoupled layer', () => {
@@ -1238,7 +1292,7 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptToContain(submitPersistedBody, 'node.type?.name === \'aiChatThread\' && node.attrs?.threadId === threadId', 'persisted detached submit')
 		expectExcerptToContain(submitPersistedBody, 'setMeta(USE_AI_CHAT_META, { threadId, nodePos })', 'persisted detached submit')
 		expectExcerptToContain(markerContentBody, 'getBranchMarkerPromptParts(\n            threadPreview?.userMessage,', 'detached marker Capability badge order')
-		expectExcerptToContain(markerContentBody, 'renderBranchMarkerPromptParts(promptPreviewParts)', 'detached marker Capability badge order')
+		expectExcerptToContain(markerContentBody, 'renderBranchMarkerPromptParts(promptPreviewParts, {', 'detached marker Capability badge order')
 		expectExcerptNotToContain(markerContentBody, '${promptReferenceBadges}', 'detached marker Capability badge order')
 	})
 

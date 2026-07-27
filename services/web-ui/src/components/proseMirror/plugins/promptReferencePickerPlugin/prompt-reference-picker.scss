@@ -161,8 +161,8 @@
     padding: 0;
     border: 0;
     background: transparent;
-    color: #3d649c;
-    font-size: 0.9375em;
+    color: var(--prompt-reference-color, #3d649c);
+    font-size: inherit;
     line-height: 1;
     vertical-align: baseline;
     white-space: nowrap;
@@ -203,5 +203,5 @@
 
 .prompt-reference-chip-name {
     font-weight: 500;
-    line-height: 1;
+    line-height: inherit;
 }

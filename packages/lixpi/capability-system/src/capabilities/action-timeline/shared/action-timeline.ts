@@ -36,6 +36,11 @@ export type ActionTimelineTextRun = { text: string }
 export type ActionTimelineReferenceRun = { assetId: string }
 export type ActionTimelineRun = ActionTimelineTextRun | ActionTimelineReferenceRun
 
+export type ActionTimelineReferenceMetadata = {
+    mediaKind: 'image' | 'video' | 'audio' | 'document'
+    displayName: string
+}
+
 export type ActionTimelineGeneratedSegment = {
     slotIndex: number
     runs: ActionTimelineRun[]
@@ -190,6 +195,7 @@ export function assertActionTimelineRuns(
 export function buildActionTimelineDocument(
     input: Pick<ActionTimelineInput, 'durationMs' | 'precisionMs'>,
     segments: readonly ActionTimelineGeneratedSegment[],
+    referenceMetadata: ReadonlyMap<string, ActionTimelineReferenceMetadata> = new Map(),
 ): ProseMirrorJsonNode {
     const grid = createActionTimelineGrid(input.durationMs, input.precisionMs)
     if (segments.length !== grid.length) throw new Error('ACTION_TIMELINE_SEGMENT_COUNT_INVALID')
@@ -212,11 +218,11 @@ export function buildActionTimelineDocument(
                         referenceType: 'media',
                         assetId: run.assetId,
                         nodeId: '',
-                        mediaKind: '',
+                        mediaKind: referenceMetadata.get(run.assetId)?.mediaKind ?? 'image',
                         moduleId: '',
                         capabilityId: '',
                         artifactTypeId: '',
-                        displayName: run.assetId,
+                        displayName: referenceMetadata.get(run.assetId)?.displayName ?? run.assetId,
                     },
                 }])
             return {

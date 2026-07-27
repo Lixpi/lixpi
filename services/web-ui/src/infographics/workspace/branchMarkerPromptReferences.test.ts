@@ -89,6 +89,65 @@ describe('branch marker prompt content', () => {
         expect(parts).toEqual([{ type: 'text', text: 'Create ...' }])
     })
 
+    it('keeps the complete Capability badge in a compact accepted-output preview', () => {
+        const parts = truncateBranchMarkerPromptParts(getBranchMarkerPromptParts(submittedMessage, ''), 22)
+        const rendered = renderBranchMarkerPromptParts(parts)
+
+        expect(getBranchMarkerPromptDisplayText(parts)).toBe('Create Action Timeline...')
+        expect(rendered[0]).toBe('Create ')
+        expect(rendered[1]).toBeInstanceOf(HTMLSpanElement)
+        expect((rendered[1] as HTMLSpanElement).classList.contains('prompt-reference-chip-capability-module')).toBe(true)
+        expect(rendered[2]).toBe('...')
+    })
+
+    it('keeps media references inline and renders their shared hover preview with the canonical Asset title', () => {
+        const parts = getBranchMarkerPromptParts({
+            type: 'aiUserMessage',
+            content: [{
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Use ' },
+                    {
+                        type: 'prompt_reference',
+                        attrs: {
+                            referenceType: 'media',
+                            assetId: 'asset-1',
+                            mediaKind: 'image',
+                            displayName: 'asset-1',
+                        },
+                    },
+                    { type: 'text', text: ' on the train' },
+                ],
+            }],
+        }, '')
+        const rendered = renderBranchMarkerPromptParts(parts, {
+            inlinePopover: true,
+            previewRenderer: {
+                getNode: () => ({
+                    type: 'image',
+                    nodeId: 'image-node-1',
+                    assetId: 'asset-1',
+                    position: { x: 0, y: 0 },
+                    dimensions: { width: 640, height: 480 },
+                }),
+                environment: {
+                    getDocuments: () => [],
+                    getThreads: () => [],
+                    getAsset: () => ({ title: 'Shelby' }) as never,
+                    getApiBaseUrl: () => '',
+                    getAuthToken: async () => '',
+                },
+            },
+        })
+
+        expect(parts[1]?.type).toBe('media')
+        expect(getBranchMarkerPromptDisplayText(parts)).toBe('Use asset-1 on the train')
+        expect((rendered[1] as HTMLElement).classList.contains('context-preview-inline')).toBe(true)
+        expect((rendered[1] as HTMLElement).querySelector('.prompt-reference-chip-name')?.textContent).toBe('Shelby')
+        expect((rendered[1] as HTMLElement).querySelector('.workspace-ai-chat-panel-context-preview-popover-title')?.textContent)
+            .toBe('Shelby')
+    })
+
     it('uses a lighter Capability accent on the dark branch message without changing marker layout', () => {
         const scss = readFileSync(resolve(__dirname, 'workspace-canvas.scss'), 'utf-8')
         const selector = '.workspace-branch-marker-message-text .prompt-reference-chip {'
@@ -102,10 +161,12 @@ describe('branch marker prompt content', () => {
             ? scss.slice(capabilityRuleStart, capabilityRuleEnd)
             : ''
 
-        expectSourceToContain(rule, 'color: inherit;')
         expectSourceToContain(rule, 'font-size: inherit;')
+        expectSourceToContain(scss, '--prompt-reference-color: #d7e6ff;')
+        expectSourceToContain(rule, 'color: var(--prompt-reference-color);')
         expectSourceToContain(scss, '--prompt-reference-capability-module-color: #eca983;')
         expectSourceToContain(capabilityRule, 'color: var(--prompt-reference-capability-module-color);')
         expectSourceNotToContain(scss, '.workspace-branch-marker-message > .prompt-reference-chip {')
+        expectSourceNotToContain(scss, '.workspace-branch-marker-message-text:has(.context-preview-inline.is-open)')
     })
 })

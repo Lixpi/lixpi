@@ -97,7 +97,7 @@ export const assetSubjects = [
                 return { error: 'CONVERSATION_IDENTITY_MISMATCH' }
             }
             AssetDocumentService.assertAssetBackedMediaNodes(initialDoc)
-            if (AssetDocumentService.getEmbeddedAssetIds(initialDoc).length > 0) {
+            if (AssetDocumentService.getEmbeddedAssetIds(initialDoc, role).length > 0) {
                 return { error: 'INITIAL_EMBEDDED_ASSETS_REQUIRE_ATTACH' }
             }
             const snapshot = new HeadlessProseMirrorEngine({

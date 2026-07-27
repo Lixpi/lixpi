@@ -12,6 +12,8 @@ import { assetsStore } from '$src/stores/assetsStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 import { html } from '$src/utils/domTemplates.ts'
 import { resolveMediaUrl } from '$src/utils/mediaUrls.ts'
+import type { AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
+import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 
 export type MediaLibraryPanelInstance = {
     readonly rootEl: HTMLElement
@@ -25,6 +27,8 @@ export type MediaLibraryPanelInstance = {
 export type MediaLibraryPanelOptions = {
     workspaceId: string
     onInsertAsset?: (item: AssetMeta) => Promise<boolean>
+    contextPreview?: AiUserMessageContextPreviewRenderer
+    promptReferencePreviewRenderer?: PromptReferencePreviewRenderer
 }
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
@@ -362,6 +366,8 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
                 content: snapshot.doc as any,
                 threadId: asset.lineage?.sourceConversationAssetId ?? asset.assetId,
                 documentType: 'assetProvenance',
+                contextPreview: this.options.contextPreview,
+                promptReferencePreviewRenderer: this.options.promptReferencePreviewRenderer,
             })
         }
     }

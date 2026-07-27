@@ -18,6 +18,8 @@ import {
     type ContentDescriptor,
 } from '@lixpi/constants'
 
+import { collectEmbeddedAssetIds } from '../services/prosemirror-asset-references.ts'
+
 type LegacyFile = {
     id: string
     name?: string
@@ -178,16 +180,6 @@ const addReference = (assetId: string, nodeIds: string[] = [], surfaceIds: strin
         createdAt: now,
         updatedAt: now,
     })
-}
-
-const collectEmbeddedAssetIds = (node: unknown, assetIds = new Set<string>()): Set<string> => {
-    if (!node || typeof node !== 'object') return assetIds
-    const record = node as { attrs?: { assetId?: unknown }; content?: unknown }
-    if (typeof record.attrs?.assetId === 'string' && record.attrs.assetId) assetIds.add(record.attrs.assetId)
-    if (Array.isArray(record.content)) {
-        for (const child of record.content) collectEmbeddedAssetIds(child, assetIds)
-    }
-    return assetIds
 }
 
 const normalizeLegacyDescriptor = (value: unknown): ContentDescriptor | undefined => {
@@ -464,7 +456,7 @@ for (const hostAsset of assets) {
         if (!pointer) continue
         const bytes = blobBytes.get(pointer.blobHash)
         if (!bytes) throw new Error(`Converter produced missing document bytes ${pointer.blobHash}`)
-        for (const embeddedAssetId of collectEmbeddedAssetIds(JSON.parse(bytes.toString('utf8')))) {
+        for (const embeddedAssetId of collectEmbeddedAssetIds(JSON.parse(bytes.toString('utf8')), role)) {
             if (embeddedAssetId === hostAsset.assetId) throw new Error('Converter produced a self-referential editable document')
             const embeddedAsset = assets.find((asset) => asset.assetId === embeddedAssetId)
             if (!embeddedAsset) throw new Error(`Converter produced dangling embedded Asset ID ${embeddedAssetId}`)

@@ -33,18 +33,258 @@ type JsonNode = {
 }
 
 export const ACTION_TIMELINE_FRONTEND_STYLES = `
-.workspace-capability-artifact-node{background:#151820;border:1px solid #353b49;border-radius:14px;box-shadow:0 14px 34px rgba(4,7,12,.35);overflow:visible}
-.action-timeline-body{display:flex;flex-direction:column;gap:10px;min-height:100%;padding:13px;background:linear-gradient(145deg,#181b23,#12151b);color:#f5f7fb;border-radius:13px;box-sizing:border-box;overflow:visible}
-.action-timeline-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 2px 7px;border-bottom:1px solid #303644}
-.action-timeline-summary strong{font:700 13px/1.3 system-ui,sans-serif;letter-spacing:.01em}.action-timeline-summary span{color:#9da9bd;font:600 11px/1.3 system-ui,sans-serif}
-.action-timeline-thumbnails{display:flex;gap:6px;min-height:0}.action-timeline-thumbnail{width:34px;height:34px;border-radius:7px;object-fit:cover;border:1px solid #3b4251;background:#222732}
-.action-timeline-legend{display:flex;align-items:center;gap:7px;color:#8f9aaf;font:500 10px/1.3 system-ui,sans-serif}.action-timeline-legend-chip{display:inline-flex;padding:2px 7px;border-radius:999px;background:#313949;color:#e3eaf7;font-weight:650}
-.action-timeline-editor{overflow:visible}.action-timeline-editor .ProseMirror{display:flex;flex-direction:column;gap:8px;outline:none;overflow:visible}.action-timeline-editor .ProseMirror:focus{outline:none}
-.action-timeline-segment-row,.action-timeline-editor .action-timeline-segment{display:grid;grid-template-columns:92px minmax(0,1fr);gap:10px;padding:9px 10px;background:#20242d;border:1px solid #303746;border-radius:9px;box-sizing:border-box;overflow:visible}
-.action-timeline-time{font:650 11px/1.35 ui-monospace,SFMono-Regular,monospace;color:#9eabc1;white-space:nowrap;user-select:none}
-.action-timeline-content,.action-timeline-segment-content{min-width:0;font:400 13px/1.55 system-ui,sans-serif;white-space:pre-wrap;overflow-wrap:anywhere}.action-timeline-segment-content p{margin:0;min-height:1.55em}
-.action-timeline-reference{display:inline-flex;align-items:center;margin:0 3px;padding:1px 7px;border-radius:999px;background:#343e50;color:#e2ebfb;font:650 11px/1.55 system-ui,sans-serif}
-.action-timeline-info{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.action-timeline-info-item{display:flex;flex-direction:column;gap:3px;padding:9px 10px;border:1px solid rgba(0,0,0,.07);border-radius:8px;background:rgba(0,0,0,.025)}.action-timeline-info-label{color:rgba(0,0,0,.45);font:700 10px/1.3 system-ui,sans-serif;text-transform:uppercase}.action-timeline-info-value{color:rgba(0,0,0,.72);font:650 13px/1.35 system-ui,sans-serif}.action-timeline-library-row{display:grid;gap:5px;width:100%;padding:10px 12px;text-align:left;border:1px solid #343b49;border-radius:10px;background:#1d212a;color:#f4f7fc}.action-timeline-library-row:hover{background:#242a35;border-color:#4d586c}.action-timeline-library-meta{color:#909bad;font-size:11px}
+.workspace-capability-artifact-node[data-artifact-type-id="action-timeline"] {
+    --action-timeline-surface: var(--workspace-branch-origin-background-color, #5d656d);
+    --action-timeline-border: rgba(255, 255, 255, 0.18);
+    --action-timeline-muted: rgba(255, 255, 255, 0.7);
+    --action-timeline-timecode: #ffd0b3;
+    --prompt-reference-color: #d7e6ff;
+    background: var(--action-timeline-surface);
+    border: 1px solid var(--workspace-branch-origin-border-color, #5d656d);
+    border-radius: 18px;
+    box-shadow: var(--workspace-branch-origin-box-shadow, 0 8px 24px rgba(42, 48, 57, 0.22));
+    overflow: visible;
+}
+
+.workspace-capability-artifact-node[data-artifact-type-id="action-timeline"] .capability-artifact-node-host {
+    width: 100%;
+    min-height: 100%;
+}
+
+.action-timeline-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 100%;
+    padding: 14px 16px 12px;
+    background: var(--action-timeline-surface);
+    color: #f8f9fb;
+    border-radius: 17px;
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.action-timeline-summary {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 0 1px 9px;
+    border-bottom: 1px solid var(--action-timeline-border);
+}
+
+.action-timeline-summary strong {
+    color: #ffffff;
+    font: 720 15px/1.25 system-ui, sans-serif;
+    letter-spacing: -0.012em;
+}
+
+.action-timeline-summary span {
+    flex: 0 0 auto;
+    color: var(--action-timeline-muted);
+    font: 650 11px/1.3 system-ui, sans-serif;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+}
+
+.action-timeline-thumbnails {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 0;
+}
+
+.action-timeline-thumbnails:empty {
+    display: none;
+}
+
+.action-timeline-thumbnail {
+    flex: 0 0 58px;
+    width: 58px;
+    height: 42px;
+    min-width: 58px;
+}
+
+.action-timeline-legend {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 1px 6px;
+    color: var(--action-timeline-muted);
+    font: 520 11px/1.35 system-ui, sans-serif;
+}
+
+.action-timeline-legend-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    color: var(--action-timeline-timecode);
+    font-weight: 700;
+}
+
+.action-timeline-editor {
+    position: relative;
+    z-index: 2;
+    overflow: visible;
+}
+
+.action-timeline-editor .ProseMirror {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    outline: none;
+    overflow: visible;
+}
+
+.action-timeline-editor .ProseMirror:focus {
+    outline: none;
+}
+
+.action-timeline-segment-row,
+.action-timeline-editor .action-timeline-segment {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    align-items: start;
+    gap: 11px;
+    padding: 8px 1px 9px;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.action-timeline-segment-row:last-child,
+.action-timeline-editor .action-timeline-segment:last-child {
+    border-bottom: 0;
+}
+
+.action-timeline-time {
+    display: block;
+    padding: 2px 0 0;
+    color: var(--action-timeline-timecode);
+    font: 700 11px/1.25 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: -0.035em;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.action-timeline-content,
+.action-timeline-segment-content {
+    min-width: 0;
+    padding: 0;
+    color: rgba(255, 255, 255, 0.96);
+    font: 430 13px/1.55 system-ui, sans-serif;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.action-timeline-segment-content p {
+    min-height: 1.55em;
+    margin: 0;
+}
+
+.action-timeline-editor .prompt-reference-chip,
+.action-timeline-reference {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-inline: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--prompt-reference-color);
+    font: inherit;
+    font-weight: 500;
+    text-decoration: none;
+    vertical-align: baseline;
+    white-space: nowrap;
+}
+
+.action-timeline-editor .prompt-reference-chip-capability-artifact {
+    margin-inline: 2px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.action-timeline-editor .prompt-reference-chip-icon {
+    flex-basis: 14px;
+    width: 14px;
+    height: 14px;
+}
+
+.action-timeline-editor .prompt-reference-chip-name {
+    color: inherit;
+    font-weight: 500;
+}
+
+.action-timeline-info {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px 16px;
+    padding: 2px 0;
+}
+
+.action-timeline-info-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.action-timeline-info-item + .action-timeline-info-item::before {
+    content: '·';
+    color: rgba(0, 0, 0, 0.28);
+    font: 700 13px/1 system-ui, sans-serif;
+}
+
+.action-timeline-info-label {
+    color: rgba(0, 0, 0, 0.45);
+    font: 700 10px/1.3 system-ui, sans-serif;
+    text-transform: uppercase;
+}
+
+.action-timeline-info-value {
+    color: rgba(0, 0, 0, 0.72);
+    font: 700 14px/1.35 system-ui, sans-serif;
+}
+
+.action-timeline-library-row {
+    display: grid;
+    gap: 5px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #343b49;
+    border-radius: 10px;
+    background: #1d212a;
+    color: #f4f7fc;
+    text-align: left;
+}
+
+.action-timeline-library-row:hover {
+    border-color: #4d586c;
+    background: #242a35;
+}
+
+.action-timeline-library-meta {
+    color: #909bad;
+    font-size: 11px;
+}
 `
 
 export const actionTimelineFrontendDefinition: CapabilityArtifactFrontendDefinition = {
@@ -124,16 +364,25 @@ function createActionTimelineCanvasView(host: CapabilityArtifactCanvasHost): Cap
     const thumbnails = root.querySelector('.action-timeline-thumbnails') as HTMLElement
     const editorContainer = root.querySelector('.action-timeline-editor') as HTMLElement
     let editor: ReturnType<NonNullable<CapabilityArtifactCanvasHost['mountEditor']>> | undefined
+    let referenceViews: Array<{ destroy: () => void }> = []
+
+    const destroyReferenceViews = (): void => {
+        for (const view of referenceViews) view.destroy()
+        referenceViews = []
+    }
 
     const mountDocument = (document: object): void => {
         const doc = document as JsonNode
         const segmentCount = doc.content?.length ?? 0
         summary.textContent = `${formatTimelineTime(numberValue(doc.attrs?.durationMs))} · ${segmentCount} segment${segmentCount === 1 ? '' : 's'}`
+        destroyReferenceViews()
         thumbnails.replaceChildren()
         for (const assetId of collectActionTimelineReferencedAssetIds(document)) {
-            const url = host.resolveThumbnailUrl(assetId)
-            if (!url) continue
-            thumbnails.appendChild(html`<img className="action-timeline-thumbnail" src=${url} alt=${host.resolveAssetTitle(assetId)} />` as HTMLImageElement)
+            const view = host.createAssetReferenceView({ assetId, variant: 'thumbnail' })
+            if (!view) continue
+            view.dom.classList.add('action-timeline-thumbnail')
+            referenceViews.push(view)
+            thumbnails.appendChild(view.dom)
         }
         if (host.mountEditor) {
             if (editor) editor.updateDocument(document)
@@ -144,7 +393,7 @@ function createActionTimelineCanvasView(host: CapabilityArtifactCanvasHost): Cap
                 plugins: createActionTimelineEditorPlugins(),
             })
         } else {
-            renderStaticTimeline(editorContainer, document, host)
+            renderStaticTimeline(editorContainer, document, host, view => referenceViews.push(view))
         }
         queueMicrotask(() => host.onHeightChange(root.scrollHeight))
     }
@@ -155,6 +404,7 @@ function createActionTimelineCanvasView(host: CapabilityArtifactCanvasHost): Cap
         updateDocument: mountDocument,
         destroy: () => {
             editor?.destroy()
+            destroyReferenceViews()
             root.remove()
         },
     }
@@ -164,6 +414,7 @@ function renderStaticTimeline(
     container: HTMLElement,
     document: object,
     host: CapabilityArtifactCanvasHost,
+    registerReferenceView: (view: { destroy: () => void }) => void,
 ): void {
     const html = createCapabilityHtml(container.ownerDocument)
     container.replaceChildren()
@@ -174,7 +425,7 @@ function renderStaticTimeline(
             <div className="action-timeline-content"></div>
         </section>` as HTMLElement
         const content = row.querySelector('.action-timeline-content') as HTMLElement
-        renderInlineContent(content, segment, host)
+        renderInlineContent(content, segment, host, registerReferenceView)
         container.appendChild(row)
     }
 }
@@ -227,14 +478,18 @@ function renderInlineContent(
     container: HTMLElement,
     node: JsonNode,
     host: CapabilityArtifactCanvasHost,
+    registerReferenceView: (view: { destroy: () => void }) => void,
 ): void {
-    const html = createCapabilityHtml(container.ownerDocument)
     const visit = (child: JsonNode): void => {
         if (child.type === 'text' && child.text) container.append(child.text)
         if (child.type === 'prompt_reference') {
             const assetId = typeof child.attrs?.assetId === 'string' ? child.attrs.assetId : ''
-            const label = host.resolveAssetTitle(assetId) || assetId
-            container.appendChild(html`<span className="action-timeline-reference">${label}</span>` as HTMLSpanElement)
+            const displayName = typeof child.attrs?.displayName === 'string' ? child.attrs.displayName : undefined
+            const view = host.createAssetReferenceView({ assetId, displayName, variant: 'inline' })
+            if (view) {
+                registerReferenceView(view)
+                container.appendChild(view.dom)
+            }
         }
         for (const nested of child.content ?? []) visit(nested)
     }

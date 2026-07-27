@@ -62,7 +62,10 @@ import {
 } from '$src/components/proseMirror/aiPromptComposer.ts'
 import { createDefaultCapabilityCatalogClient } from '$src/services/capability-catalog-client.ts'
 import { createPromptReferenceCatalogClient } from '$src/services/prompt-reference-catalog-client.ts'
-import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
+import {
+    createMediaPromptReferencePreview,
+    type PromptReferencePreviewRenderer,
+} from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 import {
     parseAiModelSelectionAttr,
     serializeAiModelSelectionAttr,
@@ -142,6 +145,7 @@ import { createVideoNodeHandler, type VideoNodeHandlerControl } from '$src/infog
 import { createAudioNodeHandler, type AudioNodeHandlerControl } from '$src/infographics/workspace/rendering/audioNodeHandler.ts'
 import { createDocumentNodeHandler } from '$src/infographics/workspace/rendering/documentNodeHandler.ts'
 import {
+    type BranchMarkerPromptPart,
     getBranchMarkerPromptDisplayText,
     getBranchMarkerPromptParts,
     renderBranchMarkerPromptParts,
@@ -370,6 +374,7 @@ function getBranchMarkerStackGap(): number {
 // workspace-canvas.scss (0.8s). Used to phase-align recreated spinners to a
 // shared rotation clock so the spinner never visibly restarts.
 const BRANCH_MARKER_SPINNER_PERIOD_MS = 800
+const GENERATED_OUTPUT_HISTORY_PREVIEW_MAX_CHARACTERS = 22
 const MEDIA_DESCRIPTOR_ANALYSIS_RETRY_DELAYS_MS = [1000, 3000, 8000] as const
 const GENERATED_IMAGE_COMPLETION_OUTLINE_FALLBACK_MS = 30_000
 const branchMarkerMediaModelCircleGlassCssImageByColor = new Map<string, string>()
@@ -1035,6 +1040,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const documentEditors: Map<string, DocumentEditorEntry> = new Map()
     const capabilityArtifactViews = new Map<string, { destroy: () => void }>()
     const capabilityArtifactHeightFrames = new Map<string, number>()
+    const capabilityArtifactReferenceAssetLoads = new Map<string, Promise<void>>()
 
     function destroyCapabilityArtifactViews(): void {
         for (const view of capabilityArtifactViews.values()) view.destroy()
@@ -2092,6 +2098,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             threadId: projection.threadId,
             className: rendererClassName,
             contextPreview: getAiUserMessageContextPreviewRenderer({ inlinePopover: true }),
+            promptReferencePreviewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true }),
             traceDetailsOptions: createCanvasTraceDetailsOptions(traceDetailsClassName, previewTiles),
         })
     }
@@ -2173,6 +2180,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             threadId: projection.threadId,
             className: rendererClassName,
             contextPreview: getAiUserMessageContextPreviewRenderer({ inlinePopover: true }),
+            promptReferencePreviewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true }),
             traceDetailsOptions: createCanvasTraceDetailsOptions(traceDetailsClassName, previewTiles),
         })
     }
@@ -2898,10 +2906,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return button
     }
 
-    function getGeneratedOutputUserMessage(node: GeneratedOutputCanvasNode): string {
+    function getGeneratedOutputUserMessageParts(node: GeneratedOutputCanvasNode): BranchMarkerPromptPart[] {
         if (node.type === 'capabilityArtifact') {
             const generatedBy = node.generatedBy
-            if (!generatedBy) return ''
+            if (!generatedBy) return []
 
             const projection = buildCapabilityArtifactTurnProjectionContent(node)
             const root = parseProseMirrorJsonContent(projection?.content)
@@ -2910,14 +2918,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const inputPrompt = typeof generatedBy.input.prompt === 'string'
                 ? generatedBy.input.prompt.trim()
                 : ''
-            return getBranchMarkerPromptDisplayText(getBranchMarkerPromptParts(
+            return getBranchMarkerPromptParts(
                 userMessage,
                 generatedBy.promptText?.trim() || inputPrompt,
-            )).trim()
+            )
         }
 
         const generatedBy = node.generatedBy
-        if (!generatedBy) return ''
+        if (!generatedBy) return []
 
         const locator = getGeneratedMediaProjectionLocator(node)
         const projection = locator
@@ -2934,16 +2942,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const root = parseProseMirrorJsonContent(projection?.content)
         const thread = root ? findAiChatThreadContentNode(root, generatedBy.conversationAssetId) : null
         const userMessage = thread?.content?.find((child) => child.type === 'aiUserMessage')
-        return getBranchMarkerPromptDisplayText(getBranchMarkerPromptParts(
+        return getBranchMarkerPromptParts(
             userMessage,
             generatedBy.promptText?.trim() || '',
-        )).trim()
+        )
     }
 
-    function getGeneratedOutputUserMessagePreview(message: string): string {
-        const normalized = message.replace(/\s+/g, ' ').trim()
-        if (normalized.length <= 20) return normalized
-        return `${normalized.slice(0, 17).trimEnd()}...`
+    function getGeneratedOutputUserMessageText(node: GeneratedOutputCanvasNode): string {
+        return getBranchMarkerPromptDisplayText(getGeneratedOutputUserMessageParts(node)).trim()
+    }
+
+    function getGeneratedOutputUserMessagePreview(
+        parts: readonly BranchMarkerPromptPart[],
+    ): BranchMarkerPromptPart[] {
+        return truncateBranchMarkerPromptParts(parts, GENERATED_OUTPUT_HISTORY_PREVIEW_MAX_CHARACTERS)
     }
 
     function isGeneratedOutputAccepted(node: GeneratedOutputCanvasNode): boolean {
@@ -3122,7 +3134,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
             return
         }
-        const promptText = getGeneratedOutputUserMessage(mediaNodes[0]!)
+        const promptText = getGeneratedOutputUserMessageText(mediaNodes[0]!)
         if (!promptText) return
         const lineageParentNodeId = scope === 'branch-lineage'
             ? targetNodeId
@@ -3264,11 +3276,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createGeneratedOutputHistoryButton(node: GeneratedOutputCanvasNode): HTMLButtonElement | null {
         if (!node.generatedBy || !isGeneratedOutputAccepted(node)) return null
-        const message = getGeneratedOutputUserMessage(node)
+        const messageParts = getGeneratedOutputUserMessageParts(node)
+        const message = getBranchMarkerPromptDisplayText(messageParts).trim()
         if (!message) return null
 
         const isExpanded = expandedGeneratedMediaHistoryNodeIds.has(node.nodeId)
-        const preview = getGeneratedOutputUserMessagePreview(message)
+        const previewParts = getGeneratedOutputUserMessagePreview(messageParts)
         const reasoningModelEntry = getBranchMarkerModelEntry(String(node.generatedBy?.reasoningModelId ?? ''))
         const reasoningModelIcon = reasoningModelEntry ? reasoningModelEntry.icon ?? atomIcon : null
         const reasoningModelLabel = reasoningModelEntry?.title ? ` Reasoning model: ${reasoningModelEntry.title}.` : ''
@@ -3287,7 +3300,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         aria-hidden="true"
                     ></span>
                 ` : null}
-                <span className="media-history-button-text">${preview}</span>
+                <span className="media-history-button-text">${renderBranchMarkerPromptParts(previewParts, {
+                    previewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true }),
+                })}</span>
             </button>
         ` as HTMLButtonElement
         button.addEventListener('click', (event: MouseEvent) => {
@@ -5925,6 +5940,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!node || !('assetId' in node) || node.assetId !== reference.assetId) return undefined
         if (reference.mediaKind === 'image' && node.type === 'image') return node
         if (reference.mediaKind === 'video' && node.type === 'video') return node
+        if (reference.mediaKind === 'audio' && node.type === 'audio') return node
         if (reference.mediaKind === 'document' && node.type === 'document') return node
         if (reference.mediaKind === 'document' && node.type === 'mediaDocument') {
             return { ...node, type: 'document' }
@@ -5944,8 +5960,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ))
         const normalizedMatchingNode = normalizePromptReferencePreviewNode(matchingNode, reference)
         if (normalizedMatchingNode) return normalizedMatchingNode
-        if (reference.mediaKind === 'audio') return undefined
-
         const asset = assetsStore.get(reference.assetId)
         const width = Math.max(1, asset?.media?.width ?? 320)
         const height = Math.max(1, asset?.media?.height ?? 240)
@@ -5957,14 +5971,41 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
         if (reference.mediaKind === 'image') return { ...baseNode, type: 'image' }
         if (reference.mediaKind === 'video') return { ...baseNode, type: 'video' }
+        if (reference.mediaKind === 'audio') return { ...baseNode, type: 'audio' }
         return { ...baseNode, type: 'document' }
     }
 
-    function getPromptReferencePreviewRenderer(): PromptReferencePreviewRenderer {
+    function getPromptReferencePreviewRenderer(
+        options: Pick<PromptReferencePreviewRenderer, 'inlinePopover' | 'preferredPlacement'> = {},
+    ): PromptReferencePreviewRenderer {
         return {
             getNode: getPromptReferencePreviewNode,
             environment: getContextPreviewEnvironment(),
+            ...options,
         }
+    }
+
+    function createCapabilityArtifactAssetReferenceView({
+        assetId,
+        displayName,
+        variant,
+    }: {
+        assetId: string
+        displayName?: string
+        variant: 'inline' | 'thumbnail'
+    }) {
+        const asset = assetsStore.get(assetId)
+        const mediaKind = asset?.media?.kind
+        if (!mediaKind) return undefined
+        return createMediaPromptReferencePreview({
+            referenceType: 'media',
+            assetId,
+            mediaKind,
+            displayName: asset.title.trim() || displayName?.trim() || assetId,
+        }, getPromptReferencePreviewRenderer({ inlinePopover: true }), {
+            variant,
+            preferredPlacement: 'top',
+        }) ?? undefined
     }
 
     function getAiUserMessageContextPreviewRenderer(options: { inlinePopover?: boolean } = {}) {
@@ -13458,6 +13499,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         try {
             const result = await assetService.refresh(node.assetId)
             if ('error' in result || !currentCanvasState?.nodes.some(candidate => candidate.nodeId === node.nodeId)) return
+            await assetService.ensureAssetsLoaded(result.lineage?.sourceAssetIds ?? [])
+            if (!currentCanvasState?.nodes.some(candidate => candidate.nodeId === node.nodeId)) return
             renderNodes()
         } catch (error) {
             console.error('Failed to load Capability Artifact:', {
@@ -13475,6 +13518,31 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 onRetry: () => { void refreshCapabilityArtifactNode(node) },
             }).dom)
         }
+    }
+
+    async function loadCapabilityArtifactReferenceAssets(
+        node: CapabilityArtifactCanvasNode,
+        assetIds: readonly string[],
+    ): Promise<void> {
+        try {
+            const loadedAssets = await assetService.ensureAssetsLoaded(assetIds)
+            if (loadedAssets.length === 0
+                || !currentCanvasState?.nodes.some(candidate => candidate.nodeId === node.nodeId)) return
+            renderNodes()
+        } finally {
+            capabilityArtifactReferenceAssetLoads.delete(node.nodeId)
+        }
+    }
+
+    function ensureCapabilityArtifactReferenceAssetsLoaded(
+        node: CapabilityArtifactCanvasNode,
+        assetIds: readonly string[],
+    ): void {
+        if (capabilityArtifactReferenceAssetLoads.has(node.nodeId)) return
+        const missingAssetIds = [...new Set(assetIds)].filter(assetId => !assetsStore.get(assetId))
+        if (missingAssetIds.length === 0) return
+        const load = loadCapabilityArtifactReferenceAssets(node, missingAssetIds)
+        capabilityArtifactReferenceAssetLoads.set(node.nodeId, load)
     }
 
     function createCapabilityArtifactNode(node: CapabilityArtifactCanvasNode): HTMLElement {
@@ -13499,12 +13567,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const frontend = capabilityArtifactFrontendRegistry.require(node.artifactTypeId)
             const shared = capabilityArtifactSharedRegistry.require(node.artifactTypeId)
             shared.assertInitialDocument(snapshot.doc)
+            const referencedAssetIds = shared.collectReferencedAssetIds(snapshot.doc)
+            void ensureCapabilityArtifactReferenceAssetsLoaded(node, referencedAssetIds)
             const view = frontend.createCanvasNodeView({
                 container: host,
                 node,
                 document: snapshot.doc,
-                resolveAssetTitle: assetId => assetsStore.get(assetId)?.title ?? assetId,
-                resolveThumbnailUrl: assetId => resolveMediaUrl(buildAssetRenditionPath(assetId, 'thumbnail')),
+                createAssetReferenceView: createCapabilityArtifactAssetReferenceView,
                 onHeightChange: height => scheduleCapabilityArtifactHeight(node.nodeId, height),
                 mountEditor: ({ container, document, schema, plugins }) => {
                     const editor = new ProseMirrorEditor({
@@ -13520,7 +13589,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             workspaceId,
                             asset.organizationId,
                         ),
-                        promptReferencePreviewRenderer: getPromptReferencePreviewRenderer(),
+                        promptReferencePreviewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true }),
                         proseMirrorAuthority: {
                             organizationId: asset.organizationId,
                             workspaceId,
@@ -14183,7 +14252,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         ${spinnerOnUserLine
                             ? html`<span className="workspace-branch-marker-spinner workspace-branch-marker-message-progress" style=${spinnerStyle} aria-hidden="true"></span>`
                             : null}
-                        <span className="workspace-branch-marker-message-text">${renderBranchMarkerPromptParts(promptPreviewParts)}</span>
+                        <span className="workspace-branch-marker-message-text">${renderBranchMarkerPromptParts(promptPreviewParts, {
+                            previewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true }),
+                        })}</span>
                     </div>
                     ${showResponseLine ? html`
                         <div className="workspace-branch-marker-separator"></div>
@@ -14824,6 +14895,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!mediaLibraryPanelInstance) {
             mediaLibraryPanelInstance = createMediaLibraryPanel({
                 workspaceId,
+                contextPreview: getAiUserMessageContextPreviewRenderer(),
+                promptReferencePreviewRenderer: getPromptReferencePreviewRenderer(),
                 onInsertAsset: async (item: AssetMeta) => {
                     if (!onAssetAttach) return false
                     const nodeId = `node-${uuidv4()}`
@@ -14851,6 +14924,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!artifactLibraryPanelInstance) {
             artifactLibraryPanelInstance = createArtifactLibraryPanel({
                 workspaceId,
+                contextPreview: getAiUserMessageContextPreviewRenderer(),
+                promptReferencePreviewRenderer: getPromptReferencePreviewRenderer(),
                 onInsertAsset: async (item: AssetMeta) => {
                     if (!onAssetAttach || !item.artifactTypeId) return false
                     const nodeId = `node-${uuidv4()}`

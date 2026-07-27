@@ -139,11 +139,7 @@ export class ProseMirrorEditor {
                 ...this.proseMirrorAuthorityOptions,
                 getView: () => this.editorView,
                 onRemoteDocumentChange: value => this.dispatchStreamingUpdate(value),
-                onLeaseStateChange: state => {
-                    this.readOnly = state.readOnly
-                    this.editorView.setProps({ editable: () => this.isEditorEditable() })
-                    onLeaseStateChange?.(state)
-                },
+                onLeaseStateChange: state => this.handleLeaseStateChange(state, onLeaseStateChange),
             })
         }
     }
@@ -308,6 +304,13 @@ export class ProseMirrorEditor {
     updateEditorFocusState(focusedState) {
         if (!this.editorView) { return }
         this.editorView.setProps({ editable: () => this.isEditorEditable() })
+    }
+
+    handleLeaseStateChange(state, onLeaseStateChange) {
+        if (!this.editorView) return
+        this.readOnly = state.readOnly
+        this.editorView.setProps({ editable: () => this.isEditorEditable() })
+        onLeaseStateChange?.(state)
     }
 
     dispatchStateChange(json) {

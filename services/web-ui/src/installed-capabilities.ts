@@ -88,7 +88,9 @@ export function createInstalledCapabilityControls(host: CapabilityControlsHost):
 
 export function ensureCapabilityStyles(document: Document): void {
     if (styledDocuments.has(document)) return
-    const style = html`<style textContent=${ACTION_TIMELINE_FRONTEND_STYLES}></style>` as HTMLStyleElement
+    const style = document.createElement('style')
+    style.dataset.capabilityStyles = ACTION_TIMELINE_MODULE_ID
+    style.textContent = ACTION_TIMELINE_FRONTEND_STYLES
     document.head.appendChild(style)
     styledDocuments.add(document)
 }

@@ -1,0 +1,219 @@
+'use strict'
+
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { NATS_SUBJECTS, type Asset } from '@lixpi/constants'
+
+import AssetService from './asset-service.ts'
+
+const mocks = vi.hoisted(() => ({
+    getTokenSilently: vi.fn(),
+    request: vi.fn(),
+    getWorkspace: vi.fn(),
+    getAsset: vi.fn(),
+    setLoading: vi.fn(),
+    setAssets: vi.fn(),
+    setError: vi.fn(),
+    upsert: vi.fn(),
+}))
+
+vi.mock('$src/services/auth-service.ts', () => ({
+    default: {
+        getTokenSilently: mocks.getTokenSilently,
+    },
+}))
+
+vi.mock('$src/stores/servicesStore.ts', () => ({
+    servicesStore: {
+        getData: vi.fn(() => ({ request: mocks.request })),
+    },
+}))
+
+vi.mock('$src/stores/assetsStore.ts', () => ({
+    assetsStore: {
+        get: mocks.getAsset,
+        setLoading: mocks.setLoading,
+        setAssets: mocks.setAssets,
+        setError: mocks.setError,
+        upsert: mocks.upsert,
+    },
+}))
+
+vi.mock('$src/stores/assetDocumentsStore.ts', () => ({
+    assetDocumentsStore: {
+        get: vi.fn(() => undefined),
+        set: vi.fn(),
+        setMany: vi.fn(),
+    },
+}))
+
+vi.mock('$src/stores/workspaceStore.ts', () => ({
+    workspaceStore: {
+        getData: mocks.getWorkspace,
+    },
+}))
+
+vi.mock('$src/stores/userStore.ts', () => ({
+    userStore: {
+        getData: vi.fn(() => 'user-1'),
+    },
+}))
+
+function makeAsset(overrides: Partial<Asset> & Pick<Asset, 'assetId' | 'title'>): Asset {
+    return {
+        organizationId: 'organization-1',
+        scope: 'workspace',
+        scopeOwnerId: 'workspace-1',
+        originWorkspaceId: 'workspace-1',
+        ownerUserId: 'user-1',
+        documents: {},
+        states: {
+            lifecycle: 'active',
+            media: 'ready',
+            conversation: 'none',
+            provenance: 'none',
+        },
+        referenceCount: 1,
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        ...overrides,
+    }
+}
+
+describe('AssetService.create', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mocks.getTokenSilently.mockResolvedValue('token')
+    })
+
+    it('rejects API errors without inserting the error reply into the Asset store', async () => {
+        mocks.request.mockResolvedValue({ error: 'INITIAL_EMBEDDED_ASSETS_REQUIRE_ATTACH' })
+        const service = new AssetService()
+
+        await expect(service.create({
+            organizationId: 'organization-1',
+            workspaceId: 'workspace-1',
+            title: 'Referenced Action Timeline request',
+            primaryCategory: 'conversation',
+            assetId: 'conversation-1',
+            initialDoc: { type: 'doc', content: [] },
+        })).rejects.toThrow('Asset creation failed: INITIAL_EMBEDDED_ASSETS_REQUIRE_ATTACH')
+
+        expect(mocks.request).toHaveBeenCalledWith(
+            NATS_SUBJECTS.ASSET_SUBJECTS.CREATE,
+            expect.objectContaining({
+                token: 'token',
+                assetId: 'conversation-1',
+                primaryCategory: 'conversation',
+            }),
+            undefined,
+        )
+        expect(mocks.upsert).not.toHaveBeenCalled()
+    })
+})
+
+describe('AssetService.loadWorkspaceAssets', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mocks.getTokenSilently.mockResolvedValue('token')
+        mocks.getAsset.mockReturnValue(undefined)
+        mocks.getWorkspace.mockReturnValue({
+            canvasState: {
+                nodes: [{
+                    nodeId: 'timeline-node',
+                    type: 'capabilityArtifact',
+                    assetId: 'timeline-asset',
+                    artifactTypeId: 'action-timeline',
+                    position: { x: 0, y: 0 },
+                    dimensions: { width: 400, height: 300 },
+                }],
+            },
+        })
+    })
+
+    it('loads lineage source Assets required by persisted Artifact references', async () => {
+        const timelineAsset = makeAsset({
+            assetId: 'timeline-asset',
+            title: 'Action Timeline',
+            artifact: { artifactTypeId: 'action-timeline', schemaVersion: 'action-timeline-v1' },
+            lineage: { sourceAssetIds: ['shelby-asset', 'train-asset'] },
+            states: {
+                lifecycle: 'active',
+                media: 'none',
+                conversation: 'none',
+                provenance: 'sealed',
+            },
+        })
+        const shelbyAsset = makeAsset({
+            assetId: 'shelby-asset',
+            title: 'Shelby',
+            media: {
+                kind: 'image',
+                originalName: 'shelby.png',
+                sourceMimeType: 'image/png',
+                modelSafe: true,
+                renditions: {},
+            },
+        })
+        const trainAsset = makeAsset({
+            assetId: 'train-asset',
+            title: 'Slop Train',
+            media: {
+                kind: 'image',
+                originalName: 'train.png',
+                sourceMimeType: 'image/png',
+                modelSafe: true,
+                renditions: {},
+            },
+        })
+        mocks.request.mockImplementation(async (_subject: string, payload: Record<string, unknown>) => {
+            if (payload.assetId === 'timeline-asset') return timelineAsset
+            if (payload.assetId === 'shelby-asset') return shelbyAsset
+            if (payload.assetId === 'train-asset') return trainAsset
+            if (payload.primaryCategory) return { items: [] }
+            return { error: 'NOT_FOUND' }
+        })
+
+        const service = new AssetService()
+        const assets = await service.loadWorkspaceAssets('workspace-1')
+
+        expect(assets.map(asset => [asset.assetId, asset.title])).toEqual([
+            ['timeline-asset', 'Action Timeline'],
+            ['shelby-asset', 'Shelby'],
+            ['train-asset', 'Slop Train'],
+        ])
+        expect(mocks.setAssets).toHaveBeenCalledWith('workspace-1', assets)
+    })
+})
+
+describe('AssetService.ensureAssetsLoaded', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mocks.getTokenSilently.mockResolvedValue('token')
+    })
+
+    it('hydrates missing Artifact reference Assets without reloading cached Assets', async () => {
+        const cachedAsset = makeAsset({ assetId: 'cached-asset', title: 'Shelby' })
+        const missingAsset = makeAsset({ assetId: 'missing-asset', title: 'Slop Train' })
+        mocks.getAsset.mockImplementation((assetId: string) => (
+            assetId === cachedAsset.assetId ? cachedAsset : undefined
+        ))
+        mocks.request.mockResolvedValue(missingAsset)
+
+        const service = new AssetService()
+        const loaded = await service.ensureAssetsLoaded([
+            cachedAsset.assetId,
+            missingAsset.assetId,
+            missingAsset.assetId,
+        ])
+
+        expect(loaded).toEqual([missingAsset])
+        expect(mocks.request).toHaveBeenCalledTimes(1)
+        expect(mocks.request).toHaveBeenCalledWith(
+            NATS_SUBJECTS.ASSET_SUBJECTS.GET,
+            { token: 'token', assetId: missingAsset.assetId },
+            undefined,
+        )
+        expect(mocks.upsert).toHaveBeenCalledWith(missingAsset)
+    })
+})
