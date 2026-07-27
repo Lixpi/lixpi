@@ -172,6 +172,64 @@ describe('Action Timeline registered actions', () => {
         expect(call.mock.calls[2]![0].userPrompt).not.toContain('rejected continuity')
     })
 
+    it('normalizes every canonical cited title in model prose into an Asset reference run', async () => {
+        const call = vi.fn(async () => ({
+            parsed: {
+                segments: [{
+                    slotIndex: 0,
+                    runs: [{ text: 'Shelby boards Slop Train while Shelby\'s bag remains visible.' }],
+                }],
+                continuity: 'Shelby is aboard Slop Train.',
+            },
+        }))
+        const dependencies = makeDependencies({ call })
+        const registry = new CapabilityActionRegistry()
+        registerActionTimelineActions(registry, dependencies)
+        const prepared = {
+            input: {
+                prompt: 'Show Shelby boarding Slop Train',
+                durationMs: 1_000,
+                precisionMs: 1_000,
+                referenceAssetIds: ['asset-shelby', 'asset-train'],
+            },
+            grid: [{ slotIndex: 0, startMs: 0, endMs: 1_000 }],
+            modelInputs: [{
+                kind: 'image' as const,
+                assetId: 'asset-shelby',
+                title: 'Shelby',
+                marker: '<ref asset:asset-shelby "Shelby">',
+                bytes: new Uint8Array([0x89, 0x50, 0x4e]),
+                mimeType: 'image/png',
+            }, {
+                kind: 'video-frame' as const,
+                assetId: 'asset-train',
+                title: 'Slop Train',
+                marker: '<ref asset:asset-train "Slop Train">',
+                bytes: new Uint8Array([0xff, 0xd8, 0xff]),
+                mimeType: 'image/jpeg',
+            }],
+        }
+
+        const written = await registry.get('action-timeline.write-segments').execute({ prepared }, makeContext())
+
+        expect(written).toMatchObject({
+            segments: [{
+                slotIndex: 0,
+                runs: [
+                    { assetId: 'asset-shelby' },
+                    { text: ' boards ' },
+                    { assetId: 'asset-train' },
+                    { text: ' while ' },
+                    { assetId: 'asset-shelby' },
+                    { text: "'s bag remains visible." },
+                ],
+            }],
+        })
+        expect(call.mock.calls[0]![0].userPrompt).toContain('Shelby => asset-shelby')
+        expect(call.mock.calls[0]![0].userPrompt).toContain('Slop Train => asset-train')
+        expect(call.mock.calls[0]![0].userPrompt).toContain('never emit its title as plain text')
+    })
+
     it('rejects an unauthorized cited Asset after one correction and never persists a partial Artifact', async () => {
         const invalid = {
             parsed: {
@@ -202,6 +260,46 @@ describe('Action Timeline registered actions', () => {
         await expect(registry.get('action-timeline.write-segments').execute({ prepared }, makeContext()))
             .rejects.toMatchObject({ code: 'CAPABILITY_ACTION_OUTPUT_INVALID' })
         expect(dependencies.model.call).toHaveBeenCalledTimes(2)
+        expect(dependencies.persistArtifact).not.toHaveBeenCalled()
+    })
+
+    it('rejects ambiguous plain-text titles instead of attaching the wrong same-named Asset', async () => {
+        const call = vi.fn(async () => ({
+            parsed: {
+                segments: [{ slotIndex: 0, runs: [{ text: 'Shelby boards the train.' }] }],
+                continuity: 'Shelby is aboard.',
+            },
+        }))
+        const dependencies = makeDependencies({ call })
+        const registry = new CapabilityActionRegistry()
+        registerActionTimelineActions(registry, dependencies)
+        const prepared = {
+            input: {
+                prompt: 'Write one beat',
+                durationMs: 1_000,
+                precisionMs: 1_000,
+                referenceAssetIds: ['asset-shelby-a', 'asset-shelby-b'],
+            },
+            grid: [{ slotIndex: 0, startMs: 0, endMs: 1_000 }],
+            modelInputs: [{
+                kind: 'document-text',
+                assetId: 'asset-shelby-a',
+                marker: '<asset-shelby-a>',
+                title: 'Shelby',
+                text: 'First Shelby',
+            }, {
+                kind: 'document-text',
+                assetId: 'asset-shelby-b',
+                marker: '<asset-shelby-b>',
+                title: 'Shelby',
+                text: 'Second Shelby',
+            }],
+        }
+
+        await expect(registry.get('action-timeline.write-segments').execute({ prepared }, makeContext()))
+            .rejects.toMatchObject({ code: 'CAPABILITY_ACTION_OUTPUT_INVALID' })
+        expect(call).toHaveBeenCalledTimes(2)
+        expect(call.mock.calls[1]![0].userPrompt).toContain('ACTION_TIMELINE_REFERENCE_TITLE_AMBIGUOUS:Shelby')
         expect(dependencies.persistArtifact).not.toHaveBeenCalled()
     })
 

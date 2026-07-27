@@ -1,5 +1,6 @@
 import type {
     Asset,
+    CapabilityArtifactCanvasNode,
     CanvasNode,
     DocumentCanvasNode,
     ImageCanvasNode,
@@ -8,6 +9,7 @@ import type {
 import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
 import { extractContentFromProseMirror } from '$src/utils/prosemirrorText.ts'
 import { documentIcon, videoPlayGlyphIcon } from '$src/svgIcons/index.ts'
+import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import { applyStyle, html } from '$src/utils/domTemplates.ts'
 import {
     buildAssetRenditionPath,
@@ -100,6 +102,7 @@ function getContextChipLabel(node: CanvasNode): string {
         case 'audio': return 'Audio'
         case 'image':
         case 'video': return ''
+        case 'capabilityArtifact': return 'Artifact'
         default: return node.type
     }
 }
@@ -275,6 +278,19 @@ function renderContextDocumentPreview(
     </div>` as HTMLElement
 }
 
+function renderContextArtifactPreview(
+    node: CapabilityArtifactCanvasNode,
+    title: string,
+    size: 'mini' | 'large',
+): HTMLElement {
+    return html`<div className=${`workspace-ai-chat-panel-context-preview-artifact workspace-ai-chat-panel-context-preview-artifact-${size}`}>
+        <span className="workspace-ai-chat-panel-context-preview-artifact-icon" innerHTML=${getCapabilityArtifactIcon(node.artifactTypeId)}></span>
+        ${size === 'large'
+            ? html`<span className="workspace-ai-chat-panel-context-preview-artifact-title">${title || 'Artifact'}</span>`
+            : ''}
+    </div>` as HTMLElement
+}
+
 function renderContextPreviewVisual(
     node: CanvasNode,
     title: string,
@@ -285,6 +301,7 @@ function renderContextPreviewVisual(
     if (node.type === 'image') return renderContextImagePreview(node, title, environment, size)
     if (node.type === 'video') return renderContextVideoPreview(node, title, environment, size)
     if (node.type === 'document') return renderContextDocumentPreview(node, title, text, size)
+    if (node.type === 'capabilityArtifact') return renderContextArtifactPreview(node, title, size)
     return html`<div className="workspace-ai-chat-panel-context-preview-document">${title}</div>` as HTMLElement
 }
 

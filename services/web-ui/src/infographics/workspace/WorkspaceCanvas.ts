@@ -6070,7 +6070,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function addContextChips(nodeIds: Iterable<string>): void {
         if (!currentCanvasState) return
         const eligibleNodeIds = new Set(currentCanvasState.nodes
-            .filter((node: CanvasNode) => node.type === 'image' || node.type === 'video' || node.type === 'document')
+            .filter((node: CanvasNode) => node.type === 'image'
+                || node.type === 'video'
+                || node.type === 'document'
+                || node.type === 'capabilityArtifact')
             .map((node) => node.nodeId))
         const chipNodeIds = new Set(aiChatPanelState.contextChips)
         const nextChips = [...aiChatPanelState.contextChips]

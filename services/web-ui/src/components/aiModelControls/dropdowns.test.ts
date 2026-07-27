@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
 
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 
@@ -9,6 +9,7 @@ vi.mock('$src/components/dropdown/index.ts', () => ({
 import { createPureDropdown } from '$src/components/dropdown/index.ts'
 import {
     transformModelsToOptions,
+    createGenericAiModelDropdown,
     createGenericImageSizeDropdown,
     createGenericImageModelDropdown,
     createGenericVideoModelDropdown,
@@ -53,6 +54,70 @@ function createControls(overrides: {
         getProvider: vi.fn(() => overrides.provider),
     }
 }
+
+describe('createGenericAiModelDropdown', () => {
+    beforeEach(() => {
+        resetMockDropdown()
+        aiModelsStore.setAiModelsCatalog({
+            models: [{
+                provider: 'anthropic',
+                model: 'haiku-4-5',
+                shortTitle: 'Haiku 4.5',
+                iconName: 'claude',
+                modalities: [{ modality: 'text_generation' }],
+            } as any],
+            defaultModels: {
+                reasoning: 'anthropic:haiku-4-5',
+                image: '',
+                video: '',
+            } as any,
+        })
+        vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+        aiModelsStore.resetStore()
+    })
+
+    it('re-commits the displayed default when restored prompt attrs become empty', () => {
+        let currentModel = ''
+        const controls = {
+            getCurrentAiModel: vi.fn(() => currentModel),
+            setAiModel: vi.fn((modelId: string) => {
+                currentModel = modelId
+            }),
+        }
+        const dropdown = createGenericAiModelDropdown(controls, 'reasoning-model')
+
+        vi.runAllTimers()
+        expect(currentModel).toBe('anthropic:haiku-4-5')
+
+        currentModel = ''
+        controls.setAiModel.mockClear()
+        dropdown.update()
+
+        expect(controls.setAiModel).toHaveBeenCalledWith('anthropic:haiku-4-5')
+        expect(currentModel).toBe('anthropic:haiku-4-5')
+        dropdown.destroy()
+    })
+
+    it('does not paint the default over an unavailable persisted selection', () => {
+        const controls = {
+            getCurrentAiModel: vi.fn(() => 'anthropic:removed-model'),
+            setAiModel: vi.fn(),
+        }
+
+        const dropdown = createGenericAiModelDropdown(controls, 'reasoning-model')
+
+        expect(lastConfig?.selectedValue).toMatchObject({
+            title: 'Select Model',
+            aiModel: '',
+        })
+        expect(controls.setAiModel).not.toHaveBeenCalled()
+        dropdown.destroy()
+    })
+})
 
 describe('createGenericImageSizeDropdown', () => {
     beforeEach(() => {

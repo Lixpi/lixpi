@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { STREAM_STATUS } from '@lixpi/constants'
 import type { Asset, MediaBranchCandidateImage, WorkspaceContextSnapshot } from '@lixpi/constants'
+import { buildActionTimelineDocument } from '@lixpi/capability-system'
 
 import * as debugTools from '@lixpi/debug-tools'
 
@@ -145,6 +146,65 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
 // resolve their image URL through Asset -> Blob, which the resolver always
 // hits directly (not via injected deps).
 const assetById: Record<string, Asset> = {
+    'asset-timeline': {
+        assetId: 'asset-timeline',
+        organizationId: 'org-1',
+        title: 'Travel Timeline',
+        scope: 'workspace',
+        scopeOwnerId: 'workspace-1',
+        originWorkspaceId: 'workspace-1',
+        ownerUserId: 'user-1',
+        primaryCategory: 'capabilityArtifact',
+        documents: {
+            capabilityArtifact: { blobHash: 'timeline-doc', version: 1, schemaVersion: 'action-timeline@1' },
+        },
+        artifact: { artifactTypeId: 'action-timeline', schemaVersion: 'action-timeline@1' },
+        states: { lifecycle: 'active', media: 'none', conversation: 'none', provenance: 'sealed' },
+        referenceCount: 1,
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+    } as Asset,
+    'asset-shelby': {
+        assetId: 'asset-shelby',
+        organizationId: 'org-1',
+        title: 'Shelby',
+        scope: 'workspace',
+        scopeOwnerId: 'workspace-1',
+        originWorkspaceId: 'workspace-1',
+        ownerUserId: 'user-1',
+        documents: {},
+        media: {
+            kind: 'image',
+            originalName: 'shelby.png',
+            sourceMimeType: 'image/png',
+            modelSafe: true,
+            renditions: { preview: { name: 'preview', status: 'ready', blobHash: 'shelby-file', updatedAt: 1 } },
+        },
+        states: { lifecycle: 'active', media: 'ready', conversation: 'none', provenance: 'none' },
+        referenceCount: 1,
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+    } as Asset,
+    'asset-travel-notes': {
+        assetId: 'asset-travel-notes',
+        organizationId: 'org-1',
+        title: 'Travel Notes',
+        scope: 'workspace',
+        scopeOwnerId: 'workspace-1',
+        originWorkspaceId: 'workspace-1',
+        ownerUserId: 'user-1',
+        documents: {
+            content: { blobHash: 'travel-notes-doc', version: 1, schemaVersion: 'prosemirror@1' },
+        },
+        media: { kind: 'document', sourceMimeType: 'application/json', modelSafe: true, renditions: {} },
+        states: { lifecycle: 'active', media: 'ready', conversation: 'none', provenance: 'none' },
+        referenceCount: 1,
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+    } as Asset,
     'asset-goat-image': {
         assetId: 'asset-goat-image',
         organizationId: 'org-1',
@@ -329,6 +389,32 @@ function createDeps(parsedInput: { selections: Array<Record<string, unknown>> } 
         entityTags: ['dog'],
         styleTags: ['notes'],
     }))
+    const loadAssetDocumentSnapshot = vi.fn(async (asset: Asset, role: string) => {
+        if (asset.assetId === 'asset-timeline' && role === 'capabilityArtifact') {
+            return {
+                doc: buildActionTimelineDocument(
+                    { durationMs: 2_000, precisionMs: 1_000 },
+                    [{
+                        slotIndex: 0,
+                        runs: [{ assetId: 'asset-shelby' }, { text: ' boards the train using ' }, { assetId: 'asset-travel-notes' }],
+                    }, { slotIndex: 1, runs: [{ text: 'Continue the journey.' }] }],
+                    new Map([
+                        ['asset-shelby', { mediaKind: 'image' as const, displayName: 'stale Shelby label' }],
+                        ['asset-travel-notes', { mediaKind: 'document' as const, displayName: 'stale notes label' }],
+                    ]),
+                ),
+            }
+        }
+        if (asset.assetId === 'asset-travel-notes' && role === 'content') {
+            return {
+                doc: {
+                    type: 'doc',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Board from platform four.' }] }],
+                },
+            }
+        }
+        return null
+    })
 
     return {
         deps: {
@@ -338,6 +424,7 @@ function createDeps(parsedInput: { selections: Array<Record<string, unknown>> } 
             getAsset: getAsset as any,
             describeMediaStill: describeMediaStill as any,
             describeTextContent: describeTextContent as any,
+            loadAssetDocumentSnapshot: loadAssetDocumentSnapshot as any,
         },
         natsService,
         publisher,
@@ -345,6 +432,7 @@ function createDeps(parsedInput: { selections: Array<Record<string, unknown>> } 
         getAsset,
         describeMediaStill,
         describeTextContent,
+        loadAssetDocumentSnapshot,
         published,
     }
 }
@@ -798,6 +886,72 @@ describe('resolveWorkspaceContext', () => {
         ])
         expect(update.workspaceContextResolution?.narrowedMediaNodeIds).toEqual([])
         expect(update.mediaBranchCandidateSnapshot?.candidates).toEqual([])
+    })
+
+    it('expands an explicit Action Timeline with canonical names and every cited payload', async () => {
+        const { deps, callLlm, natsService, loadAssetDocumentSnapshot } = createDeps({ selections: [] })
+        const artifactSnapshot: WorkspaceContextSnapshot = {
+            ...baseWorkspaceSnapshot,
+            nodes: [{
+                nodeId: 'timeline-node',
+                type: 'capabilityArtifact',
+                artifactTypeId: 'action-timeline',
+                assetId: 'asset-timeline',
+                title: 'Travel Timeline',
+                isExplicitChip: true,
+                isEdgeForced: false,
+            }],
+        }
+
+        const update = await resolveWorkspaceContext(createState({
+            workspaceContextSnapshot: artifactSnapshot,
+            mediaBranchCandidateSnapshot: undefined,
+            imageModelVersion: undefined,
+            videoModelVersion: undefined,
+        }), deps)
+        const textBlocks = getInputTextBlocks(update)
+        const artifactBlock = textBlocks.find(text => text.includes('workspace_capability_artifact'))
+        const citedDocumentBlock = textBlocks.find(text => text.includes('workspace_artifact_document_reference'))
+        const firstMessage = update.messages?.[0]
+        const imageBlock = Array.isArray(firstMessage?.content)
+            ? firstMessage.content.find(block => block?.type === 'input_image')
+            : undefined
+
+        expect(callLlm).not.toHaveBeenCalled()
+        expect(artifactBlock).toContain('@Shelby')
+        expect(artifactBlock).toContain('@Travel Notes')
+        expect(artifactBlock).not.toContain('asset-shelby')
+        expect(artifactBlock).not.toContain('asset-travel-notes')
+        expect(citedDocumentBlock).toContain('Travel Notes')
+        expect(citedDocumentBlock).toContain('Board from platform four.')
+        expect(imageBlock?.image_url).toBe(resolvedTinyPngUrl)
+        expect(natsService.getObject).toHaveBeenCalled()
+        expect(loadAssetDocumentSnapshot).toHaveBeenCalledWith(assetById['asset-timeline'], 'capabilityArtifact')
+        expect(loadAssetDocumentSnapshot).toHaveBeenCalledWith(assetById['asset-travel-notes'], 'content')
+    })
+
+    it('fails closed when an explicitly selected Action Timeline is unavailable', async () => {
+        const { deps, callLlm, publisher } = createDeps({ selections: [] })
+        deps.getAsset = vi.fn(async () => ({ error: 'ASSET_NOT_FOUND' })) as any
+
+        await expect(resolveWorkspaceContext(createState({
+            workspaceContextSnapshot: {
+                ...baseWorkspaceSnapshot,
+                nodes: [{
+                    nodeId: 'timeline-node',
+                    type: 'capabilityArtifact',
+                    artifactTypeId: 'action-timeline',
+                    assetId: 'asset-timeline',
+                    isExplicitChip: true,
+                    isEdgeForced: false,
+                }],
+            },
+        }), deps)).rejects.toThrow('WORKSPACE_CONTEXT_ARTIFACT_UNAVAILABLE:asset-timeline')
+
+        expect(callLlm).not.toHaveBeenCalled()
+        expect(publisher.contextRelevanceError).toHaveBeenCalledWith(
+            'WORKSPACE_CONTEXT_ARTIFACT_UNAVAILABLE:asset-timeline',
+        )
     })
 
     it('restricts an explicit-reference branch snapshot to its explicit candidates on the auto path', async () => {

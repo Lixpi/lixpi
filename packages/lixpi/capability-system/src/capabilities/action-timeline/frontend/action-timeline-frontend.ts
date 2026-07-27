@@ -289,6 +289,7 @@ export const ACTION_TIMELINE_FRONTEND_STYLES = `
 
 export const actionTimelineFrontendDefinition: CapabilityArtifactFrontendDefinition = {
     artifactTypeId: ACTION_TIMELINE_ARTIFACT_TYPE_ID,
+    iconId: 'ordered-list',
     createEditorPlugins: createActionTimelineEditorPlugins,
     createCanvasNodeView: createActionTimelineCanvasView,
     createGeneratedOutputInfoView: createActionTimelineInfoView,

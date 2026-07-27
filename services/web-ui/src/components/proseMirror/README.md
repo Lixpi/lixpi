@@ -66,6 +66,8 @@ Custom nodes are intentionally split by responsibility:
 
 - AI prompt input (schema spec exported by `@lixpi/prosemirror`; browser NodeView stays in `plugins/aiPromptInputPlugin/`):
   - `aiPromptInputNode` (`aiPromptInput`): floating composer used to send messages to any selected canvas node. Content: `(paragraph | block)+`. Renders as a floating element below the active node.
+  - Model controls reconcile the API-configured default into the node attrs before button submission and whenever restored prompt state clears a required selection; the label shown in the selector therefore matches the model IDs emitted in the submit payload.
+  - Submission is rejected locally without clearing the draft when the required reasoning-model attr is still empty.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%

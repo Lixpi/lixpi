@@ -192,10 +192,9 @@ export function createGenericAiModelDropdown(
         tags: []
     }
 
-    const selectedValue: AiModelDropdownOption =
-        aiModelsSelectorDropdownOptions.find(model => model.aiModel === currentAiModel)
-        || pickDefaultModelOption(aiModelsSelectorDropdownOptions, 'reasoning')
-        || placeholderValue
+    const selectedValue: AiModelDropdownOption = currentAiModel
+        ? aiModelsSelectorDropdownOptions.find(model => model.aiModel === currentAiModel) ?? placeholderValue
+        : pickDefaultModelOption(aiModelsSelectorDropdownOptions, 'reasoning') ?? placeholderValue
 
     const dropdown = createPureDropdown({
         id: dropdownId,
@@ -235,7 +234,19 @@ export function createGenericAiModelDropdown(
         const matched = currentOptions.find(model => model.aiModel === currentAiModel)
         if (matched) {
             dropdown.update(matched)
+            return
         }
+
+        if (!currentAiModel) {
+            const defaultOption = pickDefaultModelOption(currentOptions, 'reasoning')
+            if (defaultOption) {
+                controls.setAiModel(defaultOption.aiModel)
+                dropdown.update(defaultOption)
+                return
+            }
+        }
+
+        dropdown.update(placeholderValue)
     }
 
     const unsubscribe = aiModelsStore.subscribe((storeState: any) => {
@@ -398,10 +409,9 @@ export function createGenericImageModelDropdown(
         tags: []
     }
 
-    const selectedValue: AiModelDropdownOption =
-        options.find(m => m.aiModel === currentImageModel)
-        || pickDefaultModelOption(options, 'image')
-        || placeholderValue
+    const selectedValue: AiModelDropdownOption = currentImageModel
+        ? options.find(model => model.aiModel === currentImageModel) ?? placeholderValue
+        : pickDefaultModelOption(options, 'image') ?? placeholderValue
 
     const dropdown = createPureDropdown({
         id: dropdownId,
@@ -437,7 +447,19 @@ export function createGenericImageModelDropdown(
         const matched = options.find(m => m.aiModel === current)
         if (matched) {
             dropdown.update(matched)
+            return
         }
+
+        if (!current) {
+            const defaultOption = pickDefaultModelOption(options, 'image')
+            if (defaultOption) {
+                controls.setImageModel(defaultOption.aiModel)
+                dropdown.update(defaultOption)
+                return
+            }
+        }
+
+        dropdown.update(placeholderValue)
     }
 
     const unsubscribe = aiModelsStore.subscribe((storeState: any) => {
@@ -797,10 +819,9 @@ export function createGenericVideoModelDropdown(
         tags: []
     }
 
-    const selectedValue: AiModelDropdownOption =
-        options.find(m => m.aiModel === currentVideoModel)
-        || pickDefaultModelOption(options, 'video')
-        || placeholderValue
+    const selectedValue: AiModelDropdownOption = currentVideoModel
+        ? options.find(model => model.aiModel === currentVideoModel) ?? placeholderValue
+        : pickDefaultModelOption(options, 'video') ?? placeholderValue
 
     const dropdown = createPureDropdown({
         id: dropdownId,
@@ -837,9 +858,19 @@ export function createGenericVideoModelDropdown(
         const matched = options.find(m => m.aiModel === current)
         if (matched) {
             dropdown.update(matched)
-        } else if (!current) {
-            dropdown.update(placeholderValue)
+            return
         }
+
+        if (!current) {
+            const defaultOption = pickDefaultModelOption(options, 'video')
+            if (defaultOption) {
+                controls.setVideoModel(defaultOption.aiModel)
+                dropdown.update(defaultOption)
+                return
+            }
+        }
+
+        dropdown.update(placeholderValue)
     }
 
     const unsubscribe = aiModelsStore.subscribe((storeState: any) => {

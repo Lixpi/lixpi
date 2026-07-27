@@ -1091,6 +1091,12 @@ describe('createAiPromptInputNodeView — control adapters', () => {
         expect(controls).toHaveProperty('onSubmit')
         expect(controls).not.toHaveProperty('onStop')
         expect(controls).not.toHaveProperty('isReceiving')
+
+        controls.onSubmit()
+        const modelDropdownUpdate = factories.createModelDropdown.mock.results[0]!.value.update
+        expect(modelDropdownUpdate).toHaveBeenCalledOnce()
+        expect(modelDropdownUpdate.mock.invocationCallOrder[0]).toBeLessThan(onSubmit.mock.invocationCallOrder[0]!)
+        expect(onSubmit).toHaveBeenCalledOnce()
     })
 })
 
@@ -1500,7 +1506,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const { options } = createPluginOptions()
         const plugin = createAiPromptInputPlugin(options)
 
-        const testDoc = doc(promptInput(p('Hello world')))
+        const testDoc = doc(promptInput({ aiReasoningModels: '["gpt-4"]' }, p('Hello world')))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
 
         const mockView = {
@@ -1515,6 +1521,28 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
 
         // After submit, dispatch should have been called to clear content
         expect(mockView.dispatch).toHaveBeenCalled()
+    })
+
+    it('preserves the prompt when no reasoning model is selected', () => {
+        const { options } = createPluginOptions()
+        const plugin = createAiPromptInputPlugin(options)
+        const testDoc = doc(promptInput(p('Keep this prompt')))
+        const state = createEditorStateWithPlugins(testDoc, [plugin])
+        const mockView = {
+            state,
+            dispatch: vi.fn((tr: Transaction) => {
+                (mockView as any).state = (mockView as any).state.apply(tr)
+            }),
+        } as unknown as EditorView
+
+        plugin.props.handleDOMEvents!.keydown!(mockView, new KeyboardEvent('keydown', {
+            key: 'Enter',
+            metaKey: true,
+        }))
+
+        expect(options.onSubmit).not.toHaveBeenCalled()
+        expect(mockView.dispatch).not.toHaveBeenCalled()
+        expect((mockView as any).state.doc.firstChild!.textContent).toBe('Keep this prompt')
     })
 
     it('preserves model settings attrs when clearing input after submit', () => {

@@ -230,6 +230,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         if (!contentJSON) return
 
         const attrs = getInputAttrs(view.state)
+        if (!attrs.aiReasoningModels[0]) return
 
         onSubmit(buildSubmitPayload(contentJSON, attrs))
 
@@ -319,6 +320,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                 const contentJSON = extractContentJSON(newState)
                 if (contentJSON) {
                     const attrs = getInputAttrs(newState)
+                    if (!attrs.aiReasoningModels[0]) return null
                     onSubmit(buildSubmitPayload(contentJSON, attrs))
                 }
             }

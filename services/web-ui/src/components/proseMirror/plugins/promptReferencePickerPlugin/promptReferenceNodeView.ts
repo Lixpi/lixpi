@@ -35,6 +35,7 @@ import {
 import {
     capabilityArtifactFrontendRegistry,
     ensureCapabilityStyles,
+    getCapabilityArtifactIcon,
 } from '$src/installed-capabilities.ts'
 
 const promptReferenceIcons: Record<Exclude<PromptReferenceType, 'media' | 'capability-artifact'>, string> = {
@@ -231,9 +232,16 @@ export class PromptReferenceNodeView implements NodeView {
         const referenceType = getPromptReferenceType(node)
         if (referenceType === 'capability-artifact') {
             ensureCapabilityStyles(document)
-            this.dom = html`<span className="prompt-reference-chip prompt-reference-chip-capability-artifact" contenteditable="false"></span>` as HTMLSpanElement
-            this.artifactView = capabilityArtifactFrontendRegistry.require(String(node.attrs.artifactTypeId ?? '')).createPromptReferenceView({
-                container: this.dom,
+            const artifactTypeId = String(node.attrs.artifactTypeId ?? '')
+            const referenceHost = html`<span className="prompt-reference-chip-name prompt-reference-chip-artifact-host"></span>` as HTMLSpanElement
+            this.dom = html`<span className="prompt-reference-chip prompt-reference-chip-capability-artifact" contenteditable="false">
+                <span className="prompt-reference-chip-content">
+                    <span className="prompt-reference-chip-icon" aria-hidden="true" innerHTML=${getCapabilityArtifactIcon(artifactTypeId)}></span>
+                    ${referenceHost}
+                </span>
+            </span>` as HTMLSpanElement
+            this.artifactView = capabilityArtifactFrontendRegistry.require(artifactTypeId).createPromptReferenceView({
+                container: referenceHost,
                 title: String(node.attrs.displayName ?? ''),
                 displayMetadata: {},
             })

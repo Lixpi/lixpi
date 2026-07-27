@@ -475,8 +475,9 @@ function collectInlineText(node: ProseMirrorJsonNode, labels: ReadonlyMap<string
         if (child.type !== 'prompt_reference') return
         const assetId = readNonEmptyString(child.attrs?.assetId)
         if (!assetId) throw new Error('ACTION_TIMELINE_REFERENCE_INVALID')
-        const label = labels.get(assetId) ?? readNonEmptyString(child.attrs?.displayName) ?? assetId
-        parts.push(`<ref asset:${assetId} "${label.replaceAll('"', '\\"')}">`)
+        const label = labels.get(assetId)?.trim()
+        if (!label) throw new Error(`ACTION_TIMELINE_REFERENCE_LABEL_MISSING:${assetId}`)
+        parts.push(`@${label}`)
     })
     return parts.join('').trim()
 }

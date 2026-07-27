@@ -606,7 +606,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         }
 
         const submitControls: SubmitControls = {
-            onSubmit: options.onSubmit,
+            onSubmit: () => {
+                // Reconcile API-owned defaults into ProseMirror attrs immediately
+                // before either the button handler or submit plugin reads them.
+                updateModelDropdowns()
+                options.onSubmit()
+            },
         }
 
         const reasoningMultipleModelsToggle = createUseMultipleModelsToggle(
@@ -786,7 +791,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             modelMenuContent.update()
         }
 
-        const updateModelDropdowns = (): void => {
+        function updateModelDropdowns(): void {
             for (const dropdown of modelDropdowns) {
                 dropdown.update()
             }

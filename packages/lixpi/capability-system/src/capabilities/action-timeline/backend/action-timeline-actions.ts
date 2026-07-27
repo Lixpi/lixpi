@@ -206,7 +206,7 @@ async function writeSegments(
     let continuity = ''
 
     for (const batch of batches) {
-        const requestPrompt = buildBatchPrompt(prepared.input, batch, continuity)
+        const requestPrompt = buildBatchPrompt(prepared.input, batch, continuity, prepared.modelInputs)
         const maxTokens = Math.max(256, Math.min(
             context.variant.maxCompletionSize,
             768 + batch.length * 160,
@@ -235,7 +235,12 @@ async function writeSegments(
                 abortSignal: context.signal,
             })
             try {
-                accepted = validateBatchResponse(result.parsed, batch, authorizedAssetIds)
+                accepted = validateBatchResponse(
+                    result.parsed,
+                    batch,
+                    authorizedAssetIds,
+                    prepared.modelInputs,
+                )
                 break
             } catch (error) {
                 validationFeedback = error instanceof Error ? error.message : 'ACTION_TIMELINE_BATCH_INVALID'
@@ -259,12 +264,16 @@ function validateBatchResponse(
     input: unknown,
     batch: readonly ActionTimelineGridSlot[],
     authorizedAssetIds: ReadonlySet<string>,
+    modelInputs: readonly CapabilityResolvedModelInput[],
 ): TimelineBatchResponse {
     const record = asRecord(input)
     if (!record || !Array.isArray(record.segments) || typeof record.continuity !== 'string') {
         throw new Error('ACTION_TIMELINE_BATCH_SCHEMA_INVALID')
     }
-    const segments = record.segments.map(readGeneratedSegment)
+    const segments = normalizeReferenceTitleRuns(
+        record.segments.map(readGeneratedSegment),
+        modelInputs,
+    )
     const expectedSlots = new Set(batch.map(slot => slot.slotIndex))
     if (segments.length !== batch.length
         || segments.some(segment => !expectedSlots.has(segment.slotIndex))
@@ -279,14 +288,19 @@ function buildBatchPrompt(
     input: ActionTimelineInput,
     batch: readonly ActionTimelineGridSlot[],
     continuity: string,
+    modelInputs: readonly CapabilityResolvedModelInput[],
 ): string {
     const slots = batch.map(slot => `${slot.slotIndex}: ${slot.startMs}-${slot.endMs}ms`).join('\n')
+    const referenceRoster = modelInputs.length > 0
+        ? modelInputs.map(modelInput => `${resolveModelInputTitle(modelInput)} => ${modelInput.assetId}`).join('\n')
+        : '(none)'
     return [
         `Original request:\n${input.prompt}`,
         `Authorized reference Asset ids: ${input.referenceAssetIds.length > 0 ? input.referenceAssetIds.join(', ') : '(none)'}`,
+        `Canonical reference title roster:\n${referenceRoster}`,
         `Write content for exactly these server-calculated slots:\n${slots}`,
         continuity ? `Continuity from the last accepted batch:\n${continuity}` : 'This is the first batch.',
-        'Use reference runs only for authorized Asset ids. Do not calculate or return timing fields.',
+        'Whenever a roster title appears in a segment, emit its Asset id as an assetId run; never emit its title as plain text. Use reference runs only for authorized Asset ids. Do not calculate or return timing fields.',
     ].join('\n\n')
 }
 
@@ -294,9 +308,106 @@ const ACTION_TIMELINE_SYSTEM_PROMPT = [
     'You write concise, visually specific action-timeline beats for image and video generation.',
     'Return every assigned slot exactly once by slotIndex.',
     'Each segment is an ordered runs array containing text runs and optional Asset reference runs.',
+    'Every mention of an authorized referenced subject or item must be an Asset reference run. Never repeat its canonical title inside a text run.',
     'Maintain subject identity, spatial continuity, cause and effect, and a clean handoff between segments.',
     'The server owns time boundaries. Never invent timing fields.',
 ].join('\n')
+
+type CanonicalReferenceTitle = {
+    assetId?: string
+    title: string
+    foldedTitle: string
+}
+
+function normalizeReferenceTitleRuns(
+    segments: readonly ActionTimelineGeneratedSegment[],
+    modelInputs: readonly CapabilityResolvedModelInput[],
+): ActionTimelineGeneratedSegment[] {
+    const referencesByTitle = new Map<string, Array<{ assetId: string; title: string }>>()
+    for (const input of modelInputs) {
+        const title = resolveModelInputTitle(input)
+        if (!title || title === input.assetId) continue
+        const foldedTitle = title.toLocaleLowerCase('en-US')
+        const matches = referencesByTitle.get(foldedTitle) ?? []
+        matches.push({ assetId: input.assetId, title })
+        referencesByTitle.set(foldedTitle, matches)
+    }
+    const references = [...referencesByTitle.entries()]
+        .map(([foldedTitle, matches]): CanonicalReferenceTitle => ({
+            foldedTitle,
+            title: matches[0]!.title,
+            ...(matches.length === 1 ? { assetId: matches[0]!.assetId } : {}),
+        }))
+        .sort((left, right) => right.title.length - left.title.length)
+
+    if (references.length === 0) return segments.map(segment => ({ ...segment, runs: [...segment.runs] }))
+    return segments.map(segment => ({
+        ...segment,
+        runs: mergeAdjacentTextRuns(segment.runs.flatMap(run => 'text' in run
+            ? splitTextRunAtReferenceTitles(run.text, references)
+            : [run])),
+    }))
+}
+
+function splitTextRunAtReferenceTitles(
+    text: string,
+    references: readonly CanonicalReferenceTitle[],
+): ActionTimelineRun[] {
+    const foldedText = text.toLocaleLowerCase('en-US')
+    const runs: ActionTimelineRun[] = []
+    let cursor = 0
+
+    while (cursor < text.length) {
+        let next: { reference: CanonicalReferenceTitle; index: number } | undefined
+        for (const reference of references) {
+            let index = foldedText.indexOf(reference.foldedTitle, cursor)
+            while (index >= 0 && !hasReferenceTitleBoundaries(text, index, reference.title.length)) {
+                index = foldedText.indexOf(reference.foldedTitle, index + 1)
+            }
+            if (index < 0) continue
+            if (!next || index < next.index
+                || index === next.index && reference.title.length > next.reference.title.length) {
+                next = { reference, index }
+            }
+        }
+        if (!next) break
+        if (!next.reference.assetId) {
+            throw new Error(`ACTION_TIMELINE_REFERENCE_TITLE_AMBIGUOUS:${next.reference.title}`)
+        }
+        if (next.index > cursor) runs.push({ text: text.slice(cursor, next.index) })
+        runs.push({ assetId: next.reference.assetId })
+        cursor = next.index + next.reference.title.length
+    }
+
+    if (cursor < text.length) runs.push({ text: text.slice(cursor) })
+    return runs.length > 0 ? runs : [{ text }]
+}
+
+function hasReferenceTitleBoundaries(text: string, start: number, length: number): boolean {
+    const first = text[start]
+    const last = text[start + length - 1]
+    const before = text[start - 1]
+    const after = text[start + length]
+    return (!isWordCharacter(first) || !isWordCharacter(before))
+        && (!isWordCharacter(last) || !isWordCharacter(after))
+}
+
+function isWordCharacter(value: string | undefined): boolean {
+    return Boolean(value && /[\p{L}\p{N}_]/u.test(value))
+}
+
+function mergeAdjacentTextRuns(runs: readonly ActionTimelineRun[]): ActionTimelineRun[] {
+    const merged: ActionTimelineRun[] = []
+    for (const run of runs) {
+        const previous = merged.at(-1)
+        if ('text' in run && previous && 'text' in previous) {
+            previous.text += run.text
+        } else if (!('text' in run) || run.text) {
+            merged.push({ ...run })
+        }
+    }
+    return merged
+}
 
 function normalizeInput(input: Readonly<Record<string, unknown>>): ActionTimelineInput {
     const prompt = readString(input.prompt, 'prompt').trim()

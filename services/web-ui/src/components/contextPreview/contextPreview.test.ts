@@ -108,6 +108,18 @@ function createAudioNode(overrides: any = {}) {
     }
 }
 
+function createCapabilityArtifactNode(overrides: any = {}) {
+    return {
+        type: 'capabilityArtifact',
+        nodeId: 'timeline-node',
+        artifactTypeId: 'action-timeline',
+        assetId: 'timeline-asset',
+        position: { x: 0, y: 0 },
+        dimensions: { width: 520, height: 360 },
+        ...overrides,
+    }
+}
+
 function createTextDoc(text: string): string {
     return JSON.stringify({
         type: 'doc',
@@ -168,6 +180,29 @@ describe('context preview labels', () => {
         })
 
         expect(getContextPreviewAccessibleLabel(createDocumentNode(), env)).toBe('Project Notes')
+    })
+
+    it('renders a Capability Artifact with its registered existing SVG icon and canonical title', async () => {
+        const env = createMockEnvironment({
+            assets: [makeAsset({ assetId: 'timeline-asset', title: 'Train Timeline' })],
+        })
+        const { dom } = createContextPreviewTile({
+            node: createCapabilityArtifactNode(),
+            environment: env,
+        })
+        document.body.appendChild(dom)
+
+        const trigger = dom.querySelector('.help-tooltip-trigger') as HTMLElement
+        expect(trigger.getAttribute('aria-label')).toBe('Train Timeline')
+        expect(trigger.querySelector('.workspace-ai-chat-panel-context-preview-artifact-icon svg')).not.toBeNull()
+        expect(trigger.querySelector('.workspace-ai-chat-panel-context-preview-artifact-title')).toBeNull()
+
+        trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
+        await waitForMicrotasks()
+
+        const tooltipContent = document.body.querySelector('.help-tooltip-content') as HTMLElement
+        expect(tooltipContent.querySelector('.workspace-ai-chat-panel-context-preview-artifact-title')?.textContent)
+            .toBe('Train Timeline')
     })
 
     it('falls back to extracted document content when the Asset descriptor summary is blank', async () => {

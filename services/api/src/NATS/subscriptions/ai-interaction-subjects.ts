@@ -367,6 +367,17 @@ const resolveAuthorizedCandidateSnapshot = async ({
     }
 }
 
+type AuthorizedWorkspaceContextCanvasNode = Extract<CanvasNode, {
+    type: 'document' | 'image' | 'video' | 'capabilityArtifact'
+}>
+
+const isAuthorizedWorkspaceContextCanvasNode = (
+    node: CanvasNode | undefined,
+): node is AuthorizedWorkspaceContextCanvasNode => node?.type === 'document'
+    || node?.type === 'image'
+    || node?.type === 'video'
+    || node?.type === 'capabilityArtifact'
+
 const resolveAuthorizedWorkspaceContextSnapshot = ({
     snapshot,
     workspaceId,
@@ -389,19 +400,23 @@ const resolveAuthorizedWorkspaceContextSnapshot = ({
         if (seen.has(node.nodeId)) throw new Error(`DUPLICATE_WORKSPACE_CONTEXT_NODE:${node.nodeId}`)
         seen.add(node.nodeId)
         const workspaceNode = workspaceNodeById.get(node.nodeId)
-        if (!workspaceNode
-            || (workspaceNode.type !== 'document' && workspaceNode.type !== 'image' && workspaceNode.type !== 'video')
+        if (!isAuthorizedWorkspaceContextCanvasNode(workspaceNode)
             || workspaceNode.type !== node.type
             || workspaceNode.assetId !== node.assetId) {
             throw new Error(`WORKSPACE_CONTEXT_NODE_NOT_IN_WORKSPACE:${node.nodeId}`)
         }
-        const generatedBy = workspaceNode.type === 'image' || workspaceNode.type === 'video'
+        const generatedBy = workspaceNode.type === 'image'
+            || workspaceNode.type === 'video'
+            || workspaceNode.type === 'capabilityArtifact'
             ? workspaceNode.generatedBy
             : undefined
         return {
             nodeId: workspaceNode.nodeId,
             type: workspaceNode.type,
             assetId: workspaceNode.assetId,
+            ...(workspaceNode.type === 'capabilityArtifact' ? {
+                artifactTypeId: workspaceNode.artifactTypeId,
+            } : {}),
             ...(node.descriptorStatus ? { descriptorStatus: node.descriptorStatus } : {}),
             ...(node.title ? { title: node.title } : {}),
             ...(node.descriptorSummary ? { descriptorSummary: node.descriptorSummary } : {}),

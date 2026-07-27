@@ -1832,6 +1832,7 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(ts, 'contextPreviewTilesByTray: Map<HTMLDivElement, Set<ContextPreviewTileInstance>>')
 		expectSourceToContain(ts, 'for (const trayEl of Array.from(contextPreviewTilesByTray.keys()))')
 		expectSourceToContain(ts, 'function addContextChips(nodeIds: Iterable<string>): void')
+		expectSourceToContain(ts, "node.type === 'capabilityArtifact'")
 		expectSourceToContain(ts, 'function removeContextChip(nodeId: string): void')
 		expectSourceToContain(ts, 'function clearExplicitContextChips(): void')
 		expectSourceToContain(ts, 'function createAiChatPanelContextTrayElement(): HTMLDivElement')

@@ -74,6 +74,7 @@ Container for the conversation log.
 - Asset conversation/provenance mode: `doc -> aiChatThread+`
 - Main DOM: `div.ai-chat-thread-wrapper > div.ai-chat-thread-content`
 - The NodeView auto-fills a missing `threadId` by dispatching `setNodeMarkup`.
+- Clicking the thread content resolves the nearest valid text selection inside a message instead of placing a text cursor on the block-only thread container.
 - The NodeView ignores `style` attribute mutations so canvas-driven sizing avoids ProseMirror wrapper recreation.
 
 Attrs declared in `aiChatThreadNode.ts`:
@@ -104,6 +105,7 @@ Sent user message bubble inserted by `AiPromptInputController`.
 - Attrs: `id`, `createdAt`, `referenceNodeIds`
 - DOM parse target: `div.ai-user-message`
 - NodeView shell comes from `createAiUserMessageShell()`.
+- Submitted-message bubbles set the same light media-reference and Capability-reference tokens as canvas branch markers, while the shared prompt-reference atom continues to own icon, typography, and spacing.
 - Explicit composer references are stored in `referenceNodeIds` at submit time and render above the message text through `components/contextPreview` when `renderContext.contextPreview` is available; those tiles re-resolve the current canvas node on hover so late descriptor self-heal metadata appears without rebuilding the message.
 - Scaled projection surfaces can set `renderContext.contextPreview.inlinePopover` so hover cards stay inside the projection's DOM context; unscaled panels omit it and use the default viewport-clamped tooltip.
 

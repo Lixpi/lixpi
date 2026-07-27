@@ -110,7 +110,10 @@ describe('Action Timeline shared contract', () => {
         ]))
 
         expect(serialized.text).toContain(longText)
-        expect(serialized.text).toContain('<ref asset:asset-b "Hero \\"portrait\\"">')
+        expect(serialized.text).toContain('@Hero "portrait"')
+        expect(serialized.text).toContain('@Final frame')
+        expect(serialized.text).not.toContain('asset-a')
+        expect(serialized.text).not.toContain('asset-b')
         expect(serialized.referencedAssetIds).toEqual(['asset-b', 'asset-a'])
         expect(collectActionTimelineReferencedAssetIds(document)).toEqual(['asset-b', 'asset-a'])
         expect(buildActionTimelineCatalogMetadata(document)).toEqual({
@@ -119,6 +122,16 @@ describe('Action Timeline shared contract', () => {
             segmentCount: 2,
             referencedAssetIds: ['asset-b', 'asset-a'],
         })
+    })
+
+    it('requires an authorized canonical title for every serialized reference', () => {
+        const document = buildActionTimelineDocument(
+            { durationMs: 1_000, precisionMs: 1_000 },
+            [{ slotIndex: 0, runs: [{ assetId: 'asset-missing-title' }] }],
+        )
+
+        expect(() => serializeActionTimelineForModel(document, new Map()))
+            .toThrow('ACTION_TIMELINE_REFERENCE_LABEL_MISSING:asset-missing-title')
     })
 
     it('persists canonical Asset titles on reference atoms', () => {

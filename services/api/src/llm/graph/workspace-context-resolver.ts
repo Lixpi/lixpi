@@ -31,6 +31,7 @@ import { resolveImageUrls } from '../utils/attachments.ts'
 import { buildCandidateTranscriptContext, restrictSnapshotToExplicitRefs } from './media-branch-snapshot.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
 import type { StreamPublisher } from './stream-publisher.ts'
+import { capabilityArtifactBackendRegistry } from '../../capability-system/capability-artifacts.ts'
 
 type WorkspaceContextRawSelection = {
     nodeId: string
@@ -50,6 +51,7 @@ type ResolveWorkspaceContextDeps = {
     getAsset?: (assetId: string) => Promise<Asset | { error: string }>
     describeMediaStill?: typeof defaultDescribeMediaStill
     describeTextContent?: typeof defaultDescribeTextContent
+    loadAssetDocumentSnapshot?: typeof AssetDocumentService.loadCurrentSnapshot
 }
 
 type ProseMirrorNode = {
@@ -131,6 +133,7 @@ const getResolverModel = (state: ProviderState): { provider: ProviderName; model
 const compactNodeForPrompt = (node: WorkspaceContextNode): Record<string, unknown> => ({
     nodeId: node.nodeId,
     type: node.type,
+    artifactTypeId: node.artifactTypeId ?? '',
     title: node.title ?? '',
     descriptorStatus: node.descriptorStatus ?? 'missing',
     descriptorSummary: node.descriptorSummary ?? '',
@@ -380,9 +383,11 @@ const resolveContextAsset = async (
 const loadAssetDocumentText = async (
     asset: Asset,
     role: 'content',
+    deps: ResolveWorkspaceContextDeps,
 ): Promise<string> => {
     if (!asset.documents[role]) return ''
-    const snapshot = await AssetDocumentService.loadCurrentSnapshot(asset, role)
+    const loadSnapshot = deps.loadAssetDocumentSnapshot ?? AssetDocumentService.loadCurrentSnapshot
+    const snapshot = await loadSnapshot(asset, role)
     return extractTextFromProseMirror(snapshot?.doc)
 }
 
@@ -422,7 +427,7 @@ const resolveDocumentText = async (
         return text ? { title: node.title, text } : undefined
     }
 
-    const text = await loadAssetDocumentText(asset, 'content') || getFallbackText(node)
+    const text = await loadAssetDocumentText(asset, 'content', deps) || getFallbackText(node)
     return text ? { title: asset.title || node.title, text } : undefined
 }
 
@@ -523,12 +528,19 @@ const buildSelectedContextMessage = async (
             selections: resolution.selections,
         }),
     }]
+    let expandedCapabilityArtifact = false
 
     for (const selection of resolution.selections) {
         const node = nodeById.get(selection.nodeId)
         if (!node) continue
 
-        if (node.type === 'document') {
+        if (node.type === 'capabilityArtifact') {
+            const artifactBlocks = await resolveCapabilityArtifactContextBlocks(node, selection.role, state, deps)
+            if (artifactBlocks.length > 0) {
+                expandedCapabilityArtifact = true
+                blocks.push(...artifactBlocks)
+            }
+        } else if (node.type === 'document') {
             const resolved = await resolveDocumentText(node, state, deps)
             if (!resolved) continue
             const payload: Record<string, string> = {
@@ -566,11 +578,134 @@ const buildSelectedContextMessage = async (
     }
 
     if (blocks.length <= 1) return undefined
-    if (!state.imageModelVersion && !state.videoModelVersion) {
+    if (expandedCapabilityArtifact || (!state.imageModelVersion && !state.videoModelVersion)) {
         const resolvedBlocks = await resolveImageUrls(blocks, deps.natsService)
         return { role: 'user', content: Array.isArray(resolvedBlocks) ? resolvedBlocks : blocks }
     }
     return { role: 'user', content: blocks }
+}
+
+const resolveCapabilityArtifactContextBlocks = async (
+    node: WorkspaceContextNode,
+    role: WorkspaceContextSelection['role'],
+    state: ProviderState,
+    deps: ResolveWorkspaceContextDeps,
+): Promise<Array<Record<string, any>>> => {
+    if (!node.assetId) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_ASSET_REQUIRED:${node.nodeId}`)
+    const artifactAsset = await resolveContextAsset(node.assetId, state, deps)
+    if (hasModelError(artifactAsset)
+        || artifactAsset.states.lifecycle !== 'active'
+        || !artifactAsset.artifact
+        || !artifactAsset.documents.capabilityArtifact) {
+        throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_UNAVAILABLE:${node.assetId}`)
+    }
+    if (node.artifactTypeId && node.artifactTypeId !== artifactAsset.artifact.artifactTypeId) {
+        throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_TYPE_MISMATCH:${node.nodeId}`)
+    }
+
+    const definition = capabilityArtifactBackendRegistry.require(artifactAsset.artifact.artifactTypeId).shared
+    const loadSnapshot = deps.loadAssetDocumentSnapshot ?? AssetDocumentService.loadCurrentSnapshot
+    const snapshot = await loadSnapshot(artifactAsset, 'capabilityArtifact')
+    if (!snapshot) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_NOT_READY:${node.nodeId}`)
+    definition.assertInitialDocument(snapshot.doc)
+
+    const citedAssets: Asset[] = []
+    for (const assetId of definition.collectReferencedAssetIds(snapshot.doc)) {
+        const citedAsset = await resolveContextAsset(assetId, state, deps)
+        if (hasModelError(citedAsset)) {
+            throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_REFERENCE_UNAVAILABLE:${assetId}`)
+        }
+        if (citedAsset.states.lifecycle !== 'active') {
+            throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_REFERENCE_UNAVAILABLE:${assetId}`)
+        }
+        if (citedAsset.artifact || citedAsset.primaryCategory === 'capabilityArtifact') {
+            throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_NESTED_REFERENCE_FORBIDDEN:${assetId}`)
+        }
+        citedAssets.push(citedAsset)
+    }
+
+    const labels = new Map(citedAssets.map(asset => [asset.assetId, asset.title]))
+    const serialized = definition.serializeForModel(snapshot.doc, labels)
+    const blocks: Array<Record<string, any>> = [{
+        type: 'input_text',
+        text: JSON.stringify({
+            type: 'workspace_capability_artifact',
+            nodeId: node.nodeId,
+            role,
+            artifactType: definition.displayName,
+            title: artifactAsset.title,
+            content: serialized.text,
+        }),
+    }]
+
+    for (const citedAsset of citedAssets) {
+        blocks.push(...await resolveCapabilityArtifactCitedAssetBlocks(citedAsset, deps))
+    }
+    return blocks
+}
+
+const resolveCapabilityArtifactCitedAssetBlocks = async (
+    asset: Asset,
+    deps: ResolveWorkspaceContextDeps,
+): Promise<Array<Record<string, any>>> => {
+    if (asset.media?.kind === 'image' || asset.media?.kind === 'video') {
+        const imageUrl = await resolveAssetMediaUrl(asset)
+        if (!imageUrl) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_MEDIA_NOT_READY:${asset.title}`)
+        return [{
+            type: 'input_text',
+            text: JSON.stringify({
+                type: asset.media.kind === 'video'
+                    ? 'workspace_artifact_video_reference'
+                    : 'workspace_artifact_image_reference',
+                title: asset.title,
+            }),
+        }, { type: 'input_image', image_url: imageUrl, detail: 'high' }]
+    }
+
+    if (asset.media?.kind === 'audio') {
+        const dataUrl = await resolveAssetAudioDataUrl(asset, deps)
+        return [{
+            type: 'input_text',
+            text: JSON.stringify({ type: 'workspace_artifact_audio_reference', title: asset.title }),
+        }, {
+            type: 'input_audio',
+            input_audio: {
+                data: dataUrl,
+                format: asset.media.sourceMimeType.split('/')[1]?.split(';')[0] ?? 'wav',
+            },
+        }]
+    }
+
+    if (asset.media?.kind === 'document' || asset.documents.content) {
+        const text = await loadAssetDocumentText(asset, 'content', deps)
+        if (!text) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_DOCUMENT_NOT_READY:${asset.title}`)
+        return [{
+            type: 'input_text',
+            text: JSON.stringify({
+                type: 'workspace_artifact_document_reference',
+                title: asset.title,
+                content: text,
+            }),
+        }]
+    }
+
+    throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_REFERENCE_UNSUPPORTED:${asset.title}`)
+}
+
+const resolveAssetAudioDataUrl = async (
+    asset: Asset,
+    deps: ResolveWorkspaceContextDeps,
+): Promise<string> => {
+    const rendition = asset.media?.renditions.original
+    if (!rendition || rendition.status !== 'ready' || !rendition.blobHash) {
+        throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_AUDIO_NOT_READY:${asset.title}`)
+    }
+    const blob = await BlobModel.get({ organizationId: asset.organizationId, blobHash: rendition.blobHash })
+    if (!blob) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_AUDIO_BLOB_MISSING:${asset.title}`)
+    const bytes = await deps.natsService.getObject(blob.bucketName, blob.objectKey)
+    if (!bytes) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_AUDIO_OBJECT_MISSING:${asset.title}`)
+    const mimeType = rendition.mimeType || asset.media.sourceMimeType
+    return `data:${mimeType};base64,${Buffer.from(bytes).toString('base64')}`
 }
 
 const isMediaWorkspaceNode = (node: WorkspaceContextNode | undefined): node is WorkspaceContextNode =>

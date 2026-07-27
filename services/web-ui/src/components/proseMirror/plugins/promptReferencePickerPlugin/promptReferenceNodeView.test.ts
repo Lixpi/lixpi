@@ -14,6 +14,7 @@ import {
     videoPlayGlyphIcon,
     videoVolumeHighGlyphIcon,
 } from '$src/svgIcons/index.ts'
+import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import {
     createStateWithNodeSelection,
     createStateWithTextSelection,
@@ -71,6 +72,20 @@ describe('PromptReferenceNodeView', () => {
         expect(nodeView.dom.querySelector('.prompt-reference-chip-icon svg')).not.toBeNull()
         expect(nodeView.dom.querySelector('input')).toBeNull()
         expect(nodeView.dom.querySelector('.action-timeline-controls')).toBeNull()
+    })
+
+    it('renders an Action Timeline Artifact with its registered existing icon', () => {
+        const node = promptReference({
+            referenceType: 'capability-artifact',
+            assetId: 'timeline-asset',
+            artifactTypeId: 'action-timeline',
+            displayName: 'Travel Timeline',
+        })
+        const nodeView = new PromptReferenceNodeView(node)
+
+        expect(getCapabilityArtifactIcon('action-timeline')).toContain('<svg')
+        expect(nodeView.dom.querySelector('.prompt-reference-chip-icon svg')).not.toBeNull()
+        expect(nodeView.dom.querySelector('.action-timeline-reference')?.textContent).toBe('Travel Timeline')
     })
 
     it('keeps identical markup and asks ProseMirror to recreate changed reference markup', () => {

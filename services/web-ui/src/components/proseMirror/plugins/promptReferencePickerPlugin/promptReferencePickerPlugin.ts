@@ -21,6 +21,7 @@ import { resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 import {
     capabilityArtifactFrontendRegistry,
     ensureCapabilityStyles,
+    getCapabilityArtifactIcon,
 } from '$src/installed-capabilities.ts'
 
 export type PromptReferencePickerMode = 'references' | 'modules'
@@ -440,7 +441,11 @@ class PromptReferencePickerMenu {
                     this.view.dispatch(this.view.state.tr.setMeta(this.key, { type: 'select', selectedIndex: index }))
                 }
             }}
-        ><span className="prompt-reference-picker-copy prompt-reference-picker-artifact-host"></span><span className="prompt-reference-picker-badge">Artifact</span></button>` as HTMLButtonElement
+        >
+            <span className="prompt-reference-picker-glyph prompt-reference-picker-glyph-capability-artifact" aria-hidden="true" innerHTML=${getCapabilityArtifactIcon(item.artifactTypeId)}></span>
+            <span className="prompt-reference-picker-copy prompt-reference-picker-artifact-host"></span>
+            <span className="prompt-reference-picker-badge">Artifact</span>
+        </button>` as HTMLButtonElement
         capabilityArtifactFrontendRegistry.require(item.artifactTypeId).createPromptReferenceView({
             container: row.querySelector('.prompt-reference-picker-artifact-host') as HTMLElement,
             title: item.title,

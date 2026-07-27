@@ -716,6 +716,14 @@ describe('buildMediaBranchCandidateSnapshot — video media', () => {
 // =============================================================================
 
 describe('buildWorkspaceContextSnapshot', () => {
+    const actionTimelineNode = {
+        nodeId: 'timeline-node',
+        type: 'capabilityArtifact',
+        artifactTypeId: 'action-timeline',
+        assetId: 'timeline-asset',
+        position: { x: 0, y: 0 },
+        dimensions: { width: 520, height: 360 },
+    } satisfies CanvasNode
     const workspaceNodes = [
         rootNode,
         personGeneratedNode,
@@ -723,6 +731,7 @@ describe('buildWorkspaceContextSnapshot', () => {
         uploadedVideoNode,
         cubistDocNode,
         threadContextNode,
+        actionTimelineNode,
     ]
 
     it('indexes every context-bearing node, descriptors-only (no pixel data)', () => {
@@ -739,7 +748,7 @@ describe('buildWorkspaceContextSnapshot', () => {
         expect(snapshot.conversationAssetId).toBe('thread-1')
         expect(snapshot.promptText).toBe('summarize my canvas')
         expect(snapshot.nodes.map((node) => node.nodeId).sort()).toEqual(
-            ['cubist-doc', 'goat-generated', 'person-generated', 'thread-context', 'thread-node-1', 'video-uploaded'],
+            ['cubist-doc', 'goat-generated', 'person-generated', 'thread-context', 'thread-node-1', 'timeline-node', 'video-uploaded'],
         )
 
         // The payload must carry references, never embedded pixels.
@@ -835,6 +844,26 @@ describe('buildWorkspaceContextSnapshot', () => {
         expect(byId.get('goat-generated')?.isExplicitChip).toBe(false)
         // The root thread node is not forced by itself.
         expect(byId.get('thread-node-1')?.isEdgeForced).toBe(false)
+    })
+
+    it('carries explicit Capability Artifacts with their registered type identity', () => {
+        const snapshot = buildWorkspaceContextSnapshot({
+            workspaceId: 'workspace-1',
+            conversationAssetId: 'thread-1',
+            prompt: 'continue this timeline',
+            nodes: workspaceNodes,
+            edges: [],
+            contextChipNodeIds: ['timeline-node'],
+            titlesByNodeId: { 'timeline-node': 'Train Timeline' },
+        })
+
+        expect(snapshot.nodes.find((node) => node.nodeId === 'timeline-node')).toMatchObject({
+            type: 'capabilityArtifact',
+            artifactTypeId: 'action-timeline',
+            assetId: 'timeline-asset',
+            title: 'Train Timeline',
+            isExplicitChip: true,
+        })
     })
 
     it('forces no edge nodes for a standalone chat with no root node', () => {

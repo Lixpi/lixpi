@@ -16,6 +16,7 @@ import type {
     CapabilityControlsView,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import { html } from '$src/utils/domTemplates.ts'
+import { orderedListIcon } from '$src/svgIcons/index.ts'
 
 type InstalledFrontendModule = {
     moduleId: string
@@ -33,6 +34,17 @@ export const capabilityArtifactFrontendRegistry = new CapabilityArtifactFrontend
 capabilityArtifactFrontendRegistry.register(actionTimelineFrontendDefinition)
 export const capabilityArtifactSharedRegistry = new CapabilityArtifactSharedRegistry()
 capabilityArtifactSharedRegistry.register(actionTimelineArtifactDefinition)
+
+const capabilityArtifactIcons = {
+    'ordered-list': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 896" aria-hidden="true"><path d="${orderedListIcon}"></path></svg>`,
+} as const
+
+export function getCapabilityArtifactIcon(artifactTypeId: string): string {
+    const definition = capabilityArtifactFrontendRegistry.require(artifactTypeId)
+    const icon = capabilityArtifactIcons[definition.iconId as keyof typeof capabilityArtifactIcons]
+    if (!icon) throw new Error(`CAPABILITY_ARTIFACT_ICON_NOT_INSTALLED:${definition.iconId}`)
+    return icon
+}
 
 const styledDocuments = new WeakSet<Document>()
 

@@ -92,6 +92,7 @@ export type CapabilityArtifactLibraryView = {
 
 export type CapabilityArtifactFrontendDefinition = {
     artifactTypeId: string
+    iconId: string
     createEditorPlugins?: () => Plugin[]
     createPromptControls?: (host: CapabilityPromptControlHost) => CapabilityPromptControls
     createCanvasNodeView: (host: CapabilityArtifactCanvasHost) => CapabilityArtifactCanvasView
@@ -129,6 +130,7 @@ export class CapabilityArtifactFrontendRegistry {
 
 function assertCompleteFrontendDefinition(definition: CapabilityArtifactFrontendDefinition): void {
     if (!definition.artifactTypeId.trim()) throw new Error('CAPABILITY_ARTIFACT_FRONTEND_TYPE_ID_REQUIRED')
+    if (!definition.iconId.trim()) throw new Error(`CAPABILITY_ARTIFACT_FRONTEND_ICON_REQUIRED:${definition.artifactTypeId}`)
     const requiredFactories = [
         definition.createCanvasNodeView,
         definition.createGeneratedOutputInfoView,

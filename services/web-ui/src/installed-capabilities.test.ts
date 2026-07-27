@@ -17,6 +17,7 @@ describe('installed Action Timeline frontend', () => {
     it('registers a complete package-owned Artifact frontend definition', () => {
         expect(actionTimelineFrontendDefinition).toMatchObject({
             artifactTypeId: 'action-timeline',
+            iconId: 'ordered-list',
             createCanvasNodeView: expect.any(Function),
             createGeneratedOutputInfoView: expect.any(Function),
             createPromptReferenceView: expect.any(Function),

@@ -2,6 +2,7 @@
 
 import type {
     CanvasNode,
+    CapabilityArtifactCanvasNode,
     DocumentCanvasNode,
     MediaBranchCandidateImage,
     MediaBranchCandidateRoleHint,
@@ -28,7 +29,7 @@ const RESOLVER_VERSION = 'image-branch-vlm-v1'
 // parent and vice versa. The snapshot grounds every media object by a single
 // still — an image's file, or a video's representative frame — never the MP4.
 type MediaCanvasNode = ImageCanvasNode | VideoCanvasNode
-type WorkspaceContextCanvasNode = MediaCanvasNode | DocumentCanvasNode
+type WorkspaceContextCanvasNode = MediaCanvasNode | DocumentCanvasNode | CapabilityArtifactCanvasNode
 
 type BuildMediaBranchCandidateSnapshotParams = {
     regionNodeId: string
@@ -51,7 +52,10 @@ function isMediaCanvasNode(node: CanvasNode): node is MediaCanvasNode {
 }
 
 function isWorkspaceContextCanvasNode(node: CanvasNode): node is WorkspaceContextCanvasNode {
-    return node.type === 'image' || node.type === 'video' || node.type === 'document'
+    return node.type === 'image'
+        || node.type === 'video'
+        || node.type === 'document'
+        || node.type === 'capabilityArtifact'
 }
 
 function isGeneratedMediaForConversation(node: CanvasNode, conversationAssetId: string): node is MediaCanvasNode {
@@ -507,6 +511,8 @@ function toWorkspaceContextNode(
         isExplicitChip: chipNodeIds.has(node.nodeId),
         isEdgeForced: edgeForcedNodeIds.has(node.nodeId),
     }
+
+    if (node.type === 'capabilityArtifact') contextNode.artifactTypeId = node.artifactTypeId
 
     const title = titlesByNodeId[node.nodeId]?.trim()
     if (title) contextNode.title = title

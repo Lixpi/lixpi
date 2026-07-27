@@ -87,6 +87,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Use the generic `capabilityArtifact` node with `assetId`, `artifactTypeId`, position, dimensions, and optional generated-output metadata.
 - Live `CANVAS_GEOMETRY_RESOLVED` snapshots mount `capabilityArtifact` nodes incrementally, refresh the attached Asset/document, and reconcile the submit-time preflight marker with the API-owned lineage marker without waiting for a full workspace render.
 - Resolve body, schema, editor plugins, info, replay, reference, and library views through the installed frontend registry; workspace code must not switch on Action Timeline.
+- Resolve each registered Artifact's semantic glyph through that same frontend registry and reuse the existing SVG icon set; generic picker, chip, and context-preview hosts must not invent per-Artifact icons.
 - Mount a live authority-backed ProseMirror editor for the `capabilityArtifact` document role and allow `@` insertion inside registered editable content.
 - Measure complete content after load, edits, and width changes. Height may grow or shrink through branch-tree rebalancing; the user-resized width remains authoritative and the body never receives internal scrolling or truncation.
 - Use the generalized generated-output title, model badge, accept, regenerate, history, collision, and marker cleanup contracts.
@@ -375,7 +376,7 @@ Empty-space drag draws a marquee rectangle and selects all overlapping nodes.
 
 Persisted empty AI chat thread canvas nodes use special marquee-selection bounds so hidden thread shells do not create phantom selection areas. Visible workspace nodes use their own DOM bounds directly.
 
-When a marquee drag completes, eligible document, image, and video nodes in the final marquee selection become explicit composer context previews. Transient hits while the marquee is still moving do not create previews.
+When a marquee drag completes, eligible document, image, video, and `capabilityArtifact` nodes in the final marquee selection become explicit composer context previews. Transient hits while the marquee is still moving do not create previews. Artifact chips carry `assetId` plus `artifactTypeId`; the API authorizes and validates the Artifact document, serializes embedded references with current Asset titles, and attaches the cited image, video-frame, audio, and document content to the consuming model request.
 
 #### Selection Overlay Rules
 

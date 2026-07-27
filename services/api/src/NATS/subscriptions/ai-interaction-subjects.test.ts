@@ -474,6 +474,113 @@ describe('AI interaction message routing', () => {
         expect(payload.workspaceContextSnapshot.promptText).toBe(authoritativePrompt)
     })
 
+    it('authorizes a persisted Capability Artifact selected as explicit workspace context', async () => {
+        const artifactNode = {
+            nodeId: 'capability-artifact-asset-timeline',
+            type: 'capabilityArtifact',
+            artifactTypeId: 'action-timeline',
+            assetId: 'asset-timeline',
+            position: { x: 100, y: 200 },
+            dimensions: { width: 520, height: 360 },
+            generatedBy: {
+                outputKind: 'capabilityArtifact',
+                conversationAssetId: 'source-conversation',
+                capabilityRunId: 'capability-run-1',
+                capabilityId: 'global.action-timeline',
+                toolId: 'action-timeline.generate',
+                input: {},
+            },
+        } as const
+        mocks.workspace.getWorkspace.mockResolvedValueOnce({
+            ...workspace,
+            canvasState: { nodes: [artifactNode] },
+        })
+
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            aiImageModels: [],
+            aiVideoModels: [],
+            enableImageGeneration: false,
+            mediaGenerationRequest: undefined,
+            workspaceContextSnapshot: {
+                resolverVersion: 'workspace-context-v1',
+                workspaceId: 'workspace-1',
+                conversationAssetId: 'conv-1',
+                promptText: 'Use the selected timeline',
+                nodes: [{
+                    nodeId: artifactNode.nodeId,
+                    type: artifactNode.type,
+                    artifactTypeId: 'untrusted-browser-type',
+                    assetId: artifactNode.assetId,
+                    title: 'Travel Timeline',
+                    isExplicitChip: true,
+                    isEdgeForced: false,
+                }],
+            },
+        })
+        await flushPromises()
+
+        const processPayload = mocks.llmModule.process.mock.calls[0]?.[2] as {
+            workspaceContextSnapshot?: {
+                nodes: Array<Record<string, unknown>>
+            }
+        } | undefined
+        expect(processPayload?.workspaceContextSnapshot?.nodes).toEqual([expect.objectContaining({
+            nodeId: artifactNode.nodeId,
+            type: 'capabilityArtifact',
+            artifactTypeId: 'action-timeline',
+            assetId: artifactNode.assetId,
+            title: 'Travel Timeline',
+            sourceConversationAssetId: 'source-conversation',
+            isExplicitChip: true,
+        })])
+        expect(mocks.nats.publish).not.toHaveBeenCalled()
+    })
+
+    it('rejects a Capability Artifact context entry whose Asset identity does not match the workspace node', async () => {
+        const artifactNode = {
+            nodeId: 'capability-artifact-asset-timeline',
+            type: 'capabilityArtifact',
+            artifactTypeId: 'action-timeline',
+            assetId: 'asset-timeline',
+            position: { x: 100, y: 200 },
+            dimensions: { width: 520, height: 360 },
+        } as const
+        mocks.workspace.getWorkspace.mockResolvedValueOnce({
+            ...workspace,
+            canvasState: { nodes: [artifactNode] },
+        })
+
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            aiImageModels: [],
+            aiVideoModels: [],
+            enableImageGeneration: false,
+            mediaGenerationRequest: undefined,
+            workspaceContextSnapshot: {
+                resolverVersion: 'workspace-context-v1',
+                workspaceId: 'workspace-1',
+                conversationAssetId: 'conv-1',
+                promptText: 'Use the selected timeline',
+                nodes: [{
+                    nodeId: artifactNode.nodeId,
+                    type: artifactNode.type,
+                    artifactTypeId: artifactNode.artifactTypeId,
+                    assetId: 'different-asset',
+                    isExplicitChip: true,
+                    isEdgeForced: false,
+                }],
+            },
+        })
+        await flushPromises()
+
+        expect(mocks.llmModule.process).not.toHaveBeenCalled()
+        expect(mocks.nats.publish).toHaveBeenCalledWith(
+            getAiInteractionResponseSubject('user-1', 'workspace-1', 'conv-1'),
+            { error: `WORKSPACE_CONTEXT_NODE_NOT_IN_WORKSPACE:${artifactNode.nodeId}` },
+        )
+    })
+
     it('normalizes video options for valid and invalid candidate values', async () => {
         mocks.aiModel.getAiModel
             .mockResolvedValueOnce({ modelVersion: '1' })
