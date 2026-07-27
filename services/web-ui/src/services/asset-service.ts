@@ -178,7 +178,7 @@ export class AssetService {
             if (typeof workspace?.canvasState?.lastActiveConversationAssetId === 'string') {
                 assetIds.add(workspace.canvasState.lastActiveConversationAssetId)
             }
-            for (const primaryCategory of ['document', 'conversation'] as const) {
+            for (const primaryCategory of ['document', 'conversation', 'capabilityArtifact'] as const) {
                 let cursor: string | undefined
                 do {
                     const page = await this.list({ primaryCategory, limit: 100, cursor })

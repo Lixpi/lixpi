@@ -104,6 +104,46 @@ describe('branch marker lifecycle', () => {
         ), 'incremental ownership handoff should emit a diagnostic').toBe(true)
     })
 
+    it('mounts a Capability Artifact delivered by live API canvas geometry', () => {
+        const appendBody = extractFunctionBody('appendCanvasNodeToDOM')
+        const snapshotSyncBody = extractFunctionBody('syncApiCanvasSnapshotNodesToDOM')
+
+        expect(
+            appendBody.includes("node.type === 'capabilityArtifact'"),
+            'generic incremental node append should route Capability Artifacts',
+        ).toBe(true)
+        expect(
+            appendBody.includes('appendCapabilityArtifactNodeToDOM(node)'),
+            'Capability Artifact snapshots should receive a DOM shell',
+        ).toBe(true)
+        expect(
+            snapshotSyncBody.includes("node.type === 'capabilityArtifact'"),
+            'live API geometry sync should include Capability Artifact snapshots',
+        ).toBe(true)
+    })
+
+    it('removes detached-run preflight ownership when the API rejects the request', () => {
+        const failureBody = extractFunctionBody('failDetachedCanvasRun')
+        const editorBody = extractFunctionBody('createDetachedCanvasThreadEditor')
+
+        expect(
+            failureBody.includes('settledDetachedCanvasRunThreadIds.add(threadId)'),
+            'failed detached runs should not be restored as active after the API rejects them',
+        ).toBe(true)
+        expect(
+            failureBody.includes('pendingGeneratedImagePlacements.delete(threadId)'),
+            'failed detached runs should drop pending placement ownership',
+        ).toBe(true)
+        expect(
+            failureBody.includes('removePendingBranchMarkerForRun(threadId)'),
+            'failed detached runs should remove their preflight marker',
+        ).toBe(true)
+        expect(
+            editorBody.includes('onError: () => failDetachedCanvasRun(threadId)'),
+            'detached AI services should route top-level API errors into canvas cleanup',
+        ).toBe(true)
+    })
+
     it('keeps preflight ownership while structural render has not moved it into the overlay yet', () => {
         const matchingRecordBody = extractFunctionBody('getMatchingScreenFixedPendingBranchMarkerRecord')
         const threadRecordBody = extractFunctionBody('getScreenFixedPendingBranchMarkerRecordForThread')

@@ -334,6 +334,36 @@ describe('StreamPublisher extraction progress', () => {
         expect(nats.published).toHaveLength(2)
     })
 
+    it('publishes Action Timeline execution metadata as a first-class generation trace', async () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', generationRun)
+
+        publisher.capabilityGenerationTrace({
+            traceVersion: 'capability-generation-trace-v1',
+            generationRun,
+            capabilityId: 'action-timeline',
+            capabilityName: 'Action Timeline',
+            capabilityRunId: 'timeline-run',
+            chatModelProvider: 'Anthropic',
+            chatModelId: 'Anthropic:claude-sonnet-4-6',
+            input: { durationMs: 15_000, precisionMs: 2_000 },
+            outputAssetIds: ['timeline-asset'],
+            steps: [{ stepId: 'persist', title: 'Persist timeline', status: 'completed' }],
+        })
+        await flushPipelinePublishes()
+
+        expect(nats.published).toHaveLength(1)
+        expect(nats.published[0]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.CAPABILITY_GENERATION_TRACE,
+            generationRun,
+            capabilityGenerationTrace: expect.objectContaining({
+                capabilityName: 'Action Timeline',
+                capabilityRunId: 'timeline-run',
+                outputAssetIds: ['timeline-asset'],
+            }),
+        })
+    })
+
     it('persists pipeline content before live publishing with replay metadata', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')

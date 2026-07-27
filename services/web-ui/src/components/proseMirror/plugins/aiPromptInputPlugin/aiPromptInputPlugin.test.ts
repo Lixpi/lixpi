@@ -1404,6 +1404,47 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         expect(submitCall.aiReasoningModels).toEqual(['gpt-4'])
     })
 
+    it('keeps the Capability module atom in the submitted message JSON', () => {
+        const { options } = createPluginOptions()
+        const plugin = createAiPromptInputPlugin(options)
+        const capabilityReference = promptReference({
+            referenceType: 'capability-module',
+            moduleId: 'action-timeline',
+            displayName: 'Action Timeline',
+        })
+        const testDoc = doc(promptInput(
+            { aiReasoningModels: '["gpt-4"]' },
+            p(capabilityReference, ' Create 15 seconds with 2-second segments.'),
+        ))
+        const state = createEditorStateWithPlugins(testDoc, [plugin])
+        const mockView = {
+            state,
+            dispatch: vi.fn((tr: Transaction) => {
+                (mockView as any).state = (mockView as any).state.apply(tr)
+            }),
+        } as unknown as EditorView
+
+        plugin.props.handleDOMEvents!.keydown!(mockView, new KeyboardEvent('keydown', {
+            key: 'Enter',
+            metaKey: true,
+        }))
+
+        expect(options.onSubmit.mock.calls[0][0].contentJSON).toEqual([{
+            type: 'paragraph',
+            content: [
+                {
+                    type: 'prompt_reference',
+                    attrs: expect.objectContaining({
+                        referenceType: 'capability-module',
+                        moduleId: 'action-timeline',
+                        displayName: 'Action Timeline',
+                    }),
+                },
+                { type: 'text', text: ' Create 15 seconds with 2-second segments.' },
+            ],
+        }])
+    })
+
     it('Ctrl+Enter also triggers submit (Windows/Linux)', () => {
         const { options } = createPluginOptions()
         const plugin = createAiPromptInputPlugin(options)

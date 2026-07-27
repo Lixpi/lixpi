@@ -12,10 +12,15 @@ import {
     collectExplicitReferenceAssetIds,
     defaultToolInput,
     executeRequiredCapabilitiesForState,
+    hasPendingModelRequiredCapabilityOnlyOutput,
+    requiredCapabilityProducedCapabilityOnlyOutput,
     requiredCapabilityProducedOutput,
 } from './capability-state-resolver.ts'
 
-function makePlan(properties: Record<string, unknown>): SealedResolvedCapabilityPlan {
+function makePlan(
+    properties: Record<string, unknown>,
+    executionPolicy: 'required' | 'model-required' = 'required',
+): SealedResolvedCapabilityPlan {
     const ref: CapabilityResourceRef = {
         resourceId: 'input',
         blobHash: 'input-hash',
@@ -34,7 +39,14 @@ function makePlan(properties: Record<string, unknown>): SealedResolvedCapability
             toolType: 'test',
             inputSchema: ref,
             outputSchema: ref,
-            executionPolicy: 'required',
+            executionPolicy,
+            executionMultiplicity: executionPolicy === 'model-required' ? 'per-reasoning-model' : 'once',
+            modelAxisPolicy: {
+                reasoning: executionPolicy === 'model-required' ? 'all-selected' : 'ignore',
+                image: 'ignore',
+                video: 'ignore',
+                outputMode: executionPolicy === 'model-required' ? 'capability-only' : 'continue-media-generation',
+            },
             workflow: { steps: [], outputs: {} },
         },
     }
@@ -107,7 +119,7 @@ describe('Capability state resolver inputs', () => {
                     runId: 'run-1',
                     outputAssetIds: ['asset-output', 'asset-output'],
                 },
-                output: { assetId: 'asset-output' },
+                output: { outputKind: 'capabilityArtifact', assetId: 'asset-output' },
             })),
         }
 
@@ -119,10 +131,33 @@ describe('Capability state resolver inputs', () => {
 
         expect(update).toMatchObject({
             capabilityOutputAssetIds: ['asset-output'],
+            capabilityOutputMediaAssetIds: [],
             enableImageGeneration: false,
             enableVideoGeneration: false,
         })
         expect(requiredCapabilityProducedOutput({ ...state, ...update })).toBe(true)
+        expect(requiredCapabilityProducedCapabilityOnlyOutput({ ...state, ...update })).toBe(true)
+    })
+
+    it('does not classify media-producing Capability output as capability-only', () => {
+        expect(requiredCapabilityProducedCapabilityOnlyOutput({
+            capabilityOutputAssetIds: ['asset-image'],
+            capabilityOutputMediaAssetIds: ['asset-image'],
+            enableImageGeneration: false,
+            enableVideoGeneration: false,
+        } as ProviderState)).toBe(false)
+    })
+
+    it('identifies an attached model-required capability-only Tool before model execution', () => {
+        const plan = makePlan({ prompt: { type: 'string' } }, 'model-required')
+
+        expect(hasPendingModelRequiredCapabilityOnlyOutput({
+            resolvedCapabilityPlan: plan,
+        } as ProviderState)).toBe(true)
+        expect(hasPendingModelRequiredCapabilityOnlyOutput({
+            resolvedCapabilityPlan: plan,
+            capabilityToolResults: [{ capabilityId: 'tool', runId: 'run-1', output: {} }],
+        } as ProviderState)).toBe(false)
     })
 
     it('forwards the generic media-generation output contract without inspecting Tool identity', async () => {

@@ -193,6 +193,7 @@ export type ProviderState = {
         output: Record<string, CapabilityJsonValue>
     }> | undefined
     capabilityOutputAssetIds?: string[] | undefined
+    capabilityOutputMediaAssetIds?: string[] | undefined
 
     capabilityUsagePrompt?: string | undefined
 
@@ -278,6 +279,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     capabilityInvocationDepth: { reducer: keep, default: () => 0 },
     capabilityToolResults: { reducer: keep },
     capabilityOutputAssetIds: { reducer: keep },
+    capabilityOutputMediaAssetIds: { reducer: keep },
     capabilityUsagePrompt: { reducer: keep },
     workflowId: { reducer: keep },
     workflowSeq: { reducer: keep },

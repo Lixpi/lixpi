@@ -1,7 +1,15 @@
 'use strict'
 
+import { createHash } from 'node:crypto'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AdmZip from 'adm-zip'
+
+import {
+    ACTION_TIMELINE_ARTIFACT_TYPE_ID,
+    ACTION_TIMELINE_SCHEMA_VERSION,
+    buildActionTimelineDocument,
+} from '@lixpi/capability-system'
 
 const mocks = vi.hoisted(() => ({
     verify: vi.fn(),
@@ -226,6 +234,9 @@ describe('Workspace import route', () => {
             canvasStateUpdatedAt: 200,
         })
         mocks.replaceWorkspaceContent.mockResolvedValue(undefined)
+        mocks.enqueueBlobDeletion.mockResolvedValue(undefined)
+        mocks.enqueueRenditionRetry.mockResolvedValue(undefined)
+        mocks.enqueueWorkspaceReferenceCleanup.mockResolvedValue(undefined)
     })
 
     it('rejects import archives missing manifest.json', async () => {
@@ -299,6 +310,114 @@ describe('Workspace import route', () => {
             expectedCanvasStateUpdatedAt: 200,
         }))
         expect(res.json).toHaveBeenCalledWith({ success: true, importedAssets: 0 })
+    })
+
+    it('imports an Action Timeline Artifact document with its module-owned schema', async () => {
+        const sourceAssetId = '7e7d5caa-58b1-44dd-b9bd-38ab99f28b4a'
+        const sourceWorkspaceId = 'source-workspace-1'
+        const nodeId = 'capability-artifact-node-1'
+        const document = buildActionTimelineDocument(
+            { durationMs: 2_000, precisionMs: 2_000 },
+            [{ slotIndex: 0, runs: [{ text: 'The subject crosses the frame.' }] }],
+        )
+        const documentBytes = Buffer.from(JSON.stringify(document))
+        const blobHash = createHash('sha256').update(documentBytes).digest('hex')
+        const manifest = {
+            ...emptyManifest(),
+            workspace: {
+                ...emptyManifest().workspace,
+                canvasState: {
+                    viewport: { x: 0, y: 0, zoom: 1 },
+                    nodes: [{
+                        nodeId,
+                        type: 'capabilityArtifact',
+                        assetId: sourceAssetId,
+                        artifactTypeId: ACTION_TIMELINE_ARTIFACT_TYPE_ID,
+                        position: { x: 0, y: 0 },
+                        dimensions: { width: 520, height: 360 },
+                    }],
+                    edges: [],
+                },
+            },
+            assets: [{
+                assetId: sourceAssetId,
+                organizationId: 'source-organization-1',
+                title: 'Action Timeline',
+                scope: 'workspace',
+                scopeOwnerId: sourceWorkspaceId,
+                originWorkspaceId: sourceWorkspaceId,
+                ownerUserId: 'source-user-1',
+                documents: {
+                    capabilityArtifact: {
+                        role: 'capabilityArtifact',
+                        blobHash,
+                        version: 0,
+                        schemaVersion: ACTION_TIMELINE_SCHEMA_VERSION,
+                        byteSize: documentBytes.byteLength,
+                        updatedAt: 100,
+                    },
+                },
+                artifact: {
+                    artifactTypeId: ACTION_TIMELINE_ARTIFACT_TYPE_ID,
+                    schemaVersion: ACTION_TIMELINE_SCHEMA_VERSION,
+                },
+                states: {
+                    lifecycle: 'active',
+                    media: 'none',
+                    conversation: 'none',
+                    provenance: 'none',
+                },
+                referenceCount: 1,
+                revision: 1,
+                createdAt: 100,
+                updatedAt: 100,
+            }],
+            references: [{
+                assetId: sourceAssetId,
+                referenceKey: `workspace#${sourceWorkspaceId}`,
+                type: 'workspace',
+                workspaceId: sourceWorkspaceId,
+                nodeIds: [nodeId],
+                surfaceIds: [],
+                createdAt: 100,
+                updatedAt: 100,
+            }],
+            blobs: [{
+                blobHash,
+                mimeType: 'application/json',
+                byteSize: documentBytes.byteLength,
+            }],
+        }
+        const zip = new AdmZip()
+        zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest)))
+        zip.addFile(`blobs/${blobHash}`, documentBytes)
+        mocks.blobStore.mockImplementation(async ({ bytes }: { bytes: Uint8Array }) => ({
+            blobHash: createHash('sha256').update(bytes).digest('hex'),
+        }))
+        const route = findRoute('/:workspaceId/import', 'post')
+        const handler = route.stack.at(-1).handle
+        const req: any = {
+            ...makeWorkspaceRouteEnv(),
+            file: { buffer: zip.toBuffer() },
+        }
+        const res = createResponse()
+
+        await runRouteAuthAndAccess(route, req, res)
+        await handler(req, res)
+
+        expect(mocks.assetCreate).toHaveBeenCalledWith(expect.objectContaining({
+            artifact: {
+                artifactTypeId: ACTION_TIMELINE_ARTIFACT_TYPE_ID,
+                schemaVersion: ACTION_TIMELINE_SCHEMA_VERSION,
+            },
+            documents: {
+                capabilityArtifact: expect.objectContaining({
+                    role: 'capabilityArtifact',
+                    schemaVersion: ACTION_TIMELINE_SCHEMA_VERSION,
+                }),
+            },
+        }))
+        expect(res.json).toHaveBeenCalledWith({ success: true, importedAssets: 1 })
     })
 
     it('denies import when the workspace organization is not accessible to the user', async () => {

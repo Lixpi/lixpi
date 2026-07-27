@@ -1,4 +1,5 @@
 import type {
+    CapabilityGenerationTrace,
     ImageGenerationTrace,
     ImageGenerationTraceExcludedReference,
     ImageGenerationTraceReference,
@@ -22,6 +23,7 @@ export type ImageGenerationTraceDetailsAttrs = {
     imageGenerationTrace?: ImageGenerationTrace | null
     imageGenerationTraceId?: string | null
     videoGenerationTrace?: VideoGenerationTrace | null
+    capabilityGenerationTrace?: CapabilityGenerationTrace | null
     reasoningModelId?: string | null
 }
 
@@ -256,6 +258,12 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
                     <div className="ai-image-generation-resolver-rationale"></div>
                     <ul className="ai-image-generation-excluded-list"></ul>
                 </section>
+                <section className="ai-capability-generation-details-section">
+                    <div className="ai-image-generation-section-label">Capability execution</div>
+                    <dl className="ai-capability-generation-metadata"></dl>
+                    <div className="ai-image-generation-section-label">Execution steps</div>
+                    <ol className="ai-capability-generation-steps"></ol>
+                </section>
             </div>
         </div>
     ` as HTMLElement
@@ -271,6 +279,9 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
     const resolverSummary = wrapper.querySelector('.ai-image-generation-resolver-summary') as HTMLElement
     const resolverRationale = wrapper.querySelector('.ai-image-generation-resolver-rationale') as HTMLElement
     const excludedList = wrapper.querySelector('.ai-image-generation-excluded-list') as HTMLElement
+    const capabilitySection = wrapper.querySelector('.ai-capability-generation-details-section') as HTMLElement
+    const capabilityMetadata = wrapper.querySelector('.ai-capability-generation-metadata') as HTMLElement
+    const capabilitySteps = wrapper.querySelector('.ai-capability-generation-steps') as HTMLElement
 
     let renderedSignature = ''
     let renderedTrace: GenerationTrace | null = null
@@ -297,6 +308,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         toolPromptFallbackText,
     }: RenderImageGenerationTraceDetailsParams) => {
         const trace = getImageGenerationTrace(attrs)
+        const capabilityTrace = attrs.capabilityGenerationTrace ?? null
         const hasTrace = Boolean(trace)
         const fallbackText = toolPromptFallbackText ?? trace?.toolPrompt ?? ''
         const signature = [
@@ -307,6 +319,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
             attrs.imageGenerationTraceId ?? 'inline-trace',
             forceToolPromptFallback ? 'force-fallback' : 'content-fallback',
             fallbackText,
+            capabilityTrace?.capabilityRunId ?? '',
         ].join('|')
 
         if (signature === renderedSignature && trace === renderedTrace) {
@@ -318,9 +331,36 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         renderedTrace = trace
 
         wrapper.classList.toggle('has-image-generation-trace', hasTrace)
+        wrapper.classList.toggle('has-capability-generation-trace', Boolean(capabilityTrace))
         wrapper.classList.toggle('is-streaming', attrs.isStreaming)
 
+        capabilitySection.hidden = !capabilityTrace
+        if (capabilityTrace) {
+            const metadata = [
+                ['Capability', capabilityTrace.capabilityName],
+                ['Reasoning model', capabilityTrace.chatModelId],
+                ['Tool run', capabilityTrace.capabilityRunId],
+                ['Output Assets', String(capabilityTrace.outputAssetIds.length)],
+            ]
+            capabilityMetadata.replaceChildren(...metadata.flatMap(([label, value]) => [
+                html`<dt>${label}</dt>`,
+                html`<dd>${value}</dd>`,
+            ]))
+            capabilitySteps.replaceChildren(...capabilityTrace.steps.map(step => html`
+                <li className="ai-capability-generation-step" data=${{ status: step.status }}>
+                    <span className="ai-capability-generation-step-title">${step.title}</span>
+                    <span className="ai-capability-generation-step-status">${formatImageGenerationTraceRole(step.status)}</span>
+                    ${step.outputSummary ? html`<span className="ai-capability-generation-step-summary">${step.outputSummary}</span>` : null}
+                    ${step.errorMessage ? html`<span className="ai-capability-generation-step-error">${step.errorMessage}</span>` : null}
+                </li>
+            `))
+        } else {
+            capabilityMetadata.replaceChildren()
+            capabilitySteps.replaceChildren()
+        }
+
         const shouldShowFallback = Boolean(fallbackText && (forceToolPromptFallback || childCount === 0))
+        toolPromptSection.hidden = Boolean(capabilityTrace)
         toolPromptSection.classList.toggle('has-content', hasTrace || childCount > 0 || shouldShowFallback)
         toolPromptFallback.textContent = shouldShowFallback ? fallbackText : ''
         toolPromptFallback.hidden = !shouldShowFallback

@@ -32,6 +32,13 @@ function makePlan(): SealedResolvedCapabilityPlan {
             inputSchema: inputRef,
             outputSchema: outputRef,
             executionPolicy: 'model-choice',
+            executionMultiplicity: 'once',
+            modelAxisPolicy: {
+                reasoning: 'first-selected',
+                image: 'ignore',
+                video: 'ignore',
+                outputMode: 'capability-only',
+            },
             workflow: {
                 steps: [{
                     stepId: 'wait',

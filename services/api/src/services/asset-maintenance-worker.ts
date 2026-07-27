@@ -72,11 +72,13 @@ const isCurrentDocumentSurface = async ({
     embeddedAssetId: string
     surfaceId: string
 }): Promise<boolean> => {
-    const match = /^document#([^#]+)#content$/.exec(surfaceId)
+    const match = /^(?:document#([^#]+)#content|capabilityArtifact#([^#]+))$/.exec(surfaceId)
     if (!match) return false
-    const hostAsset = await getAssetRecord(match[1]!)
-    if (!hostAsset || hostAsset.organizationId !== organizationId || !hostAsset.documents.content) return false
-    const snapshot = await AssetDocumentService.loadCurrentSnapshot(hostAsset, 'content')
+    const hostAssetId = match[1] ?? match[2]
+    const role = match[2] ? 'capabilityArtifact' : 'content'
+    const hostAsset = await getAssetRecord(hostAssetId!)
+    if (!hostAsset || hostAsset.organizationId !== organizationId || !hostAsset.documents[role]) return false
+    const snapshot = await AssetDocumentService.loadCurrentSnapshot(hostAsset, role)
     return Boolean(snapshot && containsEmbeddedAsset(snapshot.doc, embeddedAssetId))
 }
 

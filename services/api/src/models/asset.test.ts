@@ -150,6 +150,76 @@ describe('Asset.attachWorkspaceReference', () => {
         expect(result).toEqual(surfaceReference)
         expect(dynamo.transactWrite).not.toHaveBeenCalled()
     })
+
+    it('activates a creating Artifact atomically with its first canvas placement', async () => {
+        const nextCanvasState = {
+            ...canvasState(500),
+            nodes: [{
+                nodeId: 'node-artifact',
+                type: 'capabilityArtifact' as const,
+                artifactTypeId: 'action-timeline',
+                assetId: 'asset-1',
+                position: { x: 500, y: 20 },
+                dimensions: { width: 520, height: 360 },
+            }],
+        }
+        dynamo.getItem
+            .mockResolvedValueOnce({
+                ...asset,
+                artifact: { artifactTypeId: 'action-timeline', schemaVersion: 'action-timeline-v1' },
+                documents: {
+                    capabilityArtifact: {
+                        role: 'capabilityArtifact',
+                        blobHash: 'a'.repeat(64),
+                        version: 0,
+                        schemaVersion: 'action-timeline-v1',
+                        byteSize: 100,
+                        updatedAt: 10,
+                    },
+                },
+                states: { ...asset.states, media: 'none' },
+            })
+            .mockResolvedValueOnce({ organizationId: 'organization-1' })
+            .mockResolvedValueOnce(undefined)
+            .mockResolvedValueOnce({
+                updatedAt: 100,
+                canvasStateUpdatedAt: 100,
+                canvasState: { ...nextCanvasState, nodes: [] },
+            })
+
+        await AssetModel.attachWorkspaceReference({
+            assetId: 'asset-1',
+            workspaceId: 'workspace-1',
+            requester,
+            nodeId: 'node-artifact',
+            activateOnAttach: true,
+            workspaceMutation: {
+                expectedCanvasStateUpdatedAt: 100,
+                canvasStateUpdatedAt: 101,
+                canvasState: nextCanvasState,
+            },
+        })
+
+        const operations = dynamo.transactWrite.mock.calls[0][0].operations
+        const activationOperation = operations.find((operation: any) => (
+            operation.updates?.states?.lifecycle === 'active'
+        ))
+        expect(activationOperation).toMatchObject({
+            updates: expect.objectContaining({ states: expect.objectContaining({ lifecycle: 'active' }) }),
+            conditionExpression: expect.stringContaining('#states.#lifecycle = :creating'),
+            expressionAttributeValues: {
+                ':expectedRevision': asset.revision,
+                ':expectedReferenceCount': asset.referenceCount,
+                ':creating': 'creating',
+            },
+        })
+        expect(activationOperation.expressionAttributeValues).not.toHaveProperty(':active')
+        expect(operations).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                updates: expect.objectContaining({ canvasState: nextCanvasState }),
+            }),
+        ]))
+    })
 })
 
 describe('Asset prompt-reference search', () => {
@@ -182,6 +252,25 @@ describe('Asset prompt-reference search', () => {
                 updatedAt: 1,
             } },
         })).toBeNull()
+        expect(buildAssetSearchRecord({
+            ...asset,
+            title: 'Action Timeline',
+            artifact: { artifactTypeId: 'action-timeline', schemaVersion: 'action-timeline-v1' },
+            documents: { capabilityArtifact: {
+                role: 'capabilityArtifact',
+                blobHash: 'b'.repeat(64),
+                version: 0,
+                schemaVersion: 'action-timeline-v1',
+                byteSize: 100,
+                updatedAt: 1,
+            } },
+            states: { ...asset.states, media: 'none' },
+        })).toMatchObject({
+            primaryCategory: 'capabilityArtifact',
+            artifactTypeId: 'action-timeline',
+            artifactSchemaVersion: 'action-timeline-v1',
+            searchKey: 'capabilityArtifact#action-timeline#action timeline#asset-1',
+        })
     })
 
     it('queries category prefixes, deduplicates scope rows, and prefers a principal projection', async () => {

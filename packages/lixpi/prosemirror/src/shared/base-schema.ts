@@ -157,6 +157,7 @@ export const nodes = {
             mediaKind: { default: '' },
             moduleId: { default: '' },
             capabilityId: { default: '' },
+            artifactTypeId: { default: '' },
             displayName: { default: '' },
         },
         parseDOM: [{
@@ -169,12 +170,13 @@ export const nodes = {
                     mediaKind: dom.getAttribute('data-media-kind') ?? '',
                     moduleId: dom.getAttribute('data-module-id') ?? '',
                     capabilityId: dom.getAttribute('data-capability-id') ?? '',
+                    artifactTypeId: dom.getAttribute('data-artifact-type-id') ?? '',
                     displayName: dom.getAttribute('data-prompt-reference-display-name') ?? '',
                 }
             },
         }],
         toDOM(node) {
-            const referenceType = ['media', 'capability-module', 'tool', 'skill'].includes(node.attrs.referenceType)
+            const referenceType = ['media', 'capability-artifact', 'capability-module', 'tool', 'skill'].includes(node.attrs.referenceType)
                 ? node.attrs.referenceType
                 : 'skill'
             return ['span', {
@@ -184,6 +186,7 @@ export const nodes = {
                 'data-media-kind': node.attrs.mediaKind,
                 'data-module-id': node.attrs.moduleId,
                 'data-capability-id': node.attrs.capabilityId,
+                'data-artifact-type-id': node.attrs.artifactTypeId,
                 'data-prompt-reference-display-name': node.attrs.displayName,
                 class: `prompt-reference-chip prompt-reference-chip-${referenceType}`,
             },

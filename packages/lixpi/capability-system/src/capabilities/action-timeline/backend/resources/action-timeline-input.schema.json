@@ -1,0 +1,16 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["prompt", "referenceAssetIds", "durationMs", "precisionMs"],
+    "properties": {
+        "prompt": { "type": "string", "minLength": 1 },
+        "referenceAssetIds": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+        },
+        "durationMs": { "type": "integer", "minimum": 1 },
+        "precisionMs": { "type": "integer", "minimum": 1 }
+    }
+}

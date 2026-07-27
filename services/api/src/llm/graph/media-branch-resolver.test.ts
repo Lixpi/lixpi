@@ -259,6 +259,22 @@ describe('resolveMediaBranch', () => {
         expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
     })
 
+    it('does not resolve a media branch for a terminal Capability Artifact', async () => {
+        const { deps, publisher, callVlm } = createDeps(createParsedResolution())
+        const state = createState({ candidates: [] })
+        state.capabilityOutputAssetIds = ['asset-action-timeline']
+        state.capabilityOutputMediaAssetIds = []
+        state.enableImageGeneration = false
+        state.enableVideoGeneration = false
+        state.videoModelVersion = 'veo-3.0-generate-001'
+        state.videoProviderName = 'Google'
+
+        await expect(resolveMediaBranch(state, deps)).resolves.toEqual({})
+        expect(callVlm).not.toHaveBeenCalled()
+        expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
+        expect(publisher.mediaBranchResolutionError).not.toHaveBeenCalled()
+    })
+
     it('preserves feature images and removes unselected candidate images from provider messages', async () => {
         const { deps, publisher, callVlm } = createDeps({
             mode: 'context-only',

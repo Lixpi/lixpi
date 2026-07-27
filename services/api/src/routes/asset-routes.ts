@@ -6,7 +6,7 @@ import multer from 'multer'
 import NATS_Service from '@lixpi/nats-service'
 import {
     MAX_UPLOAD_FILE_SIZE,
-    type AssetDocumentRole,
+    isAssetDocumentRole,
     type AssetRenditionName,
 } from '@lixpi/constants'
 
@@ -136,8 +136,8 @@ router.get('/:assetId/renditions/:renditionName', authenticateRequest, async (re
 })
 
 router.get('/:assetId/documents/:role/snapshot', authenticateRequest, async (req: any, res: any) => {
-    const role = req.params.role as AssetDocumentRole
-    if (role !== 'content' && role !== 'conversation' && role !== 'provenance') {
+    const role = req.params.role
+    if (!isAssetDocumentRole(role)) {
         return res.status(400).json({ error: 'INVALID_DOCUMENT_ROLE' })
     }
     const requester = await getAssetRequesterContext(req.user.userId)

@@ -47,6 +47,18 @@ export type ModelCapabilities = {
     // to be closed with additionalProperties=false. Open schemas need an
     // adapter at the provider boundary, not stage-specific prompt changes.
     requiresClosedJsonSchema: boolean
+    supportedInputKinds: ReadonlySet<'image' | 'video-frame' | 'audio' | 'document-text'>
+}
+
+const TEXT_AND_IMAGE_INPUTS = new Set(['image', 'video-frame', 'document-text'] as const)
+const TEXT_IMAGE_AUDIO_INPUTS = new Set(['image', 'video-frame', 'audio', 'document-text'] as const)
+const TEXT_INPUTS = new Set(['document-text'] as const)
+
+const modelInputKinds = (provider: ProviderName, modelVersion: string): ModelCapabilities['supportedInputKinds'] => {
+    if (provider === 'Google' && /^gemini-(?:2|3)[.-]/i.test(modelVersion)) return TEXT_IMAGE_AUDIO_INPUTS
+    if (provider === 'OpenAI' && /(?:audio|realtime)/i.test(modelVersion)) return TEXT_IMAGE_AUDIO_INPUTS
+    if (provider === 'OpenAI' || provider === 'Anthropic') return TEXT_AND_IMAGE_INPUTS
+    return TEXT_INPUTS
 }
 
 const matchAny = (modelVersion: string, patterns: RegExp[]): boolean =>
@@ -94,19 +106,20 @@ const GOOGLE_THINKING = [
 
 export const detectCapabilities = (provider: ProviderName, modelVersion: string): ModelCapabilities => {
     const mv = modelVersion ?? ''
+    const supportedInputKinds = modelInputKinds(provider, mv)
 
     if (provider === 'Anthropic') {
         const supportsTemperature = !matchAny(mv, ANTHROPIC_NO_TEMPERATURE)
         if (matchAny(mv, ANTHROPIC_ADAPTIVE_ONLY)) {
-            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false }
+            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false, supportedInputKinds }
         }
         if (matchAny(mv, ANTHROPIC_ADAPTIVE_OR_MANUAL)) {
-            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false }
+            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false, supportedInputKinds }
         }
         if (matchAny(mv, ANTHROPIC_MANUAL_ONLY)) {
-            return { provider, modelVersion: mv, thinkingMode: 'manual', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false }
+            return { provider, modelVersion: mv, thinkingMode: 'manual', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false, supportedInputKinds }
         }
-        return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false }
+        return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature, supportsSystemPrompt: true, requiresClosedJsonSchema: false, supportedInputKinds }
     }
 
     if (provider === 'OpenAI') {
@@ -118,6 +131,7 @@ export const detectCapabilities = (provider: ProviderName, modelVersion: string)
             supportsTemperature,
             supportsSystemPrompt: true,
             requiresClosedJsonSchema: true,
+            supportedInputKinds,
         }
     }
 
@@ -130,8 +144,28 @@ export const detectCapabilities = (provider: ProviderName, modelVersion: string)
             supportsTemperature: true,
             supportsSystemPrompt: true,
             requiresClosedJsonSchema: false,
+            supportedInputKinds,
         }
     }
 
-    return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature: true, supportsSystemPrompt: true, requiresClosedJsonSchema: false }
+    return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature: true, supportsSystemPrompt: true, requiresClosedJsonSchema: false, supportedInputKinds }
+}
+
+export function assertProviderMessageInputKinds(
+    provider: ProviderName,
+    modelVersion: string,
+    messages: Array<{ content?: unknown }>,
+): void {
+    const supported = detectCapabilities(provider, modelVersion).supportedInputKinds
+    for (const message of messages) {
+        if (!Array.isArray(message.content)) continue
+        for (const block of message.content) {
+            if (!block || typeof block !== 'object' || Array.isArray(block)) continue
+            const type = (block as Record<string, unknown>).type
+            const inputKind = type === 'input_audio' ? 'audio' : type === 'input_image' ? 'image' : undefined
+            if (inputKind && !supported.has(inputKind)) {
+                throw new Error(`MODEL_INPUT_KIND_UNSUPPORTED:${provider}:${modelVersion}:${inputKind}`)
+            }
+        }
+    }
 }

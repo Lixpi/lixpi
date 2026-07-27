@@ -38,6 +38,9 @@ const mocks = vi.hoisted(() => ({
     pipelineEventLog: {
         replayPipelineEvents: vi.fn(),
     },
+    capabilities: {
+        resolve: vi.fn(),
+    },
     llmModule: {
         process: vi.fn(),
         processMediaGenerationMatrix: vi.fn(),
@@ -79,6 +82,10 @@ vi.mock('../../llm/graph/pipeline-event-log.ts', () => ({
     PipelineEventLog: {
         fromSingleton: () => mocks.pipelineEventLog,
     },
+}))
+vi.mock('@lixpi/capability-system/backend', async (importOriginal) => ({
+    ...await importOriginal<typeof import('@lixpi/capability-system/backend')>(),
+    resolveCapabilities: mocks.capabilities.resolve,
 }))
 
 import { aiInteractionSubjects, setLlmModule } from './ai-interaction-subjects.ts'
@@ -142,11 +149,33 @@ const baseMessageData = {
     videoDuration: '30',
 }
 
+const actionTimelineInputSchema = new TextEncoder().encode(JSON.stringify({
+    type: 'object',
+    additionalProperties: false,
+    required: ['prompt', 'referenceAssetIds', 'durationMs', 'precisionMs'],
+    properties: {
+        prompt: { type: 'string', minLength: 1 },
+        referenceAssetIds: { type: 'array', items: { type: 'string' } },
+        durationMs: { type: 'integer', minimum: 1 },
+        precisionMs: { type: 'integer', minimum: 1 },
+    },
+}))
+
 const makeModule = () => ({
     process: mocks.llmModule.process,
     processMediaGenerationMatrix: mocks.llmModule.processMediaGenerationMatrix,
     stop: mocks.llmModule.stop,
     stopMediaGenerationMatrix: mocks.llmModule.stopMediaGenerationMatrix,
+    capabilityModuleCatalog: {
+        routePrompt: (prompt: string) => prompt.includes('shot plan')
+            ? {
+                capabilityId: 'global.action-timeline',
+                kind: 'tool',
+                input: {},
+                missingInputFields: ['durationMs', 'precisionMs'],
+            }
+            : undefined,
+    },
 })
 
 describe('AI interaction message routing', () => {
@@ -169,6 +198,16 @@ describe('AI interaction message routing', () => {
             streamName: 'PIPELINE_EVENTS_workspace-1',
             subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.conv-1`,
             events: [],
+        })
+        mocks.capabilities.resolve.mockResolvedValue({
+            getManifest: () => ({
+                manifest: {
+                    tool: {
+                        inputSchema: { resourceId: 'action-timeline-input-schema' },
+                    },
+                },
+            }),
+            getResource: () => ({ bytes: actionTimelineInputSchema }),
         })
         mocks.llmModule.process.mockResolvedValue(undefined)
         mocks.llmModule.processMediaGenerationMatrix.mockResolvedValue(undefined)
@@ -237,6 +276,87 @@ describe('AI interaction message routing', () => {
         expect(mocks.llmModule.process).not.toHaveBeenCalled()
     })
 
+    it('requests missing free-form timeline timing despite populated image and video selections', async () => {
+        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({
+            doc: {
+                ...conversationDoc,
+                content: [{
+                    ...conversationDoc.content[0],
+                    content: [{
+                        type: 'aiUserMessage',
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Make a shot plan for this' }] }],
+                    }],
+                }],
+            },
+            version: 5,
+        })
+
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            messages: [{ role: 'user', content: 'Make a shot plan for this' }],
+            aiImageModels: ['google:imagen3'],
+            aiVideoModels: ['openai:gpt-4o-video'],
+        })
+        await flushPromises()
+
+        expect(mocks.nats.publish).toHaveBeenCalledWith(
+            expect.stringContaining(`${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.`),
+            { error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED' },
+        )
+        expect(mocks.llmModule.process).not.toHaveBeenCalled()
+        expect(mocks.llmModule.processMediaGenerationMatrix).not.toHaveBeenCalled()
+    })
+
+    it('removes scalar image and video axes when Action Timeline owns the turn', async () => {
+        const prompt = 'Create a 17s shot plan with 2ms details for an imaginary film'
+        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({
+            doc: {
+                ...conversationDoc,
+                content: [{
+                    ...conversationDoc.content[0],
+                    content: [{
+                        type: 'aiUserMessage',
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: prompt }] }],
+                    }],
+                }],
+            },
+            version: 6,
+        })
+
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            messages: [{ role: 'user', content: prompt }],
+            aiImageModels: ['google:imagen3'],
+            aiVideoModels: ['openai:gpt-4o-video'],
+            mediaGenerationRequest: undefined,
+        })
+        await flushPromises()
+
+        expect(mocks.aiModel.getAiModel).toHaveBeenCalledTimes(1)
+        expect(mocks.llmModule.process).toHaveBeenCalledWith(
+            'workspace-1:conv-1',
+            'openai',
+            expect.objectContaining({
+                imageModelMetaInfo: null,
+                videoModelMetaInfo: null,
+                enableImageGeneration: false,
+                videoAspectRatio: undefined,
+                videoResolution: undefined,
+                videoDurationSeconds: undefined,
+                videoSourceForExtension: undefined,
+                capabilityInputs: {
+                    'global.action-timeline': {
+                        prompt,
+                        referenceAssetIds: [],
+                        durationMs: 17_000,
+                        precisionMs: 2,
+                    },
+                },
+            }),
+        )
+        expect(mocks.llmModule.processMediaGenerationMatrix).not.toHaveBeenCalled()
+    })
+
     it('publishes an error to the canonical subject when media generation matrix fails', async () => {
         mocks.llmModule.processMediaGenerationMatrix.mockRejectedValueOnce(new Error('matrix failed'))
 
@@ -293,6 +413,65 @@ describe('AI interaction message routing', () => {
             `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.org-1.conv-1`,
             { error: 'AI model not found: openai:gpt-4' },
         )
+    })
+
+    it('forwards the complete authoritative prompt into messages and context snapshots', async () => {
+        const authoritativePrompt = `start-${'x'.repeat(25_000)}-end`
+        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValueOnce({
+            doc: {
+                type: 'doc',
+                content: [{
+                    type: 'aiChatThread',
+                    attrs: { threadId: 'conv-1' },
+                    content: [{
+                        type: 'aiUserMessage',
+                        content: [{
+                            type: 'paragraph',
+                            content: [{ type: 'text', text: authoritativePrompt }],
+                        }],
+                    }],
+                }],
+            },
+            version: 6,
+        })
+
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            messages: [{ role: 'user', content: 'untrusted browser prompt' }],
+            aiImageModels: [],
+            aiVideoModels: [],
+            mediaGenerationRequest: undefined,
+            mediaBranchCandidateSnapshot: {
+                resolverVersion: 'image-branch-vlm-v1',
+                conversationAssetId: 'conv-1',
+                regionNodeId: 'standalone:conv-1',
+                promptText: 'untrusted candidate prompt',
+                promptFingerprint: 'untrusted',
+                candidates: [],
+                transcriptContext: '',
+            },
+            workspaceContextSnapshot: {
+                resolverVersion: 'workspace-context-v1',
+                workspaceId: 'workspace-1',
+                conversationAssetId: 'conv-1',
+                promptText: 'untrusted workspace prompt',
+                nodes: [],
+            },
+        })
+        await flushPromises()
+
+        const [, , payload] = mocks.llmModule.process.mock.calls[0] as [
+            string,
+            string,
+            {
+                messages: Array<{ role: string; content: string }>
+                mediaBranchCandidateSnapshot: { promptText: string }
+                workspaceContextSnapshot: { promptText: string }
+            },
+        ]
+        expect(payload.messages.at(-1)?.content).toBe(authoritativePrompt)
+        expect(payload.mediaBranchCandidateSnapshot.promptText).toBe(authoritativePrompt)
+        expect(payload.workspaceContextSnapshot.promptText).toBe(authoritativePrompt)
     })
 
     it('normalizes video options for valid and invalid candidate values', async () => {

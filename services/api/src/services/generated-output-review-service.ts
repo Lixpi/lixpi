@@ -25,7 +25,7 @@ export class GeneratedOutputReviewService {
     }): Promise<GeneratedOutputReviewResponse | { error: string }> {
         if (!requester.editableWorkspaceIds.includes(request.workspaceId)) return { error: 'PERMISSION_DENIED' }
         if (request.action === 'supersede'
-            && request.scope === 'media-node'
+            && request.scope === 'output-node'
             && request.preserveLineage !== true) {
             return { error: 'MEDIA_NODE_PROMPT_REGENERATION_NOT_SUPPORTED' }
         }
@@ -53,7 +53,10 @@ export class GeneratedOutputReviewService {
                 assets.push(asset)
                 continue
             }
-            if (asset.media?.renditions.original?.status !== 'ready') return { error: 'GENERATED_OUTPUT_NOT_READY' }
+            const outputReady = asset.artifact
+                ? Boolean(asset.documents.capabilityArtifact)
+                : asset.media?.renditions.original?.status === 'ready'
+            if (!outputReady) return { error: 'GENERATED_OUTPUT_NOT_READY' }
             if (!asset.documents.provenance || asset.states.provenance !== 'sealed') {
                 return { error: 'GENERATED_OUTPUT_PROVENANCE_NOT_READY' }
             }

@@ -5,6 +5,7 @@ import type {
     CapabilityKind,
     CapabilityMeta,
     CapabilityPromptReference,
+    CapabilityReasoningModelVariant,
     CapabilityRun,
     CapabilityRunEvent,
 } from '@lixpi/constants'
@@ -47,6 +48,7 @@ export type CapabilityUseRequest = {
     signal?: AbortSignal
     onRunCreated?: (run: Readonly<CapabilityRun>) => void | Promise<void>
     onEvent?: (event: Readonly<CapabilityRunEvent>) => void | Promise<void>
+    variant?: { axis: 'request'; variantKey: 'request' } | CapabilityReasoningModelVariant
 }
 
 export type CapabilityDispatcherOptions = {
@@ -110,6 +112,7 @@ export class CapabilityDispatcher {
             signal: request.signal,
             onRunCreated: request.onRunCreated,
             onEvent: eventHandler,
+            variant: request.variant ?? { axis: 'request', variantKey: 'request' },
         })
     }
 

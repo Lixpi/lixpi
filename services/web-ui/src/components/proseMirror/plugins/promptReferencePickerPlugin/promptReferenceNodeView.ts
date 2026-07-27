@@ -32,8 +32,12 @@ import {
     videoPlayGlyphIcon,
     videoVolumeHighGlyphIcon,
 } from '$src/svgIcons/index.ts'
+import {
+    capabilityArtifactFrontendRegistry,
+    ensureCapabilityStyles,
+} from '$src/installed-capabilities.ts'
 
-const promptReferenceIcons: Record<Exclude<PromptReferenceType, 'media'>, string> = {
+const promptReferenceIcons: Record<Exclude<PromptReferenceType, 'media' | 'capability-artifact'>, string> = {
     'capability-module': atomIcon,
     tool: promptIcon,
     skill: fileIcon,
@@ -41,6 +45,11 @@ const promptReferenceIcons: Record<Exclude<PromptReferenceType, 'media'>, string
 
 type MediaKind = MediaPromptReference['mediaKind']
 type PromptReferenceArrowKey = 'ArrowLeft' | 'ArrowRight'
+export type PromptReferenceChipDescriptor = {
+    referenceType: Exclude<PromptReferenceType, 'capability-artifact'>
+    displayName: string
+    mediaKind?: unknown
+}
 
 export type PromptReferencePreviewRenderer = {
     getNode: (reference: MediaPromptReference) => CanvasNode | undefined
@@ -61,6 +70,7 @@ function getPromptReferenceType(node: ProseMirrorNode): PromptReferenceType {
 
     const referenceType = node.attrs.referenceType
     if (referenceType === 'media'
+        || referenceType === 'capability-artifact'
         || referenceType === 'capability-module'
         || referenceType === 'tool'
         || referenceType === 'skill') return referenceType
@@ -82,11 +92,36 @@ export function getPromptReferenceIcon(
     referenceType: PromptReferenceType,
     mediaKind: unknown,
 ): string {
+    if (referenceType === 'capability-artifact') return atomIcon
     if (referenceType !== 'media') return promptReferenceIcons[referenceType]
     if (mediaKind === 'video' || mediaKind === 'audio' || mediaKind === 'document') {
         return mediaPromptReferenceIcons[mediaKind]
     }
     return mediaPromptReferenceIcons.image
+}
+
+function createPromptReferenceChipContent(descriptor: PromptReferenceChipDescriptor): HTMLSpanElement {
+    return html`
+        <span className="prompt-reference-chip-content">
+            <span
+                className="prompt-reference-chip-icon"
+                aria-hidden="true"
+                innerHTML=${getPromptReferenceIcon(descriptor.referenceType, descriptor.mediaKind)}
+            ></span>
+            <span className="prompt-reference-chip-name">${descriptor.displayName}</span>
+        </span>
+    ` as HTMLSpanElement
+}
+
+export function createPromptReferenceChipElement(
+    descriptor: PromptReferenceChipDescriptor,
+): HTMLSpanElement {
+    return html`
+        <span
+            className=${`prompt-reference-chip prompt-reference-chip-${descriptor.referenceType}`}
+            contenteditable="false"
+        >${createPromptReferenceChipContent(descriptor)}</span>
+    ` as HTMLSpanElement
 }
 
 export function getPromptReferenceArrowTarget(
@@ -112,20 +147,29 @@ export class PromptReferenceNodeView implements NodeView {
 
     private readonly node: ProseMirrorNode
     private readonly previewTile: ContextPreviewTileInstance | null
+    private readonly artifactView: { destroy: () => void } | null
 
     constructor(node: ProseMirrorNode, previewRenderer?: PromptReferencePreviewRenderer) {
         this.node = node
         const referenceType = getPromptReferenceType(node)
-        const content = html`
-            <span className="prompt-reference-chip-content">
-                <span
-                    className="prompt-reference-chip-icon"
-                    aria-hidden="true"
-                    innerHTML=${getPromptReferenceIcon(referenceType, node.attrs.mediaKind)}
-                ></span>
-                <span className="prompt-reference-chip-name">${String(node.attrs.displayName ?? '')}</span>
-            </span>
-        ` as HTMLSpanElement
+        if (referenceType === 'capability-artifact') {
+            ensureCapabilityStyles(document)
+            this.dom = html`<span className="prompt-reference-chip prompt-reference-chip-capability-artifact" contenteditable="false"></span>` as HTMLSpanElement
+            this.artifactView = capabilityArtifactFrontendRegistry.require(String(node.attrs.artifactTypeId ?? '')).createPromptReferenceView({
+                container: this.dom,
+                title: String(node.attrs.displayName ?? ''),
+                displayMetadata: {},
+            })
+            this.previewTile = null
+            return
+        }
+        this.artifactView = null
+        const descriptor: PromptReferenceChipDescriptor = {
+            referenceType,
+            displayName: String(node.attrs.displayName ?? ''),
+            mediaKind: node.attrs.mediaKind,
+        }
+        const content = createPromptReferenceChipContent(descriptor)
         const mediaReference = getMediaPromptReference(node)
         const previewNode = mediaReference ? previewRenderer?.getNode(mediaReference) : undefined
 
@@ -140,7 +184,7 @@ export class PromptReferenceNodeView implements NodeView {
             })
             : null
         this.dom = this.previewTile?.dom
-            ?? html`<span className="prompt-reference-chip" contenteditable="false">${content}</span>` as HTMLSpanElement
+            ?? createPromptReferenceChipElement(descriptor)
         this.dom.classList.add('prompt-reference-chip', `prompt-reference-chip-${referenceType}`)
     }
 
@@ -154,6 +198,7 @@ export class PromptReferenceNodeView implements NodeView {
 
     destroy(): void {
         this.previewTile?.destroy()
+        this.artifactView?.destroy()
     }
 }
 

@@ -11,6 +11,8 @@ export type CapabilityErrorCode =
     | 'CAPABILITY_ACTION_OUTPUT_INVALID'
     | 'CAPABILITY_ACTION_FAILED'
     | 'CAPABILITY_RUN_CANCELLED'
+    | 'MODEL_INPUT_KIND_UNSUPPORTED'
+    | 'MODEL_INPUT_CONTEXT_EXCEEDED'
 
 export class CapabilityError extends Error {
     constructor(

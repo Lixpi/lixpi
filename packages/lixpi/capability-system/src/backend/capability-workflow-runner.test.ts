@@ -90,6 +90,13 @@ function makeToolManifest(): { manifest: CapabilityManifest; resources: LoadedCa
             inputSchema: input.ref,
             outputSchema: output.ref,
             executionPolicy: 'model-choice',
+            executionMultiplicity: 'once',
+            modelAxisPolicy: {
+                reasoning: 'first-selected',
+                image: 'ignore',
+                video: 'ignore',
+                outputMode: 'capability-only',
+            },
             workflow: {
                 steps: [
                     {

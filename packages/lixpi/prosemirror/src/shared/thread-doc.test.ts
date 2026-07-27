@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
     collectProseMirrorText,
+    collectProseMirrorPromptReferences,
     findAiChatThreadContentNode,
     findBranchMarkerResponseSection,
     getBranchMarkerConversationPreviewFromThreadContent,
@@ -205,6 +206,51 @@ describe('getBranchMarkerConversationPreviewFromThreadContent', () => {
 
         expect(preview?.responseText).toBe('')
     })
+
+    it('keeps the submitted Capability badge metadata paired with the marker turn', () => {
+        const content: ProseMirrorJsonNode = {
+            type: 'doc',
+            content: [{
+                type: 'aiChatThread',
+                attrs: { threadId: 'thread-capability' },
+                content: [{
+                    type: 'aiUserMessage',
+                    content: [{
+                        type: 'paragraph',
+                        content: [
+                            {
+                                type: 'prompt_reference',
+                                attrs: {
+                                    referenceType: 'capability-module',
+                                    moduleId: 'action-timeline',
+                                    displayName: 'Action Timeline',
+                                },
+                            },
+                            { type: 'text', text: ' Create 15 seconds with 2-second segments.' },
+                        ],
+                    }],
+                }],
+            }],
+        }
+
+        const preview = getBranchMarkerConversationPreviewFromThreadContent(
+            content,
+            'thread-capability',
+            { generationRequestId: 'pending-request' },
+            { generationActive: true },
+        )
+
+        expect(preview?.userText).toBe('Create 15 seconds with 2-second segments.')
+        expect(preview?.userMessage.content?.[0]?.content?.map((node) => (
+            node.type === 'prompt_reference' ? node.attrs?.displayName : node.text
+        ))).toEqual(['Action Timeline', ' Create 15 seconds with 2-second segments.'])
+        expect(preview?.promptReferences).toEqual([{
+            referenceType: 'capability-module',
+            moduleId: 'action-timeline',
+            displayName: 'Action Timeline',
+        }])
+        expect(collectProseMirrorPromptReferences(content)).toEqual(preview?.promptReferences)
+    })
 })
 
 describe('getLatestThreadTurnMessages', () => {
@@ -213,6 +259,29 @@ describe('getLatestThreadTurnMessages', () => {
         const { userMessage: latestUser, responseMessage: latestResponse } = getLatestThreadTurnMessages(threadNode)
         expect(collectProseMirrorText(latestUser ?? undefined).trim()).toBe('create an oil painting')
         expect(latestResponse?.attrs?.id).toBe('resp-2')
+    })
+
+    it('does not pair a user-only latest turn with the previous turn response', () => {
+        const threadNode: ProseMirrorJsonNode = {
+            type: 'aiChatThread',
+            attrs: { threadId: 'thread-capability' },
+            content: [
+                {
+                    type: 'aiUserMessage',
+                    content: [text('Previous request')],
+                },
+                responseMessage({ id: 'resp-previous' }, [], [text('Previous response')]),
+                {
+                    type: 'aiUserMessage',
+                    content: [text('Create an Action Timeline')],
+                },
+            ],
+        }
+
+        const latestTurn = getLatestThreadTurnMessages(threadNode)
+
+        expect(collectProseMirrorText(latestTurn.userMessage ?? undefined).trim()).toBe('Create an Action Timeline')
+        expect(latestTurn.responseMessage).toBeNull()
     })
 })
 

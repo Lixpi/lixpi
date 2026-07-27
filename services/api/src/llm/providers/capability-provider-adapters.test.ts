@@ -1,6 +1,15 @@
 'use strict'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    directCapabilityToolName,
+    SealedResolvedCapabilityPlan,
+} from '@lixpi/capability-system/backend'
+import type {
+    CapabilityManifest,
+    CapabilityResourceRef,
+    ResolvedCapabilityPlan,
+} from '@lixpi/constants'
 
 const openaiMocks = vi.hoisted(() => ({ responsesCreate: vi.fn() }))
 const anthropicMocks = vi.hoisted(() => ({ messagesStream: vi.fn() }))
@@ -64,8 +73,69 @@ function capabilityRunResult() {
     }
 }
 
+function actionTimelinePlan(): SealedResolvedCapabilityPlan {
+    const schemaRef: CapabilityResourceRef = {
+        resourceId: 'input',
+        blobHash: 'input-hash',
+        mediaType: 'application/schema+json',
+        role: 'schema',
+    }
+    const manifest: CapabilityManifest = {
+        schemaVersion: 1,
+        capabilityId: 'action-timeline',
+        kind: 'tool',
+        name: 'Action Timeline',
+        description: 'Create a timed action timeline.',
+        references: [],
+        resources: [schemaRef],
+        tool: {
+            toolType: 'action-timeline',
+            inputSchema: schemaRef,
+            outputSchema: schemaRef,
+            executionPolicy: 'model-required',
+            executionMultiplicity: 'per-reasoning-model',
+            modelAxisPolicy: {
+                reasoning: 'all-selected',
+                image: 'ignore',
+                video: 'ignore',
+                outputMode: 'capability-only',
+            },
+            workflow: { steps: [], outputs: {} },
+        },
+    }
+    const serializable: ResolvedCapabilityPlan = {
+        rootCapabilityIds: ['action-timeline'],
+        capabilities: [{
+            capabilityId: 'action-timeline',
+            kind: 'tool',
+            manifestBlobHash: 'manifest-hash',
+            manifest,
+        }],
+        resolvedManifests: [{ capabilityId: 'action-timeline', manifestBlobHash: 'manifest-hash' }],
+    }
+    return new SealedResolvedCapabilityPlan(serializable, [{
+        capabilityId: 'action-timeline',
+        ref: schemaRef,
+        bytes: new TextEncoder().encode(JSON.stringify({
+            type: 'object',
+            required: ['durationMs', 'precisionMs'],
+            properties: {
+                durationMs: { type: 'number' },
+                precisionMs: { type: 'number' },
+            },
+            additionalProperties: false,
+        })),
+    }])
+}
+
 function configure(provider: OpenAIProvider | AnthropicProvider) {
-    const publisher = { start: vi.fn(), end: vi.fn(), chunk: vi.fn(), error: vi.fn() }
+    const publisher = {
+        start: vi.fn(),
+        end: vi.fn(),
+        chunk: vi.fn(),
+        error: vi.fn(),
+        capabilityGenerationTrace: vi.fn(),
+    }
     ;(provider as any).streamPublisher = publisher
     ;(provider as any).imagePublisher = { partial: vi.fn(), complete: vi.fn() }
     ;(provider as any).videoPublisher = { pending: vi.fn(), generating: vi.fn(), complete: vi.fn(), error: vi.fn() }
@@ -84,6 +154,29 @@ function state(provider: 'OpenAI' | 'Anthropic') {
         temperature: 0.7,
         eventMeta: { userId: 'user-1', organizationId: 'organization-1' },
         capabilityInvocationDepth: 0,
+    }
+}
+
+function actionTimelineState(provider: 'OpenAI' | 'Anthropic') {
+    const base = state(provider)
+    return {
+        ...base,
+        provider,
+        resolvedCapabilityPlan: actionTimelinePlan(),
+        capabilityInputs: {
+            'action-timeline': {
+                prompt: 'Create a 15 second timeline with 2 second gaps',
+                durationMs: 15_000,
+                precisionMs: 2_000,
+            },
+        },
+        generationRun: {
+            requestKind: 'media-generation-matrix',
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            reasoningModelId: `${provider}:${base.modelVersion}`,
+            reasoningIndex: 0,
+        },
     }
 }
 
@@ -200,6 +293,64 @@ describe('Capability provider adapters', () => {
         expect(update.usage).toEqual(expect.objectContaining({ totalTokens: 10 }))
     })
 
+    it('forces Action Timeline once in Anthropic and streams the agent response after its tool result', async () => {
+        const toolName = directCapabilityToolName('action-timeline')
+        const firstFinal = {
+            id: 'message-1',
+            content: [{
+                type: 'tool_use',
+                id: 'tool-1',
+                name: toolName,
+                input: { durationMs: 1, precisionMs: 1 },
+            }],
+            usage: { input_tokens: 2, output_tokens: 1 },
+        }
+        const secondFinal = {
+            id: 'message-2',
+            content: [{ type: 'text', text: 'The action timeline is ready.' }],
+            usage: { input_tokens: 3, output_tokens: 4 },
+        }
+        anthropicMocks.messagesStream
+            .mockReturnValueOnce(Object.assign(asyncStream([]), { finalMessage: vi.fn(async () => firstFinal) }))
+            .mockReturnValueOnce(Object.assign(asyncStream([{
+                type: 'content_block_delta',
+                delta: { type: 'text_delta', text: 'The action timeline is ready.' },
+            }]), { finalMessage: vi.fn(async () => secondFinal) }))
+        const use = vi.fn(async () => ({
+            ...capabilityRunResult(),
+            events: [],
+        }))
+        const provider = new AnthropicProvider('instance', {
+            ...deps(vi.fn()),
+            capabilityDispatcher: { use } as any,
+        })
+        const publisher = configure(provider)
+
+        await (provider as any).streamImpl(actionTimelineState('Anthropic'))
+
+        expect(anthropicMocks.messagesStream).toHaveBeenCalledTimes(2)
+        expect(anthropicMocks.messagesStream.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+            tool_choice: { type: 'tool', name: toolName },
+            tools: expect.arrayContaining([expect.objectContaining({ name: toolName })]),
+        }))
+        expect(anthropicMocks.messagesStream.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+            messages: expect.arrayContaining([
+                expect.objectContaining({
+                    role: 'user',
+                    content: [expect.objectContaining({ type: 'tool_result', tool_use_id: 'tool-1' })],
+                }),
+            ]),
+        }))
+        expect(anthropicMocks.messagesStream.mock.calls[1]?.[0]?.tool_choice).toBeUndefined()
+        expect(anthropicMocks.messagesStream.mock.calls[1]?.[0]?.tools).toBeUndefined()
+        expect(use).toHaveBeenCalledWith(expect.objectContaining({
+            arguments: expect.objectContaining({ durationMs: 15_000, precisionMs: 2_000 }),
+        }))
+        expect(publisher.capabilityGenerationTrace).toHaveBeenCalledOnce()
+        expect(publisher.chunk).toHaveBeenCalledWith('The action timeline is ready.')
+        expect(publisher.end).toHaveBeenCalledOnce()
+    })
+
     it('dispatches use_capability visibly and returns its run output to OpenAI', async () => {
         openaiMocks.responsesCreate
             .mockResolvedValueOnce(asyncStream([{
@@ -248,5 +399,64 @@ describe('Capability provider adapters', () => {
             status: 'completed',
             outputAssetIds: ['asset-1'],
         }))
+    })
+
+    it('forces Action Timeline once in OpenAI and streams the agent response after its function output', async () => {
+        const toolName = directCapabilityToolName('action-timeline')
+        openaiMocks.responsesCreate
+            .mockResolvedValueOnce(asyncStream([{
+                type: 'response.completed',
+                response: {
+                    id: 'response-1',
+                    output: [{
+                        type: 'function_call',
+                        call_id: 'call-1',
+                        name: toolName,
+                        arguments: JSON.stringify({ durationMs: 1, precisionMs: 1 }),
+                    }],
+                    usage: { input_tokens: 1, output_tokens: 1 },
+                },
+            }]))
+            .mockResolvedValueOnce(asyncStream([
+                { type: 'response.output_text.delta', delta: 'The action timeline is ready.' },
+                {
+                    type: 'response.completed',
+                    response: {
+                        id: 'response-2',
+                        output: [],
+                        usage: { input_tokens: 1, output_tokens: 1 },
+                    },
+                },
+            ]))
+        const use = vi.fn(async () => ({
+            ...capabilityRunResult(),
+            events: [],
+        }))
+        const provider = new OpenAIProvider('instance', {
+            ...deps(vi.fn()),
+            capabilityDispatcher: { use } as any,
+        })
+        const publisher = configure(provider)
+
+        await (provider as any).streamImpl(actionTimelineState('OpenAI'))
+
+        expect(openaiMocks.responsesCreate).toHaveBeenCalledTimes(2)
+        expect(openaiMocks.responsesCreate.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+            tool_choice: { type: 'function', name: toolName },
+            tools: expect.arrayContaining([expect.objectContaining({ name: toolName })]),
+        }))
+        expect(openaiMocks.responsesCreate.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+            input: expect.arrayContaining([
+                expect.objectContaining({ type: 'function_call_output', call_id: 'call-1' }),
+            ]),
+        }))
+        expect(openaiMocks.responsesCreate.mock.calls[1]?.[0]?.tool_choice).toBeUndefined()
+        expect(openaiMocks.responsesCreate.mock.calls[1]?.[0]?.tools).toBeUndefined()
+        expect(use).toHaveBeenCalledWith(expect.objectContaining({
+            arguments: expect.objectContaining({ durationMs: 15_000, precisionMs: 2_000 }),
+        }))
+        expect(publisher.capabilityGenerationTrace).toHaveBeenCalledOnce()
+        expect(publisher.chunk).toHaveBeenCalledWith('The action timeline is ready.')
+        expect(publisher.end).toHaveBeenCalledOnce()
     })
 })

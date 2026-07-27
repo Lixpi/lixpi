@@ -123,7 +123,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
             } while (cursor)
             if (loadSequence !== this.loadSequence) return
             this.allAssets = [...new Map(assets.map((asset) => [asset.assetId, asset])).values()]
-                .filter((asset) => asset.primaryCategory !== 'conversation')
+                .filter((asset) => asset.primaryCategory !== 'conversation' && asset.primaryCategory !== 'capabilityArtifact')
                 .filter((asset) => isAssetAttachableToWorkspace(asset, this.options.workspaceId))
                 .sort((left, right) => right.updatedAt - left.updatedAt)
             this.render()

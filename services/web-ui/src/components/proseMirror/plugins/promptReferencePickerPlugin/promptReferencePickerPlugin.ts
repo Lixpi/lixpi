@@ -18,6 +18,10 @@ import {
 } from '$src/components/proseMirror/plugins/floatingMenuPosition.ts'
 import { applyStyle, html } from '$src/utils/domTemplates.ts'
 import { resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
+import {
+    capabilityArtifactFrontendRegistry,
+    ensureCapabilityStyles,
+} from '$src/installed-capabilities.ts'
 
 export type PromptReferencePickerMode = 'references' | 'modules'
 
@@ -36,6 +40,7 @@ const SEARCH_DEBOUNCE_MS = 150
 const PAGE_LIMIT = 20
 const REFERENCE_CATEGORIES: Array<{ label: string; value: PromptReferenceCategory }> = [
     { label: 'Media', value: 'media' },
+    { label: 'Artifacts', value: 'artifacts' },
     { label: 'Capabilities', value: 'capabilities' },
     { label: 'Tools', value: 'tools' },
     { label: 'Skills', value: 'skills' },
@@ -107,6 +112,12 @@ class PromptReferencePickerMenu {
         event.stopPropagation()
     }
 
+    private readonly handleDocumentMouseDown = (event: MouseEvent): void => {
+        const state = this.key.getState(this.view.state)
+        if (!state?.active || event.composedPath().includes(this.menu)) return
+        this.close()
+    }
+
     constructor(
         private readonly view: EditorView,
         private readonly catalog: PromptReferenceCatalogClient,
@@ -153,6 +164,7 @@ class PromptReferencePickerMenu {
                 onChange: category => this.changeCategory(category),
             })
             : null
+        this.menu.ownerDocument.addEventListener('mousedown', this.handleDocumentMouseDown, true)
     }
 
     update(): void {
@@ -211,6 +223,7 @@ class PromptReferencePickerMenu {
 
     destroy(): void {
         this.cancelPendingSearch()
+        this.menu.ownerDocument.removeEventListener('mousedown', this.handleDocumentMouseDown, true)
         this.categorySwitch?.destroy()
         this.menu.remove()
     }
@@ -337,6 +350,7 @@ class PromptReferencePickerMenu {
     }
 
     private renderRow(item: PromptReferenceCatalogItem, itemKey: string): HTMLButtonElement {
+        if (item.referenceType === 'capability-artifact') return this.renderArtifactRow(item, itemKey)
         const media = item.referenceType === 'media'
         const label = media ? item.title : item.name
         const summary = media
@@ -398,6 +412,41 @@ class PromptReferencePickerMenu {
                 <span className=${`prompt-reference-picker-badge prompt-reference-picker-badge-${item.referenceType}`}>${badge}</span>
             </button>
         ` as HTMLButtonElement
+    }
+
+    private renderArtifactRow(
+        item: Extract<PromptReferenceCatalogItem, { referenceType: 'capability-artifact' }>,
+        itemKey: string,
+    ): HTMLButtonElement {
+        ensureCapabilityStyles(this.menu.ownerDocument)
+        const row = html`<button
+            type="button"
+            className="prompt-reference-picker-item prompt-reference-picker-item-capability-artifact"
+            role="option"
+            aria-selected="false"
+            title=${item.title}
+            onmousedown=${(event: MouseEvent) => {
+                event.preventDefault()
+                event.stopPropagation()
+                if (this.loading) return
+                const currentItem = this.results.find(result => getCatalogItemKey(result) === itemKey)
+                if (currentItem) this.insert(currentItem)
+            }}
+            onmousemove=${() => {
+                if (this.loading) return
+                const current = this.key.getState(this.view.state)
+                const index = this.results.findIndex(result => getCatalogItemKey(result) === itemKey)
+                if (current?.active && current.selectedIndex !== index) {
+                    this.view.dispatch(this.view.state.tr.setMeta(this.key, { type: 'select', selectedIndex: index }))
+                }
+            }}
+        ><span className="prompt-reference-picker-copy prompt-reference-picker-artifact-host"></span><span className="prompt-reference-picker-badge">Artifact</span></button>` as HTMLButtonElement
+        capabilityArtifactFrontendRegistry.require(item.artifactTypeId).createPromptReferenceView({
+            container: row.querySelector('.prompt-reference-picker-artifact-host') as HTMLElement,
+            title: item.title,
+            displayMetadata: item.displayMetadata,
+        })
+        return row
     }
 
     private updateSelection(selectedIndex: number): void {
@@ -537,6 +586,15 @@ export function promptReferenceCatalogItemToAtomAttrs(item: PromptReferenceCatal
             displayName: item.title,
         }
     }
+    if (item.referenceType === 'capability-artifact') {
+        return {
+            referenceType: 'capability-artifact',
+            assetId: item.assetId,
+            nodeId: item.nodeId ?? '',
+            artifactTypeId: item.artifactTypeId,
+            displayName: item.title,
+        }
+    }
     if (item.referenceType === 'capability-module') {
         return {
             referenceType: 'capability-module',
@@ -553,6 +611,7 @@ export function promptReferenceCatalogItemToAtomAttrs(item: PromptReferenceCatal
 
 function getCatalogItemKey(item: PromptReferenceCatalogItem): string {
     if (item.referenceType === 'media') return `media:${item.assetId}:${item.nodeId ?? ''}`
+    if (item.referenceType === 'capability-artifact') return `capability-artifact:${item.assetId}:${item.nodeId ?? ''}`
     return `${item.referenceType}:${item.referenceId}`
 }
 
@@ -564,6 +623,16 @@ function getCatalogItemSignature(item: PromptReferenceCatalogItem): string {
             item.scope,
             item.mediaKind,
             String(item.thumbnailAvailable),
+            String(item.updatedAt),
+        ].join('\n')
+    }
+    if (item.referenceType === 'capability-artifact') {
+        return [
+            item.title,
+            item.source,
+            item.scope,
+            item.artifactTypeId,
+            JSON.stringify(item.displayMetadata),
             String(item.updatedAt),
         ].join('\n')
     }

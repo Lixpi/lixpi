@@ -347,10 +347,34 @@ function validateToolDefinition(
     if (typeof tool.toolType !== 'string' || !TOOL_TYPE_PATTERN.test(tool.toolType)) {
         addIssue(issues, 'INVALID_SCHEMA', '$.tool.toolType', 'Tool type must be a lowercase kebab-case identifier')
     }
-    validateEnum(tool.executionPolicy, new Set(['required', 'model-choice']), '$.tool.executionPolicy', issues)
+    validateEnum(tool.executionPolicy, new Set(['required', 'model-required', 'model-choice']), '$.tool.executionPolicy', issues)
+    validateEnum(
+        tool.executionMultiplicity,
+        new Set(['once', 'per-reasoning-model']),
+        '$.tool.executionMultiplicity',
+        issues,
+    )
+    validateModelAxisPolicy(tool.modelAxisPolicy, issues)
     validateSchemaResource(tool.inputSchema, '$.tool.inputSchema', resources, issues)
     validateSchemaResource(tool.outputSchema, '$.tool.outputSchema', resources, issues)
     validateWorkflow(tool.workflow, '$.tool.workflow', resources, issues, options)
+}
+
+function validateModelAxisPolicy(input: unknown, issues: CapabilityValidationIssue[]): void {
+    const policy = asRecord(input)
+    if (!policy) {
+        addIssue(issues, 'INVALID_SCHEMA', '$.tool.modelAxisPolicy', 'Tool model-axis policy must be an object')
+        return
+    }
+    validateEnum(policy.reasoning, new Set(['all-selected', 'first-selected', 'ignore']), '$.tool.modelAxisPolicy.reasoning', issues)
+    validateEnum(policy.image, new Set(['all-selected', 'ignore']), '$.tool.modelAxisPolicy.image', issues)
+    validateEnum(policy.video, new Set(['all-selected', 'ignore']), '$.tool.modelAxisPolicy.video', issues)
+    validateEnum(
+        policy.outputMode,
+        new Set(['capability-only', 'continue-media-generation']),
+        '$.tool.modelAxisPolicy.outputMode',
+        issues,
+    )
 }
 
 function validateSchemaResource(

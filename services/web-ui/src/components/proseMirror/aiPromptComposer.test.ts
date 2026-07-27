@@ -62,6 +62,7 @@ import {
     createGenericVideoResolutionDropdown,
     createGenericVideoDurationDropdown,
 } from '$src/components/aiModelControls/index.ts'
+import { createInstalledCapabilityControls } from '$src/installed-capabilities.ts'
 
 const getLastEditor = (): MockEditorInstance => editorInstances.at(-1) as MockEditorInstance
 
@@ -260,6 +261,7 @@ describe('createDefaultPromptControlFactories', () => {
             createVideoAspectDropdown: createGenericVideoAspectDropdown,
             createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
             createVideoDurationDropdown: createGenericVideoDurationDropdown,
+            createCapabilityControls: createInstalledCapabilityControls,
             createSubmitButton: createGenericSubmitButton,
         })
     })

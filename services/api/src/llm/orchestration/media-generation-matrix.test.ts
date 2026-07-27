@@ -364,6 +364,70 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         expect(registry.process).not.toHaveBeenCalled()
     })
 
+    it('dispatches a reasoning child for Capability-only output so the assistant response is persisted', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        vi.spyOn(AiModelModelModule.default, 'getAiModel').mockResolvedValue({
+            provider: 'Anthropic',
+            model: 'claude-sonnet-4-6',
+            modelVersion: 'claude-sonnet-4-6',
+            modalities: [{ modality: 'text' }],
+        } as any)
+        vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext').mockResolvedValue({})
+        vi.spyOn(capabilityStateResolver, 'resolveCapabilitiesForState').mockResolvedValue({})
+        vi.spyOn(capabilityStateResolver, 'executeRequiredCapabilitiesForState').mockResolvedValue({
+            capabilityOutputAssetIds: ['asset-action-timeline'],
+            capabilityOutputMediaAssetIds: [],
+            capabilityToolResults: [{
+                capabilityId: 'global.action-timeline',
+                runId: 'run-action-timeline',
+                output: {
+                    outputKind: 'capabilityArtifact',
+                    assetId: 'asset-action-timeline',
+                },
+            }],
+            enableImageGeneration: false,
+            enableVideoGeneration: false,
+        })
+        const resolveMediaBranchSpy = vi.spyOn(mediaBranchResolver, 'resolveMediaBranch')
+
+        await orchestrator.process(createRequest({
+            aiReasoningModels: undefined,
+            aiImageModels: undefined,
+            aiVideoModels: undefined,
+            capabilityReferences: [{
+                kind: 'tool',
+                capabilityId: 'global.action-timeline',
+            }],
+            enableImageGeneration: false,
+            enableVideoGeneration: false,
+            mediaGenerationRequest: {
+                requestVersion: 'media-generation-matrix-v1',
+                generationRequestId: 'request-action-timeline',
+                reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+                imageModelIds: [],
+                videoModelIds: [],
+                imageOptions: { imageSize: '1024x1024' },
+                videoOptions: {},
+            },
+        } as any))
+
+        expect(resolveMediaBranchSpy).not.toHaveBeenCalled()
+        expect(generatedAssetStorageMocks.ensurePendingGeneratedAssets).not.toHaveBeenCalled()
+        expect(registry.process).toHaveBeenCalledOnce()
+        expect(registry.process.mock.calls[0]?.[2]).toMatchObject({
+            preflightResolved: true,
+            capabilityOutputAssetIds: ['asset-action-timeline'],
+            capabilityOutputMediaAssetIds: [],
+            enableImageGeneration: false,
+            enableVideoGeneration: false,
+            mediaFanoutPlan: {
+                imageModels: [],
+                videoModels: [],
+            },
+        })
+    })
+
     it('rejects requests with no reasoning model ids', async () => {
         const registry = createRegistry()
         const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)

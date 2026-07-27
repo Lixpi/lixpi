@@ -9,7 +9,7 @@ describe('installed Capability composition', () => {
             imageRouter: { execute: async () => ({}) } as never,
         })
 
-        expect(catalog.listModuleIds()).toEqual(['character-creator', 'style-extraction'])
+        expect(catalog.listModuleIds()).toEqual(['character-creator', 'style-extraction', 'action-timeline'])
         expect(catalog.getModule('character-creator')).toMatchObject({
             entry: { capabilityId: 'global.character-creator', kind: 'tool' },
             tools: [{ capabilityId: 'global.character-creator', kind: 'tool' }],
@@ -26,6 +26,15 @@ describe('installed Capability composition', () => {
                 { capabilityId: 'global.style-extraction-router', kind: 'skill' },
                 { capabilityId: 'global.style-extraction-axes', kind: 'skill' },
                 { capabilityId: 'global.style-extraction-synthesis', kind: 'skill' },
+            ],
+        })
+        expect(catalog.getModule('action-timeline')).toMatchObject({
+            entry: { capabilityId: 'global.action-timeline', kind: 'tool' },
+            tools: [{ capabilityId: 'global.action-timeline', kind: 'tool' }],
+            skills: [
+                { capabilityId: 'global.action-timeline-timing-grid', kind: 'skill' },
+                { capabilityId: 'global.action-timeline-segment-writing', kind: 'skill' },
+                { capabilityId: 'global.action-timeline-reference-fidelity', kind: 'skill' },
             ],
         })
     })

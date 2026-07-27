@@ -86,12 +86,6 @@ export const validateImagePrompt = (
     return `Image prompt exceeds the selected image model limit: ${len} characters > ${maxChars} characters.`
 }
 
-export const buildImagePromptRewriteInstruction = (maxChars: number): string =>
-    'Rewrite the image generation prompt so it stays within the required character limit while preserving the ' +
-    'same visual intent, composition, subject details, style, lighting, color, and constraints. ' +
-    `Return only the rewritten prompt text. It must be no more than ${maxChars} characters. ` +
-    'Do not add commentary, XML tags, markdown, or quotes.'
-
 const buildToolDescription = (
     imageModelMetaInfo?: AiModelMetaInfo,
     imageProvider?: string,

@@ -14,7 +14,7 @@ Tools and Skills are manifest-backed packages. They share scopes, permissions, d
 
 ## Taxonomy
 
-A **Capability module** is a source-registered product behavior. It has a stable `moduleId`, presentation metadata, exactly one owned entry package, and an explicit set of Tool and Skill package installers. Character Creator and Style Extraction are modules.
+A **Capability module** is a source-registered product behavior. It has a stable `moduleId`, presentation metadata, exactly one owned entry package, and an explicit set of Tool and Skill package installers. Character Creator, Style Extraction, and Action Timeline are modules.
 
 A **Capability package** is one stored record with `kind: 'skill'` or `kind: 'tool'`. Every package has its own immutable ID, manifest, resources, permissions, and manifest hash. Packages are either:
 
@@ -251,13 +251,17 @@ User and organization packages store resources in the organization Blob bucket. 
 
 ### Style Extraction
 
-Style Extraction lives under `services/api/src/capability-modules/style-extraction/`. Its module-internal entry Tool routes source images, selects visual axes, runs applicable specialists with bounded concurrency, materializes source evidence, synthesizes a visual contract, generates samples, validates the result, and saves an organization-scoped standalone `visual-style` Tool. Router, axes, and synthesis are separate module-internal Skills. See [Style Extraction Tool](./STYLE-EXTRACTION-TOOL.md).
+Style Extraction lives under `packages/lixpi/capability-system/src/capabilities/style-extraction/`. Its module-internal entry Tool routes source images, selects visual axes, runs applicable specialists with bounded concurrency, materializes source evidence, synthesizes a visual contract, generates samples, validates the result, and saves an organization-scoped standalone `visual-style` Tool. Router, axes, and synthesis are separate module-internal Skills. See [Style Extraction Tool](./STYLE-EXTRACTION-TOOL.md).
 
 ### Character Creator
 
-Character Creator lives under `services/api/src/capability-modules/character-creator/`. Its module-internal entry Tool validates the request and builds a provider-neutral character-generation brief with an authorized layout example. Separate module-internal Skills define sheet layout, reference fidelity, and image-prompt rules.
+Character Creator lives under `packages/lixpi/capability-system/src/capabilities/character-creator/`. Its module-internal entry Tool validates the request and builds a provider-neutral character-generation brief with an authorized layout example. Separate module-internal Skills define sheet layout, reference fidelity, and image-prompt rules.
 
 The Tool does not select a hidden media model or generate an Asset itself. The selected reasoning and image-model matrix remains authoritative. The normal media pipeline receives the Tool output, allocates branch lineage, sends the source and layout references through the shared provider-neutral reference resolver, and settles every variant through ordinary Asset and canvas paths. Character Creator excludes video generation. See [Character Creator](./CHARACTER-CREATOR.md).
+
+### Action Timeline
+
+Action Timeline lives under `packages/lixpi/capability-system/src/capabilities/action-timeline/`. Its entry Tool runs once per selected reasoning model, ignores persistent image/video selections, extracts duration and precision from authoritative prompt text, writes a server-owned timing grid in sequential token-budgeted batches, and persists one reusable `capabilityArtifact` Asset per successful model variant. Its timing-grid, segment-writing, and reference-fidelity Skills are module-internal. The module owns all Artifact-specific schema, validation, serialization, editor, picker, library, info, and replay factories; explicit `/` selection uses the same generic module badge as other Capabilities and mounts no parameter form. See [Action Timeline](./ACTION-TIMELINE.md).
 
 ## Storage and operations
 

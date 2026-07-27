@@ -20,6 +20,7 @@ import {
     type ImageCanvasNode,
     type VideoCanvasNode,
     type AudioCanvasNode,
+    type CapabilityArtifactCanvasNode,
     type UploadPlaceholderCanvasNode,
     type BranchOriginCanvasNode,
     type BranchForkCanvasNode,
@@ -49,6 +50,7 @@ import {
     type AiModelId,
     type MediaPromptReference,
     MEDIA_DESCRIPTOR_VERSION,
+    mediaGenerationLayoutSettings,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { createPureDropdown } from '$src/components/dropdown/index.ts'
@@ -64,6 +66,7 @@ import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror
 import {
     parseAiModelSelectionAttr,
     serializeAiModelSelectionAttr,
+    serializeCapabilityInputsAttr,
     serializeMediaGenerationConfigSelectionAttr,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
@@ -100,7 +103,7 @@ import {
     getBranchMarkerResponsePreview,
     getBranchMarkerScreenFixedMinWidth,
     getCanvasChromeScreenLayout,
-    getGeneratedMediaChromeCollisionHeight as getSharedGeneratedMediaChromeCollisionHeight,
+    getGeneratedOutputChromeCollisionHeight as getSharedGeneratedOutputChromeCollisionHeight,
     getPendingGeneratedMediaNodeId,
     getResizeHandleScaledSizes,
     resolveCollisions,
@@ -137,6 +140,12 @@ import { shouldAcceptGeneratedMediaEvent as shouldAcceptGeneratedMediaEventForSt
 import { createVideoNodeHandler, type VideoNodeHandlerControl } from '$src/infographics/workspace/rendering/videoNodeHandler.ts'
 import { createAudioNodeHandler, type AudioNodeHandlerControl } from '$src/infographics/workspace/rendering/audioNodeHandler.ts'
 import { createDocumentNodeHandler } from '$src/infographics/workspace/rendering/documentNodeHandler.ts'
+import {
+    getBranchMarkerPromptDisplayText,
+    getBranchMarkerPromptParts,
+    renderBranchMarkerPromptParts,
+    truncateBranchMarkerPromptParts,
+} from '$src/infographics/workspace/branchMarkerPromptReferences.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
@@ -229,6 +238,12 @@ import { createPixiMediaLayer, type GeneratingMediaOutlineTarget, type PixiMedia
 import { createWorkspaceLoadingOutline, type WorkspaceLoadingOutlineInstance } from '$src/infographics/workspace/workspaceLoadingOutline.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 import { createMediaLibraryPanel } from '$src/infographics/workspace/mediaLibraryPanel.ts'
+import { createArtifactLibraryPanel } from '$src/infographics/workspace/artifactLibraryPanel.ts'
+import {
+    capabilityArtifactFrontendRegistry,
+    capabilityArtifactSharedRegistry,
+    ensureCapabilityStyles,
+} from '$src/installed-capabilities.ts'
 import { createCapabilityLibraryPanel, type CapabilityLibraryPanelInstance } from '$src/infographics/workspace/capabilityLibraryPanel.ts'
 import {
     getAiChatPanelState,
@@ -747,6 +762,7 @@ type WorkspaceCanvasNodeInsertion =
     | Omit<ImageCanvasNode, 'position'>
     | Omit<VideoCanvasNode, 'position'>
     | Omit<AudioCanvasNode, 'position'>
+    | Omit<CapabilityArtifactCanvasNode, 'position'>
     | Omit<UploadPlaceholderCanvasNode, 'position'>
 
 type PendingGeneratedMediaTracker = {
@@ -760,7 +776,7 @@ type PendingGeneratedMediaTracker = {
 type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
 
 type GeneratedOutputRegenerationRequest = {
-    scope: 'media-node'
+    scope: 'output-node'
     mode: 'existing-prompt'
     targetNodeId: string
     mediaNodes: Array<ImageCanvasNode | VideoCanvasNode>
@@ -1016,6 +1032,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let suppressNextNodeClick = false
     const nodeLayerManager = createNodeLayerManager()
     const documentEditors: Map<string, DocumentEditorEntry> = new Map()
+    const capabilityArtifactViews = new Map<string, { destroy: () => void }>()
+    const capabilityArtifactHeightFrames = new Map<string, number>()
+
+    function destroyCapabilityArtifactViews(): void {
+        for (const view of capabilityArtifactViews.values()) view.destroy()
+        capabilityArtifactViews.clear()
+    }
     const threadEditors: Map<string, AiChatThreadEditorEntry> = new Map()
     // Per-node debounce timers for document/thread descriptor regeneration. Keyed
     // by canvas nodeId so rapid edits collapse into one describe call once typing
@@ -1026,7 +1049,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPanelHadContent = false
     let activeAiChatPanelEl: HTMLDivElement | null = null
     let activeAiChatPanelTabsSwitch: SlidingTabsSwitchInstance<string> | null = null
-    // Top-level Capabilities / Media / AI Threads switch that lives at the top of the
+    // Top-level library and AI-thread switch that lives at the top of the
     // right side panel. Rebuilt on every panel render alongside the panel chrome.
     let activeRightPanelModeSwitch: SlidingSwitchInstance<CanvasRightSidePanelMode> | null = null
     // Set while a preserved-switch body re-render runs, so no resize path snaps
@@ -1054,6 +1077,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const contextPreviewTilesByTray: Map<HTMLDivElement, Set<ContextPreviewTileInstance>> = new Map()
     let contextPreviewRefreshVersion = 0
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
+    let artifactLibraryPanelInstance: ReturnType<typeof createArtifactLibraryPanel> | null = null
     let capabilityLibraryPanelInstance: CapabilityLibraryPanelInstance | null = null
     const assetService = new AssetService()
     let activeAiChatSidebarThreadId: string | null = null
@@ -1675,24 +1699,33 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return Math.max(minWidth, Math.min(maxWidth, scaledWidth))
     }
 
-    function getGeneratedMediaInfoPanelWidth(generatedMediaNodes: Array<ImageCanvasNode | VideoCanvasNode>): number {
+    function getGeneratedMediaInfoPanelWidth(generatedMediaNodes: Array<ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode>): number {
         const generatedMediaWidth = Math.max(
             0,
-            ...generatedMediaNodes.map((node: ImageCanvasNode | VideoCanvasNode) => node.dimensions.width)
+            ...generatedMediaNodes.map(node => node.dimensions.width)
         )
         return getConfiguredGeneratedMediaInfoPanelWidth(generatedMediaWidth || settings.mediaBranchLineage.generatedMediaSize)
     }
 
     function getBranchOriginInfoPanelWidth(branchOriginNodeId: string): number {
-        return getGeneratedMediaInfoPanelWidth(getBranchOriginGeneratedMediaNodes(branchOriginNodeId))
+        return getGeneratedMediaInfoPanelWidth([
+            ...getBranchOriginGeneratedMediaNodes(branchOriginNodeId),
+            ...getBranchGeneratedArtifactNodes('branchOriginNodeId', branchOriginNodeId),
+        ])
     }
 
     function getBranchForkInfoPanelWidth(branchForkNodeId: string): number {
-        return getGeneratedMediaInfoPanelWidth(getBranchForkGeneratedMediaNodes(branchForkNodeId))
+        return getGeneratedMediaInfoPanelWidth([
+            ...getBranchForkGeneratedMediaNodes(branchForkNodeId),
+            ...getBranchGeneratedArtifactNodes('branchForkNodeId', branchForkNodeId),
+        ])
     }
 
     function getBranchLineInfoPanelWidth(branchLineNodeId: string): number {
-        return getGeneratedMediaInfoPanelWidth(getBranchLineGeneratedMediaNodes(branchLineNodeId))
+        return getGeneratedMediaInfoPanelWidth([
+            ...getBranchLineGeneratedMediaNodes(branchLineNodeId),
+            ...getBranchGeneratedArtifactNodes('branchLineNodeId', branchLineNodeId),
+        ])
     }
 
     function applyBranchOriginInfoChromeGeometry(
@@ -1934,7 +1967,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!currentCanvasState || !generatedMediaChromeLayerEl) return
         const nodesById = getCanvasNodesById(currentCanvasState.nodes)
         for (const node of currentCanvasState.nodes) {
-            if (node.type !== 'image' && node.type !== 'video' && !isBranchMarkerNode(node)) continue
+            if (node.type !== 'image' && node.type !== 'video' && node.type !== 'capabilityArtifact' && !isBranchMarkerNode(node)) continue
             const position = getNodeWorldPosition(node, nodesById)
             const dimensions = liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions
             updateGeneratedMediaChromeLiveTransform(node.nodeId, position, dimensions, viewport)
@@ -2076,7 +2109,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 threadId,
                 forceGenerationDetailsOpen: true,
                 lineageProjectionScope,
-                allowLatestTurnFallback: isBranchMarkerGenerationActive(marker) || Boolean(marker.pendingState),
+                allowLatestTurnFallback: isBranchMarkerGenerationActive(marker)
+                    || Boolean(marker.pendingState)
+                    || getBranchMarkerGeneratedArtifactNodes(marker).length > 0,
             },
         )
         if (!projection) return null
@@ -2202,7 +2237,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function mountAssetMetadataEditor(
-        node: ImageCanvasNode | VideoCanvasNode,
+        node: ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode,
         mount: HTMLElement,
         mode: 'node' | 'details',
     ): void {
@@ -2250,7 +2285,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         generatedMediaAssetEditors.set(editorKey, editor)
     }
 
-    function createAssetDetailsSection(node: ImageCanvasNode | VideoCanvasNode): HTMLElement | null {
+    function createAssetDetailsSection(
+        node: ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode,
+    ): HTMLElement | null {
         const asset = assetsStore.get(node.assetId)
         if (!asset) return null
         const section = html`
@@ -2268,7 +2305,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         <div className="canvas-asset-details-status"></div>
                     </div>
                     <div className="canvas-asset-detail-row">
-                        <span className="canvas-asset-diagnostics-label">Renditions</span>
+                        <span className="canvas-asset-diagnostics-label canvas-asset-storage-label">Renditions</span>
                         <div className="canvas-asset-renditions"></div>
                     </div>
                     <div className="canvas-asset-detail-row">
@@ -2281,10 +2318,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const statusEl = section.querySelector('.canvas-asset-details-status') as HTMLElement
         const renditionsEl = section.querySelector('.canvas-asset-renditions') as HTMLElement
         const lineageEl = section.querySelector('.canvas-asset-lineage') as HTMLElement
+        const storageLabel = section.querySelector('.canvas-asset-storage-label') as HTMLElement
         statusEl.textContent = `${asset.states.lifecycle} · ${asset.states.media} · ${asset.states.provenance}`
-        const renditionNames = Object.entries(asset.media?.renditions ?? {})
-            .map(([name, rendition]) => `${name}: ${rendition?.status ?? 'missing'}`)
-        renditionsEl.textContent = renditionNames.length > 0 ? renditionNames.join(' · ') : 'No media renditions'
+        if (node.type === 'capabilityArtifact') {
+            storageLabel.textContent = 'Documents'
+            const documentRoles = Object.keys(asset.documents)
+            renditionsEl.textContent = documentRoles.length > 0 ? documentRoles.join(' · ') : 'No documents'
+        } else {
+            const renditionNames = Object.entries(asset.media?.renditions ?? {})
+                .map(([name, rendition]) => `${name}: ${rendition?.status ?? 'missing'}`)
+            renditionsEl.textContent = renditionNames.length > 0 ? renditionNames.join(' · ') : 'No media renditions'
+        }
         const lineageParts = [
             asset.lineage?.sourceConversationAssetId ? `conversation ${asset.lineage.sourceConversationAssetId}` : '',
             asset.lineage?.parentAssetId ? `parent ${asset.lineage.parentAssetId}` : '',
@@ -2529,8 +2573,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function compareGeneratedMediaByGenerationOrder(
-        a: ImageCanvasNode | VideoCanvasNode,
-        b: ImageCanvasNode | VideoCanvasNode,
+        a: ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode,
+        b: ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode,
     ): number {
         const aVariant = a.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
         const bVariant = b.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
@@ -2569,6 +2613,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
                 (node.type === 'image' || node.type === 'video')
                 && node.generatedBy?.branchLineNodeId === branchLineNodeId)
+            .sort(compareGeneratedMediaByGenerationOrder)
+    }
+
+    function getBranchGeneratedArtifactNodes(
+        field: 'branchOriginNodeId' | 'branchForkNodeId' | 'branchLineNodeId',
+        nodeId: string,
+    ): CapabilityArtifactCanvasNode[] {
+        return (currentCanvasState?.nodes ?? [])
+            .filter((node: CanvasNode): node is CapabilityArtifactCanvasNode => (
+                node.type === 'capabilityArtifact' && node.generatedBy?.[field] === nodeId
+            ))
             .sort(compareGeneratedMediaByGenerationOrder)
     }
 
@@ -2847,11 +2902,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return `${normalized.slice(0, 17).trimEnd()}...`
     }
 
-    function isGeneratedOutputAccepted(node: ImageCanvasNode | VideoCanvasNode): boolean {
+    function isGeneratedOutputAccepted(node: ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode): boolean {
         return assetsStore.get(node.assetId)?.generatedOutputReview?.status === 'accepted'
     }
 
-    async function acceptGeneratedOutput(scope: 'media-node' | 'branch-lineage', nodeId: string): Promise<void> {
+    async function acceptGeneratedOutput(scope: 'output-node' | 'branch-lineage', nodeId: string): Promise<void> {
         const result = await assetService.reviewGeneratedOutput({
             workspaceId,
             scope,
@@ -2961,6 +3016,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             useMultipleReasoningModels: reasoningModels.length > 1,
             useMultipleImageModels: imageModels.length > 1,
             useMultipleVideoModels: videoModels.length > 1,
+            capabilityInputs: {},
             ...(imageModels.length > 0 ? {
                 imageOptions: {
                     aiImageModels: imageModels,
@@ -3053,10 +3109,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ...mediaNodes.map(node => node.nodeId),
             ...(regeneratePrompt ? [targetNodeId] : []),
         ]
-        const result = request.scope === 'media-node'
+        const result = request.scope === 'output-node'
             ? await assetService.reviewGeneratedOutput({
                 workspaceId,
-                scope: 'media-node',
+                scope: 'output-node',
                 action: 'supersede',
                 nodeId: targetNodeId,
                 preserveLineage: true,
@@ -3112,7 +3168,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const handleClick = (event: MouseEvent): void => {
             event.preventDefault()
             event.stopPropagation()
-            void acceptGeneratedOutput('media-node', node.nodeId)
+            void acceptGeneratedOutput('output-node', node.nodeId)
         }
         const button = html`
             <button
@@ -3139,7 +3195,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             event.preventDefault()
             event.stopPropagation()
             void regenerateGeneratedOutputs({
-                scope: 'media-node',
+                scope: 'output-node',
                 mode: 'existing-prompt',
                 targetNodeId: node.nodeId,
                 mediaNodes: [node],
@@ -3264,6 +3320,210 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             getVideoControlsOutsideOffsetScreen(node.nodeId, viewport),
         )
         return chromeEl
+    }
+
+    function getCapabilityArtifactProvenance(node: CapabilityArtifactCanvasNode): Record<string, any> {
+        const document = assetDocumentsStore.get(node.assetId, 'provenance')?.doc
+        const text = document ? extractContentFromProseMirror(document).text : ''
+        if (text) {
+            try {
+                const parsed = JSON.parse(text)
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+            } catch {
+                // Fall through to sealed canvas metadata when an older provenance
+                // document is not JSON-encoded.
+            }
+        }
+        return {
+            input: node.generatedBy?.input ?? {},
+            variant: { reasoningModelId: node.generatedBy?.reasoningModelId ?? '' },
+        }
+    }
+
+    function createCapabilityArtifactInfoButton(node: CapabilityArtifactCanvasNode): HTMLButtonElement {
+        const isExpanded = expandedGeneratedMediaInfoNodeIds.has(node.nodeId)
+        const button = html`<button
+            className=${`media-info-button nopan${isExpanded ? ' is-active' : ''}`}
+            type="button"
+            aria-label="Artifact details"
+            aria-expanded=${String(isExpanded)}
+            title="Artifact details"
+        ><span innerHTML=${infoLetterIcon}></span></button>` as HTMLButtonElement
+        button.addEventListener('click', (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            toggleGeneratedMediaInfo(node.nodeId)
+        })
+        return button
+    }
+
+    function createCapabilityArtifactAcceptButton(node: CapabilityArtifactCanvasNode): HTMLButtonElement | null {
+        if (!node.generatedBy || isGeneratedOutputAccepted(node)) return null
+        const asset = assetsStore.get(node.assetId)
+        if (!asset || asset.generatedOutputReview?.status === 'superseded') return null
+        const disabled = !asset.documents.capabilityArtifact || asset.states.provenance !== 'sealed'
+        const button = html`<button
+            className="media-review-action media-review-accept nopan"
+            type="button"
+            aria-label="Accept generated Artifact"
+            title=${disabled ? 'Generation history is still being sealed' : 'Accept generated Artifact'}
+        ><span className="media-review-action-icon" innerHTML=${checkMarkIcon} aria-hidden="true"></span></button>` as HTMLButtonElement
+        button.disabled = disabled
+        button.addEventListener('click', (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void acceptGeneratedOutput('output-node', node.nodeId)
+        })
+        return button
+    }
+
+    async function regenerateCapabilityArtifact(node: CapabilityArtifactCanvasNode): Promise<void> {
+        const asset = assetsStore.get(node.assetId)
+        if (!asset || !node.generatedBy) return
+        const provenance = getCapabilityArtifactProvenance(node)
+        const definition = capabilityArtifactFrontendRegistry.require(node.artifactTypeId)
+        const replay = definition.buildReplaySubmitData({ provenance })
+        const prompt = typeof provenance.input?.prompt === 'string'
+            ? provenance.input.prompt
+            : typeof node.generatedBy.input?.prompt === 'string'
+                ? node.generatedBy.input.prompt
+                : ''
+        if (!prompt || replay.reasoningModelIds.length === 0) return
+        const reviewed = await assetService.reviewGeneratedOutput({
+            workspaceId,
+            scope: 'output-node',
+            action: 'supersede',
+            nodeId: node.nodeId,
+            preserveLineage: true,
+        })
+        if ('error' in reviewed) return
+        applyApiCanvasGeometry(reviewed.canvasGeometry)
+        await submitCanvasGenerationRun({
+            contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: prompt }] }],
+            aiReasoningModels: replay.reasoningModelIds as AiModelId[],
+            useMultipleReasoningModels: replay.reasoningModelIds.length > 1,
+            useMultipleImageModels: false,
+            useMultipleVideoModels: false,
+            capabilityInputs: replay.capabilityInputs,
+        })
+    }
+
+    function createCapabilityArtifactRegenerationControls(node: CapabilityArtifactCanvasNode): HTMLDivElement | null {
+        if (!node.generatedBy || isGeneratedOutputAccepted(node)) return null
+        const asset = assetsStore.get(node.assetId)
+        if (!asset || asset.generatedOutputReview?.status === 'superseded') return null
+        const button = html`<button
+            className="media-review-action media-review-regenerate"
+            type="button"
+            title="Generate another Artifact from the sealed request"
+            aria-label="Regenerate Artifact"
+        ><span className="media-review-action-icon" innerHTML=${refreshIcon} aria-hidden="true"></span></button>` as HTMLButtonElement
+        button.disabled = !asset.documents.provenance || asset.states.provenance !== 'sealed'
+        button.addEventListener('click', (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void regenerateCapabilityArtifact(node)
+        })
+        return html`<div className="media-regeneration-controls nopan">${button}</div>` as HTMLDivElement
+    }
+
+    function createCapabilityArtifactHistoryButton(node: CapabilityArtifactCanvasNode): HTMLButtonElement | null {
+        if (!node.generatedBy || !isGeneratedOutputAccepted(node)) return null
+        const isExpanded = expandedGeneratedMediaHistoryNodeIds.has(node.nodeId)
+        const button = html`<button
+            className=${`media-history-button nopan${isExpanded ? ' is-active' : ''}`}
+            type="button"
+            aria-label="Open Artifact generation history"
+            aria-expanded=${String(isExpanded)}
+            title="Generation history"
+        ><span className="media-history-button-text">History</span></button>` as HTMLButtonElement
+        button.addEventListener('click', (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            toggleGeneratedMediaHistory(node.nodeId)
+        })
+        return button
+    }
+
+    function createGeneratedCapabilityArtifactChrome(node: CapabilityArtifactCanvasNode): HTMLElement {
+        const modelId = String(node.generatedBy?.reasoningModelId ?? '')
+        const model = splitAiModelId(modelId)
+        const modelBadge = createMediaModelBadge({ modelId, modelProvider: model.provider })
+        const acceptButton = createCapabilityArtifactAcceptButton(node)
+        const regenerationControls = createCapabilityArtifactRegenerationControls(node)
+        const chrome = html`<div className="workspace-generated-media-chrome" data=${{ mediaChromeNodeId: node.nodeId }}>
+            <div className="workspace-generated-media-title canvas-asset-metadata-editor is-node nopan"></div>
+            <div className="workspace-generated-media-actions">
+                ${createCapabilityArtifactInfoButton(node)}
+                ${modelBadge ? html`<div className="media-info-model-separator media-review-action-separator" aria-hidden="true"></div>` : null}
+                ${modelBadge}
+                ${acceptButton}
+                ${acceptButton && regenerationControls ? html`<div className="media-info-model-separator media-review-action-separator" aria-hidden="true"></div>` : null}
+                ${regenerationControls}
+                ${createCapabilityArtifactHistoryButton(node)}
+            </div>
+        </div>` as HTMLElement
+        mountAssetMetadataEditor(node, chrome.querySelector('.workspace-generated-media-title') as HTMLElement, 'node')
+        applyGeneratedMediaChromeGeometry(chrome, getNodeWorldPosition(node), node.dimensions, getLiveViewport(), 0)
+        return chrome
+    }
+
+    function createCapabilityArtifactInfoPanelChrome(node: CapabilityArtifactCanvasNode): HTMLElement {
+        const definition = capabilityArtifactFrontendRegistry.require(node.artifactTypeId)
+        const snapshot = assetDocumentsStore.get(node.assetId, 'capabilityArtifact')
+        const panel = html`<section className="canvas-generated-media-info-panel canvas-generated-media-metadata-panel nopan"></section>` as HTMLElement
+        const metadataEditorMount = html`<div className="canvas-asset-metadata-editor is-details nopan"></div>` as HTMLElement
+        panel.appendChild(metadataEditorMount)
+        mountAssetMetadataEditor(node, metadataEditorMount, 'details')
+        if (snapshot) {
+            const artifactDetails = html`<section className="canvas-capability-artifact-details"></section>` as HTMLElement
+            panel.appendChild(artifactDetails)
+            definition.createGeneratedOutputInfoView({ container: artifactDetails, document: snapshot.doc })
+        }
+        const assetDetails = createAssetDetailsSection(node)
+        if (assetDetails) panel.appendChild(assetDetails)
+        panel.setAttribute('data-media-info-panel-node-id', node.nodeId)
+        applyStyle(panel, { position: 'absolute', top: '0', left: '0' })
+        return panel
+    }
+
+    function getCapabilityArtifactLineageProjection(node: CapabilityArtifactCanvasNode): {
+        marker: BranchMarkerNode
+        lineageProjectionScope: AiLineageProjectionScope
+    } | null {
+        const generatedBy = node.generatedBy
+        if (!generatedBy || !currentCanvasState) return null
+        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
+        const candidates: Array<{
+            nodeId: string | undefined
+            lineageProjectionScope: AiLineageProjectionScope
+        }> = [
+            { nodeId: generatedBy.branchLineNodeId, lineageProjectionScope: 'media-run' },
+            { nodeId: generatedBy.branchForkNodeId, lineageProjectionScope: 'branch-fork' },
+            { nodeId: generatedBy.branchOriginNodeId, lineageProjectionScope: 'branch-origin' },
+        ]
+        for (const candidate of candidates) {
+            if (!candidate.nodeId) continue
+            const marker = nodesById.get(candidate.nodeId)
+            if (marker && isBranchMarkerNode(marker)) {
+                return { marker, lineageProjectionScope: candidate.lineageProjectionScope }
+            }
+        }
+        return null
+    }
+
+    function createCapabilityArtifactHistoryPanelChrome(node: CapabilityArtifactCanvasNode): HTMLElement | null {
+        const projection = getCapabilityArtifactLineageProjection(node)
+        if (!projection) return null
+        const panel = createBranchMarkerInfoPanel(projection.marker, {
+            className: 'canvas-generated-media-history-panel',
+            rendererKey: `artifact-history:${node.nodeId}`,
+            lineageProjectionScope: projection.lineageProjectionScope,
+        })
+        if (!panel) return null
+        panel.setAttribute('data-media-history-panel-node-id', node.nodeId)
+        applyStyle(panel, { position: 'absolute', top: '0', left: '0' })
+        return panel
     }
 
     function createPendingGeneratedMediaIconChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement | null {
@@ -3513,6 +3773,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ].join('\u001f')
     }
 
+    function getCapabilityArtifactNodeChromeKey(node: CapabilityArtifactCanvasNode): string {
+        const asset = assetsStore.get(node.assetId)
+        const artifact = assetDocumentsStore.get(node.assetId, 'capabilityArtifact')
+        const provenance = assetDocumentsStore.get(node.assetId, 'provenance')
+        return [
+            node.nodeId,
+            node.assetId,
+            node.artifactTypeId,
+            node.generatedBy?.reasoningModelId ?? '',
+            asset?.revision ?? '',
+            asset?.title ?? '',
+            asset?.scope ?? '',
+            artifact?.version ?? '',
+            provenance?.version ?? '',
+            expandedGeneratedMediaInfoNodeIds.has(node.nodeId) ? 'metadata-open' : '',
+            expandedGeneratedMediaHistoryNodeIds.has(node.nodeId) ? 'history-open' : '',
+        ].join('\u001f')
+    }
+
     function getBranchMarkerProjectionChromeKey(marker: BranchMarkerNode, lineageProjectionScope: AiLineageProjectionScope): string {
         const projection = buildBranchMarkerTurnProjectionContent(marker, lineageProjectionScope)
         return [
@@ -3583,7 +3862,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 generatedMediaProjectionKey,
             ].join('\u001f')
         }
-
         return [
             'branch-marker-panel',
             getBranchMarkerProjectionChromeKey(marker, lineageProjectionScope),
@@ -3602,6 +3880,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getGeneratedMediaChromeSyncKey({
         mediaInfoNodes,
+        artifactInfoNodes,
         pendingIconNodes,
         playableVideoNodes,
         branchOriginNodes,
@@ -3609,6 +3888,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         branchLineNodes,
     }: {
         mediaInfoNodes: Array<ImageCanvasNode | VideoCanvasNode>
+        artifactInfoNodes: CapabilityArtifactCanvasNode[]
         pendingIconNodes: Array<ImageCanvasNode | VideoCanvasNode>
         playableVideoNodes: VideoCanvasNode[]
         branchOriginNodes: BranchOriginCanvasNode[]
@@ -3627,6 +3907,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         return [
             mediaInfoNodes.map(getGeneratedMediaNodeChromeKey).join('\u001e'),
+            artifactInfoNodes.map(getCapabilityArtifactNodeChromeKey).join('\u001e'),
             pendingIconNodes.map((node) => [node.nodeId, node.type, node.assetId].join('\u001f')).join('\u001e'),
             playableVideoNodes.map(getPlayableVideoChromeKey).join('\u001e'),
             expandedBranchOrigins.join('\u001e'),
@@ -3685,6 +3966,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 (node.type === 'image' || node.type === 'video')
                 && !pendingBeforeFirstFrameNodeIds.has(node.nodeId)
                 && Boolean(assetsStore.get((node as ImageCanvasNode | VideoCanvasNode).assetId)))
+        const artifactInfoNodes = canvasNodes
+            .filter((node: CanvasNode): node is CapabilityArtifactCanvasNode => (
+                node.type === 'capabilityArtifact' && Boolean(assetsStore.get(node.assetId))
+            ))
         for (const node of mediaInfoNodes) {
             const descriptor = getAssetDescriptor(node)
             if (descriptor?.status === 'ready' && descriptor.version !== MEDIA_DESCRIPTOR_VERSION) {
@@ -3710,7 +3995,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         // Drop expanded state for nodes that no longer show info chrome, so a
         // deleted node doesn't leak an orphaned open panel.
-        const infoNodeIds = new Set<string>(mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => node.nodeId))
+        const infoNodeIds = new Set<string>([
+            ...mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => node.nodeId),
+            ...artifactInfoNodes.map(node => node.nodeId),
+        ])
         for (const expandedNodeId of Array.from(expandedGeneratedMediaInfoNodeIds)) {
             if (!infoNodeIds.has(expandedNodeId)) {
                 expandedGeneratedMediaInfoNodeIds.delete(expandedNodeId)
@@ -3720,6 +4008,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
         for (const expandedNodeId of Array.from(expandedGeneratedMediaHistoryNodeIds)) {
             const node = mediaInfoNodes.find((candidate) => candidate.nodeId === expandedNodeId)
+                ?? artifactInfoNodes.find(candidate => candidate.nodeId === expandedNodeId)
             if (!node?.generatedBy) expandedGeneratedMediaHistoryNodeIds.delete(expandedNodeId)
         }
         const branchOriginNodeIds = new Set<string>(branchOriginNodes.map((node: BranchOriginCanvasNode) => node.nodeId))
@@ -3737,6 +4026,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const nextChromeSyncKey = getGeneratedMediaChromeSyncKey({
             mediaInfoNodes,
+            artifactInfoNodes,
             pendingIconNodes,
             playableVideoNodes,
             branchOriginNodes,
@@ -3797,6 +4087,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         generatedMediaChromeLayerEl.replaceChildren(
             ...mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaChrome(node)),
+            ...artifactInfoNodes.map(createGeneratedCapabilityArtifactChrome),
         )
         mediaChromeViewportEl.replaceChildren(
             ...branchOriginInfoChromeEls,
@@ -3811,10 +4102,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 expandedGeneratedMediaInfoNodeIds.has(node.nodeId))
             const expandedMediaHistoryNodes = mediaInfoNodes.filter((node: ImageCanvasNode | VideoCanvasNode) =>
                 expandedGeneratedMediaHistoryNodeIds.has(node.nodeId))
+            const expandedArtifactInfoNodes = artifactInfoNodes.filter(node =>
+                expandedGeneratedMediaInfoNodeIds.has(node.nodeId))
+            const expandedArtifactHistoryNodes = artifactInfoNodes.filter(node =>
+                expandedGeneratedMediaHistoryNodeIds.has(node.nodeId))
             generatedMediaInfoPanelLayerEl.replaceChildren(
                 ...expandedMediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaInfoPanelChrome(node)),
+                ...expandedArtifactInfoNodes.map(createCapabilityArtifactInfoPanelChrome),
                 ...expandedMediaHistoryNodes
                     .map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaHistoryPanelChrome(node))
+                    .filter((panel): panel is HTMLElement => Boolean(panel)),
+                ...expandedArtifactHistoryNodes
+                    .map(createCapabilityArtifactHistoryPanelChrome)
                     .filter((panel): panel is HTMLElement => Boolean(panel)),
             )
             const nodesById = getCanvasNodesById(canvasNodes)
@@ -3828,6 +4127,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 )
             }
             for (const node of expandedMediaHistoryNodes) {
+                updateGeneratedMediaHistoryPanelPosition(
+                    node.nodeId,
+                    getNodeWorldPosition(node, nodesById),
+                    liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions,
+                    viewport,
+                )
+            }
+            for (const node of expandedArtifactInfoNodes) {
+                updateGeneratedMediaInfoPanelPosition(
+                    node.nodeId,
+                    getNodeWorldPosition(node, nodesById),
+                    liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions,
+                    viewport,
+                )
+            }
+            for (const node of expandedArtifactHistoryNodes) {
                 updateGeneratedMediaHistoryPanelPosition(
                     node.nodeId,
                     getNodeWorldPosition(node, nodesById),
@@ -4214,8 +4529,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // mediaGenerationLayoutSettings.generatedMediaChrome): pending nodes reserve
     // chrome too, so the model label appearing at settle time causes no reflow.
     function getGeneratedMediaChromeCollisionHeight(node: CanvasNode): number {
-        if (!isGeneratedMediaNode(node)) return 0
-        return getSharedGeneratedMediaChromeCollisionHeight(node.type)
+        if (!isGeneratedOutputNode(node)) return 0
+        return getSharedGeneratedOutputChromeCollisionHeight(node.type)
     }
 
     function getCanvasNodeCollisionRect(
@@ -5489,6 +5804,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             activeRightPanelModeSwitch = null
         }
         mediaLibraryPanelInstance?.unmount()
+        artifactLibraryPanelInstance?.unmount()
         activeAiChatPanelEl?.remove()
         activeAiChatPanelThreadId = null
         activeAiChatPanelHadContent = false
@@ -5961,7 +6277,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // The AI chat panel body never uses a shifting gradient background.
         const gradient: ReturnType<typeof createShiftingGradientBackground> | null = null
 
-        // Top-level switch: Capabilities / Media / AI Threads. Always shown at the top
+        // Top-level switch. Always shown at the top
         // of the panel; it owns which surface the panel body renders below it.
         const topLevelMode = aiChatPanelState.topLevelMode
         const showingAiThreads = topLevelMode === 'aiThreads'
@@ -5980,6 +6296,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 height: settings.aiChatThread.panelTabs.height,
                 options: [
                     { label: 'Capabilities', value: 'capabilities' },
+                    { label: 'Artifacts', value: 'artifacts' },
                     { label: 'Media', value: 'media' },
                     { label: 'AI Threads', value: 'aiThreads' },
                 ],
@@ -6355,10 +6672,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const capabilityLibrary = ensureCapabilityLibraryPanel()
             capabilityHost.appendChild(capabilityLibrary.element)
             void capabilityLibrary.load()
+            artifactLibraryPanelInstance?.unmount()
+        } else if (topLevelMode === 'artifacts') {
+            const artifactHost = html`<div className="workspace-right-panel-artifact-host workspace-right-panel-media-host"></div>` as HTMLDivElement
+            panelEl.appendChild(artifactHost)
+            mediaLibraryPanelInstance?.unmount()
+            destroyCapabilityLibraryPanel()
+            ensureArtifactLibraryPanel().mountInto(artifactHost)
         } else {
             const mediaHost = html`<div className="workspace-right-panel-media-host"></div>` as HTMLDivElement
             panelEl.appendChild(mediaHost)
             destroyCapabilityLibraryPanel()
+            artifactLibraryPanelInstance?.unmount()
             ensureMediaLibraryPanel().mountInto(mediaHost)
         }
 
@@ -6367,6 +6692,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // handlers stop reloading a hidden, detached body.
         if (showingAiThreads) {
             mediaLibraryPanelInstance?.unmount()
+            artifactLibraryPanelInstance?.unmount()
             destroyCapabilityLibraryPanel()
         }
 
@@ -6509,6 +6835,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeCanvasRunServices.delete(threadId)
         promptInputController.setReceiving(threadId, false)
         destroyDetachedAiChatThreadEditor(threadId)
+    }
+
+    function failDetachedCanvasRun(threadId: string): void {
+        settledDetachedCanvasRunThreadIds.add(threadId)
+        pendingGeneratedImagePlacements.delete(threadId)
+        clearGeneratingReferenceNodeIds(threadId)
+        removePendingBranchMarkerForRun(threadId)
+        teardownDetachedCanvasRun(threadId)
     }
 
     function scheduleDetachedCanvasRunTeardown(threadId: string): void {
@@ -6724,6 +7058,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             workspaceId,
             conversationAssetId: threadId,
             organizationId: thread.organizationId,
+            onError: () => failDetachedCanvasRun(threadId),
         })
         activeCanvasRunServices.set(threadId, aiService)
         const entry: AiChatThreadEditorEntry = {
@@ -6865,6 +7200,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         ...(data.videoOptions?.videoResolution ? { videoResolution: data.videoOptions.videoResolution } : {}),
                         ...(data.videoOptions?.videoDuration ? { videoDuration: data.videoOptions.videoDuration } : {}),
                         ...(videoGenerationConfigGroups ? { videoGenerationConfigGroups } : {}),
+                        capabilityInputs: serializeCapabilityInputsAttr(data.capabilityInputs),
                     },
                     content: [{
                         type: 'aiUserMessage',
@@ -9203,8 +9539,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function hasGeneratedMediaChildrenForBranchMarker(markerNode: BranchMarkerNode): boolean {
         if (markerNode.type === 'branchOrigin') return getBranchOriginGeneratedMediaNodes(markerNode.nodeId).length > 0
+            || getBranchGeneratedArtifactNodes('branchOriginNodeId', markerNode.nodeId).length > 0
         if (markerNode.type === 'branchFork') return getBranchForkGeneratedMediaNodes(markerNode.nodeId).length > 0
+            || getBranchGeneratedArtifactNodes('branchForkNodeId', markerNode.nodeId).length > 0
         return getBranchLineGeneratedMediaNodes(markerNode.nodeId).length > 0
+            || getBranchGeneratedArtifactNodes('branchLineNodeId', markerNode.nodeId).length > 0
     }
 
     function getLineagePlacementAnchorNode(threadId: string, generationRun?: MediaGenerationRunMeta): CanvasNode | undefined {
@@ -9846,11 +10185,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return shouldShowBranchMarkerConversationResponseLine(preview)
     }
 
+    function getBranchMarkerVisiblePromptText(
+        node: BranchMarkerNode,
+        preview: BranchMarkerConversationPreview | null,
+    ): string {
+        return getBranchMarkerPromptDisplayText(getBranchMarkerPromptParts(
+            preview?.userMessage,
+            preview?.userText ?? getBranchMarkerPromptText(node),
+        ))
+    }
+
     function resizeBranchMarkerNodeFromProseMirror(node: BranchMarkerNode): BranchMarkerNode {
         const preview = getBranchMarkerConversationPreview(node)
         return resizeBranchMarkerNodeToDimensions(
             node,
-            getBranchMarkerContentDimensions(preview?.userText ?? getBranchMarkerPromptText(node), {
+            getBranchMarkerContentDimensions(getBranchMarkerVisiblePromptText(node, preview), {
                 responseLine: shouldShowBranchMarkerResponseLine(node, preview),
                 responseText: preview?.responseText ?? '',
             }),
@@ -9860,7 +10209,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function getBranchMarkerScreenFixedDimensionsForNode(node: BranchMarkerNode): { width: number; height: number } {
         const preview = getBranchMarkerConversationPreview(node)
         return getBranchMarkerScreenFixedDimensions(
-            preview?.userText ?? getBranchMarkerPromptText(node),
+            getBranchMarkerVisiblePromptText(node, preview),
             {
                 responseLine: shouldShowBranchMarkerResponseLine(node, preview),
                 responseText: preview?.responseText ?? '',
@@ -10195,8 +10544,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy?.branchId)
     }
 
-    function isBranchTreeCanvasNode(node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode {
-        return isGeneratedMediaNode(node) || node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
+    function isGeneratedOutputNode(node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode {
+        return (node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact')
+            && Boolean(node.generatedBy?.branchId)
+    }
+
+    function isBranchTreeCanvasNode(node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode {
+        return isGeneratedOutputNode(node) || node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
     }
 
     function pruneOrphanBranchMarkers(nodes: CanvasNode[], edges: WorkspaceEdge[]): { nodes: CanvasNode[]; edges: WorkspaceEdge[] } {
@@ -10204,7 +10558,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const referencedForkNodeIds = new Set<string>()
         const referencedLineNodeIds = new Set<string>()
         for (const node of nodes) {
-            if (node.type !== 'image' && node.type !== 'video') continue
+            if (node.type !== 'image' && node.type !== 'video' && node.type !== 'capabilityArtifact') continue
             if (node.generatedBy?.branchOriginNodeId) referencedOriginNodeIds.add(node.generatedBy.branchOriginNodeId)
             if (node.generatedBy?.branchForkNodeId) referencedForkNodeIds.add(node.generatedBy.branchForkNodeId)
             if (node.generatedBy?.branchLineNodeId) referencedLineNodeIds.add(node.generatedBy.branchLineNodeId)
@@ -10939,11 +11293,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncConnectionsAfterManualNodeAppend()
     }
 
+    function appendCapabilityArtifactNodeToDOM(artifactNode: CapabilityArtifactCanvasNode): void {
+        viewportEl.querySelector(`[data-node-id="${artifactNode.nodeId}"]`)?.remove()
+        const nodeEl = createCapabilityArtifactNode(artifactNode)
+        viewportEl.appendChild(nodeEl)
+        connectionManager?.registerNodeElement(artifactNode.nodeId, nodeEl as HTMLDivElement)
+        syncConnectionsAfterManualNodeAppend()
+    }
+
     function appendCanvasNodeToDOM(node: CanvasNode): void {
         if (node.type === 'image') appendImageNodeToDOM(node)
         else if (node.type === 'video') appendVideoNodeToDOM(node)
         else if (node.type === 'mediaDocument') appendDocumentMediaNodeToDOM(node)
         else if (node.type === 'audio') appendAudioNodeToDOM(node)
+        else if (node.type === 'capabilityArtifact') appendCapabilityArtifactNodeToDOM(node)
     }
 
     function syncExistingUploadPlaceholderNodeToDOM(node: UploadPlaceholderCanvasNode): void {
@@ -11256,7 +11619,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             } else if (node.type === 'branchLine') {
                 if (shouldDeferApiCanvasSnapshotBranchMarkerRender(node)) continue
                 appendBranchLineNodeToDOM(node)
-            } else if (node.type === 'image' || node.type === 'video' || node.type === 'mediaDocument' || node.type === 'audio') {
+            } else if (node.type === 'image'
+                || node.type === 'video'
+                || node.type === 'mediaDocument'
+                || node.type === 'audio'
+                || node.type === 'capabilityArtifact') {
                 appendCanvasNodeToDOM(node)
             }
         }
@@ -13000,6 +13367,134 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function scheduleCapabilityArtifactHeight(nodeId: string, measuredHeight: number): void {
+        const existingFrame = capabilityArtifactHeightFrames.get(nodeId)
+        if (existingFrame !== undefined) cancelAnimationFrame(existingFrame)
+        const frame = requestAnimationFrame(() => {
+            capabilityArtifactHeightFrames.delete(nodeId)
+            if (!currentCanvasState) return
+            const node = currentCanvasState.nodes.find((candidate): candidate is CapabilityArtifactCanvasNode => (
+                candidate.nodeId === nodeId && candidate.type === 'capabilityArtifact'
+            ))
+            if (!node) return
+            const height = Math.max(140, Math.ceil(measuredHeight))
+            if (Math.abs(node.dimensions.height - height) <= 1) return
+            const resizedNodes = currentCanvasState.nodes.map(candidate => candidate.nodeId === nodeId
+                ? { ...candidate, dimensions: { width: node.dimensions.width, height } }
+                : candidate)
+            const nodes = rebalanceGeneratedMediaTrees(resizedNodes, currentCanvasState.edges)
+            commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes })
+            scheduleGeneratedMediaChromeSync()
+        })
+        capabilityArtifactHeightFrames.set(nodeId, frame)
+    }
+
+    async function refreshCapabilityArtifactNode(node: CapabilityArtifactCanvasNode): Promise<void> {
+        try {
+            const result = await assetService.refresh(node.assetId)
+            if ('error' in result || !currentCanvasState?.nodes.some(candidate => candidate.nodeId === node.nodeId)) return
+            renderNodes()
+        } catch (error) {
+            console.error('Failed to load Capability Artifact:', {
+                assetId: node.assetId,
+                artifactTypeId: node.artifactTypeId,
+                error,
+            })
+            if (!currentCanvasState?.nodes.some(candidate => candidate.nodeId === node.nodeId)) return
+            const nodeEl = viewportEl.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
+            const host = nodeEl?.querySelector('.capability-artifact-node-host') as HTMLDivElement | null
+            if (!host) return
+            host.replaceChildren(createErrorPlaceholder({
+                message: 'This Artifact could not be loaded',
+                retryLabel: 'Retry',
+                onRetry: () => { void refreshCapabilityArtifactNode(node) },
+            }).dom)
+        }
+    }
+
+    function createCapabilityArtifactNode(node: CapabilityArtifactCanvasNode): HTMLElement {
+        ensureCapabilityStyles(viewportEl.ownerDocument)
+        const { nodeEl, dragOverlay } = createBaseNodeElement(
+            node,
+            'workspace-capability-artifact-node',
+            { assetId: node.assetId, artifactTypeId: node.artifactTypeId },
+        )
+        dragOverlay.className = 'capability-artifact-drag-overlay nopan'
+        const host = html`<div className="capability-artifact-node-host nopan"></div>` as HTMLDivElement
+        nodeEl.appendChild(host)
+        const asset = assetsStore.get(node.assetId)
+        const snapshot = assetDocumentsStore.get(node.assetId, 'capabilityArtifact')
+        if (!asset || !snapshot) {
+            host.appendChild(createLoadingPlaceholder().dom)
+            void refreshCapabilityArtifactNode(node)
+            return nodeEl
+        }
+
+        try {
+            const frontend = capabilityArtifactFrontendRegistry.require(node.artifactTypeId)
+            const shared = capabilityArtifactSharedRegistry.require(node.artifactTypeId)
+            shared.assertInitialDocument(snapshot.doc)
+            const view = frontend.createCanvasNodeView({
+                container: host,
+                node,
+                document: snapshot.doc,
+                resolveAssetTitle: assetId => assetsStore.get(assetId)?.title ?? assetId,
+                resolveThumbnailUrl: assetId => resolveMediaUrl(buildAssetRenditionPath(assetId, 'thumbnail')),
+                onHeightChange: height => scheduleCapabilityArtifactHeight(node.nodeId, height),
+                mountEditor: ({ container, document, schema, plugins }) => {
+                    const editor = new ProseMirrorEditor({
+                        editorMountElement: container,
+                        content: html`<div></div>` as HTMLDivElement,
+                        initialVal: document,
+                        isDisabled: false,
+                        documentType: 'capabilityArtifact',
+                        schema,
+                        plugins,
+                        enablePromptReferences: true,
+                        promptReferenceCatalog: createPromptReferenceCatalogClient(
+                            workspaceId,
+                            asset.organizationId,
+                        ),
+                        promptReferencePreviewRenderer: getPromptReferencePreviewRenderer(),
+                        proseMirrorAuthority: {
+                            organizationId: asset.organizationId,
+                            workspaceId,
+                            assetId: node.assetId,
+                            role: 'capabilityArtifact',
+                            baseVersion: snapshot.version,
+                            onLeaseStateChange: (state: { readOnly: boolean; holderWorkspaceId?: string; expiresAt?: number }) => {
+                                nodeEl.classList.toggle('is-asset-lease-read-only', state.readOnly)
+                            },
+                        },
+                        onEditorChange: () => queueMicrotask(() => scheduleCapabilityArtifactHeight(node.nodeId, host.scrollHeight)),
+                    })
+                    const observer = new ResizeObserver(() => {
+                        scheduleCapabilityArtifactHeight(node.nodeId, host.scrollHeight)
+                    })
+                    observer.observe(container)
+                    return {
+                        updateDocument: value => editor.updateDocument(value),
+                        destroy: () => {
+                            observer.disconnect()
+                            editor.destroy()
+                        },
+                    }
+                },
+            })
+            capabilityArtifactViews.set(node.nodeId, {
+                destroy: () => view.destroy(),
+            })
+        } catch (error) {
+            console.error('Failed to mount Capability Artifact:', error)
+            host.replaceChildren(createErrorPlaceholder({
+                message: 'This Artifact cannot be rendered',
+                retryLabel: 'Retry',
+                onRetry: () => renderNodes(),
+            }).dom)
+        }
+        return nodeEl
+    }
+
     function createImageNode(node: ImageCanvasNode): HTMLElement {
         const { nodeEl, dragOverlay } = createBaseNodeElement(
             node,
@@ -13142,6 +13637,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (node.type === 'branchOrigin') return getBranchOriginGeneratedMediaNodes(node.nodeId)
         if (node.type === 'branchFork') return getBranchForkGeneratedMediaNodes(node.nodeId)
         return getBranchLineGeneratedMediaNodes(node.nodeId)
+    }
+
+    function getBranchMarkerGeneratedArtifactNodes(node: BranchMarkerNode): CapabilityArtifactCanvasNode[] {
+        if (node.type === 'branchOrigin') return getBranchGeneratedArtifactNodes('branchOriginNodeId', node.nodeId)
+        if (node.type === 'branchFork') return getBranchGeneratedArtifactNodes('branchForkNodeId', node.nodeId)
+        return getBranchGeneratedArtifactNodes('branchLineNodeId', node.nodeId)
     }
 
     function getBranchMarkerReasoningModelDescriptors(node: BranchMarkerNode): BranchMarkerModelDescriptor[] {
@@ -13561,8 +14062,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         label: string
     }): HTMLDivElement {
         const threadPreview = getBranchMarkerConversationPreview(node)
-        const promptText = (threadPreview?.userText ?? getBranchMarkerPromptText(node)).trim()
+        const promptParts = getBranchMarkerPromptParts(
+            threadPreview?.userMessage,
+            threadPreview?.userText ?? getBranchMarkerPromptText(node),
+        )
+        const promptText = getBranchMarkerPromptDisplayText(promptParts)
         const promptPreview = getBranchMarkerPromptPreview(promptText)
+        const promptPreviewParts = truncateBranchMarkerPromptParts(
+            promptParts,
+            mediaGenerationLayoutSettings.marker.promptPreviewMaxChars,
+        )
         // Media models render as a separate stacked circle rail to the right of
         // the text pill once generated media descendants exist.
         const modelDetails = getBranchMarkerModelDetails(node)
@@ -13609,7 +14118,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         ${spinnerOnUserLine
                             ? html`<span className="workspace-branch-marker-spinner workspace-branch-marker-message-progress" style=${spinnerStyle} aria-hidden="true"></span>`
                             : null}
-                        <span className="workspace-branch-marker-message-text">${promptPreview}</span>
+                        <span className="workspace-branch-marker-message-text">${renderBranchMarkerPromptParts(promptPreviewParts)}</span>
                     </div>
                     ${showResponseLine ? html`
                         <div className="workspace-branch-marker-separator"></div>
@@ -13931,6 +14440,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!viewportEl || !currentCanvasState) return
 
         destroyGeneratedMediaInfoRenderers()
+        destroyCapabilityArtifactViews()
         resetGeneratedMediaChromeSyncKey()
         destroyBranchMarkerReasoningTooltips()
         // This is a full structural rebuild. Preflight markers live outside
@@ -14012,6 +14522,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodeEl = createVideoNode(node as VideoCanvasNode)
             } else if (node.type === 'audio') {
                 nodeEl = createAudioNode(node as AudioCanvasNode)
+            } else if (node.type === 'capabilityArtifact') {
+                nodeEl = createCapabilityArtifactNode(node as CapabilityArtifactCanvasNode)
             } else if (node.type === 'uploadPlaceholder') {
                 nodeEl = createUploadPlaceholderNode(node as UploadPlaceholderCanvasNode)
             } else if (node.type === 'branchOrigin') {
@@ -14083,7 +14595,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         return currentCanvasState.nodes.some((node: CanvasNode) => {
             if (isBranchMarkerNode(node) && getBranchMarkerThreadId(node) === threadId) return true
-            return (node.type === 'image' || node.type === 'video')
+            return (node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact')
                 && node.generatedBy?.conversationAssetId === threadId
         })
     }
@@ -14110,6 +14622,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function clearWorkspaceVisualContent(newDocuments: Document[], newAiChatThreads: AiChatThread[]): void {
         destroyGeneratedMediaInfoRenderers()
+        destroyCapabilityArtifactViews()
         resetGeneratedMediaChromeSyncKey()
         destroyBranchMarkerReasoningTooltips()
         destroyVideoControlInstances()
@@ -14267,6 +14780,45 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
         }
         return mediaLibraryPanelInstance
+    }
+
+    function ensureArtifactLibraryPanel() {
+        if (!artifactLibraryPanelInstance) {
+            artifactLibraryPanelInstance = createArtifactLibraryPanel({
+                workspaceId,
+                onInsertAsset: async (item: AssetMeta) => {
+                    if (!onAssetAttach || !item.artifactTypeId) return false
+                    const nodeId = `node-${uuidv4()}`
+                    const insertion: WorkspaceCanvasNodeInsertion = {
+                        nodeId,
+                        type: 'capabilityArtifact',
+                        artifactTypeId: item.artifactTypeId,
+                        assetId: item.assetId,
+                        dimensions: { width: 520, height: 360 },
+                    }
+                    const nextState = insertNodeAtViewportCenterInternal(insertion, {}, false)
+                    await onAssetAttach({ assetId: item.assetId, nodeId, canvasState: nextState })
+                    commitTransientCanvasStatePreservingEditors(nextState)
+                    return true
+                },
+                onAcceptAsset: async (asset) => {
+                    const node = currentCanvasState?.nodes.find(candidate => (
+                        candidate.type === 'capabilityArtifact' && candidate.assetId === asset.assetId
+                    ))
+                    if (!node) return false
+                    const result = await assetService.reviewGeneratedOutput({
+                        workspaceId,
+                        scope: 'output-node',
+                        action: 'accept',
+                        nodeId: node.nodeId,
+                    })
+                    if ('error' in result) return false
+                    applyApiCanvasGeometry(result.canvasGeometry)
+                    return true
+                },
+            })
+        }
+        return artifactLibraryPanelInstance
     }
 
     function ensureCapabilityLibraryPanel(): CapabilityLibraryPanelInstance {
@@ -14661,6 +15213,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         destroy() {
             clearRightPanelModeSwitchAnimationTimer()
             mediaLibraryPanelInstance?.destroy()
+            artifactLibraryPanelInstance?.destroy()
             destroyCapabilityLibraryPanel()
             resizeObserver.disconnect()
             window.removeEventListener('keydown', onKeyDown)
@@ -14701,6 +15254,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             connectionManager = null
             viewportBridge = null
             destroyGeneratedMediaInfoRenderers()
+            destroyCapabilityArtifactViews()
             resetGeneratedMediaChromeSyncKey()
             destroyBranchMarkerReasoningTooltips()
             for (const dropdown of branchMarkerReviewDropdowns.values()) dropdown.destroy()
@@ -14733,6 +15287,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (aiService?.disconnect) aiService.disconnect()
             }
             documentEditors.clear()
+            for (const frame of capabilityArtifactHeightFrames.values()) cancelAnimationFrame(frame)
+            capabilityArtifactHeightFrames.clear()
             for (const [threadId, { editor, aiService, gradientCleanup }] of threadEditors) {
                 if (editor?.destroy) editor.destroy()
                 if (aiService?.disconnect) aiService.disconnect()

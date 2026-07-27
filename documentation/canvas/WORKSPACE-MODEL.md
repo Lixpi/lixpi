@@ -37,7 +37,7 @@ type CanvasState = {
 }
 ```
 
-The persisted chat panel contains ordered conversation tabs, the active tab, open/history state, panel width, top-level mode, and explicit context-chip node IDs. Conversation tab `refId` values are conversation Asset IDs. Capability Runs are API records and are never persisted in Workspace state.
+The persisted chat panel contains ordered conversation tabs, the active tab, open/history state, panel width, the `capabilities | artifacts | media | aiThreads` top-level mode, and explicit context-chip node IDs. Conversation tab `refId` values are conversation Asset IDs. Capability Runs are API records and are never persisted in Workspace state.
 
 ## Canvas node identity
 
@@ -55,6 +55,22 @@ type ImageCanvasNode = {
 ```
 
 Video, audio, uploaded-document, and editable-document nodes use the same `assetId` pattern. Canvas nodes never persist Object Store keys, rendition URLs, descriptors, titles, or workspace byte coordinates.
+
+Registered Capability Artifacts use one generic node contract:
+
+```ts
+type CapabilityArtifactCanvasNode = {
+  nodeId: string
+  type: 'capabilityArtifact'
+  artifactTypeId: string
+  assetId: string
+  position: Point
+  dimensions: Dimensions
+  generatedBy?: CapabilityArtifactGeneratedByMetadata
+}
+```
+
+`artifactTypeId` selects package-owned schema, editor, body, info, replay, reference, and library factories. The workspace renderer contains no concrete Action Timeline branch.
 
 `nodeId` is a placement identity and is generated independently from `assetId`. It is used by edges, branch topology, selection, parent/child layout, and workspace references. Attaching one Asset twice creates two node IDs. Node IDs are never rewritten into Asset IDs during generation completion.
 
@@ -88,12 +104,12 @@ Generated-media lineage has two independent layers:
 On route load:
 
 1. `WorkspaceService` loads the Workspace.
-2. `AssetService` collects Asset IDs from canvas nodes, conversation tabs, the last-active conversation, and workspace-scoped document/conversation Meta pages.
+2. `AssetService` collects Asset IDs from canvas nodes, conversation tabs, the last-active conversation, and workspace-scoped document/conversation/Capability Artifact Meta pages.
 3. Point-authorized Asset reads populate `assetsStore`.
 4. `content` and `conversation` document roles resume from immutable snapshots plus step events.
 5. The renderer resolves titles/descriptors from `assetsStore` and media URLs from `/api/assets/:assetId/renditions/:name`.
 
-The Media surface uses paginated `Asset-Meta` directly, so Assets do not need to be mounted on the current canvas before they can be attached.
+The Media and Artifacts surfaces use paginated `Asset-Meta` directly, so Assets do not need to be mounted on the current canvas before they can be attached. Media excludes `capabilityArtifact`; Artifacts requests only that category.
 
 ## Membership transactions
 
@@ -136,7 +152,7 @@ Rendition completion updates the Asset and Meta projection; it does not rewrite 
 
 Replacing media creates a new Asset, detaches the old `(assetId, nodeId)`, and attaches the same node ID to the new Asset in two explicit membership transactions. It never overwrites immutable Blob bytes in place.
 
-## Generated media projection
+## Generated output projection
 
 Lineage planning persists API-owned branch marker nodes and edges. The browser may show transient media placeholders, but it does not persist membership for them.
 
@@ -149,6 +165,8 @@ On final media settlement the API:
 5. publishes `CanvasGeometryUpdate` snapshots and edges with the persisted layout revision.
 
 Cancellation settlement publishes removals for every planned pending node and preserves completed siblings.
+
+Capability Artifact outputs use the same reasoning-index branch placement, collision footprint, title, model badge, candidate review, accept/supersede, regeneration, and history surfaces. The API activates a newly persisted Artifact in the same attach transaction that adds its first node. Artifact body height is measured from complete rendered content and may grow or shrink through the shared rebalancing pipeline without changing a user-resized width. Non-media output Assets stay out of media lineage planning.
 
 ## Rendering ownership
 
@@ -163,6 +181,7 @@ Asset rendition selection is centralized:
 | audio | `original` |
 | uploaded document | `poster` |
 | editable document | Asset `content` document role |
+| Capability Artifact | Registered `capabilityArtifact` ProseMirror schema and frontend factory |
 
 Authenticated API URLs are resolved at render time. Tokens are not persisted in Workspace state or Asset documents.
 

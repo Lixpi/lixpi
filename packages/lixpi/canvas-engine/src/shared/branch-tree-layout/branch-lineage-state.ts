@@ -5,12 +5,14 @@ import type {
     BranchLineCanvasNode,
     BranchOriginCanvasNode,
     CanvasNode,
+    CapabilityArtifactCanvasNode,
     ImageCanvasNode,
     VideoCanvasNode,
 } from '@lixpi/constants'
 
 export type BranchLineageMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 export type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
+export type GeneratedOutputNode = ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode
 export type StartedLineageMarkerState = {
     markerIdsWithGeneratedChildren: Set<string>
     parentIdsWithStartedMarkerChildren: Set<string>
@@ -19,8 +21,8 @@ export type StartedLineageMarkerState = {
 // Generated-media lineage only exists on persisted image/video outputs. Keeping
 // this guard shared stops tree layout, marker refresh, and rebalance proxying
 // from growing slightly different definitions of "media that belongs to a run".
-export function isGeneratedMediaNode(node: CanvasNode): node is GeneratedMediaNode {
-    return node.type === 'image' || node.type === 'video'
+export function isGeneratedMediaNode(node: CanvasNode): node is GeneratedOutputNode {
+    return node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact'
 }
 
 // Branch markers affect drag behavior, connector anchoring, tree membership,
@@ -34,7 +36,7 @@ export function isBranchLineageMarkerNode(node: CanvasNode | undefined): node is
 // that owns the branch plus the midpoint fork/line marker that rendered the
 // prompt. State derivation needs the complete set so started markers are not
 // accidentally reflowed as if they were still pending.
-export function getGeneratedMediaLineageMarkerIds(node: GeneratedMediaNode): string[] {
+export function getGeneratedMediaLineageMarkerIds(node: GeneratedOutputNode): string[] {
     const markerIds = [
         node.generatedBy?.branchOriginNodeId,
         node.generatedBy?.branchForkNodeId,
@@ -46,7 +48,7 @@ export function getGeneratedMediaLineageMarkerIds(node: GeneratedMediaNode): str
 // Only fork/line markers sit on the connector midpoint. Branch origins are
 // structural parents, so midpoint positioning must ignore them even though they
 // are part of the same lineage marker state.
-export function getGeneratedMediaMidpointMarkerId(node: GeneratedMediaNode): string | undefined {
+export function getGeneratedMediaMidpointMarkerId(node: GeneratedOutputNode): string | undefined {
     return node.generatedBy?.branchForkNodeId ?? node.generatedBy?.branchLineNodeId
 }
 

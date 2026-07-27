@@ -49,6 +49,7 @@ import type {
     StreamStatus,
     WorkspaceContextResolution,
     CapabilityRunEvent,
+    CapabilityGenerationTrace,
 } from '@lixpi/constants'
 
 import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
@@ -97,7 +98,7 @@ type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' 
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'
 type MediaLineageSegmentType = 'media_lineage_planned' | 'media_generation_skipped' | 'media_generation_request_complete' | 'canvas_geometry_resolved'
-type CapabilitySegmentType = 'capability_run_event'
+type CapabilitySegmentType = 'capability_run_event' | 'capability_generation_trace'
 export type SegmentEvent = {
     status?: StreamStatus
     type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType | MediaLineageSegmentType | CapabilitySegmentType
@@ -133,6 +134,7 @@ export type SegmentEvent = {
     usesServerProseMirror?: boolean
     error?: string
     capabilityRunEvent?: CapabilityRunEvent
+    capabilityGenerationTrace?: CapabilityGenerationTrace
 }
 type GeneratedRunAttrs = {
     generationRequestId: string
@@ -1530,6 +1532,19 @@ class AiChatThreadPluginClass {
                 return
             }
 
+            if (type === 'capability_generation_trace') {
+                if (usesServerAuthoritativeProseMirror(event)) return
+                this.ensureGenerationTraceResponseNode(
+                    view.state,
+                    tr => view.dispatch(tr),
+                    aiProvider,
+                    effectiveThreadId,
+                    event.generationRun,
+                )
+                this.handleCapabilityGenerationTrace(view, event)
+                return
+            }
+
             // Handle image generation events
             if (type === 'image_generation_trace') {
                 if (usesServerAuthoritativeProseMirror(event)) {
@@ -1887,6 +1902,17 @@ class AiChatThreadPluginClass {
             isStreaming: false,
             imageGenerationTrace,
             imageGenerationTraceId: null,
+        }, event.generationRun)
+    }
+
+    private handleCapabilityGenerationTrace(view: EditorView, event: SegmentEvent): void {
+        const { conversationAssetId: threadId, capabilityGenerationTrace } = event
+        if (!threadId || !capabilityGenerationTrace) return
+        this.applyGenerationTraceCollapsible(view, threadId, {
+            title: `${capabilityGenerationTrace.capabilityName} generation details`,
+            isOpen: false,
+            isStreaming: false,
+            capabilityGenerationTrace,
         }, event.generationRun)
     }
 

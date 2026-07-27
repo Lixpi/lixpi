@@ -17,7 +17,10 @@ import {
     type AiModelDropdownOption,
     type AiModelMenuContentView,
 } from '$src/components/aiModelControls/index.ts'
-import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
+import type {
+    CapabilityJsonValue,
+    MediaGenerationConfigSelectionGroup,
+} from '@lixpi/constants'
 import {
     LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
     PROMPT_REFERENCE_NODE_TYPE,
@@ -27,8 +30,10 @@ import {
     normalizeMediaGenerationConfigSelectionAttr,
     parseAiModelSelectionAttr,
     parseBooleanAttr,
+    parseCapabilityInputsAttr,
     parseMediaGenerationConfigSelectionAttr,
     serializeAiModelSelectionAttr,
+    serializeCapabilityInputsAttr,
     serializeMediaGenerationConfigSelectionAttr,
 } from '@lixpi/prosemirror'
 
@@ -39,8 +44,10 @@ export {
     normalizeMediaGenerationConfigSelectionAttr,
     parseAiModelSelectionAttr,
     parseBooleanAttr,
+    parseCapabilityInputsAttr,
     parseMediaGenerationConfigSelectionAttr,
     serializeAiModelSelectionAttr,
+    serializeCapabilityInputsAttr,
     serializeMediaGenerationConfigSelectionAttr,
 }
 
@@ -115,6 +122,21 @@ type AiPromptInputNodeViewOptions = {
     createVideoResolutionDropdown: (controls: VideoOptionControls, dropdownId: string) => DropdownView
     createVideoDurationDropdown: (controls: VideoOptionControls, dropdownId: string) => DropdownView
     createSubmitButton: (controls: SubmitControls) => HTMLElement
+    createCapabilityControls?: (host: CapabilityControlsHost) => CapabilityControlsView
+}
+
+export type CapabilityControlsHost = {
+    container: HTMLElement
+    getModuleIds: () => string[]
+    getPromptText: () => string
+    getCapabilityInputs: () => Record<string, Record<string, CapabilityJsonValue>>
+    setCapabilityInputs: (inputs: Record<string, Record<string, CapabilityJsonValue>>) => void
+    setValidity: (toolId: string, valid: boolean, message?: string) => void
+}
+
+export type CapabilityControlsView = {
+    update: () => void
+    destroy: () => void
 }
 
 const modelMenuToggleDimensions = {
@@ -641,6 +663,41 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             setConfigGroups: setVideoConfigSelectionGroups,
         })
         const submitButton = options.createSubmitButton(submitControls)
+        const capabilityControlsEl = html`<div className="ai-prompt-capability-controls"></div>` as HTMLDivElement
+        const capabilityValidity = new Map<string, { valid: boolean; message?: string }>()
+        const syncSubmitValidity = (): void => {
+            const invalid = [...capabilityValidity.values()].find(value => !value.valid)
+            if (submitButton instanceof HTMLButtonElement) submitButton.disabled = Boolean(invalid)
+            submitButton.setAttribute('aria-disabled', String(Boolean(invalid)))
+            if (invalid?.message) submitButton.setAttribute('title', invalid.message)
+            else submitButton.removeAttribute('title')
+        }
+        const getModuleIds = (): string[] => {
+            const moduleIds: string[] = []
+            const seen = new Set<string>()
+            node.descendants(child => {
+                if (child.type.name !== PROMPT_REFERENCE_NODE_TYPE
+                    || child.attrs.referenceType !== 'capability-module'
+                    || typeof child.attrs.moduleId !== 'string'
+                    || seen.has(child.attrs.moduleId)) return
+                seen.add(child.attrs.moduleId)
+                moduleIds.push(child.attrs.moduleId)
+            })
+            return moduleIds
+        }
+        const capabilityControls = options.createCapabilityControls?.({
+            container: capabilityControlsEl,
+            getModuleIds,
+            getPromptText: () => node.textContent,
+            getCapabilityInputs: () => parseCapabilityInputsAttr(getNodeAttr(view, getPos, 'capabilityInputs')),
+            setCapabilityInputs: inputs => setNodeAttrs(view, getPos, {
+                capabilityInputs: serializeCapabilityInputsAttr(inputs),
+            }),
+            setValidity: (toolId, valid, message) => {
+                capabilityValidity.set(toolId, { valid, ...(message ? { message } : {}) })
+                syncSubmitValidity()
+            },
+        })
         const reasoningSelectedModelTags = new SelectedModelTagsRow({
             getUseMultipleModels: reasoningMultipleModelsControls.getUseMultipleModels,
             getSelectedModelIds: () => getSelectedModelIds('aiReasoningModels'),
@@ -833,6 +890,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
 
         if (contextTrayEl) dom.appendChild(contextTrayEl)
         dom.appendChild(contentDOM)
+        if (capabilityControls) dom.appendChild(capabilityControlsEl)
         dom.appendChild(controlsEl)
 
         const modelMenuItems: BubbleMenuItem[] = [
@@ -871,6 +929,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         }
 
         syncEmptyState(node)
+        capabilityControls?.update()
 
         return {
             dom,
@@ -889,6 +948,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 node = updatedNode
                 syncEmptyState(updatedNode)
                 updateModelDropdowns()
+                capabilityControls?.update()
                 return true
             },
             destroy: () => {
@@ -908,6 +968,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 videoResolutionDropdown.destroy?.()
                 videoDurationDropdown.destroy?.()
                 videoConfigMatrix.destroy?.()
+                capabilityControls?.destroy()
             },
             stopEvent: (e: Event) => {
                 // Prevent ProseMirror from stealing focus/clicks from controls

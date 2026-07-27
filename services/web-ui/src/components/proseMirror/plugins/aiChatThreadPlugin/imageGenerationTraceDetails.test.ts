@@ -11,7 +11,11 @@ import {
     formatTraceModelLabel,
     type ImageGenerationTraceDetailsAttrs,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
-import type { ImageGenerationTrace, ImageGenerationTraceReference } from '@lixpi/constants'
+import type {
+    CapabilityGenerationTrace,
+    ImageGenerationTrace,
+    ImageGenerationTraceReference,
+} from '@lixpi/constants'
 
 vi.mock('$src/services/auth-service.ts', () => ({
     default: {
@@ -280,6 +284,51 @@ describe('createImageGenerationTraceDetails — render contract', () => {
         expect(resolverRationale.textContent).toBe('Closest candidate in context')
         expect(excludedList.hidden).toBe(false)
         expect(excludedList.children).toHaveLength(1)
+    })
+
+    it('renders Capability execution metadata and workflow steps without media-only sections', () => {
+        const details = createImageGenerationTraceDetails()
+        const capabilityGenerationTrace: CapabilityGenerationTrace = {
+            traceVersion: 'capability-generation-trace-v1',
+            capabilityId: 'action-timeline',
+            capabilityName: 'Action Timeline',
+            capabilityRunId: 'timeline-run',
+            chatModelProvider: 'Anthropic',
+            chatModelId: 'Anthropic:claude-haiku-4-5',
+            input: { durationMs: 15_000, precisionMs: 2_000 },
+            outputAssetIds: ['timeline-asset'],
+            steps: [{
+                stepId: 'persist',
+                title: 'Persist timeline',
+                status: 'completed',
+                outputSummary: 'Timeline persisted',
+            }],
+        }
+
+        details.render({
+            attrs: {
+                title: 'Action Timeline generation details',
+                isOpen: false,
+                isStreaming: false,
+                capabilityGenerationTrace,
+            },
+            childCount: 0,
+        })
+
+        const capabilitySection = details.dom.querySelector('.ai-capability-generation-details-section') as HTMLElement
+        const toolPromptSection = details.dom.querySelector('.ai-image-generation-tool-prompt-section') as HTMLElement
+        const metadataText = details.dom.querySelector('.ai-capability-generation-metadata')?.textContent ?? ''
+        const step = details.dom.querySelector('.ai-capability-generation-step') as HTMLElement
+
+        expect(details.dom.classList.contains('has-capability-generation-trace')).toBe(true)
+        expect(capabilitySection.hidden).toBe(false)
+        expect(toolPromptSection.hidden).toBe(true)
+        expect(metadataText).toContain('Action Timeline')
+        expect(metadataText).toContain('Anthropic:claude-haiku-4-5')
+        expect(metadataText).toContain('timeline-run')
+        expect(step.textContent).toContain('Persist timeline')
+        expect(step.textContent).toContain('Completed')
+        expect(step.textContent).toContain('Timeline persisted')
     })
 })
 

@@ -9,6 +9,7 @@ import {
     ASSET_EDIT_LEASE_DURATION_MS,
     getDynamoDbTableStageName,
     NATS_SUBJECTS,
+    isAssetDocumentRole,
     type Asset,
     type AssetAccessList,
     type AssetDocumentRole,
@@ -66,6 +67,7 @@ export const buildAssetWorkspaceReferenceKey = (workspaceId: string): string =>
 
 const derivePrimaryCategory = (asset: Asset): AssetPrimaryCategory => {
     if (asset.media) return asset.media.kind
+    if (asset.artifact) return 'capabilityArtifact'
     if (asset.documents.conversation) return 'conversation'
     return 'document'
 }
@@ -77,7 +79,10 @@ export const buildAssetSearchKey = (
     primaryCategory: Exclude<AssetPrimaryCategory, 'conversation'>,
     normalizedTitle: string,
     assetId: string,
-): string => `${primaryCategory}#${normalizedTitle}#${assetId}`
+    artifactTypeId?: string,
+): string => primaryCategory === 'capabilityArtifact'
+    ? `capabilityArtifact#${artifactTypeId ?? ''}#${normalizedTitle}#${assetId}`
+    : `${primaryCategory}#${normalizedTitle}#${assetId}`
 
 const isValidDescriptor = (descriptor: unknown): descriptor is NonNullable<Asset['descriptor']> => {
     if (!descriptor || typeof descriptor !== 'object') return false
@@ -132,6 +137,10 @@ export const buildAssetMeta = (asset: Asset, scopeAndOwner?: string): AssetMeta 
         ...(asset.descriptor?.summary ? { descriptorSummary: asset.descriptor.summary } : {}),
         ...(asset.descriptor?.entityTags ? { entityTags: asset.descriptor.entityTags } : {}),
         ...(asset.descriptor?.styleTags ? { styleTags: asset.descriptor.styleTags } : {}),
+        ...(asset.artifact ? {
+            artifactTypeId: asset.artifact.artifactTypeId,
+            artifactSchemaVersion: asset.artifact.schemaVersion,
+        } : {}),
         createdAt: asset.createdAt,
         updatedAt: asset.updatedAt,
     }
@@ -144,7 +153,7 @@ export const buildAssetSearchRecord = (asset: Asset, scopeAndOwner?: string): As
     return {
         ...meta,
         primaryCategory: meta.primaryCategory,
-        searchKey: buildAssetSearchKey(meta.primaryCategory, normalizedTitle, meta.assetId),
+        searchKey: buildAssetSearchKey(meta.primaryCategory, normalizedTitle, meta.assetId, meta.artifactTypeId),
         normalizedTitle,
     }
 }
@@ -578,6 +587,7 @@ type CreateAssetInput = Pick<
     | 'assetId'
     | 'documents'
     | 'media'
+    | 'artifact'
     | 'lineage'
     | 'generatedOutputReview'
     | 'descriptor'
@@ -588,11 +598,11 @@ type CreateAssetInput = Pick<
 }
 
 const assertAssetComponents = (asset: Asset): void => {
-    if (!asset.media && !asset.lineage && Object.keys(asset.documents).length === 0) {
+    if (!asset.media && !asset.artifact && !asset.lineage && Object.keys(asset.documents).length === 0) {
         throw new Error('ASSET_COMPONENT_REQUIRED')
     }
     for (const [role, pointer] of Object.entries(asset.documents)) {
-        if (!['content', 'conversation', 'provenance'].includes(role)
+        if (!isAssetDocumentRole(role)
             || !pointer
             || pointer.role !== role
             || !/^[a-f0-9]{64}$/.test(pointer.blobHash)) {
@@ -614,6 +624,17 @@ const assertAssetComponents = (asset: Asset): void => {
     }
     if (!asset.documents.provenance && asset.states.provenance !== 'none' && !asset.lineage) {
         throw new Error('INVALID_ASSET_PROVENANCE_STATE')
+    }
+    const hasArtifactDocument = Boolean(asset.documents.capabilityArtifact)
+    if (Boolean(asset.artifact) !== hasArtifactDocument) throw new Error('INVALID_ASSET_ARTIFACT_COMPONENTS')
+    if (asset.artifact) {
+        if (!asset.artifact.artifactTypeId.trim() || !asset.artifact.schemaVersion.trim()) {
+            throw new Error('INVALID_ASSET_ARTIFACT')
+        }
+        if (asset.documents.capabilityArtifact?.schemaVersion !== asset.artifact.schemaVersion) {
+            throw new Error('INVALID_ASSET_ARTIFACT_SCHEMA_VERSION')
+        }
+        if (asset.media || asset.states.media !== 'none') throw new Error('INVALID_ASSET_ARTIFACT_MEDIA_STATE')
     }
     if (asset.media) {
         if (!['image', 'video', 'audio', 'document'].includes(asset.media.kind)) {
@@ -658,6 +679,7 @@ const AssetModel = {
         ownerUserId,
         documents = {},
         media,
+        artifact,
         lineage,
         generatedOutputReview,
         descriptor,
@@ -742,6 +764,7 @@ const AssetModel = {
             ownerUserId,
             documents: resolvedDocuments,
             ...(media ? { media } : {}),
+            ...(artifact ? { artifact } : {}),
             ...(lineage ? { lineage } : {}),
             ...(generatedOutputReview ? { generatedOutputReview } : {}),
             ...(descriptor ? { descriptor } : {}),
@@ -906,7 +929,7 @@ const AssetModel = {
         cursor?: string
     }): Promise<{ items: AssetSearchRecord[]; cursor?: string }> => {
         if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new Error('INVALID_ASSET_SEARCH_LIMIT')
-        if (categories.length === 0 || categories.some((category) => !['image', 'video', 'audio', 'document'].includes(category))) {
+        if (categories.length === 0 || categories.some((category) => !['image', 'video', 'audio', 'document', 'capabilityArtifact'].includes(category))) {
             throw new Error('INVALID_ASSET_SEARCH_CATEGORY')
         }
         const normalizedQuery = normalizeAssetTitle(query)
@@ -964,7 +987,8 @@ const AssetModel = {
         for (const item of candidates) {
             if (!allowedOrganizationIds.has(item.organizationId)
                 || item.lifecycleStatus !== 'active'
-                || (item.primaryCategory !== 'document' && !['ready', 'degraded'].includes(item.mediaStatus))) continue
+                || (!['document', 'capabilityArtifact'].includes(item.primaryCategory)
+                    && !['ready', 'degraded'].includes(item.mediaStatus))) continue
             const existing = byAssetId.get(item.assetId)
             if (!existing || item.scopeAndOwner.startsWith('principal#')) byAssetId.set(item.assetId, item)
         }
@@ -1064,7 +1088,10 @@ const AssetModel = {
         if (authorized.generatedOutputReview?.status === status) return authorized
         if (authorized.generatedOutputReview?.status === 'accepted') return { error: 'ACCEPTED_OUTPUT_IMMUTABLE' }
         if (status === 'accepted') {
-            if (authorized.media?.renditions.original?.status !== 'ready') return { error: 'GENERATED_OUTPUT_NOT_READY' }
+            const outputReady = authorized.artifact
+                ? Boolean(authorized.documents.capabilityArtifact)
+                : authorized.media?.renditions.original?.status === 'ready'
+            if (!outputReady) return { error: 'GENERATED_OUTPUT_NOT_READY' }
             if (!authorized.documents.provenance || authorized.states.provenance !== 'sealed') {
                 return { error: 'GENERATED_OUTPUT_PROVENANCE_NOT_READY' }
             }
@@ -1633,6 +1660,7 @@ const AssetModel = {
         nodeId,
         surfaceId,
         workspaceMutation,
+        activateOnAttach = false,
     }: {
         assetId: string
         workspaceId: string
@@ -1640,6 +1668,7 @@ const AssetModel = {
         nodeId?: string
         surfaceId?: string
         workspaceMutation?: AssetWorkspaceMutation
+        activateOnAttach?: boolean
     }): Promise<AssetReference | { error: string }> => {
         if (!nodeId && !surfaceId) return { error: 'PLACEMENT_REQUIRED' }
         if (nodeId && !workspaceMutation) return { error: 'CANVAS_MUTATION_REQUIRED' }
@@ -1672,6 +1701,7 @@ const AssetModel = {
             && nextSurfaceIds.length === (existing.surfaceIds ?? []).length
         )
         if (existing && referenceUnchanged) {
+            if (activateOnAttach) return { error: 'ASSET_ACTIVATION_REQUIRES_NEW_REFERENCE' }
             if (!nodeId || !workspaceMutation) return existing
             const workspaceOperations = await getWorkspaceMutationOperations({
                 workspaceId,
@@ -1700,6 +1730,9 @@ const AssetModel = {
         }
         const nextAsset: Asset = {
             ...authorized,
+            states: activateOnAttach
+                ? { ...authorized.states, lifecycle: 'active' }
+                : authorized.states,
             referenceCount: authorized.referenceCount + (existing ? 0 : 1),
             revision: authorized.revision + 1,
             updatedAt: now,
@@ -1750,11 +1783,14 @@ const AssetModel = {
                     tableName: assetsTableName(),
                     key: { assetId },
                     updates: {
+                        ...(activateOnAttach ? { states: nextAsset.states } : {}),
                         referenceCount: nextAsset.referenceCount,
                         revision: nextAsset.revision,
                         updatedAt: now,
                     },
-                    conditionExpression: '#revision = :expectedRevision AND #referenceCount = :expectedReferenceCount AND (#states.#lifecycle = :active OR #states.#lifecycle = :creating)',
+                    conditionExpression: activateOnAttach
+                        ? '#revision = :expectedRevision AND #referenceCount = :expectedReferenceCount AND #states.#lifecycle = :creating'
+                        : '#revision = :expectedRevision AND #referenceCount = :expectedReferenceCount AND (#states.#lifecycle = :active OR #states.#lifecycle = :creating)',
                     expressionAttributeNames: {
                         '#revision': 'revision',
                         '#referenceCount': 'referenceCount',
@@ -1764,7 +1800,7 @@ const AssetModel = {
                     expressionAttributeValues: {
                         ':expectedRevision': authorized.revision,
                         ':expectedReferenceCount': authorized.referenceCount,
-                        ':active': 'active',
+                        ...(activateOnAttach ? {} : { ':active': 'active' }),
                         ':creating': 'creating',
                     },
                 },

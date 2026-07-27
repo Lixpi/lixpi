@@ -32,10 +32,12 @@ import type { CapabilityDispatcher } from '@lixpi/capability-system/backend'
 import { getCapabilityDispatcher } from '../../capability-system/capability-runtime.ts'
 import {
     executeRequiredCapabilitiesForState,
+    hasPendingModelRequiredCapabilityOnlyOutput,
+    requiredCapabilityProducedCapabilityOnlyOutput,
     requiredCapabilityProducedOutput,
     resolveCapabilitiesForState,
 } from '../../capability-system/capability-state-resolver.ts'
-import { isCharacterCreatorCapabilitySelected } from '../../capability-modules/character-creator/character-creator-routing.ts'
+import { isCharacterCreatorCapabilitySelected } from '@lixpi/capability-system'
 import { resolveImageGenerationReferences } from '../image-generation-references.ts'
 
 export type BaseProviderDeps = {
@@ -350,6 +352,7 @@ export abstract class BaseProvider {
             capabilityInvocationDepth: requestData.capabilityInvocationDepth ?? 0,
             capabilityToolResults: requestData.capabilityToolResults,
             capabilityOutputAssetIds: requestData.capabilityOutputAssetIds,
+            capabilityOutputMediaAssetIds: requestData.capabilityOutputMediaAssetIds,
             capabilityReferenceImages: requestData.capabilityReferenceImages,
             capabilityReferenceImageTraceUrls: requestData.capabilityReferenceImageTraceUrls,
             capabilityUsageMode: requestData.capabilityUsageMode,
@@ -426,9 +429,12 @@ export abstract class BaseProvider {
 
     protected async planMediaBranchLineage(state: ProviderState): Promise<Partial<ProviderState>> {
         if (state.mediaBranchLineagePlan) return {}
+        if (requiredCapabilityProducedCapabilityOnlyOutput(state)) return {}
 
-        const capabilityOutputAssetIds = state.capabilityOutputAssetIds ?? []
-        if (capabilityOutputAssetIds.length === 0 && !state.imageModelVersion && !state.videoModelVersion) return {}
+        const capabilityOutputMediaAssetIds = state.capabilityOutputMediaAssetIds
+            ?? state.capabilityOutputAssetIds
+            ?? []
+        if (capabilityOutputMediaAssetIds.length === 0 && !state.imageModelVersion && !state.videoModelVersion) return {}
 
         const generationRun = this.mediaGenerationRunPlanner.buildSingleReasoningRun({
             existingRun: state.generationRun,
@@ -451,8 +457,8 @@ export abstract class BaseProvider {
             && (selectedVideoModality || (!hasSelectedModality && !state.imageModelVersion))
             ? this.mediaGenerationRunPlanner.buildMediaModelId(state.videoProviderName, state.videoModelMetaInfo?.model, state.videoModelVersion)
             : undefined
-        const preassignedMediaRuns = capabilityOutputAssetIds.length > 0
-            ? await resolveCapabilityOutputMediaRuns(capabilityOutputAssetIds)
+        const preassignedMediaRuns = capabilityOutputMediaAssetIds.length > 0
+            ? await resolveCapabilityOutputMediaRuns(capabilityOutputMediaAssetIds)
             : undefined
         const lineagePlan = this.mediaBranchLineagePlanner.buildPlan({
             generationRequestId: generationRun.generationRequestId,
@@ -587,6 +593,17 @@ export abstract class BaseProvider {
     protected async streamTokens(state: ProviderState): Promise<Partial<ProviderState>> {
         const update: Partial<ProviderState> = { streamActive: true }
         try {
+            if (!state.generationRun && hasPendingModelRequiredCapabilityOnlyOutput(state)) {
+                const generationRun = this.mediaGenerationRunPlanner.buildSingleReasoningRun({
+                    eventMeta: state.eventMeta,
+                    provider: state.provider,
+                    modelName: state.aiModelMetaInfo.model,
+                    modelVersion: state.modelVersion,
+                })
+                state.generationRun = generationRun
+                state.eventMeta = this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun)
+                this.streamPublisher?.setGenerationRun(generationRun)
+            }
             if (state.replayMediaPrompts?.length) {
                 return {
                     ...update,
@@ -599,8 +616,11 @@ export abstract class BaseProvider {
             const implResult = await this.streamImpl(state)
             return {
                 ...update,
+                generationRun: state.generationRun,
+                eventMeta: state.eventMeta,
                 capabilityToolResults: state.capabilityToolResults,
                 capabilityOutputAssetIds: state.capabilityOutputAssetIds,
+                capabilityOutputMediaAssetIds: state.capabilityOutputMediaAssetIds,
                 capabilityReferenceImages: state.capabilityReferenceImages,
                 capabilityReferenceImageTraceUrls: state.capabilityReferenceImageTraceUrls,
                 capabilityUsageMode: state.capabilityUsageMode,
@@ -672,48 +692,12 @@ export abstract class BaseProvider {
         )
         if (!validationError) return {}
 
-        const retryCount = state.imagePromptRetryCount ?? 0
         warn(`Image prompt exceeds limit for ${this.instanceKey}: ${validationError}`)
-
-        if (retryCount < 1) {
-            try {
-                const rewritten = await this.rewriteImagePromptToFitLimit(state, prompt, maxChars)
-                if (rewritten) {
-                    const trimmed = rewritten.trim()
-                    const retryError = toolValidateImagePrompt(
-                        trimmed,
-                        state.imageModelMetaInfo,
-                        state.imageProviderName,
-                    )
-                    if (!retryError) {
-                        info(`Image prompt rewritten under limit for ${this.instanceKey} after retry`)
-                        return {
-                            generatedImagePrompt: trimmed,
-                            imagePromptRetryCount: retryCount + 1,
-                        }
-                    }
-                }
-            } catch (e) {
-                err(`Image prompt rewrite failed for ${this.instanceKey}: ${e}`)
-            }
-        }
-
-        // Give up: clear the prompt so the conditional edge routes to "skip"
-        // and surface the error to the client.
         this.streamPublisher?.error(validationError)
         return {
             generatedImagePrompt: undefined,
             error: validationError,
         }
-    }
-
-    // Default no-op. OpenAI and Anthropic override to short-circuit a tool call to themselves.
-    protected async rewriteImagePromptToFitLimit(
-        _state: ProviderState,
-        _prompt: string,
-        _maxChars: number,
-    ): Promise<string | undefined> {
-        return undefined
     }
 
     protected async executeImageGeneration(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -919,22 +903,6 @@ export abstract class BaseProvider {
             state.imageProviderName,
         )
         if (!validationError) return {}
-
-        try {
-            const rewritten = await this.rewriteImagePromptToFitLimit(state, prompt, maxChars)
-            if (rewritten) {
-                const trimmed = rewritten.trim()
-                const retryError = toolValidateImagePrompt(
-                    trimmed,
-                    state.imageModelMetaInfo,
-                    state.imageProviderName,
-                )
-                if (!retryError) return { generatedImagePrompt: trimmed }
-                return { error: retryError }
-            }
-        } catch (error) {
-            warn(`[BaseProvider] Image fanout prompt rewrite failed for ${this.instanceKey}: ${this.getErrorMessage(error)}`)
-        }
 
         return { error: validationError }
     }

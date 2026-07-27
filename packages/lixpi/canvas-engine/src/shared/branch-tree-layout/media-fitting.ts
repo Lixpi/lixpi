@@ -37,9 +37,11 @@ export function computeLineageContinuationPositionToRightOfRect(
 // Chrome height is reserved for generated media (pending included: the model
 // label appears at settle time, and reserving its row up front prevents a
 // post-settle reflow). Video additionally reserves its external controls strip.
-export function getGeneratedMediaChromeCollisionHeight(nodeType: 'image' | 'video'): number {
+export function getGeneratedOutputChromeCollisionHeight(nodeType: 'image' | 'video' | 'capabilityArtifact'): number {
     const chrome = mediaGenerationLayoutSettings.generatedMediaChrome
     const baseChromeHeight = chrome.topGap + chrome.iconSize
     if (nodeType !== 'video') return baseChromeHeight
     return chrome.videoControlsBottomInset + chrome.videoControlsHeight + baseChromeHeight
 }
+
+export const getGeneratedMediaChromeCollisionHeight = getGeneratedOutputChromeCollisionHeight

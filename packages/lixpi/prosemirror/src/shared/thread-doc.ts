@@ -1,5 +1,14 @@
 'use strict'
 
+import type { PromptReferenceAtomAttrs } from '@lixpi/constants'
+
+import {
+    LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
+    normalizeLegacyCapabilityReferenceAttrs,
+    normalizePromptReferenceAttrs,
+    PROMPT_REFERENCE_NODE_TYPE,
+} from './prompt-reference.ts'
+
 // Pure ProseMirror-JSON document math shared by web-ui and the API: parsing,
 // text collection, thread lookup, and branch-marker turn pairing. No schema,
 // no rendering — plain JSON traversal only, safe in Node and the browser.
@@ -39,6 +48,24 @@ export function collectProseMirrorText(node: ProseMirrorJsonNode | undefined, op
     return node.content?.map((child) => collectProseMirrorText(child, options)).join('') ?? ''
 }
 
+export function collectProseMirrorPromptReferences(
+    node: ProseMirrorJsonNode | null | undefined,
+): PromptReferenceAtomAttrs[] {
+    if (!node) return []
+    const references: PromptReferenceAtomAttrs[] = []
+    const visit = (candidate: ProseMirrorJsonNode): void => {
+        const attrs = candidate.type === PROMPT_REFERENCE_NODE_TYPE
+            ? normalizePromptReferenceAttrs(candidate.attrs)
+            : candidate.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
+                ? normalizeLegacyCapabilityReferenceAttrs(candidate.attrs)
+                : null
+        if (attrs) references.push(attrs)
+        for (const child of candidate.content ?? []) visit(child)
+    }
+    visit(node)
+    return references
+}
+
 export function findAiChatThreadContentNode(root: ProseMirrorJsonNode, threadId: string): ProseMirrorJsonNode | null {
     if (root.type === 'aiChatThread' && root.attrs?.threadId === threadId) return root
     for (const child of root.content ?? []) {
@@ -69,7 +96,9 @@ export type BranchMarkerTurnMessages = {
 export type BranchMarkerPreviewPhase = 'preamble' | 'enhancement' | 'done'
 
 export type BranchMarkerConversationPreview = {
+    userMessage: ProseMirrorJsonNode
     userText: string
+    promptReferences: PromptReferenceAtomAttrs[]
     responseText: string
     phase: BranchMarkerPreviewPhase
     isReceiving: boolean
@@ -231,6 +260,7 @@ export function getLatestThreadTurnMessages(threadNode: ProseMirrorJsonNode): {
     for (const child of threadNode.content ?? []) {
         if (child.type === 'aiUserMessage') {
             userMessage = child
+            responseMessage = null
             continue
         }
         if (child.type === 'aiResponseMessage') {
@@ -258,9 +288,12 @@ export function getBranchMarkerConversationPreviewFromThreadContent(
 
     if (!userMessage) return null
     const userText = collectProseMirrorText(userMessage).trim()
+    const promptReferences = collectProseMirrorPromptReferences(userMessage)
     if (!responseMessage) {
         return {
+            userMessage,
             userText,
+            promptReferences,
             responseText: '',
             phase: 'preamble',
             isReceiving: Boolean(options.generationActive),
@@ -271,7 +304,9 @@ export function getBranchMarkerConversationPreviewFromThreadContent(
     const responseContainer = getBranchMarkerResponseContainer(responseMessage, descriptor)
     if (!responseContainer) {
         return {
+            userMessage,
             userText,
+            promptReferences,
             responseText: '',
             phase: 'preamble',
             isReceiving: Boolean(options.generationActive),
@@ -287,7 +322,9 @@ export function getBranchMarkerConversationPreviewFromThreadContent(
     }).trim()
     const { phase, isReceiving: streamIsReceiving } = inferBranchMarkerPreviewPhase(responseMessage, responseContainer)
     return {
+        userMessage,
         userText,
+        promptReferences,
         responseText,
         phase,
         isReceiving: streamIsReceiving || Boolean(options.generationActive),

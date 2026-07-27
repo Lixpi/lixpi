@@ -5,7 +5,7 @@ description: The built-in workflow that extracts reusable visual traits and save
 
 # Style Extraction Tool
 
-Style Extraction is a built-in Capability module implemented by the generic Capability runner. Its self-contained source under `services/api/src/capability-modules/style-extraction/` is split into `tools/` and `skills/`. The module owns one internal Tool entry package plus internal router, axes, and synthesis Skill packages, each with its own `SKILL.md`. The Tool references those sibling Skills through its manifest and plugs into the abstract runtime through a `CapabilityToolPackageInstaller`; the runtime does not import Style Extraction directly. Every contained package is structurally module-internal and therefore absent from standalone Tool/Skill catalog results.
+Style Extraction is a built-in Capability module implemented by the generic Capability runner. Its self-contained source under `packages/lixpi/capability-system/src/capabilities/style-extraction/` is split into `tools/` and `skills/`. The module owns one internal Tool entry package plus internal router, axes, and synthesis Skill packages, each with its own `SKILL.md`. The Tool references those sibling Skills through its manifest and plugs into the abstract runtime through a `CapabilityToolPackageInstaller`; the runtime does not import Style Extraction directly. Every contained package is structurally module-internal and therefore absent from standalone Tool/Skill catalog results.
 
 ## Workflow
 

@@ -8,6 +8,7 @@ import {
     getOrganizationAssetStepStreamName,
 } from '@lixpi/prosemirror'
 import {
+    ASSET_DOCUMENT_ROLES,
     getDynamoDbTableStageName,
     NATS_SUBJECTS,
     type Asset,
@@ -71,8 +72,7 @@ const purgeDocumentSubjects = async (asset: Asset): Promise<void> => {
     if (!natsService) throw new Error('NATS service unavailable')
     const streamName = getOrganizationAssetStepStreamName(asset.organizationId)
     if (!await natsService.getJetStreamStreamInfoOrNull(streamName)) return
-    const roles: AssetDocumentRole[] = ['content', 'conversation', 'provenance']
-    for (const role of roles) {
+    for (const role of ASSET_DOCUMENT_ROLES) {
         const subject = getAssetStepSubject({
             organizationId: asset.organizationId,
             assetId: asset.assetId,
@@ -164,6 +164,10 @@ const AssetMaintenance = {
         await AssetModel.removeSurfaceReferencesByPrefixSystem({
             organizationId,
             surfacePrefix: `conversation#${assetId}#media#`,
+        })
+        await AssetModel.removeSurfaceReferencesByPrefixSystem({
+            organizationId,
+            surfacePrefix: `capabilityArtifact#${assetId}`,
         })
 
         const accessRows = await listAssetAccess(assetId)

@@ -3,7 +3,7 @@
 import sharp from 'sharp'
 
 import type NatsService from '@lixpi/nats-service'
-import { info, warn, err } from '@lixpi/debug-tools'
+import { info, warn } from '@lixpi/debug-tools'
 
 // Anthropic's 5MB limit applies to the base64-encoded string. Base64 inflates
 // raw bytes by ~4/3, so 5_242_880 * 3/4 = 3_932_160. Use 3.75MB for safety.
@@ -192,10 +192,7 @@ const normalizeDataUrlBlock = async (block: Record<string, any>): Promise<Record
     return { ...block, image_url: `data:${outMime};base64,${newB64}` }
 }
 
-// Resolve image URLs in message content to base64 data URLs.
-// nats-obj://bucket/key → fetched from NATS Object Store, MIME-detected, normalized, downscaled.
-// data: URLs are passed through with normalization/downscaling.
-// https:// URLs are passed through unchanged. Anything else is dropped with a warning.
+// Resolve every cited image or fail the complete request.
 export const resolveImageUrls = async (
     content: string | Array<Record<string, any>>,
     natsClient?: NatsService,
@@ -230,11 +227,10 @@ export const resolveImageUrls = async (
             try {
                 raw = await natsClient.getObject(objRef.bucket, objRef.key)
             } catch (e) {
-                err(`Failed to fetch from NATS object store: ${e}`)
+                throw new Error(`ATTACHMENT_OBJECT_READ_FAILED:${url}`, { cause: e })
             }
             if (!raw) {
-                warn(`Dropping unresolvable image block: ${url.slice(0, 80)}`)
-                continue
+                throw new Error(`ATTACHMENT_OBJECT_NOT_FOUND:${url}`)
             }
             const buf = Buffer.from(raw)
             const detected = detectImageMime(buf)
@@ -249,7 +245,7 @@ export const resolveImageUrls = async (
             continue
         }
 
-        warn(`Dropping unsupported image URL: ${url.slice(0, 80)}`)
+        throw new Error(`ATTACHMENT_IMAGE_URL_UNSUPPORTED:${url}`)
     }
 
     return resolved
@@ -265,8 +261,7 @@ const convertImageBlockToAnthropic = (block: Record<string, any>): Record<string
                 source: { type: 'base64', media_type: mediaType, data: base64 },
             }
         } catch (e) {
-            warn(`Failed to parse image data URL: ${e}`)
-            return null
+            throw new Error('ATTACHMENT_IMAGE_DATA_INVALID:ANTHROPIC', { cause: e })
         }
     }
     return { type: 'image', source: { type: 'url', url } }
@@ -276,6 +271,7 @@ const convertContentBlockToAnthropic = (block: Record<string, any>): Record<stri
     const blockType = block.type
     if (blockType === 'input_text') return { type: 'text', text: block.text ?? '' }
     if (blockType === 'input_image') return convertImageBlockToAnthropic(block)
+    if (blockType === 'input_audio') throw new Error('ATTACHMENT_INPUT_KIND_UNSUPPORTED:ANTHROPIC:audio')
     if (blockType === 'file') {
         const file = block.file ?? {}
         const url = file.url ?? ''
@@ -287,12 +283,12 @@ const convertContentBlockToAnthropic = (block: Record<string, any>): Record<stri
                     source: { type: 'base64', media_type: mediaType, data: base64 },
                 }
             } catch (e) {
-                warn(`Failed to parse file data URL: ${e}`)
+                throw new Error('ATTACHMENT_FILE_DATA_INVALID:ANTHROPIC', { cause: e })
             }
         }
-        return null
+        throw new Error('ATTACHMENT_FILE_URL_UNSUPPORTED:ANTHROPIC')
     }
-    return null
+    throw new Error(`ATTACHMENT_BLOCK_UNSUPPORTED:ANTHROPIC:${String(blockType)}`)
 }
 
 const convertContentForAnthropic = (
@@ -302,9 +298,10 @@ const convertContentForAnthropic = (
     if (!Array.isArray(content)) return content
     const out: Array<Record<string, any>> = []
     for (const block of content) {
-        if (typeof block !== 'object' || block === null) continue
+        if (typeof block !== 'object' || block === null) throw new Error('ATTACHMENT_BLOCK_INVALID:ANTHROPIC')
         const c = convertContentBlockToAnthropic(block)
-        if (c) out.push(c)
+        if (!c) throw new Error('ATTACHMENT_BLOCK_CONVERSION_FAILED:ANTHROPIC')
+        out.push(c)
     }
     return out.length > 0 ? out : ''
 }
@@ -316,7 +313,7 @@ const convertContentForOpenAI = (
     if (!Array.isArray(content)) return content
     const out: Array<Record<string, any>> = []
     for (const block of content) {
-        if (typeof block !== 'object' || block === null) continue
+        if (typeof block !== 'object' || block === null) throw new Error('ATTACHMENT_BLOCK_INVALID:OPENAI')
         const blockType = block.type
         if (blockType === 'input_text') {
             out.push({ type: 'input_text', text: block.text ?? '' })
@@ -328,6 +325,10 @@ const convertContentForOpenAI = (
             })
         } else if (blockType === 'file') {
             out.push(block)
+        } else if (blockType === 'input_audio') {
+            out.push(block)
+        } else {
+            throw new Error(`ATTACHMENT_BLOCK_UNSUPPORTED:OPENAI:${String(blockType)}`)
         }
     }
     return out.length > 0 ? out : ''
@@ -340,7 +341,7 @@ const convertContentForGoogle = (
     if (!Array.isArray(content)) return content
     const out: Array<Record<string, any>> = []
     for (const block of content) {
-        if (typeof block !== 'object' || block === null) continue
+        if (typeof block !== 'object' || block === null) throw new Error('ATTACHMENT_BLOCK_INVALID:GOOGLE')
         const blockType = block.type
         if (blockType === 'input_text') {
             out.push({ text: block.text ?? '' })
@@ -351,9 +352,20 @@ const convertContentForGoogle = (
                     const { mediaType, base64 } = parseDataUrl(url)
                     out.push({ inlineData: { mimeType: mediaType, data: base64 } })
                 } catch (e) {
-                    warn(`Failed to parse image data URL for Google: ${e}`)
+                    throw new Error('ATTACHMENT_IMAGE_DATA_INVALID:GOOGLE', { cause: e })
                 }
+            } else {
+                throw new Error('ATTACHMENT_IMAGE_URL_UNSUPPORTED:GOOGLE')
             }
+        } else if (blockType === 'input_audio') {
+            const dataUrl = block.input_audio?.data
+            if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+                throw new Error('ATTACHMENT_AUDIO_DATA_INVALID:GOOGLE')
+            }
+            const { mediaType, base64 } = parseDataUrl(dataUrl)
+            out.push({ inlineData: { mimeType: mediaType, data: base64 } })
+        } else {
+            throw new Error(`ATTACHMENT_BLOCK_UNSUPPORTED:GOOGLE:${String(blockType)}`)
         }
     }
     return out.length > 0 ? out : ''

@@ -1,6 +1,9 @@
 'use strict'
 
-import type { CapabilityJsonValue } from '@lixpi/constants'
+import type {
+    CapabilityJsonValue,
+    CapabilityReasoningModelVariant,
+} from '@lixpi/constants'
 import {
     type CapabilityDispatcher,
     type CapabilityRequesterContext,
@@ -38,16 +41,27 @@ export async function executeRequiredCapabilitiesForState(
     state: ProviderState,
     dispatcher: CapabilityDispatcher,
     signal: AbortSignal,
+    reasoningVariants: readonly CapabilityReasoningModelVariant[] = [],
 ): Promise<Partial<ProviderState>> {
     const plan = state.resolvedCapabilityPlan
     if (!plan) return {}
     const outputs: ProviderState['capabilityToolResults'] = []
     const outputAssetIds: string[] = []
+    const outputMediaAssetIds: string[] = []
+    let capabilityOnlyOutput = false
     for (const capabilityId of plan.serializable.rootCapabilityIds) {
         const capability = plan.getManifest(capabilityId)
         if (capability?.manifest.tool?.executionPolicy !== 'required') continue
         const configuredInput = state.capabilityInputs?.[capabilityId] ?? defaultToolInput(state, capabilityId)
-        const result = await dispatcher.use({
+        const tool = capability.manifest.tool
+        capabilityOnlyOutput ||= tool.modelAxisPolicy?.outputMode === 'capability-only'
+        const variants = resolveExecutionVariants(
+            tool.executionMultiplicity ?? 'once',
+            tool.modelAxisPolicy?.reasoning ?? 'ignore',
+            reasoningVariants,
+            state,
+        )
+        const settled = await Promise.allSettled(variants.map(async variant => await dispatcher.use({
             capabilityId,
             arguments: configuredInput,
             requester: requesterFromState(state),
@@ -57,13 +71,24 @@ export async function executeRequiredCapabilitiesForState(
             invocationDepth: state.capabilityInvocationDepth,
             invocationGenerationRequestId: state.generationRun?.generationRequestId,
             signal,
-        })
-        outputs.push({
-            capabilityId,
-            runId: result.run.runId,
-            output: result.output,
-        })
-        outputAssetIds.push(...result.run.outputAssetIds)
+            variant,
+        })))
+        const fulfilled = settled.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
+        if (fulfilled.length === 0) {
+            const failed = settled.find(result => result.status === 'rejected')
+            if (failed?.status === 'rejected') throw failed.reason
+        }
+        for (const result of fulfilled) {
+            outputs.push({
+                capabilityId,
+                runId: result.run.runId,
+                output: result.output,
+            })
+            outputAssetIds.push(...result.run.outputAssetIds)
+            if (result.output.outputKind !== 'capabilityArtifact') {
+                outputMediaAssetIds.push(...result.run.outputAssetIds)
+            }
+        }
     }
     if (outputs.length === 0) return {}
     const mediaGenerationOutputs = outputs.flatMap(output => {
@@ -91,8 +116,9 @@ export async function executeRequiredCapabilitiesForState(
     const requestPrompt = extractUserPrompt([...state.messages].reverse().find(message => message.role === 'user')?.content)
     return {
         capabilityToolResults: [...(state.capabilityToolResults ?? []), ...outputs],
-        ...(outputAssetIds.length > 0 ? {
+        ...(outputAssetIds.length > 0 || capabilityOnlyOutput ? {
             capabilityOutputAssetIds: [...new Set(outputAssetIds)],
+            capabilityOutputMediaAssetIds: [...new Set(outputMediaAssetIds)],
             enableImageGeneration: false,
             enableVideoGeneration: false,
         } : {}),
@@ -113,6 +139,34 @@ export async function executeRequiredCapabilitiesForState(
     }
 }
 
+function resolveExecutionVariants(
+    multiplicity: 'once' | 'per-reasoning-model',
+    reasoningPolicy: 'all-selected' | 'first-selected' | 'ignore',
+    variants: readonly CapabilityReasoningModelVariant[],
+    state: ProviderState,
+): Array<{ axis: 'request'; variantKey: 'request' } | CapabilityReasoningModelVariant> {
+    if (multiplicity === 'once') return [{ axis: 'request', variantKey: 'request' }]
+    const available = variants.length > 0 ? [...variants] : [reasoningVariantFromState(state)]
+    if (reasoningPolicy === 'first-selected') return available.slice(0, 1)
+    if (reasoningPolicy === 'ignore') return [{ axis: 'request', variantKey: 'request' }]
+    return available
+}
+
+function reasoningVariantFromState(state: ProviderState): CapabilityReasoningModelVariant {
+    const reasoningModelId = state.generationRun?.reasoningModelId
+        ?? `${state.provider}:${state.aiModelMetaInfo?.model ?? state.modelVersion}`
+    return {
+        axis: 'reasoning-model',
+        variantKey: `reasoning:0:${reasoningModelId}`,
+        reasoningIndex: state.generationRun?.reasoningIndex ?? 0,
+        reasoningModelId,
+        provider: state.provider,
+        modelVersion: state.modelVersion,
+        contextWindow: state.aiModelMetaInfo?.contextWindow ?? 0,
+        maxCompletionSize: state.maxCompletionSize ?? state.aiModelMetaInfo?.maxCompletionSize ?? 0,
+    }
+}
+
 export function applyModelCapabilityExecutionToState(args: {
     state: ProviderState
     capabilityId: string
@@ -129,6 +183,15 @@ export function applyModelCapabilityExecutionToState(args: {
         state.capabilityOutputAssetIds = [
             ...new Set([...(state.capabilityOutputAssetIds ?? []), ...outputAssetIds]),
         ]
+        if (output.outputKind !== 'capabilityArtifact') {
+            state.capabilityOutputMediaAssetIds = [
+                ...new Set([...(state.capabilityOutputMediaAssetIds ?? []), ...outputAssetIds]),
+            ]
+        } else {
+            state.capabilityOutputMediaAssetIds ??= []
+            state.enableImageGeneration = false
+            state.enableVideoGeneration = false
+        }
     }
     const visualInstructions = output.visualInstructions
     const referenceImages = output.referenceImages
@@ -155,6 +218,20 @@ export function applyModelCapabilityExecutionToState(args: {
     state.capabilityUsageMode = mediaGenerationMode as NonNullable<ProviderState['capabilityUsageMode']>
 }
 
+export function hasPendingModelRequiredCapabilityOnlyOutput(state: ProviderState): boolean {
+    const plan = state.resolvedCapabilityPlan
+    if (!plan) return false
+    const completedCapabilityIds = new Set(
+        (state.capabilityToolResults ?? []).map(result => result.capabilityId),
+    )
+    return plan.serializable.rootCapabilityIds.some(capabilityId => {
+        if (completedCapabilityIds.has(capabilityId)) return false
+        const tool = plan.getManifest(capabilityId)?.manifest.tool
+        return tool?.executionPolicy === 'model-required'
+            && tool.modelAxisPolicy.outputMode === 'capability-only'
+    })
+}
+
 function summarizeToolOutputForModel(
     output: Record<string, CapabilityJsonValue>,
 ): Record<string, CapabilityJsonValue> {
@@ -168,6 +245,20 @@ function summarizeToolOutputForModel(
 
 export function requiredCapabilityProducedOutput(state: ProviderState): boolean {
     return (state.capabilityOutputAssetIds?.length ?? 0) > 0
+}
+
+export function requiredCapabilityProducedCapabilityOnlyOutput(
+    state: Partial<Pick<ProviderState,
+        'capabilityOutputAssetIds'
+        | 'capabilityOutputMediaAssetIds'
+        | 'enableImageGeneration'
+        | 'enableVideoGeneration'>>,
+): boolean {
+    return (state.capabilityOutputAssetIds?.length ?? 0) > 0
+        && state.capabilityOutputMediaAssetIds !== undefined
+        && state.capabilityOutputMediaAssetIds.length === 0
+        && state.enableImageGeneration === false
+        && state.enableVideoGeneration === false
 }
 
 export function defaultToolInput(state: ProviderState, capabilityId: string): Record<string, CapabilityJsonValue> {

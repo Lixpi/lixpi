@@ -11,7 +11,11 @@ import { warn, info, err } from '@lixpi/debug-tools'
 import type { ProviderName } from '@lixpi/constants'
 import type { ChatMessage } from '../graph/state.ts'
 import { convertAttachmentsForProvider, resolveImageUrls, type AttachmentFormat } from '../utils/attachments.ts'
-import { detectCapabilities, type ModelCapabilities } from '../providers/provider-capabilities.ts'
+import {
+    assertProviderMessageInputKinds,
+    detectCapabilities,
+    type ModelCapabilities,
+} from '../providers/provider-capabilities.ts'
 
 export type VlmJsonSchema = {
     name: string
@@ -555,6 +559,7 @@ const MAX_VLM_RETRIES = 2 // up to 3 attempts total
 
 export const callStructuredVlm = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = detectCapabilities(args.provider, args.modelVersion)
+    assertProviderMessageInputKinds(args.provider, args.modelVersion, args.userMessages)
     info(`[vlm] call provider=${args.provider} model=${args.modelVersion} thinkingMode=${caps.thinkingMode} requestThinking=${args.enableThinking === true}`)
 
     const dispatch = (): Promise<VlmCallResult<T>> => {

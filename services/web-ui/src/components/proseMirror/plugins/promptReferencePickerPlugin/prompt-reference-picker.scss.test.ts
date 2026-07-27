@@ -80,7 +80,7 @@ describe('prompt-reference-picker.scss', () => {
         expectRuleToContain(iconSvgRule, 'fill: currentColor;')
         expectRuleToContain(nameRule, 'font-weight: 500;')
         expectRuleToContain(nameRule, 'line-height: 1;')
-        expectRuleToContain(capabilityRule, 'color: #a55324;')
+        expectRuleToContain(capabilityRule, 'color: var(--prompt-reference-capability-module-color, #a55324);')
         expectRuleToContain(toolRule, 'color: #39766f;')
         expectRuleToContain(skillRule, 'color: #6d4fb2;')
     })

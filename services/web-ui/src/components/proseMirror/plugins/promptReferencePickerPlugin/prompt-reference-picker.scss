@@ -175,7 +175,7 @@
 }
 
 .prompt-reference-chip-capability-module {
-    color: #a55324;
+    color: var(--prompt-reference-capability-module-color, #a55324);
 }
 
 .prompt-reference-chip-tool {

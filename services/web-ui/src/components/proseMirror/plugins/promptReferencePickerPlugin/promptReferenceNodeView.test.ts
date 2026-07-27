@@ -58,6 +58,21 @@ describe('PromptReferenceNodeView', () => {
         expect(nodeView.dom.textContent?.includes('/')).toBe(false)
     })
 
+    it('renders a slash-selected Action Timeline with the standard Capability module badge', () => {
+        const node = promptReference({
+            referenceType: 'capability-module',
+            moduleId: 'action-timeline',
+            displayName: 'Action Timeline',
+        })
+        const nodeView = new PromptReferenceNodeView(node)
+
+        expect(nodeView.dom.classList.contains('prompt-reference-chip-capability-module')).toBe(true)
+        expect(nodeView.dom.querySelector('.prompt-reference-chip-content')?.textContent).toBe('Action Timeline')
+        expect(nodeView.dom.querySelector('.prompt-reference-chip-icon svg')).not.toBeNull()
+        expect(nodeView.dom.querySelector('input')).toBeNull()
+        expect(nodeView.dom.querySelector('.action-timeline-controls')).toBeNull()
+    })
+
     it('keeps identical markup and asks ProseMirror to recreate changed reference markup', () => {
         const mediaNode = promptReference({
             referenceType: 'media',

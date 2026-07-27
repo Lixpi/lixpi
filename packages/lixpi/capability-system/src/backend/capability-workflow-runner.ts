@@ -9,6 +9,7 @@ import {
     type CapabilityRun,
     type CapabilityRunEvent,
     type CapabilityRunOrigin,
+    type CapabilityReasoningModelVariant,
     type CapabilityRunStepStatus,
     type CapabilityValueBinding,
     type CapabilityWorkflowStep,
@@ -51,12 +52,14 @@ export type CapabilityWorkflowRunRequest = {
     signal?: AbortSignal
     onRunCreated?: (run: Readonly<CapabilityRun>) => void | Promise<void>
     onEvent?: (event: Readonly<CapabilityRunEvent>) => void | Promise<void>
+    variant?: { axis: 'request'; variantKey: 'request' } | CapabilityReasoningModelVariant
 }
 
 export type CapabilityWorkflowRunResult = {
     run: CapabilityRun
     output: Record<string, CapabilityJsonValue>
     stepOutputs: Readonly<Record<string, unknown>>
+    events: readonly Readonly<CapabilityRunEvent>[]
 }
 
 type StepExecutionResult = {
@@ -130,6 +133,7 @@ export class CapabilityWorkflowRunner {
             workspaceId: request.workspaceId,
             conversationAssetId: request.conversationAssetId,
             origin: request.origin,
+            variant: request.variant ?? { axis: 'request', variantKey: 'request' },
             status: 'pending',
             currentStepIds: [],
             outputAssetIds: [],
@@ -303,6 +307,7 @@ export class CapabilityWorkflowRunner {
                 run,
                 output,
                 stepOutputs: Object.freeze(Object.fromEntries(stepOutputs)),
+                events: Object.freeze(runEvents.map(event => Object.freeze(structuredClone(event)))),
             }
         } catch (error) {
             if (isCancellation(error, request.signal)) {
@@ -373,6 +378,7 @@ export class CapabilityWorkflowRunner {
             ...(args.request.invocationGenerationRequestId
                 ? { invocationGenerationRequestId: args.request.invocationGenerationRequestId }
                 : {}),
+            variant: args.request.variant ?? { axis: 'request', variantKey: 'request' },
         }
         if (!await action.authorize(authorizationContext, input)) {
             return {

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
     searchAvailable: vi.fn(),
     getAsset: vi.fn(),
+    loadCurrentSnapshot: vi.fn(),
     listAuthorized: vi.fn(),
     authorizeCapability: vi.fn(),
     readManifest: vi.fn(),
@@ -33,7 +34,13 @@ vi.mock('../models/prompt-reference-recent.ts', () => ({
         remove: mocks.removeRecents,
     },
 }))
+vi.mock('./asset-document-service.ts', () => ({
+    default: {
+        loadCurrentSnapshot: mocks.loadCurrentSnapshot,
+    },
+}))
 
+import { buildActionTimelineDocument } from '@lixpi/capability-system'
 import { PromptReferenceCatalogService } from './prompt-reference-catalog-service.ts'
 
 const moduleItems = [
@@ -114,6 +121,7 @@ beforeEach(() => {
     vi.clearAllMocks()
     mocks.searchAvailable.mockResolvedValue({ items: [] })
     mocks.getAsset.mockResolvedValue({ error: 'ASSET_NOT_FOUND' })
+    mocks.loadCurrentSnapshot.mockResolvedValue(null)
     mocks.listAuthorized.mockResolvedValue({ items: [] })
     mocks.listRecents.mockResolvedValue([])
     mocks.removeRecents.mockResolvedValue(undefined)
@@ -254,6 +262,96 @@ describe('PromptReferenceCatalogService', () => {
             limit: 2,
             cursor: first.cursor,
         })).rejects.toThrow('INVALID_CURSOR')
+    })
+
+    it('lists registered Artifacts canvas-first with module-owned metadata', async () => {
+        const document = buildActionTimelineDocument({ durationMs: 2_500, precisionMs: 1_000 }, [
+            { slotIndex: 0, runs: [{ text: 'Establish ' }, { assetId: 'asset-portrait' }] },
+            { slotIndex: 1, runs: [{ text: 'Continue' }] },
+            { slotIndex: 2, runs: [{ text: 'Finish' }] },
+        ])
+        const artifactAsset = (assetId: string, updatedAt: number) => ({
+            assetId,
+            organizationId: 'organization-1',
+            title: 'Action Timeline',
+            scope: 'workspace',
+            scopeOwnerId: 'workspace-1',
+            originWorkspaceId: 'workspace-1',
+            ownerUserId: 'user-1',
+            documents: {
+                capabilityArtifact: {
+                    blobHash: `${assetId}-snapshot`,
+                    version: 0,
+                    schemaVersion: 'action-timeline-v1',
+                    byteSize: 1,
+                },
+            },
+            artifact: {
+                artifactTypeId: 'action-timeline',
+                schemaVersion: 'action-timeline-v1',
+            },
+            states: { lifecycle: 'active' },
+            referenceCount: 1,
+            revision: 1,
+            createdAt: 1,
+            updatedAt,
+        })
+        const canvasArtifact = artifactAsset('artifact-canvas', 2)
+        const libraryArtifact = artifactAsset('artifact-library', 3)
+        mocks.searchAvailable.mockResolvedValue({
+            items: [{ assetId: canvasArtifact.assetId }, { assetId: libraryArtifact.assetId }],
+        })
+        mocks.getAsset.mockImplementation(async ({ assetId }: { assetId: string }) =>
+            assetId === canvasArtifact.assetId ? canvasArtifact : libraryArtifact)
+        mocks.loadCurrentSnapshot.mockImplementation(async (asset: { assetId: string }) => ({
+            organizationId: 'organization-1',
+            assetId: asset.assetId,
+            role: 'capabilityArtifact',
+            version: 0,
+            schemaVersion: 'action-timeline-v1',
+            doc: document,
+        }))
+        const artifactWorkspace = {
+            ...workspace,
+            canvasState: {
+                ...workspace.canvasState,
+                nodes: [{
+                    nodeId: 'node-artifact',
+                    type: 'capabilityArtifact',
+                    assetId: canvasArtifact.assetId,
+                    artifactTypeId: 'action-timeline',
+                }],
+            },
+        }
+
+        const page = await new PromptReferenceCatalogService(moduleCatalog as any).list({
+            workspace: artifactWorkspace as any,
+            requester,
+            category: 'artifacts',
+            query: '',
+        })
+
+        expect(page.items).toEqual([
+            expect.objectContaining({
+                assetId: canvasArtifact.assetId,
+                nodeId: 'node-artifact',
+                source: 'canvas',
+                displayMetadata: {
+                    durationMs: 2_500,
+                    precisionMs: 1_000,
+                    segmentCount: 3,
+                    referencedAssetIds: ['asset-portrait'],
+                },
+                referenceThumbnailAssetIds: ['asset-portrait'],
+            }),
+            expect.objectContaining({
+                assetId: libraryArtifact.assetId,
+                source: 'library',
+            }),
+        ])
+        expect(mocks.searchAvailable).toHaveBeenCalledWith(expect.objectContaining({
+            categories: ['capabilityArtifact'],
+        }))
     })
 
     it('resolves same-organization cross-workspace Asset recents without showing another organization', async () => {

@@ -40,7 +40,7 @@ const CHARACTER_SOURCE_BYTES = Buffer.from('authoritative-character-source')
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
 
 const loadCharacterSheetExample = async (): Promise<Buffer> => await readFile(new URL(
-    '../../capability-modules/character-creator/tools/resources/character-sheet-example.jpg',
+    '../../../../shared/capability-system/src/capabilities/character-creator/tools/resources/character-sheet-example.jpg',
     import.meta.url,
 ))
 

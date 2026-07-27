@@ -6,6 +6,7 @@ import type {
     AssetSearchRecord,
     CapabilityModuleMeta,
     CapabilityMeta,
+    CapabilityArtifactPromptReferenceCatalogItem,
     PromptReferenceCatalogItem,
     PromptReferenceCatalogPage,
     PromptReferenceCategory,
@@ -21,6 +22,8 @@ import AssetModel, {
 } from '../models/asset.ts'
 import CapabilityModel, { type CapabilityRequesterContext } from '../models/capability.ts'
 import PromptReferenceRecentModel from '../models/prompt-reference-recent.ts'
+import AssetDocumentService from './asset-document-service.ts'
+import { capabilityArtifactBackendRegistry } from '../capability-system/capability-artifacts.ts'
 
 type PromptReferenceCatalogRequester = AssetRequesterContext
 
@@ -41,8 +44,17 @@ type MediaCatalogCursor = {
     assetCursor?: string
 }
 
+type ArtifactCatalogCursor = {
+    category: 'artifacts'
+    query: string
+    canvasOffset: number
+    assetComplete: boolean
+    assetCursor?: string
+}
+
 const categoryReferenceTypes = (category: PromptReferenceCategory): PromptReferenceType[] => {
     if (category === 'media') return ['media']
+    if (category === 'artifacts') return ['capability-artifact']
     if (category === 'capabilities') return ['capability-module']
     if (category === 'tools') return ['tool']
     return ['skill']
@@ -103,6 +115,9 @@ const toCapabilityCatalogItem = (item: CapabilityMeta): PromptReferenceCatalogIt
 
 const getCatalogItemKey = (item: PromptReferenceCatalogItem): string => {
     if (item.referenceType === 'media') return `${item.referenceType}#${item.nodeId ?? item.assetId}`
+    if (item.referenceType === 'capability-artifact') {
+        return `${item.referenceType}#${item.nodeId ?? item.assetId}`
+    }
     return `${item.referenceType}#${item.referenceId}`
 }
 
@@ -221,7 +236,121 @@ export class PromptReferenceCatalogService {
             }
         }
 
+        if (input.category === 'artifacts') return await this.listArtifactCategory(input)
+
         return await this.listMediaCategory(input)
+    }
+
+    private async listArtifactCategory(
+        input: ListPromptReferencesInput & { query: string; limit: number },
+    ): Promise<PromptReferenceCatalogPage> {
+        const cursor = this.decodeArtifactCursor(input.cursor, input.query)
+        const placements = new Map<string, string[]>()
+        for (const node of input.workspace.canvasState?.nodes ?? []) {
+            if (node.type !== 'capabilityArtifact') continue
+            const nodeIds = placements.get(node.assetId) ?? []
+            nodeIds.push(node.nodeId)
+            placements.set(node.assetId, nodeIds)
+        }
+        const canvasItems = await this.listCanvasArtifactItems(input, placements)
+        const canvasOffset = Math.min(cursor.canvasOffset, canvasItems.length)
+        const canvasPage = canvasItems.slice(canvasOffset, canvasOffset + input.limit)
+        const items = [...canvasPage]
+        const nextCanvasOffset = canvasOffset + canvasPage.length
+        let assetCursor = cursor.assetCursor
+        let assetComplete = cursor.assetComplete
+
+        while (items.length < input.limit && !assetComplete) {
+            const page = await AssetModel.searchAvailable({
+                scopeAndOwners: [
+                    ...input.requester.workspaceIds.map(workspaceId => buildAssetScopeAndOwnerKey('workspace', workspaceId)),
+                    buildAssetScopeAndOwnerKey('user', input.requester.userId),
+                    buildAssetScopeAndOwnerKey('organization', input.workspace.organizationId),
+                ],
+                principalId: input.requester.userId,
+                organizationIds: [input.workspace.organizationId],
+                query: input.query,
+                categories: ['capabilityArtifact'],
+                limit: input.limit - items.length,
+                cursor: assetCursor,
+            })
+            for (const record of page.items) {
+                if (placements.has(record.assetId)) continue
+                const item = await this.resolveArtifactCatalogItem(input, record.assetId, 'library')
+                if (item) items.push(item)
+            }
+            if (!page.cursor || page.cursor === assetCursor) {
+                assetComplete = true
+                assetCursor = undefined
+            } else {
+                assetCursor = page.cursor
+            }
+        }
+
+        const hasMoreCanvas = nextCanvasOffset < canvasItems.length
+        const hasMore = hasMoreCanvas || !assetComplete
+        return {
+            items,
+            ...(hasMore ? {
+                cursor: this.encodeArtifactCursor({
+                    category: 'artifacts',
+                    query: input.query,
+                    canvasOffset: nextCanvasOffset,
+                    assetComplete,
+                    ...(assetCursor ? { assetCursor } : {}),
+                }),
+            } : {}),
+        }
+    }
+
+    private async listCanvasArtifactItems(
+        input: ListPromptReferencesInput & { query: string },
+        placements: Map<string, string[]>,
+    ): Promise<CapabilityArtifactPromptReferenceCatalogItem[]> {
+        const normalizedQuery = normalizeAssetTitle(input.query)
+        const groups = await Promise.all([...placements].map(async ([assetId, nodeIds]) => {
+            const asset = await AssetModel.get({ assetId, requester: input.requester })
+            if ('error' in asset || !normalizeAssetTitle(asset.title).startsWith(normalizedQuery)) return []
+            const items = await Promise.all(nodeIds.map(async nodeId =>
+                await this.resolveArtifactCatalogItem(input, assetId, 'canvas', nodeId, asset)))
+            return items.filter((item): item is CapabilityArtifactPromptReferenceCatalogItem => item !== null)
+        }))
+        return groups.flat()
+    }
+
+    private async resolveArtifactCatalogItem(
+        input: ListPromptReferencesInput,
+        assetId: string,
+        source: 'canvas' | 'library',
+        nodeId?: string,
+        resolvedAsset?: Awaited<ReturnType<typeof AssetModel.get>>,
+    ): Promise<CapabilityArtifactPromptReferenceCatalogItem | null> {
+        const asset = resolvedAsset ?? await AssetModel.get({ assetId, requester: input.requester })
+        if ('error' in asset || !asset.artifact || !asset.documents.capabilityArtifact
+            || asset.organizationId !== input.workspace.organizationId
+            || asset.states.lifecycle !== 'active') return null
+        const registered = capabilityArtifactBackendRegistry.get(asset.artifact.artifactTypeId)
+        if (!registered || registered.shared.schemaVersion !== asset.artifact.schemaVersion) return null
+        const snapshot = await AssetDocumentService.loadCurrentSnapshot(asset, 'capabilityArtifact')
+        if (!snapshot) return null
+        try {
+            registered.shared.assertInitialDocument(snapshot.doc)
+        } catch {
+            return null
+        }
+        return {
+            referenceType: 'capability-artifact',
+            referenceId: asset.assetId,
+            artifactTypeId: asset.artifact.artifactTypeId,
+            assetId: asset.assetId,
+            ...(nodeId ? { nodeId } : {}),
+            title: asset.title,
+            scope: asset.scope,
+            source,
+            updatedAt: asset.updatedAt,
+            displayMetadata: registered.shared.buildCatalogMetadata(snapshot.doc),
+            referenceThumbnailAssetIds: registered.shared.collectReferencedAssetIds(snapshot.doc).slice(0, 4),
+        }
     }
 
     private async listMediaCategory(
@@ -381,6 +510,11 @@ export class PromptReferenceCatalogService {
                 updatedAt: record.updatedAt,
             })
         }
+        if (recent.referenceType === 'capability-artifact') {
+            const page = await this.listArtifactCategory({ ...input, category: 'artifacts', query: '', limit: 20 })
+            return page.items.find(item => item.referenceType === 'capability-artifact'
+                && item.assetId === recent.referenceId) ?? null
+        }
         const asset = await AssetModel.get({ assetId: recent.referenceId, requester: input.requester })
         if ('error' in asset || asset.organizationId !== input.workspace.organizationId
             || asset.states.lifecycle !== 'active') return null
@@ -391,6 +525,26 @@ export class PromptReferenceCatalogService {
 
     private encodeModuleCursor(offset: number, query: string): string {
         return Buffer.from(JSON.stringify({ category: 'capabilities', query, offset }), 'utf8').toString('base64url')
+    }
+
+    private encodeArtifactCursor(cursor: ArtifactCatalogCursor): string {
+        return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url')
+    }
+
+    private decodeArtifactCursor(cursor: string | undefined, query: string): ArtifactCatalogCursor {
+        if (!cursor) return { category: 'artifacts', query, canvasOffset: 0, assetComplete: false }
+        try {
+            const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as ArtifactCatalogCursor
+            if (parsed.category !== 'artifacts' || parsed.query !== query
+                || !Number.isSafeInteger(parsed.canvasOffset) || parsed.canvasOffset < 0
+                || typeof parsed.assetComplete !== 'boolean'
+                || (parsed.assetCursor !== undefined && typeof parsed.assetCursor !== 'string')) {
+                throw new Error('INVALID_CURSOR')
+            }
+            return parsed
+        } catch {
+            throw new Error('INVALID_CURSOR')
+        }
     }
 
     private decodeModuleCursor(cursor: string | undefined, query: string): number {

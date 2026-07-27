@@ -102,10 +102,68 @@ describe('promptReferencePickerPlugin', () => {
         view.destroy()
     })
 
+    it.each([
+        ['@', createAtPromptReferencePickerPlugin, promptReferencePickerPluginKey],
+        ['/', createSlashCapabilityModulePickerPlugin, capabilityModulePickerPluginKey],
+    ] as const)('closes the %s picker only when pressing outside it', async (trigger, createPlugin, pluginKey) => {
+        vi.useFakeTimers()
+        const plugin = createPlugin(catalog)
+        const mount = document.createElement('div')
+        const outside = document.createElement('button')
+        document.body.append(mount, outside)
+        const view = new EditorView(mount, { state: createPromptState(plugin) })
+        const triggerPos = view.state.selection.from
+        view.dispatch(view.state.tr
+            .insertText(trigger)
+            .setMeta(pluginKey, { type: 'open', triggerPos }))
+        await vi.advanceTimersByTimeAsync(150)
+
+        const listbox = mount.querySelector<HTMLElement>('[role="listbox"]')
+        if (!listbox) throw new Error(`Expected ${trigger} picker listbox`)
+        expect(listbox.style.display).toBe('flex')
+
+        listbox.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+        expect(pluginKey.getState(view.state)?.active).toBe(true)
+
+        outside.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+        expect(pluginKey.getState(view.state)?.active).toBe(false)
+        expect(listbox.style.display).toBe('none')
+
+        view.dispatch(view.state.tr.setMeta(pluginKey, { type: 'open', triggerPos }))
+        const dispatchSpy = vi.spyOn(view, 'dispatch')
+        view.destroy()
+        dispatchSpy.mockClear()
+
+        outside.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+        expect(dispatchSpy).not.toHaveBeenCalled()
+    })
+
     it('wraps keyboard selection in both directions', () => {
         expect(nextPromptReferencePickerIndex(2, 'next', 3)).toBe(0)
         expect(nextPromptReferencePickerIndex(0, 'previous', 3)).toBe(2)
         expect(nextPromptReferencePickerIndex(0, 'next', 0)).toBe(0)
+    })
+
+    it('maps registered Artifact rows to generic prompt-reference attrs', () => {
+        expect(promptReferenceCatalogItemToAtomAttrs({
+            referenceType: 'capability-artifact',
+            referenceId: 'artifact-1',
+            assetId: 'artifact-1',
+            nodeId: 'node-1',
+            artifactTypeId: 'action-timeline',
+            source: 'canvas',
+            title: 'Action Timeline',
+            scope: 'workspace',
+            updatedAt: 1,
+            displayMetadata: { segmentCount: 3 },
+            referenceThumbnailAssetIds: [],
+        })).toEqual({
+            referenceType: 'capability-artifact',
+            assetId: 'artifact-1',
+            nodeId: 'node-1',
+            artifactTypeId: 'action-timeline',
+            displayName: 'Action Timeline',
+        })
     })
 
     it('ignores stale searches, appends cursor pages, inserts by pointer, and removes its DOM on destroy', async () => {

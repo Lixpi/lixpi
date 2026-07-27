@@ -113,6 +113,13 @@ describe('CapabilityCatalogClient', () => {
                     inputSchema: { resourceId: 'input', blobHash: 'input-hash', mediaType: 'application/schema+json', role: 'schema' },
                     outputSchema: { resourceId: 'output', blobHash: 'output-hash', mediaType: 'application/schema+json', role: 'schema' },
                     executionPolicy: 'required',
+                    executionMultiplicity: 'once',
+                    modelAxisPolicy: {
+                        reasoning: 'first-selected',
+                        image: 'ignore',
+                        video: 'ignore',
+                        outputMode: 'capability-only',
+                    },
                     workflow: { steps: [], outputs: {} },
                 },
             },

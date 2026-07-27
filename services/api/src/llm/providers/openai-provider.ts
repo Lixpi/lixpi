@@ -9,7 +9,7 @@ import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
-import { detectCapabilities } from './provider-capabilities.ts'
+import { assertProviderMessageInputKinds, detectCapabilities } from './provider-capabilities.ts'
 import {
     convertAttachmentsForProvider,
     resolveImageUrls,
@@ -17,7 +17,6 @@ import {
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 import {
     applyImagePromptLimitToSystemPrompt,
-    buildImagePromptRewriteInstruction,
     extractToolCall,
     extractReferenceImages,
     getToolForProvider,
@@ -27,6 +26,7 @@ import {
     getVideoToolForProvider,
 } from '../tools/video-generation.ts'
 import {
+    buildOpenAIRequiredCapabilityToolChoice,
     CapabilityModelToolExecutor,
     shouldExposeCapabilityModelTools,
 } from '../../capability-system/capability-model-tool-executor.ts'
@@ -34,6 +34,7 @@ import {
     asOpenAITool,
     parseCapabilityToolArguments,
 } from '@lixpi/capability-system/backend'
+import { assessProviderInputBudget } from './provider-input-budget.ts'
 
 type ImageRefFile = Pick<ResolvedImageGenerationReference,
     'role' |
@@ -77,6 +78,7 @@ export class OpenAIProvider extends BaseProvider {
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
+        assertProviderMessageInputKinds('OpenAI', state.modelVersion, state.messages)
         const messages = state.messages
         const modelVersion = state.modelVersion
         const temperature = state.temperature ?? 0.7
@@ -143,11 +145,10 @@ export class OpenAIProvider extends BaseProvider {
             tools.push(getVideoToolForProvider('OpenAI'))
         }
         const capabilityToolExecutor = shouldExposeCapabilityModelTools(state)
-            ? new CapabilityModelToolExecutor(state, this.capabilityDispatcher)
+            ? new CapabilityModelToolExecutor(state, this.capabilityDispatcher, {
+                onGenerationTrace: trace => this.publisher.capabilityGenerationTrace(trace),
+            })
             : undefined
-        if (capabilityToolExecutor) {
-            tools.push(...capabilityToolExecutor.definitions().map(asOpenAITool))
-        }
 
         try {
             // Skip START_STREAM when called as image model (via ImageRouter) or
@@ -190,7 +191,12 @@ export class OpenAIProvider extends BaseProvider {
             return update
         } catch (e: any) {
             err(`OpenAI streaming failed: ${e?.message ?? e}`)
-            return { error: e?.message ?? String(e) }
+            const message = e?.message ?? String(e)
+            if (!enableImageGeneration && !enableVideoGeneration) {
+                this.publisher.error(message)
+                this.publisher.end()
+            }
+            return { error: message }
         }
     }
 
@@ -240,7 +246,16 @@ export class OpenAIProvider extends BaseProvider {
         if (args.maxTokens && args.maxTokens > 0) {
             requestKwargs.max_output_tokens = args.maxTokens
         }
-        if (args.tools) requestKwargs.tools = args.tools
+        const requestTools = [
+            ...(args.tools ?? []),
+            ...(args.capabilityToolExecutor?.definitions().map(asOpenAITool) ?? []),
+        ]
+        if (requestTools.length > 0) requestKwargs.tools = requestTools
+        const pendingRequiredToolName = args.capabilityToolExecutor?.pendingRequiredToolName()
+        if (pendingRequiredToolName) {
+            requestKwargs.tool_choice = buildOpenAIRequiredCapabilityToolChoice(pendingRequiredToolName)
+        }
+        assessProviderInputBudget({ state: args.state, request: requestKwargs })
 
         if (args.enableImageGeneration) {
             info(`[OpenAI:${this.instanceKey}] Responses-API image-gen call ${JSON.stringify({
@@ -424,7 +439,6 @@ export class OpenAIProvider extends BaseProvider {
                         update.errorType = type
                         update.responseId = response.id
                         err(`Response failed: ${message} (code: ${code}, type: ${type})`)
-                        this.publisher.error(message, code, type)
                         throw new Error(`OpenAI Responses API error: ${message}`)
                     }
                     break
@@ -600,24 +614,6 @@ export class OpenAIProvider extends BaseProvider {
         return parts.join('\n').trim()
     }
 
-    protected override async rewriteImagePromptToFitLimit(
-        state: ProviderState,
-        prompt: string,
-        maxChars: number,
-    ): Promise<string | undefined> {
-        const caps = detectCapabilities('OpenAI', state.modelVersion)
-        const response = await this.client.responses.create({
-            model: state.modelVersion,
-            input: [{ role: 'user', content: `Original image prompt:\n${prompt}` }],
-            instructions: buildImagePromptRewriteInstruction(maxChars),
-            // GPT-5 / o-series accept only the default temperature — omit it for them.
-            ...(caps.supportsTemperature ? { temperature: 0.2 } : {}),
-            max_output_tokens: Math.max(256, Math.ceil((maxChars + 3) / 4) + 128),
-            store: false,
-        } as any)
-        const out = this.extractResponseText(response)
-        return out || undefined
-    }
 }
 
 function mergeProviderUpdates(

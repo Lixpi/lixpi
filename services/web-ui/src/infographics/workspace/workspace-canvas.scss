@@ -2466,6 +2466,19 @@
     opacity: 0.96;
 }
 
+.workspace-branch-marker-message-text .prompt-reference-chip {
+    color: inherit;
+    font-size: inherit;
+}
+
+.workspace-branch-marker-message-text {
+    --prompt-reference-capability-module-color: #eca983;
+}
+
+.workspace-branch-marker-message-text .prompt-reference-chip-capability-module {
+    color: var(--prompt-reference-capability-module-color);
+}
+
 .workspace-branch-marker-message-icon {
     display: flex;
     align-items: center;

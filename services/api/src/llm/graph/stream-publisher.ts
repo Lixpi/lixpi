@@ -6,6 +6,7 @@ import { err, info } from '@lixpi/debug-tools'
 import {
     getAiInteractionCanonicalResponseSubject,
     STREAM_STATUS,
+    type CapabilityGenerationTrace,
     type CanvasGeometryUpdate,
     type MediaBranchVlmResolution,
     type ImageGenerationTrace,
@@ -72,6 +73,7 @@ export type ChunkPayload = {
         lineagePlan?: MediaBranchLineagePlan
         canvasGeometry?: CanvasGeometryUpdate
         videoGenerationTrace?: VideoGenerationTrace
+        capabilityGenerationTrace?: CapabilityGenerationTrace
         error?: string
         generationRequestId?: string
         generationRun?: MediaGenerationRunMeta
@@ -746,6 +748,18 @@ export class StreamPublisher {
             ...(generationRun ? { generationRun } : {}),
         }
         this.publishChatContent(content)
+    }
+
+    capabilityGenerationTrace(
+        trace: CapabilityGenerationTrace,
+        generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.currentGenerationRun,
+    ): void {
+        this.publishChatContent({
+            status: STREAM_STATUS.CAPABILITY_GENERATION_TRACE,
+            aiProvider: this.provider,
+            capabilityGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
+            ...(generationRun ? { generationRun } : {}),
+        })
     }
 
     mediaBranchResolutionError(message: string): void {

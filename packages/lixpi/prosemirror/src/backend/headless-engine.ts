@@ -8,6 +8,7 @@ import {
 
 export type HeadlessProseMirrorEngineConfig = {
     documentType: ProseMirrorDocumentType | string
+    schema?: Schema
     doc?: object
     version?: number
 }
@@ -24,7 +25,7 @@ export class HeadlessProseMirrorEngine {
     private currentVersion: number
 
     constructor(config: HeadlessProseMirrorEngineConfig) {
-        this.schema = createProseMirrorSchema(config.documentType)
+        this.schema = config.schema ?? createProseMirrorSchema(config.documentType)
         const doc = this.createDoc(config.doc)
         this.editorState = EditorState.create({ doc })
         this.currentVersion = config.version ?? 0

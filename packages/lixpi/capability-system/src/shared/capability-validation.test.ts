@@ -40,6 +40,13 @@ function makeToolManifest(capabilityId = 'character-creator'): CapabilityManifes
             inputSchema,
             outputSchema,
             executionPolicy: 'required',
+            executionMultiplicity: 'once',
+            modelAxisPolicy: {
+                reasoning: 'first-selected',
+                image: 'ignore',
+                video: 'ignore',
+                outputMode: 'capability-only',
+            },
             workflow: {
                 steps: [
                     {

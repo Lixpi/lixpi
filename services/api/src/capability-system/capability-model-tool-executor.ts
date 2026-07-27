@@ -1,6 +1,11 @@
 'use strict'
 
-import type { CapabilityJsonValue } from '@lixpi/constants'
+import type {
+    CapabilityGenerationTrace,
+    CapabilityGenerationTraceStep,
+    CapabilityJsonValue,
+    CapabilityReasoningModelVariant,
+} from '@lixpi/constants'
 import {
     SEARCH_CAPABILITIES_TOOL_NAME,
     type CapabilityDispatcher,
@@ -14,6 +19,7 @@ import type { ProviderState } from '../llm/graph/state.ts'
 import {
     applyModelCapabilityExecutionToState,
     collectExplicitReferenceAssetIds,
+    defaultToolInput,
     requesterFromState,
     toolInputDeclaresProperty,
 } from './capability-state-resolver.ts'
@@ -23,12 +29,34 @@ export type CapabilityModelToolExecution = {
     result: Record<string, CapabilityJsonValue>
 }
 
+export type CapabilityModelToolExecutorOptions = {
+    onGenerationTrace?: (trace: CapabilityGenerationTrace) => void
+}
+
+export function buildAnthropicRequiredCapabilityToolChoice(name: string): Record<string, string> {
+    return { type: 'tool', name }
+}
+
+export function buildOpenAIRequiredCapabilityToolChoice(name: string): Record<string, string> {
+    return { type: 'function', name }
+}
+
+export function buildGoogleRequiredCapabilityToolConfig(name: string): Record<string, unknown> {
+    return {
+        functionCallingConfig: {
+            mode: 'ANY',
+            allowedFunctionNames: [name],
+        },
+    }
+}
+
 export class CapabilityModelToolExecutor {
     private readonly definitionsByName: ReadonlyMap<string, CapabilityModelToolDefinition>
 
     constructor(
         private readonly state: ProviderState,
         private readonly dispatcher: CapabilityDispatcher,
+        private readonly options: CapabilityModelToolExecutorOptions = {},
     ) {
         const definitions = [
             ...getStandingCapabilityModelTools(),
@@ -38,11 +66,35 @@ export class CapabilityModelToolExecutor {
     }
 
     definitions(): CapabilityModelToolDefinition[] {
+        if (this.completedModelRequiredCapabilityOnlyOutput()) return []
         return [...this.definitionsByName.values()]
     }
 
     recognizes(name: string): boolean {
         return this.definitionsByName.has(name)
+    }
+
+    pendingRequiredToolName(): string | undefined {
+        const completedCapabilityIds = new Set(
+            (this.state.capabilityToolResults ?? []).map(result => result.capabilityId),
+        )
+        return this.definitions().find(definition => (
+            definition.executionPolicy === 'model-required'
+            && definition.capabilityId
+            && !completedCapabilityIds.has(definition.capabilityId)
+        ))?.name
+    }
+
+    private completedModelRequiredCapabilityOnlyOutput(): boolean {
+        const completedCapabilityIds = new Set(
+            (this.state.capabilityToolResults ?? []).map(result => result.capabilityId),
+        )
+        return this.state.resolvedCapabilityPlan?.serializable.rootCapabilityIds.some(capabilityId => {
+            if (!completedCapabilityIds.has(capabilityId)) return false
+            const tool = this.state.resolvedCapabilityPlan?.getManifest(capabilityId)?.manifest.tool
+            return tool?.executionPolicy === 'model-required'
+                && tool.modelAxisPolicy?.outputMode === 'capability-only'
+        }) ?? false
     }
 
     async execute(call: CapabilityModelToolCall, signal: AbortSignal): Promise<CapabilityModelToolExecution> {
@@ -76,7 +128,7 @@ export class CapabilityModelToolExecutor {
         const capabilityId = definition.capabilityId
             ?? (typeof call.arguments.capabilityId === 'string' ? call.arguments.capabilityId : '')
         const argsValue = definition.capabilityId ? call.arguments : call.arguments.arguments
-        const args = argsValue && typeof argsValue === 'object' && !Array.isArray(argsValue)
+        const modelArgs = argsValue && typeof argsValue === 'object' && !Array.isArray(argsValue)
             ? argsValue as Record<string, CapabilityJsonValue>
             : {}
         const requester = requesterFromState(this.state)
@@ -86,6 +138,14 @@ export class CapabilityModelToolExecutor {
             : canResolvePlan
                 ? await this.dispatcher.resolveToolPlan(capabilityId, requester, signal)
                 : undefined
+        const configuredInput = this.state.capabilityInputs?.[capabilityId]
+        const args = configuredInput
+            ? {
+                ...modelArgs,
+                ...defaultToolInput(this.state, capabilityId),
+                ...configuredInput,
+            }
+            : { ...modelArgs }
         if (!Object.hasOwn(args, 'referenceAssetIds')
             && toolInputDeclaresProperty(sealedPlan, capabilityId, 'referenceAssetIds')) {
             args.referenceAssetIds = collectExplicitReferenceAssetIds(this.state)
@@ -98,7 +158,9 @@ export class CapabilityModelToolExecutor {
             conversationAssetId: this.state.aiChatThreadId,
             sealedPlan,
             invocationDepth: this.state.capabilityInvocationDepth,
+            invocationGenerationRequestId: this.state.generationRun?.generationRequestId,
             signal,
+            variant: resolveModelToolVariant(this.state, sealedPlan, capabilityId),
         })
         applyModelCapabilityExecutionToState({
             state: this.state,
@@ -106,6 +168,21 @@ export class CapabilityModelToolExecutor {
             runId: execution.run.runId,
             output: execution.output,
             outputAssetIds: execution.run.outputAssetIds,
+        })
+        this.options.onGenerationTrace?.({
+            traceVersion: 'capability-generation-trace-v1',
+            generationRun: this.state.generationRun,
+            capabilityId,
+            capabilityName: sealedPlan?.getManifest(capabilityId)?.manifest.name
+                ?? definition.capabilityName
+                ?? capabilityId,
+            capabilityRunId: execution.run.runId,
+            chatModelProvider: this.state.provider,
+            chatModelId: this.state.generationRun?.reasoningModelId
+                ?? `${this.state.provider}:${this.state.aiModelMetaInfo?.model ?? this.state.modelVersion}`,
+            input: structuredClone(args),
+            outputAssetIds: [...execution.run.outputAssetIds],
+            steps: buildGenerationTraceSteps(execution.events ?? []),
         })
         return {
             call,
@@ -117,6 +194,60 @@ export class CapabilityModelToolExecutor {
             },
         }
     }
+}
+
+function resolveModelToolVariant(
+    state: ProviderState,
+    plan: ProviderState['resolvedCapabilityPlan'],
+    capabilityId: string,
+): { axis: 'request'; variantKey: 'request' } | CapabilityReasoningModelVariant {
+    const tool = plan?.getManifest(capabilityId)?.manifest.tool
+    if (!tool || (tool.executionMultiplicity !== 'per-reasoning-model'
+        && (tool.modelAxisPolicy?.reasoning ?? 'ignore') === 'ignore')) {
+        return { axis: 'request', variantKey: 'request' }
+    }
+    return reasoningVariantFromState(state)
+}
+
+function reasoningVariantFromState(state: ProviderState): CapabilityReasoningModelVariant {
+    const reasoningModelId = state.generationRun?.reasoningModelId
+        ?? `${state.provider}:${state.aiModelMetaInfo?.model ?? state.modelVersion}`
+    return {
+        axis: 'reasoning-model',
+        variantKey: `reasoning:${state.generationRun?.reasoningIndex ?? 0}:${reasoningModelId}`,
+        reasoningIndex: state.generationRun?.reasoningIndex ?? 0,
+        reasoningModelId,
+        provider: state.provider,
+        modelVersion: state.modelVersion,
+        contextWindow: state.aiModelMetaInfo?.contextWindow ?? 0,
+        maxCompletionSize: state.maxCompletionSize ?? state.aiModelMetaInfo?.maxCompletionSize ?? 0,
+    }
+}
+
+function buildGenerationTraceSteps(
+    events: readonly Readonly<import('@lixpi/constants').CapabilityRunEvent>[],
+): CapabilityGenerationTraceStep[] {
+    return events.flatMap(event => {
+        if (!event.stepId || !event.stepTitle) return []
+        if (event.eventType !== 'STEP_COMPLETED'
+            && event.eventType !== 'STEP_SKIPPED'
+            && event.eventType !== 'STEP_FAILED'
+            && event.eventType !== 'STEP_CANCELLED') return []
+        return [{
+            stepId: event.stepId,
+            title: event.stepTitle,
+            status: event.eventType === 'STEP_COMPLETED'
+                ? 'completed' as const
+                : event.eventType === 'STEP_SKIPPED'
+                    ? 'skipped' as const
+                    : event.eventType === 'STEP_CANCELLED'
+                        ? 'cancelled' as const
+                        : 'failed' as const,
+            ...(event.safeInputSummary ? { inputSummary: event.safeInputSummary } : {}),
+            ...(event.safeOutputSummary ? { outputSummary: event.safeOutputSummary } : {}),
+            ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
+        }]
+    })
 }
 
 export function shouldExposeCapabilityModelTools(state: ProviderState): boolean {

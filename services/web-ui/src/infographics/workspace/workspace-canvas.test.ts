@@ -211,6 +211,29 @@ function extractFunctionBody(source: string, functionName: string): string {
 	return source.slice(functionIndex, endIndex + 1)
 }
 
+describe('Capability Artifact generated-output chrome parity', () => {
+	it('uses the same metadata panel, editable metadata, and Asset details contract as generated media', () => {
+		const ts = loadTs()
+		const infoPanel = extractFunctionBody(ts, 'createCapabilityArtifactInfoPanelChrome')
+
+		expectExcerptToContain(
+			infoPanel,
+			'canvas-generated-media-info-panel canvas-generated-media-metadata-panel nopan',
+			'createCapabilityArtifactInfoPanelChrome',
+		)
+		expectExcerptToContain(
+			infoPanel,
+			"mountAssetMetadataEditor(node, metadataEditorMount, 'details')",
+			'createCapabilityArtifactInfoPanelChrome',
+		)
+		expectExcerptToContain(
+			infoPanel,
+			'const assetDetails = createAssetDetailsSection(node)',
+			'createCapabilityArtifactInfoPanelChrome',
+		)
+	})
+})
+
 function extractNodeElClickHandler(source: string): string {
 	const listener = "nodeEl.addEventListener('click',"
 	const listenerIndex = source.indexOf(listener)
@@ -660,7 +683,9 @@ describe('Workspace canvas — generated image preview rendering', () => {
 	it('keeps in-progress generated media aligned with API-owned lineage identity', () => {
 		expectSourceToContain(ts, 'buildBranchMarkerTurnProjectionFromThreadContent')
 		expectSourceToContain(ts, 'getPendingGeneratedMediaNodeId')
-		expectSourceToContain(ts, 'allowLatestTurnFallback: isBranchMarkerGenerationActive(marker) || Boolean(marker.pendingState)')
+		expectSourceToContain(ts, 'allowLatestTurnFallback: isBranchMarkerGenerationActive(marker)')
+		expectSourceToContain(ts, '|| Boolean(marker.pendingState)')
+		expectSourceToContain(ts, '|| getBranchMarkerGeneratedArtifactNodes(marker).length > 0')
 		expectSourceToContain(ts, 'const expectedNodeId = lineageAssignment ? getPendingGeneratedMediaNodeId(lineageAssignment) : \'\'')
 		expectSourceToContain(ts, 'const completedNodeId = generationRun?.lineageAssignment\n                ? getPendingGeneratedMediaNodeId(generationRun.lineageAssignment)\n                : \'\'')
 		expectSourceToContain(ts, 'const nodeId = getPendingGeneratedMediaNodeId(lineageAssignment)')
@@ -820,6 +845,26 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expect(destroyIndex, 'renderer teardown should happen only after the same-key skip branch').toBeGreaterThan(skipReturnIndex)
 		expect(generatedChromeReplaceIndex, 'generated media chrome DOM replacement should happen only after the same-key skip branch').toBeGreaterThan(skipReturnIndex)
 		expect(mediaChromeReplaceIndex, 'media chrome DOM replacement should happen only after the same-key skip branch').toBeGreaterThan(skipReturnIndex)
+	})
+
+	it('uses the standard chat projection for Capability Artifact lineage history', () => {
+		const originPanel = extractFunctionBody(ts, 'createBranchOriginInfoPanel')
+		const forkPanel = extractFunctionBody(ts, 'createBranchForkInfoPanel')
+		const linePanel = extractFunctionBody(ts, 'createBranchLineInfoPanel')
+		const artifactHistory = extractFunctionBody(ts, 'createCapabilityArtifactHistoryPanelChrome')
+		const panelKey = extractFunctionBody(ts, 'getBranchMarkerPanelChromeKey')
+
+		for (const panelBody of [originPanel, forkPanel, linePanel]) {
+			expectExcerptToContain(panelBody, 'return createBranchMarkerInfoPanel(', 'Capability Artifact branch history')
+			expectExcerptNotToContain(panelBody, 'createCapabilityArtifactBranchHistoryPanel', 'Capability Artifact branch history')
+		}
+		expectExcerptToContain(artifactHistory, 'createBranchMarkerInfoPanel(projection.marker, {', 'Capability Artifact node history')
+		expectExcerptToContain(artifactHistory, "className: 'canvas-generated-media-history-panel'", 'Capability Artifact node history')
+		expectExcerptNotToContain(artifactHistory, '<strong>Generation history</strong>', 'Capability Artifact node history')
+		expectExcerptToContain(panelKey, "'branch-marker-panel'", 'Capability Artifact branch history key')
+		expectExcerptNotToContain(panelKey, 'generated-artifact-panel', 'Capability Artifact branch history key')
+		expectSourceToContain(ts, 'getBranchMarkerGeneratedArtifactNodes(marker).length > 0')
+		expectSourceNotToContain(ts, 'function createCapabilityArtifactBranchHistoryPanel')
 	})
 
 	it('renders the info panel in a viewport-transformed decoupled layer', () => {
@@ -1155,6 +1200,7 @@ describe('Workspace canvas — detached generation resume stability', () => {
 	it('creates detached canvas threads with the submitted user message already persisted', () => {
 		const submitBody = extractFunctionBody(ts, 'submitCanvasGenerationRun')
 		const submitPersistedBody = extractFunctionBody(ts, 'submitPersistedDetachedCanvasThreadMessage')
+		const markerContentBody = extractFunctionBody(ts, 'createBranchMarkerContent')
 
 		expectExcerptToContain(submitBody, 'const initialContent = {', 'detached run submit')
 		expectExcerptToContain(submitBody, "type: 'aiUserMessage'", 'detached run submit')
@@ -1166,6 +1212,9 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptToContain(submitPersistedBody, 'editorView.state.doc.descendants', 'persisted detached submit')
 		expectExcerptToContain(submitPersistedBody, 'node.type?.name === \'aiChatThread\' && node.attrs?.threadId === threadId', 'persisted detached submit')
 		expectExcerptToContain(submitPersistedBody, 'setMeta(USE_AI_CHAT_META, { threadId, nodePos })', 'persisted detached submit')
+		expectExcerptToContain(markerContentBody, 'getBranchMarkerPromptParts(\n            threadPreview?.userMessage,', 'detached marker Capability badge order')
+		expectExcerptToContain(markerContentBody, 'renderBranchMarkerPromptParts(promptPreviewParts)', 'detached marker Capability badge order')
+		expectExcerptNotToContain(markerContentBody, '${promptReferenceBadges}', 'detached marker Capability badge order')
 	})
 
 	it('restores preflight markers from persisted standalone canvas threads after early reload', () => {
