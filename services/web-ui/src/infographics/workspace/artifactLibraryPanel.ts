@@ -112,7 +112,12 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
             const metadata: AssetMeta[] = []
             let cursor: string | undefined
             do {
-                const page = await this.assetService.list({ primaryCategory: 'capabilityArtifact', limit: 100, cursor })
+                const page = await this.assetService.list({
+                    workspaceId: this.options.workspaceId,
+                    primaryCategory: 'capabilityArtifact',
+                    limit: 100,
+                    cursor,
+                })
                 metadata.push(...page.items)
                 cursor = page.cursor
             } while (cursor)
@@ -132,7 +137,7 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
     }
 
     private async loadEntry(meta: AssetMeta): Promise<ArtifactLibraryEntry | null> {
-        const asset = await this.assetService.refresh(meta.assetId)
+        const asset = await this.assetService.refresh(meta.assetId, this.options.workspaceId)
         if ('error' in asset || !asset.artifact) return null
         const definition = capabilityArtifactSharedRegistry.get(asset.artifact.artifactTypeId)
         const snapshot = assetDocumentsStore.get(asset.assetId, 'capabilityArtifact')
@@ -210,7 +215,7 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
 
     private async renderInspector(assetId: string): Promise<void> {
         this.inspectorEl.replaceChildren(html`<div className="media-library-state">Loading Artifact…</div>`)
-        const asset = await this.assetService.refresh(assetId)
+        const asset = await this.assetService.refresh(assetId, this.options.workspaceId)
         if (!this.mounted || this.selectedAssetId !== assetId) return
         if ('error' in asset || !asset.artifact) {
             this.inspectorEl.replaceChildren(html`<div className="media-library-state media-library-state-error">Artifact unavailable.</div>`)

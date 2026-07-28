@@ -52,6 +52,7 @@ The shared schema builder does two important things:
 Custom nodes are intentionally split by responsibility:
 
 - Inline prompt references use the typed `prompt_reference` atom. The shared schema also parses `capability_reference` atoms in stored drafts and conversation snapshots; insertion paths create only `prompt_reference`. One shared prompt-reference preview renderer resolves Asset identity, labels, authenticated media, and hover cards. Canvas hosts select its inline-popover mode so cards remain inside the canvas transform; ordinary app surfaces retain body-portaled placement.
+- The `@` and `/` picker clients always send the active workspace identity. The API limits catalog partitions, recents, and final atom authorization to that workspace's Asset and Capability scope chain; the browser never receives sibling-workspace catalog rows to filter locally.
 
 - Base custom nodes (exported by `@lixpi/prosemirror`, re-exported through `customNodes/index.js`):
   - `code_block` override (`codeBlockNode`): extends the base `code_block` with attrs (e.g. theme) used by the CodeMirror NodeView.

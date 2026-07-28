@@ -19,8 +19,10 @@ import {
     rememberAuthorizedAssetEvent,
 } from '../../services/asset-event-relay.ts'
 import BlobModel from '../../models/blob.ts'
+import Organization from '../../models/organization.ts'
 import Workspace from '../../models/workspace.ts'
 import GeneratedOutputReviewService from '../../services/generated-output-review-service.ts'
+import { createAssetRequesterForWorkspaceUser } from '../../services/workspace-reference-scope.ts'
 
 const { ASSET_SUBJECTS } = NATS_SUBJECTS
 const generatedOutputReviewService = new GeneratedOutputReviewService()
@@ -31,18 +33,36 @@ export const getRequesterContext = async (userId: string) => {
     return requester
 }
 
+const getWorkspaceRequesterContext = async ({
+    workspaceId,
+    userId,
+}: {
+    workspaceId: string
+    userId: string
+}) => {
+    const workspace = await Workspace.getWorkspace({ workspaceId, userId })
+    if ('error' in workspace || workspace.deletingAt) return { error: 'WORKSPACE_ACCESS_DENIED' as const }
+    const organization = await Organization.getOrganization({ organizationId: workspace.organizationId, userId })
+    if ('error' in organization) return { error: 'ORGANIZATION_ACCESS_DENIED' as const }
+    const requester = createAssetRequesterForWorkspaceUser(workspace, userId, true)
+    ensureAssetEventRelay({ requester })
+    return { requester, workspace }
+}
+
 const authorizeAssetWorkspaceBoundary = async ({
     assetId,
     workspaceId,
     requester,
+    workspace: suppliedWorkspace,
 }: {
     assetId: string
     workspaceId: string
     requester: Awaited<ReturnType<typeof getRequesterContext>>
+    workspace?: Exclude<Awaited<ReturnType<typeof Workspace.getWorkspace>>, { error: string }>
 }) => {
     if (!requester.editableWorkspaceIds.includes(workspaceId)) return { error: 'WORKSPACE_ACCESS_DENIED' as const }
     const [workspace, asset] = await Promise.all([
-        Workspace.getWorkspace({ workspaceId, userId: requester.userId }),
+        suppliedWorkspace ?? Workspace.getWorkspace({ workspaceId, userId: requester.userId }),
         AssetModel.get({ assetId, requester }),
     ])
     if ('error' in workspace) return { error: workspace.error }
@@ -154,6 +174,19 @@ export const assetSubjects = [
         },
         handler: async (data: any) => {
             const userId = data.user.userId as string
+            if (typeof data.workspaceId === 'string' && data.workspaceId) {
+                const context = await getWorkspaceRequesterContext({ workspaceId: data.workspaceId, userId })
+                if ('error' in context) return context
+                const result = await AssetModel.get({
+                    assetId: data.assetId,
+                    requester: context.requester,
+                })
+                if (!('error' in result) && result.organizationId !== context.workspace.organizationId) {
+                    return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
+                }
+                if (!('error' in result)) rememberAuthorizedAssetEvent(userId, result.assetId)
+                return result
+            }
             const result = await AssetModel.get({
                 assetId: data.assetId,
                 requester: await getRequesterContext(userId),
@@ -171,7 +204,14 @@ export const assetSubjects = [
             sub: { allow: [] },
         },
         handler: async (data: any) => {
-            const requester = await getRequesterContext(data.user.userId)
+            const context = typeof data.workspaceId === 'string' && data.workspaceId
+                ? await getWorkspaceRequesterContext({
+                    workspaceId: data.workspaceId,
+                    userId: data.user.userId,
+                })
+                : null
+            if (context && 'error' in context) return context
+            const requester = context?.requester ?? await getRequesterContext(data.user.userId)
             const result = await AssetModel.listAvailable({
                 scopeAndOwners: [
                     ...requester.workspaceIds.map((workspaceId) => buildAssetScopeAndOwnerKey('workspace', workspaceId)),
@@ -336,18 +376,23 @@ export const assetSubjects = [
         },
         handler: async (data: any) => {
             if (typeof data.holderId !== 'string' || !data.holderId) return { error: 'LEASE_HOLDER_REQUIRED' }
-            const requester = await getRequesterContext(data.user.userId)
+            const context = await getWorkspaceRequesterContext({
+                workspaceId: data.workspaceId,
+                userId: data.user.userId,
+            })
+            if ('error' in context) return context
             const boundary = await authorizeAssetWorkspaceBoundary({
                 assetId: data.assetId,
                 workspaceId: data.workspaceId,
-                requester,
+                requester: context.requester,
+                workspace: context.workspace,
             })
             if ('error' in boundary) return boundary
             return await AssetModel.acquireLease({
                 assetId: data.assetId,
                 workspaceId: data.workspaceId,
                 holderId: data.holderId,
-                requester,
+                requester: context.requester,
             })
         },
     },
@@ -361,8 +406,17 @@ export const assetSubjects = [
         },
         handler: async (data: any) => {
             if (typeof data.holderId !== 'string' || !data.holderId) return { error: 'LEASE_HOLDER_REQUIRED' }
-            const requester = await getRequesterContext(data.user.userId)
-            const boundary = await authorizeAssetWorkspaceBoundary({ assetId: data.assetId, workspaceId: data.workspaceId, requester })
+            const context = await getWorkspaceRequesterContext({
+                workspaceId: data.workspaceId,
+                userId: data.user.userId,
+            })
+            if ('error' in context) return context
+            const boundary = await authorizeAssetWorkspaceBoundary({
+                assetId: data.assetId,
+                workspaceId: data.workspaceId,
+                requester: context.requester,
+                workspace: context.workspace,
+            })
             if ('error' in boundary) return boundary
             return await AssetModel.renewLease({
                 assetId: data.assetId,
@@ -382,8 +436,17 @@ export const assetSubjects = [
         },
         handler: async (data: any) => {
             if (typeof data.holderId !== 'string' || !data.holderId) return { error: 'LEASE_HOLDER_REQUIRED' }
-            const requester = await getRequesterContext(data.user.userId)
-            const boundary = await authorizeAssetWorkspaceBoundary({ assetId: data.assetId, workspaceId: data.workspaceId, requester })
+            const context = await getWorkspaceRequesterContext({
+                workspaceId: data.workspaceId,
+                userId: data.user.userId,
+            })
+            if ('error' in context) return context
+            const boundary = await authorizeAssetWorkspaceBoundary({
+                assetId: data.assetId,
+                workspaceId: data.workspaceId,
+                requester: context.requester,
+                workspace: context.workspace,
+            })
             if ('error' in boundary) return boundary
             return await AssetModel.releaseLease({
                 assetId: data.assetId,
@@ -419,17 +482,34 @@ export const assetSubjects = [
             pub: { allow: [ASSET_SUBJECTS.DOCUMENT_RESUME] },
             sub: { allow: [`${ASSET_SUBJECTS.DOCUMENT_EVENTS}.{userIdToken}.>`] },
         },
-        handler: async (data: any) => await AssetDocumentService.resume({
-            coordinate: {
-                organizationId: data.organizationId,
-                assetId: data.assetId,
-                role: data.role,
-            },
-            requester: await getRequesterContext(data.user.userId),
-            localVersion: data.localVersion,
-            localStreamSeq: data.localStreamSeq,
-            acceptSnapshot: data.acceptSnapshot !== false,
-            activateLiveRelay: data.activateLiveRelay === true,
-        }),
+        handler: async (data: any) => {
+            const userId = data.user.userId as string
+            const activateLiveRelay = data.activateLiveRelay === true
+            let requester: Awaited<ReturnType<typeof getRequesterContext>>
+            if (activateLiveRelay) {
+                if (typeof data.workspaceId !== 'string' || !data.workspaceId) return { error: 'WORKSPACE_ID_REQUIRED' }
+                const workspace = await Workspace.getWorkspace({ workspaceId: data.workspaceId, userId })
+                if ('error' in workspace || workspace.deletingAt) return { error: 'WORKSPACE_ACCESS_DENIED' }
+                if (workspace.organizationId !== data.organizationId) return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
+                const organization = await Organization.getOrganization({ organizationId: workspace.organizationId, userId })
+                if ('error' in organization) return { error: 'ORGANIZATION_ACCESS_DENIED' }
+                requester = createAssetRequesterForWorkspaceUser(workspace, userId, true)
+            } else {
+                requester = await getRequesterContext(userId)
+            }
+            return await AssetDocumentService.resume({
+                coordinate: {
+                    organizationId: data.organizationId,
+                    assetId: data.assetId,
+                    role: data.role,
+                },
+                requester,
+                localVersion: data.localVersion,
+                localStreamSeq: data.localStreamSeq,
+                acceptSnapshot: data.acceptSnapshot !== false,
+                activateLiveRelay,
+                ...(activateLiveRelay ? { workspaceId: data.workspaceId } : {}),
+            })
+        },
     },
 ]

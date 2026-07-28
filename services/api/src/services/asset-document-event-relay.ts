@@ -11,12 +11,15 @@ import {
 } from '@lixpi/prosemirror'
 
 import AssetModel from '../models/asset.ts'
-import { getAssetRequesterContext } from './asset-requester-context.ts'
+import Organization from '../models/organization.ts'
+import Workspace from '../models/workspace.ts'
+import { createAssetRequesterForWorkspaceUser } from './workspace-reference-scope.ts'
 
 type ActiveDocumentEventRelay = {
     requester: AssetRequesterContext
     requesterRefreshedAt: number
     targetSubject: string
+    workspaceId: string
 }
 
 const activeRelays = new Map<string, ActiveDocumentEventRelay>()
@@ -25,9 +28,11 @@ const REQUESTER_REFRESH_INTERVAL_MS = 5_000
 export const ensureAssetDocumentEventRelay = ({
     coordinate,
     requester,
+    workspaceId,
 }: {
     coordinate: AssetDocCoordinate
     requester: AssetRequesterContext
+    workspaceId: string
 }): string => {
     const { userId } = requester
     const natsService = NATS_Service.getInstance()
@@ -41,6 +46,7 @@ export const ensureAssetDocumentEventRelay = ({
     if (existing) {
         existing.requester = requester
         existing.requesterRefreshedAt = Date.now()
+        existing.workspaceId = workspaceId
         return targetSubject
     }
 
@@ -50,6 +56,7 @@ export const ensureAssetDocumentEventRelay = ({
         requester,
         requesterRefreshedAt: Date.now(),
         targetSubject,
+        workspaceId,
     }
     activeRelays.set(relayKey, relay)
     void (async () => {
@@ -57,7 +64,13 @@ export const ensureAssetDocumentEventRelay = ({
             for await (const message of subscription) {
                 try {
                     if (Date.now() - relay.requesterRefreshedAt >= REQUESTER_REFRESH_INTERVAL_MS) {
-                        relay.requester = await getAssetRequesterContext(userId)
+                        const workspace = await Workspace.getWorkspace({ workspaceId: relay.workspaceId, userId })
+                        const organization = 'error' in workspace
+                            ? workspace
+                            : await Organization.getOrganization({ organizationId: workspace.organizationId, userId })
+                        relay.requester = 'error' in workspace || workspace.deletingAt || 'error' in organization
+                            ? { userId, workspaceIds: [], editableWorkspaceIds: [], organizationIds: [] }
+                            : createAssetRequesterForWorkspaceUser(workspace, userId, true)
                         relay.requesterRefreshedAt = Date.now()
                     }
                     const authorized = await AssetModel.get({

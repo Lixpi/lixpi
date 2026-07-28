@@ -625,6 +625,7 @@ const AssetDocumentService = {
         localStreamSeq = 0,
         acceptSnapshot = true,
         activateLiveRelay = false,
+        workspaceId,
     }: {
         coordinate: AssetDocCoordinate
         requester: AssetRequesterContext
@@ -632,6 +633,7 @@ const AssetDocumentService = {
         localStreamSeq?: number
         acceptSnapshot?: boolean
         activateLiveRelay?: boolean
+        workspaceId?: string
     }) => {
         if (!ASSET_DOCUMENT_ROLES.includes(coordinate.role)) return { error: 'INVALID_DOCUMENT_ROLE' }
         if (!Number.isSafeInteger(localVersion) || localVersion < 0
@@ -644,8 +646,11 @@ const AssetDocumentService = {
         if (!authorized.documents[coordinate.role]) return { error: 'DOCUMENT_ROLE_NOT_FOUND' }
         const asset = authorized
         const liveSubject = activateLiveRelay
-            ? ensureAssetDocumentEventRelay({ coordinate, requester })
+            ? workspaceId
+                ? ensureAssetDocumentEventRelay({ coordinate, requester, workspaceId })
+                : undefined
             : undefined
+        if (activateLiveRelay && !workspaceId) return { error: 'WORKSPACE_ID_REQUIRED' }
         const snapshot = getSnapshotReference(asset, coordinate.role)
         const transport = AssetProseMirrorStepTransport.fromSingleton()
         const state = await transport.getCurrentSubjectState(coordinate)

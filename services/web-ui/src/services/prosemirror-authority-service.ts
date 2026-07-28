@@ -148,7 +148,7 @@ export class ProseMirrorAuthorityService {
                 this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10_000)
                 return
             }
-            const asset = await this.assetService.get(this.options.assetId)
+            const asset = await this.assetService.get(this.options.assetId, this.options.workspaceId)
             if (this.disconnected) return
             const lease = 'error' in asset ? undefined : asset.editLease
             this.notifyLeaseState({
@@ -224,6 +224,7 @@ export class ProseMirrorAuthorityService {
                     {
                         token: await AuthService.getTokenSilently(),
                         organizationId: this.options.organizationId,
+                        workspaceId: this.options.workspaceId,
                         assetId: this.options.assetId,
                         role: this.options.role,
                         localVersion: this.localVersion,

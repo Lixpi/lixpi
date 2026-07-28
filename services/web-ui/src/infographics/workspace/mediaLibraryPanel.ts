@@ -121,7 +121,11 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
             const assets: AssetMeta[] = []
             let cursor: string | undefined
             do {
-                const page = await this.assetService.list({ limit: 100, cursor })
+                const page = await this.assetService.list({
+                    workspaceId: this.options.workspaceId,
+                    limit: 100,
+                    cursor,
+                })
                 assets.push(...page.items)
                 cursor = page.cursor
             } while (cursor)
@@ -224,7 +228,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
     private async renderAssetInspector(assetId: string): Promise<void> {
         this.inspectorEl.replaceChildren(html`<div className="media-library-state">Loading Asset…</div>`)
         try {
-            const asset = await this.assetService.get(assetId)
+            const asset = await this.assetService.get(assetId, this.options.workspaceId)
             if (!this.isMounted || this.selectedAssetId !== assetId || !this.inspectorEl.isConnected) return
             if ('error' in asset) {
                 this.inspectorEl.replaceChildren(html`<div className="media-library-state media-library-state-error">Asset unavailable: ${asset.error}</div>`)
@@ -292,7 +296,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
     }
 
     private async updateAssetTitle(asset: Asset, titleInput: HTMLInputElement, stateEl: HTMLElement): Promise<void> {
-        const current = await this.assetService.get(asset.assetId)
+        const current = await this.assetService.get(asset.assetId, this.options.workspaceId)
         if ('error' in current) return
         const updated = await this.assetService.updateMetadata(current.assetId, current.revision, { title: titleInput.value.trim() })
         if ('error' in updated) {
@@ -305,7 +309,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
     }
 
     private async updateAssetScope(asset: Asset, scopeSelect: HTMLSelectElement, stateEl: HTMLElement): Promise<void> {
-        const current = await this.assetService.get(asset.assetId)
+        const current = await this.assetService.get(asset.assetId, this.options.workspaceId)
         if ('error' in current) return
         const scope = scopeSelect.value as Asset['scope']
         const scopeOwnerId = scope === 'workspace'

@@ -16,7 +16,7 @@ The API owns both mappings. The browser renders plans and authoritative geometry
 
 Before provider fan-out, the API resolves:
 
-1. descriptor-first workspace context;
+1. explicitly attached prompt and composer context;
 2. media branch candidates using authorized Asset renditions;
 3. the operation kind and target/parent node;
 4. reasoning and media run axes;
@@ -60,6 +60,7 @@ The assignment’s topology fields are node IDs. They are not Asset IDs.
 - A simple fresh single generation may connect directly from its origin without a per-run marker.
 
 Markers store prompt/provenance information and `conversationAssetId`. Their positions and dimensions are persisted in the Workspace.
+At request settlement, the API projects the marker's bounded reasoning-run response preview into `provenance.reasoningResponseText`. The conversation response is authoritative while mounted; the persisted marker field guarantees the reasoning row survives reloads and prompt-replay workflows. If a provider emits only a media Tool call, the Tool prompt stored in that run's generation trace is the response fallback instead of an empty row.
 
 ## Pending output Assets
 
@@ -91,13 +92,15 @@ The browser sees stable Asset IDs from `MEDIA_LINEAGE_PLANNED` before partial/fi
 
 ## Candidate media
 
-Canvas candidate snapshots contain `nodeId` plus `assetId`, roles, branch hints, descriptors, and prompt metadata. Browser-supplied byte URLs are not trusted. The API point-authorizes each Asset and resolves a model-safe Blob:
+Canvas candidate snapshots contain `nodeId` plus `assetId`, roles, branch hints, descriptors, and prompt metadata. `explicitReferenceCandidateIds` is the allowlist; the API drops every other candidate before Asset reads or branch resolution. Prompt reference atoms can add Asset-only candidates without canvas node IDs. Browser-supplied byte URLs are not trusted. The API point-authorizes each allowed Asset and resolves a model-safe Blob:
 
 - image: canonical/original or preview as required;
 - video grounding: representative frame, falling back to poster;
 - explicit video extension: canonical/original MP4.
 
 Videos cost one still image in branch resolution. The MP4 is used only by the explicit extension path.
+
+The branch VLM assigns target, style, and lineage roles only within the explicit candidate set. Every explicit candidate remains a generation reference. If the VLM cannot assign a target safely, the API keeps all explicit references and plans a targetless fresh branch instead of failing preflight.
 
 ## Canvas projection
 

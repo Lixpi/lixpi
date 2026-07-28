@@ -58,6 +58,7 @@ export function restrictMediaRequestToCharacterImages(
     delete imageOnlyRequest.videoOptions
     return {
         ...imageOnlyRequest,
+        outputMediaTypes: ['image'],
         useMultipleVideoModels: false,
         videoModelIds: [],
         ...(request.regeneration?.mode === 'existing-prompt' ? {

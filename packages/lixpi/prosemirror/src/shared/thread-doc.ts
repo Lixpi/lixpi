@@ -42,6 +42,12 @@ export function collectProseMirrorText(node: ProseMirrorJsonNode | undefined, op
     if (options.excludedNodeTypes?.includes(node.type ?? '')) return ''
     if (node.type === 'text') return node.text ?? ''
     if (node.type === 'hard_break') return '\n'
+    if (node.type === PROMPT_REFERENCE_NODE_TYPE) {
+        return normalizePromptReferenceAttrs(node.attrs)?.displayName ?? ''
+    }
+    if (node.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE) {
+        return normalizeLegacyCapabilityReferenceAttrs(node.attrs)?.displayName ?? ''
+    }
     if (node.type === 'aiGeneratedImage') {
         return typeof node.attrs?.revisedPrompt === 'string' ? node.attrs.revisedPrompt : ''
     }
@@ -193,6 +199,55 @@ function hasStreamingCollapsibleBlock(node: ProseMirrorJsonNode): boolean {
     return Boolean(node.content?.some(hasStreamingCollapsibleBlock))
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    return value as Record<string, unknown>
+}
+
+function readNonEmptyString(value: unknown): string {
+    return typeof value === 'string' ? value.trim() : ''
+}
+
+function getCapabilityTraceResponseText(trace: Record<string, unknown>): string {
+    const steps = Array.isArray(trace.steps) ? trace.steps : []
+    for (let index = steps.length - 1; index >= 0; index--) {
+        const outputSummary = readNonEmptyString(asRecord(steps[index])?.outputSummary)
+        if (outputSummary) return outputSummary
+    }
+
+    const capabilityName = readNonEmptyString(trace.capabilityName)
+    const outputAssetIds = Array.isArray(trace.outputAssetIds) ? trace.outputAssetIds : []
+    return capabilityName && outputAssetIds.length > 0 ? `${capabilityName} completed.` : ''
+}
+
+// Some providers return the media Tool call without also emitting the required
+// conversational preamble/XML prompt. The generated prompt still belongs to the
+// reasoning run and is persisted in its trace, so it is the durable response
+// fallback instead of leaving the branch marker blank.
+function getTraceBackedReasoningResponseText(node: ProseMirrorJsonNode): string {
+    if (node.type === 'aiCollapsibleBlock') {
+        const imageTrace = asRecord(node.attrs?.imageGenerationTrace)
+        const imagePrompt = readNonEmptyString(imageTrace?.toolPrompt)
+            || readNonEmptyString(imageTrace?.finalPrompt)
+        if (imagePrompt) return imagePrompt
+
+        const videoTrace = asRecord(node.attrs?.videoGenerationTrace)
+        const videoPrompt = readNonEmptyString(videoTrace?.toolPrompt)
+            || readNonEmptyString(videoTrace?.finalPrompt)
+        if (videoPrompt) return videoPrompt
+
+        const capabilityTrace = asRecord(node.attrs?.capabilityGenerationTrace)
+        const capabilityResponse = capabilityTrace ? getCapabilityTraceResponseText(capabilityTrace) : ''
+        if (capabilityResponse) return capabilityResponse
+    }
+
+    for (const child of node.content ?? []) {
+        const responseText = getTraceBackedReasoningResponseText(child)
+        if (responseText) return responseText
+    }
+    return ''
+}
+
 export function inferBranchMarkerPreviewPhase(
     responseMessage: ProseMirrorJsonNode,
     responseContainer: ProseMirrorJsonNode,
@@ -275,7 +330,7 @@ export function getBranchMarkerConversationPreviewFromThreadContent(
     content: unknown,
     threadId: string,
     descriptor: BranchMarkerTurnDescriptor,
-    options: { generationActive?: boolean } = {},
+    options: { generationActive?: boolean; allowLatestTurnFallback?: boolean } = {},
 ): BranchMarkerConversationPreview | null {
     const root = parseProseMirrorJsonContent(content)
     if (!root) return null
@@ -284,7 +339,13 @@ export function getBranchMarkerConversationPreviewFromThreadContent(
     if (!threadNode) return null
 
     const ownTurn = getBranchMarkerTurnMessages(threadNode, descriptor)
-    const { userMessage, responseMessage } = ownTurn ?? getLatestThreadTurnMessages(threadNode)
+    const allowsLatestTurnFallback = options.allowLatestTurnFallback !== false
+    const usesLatestTurnFallback = !ownTurn && allowsLatestTurnFallback
+    const latestTurn = usesLatestTurnFallback
+        ? getLatestThreadTurnMessages(threadNode)
+        : { userMessage: null, responseMessage: null }
+    const userMessage = ownTurn?.userMessage ?? latestTurn.userMessage
+    const responseMessage = ownTurn?.responseMessage ?? latestTurn.responseMessage
 
     if (!userMessage) return null
     const userText = collectProseMirrorText(userMessage).trim()
@@ -301,7 +362,11 @@ export function getBranchMarkerConversationPreviewFromThreadContent(
         }
     }
 
+    const fallbackReasoningSections = allowsLatestTurnFallback
+        ? (responseMessage.content ?? []).filter(child => child.type === 'aiReasoningSection')
+        : []
     const responseContainer = getBranchMarkerResponseContainer(responseMessage, descriptor)
+        ?? (fallbackReasoningSections.length === 1 ? fallbackReasoningSections[0]! : null)
     if (!responseContainer) {
         return {
             userMessage,
@@ -317,9 +382,12 @@ export function getBranchMarkerConversationPreviewFromThreadContent(
     const conversationalResponseText = collectProseMirrorText(responseContainer, {
         excludedNodeTypes: ['aiGeneratedImage', 'aiGeneratedVideo', 'aiLineageEvent', 'aiCollapsibleBlock'],
     }).trim()
-    const responseText = conversationalResponseText || collectProseMirrorText(responseContainer, {
+    const collapsibleResponseText = collectProseMirrorText(responseContainer, {
         excludedNodeTypes: ['aiGeneratedImage', 'aiGeneratedVideo', 'aiLineageEvent'],
     }).trim()
+    const responseText = conversationalResponseText
+        || collapsibleResponseText
+        || getTraceBackedReasoningResponseText(responseContainer)
     const { phase, isReceiving: streamIsReceiving } = inferBranchMarkerPreviewPhase(responseMessage, responseContainer)
     return {
         userMessage,

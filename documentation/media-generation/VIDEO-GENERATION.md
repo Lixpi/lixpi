@@ -94,7 +94,7 @@ sequenceDiagram
 
 ## Video `ProviderState` Fields
 
-The video fields mirror the image fields and use the same **"keep if undefined"** channel reducers in [`state.ts`](../../services/api/src/llm/graph/state.ts). VLM branch resolution is **shared** with image generation, so there is no separate video resolution field — the resolved references are written onto the video conditioning fields below. For multi-model matrix requests the branch resolver runs once in shared preflight, so these conditioning fields reach each fanout child only through the complete resolved patch the orchestrator forwards; children run with `preflightResolved` and never re-resolve, so a conditioning field the preflight selects but the fanout omits would leave the video model running text-to-video (see [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md)). The shared fields (`workspaceContextSnapshot`, `workspaceContextResolution`, `mediaBranchCandidateSnapshot`, `messages`, `model_version`) are documented in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md); only the modality-specific fields are listed here.
+The video fields mirror the image fields and use the same **"keep if undefined"** channel reducers in [`state.ts`](../../services/api/src/llm/graph/state.ts). VLM branch resolution is **shared** with image generation, so there is no separate video resolution field. The VLM assigns roles within the explicit reference set, and the resolved first/stop frames are written onto the video conditioning fields below. For multi-model matrix requests the branch resolver runs once in shared preflight, so these conditioning fields reach each fanout child only through the complete resolved patch the orchestrator forwards. Children run with `preflightResolved` and never re-resolve, so omitting a resolved conditioning field from fanout would leave the video model running text-to-video (see [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md)). The shared fields (`workspaceContextSnapshot`, `workspaceContextResolution`, `mediaBranchCandidateSnapshot`, `messages`, `model_version`) are documented in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md); only the modality-specific fields are listed here.
 
 | Field | Type | Purpose |
 |-------|------|---------|
@@ -210,11 +210,11 @@ Video events use the same live per-thread receive subject as the rest of the AI 
 
 | Status | Video-specific nuance |
 |--------|-----------------------|
-| `VIDEO_GENERATION_TRACE` | Tool prompt + selected/excluded references, published **before** VEO runs so chat history can render the trace even if VEO later fails. |
+| `VIDEO_GENERATION_TRACE` | Tool prompt plus explicit reference roles, published **before** VEO runs so chat history can render the trace even if VEO later fails. |
 | `VIDEO_PENDING` | Creates the placeholder `VideoCanvasNode` and starts the traveling outline — the video analogue of an empty `IMAGE_PARTIAL`, but there is exactly **one** placeholder event, not a partial stream. |
 | `VIDEO_GENERATING` | Pure keepalive ping during the poll loop. There is **no image-side equivalent** — images stream real partial pixels; VEO has no partial frames, so this carries no payload and only proves the worker is alive. |
 | `VIDEO_COMPLETE` | Carries `videoUrl`, `assetId`, media facts, provenance fields, and API-authored `canvasGeometry`. Playback and grounding resolve named renditions from the Asset. |
-| `VIDEO_ERROR` | Surfaces the VEO failure and cleans up the placeholder. Because the trace was published first, the failed attempt still leaves an auditable record in chat. |
+| `VIDEO_ERROR` | Surfaces the provider failure. The API removes only that run's pending node and publishes authoritative replacement geometry; the browser never persists failure cleanup from a potentially stale canvas snapshot. Because the trace was published first, the failed attempt still leaves an auditable record in chat. |
 
 The relevant public subject group in [`nats-subjects.json`](../../packages/lixpi/constants/nats-subjects.json) is Asset-centric; internal rendition request/reply subjects are not browser permissions:
 
@@ -233,6 +233,8 @@ The `CHAT_SEND_MESSAGE` payload gains `aiVideoModel`, `videoAspectRatio`, `video
 On `VIDEO_PENDING`, `WorkspaceCanvas` (`setAiGeneratedVideoCallbacks`) drops a placeholder `VideoCanvasNode` near the API-declared lineage source or reference group with a traveling progress outline; on `VIDEO_COMPLETE` it upgrades the node to poster + MP4 with `generatedBy` lineage and removes the outline; on `VIDEO_ERROR` it cleans up. Reference/style/source media can anchor placement and animate while generation prepares, but they do not become connector parents unless the API lineage plan selected an existing generated-media branch member as `parentMediaNodeId` (see [Branch Lineage](./BRANCH-LINEAGE.md)). The in-chat `aiGeneratedVideoNode` mirrors the generated-image node, showing pending / keepalive / playable / error states while the `<video_prompt>` text streams.
 
 Completed playback is **browser-composited**: a finished video plays inline through a visible DOM `<video>` element that `WorkspaceCanvas.ts` moves into the transformed video chrome layer, above the PIXI poster. PIXI owns the poster/placeholder behind the node for stable canvas geometry and initial paint, but playback, seeking, fullscreen, and scrubbing are driven by the browser-composited element. The bubble menu exposes Asset details, extension, connection, download/replace, and deletion actions.
+
+Matrix child video lifecycle events are mirrored onto the live canonical response stream as well as the shared ProseMirror assembler, so `VIDEO_COMPLETE` and `VIDEO_ERROR` reach the canvas before request-group settlement. The video handler records pending-Asset `poster`/`original` 404s; Asset revision or completion invalidates those failed sources, reapplies them immediately with a new source revision, and remounts the same browser `<video>` element. A completed Seedance/VEO Asset therefore becomes playable without a page refresh or an Asset-ID change.
 
 ## Model Sync & Pricing
 

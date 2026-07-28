@@ -41,6 +41,135 @@ import { join } from 'node:path'
 
 type VeoImageInput = { imageBytes: string; mimeType: string }
 
+type GoogleToolStreamResult = {
+    detectedImage?: string
+    detectedVideo?: string
+    capabilityCalls: Array<{ callId: string; name: string; arguments: Record<string, any>; part: any }>
+    usageMetadata?: any
+    textCharacterCount: number
+    finishReasons: string[]
+    functionCallNames: string[]
+}
+
+const EXPLICIT_VIDEO_CREATION_PATTERN =
+    /\b(?:generate|create|make|produce|render)\s+(?:an?\s+|the\s+)?(?:(?:short|cinematic|animated)\s+)*(?:video|clip|animation)\b/i
+const EXPLICIT_VIDEO_VERB_PATTERN = /\b(?:animate|film)\b/i
+
+const getGoogleMessageText = (content: unknown): string => {
+    if (typeof content === 'string') return content
+    if (!Array.isArray(content)) return ''
+    return content
+        .map((block: unknown) => {
+            if (!block || typeof block !== 'object') return ''
+            const text = (block as Record<string, unknown>).text
+            return typeof text === 'string' ? text : ''
+        })
+        .filter(Boolean)
+        .join('\n')
+}
+
+const hasExplicitVideoRequest = (messages: ChatMessage[]): boolean => {
+    for (let index = messages.length - 1; index >= 0; index--) {
+        const message = messages[index]
+        if (message?.role !== 'user') continue
+        const text = getGoogleMessageText(message.content).trim()
+        if (!text) continue
+        return EXPLICIT_VIDEO_CREATION_PATTERN.test(text)
+            || EXPLICIT_VIDEO_VERB_PATTERN.test(text)
+    }
+    return false
+}
+
+type VeoOperationSummary = {
+    operationName: string | null
+    done: boolean
+    pollCount: number
+    elapsedMs: number
+    operationKeys: string[]
+    metadataKeys: string[]
+    responseKeys: string[]
+    error: { code: string | number | null; message: string | null; keys: string[] } | null
+    generatedVideoCount: number
+    generatedVideos: Array<{
+        index: number
+        keys: string[]
+        hasVideo: boolean
+        videoKeys: string[]
+        hasInlineBytes: boolean
+        hasUri: boolean
+        mimeType: string | null
+    }>
+    raiMediaFilteredCount: number | null
+    raiMediaFilteredReasons: string[]
+}
+
+const getObjectKeys = (value: unknown): string[] => (
+    value && typeof value === 'object' ? Object.keys(value) : []
+)
+
+const getVeoOperationSummary = (
+    operation: any,
+    pollCount: number,
+    startedAt: number,
+): VeoOperationSummary => {
+    const response = operation?.response
+    const generatedVideos = Array.isArray(response?.generatedVideos) ? response.generatedVideos : []
+    const operationError = operation?.error
+
+    return {
+        operationName: typeof operation?.name === 'string' ? operation.name : null,
+        done: operation?.done === true,
+        pollCount,
+        elapsedMs: Date.now() - startedAt,
+        operationKeys: getObjectKeys(operation),
+        metadataKeys: getObjectKeys(operation?.metadata),
+        responseKeys: getObjectKeys(response),
+        error: operationError
+            ? {
+                code: typeof operationError?.code === 'string' || typeof operationError?.code === 'number'
+                    ? operationError.code
+                    : null,
+                message: typeof operationError?.message === 'string' ? operationError.message : null,
+                keys: getObjectKeys(operationError),
+            }
+            : null,
+        generatedVideoCount: generatedVideos.length,
+        generatedVideos: generatedVideos.map((generatedVideo: any, index: number) => {
+            const video = generatedVideo?.video
+            return {
+                index,
+                keys: getObjectKeys(generatedVideo),
+                hasVideo: !!video,
+                videoKeys: getObjectKeys(video),
+                hasInlineBytes: typeof video?.videoBytes === 'string' && video.videoBytes.length > 0,
+                hasUri: typeof video?.uri === 'string' && video.uri.length > 0,
+                mimeType: typeof video?.mimeType === 'string' ? video.mimeType : null,
+            }
+        }),
+        raiMediaFilteredCount: typeof response?.raiMediaFilteredCount === 'number'
+            ? response.raiMediaFilteredCount
+            : null,
+        raiMediaFilteredReasons: Array.isArray(response?.raiMediaFilteredReasons)
+            ? response.raiMediaFilteredReasons.filter((reason: unknown): reason is string => typeof reason === 'string')
+            : [],
+    }
+}
+
+const buildVeoNoVideoError = (summary: VeoOperationSummary): string => {
+    const diagnostics = [
+        `operation=${summary.operationName ?? '<missing>'}`,
+        `generatedVideoCount=${summary.generatedVideoCount}`,
+        `raiMediaFilteredCount=${summary.raiMediaFilteredCount ?? 0}`,
+    ]
+    if (summary.raiMediaFilteredReasons.length > 0) {
+        diagnostics.push(`raiMediaFilteredReasons=${JSON.stringify(summary.raiMediaFilteredReasons)}`)
+    }
+    if (summary.responseKeys.length > 0) {
+        diagnostics.push(`responseKeys=${JSON.stringify(summary.responseKeys)}`)
+    }
+    return `VEO: operation completed without a video (${diagnostics.join(', ')})`
+}
+
 const getGooglePartSummary = (part: any): Record<string, unknown> => {
     const text = typeof part?.text === 'string' ? part.text : ''
     return {
@@ -315,12 +444,7 @@ export class GoogleProvider extends BaseProvider {
                 const runToolStream = async (
                     streamConfig: Record<string, any>,
                     publishText: boolean,
-                ): Promise<{
-                    detectedImage?: string
-                    detectedVideo?: string
-                    capabilityCalls: Array<{ callId: string; name: string; arguments: Record<string, any>; part: any }>
-                    usageMetadata?: any
-                }> => {
+                ): Promise<GoogleToolStreamResult> => {
                     const pendingRequiredToolName = capabilityToolExecutor?.pendingRequiredToolName()
                     const functionDeclarations = [
                         ...providerFunctionDeclarations,
@@ -356,14 +480,19 @@ export class GoogleProvider extends BaseProvider {
                     let detectedVideo: string | undefined
                     const capabilityCalls: Array<{ callId: string; name: string; arguments: Record<string, any>; part: any }> = []
                     let streamUsageMetadata: any = null
+                    let textCharacterCount = 0
+                    const finishReasons = new Set<string>()
+                    const functionCallNames = new Set<string>()
 
                     for await (const chunk of stream) {
                         if (this.shouldStop) break
                         if (chunk.usageMetadata) streamUsageMetadata = chunk.usageMetadata
                         for (const candidate of chunk.candidates ?? []) {
+                            if (typeof candidate.finishReason === 'string') finishReasons.add(candidate.finishReason)
                             if (!candidate.content?.parts) continue
                             for (const part of candidate.content.parts) {
                                 const fnCall = (part as any).functionCall ?? (part as any).function_call
+                                if (typeof fnCall?.name === 'string') functionCallNames.add(fnCall.name)
                                 if (fnCall && fnCall.name === TOOL_NAME) {
                                     detectedImage = (fnCall.args ?? {}).prompt ?? ''
                                 } else if (fnCall && fnCall.name === VIDEO_TOOL_NAME) {
@@ -375,14 +504,23 @@ export class GoogleProvider extends BaseProvider {
                                         arguments: fnCall.args ?? {},
                                         part,
                                     })
-                                } else if (publishText && (part as any).text) {
-                                    this.publisher.chunk((part as any).text)
+                                } else if (typeof (part as any).text === 'string') {
+                                    textCharacterCount += (part as any).text.length
+                                    if (publishText) this.publisher.chunk((part as any).text)
                                 }
                             }
                         }
                     }
 
-                    return { detectedImage, detectedVideo, capabilityCalls, usageMetadata: streamUsageMetadata }
+                    return {
+                        detectedImage,
+                        detectedVideo,
+                        capabilityCalls,
+                        usageMetadata: streamUsageMetadata,
+                        textCharacterCount,
+                        finishReasons: [...finishReasons],
+                        functionCallNames: [...functionCallNames],
+                    }
                 }
 
                 let toolStreamResult = await runToolStream(config, true)
@@ -416,24 +554,52 @@ export class GoogleProvider extends BaseProvider {
                     mediaFanoutAllowedFunctionNames = mediaFanoutAllowedFunctionNames.filter(name => name === TOOL_NAME)
                 }
 
-                if (state.mediaFanoutPlan
+                const explicitVideoToolRequired = injectVideoTool
+                    && state.capabilityUsageMode !== 'character-creator'
+                    && hasExplicitVideoRequest(messages)
+                const forcedFunctionNames = state.mediaFanoutPlan
+                    ? mediaFanoutAllowedFunctionNames
+                    : explicitVideoToolRequired
+                        ? [VIDEO_TOOL_NAME]
+                        : []
+                const shouldForceMediaTool = state.mediaFanoutPlan
+                    ? !detectedImage && !detectedVideo
+                    : explicitVideoToolRequired && !detectedVideo
+
+                if (shouldForceMediaTool
                     && !this.shouldStop
-                    && !detectedImage
-                    && !detectedVideo
-                    && mediaFanoutAllowedFunctionNames.length > 0) {
-                    warn(`[Google:${this.instanceKey}] media fanout AUTO mode skipped the tool; retrying with forced function call`)
+                    && forcedFunctionNames.length > 0) {
+                    warn(`[Google:${this.instanceKey}] AUTO tool selection did not satisfy the media request; retrying with forced function call ${JSON.stringify({
+                        explicitVideoToolRequired,
+                        forcedFunctionNames,
+                        detectedImage: !!detectedImage,
+                        detectedVideo: !!detectedVideo,
+                        textCharacterCount: toolStreamResult.textCharacterCount,
+                        finishReasons: toolStreamResult.finishReasons,
+                        functionCallNames: toolStreamResult.functionCallNames,
+                    }, null, 0)}`)
                     toolStreamResult = await runToolStream({
                         ...config,
                         toolConfig: {
                             functionCallingConfig: {
                                 mode: 'ANY',
-                                allowedFunctionNames: mediaFanoutAllowedFunctionNames,
+                                allowedFunctionNames: forcedFunctionNames,
                             },
                         },
                     }, false)
                     usageMetadata = mergeGoogleUsageMetadata(usageMetadata, toolStreamResult.usageMetadata)
                     detectedImage = toolStreamResult.detectedImage
                     detectedVideo = toolStreamResult.detectedVideo
+                }
+
+                if (explicitVideoToolRequired && !this.shouldStop && !detectedVideo) {
+                    throw new Error(`Google reasoning model failed to emit required generate_video tool call ${JSON.stringify({
+                        model: modelVersion,
+                        detectedImage: !!detectedImage,
+                        textCharacterCount: toolStreamResult.textCharacterCount,
+                        finishReasons: toolStreamResult.finishReasons,
+                        functionCallNames: toolStreamResult.functionCallNames,
+                    }, null, 0)}`)
                 }
 
                 if (detectedVideo) {
@@ -605,9 +771,12 @@ export class GoogleProvider extends BaseProvider {
         // interpolation). When extension is active, both are suppressed.
         let firstFrameImage: VeoImageInput | undefined
         let lastFrameImage: VeoImageInput | undefined
+        let duplicateFrameInputCount = 0
         if (!extensionVideo) {
-            const frameUrls = [state.videoFirstFrameImage, ...(state.videoReferenceImages ?? [])]
+            const rawFrameUrls = [state.videoFirstFrameImage, ...(state.videoReferenceImages ?? [])]
                 .filter((url): url is string => typeof url === 'string' && url.length > 0)
+            const frameUrls = [...new Set(rawFrameUrls)]
+            duplicateFrameInputCount = rawFrameUrls.length - frameUrls.length
             if (frameUrls[0]) firstFrameImage = this.dataUrlToImageBytes(frameUrls[0])
             if (frameUrls[1]) lastFrameImage = this.dataUrlToImageBytes(frameUrls[1])
         }
@@ -627,11 +796,18 @@ export class GoogleProvider extends BaseProvider {
             promptLen: prompt.length,
             hasFirstFrame: !!firstFrameImage,
             hasLastFrame: !!lastFrameImage,
+            firstFrameMimeType: firstFrameImage?.mimeType,
+            firstFrameBase64Length: firstFrameImage?.imageBytes.length ?? 0,
+            lastFrameMimeType: lastFrameImage?.mimeType,
+            lastFrameBase64Length: lastFrameImage?.imageBytes.length ?? 0,
+            duplicateFrameInputCount,
             hasExtensionSource: !!extensionVideo,
         }, null, 0)}`)
 
         try {
             await this.videoPub.pending()
+            const startedAt = Date.now()
+            let pollCount = 0
 
             const veoParams: Record<string, any> = {
                 model: modelVersion,
@@ -645,25 +821,47 @@ export class GoogleProvider extends BaseProvider {
                 veoParams.image = firstFrameImage
             }
             let operation: any = await this.client.models.generateVideos(veoParams as any)
+            info(`[Google:${this.instanceKey}] VEO operation accepted ${JSON.stringify({
+                operationName: typeof operation?.name === 'string' ? operation.name : null,
+                done: operation?.done === true,
+                operationKeys: getObjectKeys(operation),
+                metadataKeys: getObjectKeys(operation?.metadata),
+                hasResponse: !!operation?.response,
+                hasError: !!operation?.error,
+            }, null, 0)}`)
 
             while (!operation.done) {
                 if (this.shouldStop) throw new Error('Video generation aborted')
                 await new Promise(resolve => setTimeout(resolve, VEO_POLL_INTERVAL_MS))
                 if (this.shouldStop) throw new Error('Video generation aborted')
                 this.videoPub.generating()
+                pollCount += 1
                 operation = await this.client.operations.getVideosOperation({
                     operation,
                     config: { abortSignal: this.signal } as any,
                 } as any)
+                if (operation.done || pollCount === 1 || pollCount % 6 === 0) {
+                    info(`[Google:${this.instanceKey}] VEO poll ${JSON.stringify({
+                        operationName: typeof operation?.name === 'string' ? operation.name : null,
+                        pollCount,
+                        elapsedMs: Date.now() - startedAt,
+                        done: operation?.done === true,
+                        hasResponse: !!operation?.response,
+                        hasError: !!operation?.error,
+                    }, null, 0)}`)
+                }
             }
 
-            if ((operation as any).error) {
-                const opErr = (operation as any).error
+            const terminalSummary = getVeoOperationSummary(operation, pollCount, startedAt)
+            info(`[Google:${this.instanceKey}] VEO terminal operation ${JSON.stringify(terminalSummary, null, 0)}`)
+
+            if (operation.error) {
+                const opErr = operation.error
                 throw new Error(`VEO operation error: ${typeof opErr === 'object' ? JSON.stringify(opErr) : String(opErr)}`)
             }
 
             const video = operation.response?.generatedVideos?.[0]?.video
-            if (!video) throw new Error('VEO: operation completed without a video')
+            if (!video) throw new Error(buildVeoNoVideoError(terminalSummary))
 
             const videoBuffer = await this.fetchVideoBytes(video)
             if (!videoBuffer || videoBuffer.length === 0) {

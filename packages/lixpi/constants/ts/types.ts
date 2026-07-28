@@ -267,10 +267,10 @@ export type MediaBranchCandidateSnapshot = {
     conversationAssetId: string
     regionNodeId: string
     activeTargetCandidateId?: string
-    // Candidate identities the user explicitly attached as context. Asset-only
-    // references have no canvas node, so resolver routing must never key on
-    // nodeId. The candidate list itself stays unfiltered; the API remains the
-    // source of truth for authorization and exclusivity.
+    // Candidate identities the user explicitly attached in the message or
+    // composer context. Asset-only references have no canvas node, so resolver
+    // routing must never key on nodeId. The API filters against this allowlist
+    // before authorizing or resolving candidate media.
     explicitReferenceCandidateIds?: string[]
     promptText: string
     promptFingerprint: string
@@ -278,10 +278,8 @@ export type MediaBranchCandidateSnapshot = {
     transcriptContext: string
 }
 
-// One compact, descriptors-only entry per context-bearing canvas node. The
-// browser builds these for the whole workspace each chat turn so the API
-// relevance stage can rank on text alone. The API resolves Asset renditions
-// only for the narrowed, selected set.
+// One compact entry per canvas node explicitly attached to the submitted turn.
+// Unselected workspace nodes are omitted from the request.
 export type WorkspaceContextNode = {
     nodeId: string
     type: CanvasNodeType
@@ -296,6 +294,7 @@ export type WorkspaceContextNode = {
     sourceConversationAssetId?: string
     isCurrentConversationGenerated?: boolean
     isExplicitChip: boolean
+    // Transport compatibility only. Context resolution ignores canvas edges.
     isEdgeForced: boolean
 }
 
@@ -307,7 +306,7 @@ export type WorkspaceContextSnapshot = {
     nodes: WorkspaceContextNode[]
 }
 
-export type WorkspaceContextSelectionRole = 'forced-chip' | 'forced-edge' | 'auto'
+export type WorkspaceContextSelectionRole = 'forced-chip'
 
 export type WorkspaceContextSelection = {
     nodeId: string
@@ -362,6 +361,7 @@ export type MediaBranchVlmResolution = {
 export type BranchOriginProvenance = {
     kind: 'branch-root-fork-decision'
     promptText: string
+    reasoningResponseText?: string
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -372,6 +372,7 @@ export type BranchOriginProvenance = {
 export type BranchForkProvenance = {
     kind: 'reasoning-run'
     promptText: string
+    reasoningResponseText?: string
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -386,6 +387,7 @@ export type BranchForkProvenance = {
 export type BranchLineProvenance = {
     kind: 'branch-continuation'
     promptText: string
+    reasoningResponseText?: string
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -1510,8 +1512,7 @@ export type AiInteractionChatSendMessagePayload = {
     conversationAssetId: string
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
     mediaGenerationRequest?: AiInteractionMediaGenerationRequest
-    // Whole-workspace, descriptors-only index sent each turn and consumed by
-    // the API `resolveWorkspaceContext` relevance stage.
+    // Explicit composer context attached to this submitted turn.
     workspaceContextSnapshot?: WorkspaceContextSnapshot
     canvasVisibleArea?: {
         width: number
@@ -1529,6 +1530,7 @@ export type AiInteractionChatSubmitPayload = AiInteractionChatSendMessagePayload
 export type AiInteractionMediaGenerationRequest = {
     requestVersion: 'media-generation-matrix-v1'
     generationRequestId: string
+    outputMediaTypes?: Array<'image' | 'video'>
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean

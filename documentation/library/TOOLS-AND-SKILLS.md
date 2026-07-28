@@ -125,7 +125,9 @@ Typing `/` at a prompt token boundary opens the module picker. It lists top-leve
 
 Typing `@` opens the media-first prompt-reference picker. Media is the default category; the category switch also exposes Capabilities, Tools, and Skills. Capability results are source-registered modules. Tool and Skill results contain standalone packages only. Selection inserts a typed `prompt_reference` atom with a stable Asset, module, Tool, or Skill identity and a cosmetic display name.
 
-The authoritative submitted conversation document is the reference source of truth. After acquiring the conversation lease, the API extracts atoms from the latest user message and reauthorizes each identity. The browser does not send a parallel capability-reference list. Media references can point to an Asset without adding it to the canvas; an optional `nodeId` is present only when the user selected a current-workspace placement.
+Both pickers are scoped to the active workspace request. Media and Artifact results include current-workspace Assets plus authorized user-, current-organization-, and principal-scoped entries. They never include workspace-scoped Assets from another workspace or Assets from another organization. Capability modules, standalone Tools, and Skills use the current user, current workspace organization, global scope, and explicit principal grants; organization memberships unrelated to the active workspace are excluded. Empty-query recents are reauthorized against the same boundary before display.
+
+The authoritative submitted conversation document is the reference source of truth. After acquiring the conversation lease, the API extracts atoms from the latest user message and reauthorizes each identity against the active workspace scope. A stale or forged atom naming a sibling-workspace or foreign-organization Asset is rejected before Blob or document resolution. The browser does not send a parallel capability-reference list. Media references can point to an Asset without adding it to the canvas; an optional `nodeId` is present only when the user selected a current-workspace placement.
 
 The right-side Capability panel lists authorized standalone packages for inspection and attachment. Top-level modules are selected through `/` or the Capabilities category in `@`. The package catalog client and NATS API also expose manifest details, dependency names, input schemas, and detached Tool-run operations. The side-panel inspector does not render a Run form.
 
@@ -236,10 +238,10 @@ Generated Tools can call only actions already present in the server allowlist. S
 
 ## Scopes, permissions, and visibility
 
-Catalog visibility is the authorized union of:
+Within an active workspace, Capability catalog visibility is the authorized union of:
 
 - `user#<userId>`
-- `organization#<organizationId>`
+- `organization#<activeWorkspaceOrganizationId>`
 - `global#system`
 - explicit `principal#<userId>` projections
 

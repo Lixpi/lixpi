@@ -68,6 +68,7 @@ type ResolvedAiModel = ParsedAiModelId & {
 type NormalizedMatrixRequest = {
     generationRequestId: string
     requestGroupKey: string
+    outputMediaTypes: Array<'image' | 'video'>
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
     useMultipleVideoModels: boolean
@@ -264,6 +265,7 @@ export class MediaGenerationMatrixOrchestrator {
             useMultipleReasoningModels: normalized.useMultipleReasoningModels,
             useMultipleImageModels: normalized.useMultipleImageModels,
             useMultipleVideoModels: normalized.useMultipleVideoModels,
+            outputMediaTypes: normalized.outputMediaTypes,
             requestedReasoningModelIds: requestData.mediaGenerationRequest?.reasoningModelIds ?? requestData.aiReasoningModels ?? [],
             requestedImageModelIds: requestData.mediaGenerationRequest?.imageModelIds ?? requestData.aiImageModels ?? [],
             requestedVideoModelIds: requestData.mediaGenerationRequest?.videoModelIds ?? requestData.aiVideoModels ?? [],
@@ -374,6 +376,7 @@ export class MediaGenerationMatrixOrchestrator {
                     mediaGenerationRequest: {
                         requestVersion: 'media-generation-matrix-v1',
                         generationRequestId: normalized.generationRequestId,
+                        outputMediaTypes: normalized.outputMediaTypes,
                         useMultipleReasoningModels: normalized.useMultipleReasoningModels,
                         useMultipleImageModels: normalized.useMultipleImageModels,
                         useMultipleVideoModels: normalized.useMultipleVideoModels,
@@ -482,11 +485,28 @@ export class MediaGenerationMatrixOrchestrator {
         const useMultipleImageModels = request?.useMultipleImageModels ?? ((request?.imageModelIds?.length ?? 0) > 1)
         const hasExplicitVideoSource = Boolean(request?.videoOptions?.sourceForExtension ?? requestData.videoSourceForExtension)
         const useMultipleVideoModels = request?.useMultipleVideoModels ?? ((request?.videoModelIds?.length ?? 0) > 1)
+        const hasExplicitMediaFanout = useMultipleImageModels || useMultipleVideoModels
+        const outputMediaTypes = request?.outputMediaTypes?.length
+            ? Array.from(new Set(request.outputMediaTypes))
+            : [
+                ...((hasExplicitMediaFanout
+                    ? useMultipleImageModels
+                    : (request?.imageModelIds?.length ?? requestData.aiImageModels?.length ?? 0) > 0
+                ) ? ['image' as const] : []),
+                ...((hasExplicitMediaFanout
+                    ? useMultipleVideoModels || hasExplicitVideoSource
+                    : (request?.videoModelIds?.length ?? requestData.aiVideoModels?.length ?? 0) > 0 || hasExplicitVideoSource
+                )
+                    ? ['video' as const]
+                    : []),
+            ]
         const includeVideoModels = request
-            ? (request.videoModelIds?.length ?? 0) > 0 || hasExplicitVideoSource
+            ? outputMediaTypes.includes('video') && ((request.videoModelIds?.length ?? 0) > 0 || hasExplicitVideoSource)
             : (requestData.aiVideoModels?.length ?? 0) > 0
         const reasoningModelIds = normalizeModelIdsForMode(useMultipleReasoningModels, request?.reasoningModelIds, requestData.aiReasoningModels?.[0])
-        const imageModelIds = normalizeModelIdsForMode(useMultipleImageModels, request?.imageModelIds, requestData.aiImageModels?.[0])
+        const imageModelIds = outputMediaTypes.includes('image')
+            ? normalizeModelIdsForMode(useMultipleImageModels, request?.imageModelIds, requestData.aiImageModels?.[0])
+            : []
         const videoModelIds = includeVideoModels
             ? normalizeModelIdsForMode(useMultipleVideoModels, request?.videoModelIds, requestData.aiVideoModels?.[0])
             : []
@@ -508,6 +528,7 @@ export class MediaGenerationMatrixOrchestrator {
                 requestData.aiChatThreadId,
                 generationRequestId,
             ),
+            outputMediaTypes,
             useMultipleReasoningModels,
             useMultipleImageModels,
             useMultipleVideoModels,

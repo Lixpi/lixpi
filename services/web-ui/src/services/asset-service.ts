@@ -70,10 +70,10 @@ async function mapWithConcurrency<T, R>(
 }
 
 export class AssetService {
-    private async loadAssetsById(assetIds: readonly string[]): Promise<Asset[]> {
+    private async loadAssetsById(assetIds: readonly string[], workspaceId?: string): Promise<Asset[]> {
         const results = await mapWithConcurrency([...assetIds], ASSET_LOAD_CONCURRENCY, async (assetId) => {
             try {
-                return await this.get(assetId)
+                return await this.get(assetId, workspaceId)
             } catch (error) {
                 console.warn('[AssetService] Asset load failed; synchronization will retry it', { assetId, error })
                 return { error: 'ASSET_LOAD_FAILED' }
@@ -96,8 +96,11 @@ export class AssetService {
         return snapshot
     }
 
-    async get(assetId: string): Promise<Asset | { error: string }> {
-        return await request(ASSET_SUBJECTS.GET, { assetId })
+    async get(assetId: string, workspaceId?: string): Promise<Asset | { error: string }> {
+        return await request(ASSET_SUBJECTS.GET, {
+            assetId,
+            ...(workspaceId ? { workspaceId } : {}),
+        })
     }
 
     async ensureAssetsLoaded(assetIds: readonly string[]): Promise<Asset[]> {
@@ -108,8 +111,8 @@ export class AssetService {
         return loadedAssets
     }
 
-    async refresh(assetId: string): Promise<Asset | { error: string }> {
-        const asset = await this.get(assetId)
+    async refresh(assetId: string, workspaceId?: string): Promise<Asset | { error: string }> {
+        const asset = await this.get(assetId, workspaceId)
         if ('error' in asset) return asset
         assetsStore.upsert(asset)
         for (const role of Object.keys(asset.documents) as AssetDocumentRole[]) {
@@ -149,7 +152,7 @@ export class AssetService {
                         return
                     }
                     if (assetId && assetsStore.get(assetId)) {
-                        void this.refresh(assetId).then((result) => {
+                        void this.refresh(assetId, workspaceId).then((result) => {
                             if ('error' in result) assetsStore.remove(assetId)
                         })
                         return
@@ -167,17 +170,19 @@ export class AssetService {
     }
 
     async list({
+        workspaceId,
         primaryCategory,
         limit = 50,
         cursor,
     }: {
+        workspaceId?: string
         primaryCategory?: AssetPrimaryCategory
         limit?: number
         cursor?: string
     } = {}): Promise<{ items: AssetMeta[]; cursor?: string }> {
         const result = await request<{ items: AssetMeta[]; cursor?: string } | { error: string }>(
             ASSET_SUBJECTS.LIST,
-            { primaryCategory, limit, cursor },
+            { workspaceId, primaryCategory, limit, cursor },
         )
         if ('error' in result) throw new Error(`Asset list failed: ${result.error}`)
         if (!Array.isArray(result.items)) throw new Error('Asset list failed: invalid response')
@@ -201,7 +206,7 @@ export class AssetService {
             for (const primaryCategory of ['document', 'conversation', 'capabilityArtifact'] as const) {
                 let cursor: string | undefined
                 do {
-                    const page = await this.list({ primaryCategory, limit: 100, cursor })
+                    const page = await this.list({ workspaceId, primaryCategory, limit: 100, cursor })
                     for (const item of page.items) {
                         if (item.scopeAndOwner === `workspace#${workspaceId}`) assetIds.add(item.assetId)
                     }
@@ -214,11 +219,11 @@ export class AssetService {
                 if (right === activeConversationAssetId) return 1
                 return 0
             })
-            const directAssets = await this.loadAssetsById(prioritizedAssetIds)
+            const directAssets = await this.loadAssetsById(prioritizedAssetIds, workspaceId)
             const directAssetIds = new Set(directAssets.map(asset => asset.assetId))
             const lineageSourceAssetIds = [...new Set(directAssets.flatMap(asset => asset.lineage?.sourceAssetIds ?? []))]
                 .filter(assetId => !directAssetIds.has(assetId))
-            const lineageSourceAssets = await this.loadAssetsById(lineageSourceAssetIds)
+            const lineageSourceAssets = await this.loadAssetsById(lineageSourceAssetIds, workspaceId)
             const assets = [...directAssets, ...lineageSourceAssets]
             assetsStore.setAssets(workspaceId, Array.isArray(assets) ? assets : [])
             const documentCoordinates = assets

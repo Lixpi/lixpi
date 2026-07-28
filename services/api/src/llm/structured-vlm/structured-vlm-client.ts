@@ -230,9 +230,23 @@ const asTypeArray = (type: unknown): string[] => {
     return typeof type === 'string' ? [type] : []
 }
 
-const schemaNeedsClosedSchemaAdapter = (schema: unknown): boolean => {
+const OPENAI_UNSUPPORTED_SCHEMA_KEYWORDS = new Set([
+    '$schema',
+    'allOf',
+    'dependentRequired',
+    'dependentSchemas',
+    'else',
+    'if',
+    'not',
+    'oneOf',
+    'then',
+    'uniqueItems',
+])
+
+const schemaNeedsOpenAIAdapter = (schema: unknown): boolean => {
     if (!schema || typeof schema !== 'object') return false
     const node = schema as Record<string, any>
+    if (Object.keys(node).some(key => OPENAI_UNSUPPORTED_SCHEMA_KEYWORDS.has(key))) return true
     if (asTypeArray(node.type).includes('object') && node.additionalProperties !== false) {
         return true
     }
@@ -243,7 +257,7 @@ const schemaNeedsClosedSchemaAdapter = (schema: unknown): boolean => {
             if (!required.has(key)) return true
         }
         for (const child of Object.values(node.properties)) {
-            if (schemaNeedsClosedSchemaAdapter(child)) return true
+            if (schemaNeedsOpenAIAdapter(child)) return true
         }
     }
 
@@ -251,18 +265,15 @@ const schemaNeedsClosedSchemaAdapter = (schema: unknown): boolean => {
         ? node.items
         : node.items ? [node.items] : []
     for (const child of itemSchemas) {
-        if (schemaNeedsClosedSchemaAdapter(child)) return true
+        if (schemaNeedsOpenAIAdapter(child)) return true
     }
 
-    for (const key of ['anyOf', 'oneOf', 'allOf']) {
-        const variants = node[key]
-        if (!Array.isArray(variants)) continue
-        for (const child of variants) {
-            if (schemaNeedsClosedSchemaAdapter(child)) return true
+    if (Array.isArray(node.anyOf)) {
+        for (const child of node.anyOf) {
+            if (schemaNeedsOpenAIAdapter(child)) return true
         }
     }
 
-    if (node.not && schemaNeedsClosedSchemaAdapter(node.not)) return true
     return false
 }
 
@@ -311,7 +322,7 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     // input_image). The system prompt rides on `instructions`, the modern
     // top-level field, rather than a synthetic system message in the input.
     const input = await resolveAndConvert(args.userMessages, args.natsService, 'OPENAI')
-    const usesClosedSchemaEnvelope = caps.requiresClosedJsonSchema && schemaNeedsClosedSchemaAdapter(args.schema.schema)
+    const usesClosedSchemaEnvelope = caps.requiresClosedJsonSchema && schemaNeedsOpenAIAdapter(args.schema.schema)
     const requestSchema = usesClosedSchemaEnvelope ? buildClosedSchemaPayloadEnvelope(args.schema) : args.schema
     const instructions = usesClosedSchemaEnvelope ? buildClosedSchemaPayloadInstructions(args.systemPrompt, args.schema) : args.systemPrompt
 

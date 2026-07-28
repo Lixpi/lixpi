@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto'
 
 import type {
+    AssetRequesterContext,
     AssetDocumentPointer,
     CanvasGeometryUpdate,
     CapabilityJsonValue,
@@ -23,8 +24,8 @@ import { PROSEMIRROR_SCHEMA_VERSION } from '@lixpi/prosemirror'
 
 import AssetModel, { getAssetRecord } from '../models/asset.ts'
 import BlobModel from '../models/blob.ts'
+import OrganizationModel from '../models/organization.ts'
 import WorkspaceModel from '../models/workspace.ts'
-import { getAssetRequesterContext } from '../services/asset-requester-context.ts'
 import {
     buildAssetCanvasGeometryUpdate,
     projectGeneratedArtifactNode,
@@ -34,8 +35,29 @@ import {
 } from '../services/asset-maintenance-queue.ts'
 import { capabilityArtifactBackendRegistry } from './capability-artifacts.ts'
 import { buildActionTimelineLineageAssignment } from './action-timeline-lineage.ts'
+import { createAssetRequesterForWorkspaceUser } from '../services/workspace-reference-scope.ts'
 
 const MAX_CANVAS_ATTACH_ATTEMPTS = 5
+
+const getActionTimelineRequester = async ({
+    workspaceId,
+    organizationId,
+    userId,
+}: {
+    workspaceId: string
+    organizationId: string
+    userId: string
+}): Promise<AssetRequesterContext> => {
+    const workspace = await WorkspaceModel.getWorkspace({ workspaceId, userId })
+    if ('error' in workspace || workspace.deletingAt || workspace.organizationId !== organizationId) {
+        throw new Error('WORKSPACE_ACCESS_DENIED')
+    }
+    const organization = await OrganizationModel.getOrganization({ organizationId, userId })
+    if ('error' in organization) throw new Error('ORGANIZATION_ACCESS_DENIED')
+    const requester = createAssetRequesterForWorkspaceUser(workspace, userId, true)
+    if (!requester.editableWorkspaceIds.includes(workspaceId)) throw new Error('PERMISSION_DENIED')
+    return requester
+}
 
 export async function persistActionTimelineArtifact(
     request: ActionTimelinePersistRequest,
@@ -47,9 +69,18 @@ export async function persistActionTimelineArtifact(
 
     const definition = capabilityArtifactBackendRegistry.require(ACTION_TIMELINE_ARTIFACT_TYPE_ID)
     definition.shared.assertInitialDocument(request.document)
-    const requester = await getAssetRequesterContext(context.userId)
-    if (!requester.editableWorkspaceIds.includes(context.workspaceId)) throw new Error('PERMISSION_DENIED')
+    const requester = await getActionTimelineRequester({
+        workspaceId: context.workspaceId,
+        organizationId,
+        userId: context.userId,
+    })
 
+    const sourceAssetIds = [...new Set(request.input.referenceAssetIds)]
+    const referencedAssetIds = [...new Set(request.referencedAssetIds)]
+    const sourceAssetIdSet = new Set(sourceAssetIds)
+    if (referencedAssetIds.some(referencedAssetId => !sourceAssetIdSet.has(referencedAssetId))) {
+        throw new Error('ACTION_TIMELINE_DOCUMENT_REFERENCE_NOT_IN_SOURCE_INPUT')
+    }
     const assetId = randomUUID()
     const generationRequestId = context.invocationGenerationRequestId ?? `capability-${context.runId}`
     const reasoningRunId = `${generationRequestId}:reasoning:${context.variant.reasoningIndex}`
@@ -60,7 +91,7 @@ export async function persistActionTimelineArtifact(
         reasoningRunId,
         variant: context.variant,
         prompt: request.input.prompt,
-        referenceAssetIds: request.referencedAssetIds,
+        referenceAssetIds: sourceAssetIds,
         createdAt: now,
     })
     const generationRun: MediaGenerationRunMeta = {
@@ -123,7 +154,7 @@ export async function persistActionTimelineArtifact(
             },
             lineage: {
                 sourceConversationAssetId: conversationAssetId,
-                sourceAssetIds: request.referencedAssetIds,
+                sourceAssetIds,
                 generationRequestId,
                 reasoningRunId,
                 reasoningModelId: context.variant.reasoningModelId,
@@ -138,7 +169,7 @@ export async function persistActionTimelineArtifact(
             },
         })
         created = true
-        for (const sourceAssetId of request.referencedAssetIds) {
+        for (const sourceAssetId of sourceAssetIds) {
             const attached = await AssetModel.attachWorkspaceReference({
                 assetId: sourceAssetId,
                 workspaceId: context.workspaceId,
@@ -228,8 +259,11 @@ export async function finalizeActionTimelineArtifact(request: {
         }),
     }
 
-    const requester = await getAssetRequesterContext(request.userId)
-    if (!requester.editableWorkspaceIds.includes(request.workspaceId)) throw new Error('PERMISSION_DENIED')
+    const requester = await getActionTimelineRequester({
+        workspaceId: request.workspaceId,
+        organizationId: request.organizationId,
+        userId: request.userId,
+    })
     const definition = capabilityArtifactBackendRegistry.require(ACTION_TIMELINE_ARTIFACT_TYPE_ID)
     const canvasGeometry = await attachArtifactToCanvas({
         assetId: request.assetId,
@@ -256,7 +290,11 @@ export async function discardStagedActionTimelineArtifact(request: {
     if (asset.organizationId !== request.organizationId || asset.originWorkspaceId !== request.workspaceId) {
         throw new Error(`ACTION_TIMELINE_STAGED_ASSET_MISMATCH:${request.assetId}`)
     }
-    const requester = await getAssetRequesterContext(request.userId)
+    const requester = await getActionTimelineRequester({
+        workspaceId: request.workspaceId,
+        organizationId: request.organizationId,
+        userId: request.userId,
+    })
     const embeddedSurfaceId = `capabilityArtifact#${request.assetId}`
     await Promise.allSettled((asset.lineage.sourceAssetIds ?? []).map(async sourceAssetId => {
         await AssetModel.detachWorkspaceReference({
@@ -277,7 +315,7 @@ async function attachArtifactToCanvas(args: {
     conversationAssetId: string
     capabilityRunId: string
     input: Record<string, CapabilityJsonValue>
-    requester: Awaited<ReturnType<typeof getAssetRequesterContext>>
+    requester: AssetRequesterContext
     dimensions: { width: number; height: number }
 }): Promise<CanvasGeometryUpdate> {
     let lastError: unknown

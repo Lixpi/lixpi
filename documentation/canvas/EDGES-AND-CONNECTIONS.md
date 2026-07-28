@@ -1,14 +1,14 @@
 ---
 title: Edges & Connections
-description: The workspace connection system — handles, drag-to-connect, the WorkspaceConnectionManager, PIXI edge rendering, routing rules, proximity connect, message-level anchoring, selection, deletion, and persistence.
+description: The workspace connection system: handles, drag-to-connect, the WorkspaceConnectionManager, PIXI edge rendering, routing rules, proximity connect, message-level anchoring, selection, deletion, and persistence.
 ---
 
 # Edges & Connections
 
-Visual connections (edges/arrows) between canvas nodes let users show relationships, context flows, and dependencies between workspace entities. A user drags from a handle on one node to another to create a relationship line. Edges are not purely cosmetic: an edge-connected node is force-included in the AI context for a chat turn, and an edge with a `sourceMessageId` records which AI response produced a generated image. That data shape is defined in [Workspace Model](./WORKSPACE-MODEL.md#workspaceedge); this page covers how connections are made, routed, drawn, selected, and persisted.
+Visual connections (edges/arrows) between canvas nodes show relationships, generated-media lineage, and dependencies between workspace entities. A user drags from a handle on one node to another to create a relationship line. Edges do not add AI context. An edge with a `sourceMessageId` records which AI response produced generated media. That data shape is defined in [Workspace Model](./WORKSPACE-MODEL.md#workspaceedge); this page covers how connections are made, routed, drawn, selected, and persisted.
 
 {% callout type="note" %}
-This page is part of the canvas domain. For the `WorkspaceEdge` schema and the surrounding data model see [Workspace Model](./WORKSPACE-MODEL.md). For how edge geometry is painted into the PIXI layer and kept aligned with the DOM see [Rendering Engine](./RENDERING-ENGINE.md). For how `sourceMessageId` feeds AI context resolution see [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md).
+This page is part of the canvas domain. For the `WorkspaceEdge` schema and the surrounding data model see [Workspace Model](./WORKSPACE-MODEL.md). For how edge geometry is painted into the PIXI layer and kept aligned with the DOM see [Rendering Engine](./RENDERING-ENGINE.md). For media lineage planning see [Branch Lineage](../media-generation/BRANCH-LINEAGE.md).
 {% /callout %}
 
 ## Key Features
@@ -238,9 +238,9 @@ Edge styling:
 
 ## Message-Level Anchoring
 
-When an edge has a `sourceMessageId` — connecting a specific AI response to a generated image — the renderer dynamically calculates `sourceT` to anchor the arrow exactly to that response message in the DOM. It also intelligently adjusts `targetT` so the arrow points in a straight line to the target image height, preventing the "diving arrow" effect where a connector would otherwise plunge diagonally toward the image's vertical center.
+When an edge has a `sourceMessageId`, connecting a specific AI response to generated media, the renderer dynamically calculates `sourceT` to anchor the arrow exactly to that response message in the DOM. It also adjusts `targetT` so the arrow points in a straight line to the target media height, preventing the "diving arrow" effect where a connector would otherwise plunge diagonally toward the media's vertical center.
 
-The `sourceMessageId` is the same property defined on `WorkspaceEdge` (see [Workspace Model](./WORKSPACE-MODEL.md#workspaceedge)); it ties a generated image back to the exact `aiResponseMessage` that produced it, and that linkage is what lets context extraction associate images with their originating conversation turns ([Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md)).
+The `sourceMessageId` is the same property defined on `WorkspaceEdge` (see [Workspace Model](./WORKSPACE-MODEL.md#workspaceedge)). It ties generated media back to the exact `aiResponseMessage` that produced it for rendering and lineage projection.
 
 ## Edge Selection and Deletion
 
@@ -310,7 +310,7 @@ sequenceDiagram
 
 ## Related Pages
 
-- [Workspace Model](./WORKSPACE-MODEL.md) — the `WorkspaceEdge` schema, `CanvasState`, and persistence cadence.
-- [Rendering Engine](./RENDERING-ENGINE.md) — the PIXI edge layer, z-order, and DOM/PIXI alignment.
-- [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md) — how edge-connected nodes and `sourceMessageId` feed AI context.
-- [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) — how generated-image edges are created with `sourceMessageId` during a branch.
+- [Workspace Model](./WORKSPACE-MODEL.md): the `WorkspaceEdge` schema, `CanvasState`, and persistence cadence.
+- [Rendering Engine](./RENDERING-ENGINE.md): the PIXI edge layer, z-order, and DOM/PIXI alignment.
+- [Explicit Workspace Context](../ai-chat/CONTEXT-RELEVANCE.md): context chips and prompt references; canvas edges are not context.
+- [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md): how generated-media edges are created with `sourceMessageId` during a branch.

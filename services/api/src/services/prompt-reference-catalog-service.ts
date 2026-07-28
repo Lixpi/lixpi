@@ -24,6 +24,11 @@ import CapabilityModel, { type CapabilityRequesterContext } from '../models/capa
 import PromptReferenceRecentModel from '../models/prompt-reference-recent.ts'
 import AssetDocumentService from './asset-document-service.ts'
 import { capabilityArtifactBackendRegistry } from '../capability-system/capability-artifacts.ts'
+import {
+    isAssetAvailableInWorkspaceScope,
+    requesterHasWorkspaceScope,
+    scopeAssetRequesterToWorkspace,
+} from './workspace-reference-scope.ts'
 
 type PromptReferenceCatalogRequester = AssetRequesterContext
 
@@ -125,15 +130,18 @@ export class PromptReferenceCatalogService {
     constructor(private readonly moduleCatalog: CapabilityModuleCatalog) {}
 
     async listModules(
+        workspace: Workspace,
         requester: PromptReferenceCatalogRequester,
         query = '',
     ): Promise<CapabilityModuleMeta[]> {
+        if (!requesterHasWorkspaceScope(requester, workspace)) throw new Error('WORKSPACE_ACCESS_DENIED')
+        const scopedRequester = scopeAssetRequesterToWorkspace(requester, workspace)
         const resolved = await Promise.all(this.moduleCatalog.listModules(query).map(async (meta) => {
             const entry = this.moduleCatalog.resolveEntry(meta.moduleId)
             if (!entry) return null
             const record = await CapabilityModel.authorize({
                 capabilityId: entry.capabilityId,
-                requester: toCapabilityRequester(requester),
+                requester: toCapabilityRequester(scopedRequester),
             })
             if ('error' in record || record.status !== 'active'
                 || record.kind !== entry.kind
@@ -145,6 +153,7 @@ export class PromptReferenceCatalogService {
     }
 
     async getModule(
+        workspace: Workspace,
         requester: PromptReferenceCatalogRequester,
         moduleId: string,
     ): Promise<{
@@ -154,25 +163,32 @@ export class PromptReferenceCatalogService {
         const entry = this.moduleCatalog.resolveEntry(moduleId)
         const meta = this.moduleCatalog.getModuleMeta(moduleId)
         if (!entry || !meta) return null
-        const items = await this.listModules(requester, meta.normalizedName)
+        const items = await this.listModules(workspace, requester, meta.normalizedName)
         const authorizedMeta = items.find((item) => item.moduleId === moduleId)
         return authorizedMeta ? { meta: authorizedMeta, entry } : null
     }
 
     async list(input: ListPromptReferencesInput): Promise<PromptReferenceCatalogPage> {
+        if (!requesterHasWorkspaceScope(input.requester, input.workspace)) {
+            throw new Error('WORKSPACE_ACCESS_DENIED')
+        }
+        const scopedInput = {
+            ...input,
+            requester: scopeAssetRequesterToWorkspace(input.requester, input.workspace),
+        }
         const limit = input.limit ?? 20
         if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new Error('INVALID_PROMPT_REFERENCE_LIMIT')
         const query = typeof input.query === 'string' ? input.query : ''
-        if (query.trim() || input.cursor) return await this.listCategory({ ...input, query, limit })
+        if (query.trim() || input.cursor) return await this.listCategory({ ...scopedInput, query, limit })
 
         const recents = await PromptReferenceRecentModel.list({
-            userId: input.requester.userId,
+            userId: scopedInput.requester.userId,
             referenceTypes: categoryReferenceTypes(input.category),
             limit: 5,
         })
-        const { items: recentItems, staleKeys } = await this.resolveRecents(input, recents)
+        const { items: recentItems, staleKeys } = await this.resolveRecents(scopedInput, recents)
         await PromptReferenceRecentModel.remove({
-            userId: input.requester.userId,
+            userId: scopedInput.requester.userId,
             referenceKeys: staleKeys,
         }).catch(() => undefined)
         const merged = new Map<string, PromptReferenceCatalogItem>()
@@ -183,7 +199,7 @@ export class PromptReferenceCatalogService {
         let catalogCursor: string | undefined
         while (merged.size < limit) {
             const page = await this.listCategory({
-                ...input,
+                ...scopedInput,
                 query,
                 limit: limit - merged.size,
                 cursor: catalogCursor,
@@ -207,7 +223,7 @@ export class PromptReferenceCatalogService {
 
     private async listCategory(input: ListPromptReferencesInput & { query: string; limit: number }): Promise<PromptReferenceCatalogPage> {
         if (input.category === 'capabilities') {
-            const items = (await this.listModules(input.requester, input.query))
+            const items = (await this.listModules(input.workspace, input.requester, input.query))
                 .map((item): PromptReferenceCatalogItem => ({
                     ...item,
                     referenceType: 'capability-module',
@@ -327,7 +343,7 @@ export class PromptReferenceCatalogService {
     ): Promise<CapabilityArtifactPromptReferenceCatalogItem | null> {
         const asset = resolvedAsset ?? await AssetModel.get({ assetId, requester: input.requester })
         if ('error' in asset || !asset.artifact || !asset.documents.capabilityArtifact
-            || asset.organizationId !== input.workspace.organizationId
+            || !isAssetAvailableInWorkspaceScope(asset, input.workspace)
             || asset.states.lifecycle !== 'active') return null
         const registered = capabilityArtifactBackendRegistry.get(asset.artifact.artifactTypeId)
         if (!registered || registered.shared.schemaVersion !== asset.artifact.schemaVersion) return null
@@ -338,6 +354,13 @@ export class PromptReferenceCatalogService {
         } catch {
             return null
         }
+        const referencedAssetIds = registered.shared.collectReferencedAssetIds(snapshot.doc)
+        const referencedAssets = await Promise.all(referencedAssetIds.map(async referencedAssetId =>
+            await AssetModel.get({ assetId: referencedAssetId, requester: input.requester })))
+        if (referencedAssets.some(referencedAsset =>
+            'error' in referencedAsset
+            || !isAssetAvailableInWorkspaceScope(referencedAsset, input.workspace)
+            || referencedAsset.states.lifecycle !== 'active')) return null
         return {
             referenceType: 'capability-artifact',
             referenceId: asset.assetId,
@@ -349,7 +372,7 @@ export class PromptReferenceCatalogService {
             source,
             updatedAt: asset.updatedAt,
             displayMetadata: registered.shared.buildCatalogMetadata(snapshot.doc),
-            referenceThumbnailAssetIds: registered.shared.collectReferencedAssetIds(snapshot.doc).slice(0, 4),
+            referenceThumbnailAssetIds: referencedAssetIds.slice(0, 4),
         }
     }
 
@@ -388,6 +411,7 @@ export class PromptReferenceCatalogService {
             })
             for (const record of page.items) {
                 if (placementsByAsset.has(record.assetId)) continue
+                if (!isAssetAvailableInWorkspaceScope(record, input.workspace)) continue
                 items.push(toMediaCatalogItem(record, 'library'))
             }
             if (!page.cursor || page.cursor === assetCursor) {
@@ -422,7 +446,7 @@ export class PromptReferenceCatalogService {
         const assets = await Promise.all([...placementsByAsset.keys()].map(async (assetId) =>
             await AssetModel.get({ assetId, requester: input.requester })))
         return assets.flatMap((asset): PromptReferenceCatalogItem[] => {
-            if ('error' in asset || asset.organizationId !== input.workspace.organizationId
+            if ('error' in asset || !isAssetAvailableInWorkspaceScope(asset, input.workspace)
                 || asset.states.lifecycle !== 'active'
                 || (asset.media && !['ready', 'degraded'].includes(asset.states.media))
                 || !normalizeAssetTitle(asset.title).startsWith(normalizedQuery)) return []
@@ -473,7 +497,7 @@ export class PromptReferenceCatalogService {
         recent: PromptReferenceRecent,
     ): Promise<PromptReferenceCatalogItem | null> {
         if (recent.referenceType === 'capability-module') {
-            const module = await this.getModule(input.requester, recent.referenceId)
+            const module = await this.getModule(input.workspace, input.requester, recent.referenceId)
             return module ? {
                 ...module.meta,
                 referenceType: 'capability-module',
@@ -516,7 +540,7 @@ export class PromptReferenceCatalogService {
                 && item.assetId === recent.referenceId) ?? null
         }
         const asset = await AssetModel.get({ assetId: recent.referenceId, requester: input.requester })
-        if ('error' in asset || asset.organizationId !== input.workspace.organizationId
+        if ('error' in asset || !isAssetAvailableInWorkspaceScope(asset, input.workspace)
             || asset.states.lifecycle !== 'active') return null
         const placement = (input.workspace.canvasState?.nodes ?? []).find((node) =>
             'assetId' in node && node.assetId === asset.assetId && ['image', 'video', 'audio', 'document', 'mediaDocument'].includes(node.type))

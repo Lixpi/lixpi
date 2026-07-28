@@ -91,7 +91,7 @@ Changing scope validates every workspace reference before moving the catalog and
 Asset create, title update, scope change, grant/revoke, repair, and deletion maintain `Assets-Meta` and `Assets-Search` together. Grant/revoke operations update the ACL row, principal Meta/search projections, base/other projections, and Asset revision in one conditional transaction. They cannot overwrite the owner's permanent `owner` row or race a metadata update into a stale principal projection.
 The model caps total Asset projection scopes at 32 so the authority mutation plus Meta and search writes remain below DynamoDB's 100-operation transaction limit; a grant beyond that bound is rejected before writing.
 
-`Prompt-Reference-Recents` stores at most 100 stable identities per user. Accepted authoritative submissions upsert recents; empty picker queries reauthorize the newest five in the active category, remove stale rows, then fill from current catalog results. Recents never grant access.
+`Prompt-Reference-Recents` stores at most 100 stable identities per user. Accepted authoritative submissions upsert recents; empty picker queries reauthorize the newest five in the active category against the active workspace, user, organization, and principal scope boundary, remove stale or out-of-scope rows, then fill from current catalog results. Recents never grant access and never carry a reference across workspace scope boundaries.
 
 ## References and deletion
 

@@ -408,6 +408,6 @@ This page is the product-level picture. For the technical deep dives, start at t
 
 - **Platform** — [System Architecture](platform/SYSTEM-ARCHITECTURE.md), [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md), [Streaming & Events](platform/STREAMING-AND-EVENTS.md), [Authentication](platform/AUTHENTICATION.md).
 - **Canvas** — [Workspace Model](canvas/WORKSPACE-MODEL.md), [Rendering Engine](canvas/RENDERING-ENGINE.md).
-- **AI chat** — [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md), [Context Relevance](ai-chat/CONTEXT-RELEVANCE.md).
+- **AI chat**: [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md), [Explicit Workspace Context](ai-chat/CONTEXT-RELEVANCE.md).
 - **Media generation** — [Image Generation](media-generation/IMAGE-GENERATION.md), [Video Generation](media-generation/VIDEO-GENERATION.md), [Branch Lineage & Provenance](media-generation/BRANCH-LINEAGE.md).
 - **Library** - [Tools and Skills](library/TOOLS-AND-SKILLS.md), [Character Creator](library/CHARACTER-CREATOR.md), [Style Extraction Tool](library/STYLE-EXTRACTION-TOOL.md), [Media Library](library/MEDIA-LIBRARY.md), [Workspace Export & Import](library/WORKSPACE-EXPORT-IMPORT.md).

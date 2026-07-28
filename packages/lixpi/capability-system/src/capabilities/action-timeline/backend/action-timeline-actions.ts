@@ -72,7 +72,7 @@ const TIMELINE_BATCH_SCHEMA = {
                         type: 'array',
                         minItems: 1,
                         items: {
-                            oneOf: [
+                            anyOf: [
                                 {
                                     type: 'object',
                                     additionalProperties: false,

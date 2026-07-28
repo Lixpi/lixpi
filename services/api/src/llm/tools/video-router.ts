@@ -33,6 +33,7 @@ const addUniqueReferenceImages = (target: string[], source: string[], max: numbe
 type VideoRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
     getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
+    signal?: AbortSignal
 }
 
 const buildRoutedVideoReferenceImages = (state: ProviderState): string[] | undefined => {
@@ -106,6 +107,9 @@ export class VideoRouter {
             originalPromptLen: prompt.length,
             routedPromptLen: videoModelPrompt.length,
             hasFirstFrame: !!state.videoFirstFrameImage,
+            firstFrameFingerprint: state.videoFirstFrameImage
+                ? fingerprintRef(state.videoFirstFrameImage)
+                : null,
             referenceCount,
             referenceImageFingerprints: (videoReferenceImages ?? []).map(fingerprintRef),
             capabilityReferenceImagesCount: capabilityReferenceImages.length,
@@ -138,6 +142,7 @@ export class VideoRouter {
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
                 proseMirrorContentHandler: options.onProseMirrorContent,
                 proseMirrorSnapshotProvider: options.getProseMirrorSnapshot,
+                abortSignal: options.signal,
             }
 
             const finalState = await provider.process(requestData)

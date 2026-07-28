@@ -12,9 +12,12 @@ import {
     aiGeneratedVideoNodeType,
     aiResponseMessageNodeType,
     aiUserMessageNodeType,
+    collectProseMirrorPromptReferences,
     findAiChatThreadContentNode,
+    LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
     parseCapabilityInputsAttr,
     parseProseMirrorJsonContent,
+    PROMPT_REFERENCE_NODE_TYPE,
     type ProseMirrorJsonNode,
 } from '@lixpi/prosemirror'
 import {
@@ -22,6 +25,7 @@ import {
     getAiInteractionResponseSubject,
     NATS_SUBJECTS,
     type AiInteractionChatSendMessagePayload,
+    type AssetRequesterContext,
     type CapabilityJsonValue,
     type CanvasNode,
     type MediaBranchCandidateRoleHint,
@@ -42,10 +46,10 @@ import {
 import AiModel from '../../models/ai-model.ts'
 import type { LlmModule } from '../../llm/index.ts'
 import Workspace from '../../models/workspace.ts'
+import Organization from '../../models/organization.ts'
 import { PipelineEventLog } from '../../llm/graph/pipeline-event-log.ts'
 import AssetModel from '../../models/asset.ts'
 import BlobModel from '../../models/blob.ts'
-import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 import { ensureAiInteractionEventRelay } from '../../services/ai-interaction-event-relay.ts'
 import AssetDocumentService from '../../services/asset-document-service.ts'
 import { buildCandidateTranscriptContext } from '../../llm/graph/media-branch-snapshot.ts'
@@ -59,6 +63,11 @@ import PromptReferenceRecentModel from '../../models/prompt-reference-recent.ts'
 import { CapabilityModelResolverStore } from '../../capability-system/capability-runtime-adapters.ts'
 import { capabilityActionRegistry } from '../../capability-system/capability-runtime.ts'
 import { resolveActionTimelineInput } from '../../capability-system/action-timeline-input.ts'
+import { removeMediaGenerationRequestFromCanvas } from '../../services/asset-canvas-projection.ts'
+import {
+    createAssetRequesterForWorkspaceUser,
+    isAssetAvailableInWorkspaceScope,
+} from '../../services/workspace-reference-scope.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 type PipelineResumePayload = {
@@ -163,6 +172,9 @@ const collectAuthoritativeMessageText = (node: ProseMirrorJsonNode): string => {
             text += child.text ?? ''
         } else if (child.type === 'hard_break') {
             text += '\n'
+        } else if (child.type === PROMPT_REFERENCE_NODE_TYPE
+            || child.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE) {
+            text += collectProseMirrorPromptReferences(child)[0]?.displayName ?? ''
         } else if (child.type === 'code_block') {
             text += `\n\`\`\`\n${collectAuthoritativeMessageText(child)}\n\`\`\`\n`
         } else if (child.type === aiGeneratedImageNodeType || child.type === aiGeneratedVideoNodeType) {
@@ -215,7 +227,7 @@ const validateCapabilityInputs = async ({
 }: {
     inputs: Record<string, Record<string, CapabilityJsonValue>>
     references: Array<{ capabilityId: string; kind: 'tool' | 'skill' }>
-    requester: Awaited<ReturnType<typeof getAssetRequesterContext>>
+    requester: AssetRequesterContext
     workspaceId: string
     organizationId: string
 }): Promise<void> => {
@@ -255,12 +267,14 @@ const validateCapabilityInputs = async ({
 const resolveAuthorizedCandidateSnapshot = async ({
     snapshot,
     requester,
+    workspaceId,
     organizationId,
     conversationAssetId,
     workspaceNodes,
 }: {
     snapshot: MediaBranchCandidateSnapshot | undefined
-    requester: Awaited<ReturnType<typeof getAssetRequesterContext>>
+    requester: AssetRequesterContext
+    workspaceId: string
     organizationId: string
     conversationAssetId: string
     workspaceNodes: CanvasNode[]
@@ -273,15 +287,22 @@ const resolveAuthorizedCandidateSnapshot = async ({
     if (snapshot.regionNodeId !== `standalone:${conversationAssetId}` && !workspaceNodeById.has(snapshot.regionNodeId)) {
         throw new Error('MEDIA_BRANCH_REGION_NOT_IN_WORKSPACE')
     }
-    const candidateIds = new Set(snapshot.candidates.map((candidate) => candidate.candidateId))
-    if (candidateIds.size !== snapshot.candidates.length) throw new Error('DUPLICATE_MEDIA_BRANCH_CANDIDATE')
-    if (snapshot.activeTargetCandidateId && !candidateIds.has(snapshot.activeTargetCandidateId)) {
+    const submittedCandidateIds = new Set(snapshot.candidates.map((candidate) => candidate.candidateId))
+    if (submittedCandidateIds.size !== snapshot.candidates.length) throw new Error('DUPLICATE_MEDIA_BRANCH_CANDIDATE')
+    if (snapshot.activeTargetCandidateId && !submittedCandidateIds.has(snapshot.activeTargetCandidateId)) {
         throw new Error('MEDIA_BRANCH_ACTIVE_TARGET_INVALID')
     }
-    if (snapshot.explicitReferenceCandidateIds?.some((candidateId) => !candidateIds.has(candidateId))) {
+    if (snapshot.explicitReferenceCandidateIds?.some((candidateId) => !submittedCandidateIds.has(candidateId))) {
         throw new Error('MEDIA_BRANCH_EXPLICIT_REFERENCE_INVALID')
     }
-    const candidates = await Promise.all(snapshot.candidates.map(async (candidate) => {
+    const explicitReferenceCandidateIds = new Set(snapshot.explicitReferenceCandidateIds ?? [])
+    const submittedCandidates = snapshot.candidates.filter((candidate) =>
+        explicitReferenceCandidateIds.has(candidate.candidateId))
+    const activeTargetCandidateId = snapshot.activeTargetCandidateId
+        && explicitReferenceCandidateIds.has(snapshot.activeTargetCandidateId)
+        ? snapshot.activeTargetCandidateId
+        : undefined
+    const candidates = await Promise.all(submittedCandidates.map(async (candidate) => {
         if (!candidate.nodeId || candidate.candidateId !== `node:${candidate.nodeId}`) {
             throw new Error(`INVALID_MEDIA_BRANCH_CANDIDATE_ID:${candidate.candidateId}`)
         }
@@ -291,7 +312,7 @@ const resolveAuthorizedCandidateSnapshot = async ({
             throw new Error(`MEDIA_BRANCH_NODE_NOT_IN_WORKSPACE:${candidate.nodeId}`)
         }
         const asset = await AssetModel.get({ assetId: candidate.assetId, requester })
-        if ('error' in asset || asset.organizationId !== organizationId || !asset.media
+        if ('error' in asset || !isAssetAvailableInWorkspaceScope(asset, { workspaceId, organizationId }) || !asset.media
             || (asset.media.kind !== 'image' && asset.media.kind !== 'video')) {
             throw new Error(`MEDIA_BRANCH_ASSET_NOT_FOUND:${candidate.assetId}`)
         }
@@ -317,7 +338,7 @@ const resolveAuthorizedCandidateSnapshot = async ({
             roleHints.add('generated-variant')
             roleHints.add(childExists ? 'branch-ancestor' : 'branch-leaf')
         }
-        if (snapshot.activeTargetCandidateId === candidate.candidateId) roleHints.add('active-target')
+        if (activeTargetCandidateId === candidate.candidateId) roleHints.add('active-target')
         const ancestorNodeIds = [workspaceNode.nodeId]
         let parentNodeId = generatedBy?.parentMediaNodeId
         while (parentNodeId && !ancestorNodeIds.includes(parentNodeId)) {
@@ -326,9 +347,6 @@ const resolveAuthorizedCandidateSnapshot = async ({
             ancestorNodeIds.push(parentNodeId)
             parentNodeId = parent.generatedBy?.parentMediaNodeId
         }
-        const sourceContextNodeIds = generatedBy?.sourceContextNodeIds
-            ?.filter((nodeId) => workspaceNodeById.has(nodeId))
-            ?? [workspaceNode.nodeId]
         return {
             candidateId: candidate.candidateId,
             nodeId: workspaceNode.nodeId,
@@ -340,7 +358,10 @@ const resolveAuthorizedCandidateSnapshot = async ({
             ...(generatedBy?.parentMediaNodeId ? { parentMediaNodeId: generatedBy.parentMediaNodeId } : {}),
             ...(generatedBy?.parentImageNodeId ? { parentImageNodeId: generatedBy.parentImageNodeId } : {}),
             ancestorNodeIds,
-            sourceContextNodeIds,
+            // Selecting one generated output does not implicitly select every
+            // historical source that produced it. Context identity is exactly
+            // the canvas node the user attached for this turn.
+            sourceContextNodeIds: [workspaceNode.nodeId],
             ...(generatedBy?.promptText ? { promptText: generatedBy.promptText } : {}),
             ...(asset.descriptor?.summary ? {
                 visualEntitySummary: asset.descriptor.summary,
@@ -356,14 +377,14 @@ const resolveAuthorizedCandidateSnapshot = async ({
         resolverVersion: 'image-branch-vlm-v1',
         conversationAssetId,
         regionNodeId: snapshot.regionNodeId,
-        ...(snapshot.activeTargetCandidateId ? { activeTargetCandidateId: snapshot.activeTargetCandidateId } : {}),
-        ...(snapshot.explicitReferenceCandidateIds?.length ? {
-            explicitReferenceCandidateIds: [...new Set(snapshot.explicitReferenceCandidateIds)],
+        ...(activeTargetCandidateId ? { activeTargetCandidateId } : {}),
+        ...(candidates.length > 0 ? {
+            explicitReferenceCandidateIds: candidates.map((candidate) => candidate.candidateId),
         } : {}),
         promptText,
         promptFingerprint: createHash('sha256').update(promptText).digest('hex'),
         candidates,
-        transcriptContext: buildCandidateTranscriptContext(candidates, promptText, snapshot.activeTargetCandidateId),
+        transcriptContext: buildCandidateTranscriptContext(candidates, promptText, activeTargetCandidateId),
     }
 }
 
@@ -396,39 +417,41 @@ const resolveAuthorizedWorkspaceContextSnapshot = ({
     const workspaceNodeById = new Map(workspaceNodes.map((node) => [node.nodeId, node]))
     if (workspaceNodeById.size !== workspaceNodes.length) throw new Error('WORKSPACE_NODE_ID_CONFLICT')
     const seen = new Set<string>()
-    const nodes = snapshot.nodes.map((node) => {
-        if (seen.has(node.nodeId)) throw new Error(`DUPLICATE_WORKSPACE_CONTEXT_NODE:${node.nodeId}`)
-        seen.add(node.nodeId)
-        const workspaceNode = workspaceNodeById.get(node.nodeId)
-        if (!isAuthorizedWorkspaceContextCanvasNode(workspaceNode)
-            || workspaceNode.type !== node.type
-            || workspaceNode.assetId !== node.assetId) {
-            throw new Error(`WORKSPACE_CONTEXT_NODE_NOT_IN_WORKSPACE:${node.nodeId}`)
-        }
-        const generatedBy = workspaceNode.type === 'image'
-            || workspaceNode.type === 'video'
-            || workspaceNode.type === 'capabilityArtifact'
-            ? workspaceNode.generatedBy
-            : undefined
-        return {
-            nodeId: workspaceNode.nodeId,
-            type: workspaceNode.type,
-            assetId: workspaceNode.assetId,
-            ...(workspaceNode.type === 'capabilityArtifact' ? {
-                artifactTypeId: workspaceNode.artifactTypeId,
-            } : {}),
-            ...(node.descriptorStatus ? { descriptorStatus: node.descriptorStatus } : {}),
-            ...(node.title ? { title: node.title } : {}),
-            ...(node.descriptorSummary ? { descriptorSummary: node.descriptorSummary } : {}),
-            ...(node.entityTags ? { entityTags: node.entityTags } : {}),
-            ...(node.styleTags ? { styleTags: node.styleTags } : {}),
-            ...(generatedBy?.branchId ? { branchId: generatedBy.branchId } : {}),
-            ...(generatedBy?.conversationAssetId ? { sourceConversationAssetId: generatedBy.conversationAssetId } : {}),
-            ...(generatedBy?.conversationAssetId === conversationAssetId ? { isCurrentConversationGenerated: true } : {}),
-            isExplicitChip: node.isExplicitChip === true,
-            isEdgeForced: false,
-        }
-    })
+    const nodes = snapshot.nodes
+        .filter((node) => node.isExplicitChip === true)
+        .map((node) => {
+            if (seen.has(node.nodeId)) throw new Error(`DUPLICATE_WORKSPACE_CONTEXT_NODE:${node.nodeId}`)
+            seen.add(node.nodeId)
+            const workspaceNode = workspaceNodeById.get(node.nodeId)
+            if (!isAuthorizedWorkspaceContextCanvasNode(workspaceNode)
+                || workspaceNode.type !== node.type
+                || workspaceNode.assetId !== node.assetId) {
+                throw new Error(`WORKSPACE_CONTEXT_NODE_NOT_IN_WORKSPACE:${node.nodeId}`)
+            }
+            const generatedBy = workspaceNode.type === 'image'
+                || workspaceNode.type === 'video'
+                || workspaceNode.type === 'capabilityArtifact'
+                ? workspaceNode.generatedBy
+                : undefined
+            return {
+                nodeId: workspaceNode.nodeId,
+                type: workspaceNode.type,
+                assetId: workspaceNode.assetId,
+                ...(workspaceNode.type === 'capabilityArtifact' ? {
+                    artifactTypeId: workspaceNode.artifactTypeId,
+                } : {}),
+                ...(node.descriptorStatus ? { descriptorStatus: node.descriptorStatus } : {}),
+                ...(node.title ? { title: node.title } : {}),
+                ...(node.descriptorSummary ? { descriptorSummary: node.descriptorSummary } : {}),
+                ...(node.entityTags ? { entityTags: node.entityTags } : {}),
+                ...(node.styleTags ? { styleTags: node.styleTags } : {}),
+                ...(generatedBy?.branchId ? { branchId: generatedBy.branchId } : {}),
+                ...(generatedBy?.conversationAssetId ? { sourceConversationAssetId: generatedBy.conversationAssetId } : {}),
+                ...(generatedBy?.conversationAssetId === conversationAssetId ? { isCurrentConversationGenerated: true } : {}),
+                isExplicitChip: true,
+                isEdgeForced: false,
+            }
+        })
     return {
         resolverVersion: 'workspace-context-v1',
         workspaceId,
@@ -545,17 +568,21 @@ export const aiInteractionSubjects = [
             if (!mediaGenerationRequest && (typeof aiModel !== 'string' || !aiModel.includes(':'))) {
                 return rejectSend('AI_MODEL_REQUIRED')
             }
-            const requester = await getAssetRequesterContext(userId)
-            const conversationAsset = await AssetModel.get({ assetId: conversationAssetId, requester })
-            if ('error' in conversationAsset || !conversationAsset.documents.conversation) return rejectSend('CONVERSATION_ASSET_NOT_FOUND')
             const workspace = await Workspace.getWorkspace({ workspaceId, userId })
             if ('error' in workspace) return rejectSend(workspace)
             if (workspace.deletingAt) return rejectSend('WORKSPACE_DELETING')
-            if (workspace.organizationId !== conversationAsset.organizationId) return rejectSend('ORGANIZATION_BOUNDARY_VIOLATION')
             if (!workspace.accessList.some((entry) => entry.userId === userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor'))) {
                 return rejectSend('PERMISSION_DENIED')
             }
-            const organizationId = conversationAsset.organizationId
+            const organization = await Organization.getOrganization({ organizationId: workspace.organizationId, userId })
+            if ('error' in organization) return rejectSend('ORGANIZATION_ACCESS_DENIED')
+            const requester = createAssetRequesterForWorkspaceUser(workspace, userId, true)
+            const conversationAsset = await AssetModel.get({ assetId: conversationAssetId, requester })
+            if ('error' in conversationAsset || !conversationAsset.documents.conversation
+                || !isAssetAvailableInWorkspaceScope(conversationAsset, workspace)) {
+                return rejectSend('CONVERSATION_ASSET_NOT_FOUND')
+            }
+            const organizationId = workspace.organizationId
             const aiChatThreadId = conversationAssetId
             const workspaceNodes = workspace.canvasState?.nodes ?? []
             const regeneration = mediaGenerationRequest?.regeneration
@@ -590,7 +617,7 @@ export const aiInteractionSubjects = [
                 for (const replayPrompt of regeneration.replayPrompts) {
                     const sourceAsset = await AssetModel.get({ assetId: replayPrompt.sourceAssetId, requester })
                     if ('error' in sourceAsset
-                        || sourceAsset.organizationId !== organizationId
+                        || !isAssetAvailableInWorkspaceScope(sourceAsset, workspace)
                         || sourceAsset.generatedOutputReview?.status !== 'superseded'
                         || sourceAsset.generatedOutputReview?.regenerationMode !== 'existing-prompt'
                         || sourceAsset.states.provenance !== 'sealed'
@@ -640,6 +667,7 @@ export const aiInteractionSubjects = [
             let resolvedMediaBranchCandidateSnapshot = await resolveAuthorizedCandidateSnapshot({
                 snapshot: mediaBranchCandidateSnapshot,
                 requester,
+                workspaceId,
                 organizationId,
                 conversationAssetId,
                 workspaceNodes,
@@ -650,14 +678,19 @@ export const aiInteractionSubjects = [
                 conversationAssetId,
                 workspaceNodes,
             })
-            ensureAiInteractionEventRelay({ userId, scopeId: organizationId, pipelineId: aiChatThreadId })
+            ensureAiInteractionEventRelay({
+                userId,
+                scopeId: organizationId,
+                pipelineId: aiChatThreadId,
+                workspaceId,
+            })
             const canonicalResponseSubject = getAiInteractionCanonicalResponseSubject(organizationId, aiChatThreadId)
             const sourceAssetId = mediaGenerationRequest?.videoOptions?.sourceForExtension ?? videoSourceForExtension
             let resolvedVideoSourceForExtension: string | undefined
             if (sourceAssetId) {
                 const sourceAsset = await AssetModel.get({ assetId: sourceAssetId, requester })
                 if ('error' in sourceAsset
-                    || sourceAsset.organizationId !== organizationId
+                    || !isAssetAvailableInWorkspaceScope(sourceAsset, workspace)
                     || sourceAsset.media?.kind !== 'video') return rejectSend('VIDEO_SOURCE_ASSET_NOT_FOUND')
                 const sourceRendition = sourceAsset.media.renditions.canonical?.status === 'ready'
                     ? sourceAsset.media.renditions.canonical
@@ -1102,13 +1135,13 @@ export const aiInteractionSubjects = [
             }
             let responseScopeId = workspaceId
             if (data.conversationAssetId) {
-                const requester = await getAssetRequesterContext(userId)
+                const organization = await Organization.getOrganization({ organizationId: workspace.organizationId, userId })
+                if ('error' in organization) return { error: 'ORGANIZATION_ACCESS_DENIED' }
+                const requester = createAssetRequesterForWorkspaceUser(workspace, userId, true)
                 const conversation = await AssetModel.get({ assetId: data.conversationAssetId, requester })
-                if ('error' in conversation || !conversation.documents.conversation) {
+                if ('error' in conversation || !conversation.documents.conversation
+                    || !isAssetAvailableInWorkspaceScope(conversation, workspace)) {
                     return { error: 'CONVERSATION_ASSET_NOT_FOUND' }
-                }
-                if (conversation.organizationId !== workspace.organizationId) {
-                    return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
                 }
                 responseScopeId = conversation.organizationId
             }
@@ -1116,6 +1149,7 @@ export const aiInteractionSubjects = [
                 userId,
                 scopeId: responseScopeId,
                 pipelineId,
+                workspaceId,
             })
 
             const localStreamSeq = Number.isSafeInteger(data.localStreamSeq) && data.localStreamSeq! >= 0
@@ -1157,14 +1191,21 @@ export const aiInteractionSubjects = [
                 generationRequestId?: string
             }
 
-            const requester = await getAssetRequesterContext(data.user.userId)
-            const conversation = await AssetModel.get({ assetId: conversationAssetId, requester })
-            if ('error' in conversation || !conversation.documents.conversation) return { error: 'CONVERSATION_ASSET_NOT_FOUND' }
             const workspace = await Workspace.getWorkspace({ workspaceId, userId: data.user.userId })
             if ('error' in workspace) return workspace
-            if (workspace.organizationId !== conversation.organizationId) return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
             if (!workspace.accessList.some((entry) => entry.userId === data.user.userId && (entry.accessLevel === 'owner' || entry.accessLevel === 'editor'))) {
                 return { error: 'PERMISSION_DENIED' }
+            }
+            const organization = await Organization.getOrganization({
+                organizationId: workspace.organizationId,
+                userId: data.user.userId,
+            })
+            if ('error' in organization) return { error: 'ORGANIZATION_ACCESS_DENIED' }
+            const requester = createAssetRequesterForWorkspaceUser(workspace, data.user.userId, true)
+            const conversation = await AssetModel.get({ assetId: conversationAssetId, requester })
+            if ('error' in conversation || !conversation.documents.conversation
+                || !isAssetAvailableInWorkspaceScope(conversation, workspace)) {
+                return { error: 'CONVERSATION_ASSET_NOT_FOUND' }
             }
             const instanceKey = `${workspaceId}:${conversationAssetId}`
 
@@ -1175,25 +1216,64 @@ export const aiInteractionSubjects = [
                 chalk.red(instanceKey),
             ])
 
+            if (generationRequestId) {
+                try {
+                    await getLlmModule().stop(instanceKey)
+                } catch (error) {
+                    err(`Failed to stop conversation workflow ${instanceKey}:`, error)
+                }
+                try {
+                    await getLlmModule().stopMediaGenerationMatrix({
+                        workspaceId,
+                        aiChatThreadId: conversationAssetId,
+                        ...(!generationRequestId.startsWith('canvas-') ? { generationRequestId } : {}),
+                    })
+                } catch (error) {
+                    err(`Failed to stop media generation request ${generationRequestId}:`, error)
+                }
+
+                try {
+                    const canvasGeometry = await removeMediaGenerationRequestFromCanvas({
+                        workspaceId,
+                        generationRequestId,
+                        conversationAssetId,
+                        requester,
+                    })
+                    try {
+                        await AssetModel.updateConversationStateSystem({
+                            assetId: conversationAssetId,
+                            organizationId: conversation.organizationId,
+                            conversation: 'paused',
+                        })
+                    } catch (error) {
+                        err(`Failed to pause stopped conversation ${conversationAssetId}:`, error)
+                    }
+                    return {
+                        status: 'stopped',
+                        generationRequestId,
+                        ...(canvasGeometry ? { canvasGeometry } : {}),
+                    }
+                } catch (error) {
+                    err(`Failed to remove stopped generation request ${generationRequestId}:`, error)
+                    return { error: error instanceof Error ? error.message : String(error) }
+                }
+            }
+
             try {
                 await getLlmModule().stop(instanceKey)
                 await getLlmModule().stopMediaGenerationMatrix({
                     workspaceId,
                     aiChatThreadId: conversationAssetId,
-                    generationRequestId,
                 })
                 await AssetModel.updateConversationStateSystem({
                     assetId: conversationAssetId,
                     organizationId: conversation.organizationId,
                     conversation: 'paused',
                 })
-                return {
-                    status: 'stopped',
-                    ...(generationRequestId ? { generationRequestId } : {}),
-                }
-            } catch (e) {
-                err(`Failed to stop ${instanceKey}:`, e)
-                return { error: e instanceof Error ? e.message : String(e) }
+                return { status: 'stopped' }
+            } catch (error) {
+                err(`Failed to stop ${instanceKey}:`, error)
+                return { error: error instanceof Error ? error.message : String(error) }
             }
         },
     },

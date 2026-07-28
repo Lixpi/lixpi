@@ -15,10 +15,13 @@ import {
 import AssetModel, { canEditAssetMetadata } from '../../models/asset.ts'
 import BlobModel from '../../models/blob.ts'
 import AiModel from '../../models/ai-model.ts'
+import Organization from '../../models/organization.ts'
+import Workspace from '../../models/workspace.ts'
 import { describeMediaStill, describeTextContent } from '../../llm/media-descriptor.ts'
 import { settings } from '../../settings.ts'
 import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 import AssetDocumentService from '../../services/asset-document-service.ts'
+import { createAssetRequesterForWorkspaceUser } from '../../services/workspace-reference-scope.ts'
 
 const { MEDIA_DESCRIBE } = NATS_SUBJECTS.AI_INTERACTION_SUBJECTS
 
@@ -90,7 +93,16 @@ export const mediaDescriptorSubjects = [{
         const userId = data.user.userId as string
         const assetId = data.assetId as string
         if (!assetId) return { error: 'ASSET_ID_REQUIRED' }
-        const requester = await getAssetRequesterContext(userId)
+        const requester = typeof data.workspaceId === 'string' && data.workspaceId
+            ? await (async () => {
+                const workspace = await Workspace.getWorkspace({ workspaceId: data.workspaceId, userId })
+                if ('error' in workspace || workspace.deletingAt) return null
+                const organization = await Organization.getOrganization({ organizationId: workspace.organizationId, userId })
+                if ('error' in organization) return null
+                return createAssetRequesterForWorkspaceUser(workspace, userId, true)
+            })()
+            : await getAssetRequesterContext(userId)
+        if (!requester) return { error: 'WORKSPACE_ACCESS_DENIED' }
         const asset = await AssetModel.get({ assetId, requester })
         if ('error' in asset) return asset
         if (!await canEditAssetMetadata(asset, requester)) return { error: 'PERMISSION_DENIED' }

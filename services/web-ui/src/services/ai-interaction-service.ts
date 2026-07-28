@@ -9,6 +9,7 @@ import {
     type AiInteractionMediaGenerationRequest,
     type CapabilityGenerationTrace,
     type CapabilityRunEventStreamPayload,
+    type CanvasGeometryUpdate,
     type ImageGenerationTrace,
     type ImageGenerationSize,
     type MediaBranchLineagePlan,
@@ -76,6 +77,12 @@ type StopAiChatMessageTarget = {
     generationRequestId?: string
 }
 
+type StopAiChatMessageResult = {
+    status: 'stopped'
+    generationRequestId?: string
+    canvasGeometry?: CanvasGeometryUpdate
+}
+
 type AiInteractionServiceOptions = {
     workspaceId: string
     conversationAssetId: string
@@ -87,7 +94,7 @@ export async function stopAiChatMessageForThread({
     workspaceId,
     conversationAssetId,
     generationRequestId,
-}: StopAiChatMessageTarget): Promise<void> {
+}: StopAiChatMessageTarget): Promise<StopAiChatMessageResult> {
     const payload = {
         token: await AuthService.getTokenSilently(),
         workspaceId,
@@ -98,8 +105,9 @@ export async function stopAiChatMessageForThread({
     const result = await servicesStore.getData('nats')!.request(
         AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE,
         payload,
-    ) as { error?: string }
-    if (result?.error) throw new Error(result.error)
+    ) as StopAiChatMessageResult | { error: string }
+    if ('error' in result) throw new Error(result.error)
+    return result
 }
 
 export default class AiInteractionService {
@@ -573,8 +581,7 @@ export default class AiInteractionService {
             payload.mediaBranchCandidateSnapshot = mediaBranchCandidateSnapshot
         }
 
-        // Whole-workspace descriptors index for the API relevance stage. Sent on
-        // every turn, including text-only turns.
+        // Explicit composer context for this submitted turn.
         if (workspaceContextSnapshot) {
             payload.workspaceContextSnapshot = workspaceContextSnapshot
         }
@@ -602,24 +609,41 @@ export default class AiInteractionService {
 
         // The media-generation matrix is needed only when some section carries
         // more than one model; a single model per section runs the plain path.
-        const matrixVideoModelIds = regeneration || videoModelsEnabled || Boolean(videoSourceForExtension) ? videoModelIds : []
-        const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, matrixVideoModelIds.length]
+        const regenerationMediaTypes = regeneration?.mode === 'existing-prompt'
+            ? Array.from(new Set(regeneration.replayPrompts.map(prompt => prompt.mediaType)))
+            : []
+        const hasVideoOutput = regenerationMediaTypes.length > 0
+            ? regenerationMediaTypes.includes('video')
+            : videoModelsEnabled || Boolean(videoSourceForExtension)
+        const hasImageOutput = regenerationMediaTypes.length > 0
+            ? regenerationMediaTypes.includes('image')
+            : imageModelsEnabled || !hasVideoOutput
+        const outputMediaTypes: Array<'image' | 'video'> = regenerationMediaTypes.length > 0
+            ? regenerationMediaTypes
+            : [
+                ...(hasImageOutput ? ['image' as const] : []),
+                ...(hasVideoOutput ? ['video' as const] : []),
+            ]
+        const matrixImageModelIds = outputMediaTypes.includes('image') ? imageModelIds : []
+        const matrixVideoModelIds = outputMediaTypes.includes('video') ? videoModelIds : []
+        const selectedSectionCounts = [reasoningModelIds.length, matrixImageModelIds.length, matrixVideoModelIds.length]
         const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
         const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
         if (regeneration || totalSelectedModelCount > sectionsWithSelection) {
             payload.mediaGenerationRequest = {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: uuidv4(),
+                outputMediaTypes,
                 useMultipleReasoningModels: reasoningModelsEnabled,
                 useMultipleImageModels: imageModelsEnabled,
                 useMultipleVideoModels: videoModelsEnabled,
                 reasoningModelIds,
-                imageModelIds,
+                imageModelIds: matrixImageModelIds,
                 videoModelIds: matrixVideoModelIds,
-                imageOptions: {
+                ...(matrixImageModelIds.length > 0 ? { imageOptions: {
                     imageSize: imageSize || 'auto',
                     ...(imageModelsEnabled && imageConfigGroups?.length ? { configGroups: imageConfigGroups } : {}),
-                },
+                } } : {}),
                 ...(matrixVideoModelIds.length > 0 ? { videoOptions: {
                     ...(videoAspectRatio ? { aspectRatio: videoAspectRatio } : {}),
                     ...(videoResolution ? { resolution: videoResolution } : {}),
@@ -637,6 +661,9 @@ export default class AiInteractionService {
             reasoningModelCount: reasoningModelIds.length,
             imageModelCount: imageModelIds.length,
             videoModelCount: videoModelIds.length,
+            matrixOutputMediaTypes: payload.mediaGenerationRequest?.outputMediaTypes ?? [],
+            matrixImageModelCount: payload.mediaGenerationRequest?.imageModelIds?.length ?? 0,
+            matrixVideoModelCount: payload.mediaGenerationRequest?.videoModelIds?.length ?? 0,
             hasImageModel: imageModelIds.length > 0,
             hasVideoModel: videoModelIds.length > 0,
             mediaBranchCandidateCount: mediaBranchCandidateSnapshot?.candidates.length ?? 0,

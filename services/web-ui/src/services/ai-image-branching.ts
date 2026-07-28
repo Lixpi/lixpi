@@ -114,31 +114,6 @@ function uniqueRoleHints(values: MediaBranchCandidateRoleHint[]): MediaBranchCan
     return Array.from(new Set(values))
 }
 
-function getSourceContextNodeIds(nodes: CanvasNode[], edges: WorkspaceEdge[], regionNodeId: string): string[] {
-    const nodeIds = new Set<string>()
-    const queue: string[] = [regionNodeId]
-    const visited = new Set<string>()
-
-    while (queue.length > 0) {
-        const targetNodeId = queue.shift()
-        if (!targetNodeId || visited.has(targetNodeId)) continue
-        visited.add(targetNodeId)
-
-        for (const edge of edges) {
-            if (edge.targetNodeId !== targetNodeId || nodeIds.has(edge.sourceNodeId)) continue
-            nodeIds.add(edge.sourceNodeId)
-            queue.push(edge.sourceNodeId)
-        }
-
-        for (const node of nodes) {
-            if (node.parentId !== targetNodeId || nodeIds.has(node.nodeId)) continue
-            nodeIds.add(node.nodeId)
-        }
-    }
-
-    return Array.from(nodeIds)
-}
-
 function getContextMediaNodes(nodes: CanvasNode[], sourceContextNodeIds: string[]): MediaCanvasNode[] {
     const sourceContextNodeIdSet = new Set(sourceContextNodeIds)
     return nodes.filter((node): node is MediaCanvasNode => isMediaCanvasNode(node) && sourceContextNodeIdSet.has(node.nodeId))
@@ -148,65 +123,6 @@ function getGeneratedMediaForConversation(nodes: CanvasNode[], conversationAsset
     return nodes.filter((node): node is MediaCanvasNode => isGeneratedMediaForConversation(node, conversationAssetId))
 }
 
-function getLeafGeneratedMedia(media: MediaCanvasNode[], edges: WorkspaceEdge[]): MediaCanvasNode[] {
-    const mediaIds = new Set(media.map((node) => node.nodeId))
-    const sourceIdsWithGeneratedChildren = new Set(
-        edges
-            .filter((edge) => mediaIds.has(edge.sourceNodeId) && mediaIds.has(edge.targetNodeId))
-            .map((edge) => edge.sourceNodeId)
-    )
-
-    for (const node of media) {
-        const parentMediaNodeId = node.generatedBy?.parentMediaNodeId ?? node.generatedBy?.parentImageNodeId
-        if (parentMediaNodeId && mediaIds.has(parentMediaNodeId)) sourceIdsWithGeneratedChildren.add(parentMediaNodeId)
-    }
-
-    const leaves = media.filter((node) => !sourceIdsWithGeneratedChildren.has(node.nodeId))
-    return leaves.length > 0 ? leaves : media
-}
-
-function collectMediaBranchAncestors(
-    selectedMedia: MediaCanvasNode,
-    mediaById: Map<string, MediaCanvasNode>,
-    edges: WorkspaceEdge[],
-    regionNodeId: string
-): string[] {
-    const branchNodeIds: string[] = []
-    const visited = new Set<string>()
-    let current: MediaCanvasNode | undefined = selectedMedia
-
-    while (current && !visited.has(current.nodeId)) {
-        visited.add(current.nodeId)
-        branchNodeIds.unshift(current.nodeId)
-
-        const incomingEdge = edges.find((edge) => edge.targetNodeId === current?.nodeId)
-        if (incomingEdge && incomingEdge.sourceNodeId !== regionNodeId) {
-            const sourceMedia = mediaById.get(incomingEdge.sourceNodeId)
-            if (sourceMedia) {
-                current = sourceMedia
-                continue
-            }
-        }
-
-        const parentMediaNodeId = current.generatedBy?.parentMediaNodeId ?? current.generatedBy?.parentImageNodeId
-        current = parentMediaNodeId ? mediaById.get(parentMediaNodeId) : undefined
-    }
-
-    return branchNodeIds
-}
-
-function getBranchIdForMedia(selectedMedia: MediaCanvasNode, ancestorNodeIds: string[], mediaById: Map<string, MediaCanvasNode>): string | undefined {
-    const explicitBranchId = selectedMedia.generatedBy?.branchId
-    if (explicitBranchId) return explicitBranchId
-
-    for (const ancestorNodeId of ancestorNodeIds) {
-        const ancestorBranchId = mediaById.get(ancestorNodeId)?.generatedBy?.branchId
-        if (ancestorBranchId) return ancestorBranchId
-    }
-
-    return undefined
-}
-
 // Resolve the still the resolver sees for a candidate. For videos this is the
 // representative mid-frame (falling back to the frame-0 poster); the MP4 itself
 // is never sent to the VLM — only the explicit "extend video" action ships it.
@@ -214,7 +130,7 @@ function getMediaUrl(node: MediaCanvasNode): string {
     return buildAssetRenditionPath(node.assetId, node.type === 'video' ? 'representativeFrame' : 'preview')
 }
 
-function getMediaPromptText(node: MediaCanvasNode, generatedMediaTextByNodeId: Record<string, string> = {}): string {
+function getMediaPromptText(node: MediaCanvasNode): string {
     const generatedBy = node.generatedBy
     return [
         generatedBy?.promptText,
@@ -225,23 +141,7 @@ function getMediaPromptText(node: MediaCanvasNode, generatedMediaTextByNodeId: R
         // Descriptor summaries come from the media pixels and help distinguish
         // media from prompt/provenance text.
         assetsStore.get(node.assetId)?.descriptor?.summary,
-        generatedMediaTextByNodeId[node.nodeId],
     ].filter((text): text is string => Boolean(text?.trim())).join('\n')
-}
-
-function getBranchPromptText(
-    selectedMedia: MediaCanvasNode,
-    mediaById: Map<string, MediaCanvasNode>,
-    edges: WorkspaceEdge[],
-    regionNodeId: string,
-    generatedMediaTextByNodeId: Record<string, string> = {}
-): string {
-    return collectMediaBranchAncestors(selectedMedia, mediaById, edges, regionNodeId)
-        .map((nodeId) => mediaById.get(nodeId))
-        .filter((node): node is MediaCanvasNode => Boolean(node))
-        .map((node) => getMediaPromptText(node, generatedMediaTextByNodeId))
-        .filter(Boolean)
-        .join('\n---\n')
 }
 
 export function getGeneratedImageTextByNodeIdFromThreadContent(
@@ -315,44 +215,6 @@ function createBaseContextCandidate(media: MediaCanvasNode, activeTargetNodeId: 
     }
 }
 
-function createGeneratedCandidate(args: {
-    media: MediaCanvasNode
-    mediaById: Map<string, MediaCanvasNode>
-    edges: WorkspaceEdge[]
-    regionNodeId: string
-    sourceContextNodeIds: string[]
-    leafNodeIds: Set<string>
-    generatedMediaTextByNodeId: Record<string, string>
-    activeTargetNodeId?: string
-}): MediaBranchCandidateImage {
-    const ancestorNodeIds = collectMediaBranchAncestors(args.media, args.mediaById, args.edges, args.regionNodeId)
-    const generatedBy = args.media.generatedBy
-    const parentMediaNodeId = generatedBy?.parentMediaNodeId ?? generatedBy?.parentImageNodeId
-    const roleHints: MediaBranchCandidateRoleHint[] = ['generated-variant']
-    roleHints.push(args.leafNodeIds.has(args.media.nodeId) ? 'branch-leaf' : 'branch-ancestor')
-
-    return {
-        candidateId: `node:${args.media.nodeId}`,
-        nodeId: args.media.nodeId,
-        assetId: args.media.assetId,
-        imageUrl: getMediaUrl(args.media),
-        mediaKind: args.media.type,
-        roleHints: addActiveTargetHint(roleHints, args.media.nodeId, args.activeTargetNodeId),
-        branchId: getBranchIdForMedia(args.media, ancestorNodeIds, args.mediaById),
-        parentMediaNodeId,
-        parentImageNodeId: parentMediaNodeId,
-        ancestorNodeIds,
-        sourceContextNodeIds: uniqueValues([...(generatedBy?.sourceContextNodeIds ?? []), ...args.sourceContextNodeIds]),
-        sourceMessageId: generatedBy?.responseMessageId,
-        promptText: getBranchPromptText(args.media, args.mediaById, args.edges, args.regionNodeId, args.generatedMediaTextByNodeId),
-        visualEntitySummary: generatedBy?.visualEntitySummary ?? generatedBy?.entitySummary,
-        visualStyleSummary: generatedBy?.visualStyleSummary,
-        entityTags: generatedBy?.entityTags ?? assetsStore.get(args.media.assetId)?.descriptor?.entityTags ?? [],
-        styleTags: generatedBy?.styleTags ?? assetsStore.get(args.media.assetId)?.descriptor?.styleTags ?? [],
-        createdAt: generatedBy?.createdAt,
-    }
-}
-
 function buildTranscriptContext(candidates: MediaBranchCandidateImage[], prompt: string, activeTargetCandidateId: string | undefined): string {
     const candidateLines = candidates.map((candidate) => [
         `candidateId=${candidate.candidateId}`,
@@ -379,36 +241,15 @@ export function buildMediaBranchCandidateSnapshot({
     conversationAssetId,
     activeTargetNodeId,
     nodes,
-    edges,
     prompt,
     contextMediaNodeIds = [],
-    generatedImageTextByNodeId = {},
 }: BuildMediaBranchCandidateSnapshotParams): MediaBranchCandidateSnapshot {
-    const sourceContextNodeIds = uniqueValues([
-        ...getSourceContextNodeIds(nodes, edges, regionNodeId),
-        ...contextMediaNodeIds,
-    ])
-    const contextMedia = getContextMediaNodes(nodes, sourceContextNodeIds)
-    const generatedMedia = getGeneratedMediaForConversation(nodes, conversationAssetId)
-    const generatedMediaById = new Map(generatedMedia.map((node) => [node.nodeId, node]))
-    const leafNodeIds = new Set(getLeafGeneratedMedia(generatedMedia, edges).map((node) => node.nodeId))
+    const explicitContextNodeIds = uniqueValues(contextMediaNodeIds)
+    const contextMedia = getContextMediaNodes(nodes, explicitContextNodeIds)
     const candidatesById = new Map<string, MediaBranchCandidateImage>()
 
     for (const media of contextMedia) {
         addCandidate(candidatesById, createBaseContextCandidate(media, activeTargetNodeId))
-    }
-
-    for (const media of generatedMedia) {
-        addCandidate(candidatesById, createGeneratedCandidate({
-            media,
-            mediaById: generatedMediaById,
-            edges,
-            regionNodeId,
-            sourceContextNodeIds,
-            leafNodeIds,
-            generatedMediaTextByNodeId: generatedImageTextByNodeId,
-            activeTargetNodeId,
-        }))
     }
 
     const candidates = Array.from(candidatesById.values())
@@ -418,10 +259,8 @@ export function buildMediaBranchCandidateSnapshot({
         conversationAssetId,
         regionNodeId,
         ...(activeTargetCandidateId ? { activeTargetCandidateId } : {}),
-        // Explicit refs are carried as data only — the candidate list stays
-        // unfiltered and the API enforces explicit-context exclusivity.
-        ...(contextMediaNodeIds.length ? {
-            explicitReferenceCandidateIds: contextMediaNodeIds.map(nodeId => `node:${nodeId}`),
+        ...(explicitContextNodeIds.length ? {
+            explicitReferenceCandidateIds: explicitContextNodeIds.map(nodeId => `node:${nodeId}`),
         } : {}),
         promptText: prompt,
         promptFingerprint: fingerprintPrompt(prompt),
@@ -430,7 +269,7 @@ export function buildMediaBranchCandidateSnapshot({
     }
 }
 
-type BuildCanvasWideCandidateSnapshotParams = {
+type BuildExplicitMediaCandidateSnapshotParams = {
     // Identity used in place of a thread id to route streaming + placement for a
     // thread-less, canvas-wide generation run.
     generationRunId: string
@@ -441,21 +280,19 @@ type BuildCanvasWideCandidateSnapshotParams = {
     referenceNodeIds?: string[]
 }
 
-// Candidate snapshot scoped to the WHOLE canvas (every media node), used by the
-// screen-fixed center-bottom composer. Unlike buildMediaBranchCandidateSnapshot
-// — which narrows to one thread's lineage + edge-connected context — this offers
-// the VLM every still on the canvas as a candidate. Branch topology and role
-// assignment remain API-owned; this only collects non-authoritative candidates.
-export function buildCanvasWideCandidateSnapshot({
+// The screen-fixed composer supplies only references explicitly attached to the
+// submitted turn. The API authorizes the Assets and owns role assignment.
+export function buildExplicitMediaCandidateSnapshot({
     generationRunId,
     nodes,
     prompt,
     referenceNodeIds = [],
-}: BuildCanvasWideCandidateSnapshotParams): MediaBranchCandidateSnapshot {
+}: BuildExplicitMediaCandidateSnapshotParams): MediaBranchCandidateSnapshot {
     const activeTargetNodeId = referenceNodeIds.length === 1 ? referenceNodeIds[0] : undefined
+    const referenceNodeIdSet = new Set(referenceNodeIds)
     const candidatesById = new Map<string, MediaBranchCandidateImage>()
     for (const node of nodes) {
-        if (!isMediaCanvasNode(node)) continue
+        if (!isMediaCanvasNode(node) || !referenceNodeIdSet.has(node.nodeId)) continue
         addCandidate(candidatesById, createBaseContextCandidate(node, activeTargetNodeId))
     }
 
@@ -469,8 +306,6 @@ export function buildCanvasWideCandidateSnapshot({
         // thread-less canvas run has no chat/source node to root on.
         regionNodeId: `standalone:${generationRunId}`,
         ...(activeTargetCandidateId ? { activeTargetCandidateId } : {}),
-        // Explicit refs are carried as data only — the candidate list stays
-        // unfiltered and the API enforces explicit-context exclusivity.
         ...(referenceNodeIds.length ? {
             explicitReferenceCandidateIds: referenceNodeIds.map(nodeId => `node:${nodeId}`),
         } : {}),
@@ -481,6 +316,8 @@ export function buildCanvasWideCandidateSnapshot({
     }
 }
 
+export const buildCanvasWideCandidateSnapshot = buildExplicitMediaCandidateSnapshot
+
 const WORKSPACE_CONTEXT_RESOLVER_VERSION = 'workspace-context-v1'
 
 type BuildWorkspaceContextSnapshotParams = {
@@ -489,9 +326,6 @@ type BuildWorkspaceContextSnapshotParams = {
     prompt: string
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
-    // The active canvas thread node, when the chat is rooted on the canvas. Its
-    // edge-connected nodes are flagged `isEdgeForced`; a standalone panel chat
-    // (no root) simply has no edge-forced nodes.
     rootNodeId?: string
     contextChipNodeIds?: string[]
     titlesByNodeId?: Record<string, string>
@@ -501,7 +335,6 @@ function toWorkspaceContextNode(
     node: WorkspaceContextCanvasNode,
     conversationAssetId: string,
     chipNodeIds: Set<string>,
-    edgeForcedNodeIds: Set<string>,
     titlesByNodeId: Record<string, string>
 ): WorkspaceContextNode {
     const contextNode: WorkspaceContextNode = {
@@ -509,7 +342,7 @@ function toWorkspaceContextNode(
         type: node.type,
         assetId: node.assetId,
         isExplicitChip: chipNodeIds.has(node.nodeId),
-        isEdgeForced: edgeForcedNodeIds.has(node.nodeId),
+        isEdgeForced: false,
     }
 
     if (node.type === 'capabilityArtifact') contextNode.artifactTypeId = node.artifactTypeId
@@ -541,24 +374,17 @@ function toWorkspaceContextNode(
     return contextNode
 }
 
-// Whole-workspace, descriptors-only index built each chat turn. Generalizes
-// buildMediaBranchCandidateSnapshot from "media candidates for one thread" to
-// "every context-bearing node in the workspace", tagging explicit chips and
-// edge-forced nodes so the API relevance stage can force-include them.
+// Explicit composer context for one submitted turn. Unselected canvas nodes are
+// omitted from the request entirely.
 export function buildWorkspaceContextSnapshot({
     workspaceId,
     conversationAssetId,
     prompt,
     nodes,
-    edges,
-    rootNodeId,
     contextChipNodeIds = [],
     titlesByNodeId = {},
 }: BuildWorkspaceContextSnapshotParams): WorkspaceContextSnapshot {
     const chipNodeIds = new Set(contextChipNodeIds)
-    const edgeForcedNodeIds = rootNodeId
-        ? new Set(getSourceContextNodeIds(nodes, edges, rootNodeId))
-        : new Set<string>()
 
     return {
         resolverVersion: WORKSPACE_CONTEXT_RESOLVER_VERSION,
@@ -566,7 +392,8 @@ export function buildWorkspaceContextSnapshot({
         conversationAssetId,
         promptText: prompt,
         nodes: nodes
-            .filter(isWorkspaceContextCanvasNode)
-            .map((node) => toWorkspaceContextNode(node, conversationAssetId, chipNodeIds, edgeForcedNodeIds, titlesByNodeId)),
+            .filter((node): node is WorkspaceContextCanvasNode =>
+                isWorkspaceContextCanvasNode(node) && chipNodeIds.has(node.nodeId))
+            .map((node) => toWorkspaceContextNode(node, conversationAssetId, chipNodeIds, titlesByNodeId)),
     }
 }

@@ -173,8 +173,8 @@ export type ProviderState = {
     canvasVisibleArea?: { width: number; height: number } | undefined
 
     // Video generation (VEO) — async submit/poll routing. Mirrors the image
-    // fields above; the VLM branch resolution is shared (reused for first-frame
-    // + reference selection), so no separate video resolution field is needed.
+    // fields above; the VLM branch resolution is shared for first-frame and
+    // role assignment within the explicit reference set.
     enableVideoGeneration?: boolean | undefined
     videoModelMetaInfo?: AiModelMetaInfo | undefined
     videoModelVersion?: string | undefined

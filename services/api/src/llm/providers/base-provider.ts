@@ -229,6 +229,15 @@ export abstract class BaseProvider {
     // Run a request through the LangGraph workflow.
     async process(requestData: Record<string, any>): Promise<ProviderState> {
         this.abortController = new AbortController()
+        const parentAbortSignal = requestData.abortSignal as AbortSignal | undefined
+        const abortFromParent = (): void => {
+            this.abortController?.abort(parentAbortSignal?.reason ?? new Error('Parent request aborted'))
+        }
+        if (parentAbortSignal?.aborted) {
+            abortFromParent()
+        } else {
+            parentAbortSignal?.addEventListener('abort', abortFromParent, { once: true })
+        }
         const characterCreatorSelected = requestData.capabilityUsageMode === 'character-creator'
             || isCharacterCreatorCapabilitySelected(requestData.capabilityReferences)
         const mediaFanoutPlan = characterCreatorSelected && requestData.mediaFanoutPlan
@@ -275,7 +284,8 @@ export abstract class BaseProvider {
         this.pipelineProseMirrorSnapshotProvider = typeof requestData.proseMirrorSnapshotProvider === 'function'
             ? requestData.proseMirrorSnapshotProvider as ProseMirrorSnapshotProvider
             : undefined
-        this.publishMirroredMediaLive = !requestData.enableImageGeneration && !requestData.enableVideoGeneration
+        this.publishMirroredMediaLive = requestData.generationRun?.requestKind === 'media-generation-matrix'
+            && !requestData.generationRun?.mediaRunId
         const onPipelineContent: ProseMirrorContentHandler = content => this.publishPipelineProseMirrorContent(content)
         const getProseMirrorSnapshot: ProseMirrorSnapshotProvider = () => this.getPipelineProseMirrorSnapshot()
         this.streamPublisher = new StreamPublisher(
@@ -415,6 +425,7 @@ export abstract class BaseProvider {
                 aiRequestFinishedAt: Date.now(),
             }
         } finally {
+            parentAbortSignal?.removeEventListener('abort', abortFromParent)
             try {
                 await this.imagePublisher?.clearTransientMedia()
             } catch (cleanupError) {
@@ -432,6 +443,7 @@ export abstract class BaseProvider {
     // -- Workflow nodes (shared) --
 
     protected async planMediaBranchLineage(state: ProviderState): Promise<Partial<ProviderState>> {
+        if (state.error) return {}
         if (state.mediaBranchLineagePlan) return {}
         if (requiredCapabilityProducedCapabilityOnlyOutput(state)) return {}
 
@@ -766,7 +778,7 @@ export abstract class BaseProvider {
     // provider). The VEO submit/poll happens synchronously inside the router,
     // emitting VIDEO_PENDING/GENERATING/COMPLETE on the same per-thread subject.
     // The VIDEO_GENERATION_TRACE event is published BEFORE the router runs so
-    // chat history can render the tool prompt + selected/excluded references
+    // chat history can render the tool prompt and explicit reference roles
     // even if the VEO operation later fails.
     protected async executeVideoGeneration(state: ProviderState): Promise<Partial<ProviderState>> {
         if (state.mediaFanoutPlan && state.generationRun) {
@@ -785,6 +797,7 @@ export abstract class BaseProvider {
         const videoResult = await this.deps.runVideoRouter(state, {
             onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
             getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
+            signal: this.signal,
         })
         if (videoResult.error) {
             this.streamPublisher?.error(videoResult.error, videoResult.errorCode, videoResult.errorType)
@@ -993,6 +1006,7 @@ export abstract class BaseProvider {
             const videoResult = await this.deps.runVideoRouter(fanoutState, {
                 onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
                 getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
+                signal: this.signal,
             })
             return {
                 error: videoResult.error,
