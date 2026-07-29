@@ -248,6 +248,7 @@ import {
     capabilityArtifactSharedRegistry,
     ensureCapabilityStyles,
 } from '$src/installed-capabilities.ts'
+import type { CapabilityReplaySubmitData } from '@lixpi/capability-system/frontend'
 import { createCapabilityLibraryPanel, type CapabilityLibraryPanelInstance } from '$src/infographics/workspace/capabilityLibraryPanel.ts'
 import {
     getAiChatPanelState,
@@ -784,12 +785,12 @@ type GeneratedOutputRegenerationRequest = {
     scope: 'output-node'
     mode: 'existing-prompt'
     targetNodeId: string
-    mediaNodes: Array<ImageCanvasNode | VideoCanvasNode>
+    outputNodes: GeneratedOutputCanvasNode[]
 } | {
     scope: 'branch-lineage'
     mode: 'existing-prompt' | 'regenerate-prompt'
     targetNodeId: string
-    mediaNodes: Array<ImageCanvasNode | VideoCanvasNode>
+    outputNodes: GeneratedOutputCanvasNode[]
 }
 
 type WorkspaceCanvasInsertionStatePatch = Omit<Partial<CanvasState>, 'nodes' | 'edges' | 'viewport'>
@@ -2959,6 +2960,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return assetsStore.get(node.assetId)?.generatedOutputReview?.status === 'accepted'
     }
 
+    // Single readiness rule for every generated output kind. Artifacts publish
+    // their payload as a capability document, media publishes an original
+    // rendition; both additionally require a sealed provenance history before
+    // they can be accepted or replayed.
+    function isGeneratedOutputReviewReady(node: GeneratedOutputCanvasNode): boolean {
+        const asset = assetsStore.get(node.assetId)
+        if (!asset || asset.states.provenance !== 'sealed') return false
+        return node.type === 'capabilityArtifact'
+            ? Boolean(asset.documents.capabilityArtifact)
+            : asset.media?.renditions.original?.status === 'ready'
+    }
+
     async function acceptGeneratedOutput(scope: 'output-node' | 'branch-lineage', nodeId: string): Promise<void> {
         const result = await assetService.reviewGeneratedOutput({
             workspaceId,
@@ -2976,6 +2989,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     type GeneratedMediaReplayDescriptor = {
+        kind: 'media'
         node: ImageCanvasNode | VideoCanvasNode
         reasoningModelId: AiModelId
         mediaModelId: AiModelId
@@ -2986,6 +3000,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         videoResolution?: string
         videoDuration?: string
     }
+
+    type GeneratedArtifactReplayDescriptor = {
+        kind: 'artifact'
+        node: CapabilityArtifactCanvasNode
+        reasoningModelId: AiModelId
+        capabilityInputs: CapabilityReplaySubmitData['capabilityInputs']
+    }
+
+    type GeneratedOutputReplayDescriptor = GeneratedMediaReplayDescriptor | GeneratedArtifactReplayDescriptor
 
     function getGeneratedMediaTrace(
         node: ImageCanvasNode | VideoCanvasNode,
@@ -3032,6 +3055,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!trace?.finalPrompt || !reasoningModelId || !mediaModelId) return null
         if (trace.traceVersion === 'image-generation-trace-v1') {
             return {
+                kind: 'media',
                 node,
                 reasoningModelId,
                 mediaModelId: mediaModelId as AiModelId,
@@ -3041,6 +3065,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
         return {
+            kind: 'media',
             node,
             reasoningModelId,
             mediaModelId: mediaModelId as AiModelId,
@@ -3052,13 +3077,47 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function getGeneratedArtifactReplayDescriptor(
+        node: CapabilityArtifactCanvasNode,
+    ): GeneratedArtifactReplayDescriptor | null {
+        if (!node.generatedBy) return null
+        const definition = capabilityArtifactFrontendRegistry.require(node.artifactTypeId)
+        const replay = definition.buildReplaySubmitData({ provenance: getCapabilityArtifactProvenance(node) })
+        const reasoningModelId = replay.reasoningModelIds[0]
+        if (!reasoningModelId) return null
+        return {
+            kind: 'artifact',
+            node,
+            reasoningModelId: reasoningModelId as AiModelId,
+            capabilityInputs: replay.capabilityInputs,
+        }
+    }
+
+    // Single entry point that turns any generated output node into its replay
+    // descriptor, so review controls never branch on the output kind.
+    function getGeneratedOutputReplayDescriptor(
+        node: GeneratedOutputCanvasNode,
+    ): GeneratedOutputReplayDescriptor | null {
+        return node.type === 'capabilityArtifact'
+            ? getGeneratedArtifactReplayDescriptor(node)
+            : getGeneratedMediaReplayDescriptor(node)
+    }
+
     function buildRegenerationSubmitData(
-        descriptors: GeneratedMediaReplayDescriptor[],
+        descriptors: GeneratedOutputReplayDescriptor[],
         promptText: string,
     ): AiPromptComposerSubmitData {
         const reasoningModels = uniqueAiModelIds(descriptors.map(descriptor => descriptor.reasoningModelId))
-        const imageDescriptors = descriptors.filter(descriptor => descriptor.mediaType === 'image')
-        const videoDescriptors = descriptors.filter(descriptor => descriptor.mediaType === 'video')
+        const mediaDescriptors = descriptors
+            .filter((descriptor): descriptor is GeneratedMediaReplayDescriptor => descriptor.kind === 'media')
+        const capabilityInputs = descriptors.reduce<CapabilityReplaySubmitData['capabilityInputs']>(
+            (merged, descriptor) => descriptor.kind === 'artifact'
+                ? { ...merged, ...descriptor.capabilityInputs }
+                : merged,
+            {},
+        )
+        const imageDescriptors = mediaDescriptors.filter(descriptor => descriptor.mediaType === 'image')
+        const videoDescriptors = mediaDescriptors.filter(descriptor => descriptor.mediaType === 'video')
         const imageModels = uniqueAiModelIds(imageDescriptors.map(descriptor => descriptor.mediaModelId))
         const videoModels = uniqueAiModelIds(videoDescriptors.map(descriptor => descriptor.mediaModelId))
         const firstImage = imageDescriptors[0]
@@ -3069,7 +3128,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             useMultipleReasoningModels: reasoningModels.length > 1,
             useMultipleImageModels: imageModels.length > 1,
             useMultipleVideoModels: videoModels.length > 1,
-            capabilityInputs: {},
+            capabilityInputs,
             ...(imageModels.length > 0 ? {
                 imageOptions: {
                     aiImageModels: imageModels,
@@ -3108,9 +3167,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     async function regenerateGeneratedOutputs(request: GeneratedOutputRegenerationRequest): Promise<void> {
-        const { scope, targetNodeId, mediaNodes } = request
+        const { scope, targetNodeId, outputNodes } = request
         const regeneratePrompt = request.mode === 'regenerate-prompt'
-        await Promise.all(mediaNodes.map(async (node) => {
+        await Promise.all(outputNodes.map(async (node) => {
             if (assetDocumentsStore.get(node.assetId, 'provenance')?.doc) return
             const result = await assetService.refresh(node.assetId, workspaceId)
             if ('error' in result) {
@@ -3120,32 +3179,38 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
             }
         }))
-        const descriptors = mediaNodes
-            .map(getGeneratedMediaReplayDescriptor)
-            .filter((descriptor): descriptor is GeneratedMediaReplayDescriptor => Boolean(descriptor))
-        if (descriptors.length !== mediaNodes.length) {
+        const descriptors = outputNodes
+            .map(getGeneratedOutputReplayDescriptor)
+            .filter((descriptor): descriptor is GeneratedOutputReplayDescriptor => Boolean(descriptor))
+        if (descriptors.length !== outputNodes.length) {
             console.error('[CANVAS][generated-output-review] Generation history is not ready for regeneration.', {
                 targetNodeId,
-                mediaNodeIds: mediaNodes.map(node => node.nodeId),
+                outputNodeIds: outputNodes.map(node => node.nodeId),
                 descriptorCount: descriptors.length,
             })
             return
         }
-        const promptText = getGeneratedOutputUserMessageText(mediaNodes[0]!)
+        const mediaDescriptors = descriptors
+            .filter((descriptor): descriptor is GeneratedMediaReplayDescriptor => descriptor.kind === 'media')
+        const promptText = getGeneratedOutputUserMessageText(outputNodes[0]!)
         if (!promptText) return
         const lineageParentNodeId = scope === 'branch-lineage'
             ? targetNodeId
-            : mediaNodes[0]?.generatedBy?.lineageParentNodeId
-                ?? mediaNodes[0]?.generatedBy?.branchLineNodeId
-                ?? mediaNodes[0]?.generatedBy?.branchForkNodeId
-                ?? mediaNodes[0]?.generatedBy?.branchOriginNodeId
-        const branchId = mediaNodes[0]?.generatedBy?.branchId
+            : outputNodes[0]?.generatedBy?.lineageParentNodeId
+                ?? outputNodes[0]?.generatedBy?.branchLineNodeId
+                ?? outputNodes[0]?.generatedBy?.branchForkNodeId
+                ?? outputNodes[0]?.generatedBy?.branchOriginNodeId
+        const branchId = outputNodes[0]?.generatedBy?.branchId
         const lineageParentNode = lineageParentNodeId ? findCanvasNodeById(lineageParentNodeId) : undefined
         const lineageParentType = lineageParentNode
             && ['branchOrigin', 'branchFork', 'branchLine'].includes(lineageParentNode.type)
             ? lineageParentNode.type as 'branchOrigin' | 'branchFork' | 'branchLine'
             : undefined
-        if (!regeneratePrompt && (!lineageParentNodeId || !lineageParentType || !branchId)) {
+        // Replaying an existing prompt needs a media trace to pin the branch to.
+        // Artifact-only branches carry no media trace, so they re-run from their
+        // sealed capability inputs with the lineage preserved by the supersede call.
+        const replaysExistingPrompt = !regeneratePrompt && mediaDescriptors.length > 0
+        if (replaysExistingPrompt && (!lineageParentNodeId || !lineageParentType || !branchId)) {
             console.error('[CANVAS][generated-output-review] Branch lineage is unavailable.', {
                 targetNodeId,
                 lineageParentNodeId,
@@ -3154,12 +3219,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
             return
         }
-        const explicitContextNodeIds = [...new Set(mediaNodes.flatMap(node => [
-            ...(node.generatedBy?.referenceImageNodeIds ?? []),
-            ...(node.generatedBy?.sourceContextNodeIds ?? []),
+        // Reference and context node IDs are media-generation inputs; artifacts
+        // carry their own inputs inside capabilityInputs instead.
+        const explicitContextNodeIds = [...new Set(mediaDescriptors.flatMap(descriptor => [
+            ...(descriptor.node.generatedBy?.referenceImageNodeIds ?? []),
+            ...(descriptor.node.generatedBy?.sourceContextNodeIds ?? []),
         ]))]
         const excludedCanvasNodeIds = [
-            ...mediaNodes.map(node => node.nodeId),
+            ...outputNodes.map(node => node.nodeId),
             ...(regeneratePrompt ? [targetNodeId] : []),
         ]
         const result = request.scope === 'output-node'
@@ -3193,13 +3260,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     mode: 'regenerate-prompt',
                     forceFreshLineage: true,
                 } as const,
-            } : lineageParentNodeId && lineageParentType && branchId ? {
+            } : replaysExistingPrompt && lineageParentNodeId && lineageParentType && branchId ? {
                 regeneration: {
                     mode: 'existing-prompt',
                     branchId,
                     lineageParentNodeId,
                     lineageParentType,
-                    replayPrompts: descriptors.map(descriptor => ({
+                    replayPrompts: mediaDescriptors.map(descriptor => ({
                         sourceAssetId: descriptor.node.assetId,
                         reasoningModelId: descriptor.reasoningModelId,
                         mediaModelId: descriptor.mediaModelId,
@@ -3216,8 +3283,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (isGeneratedOutputAccepted(node)) return null
         const asset = assetsStore.get(node.assetId)
         if (!asset || asset.generatedOutputReview?.status === 'superseded') return null
-        const disabled = asset.media?.renditions.original?.status !== 'ready'
-            || asset.states.provenance !== 'sealed'
+        const disabled = !isGeneratedOutputReviewReady(node)
         const handleClick = (event: MouseEvent): void => {
             event.preventDefault()
             event.stopPropagation()
@@ -3242,8 +3308,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!node.generatedBy) return null
         const asset = assetsStore.get(node.assetId)
         if (!asset || isGeneratedOutputAccepted(node) || asset.generatedOutputReview?.status === 'superseded') return null
-        const disabled = asset.media?.renditions.original?.status !== 'ready'
-            || asset.states.provenance !== 'sealed'
+        const disabled = !isGeneratedOutputReviewReady(node)
         const regenerate = (event: MouseEvent): void => {
             event.preventDefault()
             event.stopPropagation()
@@ -3251,7 +3316,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 scope: 'output-node',
                 mode: 'existing-prompt',
                 targetNodeId: node.nodeId,
-                mediaNodes: [node],
+                outputNodes: [node],
             })
         }
         const controls = html`
@@ -3417,7 +3482,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!node.generatedBy || isGeneratedOutputAccepted(node)) return null
         const asset = assetsStore.get(node.assetId)
         if (!asset || asset.generatedOutputReview?.status === 'superseded') return null
-        const disabled = !asset.documents.capabilityArtifact || asset.states.provenance !== 'sealed'
+        const disabled = !isGeneratedOutputReviewReady(node)
         const button = html`<button
             className="media-review-action media-review-accept nopan"
             type="button"
@@ -3433,37 +3498,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return button
     }
 
-    async function regenerateCapabilityArtifact(node: CapabilityArtifactCanvasNode): Promise<void> {
-        const asset = assetsStore.get(node.assetId)
-        if (!asset || !node.generatedBy) return
-        const provenance = getCapabilityArtifactProvenance(node)
-        const definition = capabilityArtifactFrontendRegistry.require(node.artifactTypeId)
-        const replay = definition.buildReplaySubmitData({ provenance })
-        const prompt = typeof provenance.input?.prompt === 'string'
-            ? provenance.input.prompt
-            : typeof node.generatedBy.input?.prompt === 'string'
-                ? node.generatedBy.input.prompt
-                : ''
-        if (!prompt || replay.reasoningModelIds.length === 0) return
-        const reviewed = await assetService.reviewGeneratedOutput({
-            workspaceId,
-            scope: 'output-node',
-            action: 'supersede',
-            nodeId: node.nodeId,
-            preserveLineage: true,
-        })
-        if ('error' in reviewed) return
-        applyApiCanvasGeometry(reviewed.canvasGeometry)
-        await submitCanvasGenerationRun({
-            contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: prompt }] }],
-            aiReasoningModels: replay.reasoningModelIds as AiModelId[],
-            useMultipleReasoningModels: replay.reasoningModelIds.length > 1,
-            useMultipleImageModels: false,
-            useMultipleVideoModels: false,
-            capabilityInputs: replay.capabilityInputs,
-        })
-    }
-
     function createCapabilityArtifactRegenerationControls(node: CapabilityArtifactCanvasNode): HTMLDivElement | null {
         if (!node.generatedBy || isGeneratedOutputAccepted(node)) return null
         const asset = assetsStore.get(node.assetId)
@@ -3474,11 +3508,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             title="Generate another Artifact from the sealed request"
             aria-label="Regenerate Artifact"
         ><span className="media-review-action-icon" innerHTML=${refreshIcon} aria-hidden="true"></span></button>` as HTMLButtonElement
-        button.disabled = !asset.documents.provenance || asset.states.provenance !== 'sealed'
+        button.disabled = !isGeneratedOutputReviewReady(node)
         button.addEventListener('click', (event) => {
             event.preventDefault()
             event.stopPropagation()
-            void regenerateCapabilityArtifact(node)
+            void regenerateGeneratedOutputs({
+                scope: 'output-node',
+                mode: 'existing-prompt',
+                targetNodeId: node.nodeId,
+                outputNodes: [node],
+            })
         })
         return html`<div className="media-regeneration-controls nopan">${button}</div>` as HTMLDivElement
     }
@@ -10334,11 +10373,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function isBranchMarkerGenerationGroupActive(node: BranchMarkerNode): boolean {
         if (isBranchMarkerGenerationCancelled(node)) return false
-        const generatedMediaNodes = getBranchMarkerGeneratedMediaNodes(node)
-        const everyGeneratedMediaNodeCompleted = generatedMediaNodes.length > 0
-            && generatedMediaNodes.every((mediaNode) =>
-                assetsStore.get(mediaNode.assetId)?.media?.renditions.original?.status === 'ready')
-        if (everyGeneratedMediaNodeCompleted) return false
+        const generatedOutputNodes = getBranchMarkerGeneratedOutputNodes(node)
+        const everyGeneratedOutputCompleted = generatedOutputNodes.length > 0
+            && generatedOutputNodes.every(outputNode => outputNode.type === 'capabilityArtifact'
+                ? Boolean(assetsStore.get(outputNode.assetId)?.documents.capabilityArtifact)
+                : assetsStore.get(outputNode.assetId)?.media?.renditions.original?.status === 'ready')
+        if (everyGeneratedOutputCompleted) return false
         if (node.pendingState || isBranchMarkerPendingForUi(node)) return true
 
         const threadId = getBranchMarkerThreadId(node)
@@ -13897,6 +13937,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return getBranchGeneratedArtifactNodes('branchLineNodeId', node.nodeId)
     }
 
+    // Every generated output hanging off the marker, regardless of kind. Branch
+    // marker chrome must never vary by what was generated.
+    function getBranchMarkerGeneratedOutputNodes(node: BranchMarkerNode): GeneratedOutputCanvasNode[] {
+        return [
+            ...getBranchMarkerGeneratedMediaNodes(node),
+            ...getBranchMarkerGeneratedArtifactNodes(node),
+        ]
+    }
+
     function getBranchMarkerReasoningModelDescriptors(node: BranchMarkerNode): BranchMarkerModelDescriptor[] {
         const descriptors: BranchMarkerModelDescriptor[] = []
         if (node.pendingState?.reasoningModelId) {
@@ -13908,8 +13957,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (node.reasoningModelId) descriptors.push({ modelId: node.reasoningModelId })
             if (node.provenance?.reasoningModelId) descriptors.push({ modelId: node.provenance.reasoningModelId })
         }
-        for (const mediaNode of getBranchMarkerGeneratedMediaNodes(node)) {
-            const reasoningModelId = mediaNode.generatedBy?.reasoningModelId
+        for (const outputNode of getBranchMarkerGeneratedOutputNodes(node)) {
+            const reasoningModelId = outputNode.generatedBy?.reasoningModelId
             if (reasoningModelId) descriptors.push({ modelId: reasoningModelId })
         }
         return descriptors
@@ -14203,14 +14252,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createBranchMarkerReviewControls(node: BranchMarkerNode): HTMLDivElement | null {
         branchMarkerReviewDropdowns.get(node.nodeId)?.destroy()
         branchMarkerReviewDropdowns.delete(node.nodeId)
-        const mediaNodes = getBranchMarkerGeneratedMediaNodes(node)
-            .filter(mediaNode => !isGeneratedOutputAccepted(mediaNode))
-        if (mediaNodes.length === 0 || isBranchMarkerGenerationGroupActive(node)) return null
-        const canAcceptAll = mediaNodes.every((mediaNode) => {
-            const asset = assetsStore.get(mediaNode.assetId)
-            return asset?.media?.renditions.original?.status === 'ready'
-                && asset.states.provenance === 'sealed'
-        })
+        const outputNodes = getBranchMarkerGeneratedOutputNodes(node)
+            .filter(outputNode => !isGeneratedOutputAccepted(outputNode))
+        if (outputNodes.length === 0 || isBranchMarkerGenerationGroupActive(node)) return null
+        const canAcceptAll = outputNodes.every(isGeneratedOutputReviewReady)
         const handleAcceptAll = (event: MouseEvent): void => {
             event.preventDefault()
             event.stopPropagation()
@@ -14221,7 +14266,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 scope: 'branch-lineage',
                 mode,
                 targetNodeId: node.nodeId,
-                mediaNodes,
+                outputNodes,
             })
         }
         const stopPointerEvent = (event: PointerEvent): void => {

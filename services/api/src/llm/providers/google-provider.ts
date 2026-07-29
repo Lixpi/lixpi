@@ -557,14 +557,15 @@ export class GoogleProvider extends BaseProvider {
                 const explicitVideoToolRequired = injectVideoTool
                     && state.capabilityUsageMode !== 'character-creator'
                     && hasExplicitVideoRequest(messages)
-                const forcedFunctionNames = state.mediaFanoutPlan
-                    ? mediaFanoutAllowedFunctionNames
-                    : explicitVideoToolRequired
-                        ? [VIDEO_TOOL_NAME]
-                        : []
-                const shouldForceMediaTool = state.mediaFanoutPlan
-                    ? !detectedImage && !detectedVideo
-                    : explicitVideoToolRequired && !detectedVideo
+                // AUTO tool selection is unreliable on the smaller Gemini models — they
+                // answer a media request with plain text instead of calling the tool. Any
+                // media request (fanout or single-media) retries with a forced call.
+                const forcedFunctionNames = explicitVideoToolRequired
+                    ? [VIDEO_TOOL_NAME]
+                    : mediaFanoutAllowedFunctionNames
+                const shouldForceMediaTool = explicitVideoToolRequired
+                    ? !detectedVideo
+                    : !detectedImage && !detectedVideo
 
                 if (shouldForceMediaTool
                     && !this.shouldStop

@@ -748,6 +748,9 @@ export type MediaGenerationRunMeta = {
 
 export type GeneratedOutputVariantMetadata = {
     outputKind?: 'image' | 'video' | 'capabilityArtifact'
+    // Branch lineage is assigned by the API for every generated output kind,
+    // artifacts included, so it belongs to the shared variant metadata.
+    branchId?: string
     generationRequestId?: string
     reasoningRunId?: string
     mediaRunId?: string
@@ -813,7 +816,6 @@ export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     imageModelProvider?: string
     revisedPrompt: string
     responseMessageId?: string
-    branchId?: string
     // Image-named schema alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
@@ -889,8 +891,6 @@ export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     hasAudio?: boolean
     veoOperationName?: string
     sourceVideoNodeId?: string    // set for extend/edit continuations (Phase 6)
-    // reused branch-lineage audit fields (identical names to images)
-    branchId?: string
     // Image-named schema alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
