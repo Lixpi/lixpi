@@ -22,7 +22,7 @@ const pendingOutput = {
     capabilityId: 'global.action-timeline',
     capabilityRunId: 'run-1',
     assetId: 'artifact-1',
-    input: { prompt: 'Create a timeline', durationMs: 15_000, precisionMs: 2_000 },
+    input: { prompt: 'Create a timeline', durationMs: 15000, precisionMs: 2000 },
     variant: {
         axis: 'reasoning-model' as const,
         variantKey: 'reasoning:0:Anthropic:claude',
@@ -30,8 +30,8 @@ const pendingOutput = {
         reasoningModelId: 'Anthropic:claude',
         provider: 'Anthropic' as const,
         modelVersion: 'claude',
-        contextWindow: 100_000,
-        maxCompletionSize: 8_192,
+        contextWindow: 100000,
+        maxCompletionSize: 8192,
     },
     generationRun: {
         requestKind: 'capability-output' as const,

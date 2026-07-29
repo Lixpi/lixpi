@@ -147,7 +147,7 @@ function action(
 ): CapabilityActionDefinition {
     return {
         key,
-        timeoutMs: 1_000,
+        timeoutMs: 1000,
         validateInput: () => ({ valid: true }),
         validateOutput: acceptCapabilityJsonValue,
         authorize: () => true,

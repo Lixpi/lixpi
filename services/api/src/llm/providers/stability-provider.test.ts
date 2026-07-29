@@ -34,7 +34,7 @@ vi.mock('../../services/asset-maintenance-queue.ts', () => ({
     enqueueProvenanceRebuild: vi.fn(async () => undefined),
 }))
 
-const MAX_STABILITY_REFERENCE_PIXELS = 9_437_184
+const MAX_STABILITY_REFERENCE_PIXELS = 9437184
 const OVERSIZED_WIDTH = 5000
 const OVERSIZED_HEIGHT = 3500
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='

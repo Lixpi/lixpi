@@ -265,7 +265,7 @@ describe('PromptReferenceCatalogService', () => {
     })
 
     it('lists registered Artifacts canvas-first with module-owned metadata', async () => {
-        const document = buildActionTimelineDocument({ durationMs: 2_500, precisionMs: 1_000 }, [
+        const document = buildActionTimelineDocument({ durationMs: 2500, precisionMs: 1000 }, [
             { slotIndex: 0, runs: [{ text: 'Establish ' }, { assetId: 'asset-portrait' }] },
             { slotIndex: 1, runs: [{ text: 'Continue' }] },
             { slotIndex: 2, runs: [{ text: 'Finish' }] },
@@ -337,8 +337,8 @@ describe('PromptReferenceCatalogService', () => {
                 nodeId: 'node-artifact',
                 source: 'canvas',
                 displayMetadata: {
-                    durationMs: 2_500,
-                    precisionMs: 1_000,
+                    durationMs: 2500,
+                    precisionMs: 1000,
                     segmentCount: 3,
                     referencedAssetIds: ['asset-portrait'],
                 },

@@ -316,7 +316,7 @@ function getSharedToken(): Promise<string | false> {
         tokenPromiseTimer = setTimeout(() => {
             tokenPromise = null
             tokenPromiseTimer = null
-        }, 30_000)
+        }, 30000)
     }
     return tokenPromise
 }

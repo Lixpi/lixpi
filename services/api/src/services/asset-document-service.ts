@@ -49,7 +49,7 @@ import {
 const { ORG_NAME, STAGE } = process.env
 const assetsTableName = (): string => getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE)
 const SETTLED_STEP_REPLAY_GRACE_MS = 5 * 60 * 1000
-const RESUME_EVENT_SCAN_LIMIT = 1_000
+const RESUME_EVENT_SCAN_LIMIT = 1000
 const RESUME_EVENT_REPLY_BUDGET_BYTES = 256 * 1024
 
 const getDocumentType = (role: AssetDocumentRole) => {
@@ -147,7 +147,7 @@ const loadCurrentSnapshot = async (asset: Asset, role: AssetDocumentRole): Promi
         organizationId: asset.organizationId,
         assetId: asset.assetId,
         role,
-    }, 1, 10_000)
+    }, 1, 10000)
     if (!settledSnapshot && events.length === 0) return null
     const engine = new HeadlessProseMirrorEngine({
         ...getHeadlessEngineConfig(asset, role, settledSnapshot?.doc, settledSnapshot?.version ?? 0),
@@ -280,7 +280,7 @@ const settle = async ({
         organizationId: asset.organizationId,
         assetId: asset.assetId,
         role,
-    }, 1, 10_000)
+    }, 1, 10000)
     const incorporatedStreamSequence = events.reduce(
         (latest, event) => Math.max(latest, event.streamSequence),
         0,

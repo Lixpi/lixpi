@@ -198,7 +198,7 @@ describe('OpenAIProvider character-reference ingestion', () => {
                 layoutExampleBytes.byteOffset + layoutExampleBytes.byteLength,
             ),
         )
-        expect(layoutExampleBytes.byteLength).toBe(460_138)
+        expect(layoutExampleBytes.byteLength).toBe(460138)
         expect(createHash('sha256').update(layoutExampleBytes).digest('hex')).toBe(
             '388e3c7a398f43b3e2ad9cebf6019d16c95e4a17289fb5b77a94bf62e11acadd',
         )

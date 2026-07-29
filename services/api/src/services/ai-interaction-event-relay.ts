@@ -20,7 +20,7 @@ type ActiveRelay = {
 }
 
 const activeRelays = new Map<string, ActiveRelay>()
-const REQUESTER_REFRESH_INTERVAL_MS = 5_000
+const REQUESTER_REFRESH_INTERVAL_MS = 5000
 
 const refreshRelayAuthorization = async ({
     relay,

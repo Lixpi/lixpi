@@ -193,7 +193,7 @@ export function buildStyleExtractionManifest(resources: {
                                 resourceId: STYLE_EXTRACTION_ROUTER_RESOURCE_ID,
                             },
                         },
-                        retry: { maxAttempts: 2, backoffMs: 1_000 },
+                        retry: { maxAttempts: 2, backoffMs: 1000 },
                         progress: { exposeReasoning: true },
                     },
                     ...axisSteps,
@@ -228,7 +228,7 @@ export function buildStyleExtractionManifest(resources: {
                                 resourceId: STYLE_EXTRACTION_SYNTHESIS_RESOURCE_ID,
                             },
                         },
-                        retry: { maxAttempts: 2, backoffMs: 1_000 },
+                        retry: { maxAttempts: 2, backoffMs: 1000 },
                         progress: { exposeReasoning: true },
                     },
                     {

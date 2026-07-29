@@ -26,11 +26,11 @@ import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 
 const { ASSET_SUBJECTS } = NATS_SUBJECTS
-const WORKSPACE_RECONCILIATION_INTERVAL_MS = 5 * 60_000
+const WORKSPACE_RECONCILIATION_INTERVAL_MS = 5 * 60000
 const ASSET_LOAD_CONCURRENCY = 8
 const ASSET_DOCUMENT_RESUME_CONCURRENCY = 4
 const ASSET_DOCUMENT_STORE_BATCH_SIZE = 16
-const ASSET_DOCUMENT_RESUME_TIMEOUT_MS = 15_000
+const ASSET_DOCUMENT_RESUME_TIMEOUT_MS = 15000
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 const request = async <T>(

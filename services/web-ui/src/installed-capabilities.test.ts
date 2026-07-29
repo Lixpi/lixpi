@@ -104,7 +104,7 @@ describe('installed Action Timeline frontend', () => {
             destroy: vi.fn(),
         }))
         const timeline = buildActionTimelineDocument(
-            { durationMs: 1_000, precisionMs: 1_000 },
+            { durationMs: 1000, precisionMs: 1000 },
             [{ slotIndex: 0, runs: [{ text: 'Board ' }, { assetId: 'train-asset' }] }],
             new Map([['train-asset', { mediaKind: 'video' as const }]]),
         )

@@ -132,6 +132,7 @@ export const synthesizeStyle = async (state: StyleExtractionState, logger: Stage
             natsService,
             temperature: 0.3,
             maxTokens: state.input.analysisModel.maxCompletionSize ?? 8192,
+            maxOutputTokensCeiling: state.input.analysisModel.maxCompletionSize,
             enableThinking: state.input.analysisProvider === 'Anthropic',
             thinkingBudgetTokens: 6144,
             onTextChunk: (text) => logger.chunk(text),

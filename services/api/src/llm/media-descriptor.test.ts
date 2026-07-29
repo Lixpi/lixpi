@@ -114,7 +114,7 @@ describe('describeTextContent', () => {
     })
 
     it('sends text beyond the former 20,000-character boundary without clipping', async () => {
-        const text = `prefix-${'x'.repeat(25_000)}-suffix`
+        const text = `prefix-${'x'.repeat(25000)}-suffix`
         const callVlm = vi.fn(async (args: any) => {
             expect(args.userMessages[0].content.map((block: any) => block.text).join('')).toContain(text)
             return {
@@ -130,7 +130,7 @@ describe('describeTextContent', () => {
     })
 
     it('rejects an oversized descriptor result instead of shortening it', async () => {
-        const summary = 'x'.repeat(10_000)
+        const summary = 'x'.repeat(10000)
         const callVlm = vi.fn(async () => ({
             parsed: { title: 'Long Notes', summary, entityTags: [], styleTags: [] },
             rawText: '',
@@ -139,7 +139,7 @@ describe('describeTextContent', () => {
 
         await expect(describeTextContent({ ...baseArgs, text: 'content', callVlm }))
             .rejects.toThrow('MEDIA_DESCRIPTOR_SUMMARY_TOO_LONG')
-        expect(summary).toHaveLength(10_000)
+        expect(summary).toHaveLength(10000)
     })
 
     it('returns empty fields when the model yields nothing usable', async () => {

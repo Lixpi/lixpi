@@ -375,7 +375,7 @@ function getBranchMarkerStackGap(): number {
 const BRANCH_MARKER_SPINNER_PERIOD_MS = 800
 const GENERATED_OUTPUT_HISTORY_PREVIEW_MAX_CHARACTERS = 22
 const MEDIA_DESCRIPTOR_ANALYSIS_RETRY_DELAYS_MS = [1000, 3000, 8000] as const
-const GENERATED_IMAGE_COMPLETION_OUTLINE_FALLBACK_MS = 30_000
+const GENERATED_IMAGE_COMPLETION_OUTLINE_FALLBACK_MS = 30000
 const branchMarkerMediaModelCircleGlassCssImageByColor = new Map<string, string>()
 const branchMarkerMediaModelCircleTextureCssImageByColor = new Map<string, string>()
 type BranchMarkerDimensionOptions = {
@@ -5797,7 +5797,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!Number.isFinite(updatedAt)) return ''
 
         const elapsedMs = Math.max(0, Date.now() - updatedAt)
-        const minuteMs = 60_000
+        const minuteMs = 60000
         const hourMs = 60 * minuteMs
         const dayMs = 24 * hourMs
         const weekMs = 7 * dayMs
@@ -10213,7 +10213,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
         pendingAiChatThreadRefreshTimers.delete(threadId)
 
-        const retryDelaysMs = [400, 1_000, 1_600, 3_000]
+        const retryDelaysMs = [400, 1000, 1600, 3000]
         const scheduleAttempt = (attempt: number): void => {
             const delayMs = retryDelaysMs[attempt]
             if (delayMs === undefined) {
@@ -11187,7 +11187,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             syncBranchMarkerNodeContents()
             queueCanvasMediaAnalysis(node.nodeId, getMediaDescriptorStillAssetId(node))
             if (result.states.provenance !== 'sealed' && attempt < 5) {
-                const retryDelaysMs = [250, 500, 1_000, 2_000, 4_000]
+                const retryDelaysMs = [250, 500, 1000, 2000, 4000]
                 window.setTimeout(() => {
                     const currentNode = getCurrentCanvasMediaNode(node.nodeId)
                     if (currentNode?.assetId === node.assetId) {
@@ -14879,7 +14879,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             thread.content,
             new Set(['aiUserMessage', 'aiResponseMessage', 'aiReasoningSection', 'prompt_reference']),
         )
-        return messageCount * 1_000_000 + JSON.stringify(thread.content).length
+        return messageCount * 1000000 + JSON.stringify(thread.content).length
     }
 
     function getCanvasConversationThreadIds(canvasState: CanvasState | null): Set<string> {
@@ -15117,7 +15117,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         type: 'capabilityArtifact',
                         artifactTypeId: item.artifactTypeId,
                         assetId: item.assetId,
-                        dimensions: { width: 520, height: 360 },
+                        dimensions: { ...capabilityArtifactFrontendRegistry.require(item.artifactTypeId).initialCanvasDimensions },
                     }
                     const nextState = insertNodeAtViewportCenterInternal(insertion, {}, false)
                     await onAssetAttach({ assetId: item.assetId, nodeId, canvasState: nextState })

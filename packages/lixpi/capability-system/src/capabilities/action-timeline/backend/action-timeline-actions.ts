@@ -23,6 +23,7 @@ import {
     type ActionTimelineInput,
     type ActionTimelineRun,
 } from '../shared/action-timeline.ts'
+import { actionTimelineSettings } from '../settings.ts'
 
 export type ActionTimelinePersistRequest = {
     input: ActionTimelineInput
@@ -53,6 +54,17 @@ type ValidatedTimelineRequest = {
 type TimelineBatchResponse = {
     segments: ActionTimelineGeneratedSegment[]
     continuity: string
+}
+
+// Batch planning and the per-call budget both read the same capability settings,
+// so a planned batch always fits the budget requested for it.
+const { segmentAnswerTokens, batchAnswerOverheadTokens, maxBatchAnswerTokens, maxBatchAttempts } = actionTimelineSettings.generation
+
+function maxAnswerTokensForModel(maxCompletionSize: number): number {
+    return Math.max(
+        batchAnswerOverheadTokens + segmentAnswerTokens,
+        Math.min(maxBatchAnswerTokens, maxCompletionSize),
+    )
 }
 
 const TIMELINE_BATCH_SCHEMA = {
@@ -101,7 +113,7 @@ export function registerActionTimelineActions(
 ): void {
     registry.register({
         key: 'action-timeline.validate-request',
-        timeoutMs: 60_000,
+        timeoutMs: actionTimelineSettings.actionTimeoutsMs.validateRequest,
         validateInput: validateObject,
         validateOutput: validateObject,
         authorize: authorizeActionTimeline,
@@ -126,7 +138,7 @@ export function registerActionTimelineActions(
     })
     registry.register({
         key: 'action-timeline.write-segments',
-        timeoutMs: 15 * 60_000,
+        timeoutMs: actionTimelineSettings.actionTimeoutsMs.writeSegments,
         validateInput: validatePreparedInput,
         validateOutput: validateWrittenOutput,
         authorize: authorizeActionTimeline,
@@ -141,7 +153,7 @@ export function registerActionTimelineActions(
     })
     registry.register({
         key: 'action-timeline.persist-timeline',
-        timeoutMs: 120_000,
+        timeoutMs: actionTimelineSettings.actionTimeoutsMs.persistTimeline,
         validateInput: validatePersistInput,
         validateOutput: validatePersistOutput,
         authorize: authorizeActionTimeline,
@@ -178,9 +190,11 @@ export function planActionTimelineBatches(
     grid: readonly ActionTimelineGridSlot[],
     maxCompletionSize: number,
 ): ActionTimelineGridSlot[][] {
-    const usableTokens = Math.max(256, maxCompletionSize - 768)
-    const segmentBudget = 160
-    const batchSize = Math.max(1, Math.floor(usableTokens / segmentBudget))
+    const usableTokens = Math.max(
+        segmentAnswerTokens,
+        maxAnswerTokensForModel(maxCompletionSize) - batchAnswerOverheadTokens,
+    )
+    const batchSize = Math.max(1, Math.floor(usableTokens / segmentAnswerTokens))
     const batches: ActionTimelineGridSlot[][] = []
     for (let index = 0; index < grid.length; index += batchSize) {
         batches.push(grid.slice(index, index + batchSize))
@@ -207,9 +221,9 @@ async function writeSegments(
 
     for (const batch of batches) {
         const requestPrompt = buildBatchPrompt(prepared.input, batch, continuity, prepared.modelInputs)
-        const maxTokens = Math.max(256, Math.min(
-            context.variant.maxCompletionSize,
-            768 + batch.length * 160,
+        const maxTokens = Math.max(segmentAnswerTokens, Math.min(
+            maxAnswerTokensForModel(context.variant.maxCompletionSize),
+            batchAnswerOverheadTokens + batch.length * segmentAnswerTokens,
         ))
         await model.assessInputBudget({
             variant: context.variant,
@@ -221,7 +235,7 @@ async function writeSegments(
         })
         let accepted: TimelineBatchResponse | undefined
         let validationFeedback = ''
-        for (let attempt = 0; attempt < 2; attempt += 1) {
+        for (let attempt = 0; attempt < maxBatchAttempts; attempt += 1) {
             const userPrompt = attempt === 0
                 ? requestPrompt
                 : `${requestPrompt}\n\nCorrection required. Return a complete replacement for this batch. Validation errors:\n${validationFeedback}`

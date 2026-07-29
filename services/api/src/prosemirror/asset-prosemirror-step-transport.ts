@@ -14,7 +14,7 @@ import {
     type SubmitResult,
 } from '@lixpi/prosemirror'
 
-const MAX_AGE_NANOS = 7 * 24 * 60 * 60 * 1_000_000_000
+const MAX_AGE_NANOS = 7 * 24 * 60 * 60 * 1000000000
 
 export type LoggedAssetStepEnvelope = AssetStepStreamEvent & { streamSequence: number }
 
@@ -49,7 +49,7 @@ export class AssetProseMirrorStepTransport {
             allow_direct: true,
             max_age: MAX_AGE_NANOS,
             max_bytes: 256 * 1024 * 1024,
-            max_msgs_per_subject: 10_000,
+            max_msgs_per_subject: 10000,
         })
         return streamName
     }

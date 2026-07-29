@@ -335,7 +335,7 @@ describe('AiInteractionService', () => {
             capabilityRunId: 'timeline-run',
             chatModelProvider: 'Anthropic',
             chatModelId: 'Anthropic:claude-haiku-4-5',
-            input: { durationMs: 15_000, precisionMs: 2_000 },
+            input: { durationMs: 15000, precisionMs: 2000 },
             outputAssetIds: ['timeline-asset'],
             steps: [],
         }

@@ -646,7 +646,7 @@ describe('GoogleProvider internals', () => {
             eventMeta: { userId: 'user-1', organizationId: 'organization-1' },
             resolvedCapabilityPlan: makeModelRequiredPlan(),
             capabilityInputs: {
-                'action-timeline': { durationMs: 15_000, precisionMs: 2_000 },
+                'action-timeline': { durationMs: 15000, precisionMs: 2000 },
             },
             generationRun: {
                 requestKind: 'media-generation-matrix',
@@ -688,8 +688,8 @@ describe('GoogleProvider internals', () => {
             .not.toContain('Do not include code')
         expect(use).toHaveBeenCalledWith(expect.objectContaining({
             arguments: expect.objectContaining({
-                durationMs: 15_000,
-                precisionMs: 2_000,
+                durationMs: 15000,
+                precisionMs: 2000,
             }),
         }))
         expect(capabilityGenerationTrace).toHaveBeenCalledWith(expect.objectContaining({

@@ -29,7 +29,7 @@ type LoggedEvent = AssetStepStreamEvent & { streamSequence?: number }
 
 const BATCH_DELAY_MS = 100
 const MAX_BATCH_SIZE = 50
-const DOCUMENT_RESUME_TIMEOUT_MS = 15_000
+const DOCUMENT_RESUME_TIMEOUT_MS = 15000
 const sharedWorkspaceLeases = new Map<string, { leaseId: string; holderId: string; references: number }>()
 
 export class ProseMirrorAuthorityService {
@@ -128,7 +128,7 @@ export class ProseMirrorAuthorityService {
             this.sharedLeaseKey = leaseKey
             this.leaseId = sharedLease.leaseId
             this.notifyLeaseState({ readOnly: false })
-            this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10_000)
+            this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10000)
             return
         }
         const result = await this.assetService.acquireLease(this.options.assetId, this.options.workspaceId, this.clientId)
@@ -145,7 +145,7 @@ export class ProseMirrorAuthorityService {
                 this.sharedLeaseKey = leaseKey
                 this.leaseId = concurrentlyAcquired.leaseId
                 this.notifyLeaseState({ readOnly: false })
-                this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10_000)
+                this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10000)
                 return
             }
             const asset = await this.assetService.get(this.options.assetId, this.options.workspaceId)
@@ -166,14 +166,14 @@ export class ProseMirrorAuthorityService {
             await this.releaseLeaseSilently(result.leaseId, this.clientId)
             if (this.disconnected) return
             this.notifyLeaseState({ readOnly: false })
-            this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10_000)
+            this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10000)
             return
         }
         sharedWorkspaceLeases.set(leaseKey, { leaseId: result.leaseId, holderId: this.clientId, references: 1 })
         this.sharedLeaseKey = leaseKey
         this.leaseId = result.leaseId
         this.notifyLeaseState({ readOnly: false })
-        this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10_000)
+        this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10000)
     }
 
     private async renewLease(): Promise<void> {

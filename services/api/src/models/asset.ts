@@ -371,7 +371,7 @@ const decodeSearchCursor = (
             || parsed.completed.some((cursorKey) => typeof cursorKey !== 'string' || !allowedCursorKeys.has(cursorKey)))) {
             throw new Error('INVALID_ASSET_SEARCH_CURSOR')
         }
-        if (parsed.buffered && (!Array.isArray(parsed.buffered) || parsed.buffered.length > 2_000
+        if (parsed.buffered && (!Array.isArray(parsed.buffered) || parsed.buffered.length > 2000
             || parsed.buffered.some((key) => {
                 if (!key || typeof key !== 'object' || Array.isArray(key)
                     || typeof key.scopeAndOwner !== 'string' || typeof key.searchKey !== 'string') return true

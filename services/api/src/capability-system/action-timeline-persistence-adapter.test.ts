@@ -51,8 +51,8 @@ import {
 
 const input = {
     prompt: 'Create a timed chase',
-    durationMs: 2_000,
-    precisionMs: 1_000,
+    durationMs: 2000,
+    precisionMs: 1000,
     referenceAssetIds: ['source-1'],
 }
 const variant = {
@@ -62,8 +62,8 @@ const variant = {
     reasoningModelId: 'Anthropic:claude',
     provider: 'Anthropic' as const,
     modelVersion: 'claude',
-    contextWindow: 100_000,
-    maxCompletionSize: 8_192,
+    contextWindow: 100000,
+    maxCompletionSize: 8192,
 }
 const generationRun = {
     requestKind: 'capability-output' as const,

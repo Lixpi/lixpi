@@ -43,7 +43,7 @@ describe('transcodeAudioVideo', () => {
         expect(runProcessMock).toHaveBeenCalledWith(
             'ffmpeg',
             ['-y', '-i', expect.any(String), '-vn', '-c:a', 'libmp3lame', '-q:a', '2', expect.any(String)],
-            { timeoutMs: 300_000 },
+            { timeoutMs: 300000 },
         )
     })
 
@@ -58,7 +58,7 @@ describe('transcodeAudioVideo', () => {
         expect(runProcessMock).toHaveBeenCalledWith(
             'ffmpeg',
             ['-y', '-i', expect.any(String), '-vn', expect.any(String)],
-            { timeoutMs: 300_000 },
+            { timeoutMs: 300000 },
         )
     })
 
@@ -73,7 +73,7 @@ describe('transcodeAudioVideo', () => {
         expect(runProcessMock).toHaveBeenCalledWith(
             'ffmpeg',
             expect.arrayContaining(['-c:v', 'libx264', '-preset', 'fast', '-movflags', '+faststart']),
-            { timeoutMs: 300_000 },
+            { timeoutMs: 300000 },
         )
     })
 

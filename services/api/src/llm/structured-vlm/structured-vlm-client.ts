@@ -36,7 +36,12 @@ export type VlmCallArgs = {
     schema: VlmJsonSchema
     natsService: NatsService
     temperature?: number
+    // Tokens for the ANSWER only. Thinking headroom is added on top by the
+    // runner, uniformly for every provider. See resolveOutputBudget.
     maxTokens?: number
+    // The model's hard output ceiling (maxCompletionSize), when the caller knows
+    // it. The answer + thinking wire cap is clamped to it.
+    maxOutputTokensCeiling?: number
     abortSignal?: AbortSignal
     // Caller intent: should we try to stream reasoning to the user? The strategy
     // layer decides if and how the underlying model can satisfy this — Anthropic
@@ -56,6 +61,86 @@ export type VlmCallResult<T = unknown> = {
     modelName: string
     promptTokens: number
     completionTokens: number
+}
+
+// ─── Output budget normalization ──────────────────────────────────────────────
+
+// Every provider charges hidden reasoning tokens against the SAME output cap as
+// the answer: Anthropic `max_tokens` covers thinking blocks, Google
+// `maxOutputTokens` covers thinking parts (Gemini 2.5 thinkingBudget and 3.x
+// thinkingLevel alike), OpenAI `max_output_tokens` covers reasoning items. So a
+// caller that asks for N tokens of JSON and also asks for thinking gets its JSON
+// truncated mid-object, reported as finishReason=MAX_TOKENS, stop_reason
+// max_tokens, or response.incomplete, well below the model's real output limit.
+//
+// `maxTokens` on VlmCallArgs therefore means "tokens for the ANSWER". This layer
+// adds the thinking headroom on top, identically for every provider, so no
+// caller and no capability has to know provider-specific reasoning accounting.
+const DEFAULT_ANSWER_TOKENS = 4096
+const DEFAULT_THINKING_TOKENS = 8192
+
+type OutputBudget = {
+    answerTokens: number
+    thinkingTokens: number
+    // What actually goes on the wire as the provider's output cap.
+    wireMaxTokens: number
+}
+
+type OutputBudgetRequest = {
+    maxTokens?: number
+    thinkingBudgetTokens?: number
+    enableThinking?: boolean
+    // The model's own hard output ceiling (maxCompletionSize). The wire cap stays
+    // at or below it, since models with small caps reject anything larger.
+    maxOutputTokensCeiling?: number
+}
+
+const resolveOutputBudget = (args: OutputBudgetRequest, caps: ModelCapabilities): OutputBudget => {
+    const requestedAnswer = Math.max(256, args.maxTokens ?? DEFAULT_ANSWER_TOKENS)
+    const thinks = args.enableThinking === true && caps.thinkingMode !== 'none'
+    // Reasoning scales with task size, so the reserve never drops below the
+    // answer itself. A bigger batch thinks proportionally longer.
+    const requestedThinking = thinks
+        ? Math.max(args.thinkingBudgetTokens ?? DEFAULT_THINKING_TOKENS, requestedAnswer)
+        : 0
+
+    const ceiling = args.maxOutputTokensCeiling
+    const hasCeiling = typeof ceiling === 'number' && Number.isFinite(ceiling) && ceiling > 0
+    const requestedWire = requestedAnswer + requestedThinking
+    if (!hasCeiling || requestedWire <= ceiling) {
+        return { answerTokens: requestedAnswer, thinkingTokens: requestedThinking, wireMaxTokens: requestedWire }
+    }
+
+    // The model's ceiling binds. Split it so the answer always keeps at least
+    // half, and thinking takes the rest up to what it asked for.
+    const thinkingTokens = Math.min(requestedThinking, Math.floor(ceiling / 2))
+    return { answerTokens: ceiling - thinkingTokens, thinkingTokens, wireMaxTokens: ceiling }
+}
+
+// The completion tokens a caller must reserve in the context window for an answer
+// budget of `maxTokens`: the answer plus the provider-normalized thinking reserve.
+// Callers that do their own context-window math use this so their reservation
+// matches what the runner sends.
+export const reservedCompletionTokensForStructuredCall = (request: {
+    provider: ProviderName
+    modelVersion: string
+    maxTokens?: number
+    thinkingBudgetTokens?: number
+    enableThinking?: boolean
+    maxOutputTokensCeiling?: number
+}): number => {
+    const caps = detectCapabilities(request.provider, request.modelVersion)
+    return resolveOutputBudget(request, caps).wireMaxTokens
+}
+
+// Raised when the model hit the output cap before closing its structured output.
+// Retried by the dispatcher with an escalated budget rather than surfaced as a
+// bogus "non-JSON output" parse error.
+class VlmOutputTruncatedError extends Error {
+    constructor(provider: ProviderName, modelVersion: string, schemaName: string, budget: OutputBudget, detail: string) {
+        super(`${provider}/${modelVersion} truncated structured output for schema=${schemaName} at answerTokens=${budget.answerTokens} thinkingTokens=${budget.thinkingTokens} (wire cap ${budget.wireMaxTokens}). ${detail}`)
+        this.name = 'VlmOutputTruncatedError'
+    }
 }
 
 let _anthropic: Anthropic | undefined
@@ -106,18 +191,14 @@ const resolveAndConvert = async (
 
 // ─── Anthropic ────────────────────────────────────────────────────────────────
 
-const buildAnthropicRequest = (args: VlmCallArgs, caps: ModelCapabilities, formattedMessages: Array<{ role: string; content: any }>, useThinking: boolean): Record<string, any> => {
-    const thinkingBudget = args.thinkingBudgetTokens ?? 4096
-    const baseMaxTokens = args.maxTokens ?? 4096
-    // When thinking is on, max_tokens must exceed budget_tokens (unless using
-    // adaptive interleaved thinking; we play it safe and add a buffer).
-    const maxTokens = useThinking
-        ? Math.max(baseMaxTokens, thinkingBudget + 1024)
-        : baseMaxTokens
+const buildAnthropicRequest = (args: VlmCallArgs, caps: ModelCapabilities, budget: OutputBudget, formattedMessages: Array<{ role: string; content: any }>, useThinking: boolean): Record<string, any> => {
+    // max_tokens covers thinking + answer, so it is always the wire cap; the
+    // thinking budget is the reserve carved out of it.
+    const thinkingBudget = Math.max(1024, budget.thinkingTokens)
 
     const request: Record<string, any> = {
         model: args.modelVersion,
-        max_tokens: maxTokens,
+        max_tokens: useThinking ? budget.wireMaxTokens : budget.answerTokens,
         system: args.systemPrompt,
         messages: formattedMessages,
         tools: [{
@@ -151,10 +232,10 @@ const buildAnthropicRequest = (args: VlmCallArgs, caps: ModelCapabilities, forma
     return request
 }
 
-const callAnthropicOnce = async <T>(args: VlmCallArgs, caps: ModelCapabilities, useThinking: boolean): Promise<VlmCallResult<T> | { needsRetry: true; rawText: string }> => {
+const callAnthropicOnce = async <T>(args: VlmCallArgs, caps: ModelCapabilities, budget: OutputBudget, useThinking: boolean): Promise<VlmCallResult<T> | { needsRetry: true; rawText: string }> => {
     const client = getAnthropic()
     const formatted = await resolveAndConvert(args.userMessages, args.natsService, 'ANTHROPIC')
-    const request = buildAnthropicRequest(args, caps, formatted, useThinking)
+    const request = buildAnthropicRequest(args, caps, budget, formatted, useThinking)
 
     const stream = client.messages.stream(request as any, { signal: args.abortSignal })
 
@@ -187,6 +268,11 @@ const callAnthropicOnce = async <T>(args: VlmCallArgs, caps: ModelCapabilities, 
     }
 
     if (parsed === undefined) {
+        // A tool call cut off by the output cap arrives as an unusable partial, so
+        // escalate the budget instead of blaming the model for skipping the tool.
+        if (finalMessage.stop_reason === 'max_tokens') {
+            throw new VlmOutputTruncatedError(args.provider, args.modelVersion, args.schema.name, budget, 'stop_reason=max_tokens')
+        }
         // Model didn't call the tool. If thinking was enabled (which forces
         // tool_choice='auto'), we can retry without thinking to force the call.
         // Otherwise this is a hard failure.
@@ -205,18 +291,19 @@ const callAnthropicOnce = async <T>(args: VlmCallArgs, caps: ModelCapabilities, 
 
 const callAnthropic = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = detectCapabilities(args.provider, args.modelVersion)
+    const budget = resolveOutputBudget(args, caps)
     const wantsThinking = args.enableThinking === true && caps.thinkingMode !== 'none'
 
     // First attempt: with thinking if requested and supported. tool_choice is
     // 'auto' in that case so the model COULD skip the tool — we handle that.
     if (wantsThinking) {
-        const result = await callAnthropicOnce<T>(args, caps, true)
+        const result = await callAnthropicOnce<T>(args, caps, budget, true)
         if (!('needsRetry' in result)) return result
         warn(`Anthropic ${args.modelVersion} returned text instead of tool call with thinking on; retrying with forced tool_choice (thinking disabled). rawText preview=${result.rawText.slice(0, 200)}`)
     }
 
     // Forced tool call (no thinking) — guaranteed structured output.
-    const result = await callAnthropicOnce<T>(args, caps, false)
+    const result = await callAnthropicOnce<T>(args, caps, budget, false)
     if ('needsRetry' in result) {
         throw new Error(`Anthropic ${args.modelVersion} did not call tool "${args.schema.name}" even with forced tool_choice. rawText preview=${result.rawText.slice(0, 200)}`)
     }
@@ -317,6 +404,7 @@ const parseClosedSchemaPayloadEnvelope = <T>(outer: unknown, provider: ProviderN
 
 const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = detectCapabilities(args.provider, args.modelVersion)
+    const budget = resolveOutputBudget(args, caps)
     const client = getOpenAi()
     // 'OPENAI' format yields the Responses-API content shape (input_text /
     // input_image). The system prompt rides on `instructions`, the modern
@@ -346,7 +434,9 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
         },
     }
     if (args.temperature !== undefined && caps.supportsTemperature) requestArgs.temperature = args.temperature
-    if (args.maxTokens) requestArgs.max_output_tokens = args.maxTokens
+    // Reasoning items are billed against max_output_tokens on the Responses API,
+    // so the wire cap carries the same answer+thinking headroom as elsewhere.
+    requestArgs.max_output_tokens = budget.wireMaxTokens
 
     const stream = await client.responses.create(requestArgs as any, { signal: args.abortSignal })
 
@@ -355,6 +445,7 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     let modelName = args.modelVersion
     let promptTokens = 0
     let completionTokens = 0
+    let incompleteByCap = false
 
     for await (const event of stream as any) {
         switch (event?.type) {
@@ -370,6 +461,7 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
             case 'response.incomplete': {
                 const response = event.response
                 if (response?.model) modelName = response.model
+                if (response?.incomplete_details?.reason === 'max_output_tokens') incompleteByCap = true
                 if (typeof response?.output_text === 'string' && response.output_text) {
                     finalText = response.output_text
                 }
@@ -387,6 +479,9 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     }
 
     const outputText = finalText || rawText
+    if (incompleteByCap) {
+        throw new VlmOutputTruncatedError(args.provider, args.modelVersion, args.schema.name, budget, 'incomplete_details.reason=max_output_tokens')
+    }
     if (!outputText) throw new Error(`OpenAI ${args.modelVersion} returned empty structured output for schema=${args.schema.name}`)
     let parsedOuter: unknown
     try { parsedOuter = JSON.parse(outputText) }
@@ -403,6 +498,7 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
 
 const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = detectCapabilities(args.provider, args.modelVersion)
+    const budget = resolveOutputBudget(args, caps)
     const client = getGoogle()
     const formatted = await resolveAndConvert(args.userMessages, args.natsService, 'GOOGLE')
     const contents: Array<Record<string, any>> = formatted.map((msg) => ({
@@ -416,7 +512,9 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
         responseSchema: args.schema.schema,
     }
     if (args.temperature !== undefined && caps.supportsTemperature) config.temperature = args.temperature
-    if (args.maxTokens) config.maxOutputTokens = args.maxTokens
+    // Gemini counts thinking parts against maxOutputTokens, so the wire cap
+    // carries the thinking reserve on top of the answer budget.
+    config.maxOutputTokens = budget.wireMaxTokens
 
     // Enable thinking for visible reasoning when the model supports it. Gemini
     // 3.x uses thinkingLevel; Gemini 2.5 uses thinkingBudget. We include
@@ -425,7 +523,9 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
         const isGemini3 = /^gemini-3\./i.test(args.modelVersion)
         config.thinkingConfig = isGemini3
             ? { thinkingLevel: 'medium', includeThoughts: true }
-            : { thinkingBudget: args.thinkingBudgetTokens ?? -1, includeThoughts: true }
+            // An unbounded (-1) budget would let thinking eat the whole cap and
+            // starve the answer; pin it to the reserve we sized for it.
+            : { thinkingBudget: budget.thinkingTokens, includeThoughts: true }
     }
 
     let rawText = ''
@@ -484,6 +584,10 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
         collectResponseText(response)
     }
 
+    const truncated = /MAX_TOKENS/i.test(finishReason)
+    if (truncated) {
+        throw new VlmOutputTruncatedError(args.provider, args.modelVersion, args.schema.name, budget, `finishReason=${finishReason}`)
+    }
     if (!rawText) throw new Error(`Google ${args.modelVersion} returned empty response for schema=${args.schema.name}`)
 
     // Gemini's responseSchema occasionally returns the JSON wrapped in
@@ -560,30 +664,54 @@ const parseRetryAfterMs = (error: any): number | undefined => {
     const raw = typeof headers?.get === 'function' ? headers.get('retry-after') : headers?.['retry-after']
     if (!raw) return undefined
     const seconds = Number(raw)
-    if (!Number.isNaN(seconds)) return Math.min(seconds * 1000, 30_000)
+    if (!Number.isNaN(seconds)) return Math.min(seconds * 1000, 30000)
     const dateMs = Date.parse(raw)
-    if (!Number.isNaN(dateMs)) return Math.max(0, Math.min(dateMs - Date.now(), 30_000))
+    if (!Number.isNaN(dateMs)) return Math.max(0, Math.min(dateMs - Date.now(), 30000))
     return undefined
 }
 
 const MAX_VLM_RETRIES = 2 // up to 3 attempts total
+// How far truncation-driven escalation may grow the answer budget when the caller
+// gives no model ceiling to grow into. With a ceiling, escalation runs up to it.
+const MAX_ESCALATED_ANSWER_TOKENS = 32768
 
 export const callStructuredVlm = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = detectCapabilities(args.provider, args.modelVersion)
     assertProviderMessageInputKinds(args.provider, args.modelVersion, args.userMessages)
     info(`[vlm] call provider=${args.provider} model=${args.modelVersion} thinkingMode=${caps.thinkingMode} requestThinking=${args.enableThinking === true}`)
 
-    const dispatch = (): Promise<VlmCallResult<T>> => {
-        if (args.provider === 'Anthropic') return callAnthropic<T>(args)
-        if (args.provider === 'OpenAI') return callOpenAi<T>(args)
-        if (args.provider === 'Google') return callGoogle<T>(args)
-        throw new Error(`Unsupported analysis provider for structured VLM call: ${args.provider}`)
+    const dispatch = (attemptArgs: VlmCallArgs): Promise<VlmCallResult<T>> => {
+        if (attemptArgs.provider === 'Anthropic') return callAnthropic<T>(attemptArgs)
+        if (attemptArgs.provider === 'OpenAI') return callOpenAi<T>(attemptArgs)
+        if (attemptArgs.provider === 'Google') return callGoogle<T>(attemptArgs)
+        throw new Error(`Unsupported analysis provider for structured VLM call: ${attemptArgs.provider}`)
     }
+
+    // Answer budget for the current attempt; doubled on truncation.
+    let answerTokens = resolveOutputBudget(args, caps).answerTokens
 
     for (let attempt = 0; ; attempt++) {
         try {
-            return await dispatch()
+            return await dispatch({ ...args, maxTokens: answerTokens })
         } catch (error: any) {
+            // Truncation means the answer did not fit, not that the model failed.
+            // Retry with a doubled answer budget, which doubles the thinking
+            // reserve with it, growing into the model's own ceiling.
+            const escalationCap = args.maxOutputTokensCeiling ?? MAX_ESCALATED_ANSWER_TOKENS
+            const grown = Math.min(answerTokens * 2, escalationCap)
+            // A request already at the model's output ceiling cannot grow, and
+            // repeating it identically would only burn tokens.
+            const atCeiling = resolveOutputBudget({ ...args, maxTokens: grown }, caps).answerTokens <= answerTokens
+            const canGrow = error instanceof VlmOutputTruncatedError
+                && grown > answerTokens
+                && !atCeiling
+                && !args.abortSignal?.aborted
+            if (canGrow) {
+                warn(`[vlm] output truncated provider=${args.provider} model=${args.modelVersion} schema=${args.schema.name}; retrying with answerTokens ${answerTokens} -> ${grown} :: ${error.message}`)
+                answerTokens = grown
+                continue
+            }
+
             const detail = describeProviderError(error)
             const canRetry = attempt < MAX_VLM_RETRIES && isTransientError(error) && !args.abortSignal?.aborted
             if (canRetry) {

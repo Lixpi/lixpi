@@ -372,7 +372,7 @@ describe('NatsService', () => {
             service['nc'] = createMockConnection({ close: closeSpy, isClosed: vi.fn().mockReturnValue(false) })
             const timer = setTimeout(() => {
                 // placeholder
-            }, 10_000)
+            }, 10000)
 
             service['reconnectTimer'] = timer as any
             await service.disconnect()

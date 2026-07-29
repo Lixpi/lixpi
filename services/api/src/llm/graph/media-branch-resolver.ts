@@ -594,6 +594,7 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
             natsService: deps.natsService,
             temperature: 0.1,
             maxTokens: Math.min(state.aiModelMetaInfo.maxCompletionSize ?? 4096, 4096),
+            maxOutputTokensCeiling: state.aiModelMetaInfo.maxCompletionSize,
             abortSignal: deps.abortSignal,
         })
 

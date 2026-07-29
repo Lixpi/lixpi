@@ -348,7 +348,7 @@ describe('AI interaction message routing', () => {
                     'global.action-timeline': {
                         prompt,
                         referenceAssetIds: [],
-                        durationMs: 17_000,
+                        durationMs: 17000,
                         precisionMs: 2,
                     },
                 },
@@ -416,7 +416,7 @@ describe('AI interaction message routing', () => {
     })
 
     it('forwards the complete authoritative prompt into messages and context snapshots', async () => {
-        const authoritativePrompt = `start-${'x'.repeat(25_000)}-end`
+        const authoritativePrompt = `start-${'x'.repeat(25000)}-end`
         mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValueOnce({
             doc: {
                 type: 'doc',

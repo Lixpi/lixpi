@@ -32,8 +32,8 @@ function makeContext(): CapabilityActionExecutionContext {
             reasoningModelId: 'Anthropic:claude',
             provider: 'Anthropic',
             modelVersion: 'claude',
-            contextWindow: 32_000,
-            maxCompletionSize: 1_024,
+            contextWindow: 32000,
+            maxCompletionSize: 1024,
         },
         stepId: 'write-segments',
         attempt: 1,
@@ -103,22 +103,22 @@ describe('Action Timeline registered actions', () => {
 
         const prepared = await registry.get('action-timeline.validate-request').execute({
             prompt: '  A timed sequence  ',
-            durationMs: 2_500,
-            precisionMs: 1_000,
+            durationMs: 2500,
+            precisionMs: 1000,
             referenceAssetIds: ['asset-a', 'asset-a', 'asset-b'],
         }, context)
 
         expect(prepared).toMatchObject({
             input: {
                 prompt: 'A timed sequence',
-                durationMs: 2_500,
-                precisionMs: 1_000,
+                durationMs: 2500,
+                precisionMs: 1000,
                 referenceAssetIds: ['asset-a', 'asset-b'],
             },
             grid: [
-                { slotIndex: 0, startMs: 0, endMs: 1_000 },
-                { slotIndex: 1, startMs: 1_000, endMs: 2_000 },
-                { slotIndex: 2, startMs: 2_000, endMs: 2_500 },
+                { slotIndex: 0, startMs: 0, endMs: 1000 },
+                { slotIndex: 1, startMs: 1000, endMs: 2000 },
+                { slotIndex: 2, startMs: 2000, endMs: 2500 },
             ],
         })
         expect(dependencies.resolveModelInputs).toHaveBeenCalledWith({
@@ -130,10 +130,10 @@ describe('Action Timeline registered actions', () => {
     it('plans bounded batches from the completion budget', () => {
         const grid: ActionTimelineGridSlot[] = Array.from({ length: 10 }, (_, slotIndex) => ({
             slotIndex,
-            startMs: slotIndex * 1_000,
-            endMs: (slotIndex + 1) * 1_000,
+            startMs: slotIndex * 1000,
+            endMs: (slotIndex + 1) * 1000,
         }))
-        expect(planActionTimelineBatches(grid, 1_408).map(batch => batch.length)).toEqual([4, 4, 2])
+        expect(planActionTimelineBatches(grid, 1408).map(batch => batch.length)).toEqual([4, 4, 2])
         expect(planActionTimelineBatches(grid, 100).every(batch => batch.length === 1)).toBe(true)
     })
 
@@ -148,13 +148,13 @@ describe('Action Timeline registered actions', () => {
         const prepared = {
             input: {
                 prompt: 'Write two beats',
-                durationMs: 2_000,
-                precisionMs: 1_000,
+                durationMs: 2000,
+                precisionMs: 1000,
                 referenceAssetIds: [],
             },
             grid: [
-                { slotIndex: 0, startMs: 0, endMs: 1_000 },
-                { slotIndex: 1, startMs: 1_000, endMs: 2_000 },
+                { slotIndex: 0, startMs: 0, endMs: 1000 },
+                { slotIndex: 1, startMs: 1000, endMs: 2000 },
             ],
             modelInputs: [],
         }
@@ -188,11 +188,11 @@ describe('Action Timeline registered actions', () => {
         const prepared = {
             input: {
                 prompt: 'Show Shelby boarding Slop Train',
-                durationMs: 1_000,
-                precisionMs: 1_000,
+                durationMs: 1000,
+                precisionMs: 1000,
                 referenceAssetIds: ['asset-shelby', 'asset-train'],
             },
-            grid: [{ slotIndex: 0, startMs: 0, endMs: 1_000 }],
+            grid: [{ slotIndex: 0, startMs: 0, endMs: 1000 }],
             modelInputs: [{
                 kind: 'image' as const,
                 assetId: 'asset-shelby',
@@ -243,11 +243,11 @@ describe('Action Timeline registered actions', () => {
         const prepared = {
             input: {
                 prompt: 'Write one beat',
-                durationMs: 1_000,
-                precisionMs: 1_000,
+                durationMs: 1000,
+                precisionMs: 1000,
                 referenceAssetIds: ['asset-authorized'],
             },
-            grid: [{ slotIndex: 0, startMs: 0, endMs: 1_000 }],
+            grid: [{ slotIndex: 0, startMs: 0, endMs: 1000 }],
             modelInputs: [{
                 kind: 'document-text',
                 assetId: 'asset-authorized',
@@ -276,11 +276,11 @@ describe('Action Timeline registered actions', () => {
         const prepared = {
             input: {
                 prompt: 'Write one beat',
-                durationMs: 1_000,
-                precisionMs: 1_000,
+                durationMs: 1000,
+                precisionMs: 1000,
                 referenceAssetIds: ['asset-shelby-a', 'asset-shelby-b'],
             },
-            grid: [{ slotIndex: 0, startMs: 0, endMs: 1_000 }],
+            grid: [{ slotIndex: 0, startMs: 0, endMs: 1000 }],
             modelInputs: [{
                 kind: 'document-text',
                 assetId: 'asset-shelby-a',
@@ -313,11 +313,11 @@ describe('Action Timeline registered actions', () => {
             prepared: {
                 input: {
                     prompt: 'Write one beat',
-                    durationMs: 1_000,
-                    precisionMs: 1_000,
+                    durationMs: 1000,
+                    precisionMs: 1000,
                     referenceAssetIds: ['asset-a'],
                 },
-                grid: [{ slotIndex: 0, startMs: 0, endMs: 1_000 }],
+                grid: [{ slotIndex: 0, startMs: 0, endMs: 1000 }],
                 modelInputs: [{
                     kind: 'video-frame',
                     assetId: 'asset-a',

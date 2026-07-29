@@ -137,7 +137,7 @@ const dispatchMaintenanceMessage = async ({
                 console.error('Asset provenance rebuild exhausted:', error)
                 return
             }
-            const backoffMs = Math.min(5 * 60_000, 30_000 * 2 ** Math.min(retryAttempt - 1, 4))
+            const backoffMs = Math.min(5 * 60000, 30000 * 2 ** Math.min(retryAttempt - 1, 4))
             await enqueueProvenanceRebuild({
                 organizationId: data.organizationId,
                 assetId: data.assetId,
@@ -212,7 +212,7 @@ export const startAssetMaintenanceWorker = async (natsService: NATS_Service): Pr
                 ASSET_MAINTENANCE_STREAM_NAME,
                 ASSET_MAINTENANCE_CONSUMER_NAME,
                 async (message) => await dispatchMaintenanceMessage(message),
-                { maxMessages: 20, expiresMs: 1000, nakDelayMs: 30_000 },
+                { maxMessages: 20, expiresMs: 1000, nakDelayMs: 30000 },
             )
             if (Date.now() >= nextStagingCollectionAt) {
                 await BlobModel.collectOrphanedStagingBlobs({

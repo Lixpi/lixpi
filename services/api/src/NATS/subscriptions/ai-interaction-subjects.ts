@@ -633,7 +633,7 @@ export const aiInteractionSubjects = [
                         mediaModelId: replayPrompt.mediaModelId,
                         mediaType: replayPrompt.mediaType,
                     }) : undefined
-                    if (!trace || !trace.finalPrompt.trim() || trace.finalPrompt.length > 20_000) {
+                    if (!trace || !trace.finalPrompt.trim() || trace.finalPrompt.length > 20000) {
                         return rejectSend('REGENERATION_PROVENANCE_MISMATCH')
                     }
                     if (replayPrompt.mediaType === 'image') {
@@ -855,7 +855,7 @@ export const aiInteractionSubjects = [
             const runWithLease = async (run: () => Promise<void>): Promise<void> => {
                 const renewal = setInterval(() => {
                     void AssetModel.renewLease({ assetId: conversationAssetId, workspaceId, leaseId: lease.leaseId, holderId: leaseHolderId })
-                }, 10_000)
+                }, 10000)
                 try {
                     await run()
                 } finally {
@@ -1156,7 +1156,7 @@ export const aiInteractionSubjects = [
                 ? data.localStreamSeq!
                 : 0
             const maxMessages = Number.isSafeInteger(data.maxMessages) && data.maxMessages! > 0
-                ? Math.min(data.maxMessages!, 10_000)
+                ? Math.min(data.maxMessages!, 10000)
                 : 1000
             const result = await PipelineEventLog.fromSingleton().replayPipelineEvents({
                 workspaceId,

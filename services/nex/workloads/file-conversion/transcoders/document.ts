@@ -27,7 +27,7 @@ export const convertDocumentToPdf = async (buffer: Buffer, originalName: string)
             '--convert-to', 'pdf',
             '--outdir', outDir,
             inPath,
-        ], { timeoutMs: 120_000 })
+        ], { timeoutMs: 120000 })
 
         const produced = (await readdir(outDir)).find((name) => name.toLowerCase().endsWith('.pdf'))
         if (!produced) {
@@ -52,7 +52,7 @@ export const renderPdfFirstPagePoster = async (pdfBuffer: Buffer): Promise<Buffe
             await runProcess('pdftocairo', [
                 '-png', '-f', '1', '-l', '1', '-singlefile', '-scale-to', '1024',
                 inPath, outPrefix,
-            ], { timeoutMs: 60_000 })
+            ], { timeoutMs: 60000 })
 
             return readFile(`${outPrefix}.png`)
         })
@@ -70,7 +70,7 @@ export const getPdfPageCount = async (pdfBuffer: Buffer): Promise<number | null>
             const inPath = join(dir, 'in.pdf')
             const outPath = join(dir, 'info.txt')
             await writeFile(inPath, pdfBuffer)
-            await runProcess('sh', ['-c', `pdfinfo "${inPath}" > "${outPath}"`], { timeoutMs: 30_000 })
+            await runProcess('sh', ['-c', `pdfinfo "${inPath}" > "${outPath}"`], { timeoutMs: 30000 })
 
             const info = await readFile(outPath, 'utf-8')
             const match = /^Pages:\s+(\d+)/m.exec(info)

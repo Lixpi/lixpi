@@ -33,7 +33,7 @@ import {
 import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
 import { attachPlannedGeneratedAssetNodes } from '../../services/generated-asset-storage.ts'
 
-const PIPELINE_EVENT_PURGE_RETRY_MS = 60_000
+const PIPELINE_EVENT_PURGE_RETRY_MS = 60000
 
 const MEDIA_RESPONSE_PUBLISH_STATUSES: ReadonlySet<StreamStatus> = new Set([
     STREAM_STATUS.IMAGE_GENERATION_TRACE,

@@ -18,7 +18,10 @@ import AssetModel from '../models/asset.ts'
 import BlobModel from '../models/blob.ts'
 import Organization from '../models/organization.ts'
 import Workspace from '../models/workspace.ts'
-import { callStructuredVlm } from '../llm/structured-vlm/structured-vlm-client.ts'
+import {
+    callStructuredVlm,
+    reservedCompletionTokensForStructuredCall,
+} from '../llm/structured-vlm/structured-vlm-client.ts'
 import { detectCapabilities } from '../llm/providers/provider-capabilities.ts'
 import AssetDocumentService from '../services/asset-document-service.ts'
 import { collectDocumentText } from '../services/prosemirror-text.ts'
@@ -95,6 +98,7 @@ export function createCapabilityStructuredModelPort(): CapabilityStructuredModel
                 },
                 natsService,
                 maxTokens: request.maxTokens,
+                maxOutputTokensCeiling: request.variant.maxCompletionSize,
                 abortSignal: request.abortSignal,
                 enableThinking: true,
             })
@@ -122,10 +126,18 @@ export function assessCapabilityModelInputBudget(
     const mediaTokens = request.inputs.reduce((total, input) => {
         if (input.kind === 'document-text') return total
         if (input.kind === 'audio') return total + Math.ceil(input.bytes.byteLength / 24)
-        return total + 1_600
+        return total + 1600
     }, 0)
     const inputTokens = textTokens + mediaTokens
-    const reservedCompletionTokens = request.maxTokens
+    // The runner sends the answer budget plus a thinking reserve, so the context
+    // window must be checked against that same total, not the answer alone.
+    const reservedCompletionTokens = reservedCompletionTokensForStructuredCall({
+        provider: request.variant.provider,
+        modelVersion: request.variant.modelVersion,
+        maxTokens: request.maxTokens,
+        maxOutputTokensCeiling: request.variant.maxCompletionSize,
+        enableThinking: true,
+    })
     const contextWindow = request.variant.contextWindow
     if (!Number.isSafeInteger(contextWindow) || contextWindow <= 0
         || inputTokens + reservedCompletionTokens > contextWindow) {

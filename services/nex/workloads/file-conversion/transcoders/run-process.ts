@@ -12,7 +12,7 @@ import { join } from 'node:path'
 export const runProcess = async (
     command: string,
     args: string[],
-    { timeoutMs = 120_000 }: { timeoutMs?: number } = {},
+    { timeoutMs = 120000 }: { timeoutMs?: number } = {},
 ): Promise<void> => {
     await new Promise<void>((resolve, reject) => {
         const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'ignore'] })

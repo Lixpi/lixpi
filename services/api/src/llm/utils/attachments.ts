@@ -6,8 +6,8 @@ import type NatsService from '@lixpi/nats-service'
 import { info, warn } from '@lixpi/debug-tools'
 
 // Anthropic's 5MB limit applies to the base64-encoded string. Base64 inflates
-// raw bytes by ~4/3, so 5_242_880 * 3/4 = 3_932_160. Use 3.75MB for safety.
-const MAX_IMAGE_BYTES = 3_750_000
+// raw bytes by ~4/3, so 5242880 * 3/4 = 3932160. Use 3.75MB for safety.
+const MAX_IMAGE_BYTES = 3750000
 const MAX_IMAGE_DIMENSION = 2048
 
 const SAFE_MIMES = new Set(['image/png', 'image/jpeg', 'image/gif'])

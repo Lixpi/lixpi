@@ -23,7 +23,7 @@ const STRUCTURE_CONTROL_ENDPOINT = '/v2beta/stable-image/control/structure'
 const STYLE_TRANSFER_ENDPOINT = '/v2beta/stable-image/control/style-transfer'
 const STYLE_CONTROL_FIDELITY = 0.7
 const STRUCTURE_CONTROL_STRENGTH = 0.9
-const MAX_STABILITY_REFERENCE_PIXELS = 9_437_184
+const MAX_STABILITY_REFERENCE_PIXELS = 9437184
 const STABILITY_REFERENCE_TILE_SIZE = 768
 
 const resizeReferenceForStability = async (

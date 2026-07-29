@@ -49,7 +49,7 @@ export function assessProviderInputBudget({
             const byteLength = base64ByteLength(record.data)
             mediaTokens += mediaType.startsWith('audio/')
                 ? Math.ceil(byteLength / 24)
-                : 1_600
+                : 1600
             return { ...record, data: `<${mediaType} input:${byteLength} bytes>` }
         }
         return value
@@ -74,7 +74,7 @@ function assessDataUrl(value: string): {
     return {
         mimeType,
         byteLength,
-        tokens: mimeType.startsWith('audio/') ? Math.ceil(byteLength / 24) : 1_600,
+        tokens: mimeType.startsWith('audio/') ? Math.ceil(byteLength / 24) : 1600,
     }
 }
 

@@ -393,7 +393,7 @@ function createDeps(parsedInput: { selections: Array<Record<string, unknown>> } 
         if (asset.assetId === 'asset-timeline' && role === 'capabilityArtifact') {
             return {
                 doc: buildActionTimelineDocument(
-                    { durationMs: 2_000, precisionMs: 1_000 },
+                    { durationMs: 2000, precisionMs: 1000 },
                     [{
                         slotIndex: 0,
                         runs: [{ assetId: 'asset-shelby' }, { text: ' boards the train using ' }, { assetId: 'asset-travel-notes' }],

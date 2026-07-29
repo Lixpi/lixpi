@@ -151,8 +151,8 @@ function timeTextToMilliseconds(raw: string, rawUnit: string, minimumMs: number)
         ? 1
         : normalizedUnit === 'm'
             || normalizedUnit.startsWith('min')
-            ? 60_000
-            : 1_000
+            ? 60000
+            : 1000
     const scaledMilliseconds = unitCount * unitMilliseconds
     if (!Number.isSafeInteger(scaledMilliseconds) || scaledMilliseconds % fractionScale !== 0) return undefined
     const milliseconds = scaledMilliseconds / fractionScale
@@ -431,7 +431,7 @@ export function buildActionTimelineCatalogMetadata(input: object): Record<string
 }
 
 export function formatTimelineTime(milliseconds: number): string {
-    const totalSeconds = milliseconds / 1_000
+    const totalSeconds = milliseconds / 1000
     const minutes = Math.floor(totalSeconds / 60)
     const seconds = totalSeconds - minutes * 60
     const formattedSeconds = Number.isInteger(seconds)

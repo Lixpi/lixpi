@@ -1602,7 +1602,7 @@ describe('Workspace AI chat panel — session history interactions', () => {
 	it('defines stable session metadata formatters for deterministic labels', () => {
 		expectSourceToContain(ts, 'function formatSessionStatus(status: string): string')
 		expectSourceToContain(ts, ".split(/[-_]/)")
-		expectSourceToContain(ts, 'const minuteMs = 60_000')
+		expectSourceToContain(ts, 'const minuteMs = 60000')
 		expectSourceToContain(ts, 'return `${days} ${days === 1 ? \'day\' : \'days\'} ago`')
 		expectSourceToContain(ts, 'return `${weeks} ${weeks === 1 ? \'week\' : \'weeks\'} ago`')
 		expectSourceToContain(ts, 'formatSessionUpdatedAt')

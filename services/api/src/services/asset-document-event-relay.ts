@@ -23,7 +23,7 @@ type ActiveDocumentEventRelay = {
 }
 
 const activeRelays = new Map<string, ActiveDocumentEventRelay>()
-const REQUESTER_REFRESH_INTERVAL_MS = 5_000
+const REQUESTER_REFRESH_INTERVAL_MS = 5000
 
 export const ensureAssetDocumentEventRelay = ({
     coordinate,

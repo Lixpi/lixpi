@@ -229,7 +229,7 @@ describe('authorizePromptReferences', () => {
     })
 
     it('serializes a registered Artifact losslessly and expands its cited media once', async () => {
-        const longText = 'Complete beat. '.repeat(1_100)
+        const longText = 'Complete beat. '.repeat(1100)
         const artifactAsset = {
             ...imageAsset,
             assetId: 'timeline-1',
@@ -245,10 +245,10 @@ describe('authorizePromptReferences', () => {
         mocks.loadSnapshot.mockResolvedValue({
             doc: {
                 type: 'doc',
-                attrs: { schemaVersion: 'action-timeline-v1', durationMs: 1_000, precisionMs: 1_000 },
+                attrs: { schemaVersion: 'action-timeline-v1', durationMs: 1000, precisionMs: 1000 },
                 content: [{
                     type: 'actionTimelineSegment',
-                    attrs: { startMs: 0, endMs: 1_000 },
+                    attrs: { startMs: 0, endMs: 1000 },
                     content: [{ type: 'paragraph', content: [
                         { type: 'text', text: longText },
                         { type: 'prompt_reference', attrs: { referenceType: 'media', assetId: 'asset-1' } },

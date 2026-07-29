@@ -122,7 +122,7 @@ export class CapabilityCatalogClient {
     private readonly catalogItems = new Map<string, CapabilityCatalogItem>()
 
     constructor(private readonly config: CapabilityCatalogClientConfig) {
-        this.cacheTtlMs = config.cacheTtlMs ?? 30_000
+        this.cacheTtlMs = config.cacheTtlMs ?? 30000
     }
 
     async search(query: string, limit = 20): Promise<CapabilityCatalogPage> {

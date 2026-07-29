@@ -165,11 +165,11 @@ describe('CapabilityModelToolExecutor', () => {
             aiChatThreadId: 'conversation-1',
             provider: 'Anthropic',
             modelVersion: 'claude-haiku-4-5',
-            aiModelMetaInfo: { model: 'claude-haiku-4-5', contextWindow: 200_000, maxCompletionSize: 8_192 },
-            maxCompletionSize: 8_192,
+            aiModelMetaInfo: { model: 'claude-haiku-4-5', contextWindow: 200000, maxCompletionSize: 8192 },
+            maxCompletionSize: 8192,
             resolvedCapabilityPlan: plan,
             capabilityInputs: {
-                'discovered-tool': { durationMs: 15_000, precisionMs: 2_000 },
+                'discovered-tool': { durationMs: 15000, precisionMs: 2000 },
             },
             generationRun: {
                 requestKind: 'media-generation-matrix',
@@ -197,8 +197,8 @@ describe('CapabilityModelToolExecutor', () => {
         expect(use).toHaveBeenCalledWith(expect.objectContaining({
             arguments: expect.objectContaining({
                 prompt: 'Create a 15 second timeline with 2 second gaps',
-                durationMs: 15_000,
-                precisionMs: 2_000,
+                durationMs: 15000,
+                precisionMs: 2000,
             }),
             invocationGenerationRequestId: 'request-1',
             variant: expect.objectContaining({
@@ -219,8 +219,8 @@ describe('CapabilityModelToolExecutor', () => {
             assetId: 'timeline-asset',
             input: expect.objectContaining({
                 prompt: 'Create a 15 second timeline with 2 second gaps',
-                durationMs: 15_000,
-                precisionMs: 2_000,
+                durationMs: 15000,
+                precisionMs: 2000,
             }),
             generationRun: expect.objectContaining({ generationRequestId: 'request-1' }),
         })])

@@ -232,8 +232,8 @@ export type AssetRequesterContext = {
     organizationIds: string[]
 }
 
-export const ASSET_EDIT_LEASE_DURATION_MS = 30_000
-export const ASSET_EDIT_LEASE_RENEWAL_MS = 10_000
+export const ASSET_EDIT_LEASE_DURATION_MS = 30000
+export const ASSET_EDIT_LEASE_RENEWAL_MS = 10000
 
 export const ASSET_REQUIRED_RENDITIONS: Readonly<Record<AssetMediaKind, readonly AssetRenditionName[]>> = {
     image: ['original', 'preview', 'thumbnail'],
