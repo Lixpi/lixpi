@@ -4,11 +4,62 @@ import { CapabilityError } from '@lixpi/capability-system/backend'
 
 import type { ProviderState } from '../graph/state.ts'
 
+// House token heuristic. Deliberately coarse and deliberately generous: it sizes
+// context-window guards and pre-call spend estimates, so over-counting is safe
+// and under-counting is not. No tokenizer dependency by design.
+const TEXT_CHARACTERS_PER_TOKEN = 3
+const AUDIO_BYTES_PER_TOKEN = 24
+const IMAGE_INPUT_TOKENS = 1_600
+
+export type ProviderInputTokenEstimate = {
+    textTokens: number
+    mediaTokens: number
+    inputTokens: number
+}
+
 export type ProviderInputBudgetAssessment = {
     inputTokens: number
     mediaTokens: number
     reservedCompletionTokens: number
     contextWindow: number
+}
+
+// estimateInputTokens counts any request-shaped payload with the house heuristic.
+// Embedded binary — data URLs, Uint8Array, and base64 blobs carried alongside a
+// mime type — is swapped for a short placeholder before the text pass, so a
+// megabyte of base64 is charged once as media rather than twice as text.
+// This is the single implementation of the heuristic; every gate that needs a
+// token count calls it rather than re-deriving the ratios.
+export function estimateInputTokens(request: unknown): ProviderInputTokenEstimate {
+    let mediaTokens = 0
+    const serialized = JSON.stringify(request, (_key, value: unknown) => {
+        if (typeof value === 'string' && value.startsWith('data:')) {
+            const assessment = assessDataUrl(value)
+            if (!assessment) return value
+            mediaTokens += assessment.tokens
+            return `<${assessment.mimeType} input:${assessment.byteLength} bytes>`
+        }
+        if (value instanceof Uint8Array) {
+            mediaTokens += Math.ceil(value.byteLength / AUDIO_BYTES_PER_TOKEN)
+            return `<binary input:${value.byteLength} bytes>`
+        }
+        const record = asRecord(value)
+        const mediaType = typeof record?.mimeType === 'string'
+            ? record.mimeType
+            : typeof record?.media_type === 'string'
+                ? record.media_type
+                : undefined
+        if (mediaType && typeof record?.data === 'string' && isBase64(record.data)) {
+            const byteLength = base64ByteLength(record.data)
+            mediaTokens += mediaType.startsWith('audio/')
+                ? Math.ceil(byteLength / AUDIO_BYTES_PER_TOKEN)
+                : IMAGE_INPUT_TOKENS
+            return { ...record, data: `<${mediaType} input:${byteLength} bytes>` }
+        }
+        return value
+    }) ?? ''
+    const textTokens = Math.ceil(serialized.length / TEXT_CHARACTERS_PER_TOKEN)
+    return { textTokens, mediaTokens, inputTokens: textTokens + mediaTokens }
 }
 
 export function assessProviderInputBudget({
@@ -27,35 +78,7 @@ export function assessProviderInputBudget({
         throw contextError(state, 0, reservedCompletionTokens ?? 0, contextWindow)
     }
 
-    let mediaTokens = 0
-    const serialized = JSON.stringify(request, (_key, value: unknown) => {
-        if (typeof value === 'string' && value.startsWith('data:')) {
-            const assessment = assessDataUrl(value)
-            if (!assessment) return value
-            mediaTokens += assessment.tokens
-            return `<${assessment.mimeType} input:${assessment.byteLength} bytes>`
-        }
-        if (value instanceof Uint8Array) {
-            mediaTokens += Math.ceil(value.byteLength / 24)
-            return `<binary input:${value.byteLength} bytes>`
-        }
-        const record = asRecord(value)
-        const mediaType = typeof record?.mimeType === 'string'
-            ? record.mimeType
-            : typeof record?.media_type === 'string'
-                ? record.media_type
-                : undefined
-        if (mediaType && typeof record?.data === 'string' && isBase64(record.data)) {
-            const byteLength = base64ByteLength(record.data)
-            mediaTokens += mediaType.startsWith('audio/')
-                ? Math.ceil(byteLength / 24)
-                : 1_600
-            return { ...record, data: `<${mediaType} input:${byteLength} bytes>` }
-        }
-        return value
-    })
-    const textTokens = Math.ceil(serialized.length / 3)
-    const inputTokens = textTokens + mediaTokens
+    const { inputTokens, mediaTokens } = estimateInputTokens(request)
     if (inputTokens + reservedCompletionTokens > contextWindow) {
         throw contextError(state, inputTokens, reservedCompletionTokens, contextWindow)
     }
@@ -74,7 +97,9 @@ function assessDataUrl(value: string): {
     return {
         mimeType,
         byteLength,
-        tokens: mimeType.startsWith('audio/') ? Math.ceil(byteLength / 24) : 1_600,
+        tokens: mimeType.startsWith('audio/')
+            ? Math.ceil(byteLength / AUDIO_BYTES_PER_TOKEN)
+            : IMAGE_INPUT_TOKENS,
     }
 }
 

@@ -19,6 +19,7 @@ import { getContentAddressedBlob } from '../services/blob-storage.ts'
 import { settleGeneratedAssetOriginal } from '../services/generated-asset-storage.ts'
 import type { ImageRouter } from '../llm/tools/image-router.ts'
 import { callStructuredVlm } from '../llm/structured-vlm/structured-vlm-client.ts'
+import { estimateTokenUnits } from '../llm/usage/usage-estimator.ts'
 import type { ProviderState } from '../llm/graph/state.ts'
 import { readImageIntrinsicSize } from '../llm/graph/image-intrinsic-size.ts'
 import type {
@@ -35,6 +36,11 @@ type RuntimeOptions = {
     imageRouter: ImageRouter
     metrics?: MetricsClient
 }
+
+// Shared with the pre-call spend estimate below so it is sized from the exact
+// prompts the assessment sends; a drifting copy would silently mis-price the gate.
+const CHARACTER_SHEET_ASSESSMENT_SYSTEM_PROMPT = 'Inspect the supplied character sheet against the complete attached-template contract: landscape canvas, five aligned full-body views, five head views, expression and feature panels, hands/feet/props panels, costume/palette/material/detail panels, six pose panels, anatomical guides, framing, labels, and identity consistency. Report every check exactly through the schema.'
+const CHARACTER_SHEET_ASSESSMENT_USER_PROMPT = 'Validate this single character-sheet image.'
 
 export function createCharacterCreatorActionDependencies(
     options: RuntimeOptions,
@@ -112,7 +118,19 @@ export function createCharacterCreatorActionDependencies(
                 workflowId,
                 model: reasoningModel.modelVersion,
                 modality: 'tokens',
-                estimatedUnits: 0,
+                // Upper bound: the exact payload this assessment is about to send
+                // plus the model's completion ceiling. The backend multiplies this
+                // by the model's rate, so it must never under-count.
+                estimatedUnits: estimateTokenUnits({
+                    payload: {
+                        systemPrompt: CHARACTER_SHEET_ASSESSMENT_SYSTEM_PROMPT,
+                        userText: CHARACTER_SHEET_ASSESSMENT_USER_PROMPT,
+                        image,
+                        schema: CHARACTER_SHEET_ASSESSMENT_JSON_SCHEMA,
+                    },
+                    maxCompletionTokens: reasoningModel.maxCompletionSize,
+                    contextWindow: reasoningModel.contextWindow,
+                }),
                 currency: 'USD',
             })
             if (admission && !admission.approved) {
@@ -122,11 +140,11 @@ export function createCharacterCreatorActionDependencies(
             const result = await callStructuredVlm<CharacterSheetAssessment>({
                 provider: reasoningModel.provider as ProviderName,
                 modelVersion: reasoningModel.modelVersion,
-                systemPrompt: 'Inspect the supplied character sheet against the complete attached-template contract: landscape canvas, five aligned full-body views, five head views, expression and feature panels, hands/feet/props panels, costume/palette/material/detail panels, six pose panels, anatomical guides, framing, labels, and identity consistency. Report every check exactly through the schema.',
+                systemPrompt: CHARACTER_SHEET_ASSESSMENT_SYSTEM_PROMPT,
                 userMessages: [{
                     role: 'user',
                     content: [
-                        { type: 'input_text', text: 'Validate this single character-sheet image.' },
+                        { type: 'input_text', text: CHARACTER_SHEET_ASSESSMENT_USER_PROMPT },
                         { type: 'input_image', image_url: image, detail: 'high' },
                     ],
                 }],
