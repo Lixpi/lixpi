@@ -1643,11 +1643,21 @@ export type AiModel = {
             prompt: string
             completion: string
         }
-        // Video models (VEO) are billed per second of generated video.
+        // Video models are billed per second of generated video (VEO) or per
+        // vendor video token (Seedance). `price` is the flat rate and stays the
+        // fallback for models that publish one. `tiers` carries the per-resolution
+        // rates for vendors that price by output resolution AND by whether the
+        // input contained video, keyed by the same resolution values as
+        // videoResolutions. Consumers use a matching tier when there is one and
+        // fall back to `price` otherwise.
         video?: {
             measuringUnit: string
             pricePer: string
             price: string
+            tiers?: Record<string, {
+                withoutVideoInput: string
+                withVideoInput: string
+            }>
         }
     }
     createdAt: number

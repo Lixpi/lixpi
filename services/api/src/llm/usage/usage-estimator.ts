@@ -167,10 +167,11 @@ function estimateVideoMetering(state: ProviderState): CheckMetering {
     }
 
     // An extension run feeds a source clip back in, and the vendor counts input
-    // duration too. Its real length is not known here, so it is bounded by the
+    // duration too. The clip's measured length is read off its Asset when the
+    // request is resolved; when the Asset carries no duration, fall back to the
     // longest clip these models can produce, which is what generated it.
     const inputSeconds = state.videoSourceForExtension
-        ? Math.max(0, ...catalogDurationSeconds(model))
+        ? positiveNumber(state.videoSourceDurationSeconds) ?? Math.max(0, ...catalogDurationSeconds(model))
         : 0
     const estimate = estimateVideoTokens({
         resolutionTier: state.videoResolution,

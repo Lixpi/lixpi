@@ -691,16 +691,49 @@ export class AiModelsSync {
             }
         },
         // BytePlus ModelArk — Seedance 2.0 video generation. Static entries (no
-        // model-list API in the repo); token-metered per the Dreamina resource
-        // packs ($4.30/1M tokens, Fast $3.30/1M). videoMaxReferenceImages=9 lets
-        // the provider-aware cap (Phase 2) pass up to 9 references.
+        // model-list API in the repo); token-metered. videoMaxReferenceImages=9
+        // lets the provider-aware cap (Phase 2) pass up to 9 references.
+        //
+        // Rates are the vendor's published online-inference prices in USD per 1M
+        // tokens. Seedance prices by output resolution AND by whether the input
+        // contained video, so a single flat rate cannot express the tariff: at
+        // 480p/720p, text-to-video costs 7.0 while video-to-video costs 4.3, a 63%
+        // spread. `tiers` carries that; `price` remains the fallback for a
+        // resolution with no matching tier and is set to the model's HIGHEST
+        // published rate so an unmatched tier never under-charges.
+        //
+        // 4K is listed for Seedance 2.0 even though SEEDANCE_RESOLUTIONS does not
+        // offer it yet; a tier table ahead of the resolution list is harmless, and
+        // the resolution list is the stale one.
         BytePlus: {
             exact: {
                 'dreamina-seedance-2-0-260128': {
-                    pricing: { video: { measuringUnit: 'tokens', pricePer: '1000000', price: '4.30' } },
+                    pricing: {
+                        video: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            price: '7.7',
+                            tiers: {
+                                '480p': { withoutVideoInput: '7.0', withVideoInput: '4.3' },
+                                '720p': { withoutVideoInput: '7.0', withVideoInput: '4.3' },
+                                '1080p': { withoutVideoInput: '7.7', withVideoInput: '4.7' },
+                                '4k': { withoutVideoInput: '4.0', withVideoInput: '2.4' },
+                            },
+                        },
+                    },
                 },
                 'dreamina-seedance-2-0-fast-260128': {
-                    pricing: { video: { measuringUnit: 'tokens', pricePer: '1000000', price: '3.30' } },
+                    pricing: {
+                        video: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            price: '5.6',
+                            tiers: {
+                                '480p': { withoutVideoInput: '5.6', withVideoInput: '3.3' },
+                                '720p': { withoutVideoInput: '5.6', withVideoInput: '3.3' },
+                            },
+                        },
+                    },
                 },
             },
             prefix: [],
@@ -715,10 +748,12 @@ export class AiModelsSync {
                 videoResolutions: SEEDANCE_RESOLUTIONS,
                 videoDurations: SEEDANCE_DURATIONS,
                 videoMaxReferenceImages: 9,
+                // Fallback for an unrecognized BytePlus video model: the highest
+                // Seedance 2.0 rate, so an unknown model is never under-charged.
                 pricing: {
                     currency: 'USD',
                     resaleMargin: '1',
-                    video: { measuringUnit: 'tokens', pricePer: '1000000', price: '4.30' }
+                    video: { measuringUnit: 'tokens', pricePer: '1000000', price: '7.7' }
                 },
                 // Seedance is a ByteDance model — brand color plus the ByteDance brand icon.
                 color: '#1664FF',

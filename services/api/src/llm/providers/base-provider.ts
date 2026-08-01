@@ -369,6 +369,7 @@ export abstract class BaseProvider {
             videoFirstFrameImage: characterCreatorSelected ? undefined : requestData.videoFirstFrameImage,
             videoReferenceImages: characterCreatorSelected ? undefined : requestData.videoReferenceImages,
             videoSourceForExtension: characterCreatorSelected ? undefined : requestData.videoSourceForExtension,
+            videoSourceDurationSeconds: characterCreatorSelected ? undefined : requestData.videoSourceDurationSeconds,
             workflowId: requestData.workflowId,
             workflowSeq: requestData.workflowSeq,
             metricsOperationId: requestData.metricsOperationId,
@@ -982,6 +983,7 @@ export abstract class BaseProvider {
                 videoResolution: normalizedVideoResolution,
                 videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
                 videoSourceForExtension: state.mediaFanoutPlan?.videoSourceForExtension ?? state.videoSourceForExtension,
+                videoSourceDurationSeconds: state.videoSourceDurationSeconds,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
                 ...(replayPrompt ? { generatedVideoPrompt: replayPrompt.finalPrompt } : {}),
             }
@@ -1079,6 +1081,7 @@ export abstract class BaseProvider {
                 aspectRatio: state.videoUsage.aspectRatio,
                 totalTokens: state.videoUsage.totalTokens,
                 completionTokens: state.videoUsage.completionTokens,
+                inputVideoSeconds: state.videoSourceForExtension ? state.videoSourceDurationSeconds : undefined,
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })

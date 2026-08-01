@@ -654,6 +654,11 @@ export const aiInteractionSubjects = [
             const canonicalResponseSubject = getAiInteractionCanonicalResponseSubject(organizationId, aiChatThreadId)
             const sourceAssetId = mediaGenerationRequest?.videoOptions?.sourceForExtension ?? videoSourceForExtension
             let resolvedVideoSourceForExtension: string | undefined
+            // Token-metered video vendors charge for input duration too, and price
+            // a run with video input differently from one without, so the source
+            // clip's length is captured here where its Asset is already loaded.
+            // Downstream it is only ever a URI, which carries no duration.
+            let resolvedVideoSourceDurationSeconds: number | undefined
             if (sourceAssetId) {
                 const sourceAsset = await AssetModel.get({ assetId: sourceAssetId, requester })
                 if ('error' in sourceAsset
@@ -666,6 +671,10 @@ export const aiInteractionSubjects = [
                 const sourceBlob = await BlobModel.get({ organizationId: sourceAsset.organizationId, blobHash: sourceRendition.blobHash })
                 if (!sourceBlob) return rejectSend('VIDEO_SOURCE_BLOB_NOT_FOUND')
                 resolvedVideoSourceForExtension = `nats-obj://${sourceBlob.bucketName}/${sourceBlob.objectKey}`
+                const measuredDuration = sourceRendition.durationSeconds ?? sourceAsset.media.durationSeconds
+                if (typeof measuredDuration === 'number' && measuredDuration > 0) {
+                    resolvedVideoSourceDurationSeconds = measuredDuration
+                }
             }
             const leaseHolderId = `ai-run:${uuid()}`
             const lease = await AssetModel.acquireLease({ assetId: conversationAssetId, workspaceId, holderId: leaseHolderId, requester })
@@ -889,6 +898,9 @@ export const aiInteractionSubjects = [
                             videoSourceForExtension: characterCreatorRouting.isCharacterCreator
                                 ? undefined
                                 : resolvedVideoSourceForExtension,
+                            videoSourceDurationSeconds: characterCreatorRouting.isCharacterCreator
+                                ? undefined
+                                : resolvedVideoSourceDurationSeconds,
                             mediaGenerationRequest: {
                                 ...routedMediaGenerationRequest,
                                 ...(!characterCreatorRouting.isCharacterCreator && routedMediaGenerationRequest.videoOptions ? {
@@ -1021,6 +1033,9 @@ export const aiInteractionSubjects = [
                                 : undefined,
                             videoSourceForExtension: routedAiVideoModel
                                 ? resolvedVideoSourceForExtension
+                                : undefined,
+                            videoSourceDurationSeconds: routedAiVideoModel
+                                ? resolvedVideoSourceDurationSeconds
                                 : undefined,
                             capabilityReferences: characterCreatorRouting.capabilityReferences,
                             capabilityInputs,

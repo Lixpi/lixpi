@@ -186,6 +186,13 @@ export type ProviderState = {
     videoFirstFrameImage?: string | undefined
     videoReferenceImages?: string[] | undefined
     videoSourceForExtension?: string | undefined
+    // Duration of the source clip named by videoSourceForExtension, read off its
+    // Asset when the request is resolved. Vendors that meter video by token count
+    // charge for input duration as well as output, and they price a run with video
+    // input differently from one without, so both the spend gate and the usage
+    // confirm need this. Undefined when there is no source clip, or when the
+    // Asset carries no measured duration.
+    videoSourceDurationSeconds?: number | undefined
     generatedVideos?: string[] | undefined
     videoUsage?: VideoUsage | undefined
 
@@ -281,6 +288,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     videoFirstFrameImage: { reducer: keep },
     videoReferenceImages: { reducer: keep },
     videoSourceForExtension: { reducer: keep },
+    videoSourceDurationSeconds: { reducer: keep },
     generatedVideos: { reducer: keep },
     videoUsage: { reducer: keep },
     previousResponseId: { reducer: keep },
