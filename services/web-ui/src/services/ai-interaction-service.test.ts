@@ -132,6 +132,19 @@ describe('AiInteractionService', () => {
         expect(receiveSegmentMock).not.toHaveBeenCalled()
     })
 
+    it('accepts durable media request acknowledgments without reporting missing chat content', () => {
+        service.onChatMessageResponse({
+            generationRequestId: 'media-request-1',
+            status: 'submitted',
+            requestRevision: 1,
+            mediaEventSubject: 'ai.interaction.mediaGeneration.status.user.workspace.media-request-1',
+        })
+
+        expect(console.error).not.toHaveBeenCalled()
+        expect(onErrorMock).not.toHaveBeenCalled()
+        expect(receiveSegmentMock).not.toHaveBeenCalled()
+    })
+
     it('tracks provider per run key and falls back when events omit aiProvider', () => {
         service.updateRunProvider('reasoning-run', 'provider-A')
 

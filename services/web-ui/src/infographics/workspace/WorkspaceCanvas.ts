@@ -21,7 +21,7 @@ import {
     type VideoCanvasNode,
     type AudioCanvasNode,
     type CapabilityArtifactCanvasNode,
-    type UploadPlaceholderCanvasNode,
+    type OperationStatusCanvasNode,
     type BranchOriginCanvasNode,
     type BranchForkCanvasNode,
     type BranchForkLineagePlan,
@@ -43,6 +43,8 @@ import {
     type WorkspaceContextResolution,
     type WorkspaceContextSelection,
     type MediaGenerationRunMeta,
+    type MediaGenerationRequest,
+    type MediaGenerationRequestEvent,
     type ImageGenerationTraceReference,
     type ImageGenerationTrace,
     type VideoGenerationTrace,
@@ -120,7 +122,14 @@ import {
     type ReadOnlyAiChatThreadRendererInstance,
 } from '$src/components/proseMirror/readOnlyAiChatThreadRenderer.ts'
 import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
-import AiInteractionService, { stopAiChatMessageForThread } from '$src/services/ai-interaction-service.ts'
+import AiInteractionService, {
+    cancelMediaGenerationRequest,
+    getMediaGenerationRequest,
+    replayMediaGenerationRequest,
+    resolveMediaGenerationReference,
+    startMediaGenerationVerification,
+    stopAiChatMessageForThread,
+} from '$src/services/ai-interaction-service.ts'
 import {
     aiChatPanelCollapseIcon,
     aiChatPanelToggleHistoryIcon,
@@ -196,6 +205,11 @@ import {
 } from '$src/infographics/workspace/workspaceRenderStatePlan.ts'
 import { shouldPreserveLiveViewportForSameWorkspaceRender } from '$src/infographics/workspace/workspaceViewportStatePlan.ts'
 import { planWorkspaceRenderTransition } from '$src/infographics/workspace/workspaceRenderTransitionPlan.ts'
+import {
+    applyMediaGenerationRequestEventToOperationNodes,
+    applyMediaGenerationRequestToOperationNodes,
+    type MediaGenerationOperationRecoveryResult,
+} from '$src/infographics/workspace/mediaGenerationOperationRecovery.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { loadWorkspaceRouteData } from '$src/services/router-service.ts'
@@ -242,6 +256,10 @@ import { createPixiMediaLayer, type GeneratingMediaOutlineTarget, type PixiMedia
 import { createWorkspaceLoadingOutline, type WorkspaceLoadingOutlineInstance } from '$src/infographics/workspace/workspaceLoadingOutline.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 import { createMediaLibraryPanel } from '$src/infographics/workspace/mediaLibraryPanel.ts'
+import {
+    mountAssetSubjectIdentityControl,
+    type AssetSubjectIdentityControlInstance,
+} from '$src/infographics/workspace/assetSubjectIdentityControl.ts'
 import { createArtifactLibraryPanel } from '$src/infographics/workspace/artifactLibraryPanel.ts'
 import {
     capabilityArtifactFrontendRegistry,
@@ -769,7 +787,7 @@ type WorkspaceCanvasNodeInsertion =
     | Omit<VideoCanvasNode, 'position'>
     | Omit<AudioCanvasNode, 'position'>
     | Omit<CapabilityArtifactCanvasNode, 'position'>
-    | Omit<UploadPlaceholderCanvasNode, 'position'>
+    | Omit<OperationStatusCanvasNode, 'position'>
 
 type PendingGeneratedMediaTracker = {
     nodeId: string
@@ -1011,6 +1029,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const generatedMediaInfoRenderers: Map<string, ReadOnlyAiChatThreadRendererInstance> = new Map()
     const generatedMediaAssetEditors: Map<string, ProseMirrorEditor> = new Map()
     const generatedMediaAssetDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
+    const generatedMediaIdentityControls: Map<string, AssetSubjectIdentityControlInstance> = new Map()
     const branchMarkerReviewDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const RESET_GENERATED_MEDIA_CHROME_SYNC_KEY = '\u0000reset-generated-media-chrome'
@@ -1082,6 +1101,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const DETACHED_CANVAS_PREFLIGHT_REATTACH_WINDOW_MS = 30 * 60 * 1000
     const activeContextChipTrayEls: Set<HTMLDivElement> = new Set()
     const contextPreviewTilesByTray: Map<HTMLDivElement, Set<ContextPreviewTileInstance>> = new Map()
+    const operationStatusPreviewTiles = new Map<string, Set<ContextPreviewTileInstance>>()
+    const recoveredMediaOperationRequestIds = new Set<string>()
+    const mediaOperationLiveSubjects = new Set<string>()
+    const mediaOperationEventSequences = new Map<string, Set<number>>()
+    const mediaOperationRequestRevisions = new Map<string, number>()
     let contextPreviewRefreshVersion = 0
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
     let artifactLibraryPanelInstance: ReturnType<typeof createArtifactLibraryPanel> | null = null
@@ -2330,6 +2354,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     </div>
                 </div>
                 <div className="canvas-asset-storage-lineage">
+                    <div className="canvas-asset-detail-row canvas-asset-subject-identity-row">
+                        <span className="canvas-asset-diagnostics-label">Subject identity</span>
+                        <div className="canvas-asset-subject-identity-control"></div>
+                    </div>
                     <div className="canvas-asset-detail-row">
                         <span className="canvas-asset-diagnostics-label">Status</span>
                         <div className="canvas-asset-details-status"></div>
@@ -2349,6 +2377,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const renditionsEl = section.querySelector('.canvas-asset-renditions') as HTMLElement
         const lineageEl = section.querySelector('.canvas-asset-lineage') as HTMLElement
         const storageLabel = section.querySelector('.canvas-asset-storage-label') as HTMLElement
+        const identityControlMount = section.querySelector('.canvas-asset-subject-identity-control') as HTMLElement
+        const identityError = (message: string): void => {
+            statusEl.textContent = `Subject identity update failed: ${message}`
+            statusEl.classList.add('is-error')
+        }
+        generatedMediaIdentityControls.get(node.nodeId)?.destroy()
+        generatedMediaIdentityControls.set(node.nodeId, mountAssetSubjectIdentityControl({
+            host: identityControlMount,
+            asset,
+            onUpdated: updated => {
+                assetsStore.upsert(updated)
+                statusEl.classList.remove('is-error')
+                statusEl.textContent = `${updated.states.lifecycle} · ${updated.states.media} · ${updated.states.provenance}`
+            },
+            onError: identityError,
+        }))
         statusEl.textContent = `${asset.states.lifecycle} · ${asset.states.media} · ${asset.states.provenance}`
         if (node.type === 'capabilityArtifact') {
             storageLabel.textContent = 'Documents'
@@ -3830,6 +3874,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         generatedMediaAssetEditors.clear()
         for (const dropdown of generatedMediaAssetDropdowns.values()) dropdown.destroy()
         generatedMediaAssetDropdowns.clear()
+        for (const control of generatedMediaIdentityControls.values()) control.destroy()
+        generatedMediaIdentityControls.clear()
         for (const tile of generatedMediaInfoPreviewTiles) {
             tile.destroy()
         }
@@ -7143,6 +7189,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     // composer prompt (for example, "Use Action Timeline to generate video").
                     const promptText = extractPromptTextFromContentJSON(submittedData.contentJSON)
                         || getPromptTextFromMessages(messages)
+                    const promptParts = getBranchMarkerPromptParts({
+                        type: 'doc',
+                        content: submittedData.contentJSON as ProseMirrorJsonNode[],
+                    }, promptText)
                     const submittedExplicitContextNodeIds = Array.from(new Set([
                         ...explicitContextNodeIds,
                         ...submittedReferenceNodeIds,
@@ -7179,6 +7229,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         pendingGeneratedImagePlacements.set(threadId, {
                             referenceNodeIds: candidateNodeIds,
                             promptText,
+                            promptParts,
                             mediaBranchCandidateSnapshot,
                             createdAt: Date.now(),
                         })
@@ -7464,6 +7515,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         referenceNodeIds?: string[]
         lineagePlan?: MediaBranchLineagePlan
         promptText: string
+        promptParts?: BranchMarkerPromptPart[]
         mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
         mediaBranchResolution?: MediaBranchVlmResolution
         activeRunKeys?: Set<string>
@@ -7974,13 +8026,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         nodeEl.classList.add('workspace-branch-marker-screen-fixed')
 
-        // The docked pill hugs its single-line content (no trailing dead space):
-        // measure the intrinsic content width instead of a char-count heuristic, then
-        // cap it so its on-screen width never exceeds 80% of the prompt input field —
-        // beyond that the message truncates with an ellipsis.
+        // Screen-fixed sizing uses the same prompt parts as rendering. Intrinsic
+        // DOM measurement here included hidden scalar fallback text before submitted
+        // reference atoms were available, which produced a blank reserved tail.
         const composerBounds = (globalCanvasComposer?.element ?? globalCanvasComposerHostEl)?.getBoundingClientRect()
-        applyStyle(nodeEl, { width: 'max-content', height: `${dimensions.height}px` })
-        let dockedWidth = Math.max(getBranchMarkerScreenFixedMinWidth(), nodeEl.scrollWidth || dimensions.width)
+        let dockedWidth = Math.max(getBranchMarkerScreenFixedMinWidth(), dimensions.width)
         if (composerBounds && composerBounds.width > 0) {
             // Preflight markers are screen-space UI, not canvas chrome. Keep the
             // width cap independent from zoom; zoom only matters after promotion.
@@ -8407,14 +8457,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const pendingStates = getPendingBranchMarkerModelStates(data, promptText)
         const pendingNodes: BranchLineCanvasNode[] = []
-        const screenFixedDimensionsByIndex = pendingStates.map(() => getBranchMarkerScreenFixedDimensions(promptText))
+        const submittedPromptParts = pendingGeneratedImagePlacements.get(placementKey)?.promptParts
+        const submittedPromptText = submittedPromptParts?.length
+            ? getBranchMarkerPromptDisplayText(submittedPromptParts)
+            : promptText
+        const screenFixedDimensionsByIndex = pendingStates.map(() => getBranchMarkerScreenFixedDimensions(submittedPromptText))
         const stackOffsets = getPendingBranchMarkerStackOffsets(screenFixedDimensionsByIndex)
         const stackHeight = getPendingBranchMarkerStackHeight(screenFixedDimensionsByIndex)
         pendingStates.forEach((pendingState, index) => {
-            const dimensions = getBranchMarkerContentDimensions(promptText)
+            const dimensions = getBranchMarkerContentDimensions(submittedPromptText)
             // The node carries on-canvas dimensions, but its initial preflight pose is
             // projected from the compact screen-fixed size.
-            const screenFixedDimensions = screenFixedDimensionsByIndex[index] ?? getBranchMarkerScreenFixedDimensions(promptText)
+            const screenFixedDimensions = screenFixedDimensionsByIndex[index]
+                ?? getBranchMarkerScreenFixedDimensions(submittedPromptText)
             const projection = getPendingBranchMarkerScreenProjection(screenFixedDimensions, stackOffsets[index] ?? 0, stackHeight)
             const nodeId = `pending-branch-${uuidv4()}`
             const basePendingNode: BranchLineCanvasNode = {
@@ -10472,14 +10527,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             || ''
     }
 
+    function getBranchMarkerPromptPartsForNode(
+        node: BranchMarkerNode,
+        preview: BranchMarkerConversationPreview | null | undefined,
+    ): BranchMarkerPromptPart[] {
+        if (node.pendingState) {
+            for (const placementKey of getBranchMarkerPlacementKeys(node)) {
+                const submittedParts = pendingGeneratedImagePlacements.get(placementKey)?.promptParts
+                if (submittedParts?.length) return submittedParts
+            }
+        }
+        return getBranchMarkerPromptParts(
+            preview?.userMessage,
+            preview?.userText ?? getBranchMarkerPromptText(node),
+        )
+    }
+
     function getBranchMarkerVisiblePromptText(
         node: BranchMarkerNode,
         preview: BranchMarkerConversationPreview | null,
     ): string {
-        return getBranchMarkerPromptDisplayText(getBranchMarkerPromptParts(
-            preview?.userMessage,
-            preview?.userText ?? getBranchMarkerPromptText(node),
-        ))
+        return getBranchMarkerPromptDisplayText(getBranchMarkerPromptPartsForNode(node, preview))
     }
 
     function resizeBranchMarkerNodeFromProseMirror(node: BranchMarkerNode): BranchMarkerNode {
@@ -11578,18 +11646,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         else if (node.type === 'capabilityArtifact') appendCapabilityArtifactNodeToDOM(node)
     }
 
-    function syncExistingUploadPlaceholderNodeToDOM(node: UploadPlaceholderCanvasNode): void {
+    function syncExistingOperationStatusNodeToDOM(node: OperationStatusCanvasNode): void {
         const existingNodeEl = viewportEl.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
         if (!existingNodeEl) return
 
-        const nodeEl = createUploadPlaceholderNode(node)
+        const nodeEl = createOperationStatusNode(node)
         existingNodeEl.replaceWith(nodeEl)
         connectionManager?.registerNodeElement(node.nodeId, nodeEl as HTMLDivElement)
         syncConnectionsAfterManualNodeAppend()
     }
 
     function prepareUploadReplacementNode(
-        placeholderNode: UploadPlaceholderCanvasNode,
+        placeholderNode: OperationStatusCanvasNode,
         node: WorkspaceCanvasNodeInsertion,
     ): CanvasNode {
         const position = {
@@ -11606,8 +11674,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         commit = true,
     ): CanvasState | null {
         if (!currentCanvasState) return null
-        const placeholderNode = currentCanvasState.nodes.find((candidate: CanvasNode): candidate is UploadPlaceholderCanvasNode =>
-            candidate.type === 'uploadPlaceholder' && candidate.nodeId === placeholderNodeId
+        const placeholderNode = currentCanvasState.nodes.find((candidate: CanvasNode): candidate is OperationStatusCanvasNode =>
+            candidate.type === 'operationStatus' && candidate.operation === 'upload' && candidate.nodeId === placeholderNodeId
         )
         if (!placeholderNode) return null
 
@@ -11639,9 +11707,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function markUploadPlaceholderFailedInternal(placeholderNodeId: string, message: string): CanvasState | null {
         if (!currentCanvasState) return null
-        let failedNode: UploadPlaceholderCanvasNode | null = null
+        let failedNode: OperationStatusCanvasNode | null = null
         const nodes = currentCanvasState.nodes.map((node: CanvasNode): CanvasNode => {
-            if (node.type !== 'uploadPlaceholder' || node.nodeId !== placeholderNodeId) return node
+            if (node.type !== 'operationStatus' || node.operation !== 'upload' || node.nodeId !== placeholderNodeId) return node
             failedNode = {
                 ...node,
                 status: 'failed',
@@ -11654,7 +11722,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const nextState: CanvasState = { ...currentCanvasState, nodes }
         commitCanvasStatePreservingEditors(nextState)
-        syncExistingUploadPlaceholderNodeToDOM(failedNode)
+        syncExistingOperationStatusNodeToDOM(failedNode)
 
         return nextState
     }
@@ -12025,7 +12093,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     setAiGeneratedImageCallbacks({
         onAddToCanvas: async (data) => {
             if (!data.assetId) return
-            await loadWorkspaceRouteData(workspaceId)
+            const refreshed = await assetService.refresh(data.assetId, workspaceId)
+            if ('error' in refreshed) throw new Error(`GENERATED_ASSET_REFRESH_FAILED:${refreshed.error}`)
         },
 
         onMediaBranchResolvedToCanvas: ({ threadId, resolution, generationRun }) => {
@@ -13857,12 +13926,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
-    // Dismiss a (typically failed) upload placeholder: drop it from canvas state
-    // + DOM so a failed upload can be cleared instead of lingering forever.
-    function removeUploadPlaceholderInternal(placeholderNodeId: string): CanvasState | null {
+    function removeOperationStatusNodeInternal(placeholderNodeId: string, operation?: OperationStatusCanvasNode['operation']): CanvasState | null {
         if (!currentCanvasState) return null
         const exists = currentCanvasState.nodes.some((candidate: CanvasNode): boolean =>
-            candidate.type === 'uploadPlaceholder' && candidate.nodeId === placeholderNodeId
+            candidate.type === 'operationStatus'
+            && (!operation || candidate.operation === operation)
+            && candidate.nodeId === placeholderNodeId
         )
         if (!exists) return null
 
@@ -13875,11 +13944,96 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         commitCanvasStatePreservingEditors(nextState)
         viewportEl.querySelector(`[data-node-id="${placeholderNodeId}"]`)?.remove()
         selectedNodeIds.delete(placeholderNodeId)
+        for (const preview of operationStatusPreviewTiles.get(placeholderNodeId) ?? []) preview.destroy()
+        operationStatusPreviewTiles.delete(placeholderNodeId)
 
         return nextState
     }
 
-    function createUploadPlaceholderNode(node: UploadPlaceholderCanvasNode): HTMLElement {
+    function applyMediaOperationRecoveryResult(result: MediaGenerationOperationRecoveryResult): void {
+        if (!result.changed || !currentCanvasState) return
+        commitTransientCanvasStatePreservingEditors(result.state)
+
+        for (const nodeId of result.removedNodeIds) {
+            viewportEl.querySelector(`[data-node-id="${nodeId}"]`)?.remove()
+            selectedNodeIds.delete(nodeId)
+            for (const preview of operationStatusPreviewTiles.get(nodeId) ?? []) preview.destroy()
+            operationStatusPreviewTiles.delete(nodeId)
+        }
+        for (const nodeId of result.updatedNodeIds) {
+            const updatedNode = currentCanvasState.nodes.find((candidate): candidate is OperationStatusCanvasNode => (
+                candidate.type === 'operationStatus' && candidate.nodeId === nodeId
+            ))
+            if (updatedNode) syncExistingOperationStatusNodeToDOM(updatedNode)
+        }
+        syncConnectionsAfterManualNodeAppend()
+    }
+
+    function applyRecoveredMediaGenerationRequest(request: MediaGenerationRequest): void {
+        const knownRevision = mediaOperationRequestRevisions.get(request.generationRequestId) ?? 0
+        if (request.revision < knownRevision) return
+        mediaOperationRequestRevisions.set(request.generationRequestId, request.revision)
+        if (!currentCanvasState) return
+        applyMediaOperationRecoveryResult(
+            applyMediaGenerationRequestToOperationNodes(currentCanvasState, request),
+        )
+    }
+
+    function applyRecoveredMediaGenerationRequestEvent(event: MediaGenerationRequestEvent): void {
+        const knownRevision = mediaOperationRequestRevisions.get(event.generationRequestId) ?? 0
+        if (event.requestRevision < knownRevision) return
+        mediaOperationRequestRevisions.set(event.generationRequestId, event.requestRevision)
+        if (!currentCanvasState) return
+        applyMediaOperationRecoveryResult(
+            applyMediaGenerationRequestEventToOperationNodes(currentCanvasState, event),
+        )
+    }
+
+    function createOperationStatusNode(node: OperationStatusCanvasNode): HTMLElement {
+        for (const preview of operationStatusPreviewTiles.get(node.nodeId) ?? []) preview.destroy()
+        operationStatusPreviewTiles.delete(node.nodeId)
+        if (node.operation === 'media-generation'
+            && node.status !== 'failed'
+            && node.generationRequestId
+            && !recoveredMediaOperationRequestIds.has(node.generationRequestId)) {
+            recoveredMediaOperationRequestIds.add(node.generationRequestId)
+            void getMediaGenerationRequest({
+                generationRequestId: node.generationRequestId,
+                workspaceId,
+                includeCheckpoint: false,
+            }).then(result => {
+                applyRecoveredMediaGenerationRequest(result.request)
+                const seenSequences = mediaOperationEventSequences.get(node.generationRequestId!) ?? new Set<number>()
+                mediaOperationEventSequences.set(node.generationRequestId!, seenSequences)
+                if (!mediaOperationLiveSubjects.has(result.liveSubject)) {
+                    mediaOperationLiveSubjects.add(result.liveSubject)
+                    servicesStore.getData('nats')!.subscribe(result.liveSubject, (envelope: {
+                        event?: MediaGenerationRequestEvent
+                        streamSequence?: number
+                    }) => {
+                        if (typeof envelope?.streamSequence === 'number') {
+                            if (seenSequences.has(envelope.streamSequence)) return
+                            seenSequences.add(envelope.streamSequence)
+                        }
+                        if (envelope.event) applyRecoveredMediaGenerationRequestEvent(envelope.event)
+                    })
+                }
+                return replayMediaGenerationRequest({
+                    generationRequestId: node.generationRequestId!,
+                    workspaceId,
+                }).then(replay => {
+                    applyRecoveredMediaGenerationRequest(replay.request)
+                    for (const envelope of replay.replay.events) {
+                        if (seenSequences.has(envelope.streamSequence)) continue
+                        seenSequences.add(envelope.streamSequence)
+                        applyRecoveredMediaGenerationRequestEvent(envelope.event)
+                    }
+                })
+            }).catch(error => {
+                recoveredMediaOperationRequestIds.delete(node.generationRequestId!)
+                console.error('[CANVAS] Media operation recovery failed:', error)
+            })
+        }
         const { nodeEl, dragOverlay } = createBaseNodeElement(
             node,
             `workspace-upload-placeholder-node is-${node.status}`,
@@ -13888,27 +14042,200 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         dragOverlay.className = 'upload-placeholder-drag-overlay nopan'
 
-        const label = node.status === 'failed' ? 'Conversion failed' : 'Converting upload'
+        const label = node.status === 'failed'
+            ? `${node.operation === 'upload' ? 'Conversion' : 'Generation'} failed`
+            : node.status === 'action-required'
+                ? 'Action required'
+                : node.operation === 'upload' ? 'Converting upload' : 'Generating media'
         const message = node.message ?? (node.status === 'failed'
             ? 'The file could not be converted to a supported format.'
             : 'Creating a supported copy before adding it to the canvas.')
         const content = html`
             <div className="workspace-upload-placeholder-content">
                 <span className="workspace-upload-placeholder-status">${label}</span>
-                <span className="workspace-upload-placeholder-name">${node.fileName}</span>
+                <span className="workspace-upload-placeholder-name">${node.title}</span>
                 <span className="workspace-upload-placeholder-message">${message}</span>
             </div>
         ` as HTMLDivElement
         nodeEl.appendChild(content)
 
-        if (node.status === 'converting') {
+        if (node.status === 'in-progress') {
             const spinner = html`<span className="workspace-upload-placeholder-loading-spinner ai-response-loading-spinner" aria-hidden="true"></span>` as HTMLSpanElement
             nodeEl.appendChild(spinner)
         }
 
+        const actions = html`<div className="workspace-media-operation-actions nopan"></div>` as HTMLDivElement
+        const setActionError = (error: unknown): void => {
+            const element = content.querySelector('.workspace-upload-placeholder-message')
+            if (element) element.textContent = error instanceof Error ? error.message : String(error)
+        }
+        const addActionButton = (label: string, action: () => Promise<void>): HTMLButtonElement => {
+            const button = html`<button type="button" className="workspace-media-operation-action nopan">${label}</button>` as HTMLButtonElement
+            button.addEventListener('pointerdown', event => event.stopPropagation())
+            button.addEventListener('click', event => {
+                event.stopPropagation()
+                button.disabled = true
+                void action().catch(setActionError).finally(() => { button.disabled = false })
+            })
+            actions.appendChild(button)
+            return button
+        }
+
+        if (node.operation === 'media-generation'
+            && node.status === 'action-required'
+            && node.generationRequestId
+            && node.requestRevision !== undefined) {
+            if (node.candidateAssetIds?.length && node.unresolvedBindingId) {
+                const previews = new Set<ContextPreviewTileInstance>()
+                for (const assetId of node.candidateAssetIds) {
+                    const asset = assetsStore.get(assetId)
+                    const candidateNode = currentCanvasState?.nodes.find(candidate =>
+                        'assetId' in candidate && candidate.assetId === assetId)
+                    const choose = async (): Promise<void> => {
+                        await resolveMediaGenerationReference({
+                            generationRequestId: node.generationRequestId!,
+                            workspaceId,
+                            requestRevision: node.requestRevision!,
+                            bindingId: node.unresolvedBindingId!,
+                            assetId,
+                        })
+                    }
+                    if (candidateNode) {
+                        const trigger = html`<button type="button" className="workspace-media-operation-candidate nopan">${asset?.title ?? 'Attached Asset'}</button>` as HTMLButtonElement
+                        const preview = createContextPreviewTile({
+                            node: candidateNode,
+                            getNode: () => currentCanvasState?.nodes.find(candidate => candidate.nodeId === candidateNode.nodeId),
+                            environment: getContextPreviewEnvironment(),
+                            preferredPlacement: 'top',
+                            inlinePopover: true,
+                            triggerContent: trigger,
+                            titleOverride: asset?.title,
+                        })
+                        preview.dom.addEventListener('click', event => {
+                            event.stopPropagation()
+                            void choose().catch(setActionError)
+                        })
+                        actions.appendChild(preview.dom)
+                        previews.add(preview)
+                    } else {
+                        addActionButton(asset?.title ?? 'Attached Asset', choose)
+                    }
+                }
+                operationStatusPreviewTiles.set(node.nodeId, previews)
+            }
+            if (node.verificationAssetId && node.generationRun !== undefined) {
+                addActionButton('Verify with provider', async () => {
+                    const session = await startMediaGenerationVerification({
+                        generationRequestId: node.generationRequestId!,
+                        workspaceId,
+                        requestRevision: node.requestRevision!,
+                        generationRun: node.generationRun!,
+                        assetId: node.verificationAssetId!,
+                    })
+                    window.open(session.verificationUrl, '_blank', 'noopener,noreferrer')
+                })
+            }
+            addActionButton('Cancel', async () => {
+                await cancelMediaGenerationRequest({
+                    generationRequestId: node.generationRequestId!,
+                    workspaceId,
+                    requestRevision: node.requestRevision!,
+                })
+                removeOperationStatusNodeInternal(node.nodeId, 'media-generation')
+            })
+        }
+
+        if (node.operation === 'media-generation'
+            && node.status === 'failed'
+            && node.generationRequestId
+            && node.requestRevision !== undefined) {
+            if (node.problem) {
+                const details = html`
+                    <details className="workspace-media-operation-problem nopan">
+                        <summary>Provider details</summary>
+                        <span className="workspace-media-operation-provider-reason"></span>
+                        <code className="workspace-media-operation-provider-code"></code>
+                        <code className="workspace-media-operation-support-code"></code>
+                    </details>
+                ` as HTMLDetailsElement
+                ;(details.querySelector('.workspace-media-operation-provider-reason') as HTMLElement).textContent =
+                    node.problem.providerReason ?? node.problem.detail
+                ;(details.querySelector('.workspace-media-operation-provider-code') as HTMLElement).textContent =
+                    node.problem.providerCode ?? ''
+                ;(details.querySelector('.workspace-media-operation-support-code') as HTMLElement).textContent =
+                    node.problem.supportCode
+                actions.appendChild(details)
+            }
+            addActionButton('Edit request', async () => {
+                const response = await getMediaGenerationRequest({
+                    generationRequestId: node.generationRequestId!,
+                    workspaceId,
+                })
+                if (!response.checkpoint) throw new Error('Media request checkpoint is no longer available.')
+                const promptDocument = response.checkpoint.promptDocument as { content?: unknown[] }
+                const selection = response.checkpoint.modelSelection as {
+                    reasoningModelIds?: string[]
+                    mediaModelIds?: string[]
+                }
+                const generation = (response.checkpoint.configuration as {
+                    generation?: AiInteractionMediaGenerationRequest
+                }).generation
+                const restoredContextNodeIds = response.checkpoint.selectedReferences.flatMap(reference => {
+                    const explicitNode = reference.nodeId
+                        ? currentCanvasState?.nodes.find(candidate => candidate.nodeId === reference.nodeId)
+                        : undefined
+                    const assetNode = currentCanvasState?.nodes.find(candidate => (
+                        'assetId' in candidate && candidate.assetId === reference.assetId
+                    ))
+                    const nodeId = explicitNode?.nodeId ?? assetNode?.nodeId
+                    return nodeId ? [nodeId] : []
+                })
+                addContextChips(restoredContextNodeIds)
+                const imageModelIds = generation?.imageModelIds ?? selection.mediaModelIds?.filter(modelId =>
+                    !modelId.toLocaleLowerCase().includes('video')) ?? []
+                const videoModelIds = generation?.videoModelIds ?? selection.mediaModelIds?.filter(modelId =>
+                    modelId.toLocaleLowerCase().includes('video')) ?? []
+                globalCanvasComposer?.restoreContent({
+                    type: 'doc',
+                    content: [{
+                        type: 'aiPromptInput',
+                        attrs: {
+                            aiReasoningModels: serializeAiModelSelectionAttr(selection.reasoningModelIds ?? []),
+                            useMultipleReasoningModels: (selection.reasoningModelIds?.length ?? 0) > 1,
+                            useMultipleImageModels: imageModelIds.length > 1,
+                            useMultipleVideoModels: videoModelIds.length > 1,
+                            aiImageModels: serializeAiModelSelectionAttr(imageModelIds),
+                            imageGenerationSize: generation?.imageOptions?.imageSize ?? 'auto',
+                            imageGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(
+                                generation?.imageOptions?.configGroups ?? [],
+                            ),
+                            aiVideoModels: serializeAiModelSelectionAttr(videoModelIds),
+                            videoAspectRatio: generation?.videoOptions?.aspectRatio ?? '',
+                            videoResolution: generation?.videoOptions?.resolution ?? '',
+                            videoDuration: generation?.videoOptions?.duration ?? '',
+                            videoGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(
+                                generation?.videoOptions?.configGroups ?? [],
+                            ),
+                            capabilityInputs: '',
+                        },
+                        content: promptDocument.content ?? [{ type: 'paragraph' }],
+                    }],
+                })
+            })
+            addActionButton('Dismiss', async () => {
+                await cancelMediaGenerationRequest({
+                    generationRequestId: node.generationRequestId!,
+                    workspaceId,
+                    requestRevision: node.requestRevision!,
+                })
+                removeOperationStatusNodeInternal(node.nodeId, 'media-generation')
+            })
+        }
+        if (actions.childElementCount > 0) content.appendChild(actions)
+
         // Failed uploads get a dismiss (×) button so they can be cleared. It sits
         // above the transparent drag overlay (z-index) so its click isn't swallowed.
-        if (node.status === 'failed') {
+        if (node.status === 'failed' && node.operation === 'upload') {
             const dismissBtn = document.createElement('button')
             dismissBtn.type = 'button'
             dismissBtn.className = 'workspace-upload-placeholder-dismiss nopan'
@@ -13917,7 +14244,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             dismissBtn.addEventListener('pointerdown', (e: Event) => { e.stopPropagation() })
             dismissBtn.addEventListener('click', (e: Event) => {
                 e.stopPropagation()
-                removeUploadPlaceholderInternal(node.nodeId)
+                removeOperationStatusNodeInternal(node.nodeId, node.operation)
             })
             nodeEl.appendChild(dismissBtn)
         }
@@ -14361,10 +14688,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         label: string
     }): HTMLDivElement {
         const threadPreview = getBranchMarkerConversationPreview(node)
-        const promptParts = getBranchMarkerPromptParts(
-            threadPreview?.userMessage,
-            threadPreview?.userText ?? getBranchMarkerPromptText(node),
-        )
+        const promptParts = getBranchMarkerPromptPartsForNode(node, threadPreview)
         const promptText = getBranchMarkerPromptDisplayText(promptParts)
         const promptPreview = getBranchMarkerPromptPreview(promptText)
         const promptPreviewParts = truncateBranchMarkerPromptParts(
@@ -14825,8 +15149,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodeEl = createAudioNode(node as AudioCanvasNode)
             } else if (node.type === 'capabilityArtifact') {
                 nodeEl = createCapabilityArtifactNode(node as CapabilityArtifactCanvasNode)
-            } else if (node.type === 'uploadPlaceholder') {
-                nodeEl = createUploadPlaceholderNode(node as UploadPlaceholderCanvasNode)
+            } else if (node.type === 'operationStatus') {
+                nodeEl = createOperationStatusNode(node as OperationStatusCanvasNode)
             } else if (node.type === 'branchOrigin') {
                 if (shouldDeferPlannedBranchMarkerViewportRender(node as BranchOriginCanvasNode)) continue
                 nodeEl = createBranchOriginNode(node as BranchOriginCanvasNode)
@@ -15710,6 +16034,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             destroyActiveAiChatPanel(true, activeAiChatPanelThreadId ?? activeAiChatThreadId, false, true)
             destroyContextPreviewTiles()
+            for (const previews of operationStatusPreviewTiles.values()) {
+                for (const preview of previews) preview.destroy()
+            }
+            operationStatusPreviewTiles.clear()
+            for (const subject of mediaOperationLiveSubjects) {
+                servicesStore.getData('nats')?.getSubscriptions([subject])
+                    .forEach((subscription: { unsubscribe: () => void }) => subscription.unsubscribe())
+            }
+            mediaOperationLiveSubjects.clear()
+            mediaOperationEventSequences.clear()
+            mediaOperationRequestRevisions.clear()
             activeContextChipTrayEls.clear()
 
             promptInputController.destroy()

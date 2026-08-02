@@ -6,6 +6,7 @@ import {
     type AssetPrimaryCategory,
     type AssetScope,
     type GeneratedOutputReviewRequest,
+    type SubjectIdentityClassification,
 } from '@lixpi/constants'
 import { DOCUMENT_TYPE, HeadlessProseMirrorEngine, PROSEMIRROR_SCHEMA_VERSION } from '@lixpi/prosemirror'
 
@@ -23,9 +24,11 @@ import Organization from '../../models/organization.ts'
 import Workspace from '../../models/workspace.ts'
 import GeneratedOutputReviewService from '../../services/generated-output-review-service.ts'
 import { createAssetRequesterForWorkspaceUser } from '../../services/workspace-reference-scope.ts'
+import AssetSubjectIdentityService from '../../services/asset-subject-identity-service.ts'
 
 const { ASSET_SUBJECTS } = NATS_SUBJECTS
 const generatedOutputReviewService = new GeneratedOutputReviewService()
+const assetSubjectIdentityService = new AssetSubjectIdentityService()
 
 export const getRequesterContext = async (userId: string) => {
     const requester = await getAssetRequesterContext(userId)
@@ -246,6 +249,21 @@ export const assetSubjects = [
             })
             return result
         },
+    },
+    {
+        subject: ASSET_SUBJECTS.SUBJECT_IDENTITY_ATTEST,
+        type: 'reply',
+        payloadType: 'json',
+        permissions: {
+            pub: { allow: [ASSET_SUBJECTS.SUBJECT_IDENTITY_ATTEST] },
+            sub: { allow: [] },
+        },
+        handler: async (data: any) => await assetSubjectIdentityService.attest({
+            assetId: data.assetId,
+            assetRevision: data.assetRevision,
+            classification: data.classification as SubjectIdentityClassification,
+            requester: await getRequesterContext(data.user.userId),
+        }),
     },
     {
         subject: ASSET_SUBJECTS.CHANGE_SCOPE,

@@ -3,8 +3,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
+import { PROVIDER_NAMES, type ProviderName } from '@lixpi/constants'
 
 import { ProviderRegistry } from './provider-registry.ts'
+import {
+    compileProviderSafeIntent,
+    normalizeProviderProblem,
+    type MediaProviderDefinition,
+} from './media-provider-definition.ts'
 
 let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
 let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
@@ -46,6 +52,43 @@ const createFakeProvider = (resolveToken?: { release: () => void }) => {
     return { process, stop, providerName, ctor }
 }
 
+const createDefinition = (provider: ProviderName, constructor: any): MediaProviderDefinition => ({
+    provider,
+    constructor,
+    mediaCapabilities: provider === 'Anthropic' ? [] : ['image'],
+    referenceRules: {
+        aliases: 'positional-reference',
+        supportedInputs: ['text', 'image', 'video'],
+        compile: compileProviderSafeIntent,
+    },
+    moderation: {
+        policy: provider === 'OpenAI' ? 'low'
+            : provider === 'Google' ? 'input-mode-least-restrictive' : 'fixed-provider-policy',
+        settings: (_modelId, inputMode) => provider === 'OpenAI'
+            ? { moderation: 'low' }
+            : provider === 'Google' ? {
+                personGeneration: inputMode === 'image-conditioned' ? 'allow_adult' : 'allow_all',
+            } : {},
+        automaticRetry: 'never',
+        costOnFilter: 'not-documented',
+    },
+    normalizeProblem: (error, context) => normalizeProviderProblem({ provider, error, context }),
+    verification: provider === 'BytePlus'
+        ? { strategy: 'provider-hosted-session', derivativeReuse: 'documented-lineage' }
+        : { strategy: 'unsupported', derivativeReuse: 'not-allowed' },
+    retentionNotes: 'Test retention policy.',
+    sensitiveDataNotes: 'Test sensitive-data policy.',
+    documentationUrls: ['https://docs.anthropic.com/'],
+    reviewedAt: '2026-07-28',
+    profileVersion: `${provider.toLowerCase()}-test-v1`,
+})
+
+const createDefinitions = (anthropicConstructor: any): Record<ProviderName, MediaProviderDefinition> =>
+    Object.fromEntries(PROVIDER_NAMES.map(provider => [
+        provider,
+        createDefinition(provider, provider === 'Anthropic' ? anthropicConstructor : createFakeProvider().ctor),
+    ])) as Record<ProviderName, MediaProviderDefinition>
+
 const createState = () => ({
     messages: [{ role: 'user', content: 'hi' }],
     aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
@@ -64,7 +107,7 @@ describe('ProviderRegistry', () => {
     it('creates and reuses providers by instance key, but refuses unknown providers', async () => {
         const { natsService } = makeDeps() as any
         const { ctor } = createFakeProvider()
-        const registry = new ProviderRegistry(natsService, { Anthropic: ctor as any })
+        const registry = new ProviderRegistry(natsService, createDefinitions(ctor))
         const create = ctor
 
         const first = registry.getOrCreate('ws-1:thread-1', 'Anthropic')
@@ -72,8 +115,8 @@ describe('ProviderRegistry', () => {
 
         expect(first).toBe(second)
         expect(create).toHaveBeenCalledOnce()
-        expect(() => registry.getOrCreate('ws-1:thread-2', 'Google' as any))
-            .toThrow('Unsupported provider: Google')
+        expect(() => registry.getOrCreate('ws-1:thread-2', 'Unknown' as any))
+            .toThrow('Unsupported provider: Unknown')
     })
 
     it('ignores duplicate process requests while one is in flight', async () => {
@@ -81,7 +124,7 @@ describe('ProviderRegistry', () => {
         const { process, stop, ctor } = createFakeProvider(resolver)
         const create = ctor
         const deps = makeDeps()
-        const registry = new ProviderRegistry(deps.natsService, { Anthropic: create as any })
+        const registry = new ProviderRegistry(deps.natsService, createDefinitions(create))
 
         const first = registry.process('ws-1:thread-1', 'Anthropic', createState())
         const second = registry.process('ws-1:thread-1', 'Anthropic', createState())
@@ -101,7 +144,7 @@ describe('ProviderRegistry', () => {
         const { process, stop, ctor } = createFakeProvider(resolver)
         const create = ctor
         const deps = makeDeps()
-        const registry = new ProviderRegistry(deps.natsService, { Anthropic: create as any })
+        const registry = new ProviderRegistry(deps.natsService, createDefinitions(create))
 
         const processPromise = registry.process('ws-1:thread-1', 'Anthropic', createState(), {
             requestGroupKey: 'ws-1:thread-1:group-1',
@@ -129,7 +172,7 @@ describe('ProviderRegistry', () => {
                 return { process: providerB.process, stop: providerB.stop, providerName: providerB.providerName }
             })
         const deps = makeDeps()
-        const registry = new ProviderRegistry(deps.natsService, { Anthropic: create as any })
+        const registry = new ProviderRegistry(deps.natsService, createDefinitions(create))
 
         registry.createTransient('ws:thread:image', 'Anthropic')
         registry.createTransient('ws:thread:video', 'Anthropic')
@@ -145,7 +188,7 @@ describe('ProviderRegistry', () => {
         const resolver = { release: () => undefined as void }
         const { stop, ctor } = createFakeProvider(resolver)
         const deps = makeDeps()
-        const registry = new ProviderRegistry(deps.natsService, { Anthropic: ctor as any })
+        const registry = new ProviderRegistry(deps.natsService, createDefinitions(ctor))
 
         registry.createTransient('ws-1:thread-1:reasoning:alpha', 'Anthropic')
         await registry.stopGroupsWithPrefix('ws-1:thread-1')
@@ -155,8 +198,16 @@ describe('ProviderRegistry', () => {
 
     it('does not stop unknown groups, and no-op is safe', async () => {
         const deps = makeDeps()
-        const registry = new ProviderRegistry(deps.natsService, {})
+        const registry = new ProviderRegistry(deps.natsService, createDefinitions(createFakeProvider().ctor))
         await expect(registry.stopGroup('missing-group')).resolves.toBeUndefined()
         await expect(registry.stopGroupsWithPrefix('never-present')).resolves.toBeUndefined()
+    })
+
+    it('rejects legacy constructor-only provider registration', () => {
+        const { ctor } = createFakeProvider()
+        const definitions = createDefinitions(ctor) as any
+        definitions.Anthropic = ctor
+        expect(() => new ProviderRegistry(makeDeps().natsService, definitions))
+            .toThrow('MEDIA_PROVIDER_CONSTRUCTOR_REQUIRED')
     })
 })

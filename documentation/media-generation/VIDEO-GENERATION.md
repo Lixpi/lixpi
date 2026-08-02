@@ -155,6 +155,8 @@ The typed REST client lives in [`byteplus-video-types.ts`](../../services/api/sr
 
 Inputs are base64 data URLs (the resolver already supplies them); private `nats-obj://` URIs are refused before submit so they never reach ModelArk.
 
+For `self` or `authorized-real-person` references, the router first requires a valid BytePlus provider Asset handle in the configured account scope. Missing/expired/revoked handles pause the durable request before submit and expose **Verify with provider** in the planned canvas slot. The provider-hosted H5 flow sends liveness/identity media directly to BytePlus; Lixpi stores only signed-session hashes and the resulting scoped handle. Seedance then receives `asset://<subjectHandle>`. See [Media Reference Identity and Provider Moderation](./MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md#byteplus-native-verification).
+
 **Submit + poll + store.** Publish `VIDEO_PENDING` on accept; poll `GET …/tasks/{id}` every `BYTEPLUS_VIDEO_POLL_INTERVAL_MS` (default = `VEO_POLL_INTERVAL_MS`, 10s), publishing a `VIDEO_GENERATING` keepalive on each non-terminal poll, until `succeeded`/`failed`/`cancelled`/`expired`. On success, **download `content.video_url` immediately** — ModelArk output URLs are cleaned after 24 hours — then `VideoPublisher.complete` validates the MP4 (`ftyp`), extracts a poster + mid-frame, stores, and publishes `VIDEO_COMPLETE`. Vendor token usage (`usage.total_tokens`) flows into `videoUsage` for billing.
 
 **Prompt phrasing.** The shared final-prompt wrapper (`buildVideoModelPrompt`) selects a per-provider profile: Seedance uses positive/affirmative phrasing, **omits VEO's inline `Negative prompt:` line** (negative tokens backfire on Seedance — the model renders them), and adds an image-safety context that preserves visible reference characteristics when selected image-conditioned references are generated or visibly stylized canvas media. VEO's emitted prompt is byte-identical. The shared wrapper + profiles are covered in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
@@ -170,6 +172,8 @@ The structured VLM resolver itself — candidate snapshots, role assignment, ref
 | No references | neither set → text-to-video |
 
 VEO's `image` (first frame) and `referenceImages` are **mutually exclusive** per the SDK, so the resolver populates exactly one path. The browser receives the same `MEDIA_BRANCH_RESOLVED` event it already understands for images.
+
+The registered Google profile requires `GOOGLE_VEO_PERSON_GENERATION_PROFILE=standard|restricted`. Standard text/extension requests use `personGeneration: allow_all`; standard image-conditioned and every restricted-profile request use `allow_adult`. Missing profile configuration is a visible configuration failure, not a guessed fallback. Display names remain behind the shared `REFERENCE_n` boundary and Veo rejections are terminal for that paid run.
 
 {% callout type="important" %}
 **Videos are grounded by a single still, never the MP4.** The browser's candidate snapshot includes prior video Assets alongside images, each contributing the `representativeFrame` rendition and falling back to `poster`. An edit therefore continues a previous video branch at the same VLM cost as an image. The full `original` rendition reaches VEO only for explicit extension. The candidate-snapshot mechanics live in [Branch Lineage](./BRANCH-LINEAGE.md).

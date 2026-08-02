@@ -47,6 +47,14 @@ describe('estimateBranchMarkerDimensions', () => {
         expect(screenFixed.height).toBe(marker.screenFixedVerticalPadding + messageLineHeight)
     })
 
+    it('reserves fixed chrome so an inline Capability label fits beside pending controls', () => {
+        const prompt = 'create character Character Creator'
+        const screenFixed = estimateBranchMarkerDimensions(prompt, { screenFixed: true })
+        const estimatedTextWidth = prompt.length * marker.approxCharWidth
+
+        expect(screenFixed.width - estimatedTextWidth).toBeGreaterThanOrEqual(120)
+    })
+
     it('is deterministic — identical inputs give identical dimensions on API and client', () => {
         expect(estimateBranchMarkerDimensions('draw a watercolor', { responseLine: true }))
             .toEqual(estimateBranchMarkerDimensions('draw a watercolor', { responseLine: true }))

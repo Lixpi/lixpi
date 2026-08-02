@@ -27,6 +27,8 @@ export type CharacterSheetValidation = CharacterSheetAssessment & {
     passed: boolean
 }
 
+export const CHARACTER_CREATOR_VISUAL_INSTRUCTIONS_MAX_CHARS = 8500
+
 const REQUIRED_ASSESSMENT_FLAGS: Array<keyof Omit<CharacterSheetAssessment, 'issues'>> = [
     'isSingleImage',
     'isLandscape',
@@ -76,11 +78,11 @@ export function buildCharacterCreatorImagePrompt(input: CharacterCreatorPromptIn
         throw new Error('CHARACTER_CREATOR_REFERENCE_COUNT_INVALID')
     }
 
-    return [
+    const renderPrompt = (boundedRequest: string): string => [
         'Create exactly one professional character design sheet containing one repeated character identity.',
         '',
         'CHARACTER REQUEST',
-        request,
+        boundedRequest,
         '',
         'AUTHORITATIVE ATTACHED TEMPLATE',
         'The attached character-sheet template image is the output-layout specification, not character-appearance inspiration.',
@@ -104,6 +106,15 @@ export function buildCharacterCreatorImagePrompt(input: CharacterCreatorPromptIn
         'Do not crop any full-height view. Do not omit the head, expression, hands, feet, props, notes, palette, materials, details, alignment-guide, or pose sections.',
         'Do not add extra characters, alternate outfits, scenery, logos, or watermarks.',
     ].join('\n')
+    const fixedPromptLength = renderPrompt('').length
+    const maximumRequestLength = Math.max(
+        1,
+        CHARACTER_CREATOR_VISUAL_INSTRUCTIONS_MAX_CHARS - fixedPromptLength,
+    )
+    const boundedRequest = request.length <= maximumRequestLength
+        ? request
+        : `${request.slice(0, Math.max(0, maximumRequestLength - 3)).trimEnd()}...`
+    return renderPrompt(boundedRequest)
 }
 
 export function normalizeCharacterSheetAssessment(input: unknown): CharacterSheetValidation {

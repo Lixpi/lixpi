@@ -3,7 +3,7 @@
 // Action Timeline capability settings. Every tunable this capability owns lives
 // here, in the capability itself, so the backend actions, the canvas projection,
 // and the frontend all read one source instead of re-declaring constants.
-// Same shape as services/web-ui/src/settings.ts and services/api/src/settings.ts.
+// Uses the same nested settings shape as the consuming frontend and backend.
 export type ActionTimelineSettings = {
     canvas: {
         initialDimensions: {

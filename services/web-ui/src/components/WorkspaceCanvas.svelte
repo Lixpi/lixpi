@@ -12,7 +12,7 @@
         type ImageCanvasNode,
         type VideoCanvasNode,
         type AudioCanvasNode,
-        type UploadPlaceholderCanvasNode,
+        type OperationStatusCanvasNode,
         type MediaKind
     } from '@lixpi/constants'
 
@@ -299,11 +299,12 @@
     function insertUploadPlaceholder(fileName: string): string | null {
         const nodeId = getUploadPlaceholderNodeId()
         const now = Date.now()
-        const placeholderNode: Omit<UploadPlaceholderCanvasNode, 'position'> = {
+        const placeholderNode: Omit<OperationStatusCanvasNode, 'position'> = {
             nodeId,
-            type: 'uploadPlaceholder',
-            fileName,
-            status: 'converting',
+            type: 'operationStatus',
+            operation: 'upload',
+            title: fileName,
+            status: 'in-progress',
             message: 'Creating a supported copy before adding it to the canvas.',
             dimensions: { width: 360, height: 84 },
             createdAt: now,

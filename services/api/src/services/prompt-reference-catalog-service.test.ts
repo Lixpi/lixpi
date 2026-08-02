@@ -354,7 +354,7 @@ describe('PromptReferenceCatalogService', () => {
         }))
     })
 
-    it('resolves same-organization cross-workspace Asset recents without showing another organization', async () => {
+    it('rejects cross-workspace Asset recents even within the same organization', async () => {
         mocks.listRecents.mockResolvedValue([{
             userId: 'user-1',
             referenceKey: 'media#asset-recent',
@@ -387,10 +387,11 @@ describe('PromptReferenceCatalogService', () => {
             query: '',
             limit: 5,
         })
-        expect(page.items).toEqual([expect.objectContaining({
-            assetId: 'asset-recent',
-            source: 'library',
-        })])
+        expect(page.items).toEqual([])
+        expect(mocks.removeRecents).toHaveBeenLastCalledWith({
+            userId: 'user-1',
+            referenceKeys: ['media#asset-recent'],
+        })
 
         mocks.getAsset.mockResolvedValue({
             assetId: 'asset-recent',

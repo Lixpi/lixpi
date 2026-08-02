@@ -36,6 +36,12 @@ prompt.reference.list
 ai.interaction.capability.run.{start|stop|resume|get|replay}
 ai.interaction.capability.run.events.{workspaceId}.{runId}
 ai.interaction.capability.run.status.{userIdToken}.{workspaceId}.{runId}
+ai.interaction.mediaGeneration.request.{get|cancel}
+ai.interaction.mediaGeneration.reference.resolve
+ai.interaction.mediaGeneration.verification.{start|complete}
+ai.interaction.mediaGeneration.replay
+ai.interaction.mediaGeneration.events.{workspaceId}.{generationRequestId}
+ai.interaction.mediaGeneration.status.{userIdToken}.{workspaceId}.{generationRequestId}
 ```
 
 | Direction | Subject | Side |
@@ -57,6 +63,9 @@ ai.interaction.capability.run.status.{userIdToken}.{workspaceId}.{runId}
 | Capability run commands | `ai.interaction.capability.run.{start|stop|resume|get|replay}` | Start validates ownership and Tool input. Stop requires the run owner. Resume authorizes the run, activates the live relay, and returns replay state plus the exact tokenized subject. |
 | Durable Capability run events | `ai.interaction.capability.run.events.{workspaceId}.{runId}` | The runner writes safe ordered events before live publication. Raw prompts, resource bytes, and unrestricted action output are excluded. |
 | Browser Capability run status | `ai.interaction.capability.run.status.{userIdToken}.{workspaceId}.{runId}` | Authorized per-user relay. The browser subscribes before replay, buffers live events, deduplicates by run sequence, then drains the buffer to close the replay/live race. |
+| Media request commands | `ai.interaction.mediaGeneration.request.get`, `.request.cancel`, `.reference.resolve`, `.verification.start`, `.verification.complete`, `.replay` | Owner-authorized mutations use request revision CAS. Workspace collaborators may read/replay only after current Workspace authorization. Verification completion accepts signed provider callback state and no biometric bytes. |
+| Durable media request events | `ai.interaction.mediaGeneration.events.{workspaceId}.{generationRequestId}` | One subject per durable request records bounded request status, action-required, and normalized problem events. It has no age-based expiry; explicit checkpoint retention cleanup purges it. |
+| Browser media request status | `ai.interaction.mediaGeneration.status.{userIdToken}.{workspaceId}.{generationRequestId}` | Authorized relay. Canvas recovery subscribes live before replay and deduplicates by JetStream `streamSequence`. |
 
 Subject names live in [`nats-subjects.json`](../../packages/lixpi/constants/nats-subjects.json). AI stream status values live in [`ai-interaction-constants.json`](../../packages/lixpi/constants/ai-interaction-constants.json) (`STREAM_STATUS`).
 
@@ -86,6 +95,14 @@ type PipelineEventEnvelope = {
 
 `AiInteractionService` tracks `pipelineEventId` for dedupe and `pipelineLocalStreamSeq` as its replay cursor. On mount it calls `CHAT_PIPELINE_RESUME`; for an active response, the API returns events after that stream sequence by reading direct JetStream messages with `last_by_subj` and `next_by_subj`. Replay pages expose `hasMore`, and the browser continues from its last applied stream sequence until the bounded subject is caught up. A finished response loads from its persisted conversation, Asset, provenance, and canvas state because its pipeline subject has already been purged.
 
+### Media Generation Request Log
+
+`MediaGenerationRequestEventLog` creates one file-backed stream per Workspace and one subject per request. Events are appended with the request revision as the JetStream dedupe identity. Payloads contain status, run identity, candidate Asset IDs, or normalized `MediaGenerationProblem`; prompt text, provider response bodies, media bytes, and secrets are excluded.
+
+The request stream does not use an age limit because ambiguity and verification waits are not TTL-cancelled. Completion after all-success or explicit cancellation/dismissal releases the checkpoint and purges the subject. Workspace deletion performs the same cleanup idempotently.
+
+On reload the canvas first calls request `GET` without checkpoint content to obtain the exact live subject, subscribes, then requests replay. Live and replay events share `streamSequence`; a per-request set suppresses duplicates and closes the race.
+
 ### ProseMirror Step Log
 
 AI chat text and generated-media transcript nodes are not reconstructed from raw token events in the browser. The API owns the headless ProseMirror state for the AI stream through [`AiChatProseMirrorStreamAssembler`](../../services/api/src/prosemirror/ai-chat-stream-assembler.ts). It runs `@lixpi/markdown-stream-parser`, applies the shared assembly rules from `@lixpi/prosemirror`, and publishes Asset-role events through [`AssetProseMirrorStepTransport`](../../services/api/src/prosemirror/asset-prosemirror-step-transport.ts).
@@ -103,7 +120,7 @@ Events carry two cursors with different meanings:
 | `version` / `finalVersion` | ProseMirror document version after applying document-changing steps. Browser freshness is based on this value. |
 | `streamSequence` | JetStream stream sequence for replay. Browser resume uses this to avoid missing control messages that do not increment document version. |
 
-`asset.document.resume` authorizes the Asset/Workspace/role and returns only persisted snapshot metadata plus an authenticated `/api/assets/:assetId/documents/:role/snapshot` URL. The browser fetches that JSON over HTTP; the API reads it from the Asset's Blob Object Store. Missed step events are returned in pages capped by a serialized-byte budget, with separate replayed and latest stream cursors, so a long active stream cannot exceed core NATS `max_payload`. Mounted authorities request `activateLiveRelay: true`; the API then activates the user relay and returns its exact live subject. Snapshot-only Asset loads omit the flag and create no relay. `ProseMirrorAuthorityService` subscribes to its predicted tokenized subject before resume to close the live/replay race, verifies the returned subject, and drains every replay page. With no pending local steps it can apply a newer snapshot directly; otherwise it requests events relative to its local version and rebases pending local steps. The server-authored AI chat assembler purges the conversation step subject immediately after its final snapshot and `END` event are persisted. General mutable-document settlement retains incorporated client-edit steps for a five-minute replay grace before purging through that sequence. Mutable roles require the current workspace lease; provenance is sealed and never accepts client steps.
+`asset.document.resume` authorizes the Asset/Workspace/role and returns only persisted snapshot metadata plus an authenticated `/api/assets/:assetId/documents/:role/snapshot` URL. The browser fetches that JSON over HTTP; the API reads it from the Asset's Blob Object Store. Missed step events are returned in pages capped by a serialized-byte budget, with separate replayed and latest stream cursors, so a long active stream cannot exceed core NATS `max_payload`. Mounted authorities request `activateLiveRelay: true`; the API then activates the user relay and returns its exact live subject. The relay treats that validated resume as its initial authorization and refreshes Workspace, Organization, and Asset authorization at a bounded interval; it does not read the Asset once per streamed ProseMirror event. Relay open, authorization-refresh, and close logs report received, forwarded, dropped, and refresh counts, while refresh reads carry the `AssetDocumentEventRelay.refreshAuthorization` DynamoDB origin. Snapshot-only Asset loads omit the flag and create no relay. `ProseMirrorAuthorityService` subscribes to its predicted tokenized subject before resume to close the live/replay race, verifies the returned subject, and drains every replay page. With no pending local steps it can apply a newer snapshot directly; otherwise it requests events relative to its local version and rebases pending local steps. The server-authored AI chat assembler purges the conversation step subject immediately after its final snapshot and `END` event are persisted. General mutable-document settlement retains incorporated client-edit steps for a five-minute replay grace before purging through that sequence. Mutable roles require the current workspace lease; provenance is sealed and never accepts client steps.
 
 JetStream publish CAS uses the last JetStream stream sequence returned for that document subject. The envelope's logical `subjectSeq` is ordering metadata and must never be passed as `lastSubjectSequence`; organization streams interleave many Asset subjects, so those values are intentionally different.
 

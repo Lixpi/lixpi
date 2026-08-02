@@ -28,6 +28,7 @@ import {
 } from './asset-canvas-projection.ts'
 import AssetRenditionService from './asset-rendition-service.ts'
 import { enqueueRenditionRetry } from './asset-maintenance-queue.ts'
+import { deriveSubjectIdentityFromLineage } from './asset-subject-identity-service.ts'
 
 const { ORG_NAME, STAGE } = process.env
 
@@ -88,6 +89,9 @@ export const ensurePendingGeneratedAssets = async ({
             mediaBranchCandidateSnapshot,
             workspaceContextSnapshot,
         )
+        const sourceAssets = (await Promise.all(sourceAssetIds.map(getAssetRecord)))
+            .filter((asset): asset is Asset => Boolean(asset))
+        const subjectIdentity = deriveSubjectIdentityFromLineage(sourceAssets, { generatedOutput: true })
         const lineage = {
             sourceConversationAssetId: conversationAssetId,
             ...(parentAssetId ? { parentAssetId } : {}),
@@ -127,6 +131,7 @@ export const ensurePendingGeneratedAssets = async ({
                 documents: {},
                 lineage,
                 generatedOutputReview: { status: 'candidate' },
+                subjectIdentity,
                 states: {
                     lifecycle: 'creating',
                     media: 'processing',

@@ -348,7 +348,9 @@ export function getBranchMarkerConversationPreviewFromThreadContent(
     const responseMessage = ownTurn?.responseMessage ?? latestTurn.responseMessage
 
     if (!userMessage) return null
-    const userText = collectProseMirrorText(userMessage).trim()
+    const userText = collectProseMirrorText(userMessage, {
+        excludedNodeTypes: [PROMPT_REFERENCE_NODE_TYPE, LEGACY_CAPABILITY_REFERENCE_NODE_TYPE],
+    }).trim()
     const promptReferences = collectProseMirrorPromptReferences(userMessage)
     if (!responseMessage) {
         return {

@@ -28,6 +28,7 @@ import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-plann
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import { resolveCapabilityOutputMediaRuns } from '../lineage/capability-output-media-runs.ts'
 import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
+import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 import type { CapabilityDispatcher } from '@lixpi/capability-system/backend'
 import { getCapabilityDispatcher } from '../../capability-system/capability-runtime.ts'
 import {
@@ -38,6 +39,8 @@ import {
     resolveCapabilitiesForState,
 } from '../../capability-system/capability-state-resolver.ts'
 import { isCharacterCreatorCapabilitySelected } from '@lixpi/capability-system'
+import type { MediaProviderDefinition } from './media-provider-definition.ts'
+import { assertNoForbiddenMediaReferenceLeak } from '../media-reference/provider-safe-context.ts'
 import { resolveImageGenerationReferences } from '../image-generation-references.ts'
 import {
     discardPendingCapabilityOutputsForState,
@@ -54,6 +57,7 @@ export type BaseProviderDeps = {
     // behavior). The synchronous check/confirm run on the workflow path via this
     // abstract metering client (see metrics/metrics-client.ts).
     metrics?: MetricsClient
+    mediaProviderDefinition: MediaProviderDefinition
 }
 
 type FanoutRouterResult = Pick<ProviderState,
@@ -389,6 +393,10 @@ export abstract class BaseProvider {
             mediaFanoutPlan,
             replayMediaPrompts: requestData.replayMediaPrompts,
             preflightResolved: requestData.preflightResolved ?? false,
+            durableGenerationRequestId: requestData.durableGenerationRequestId,
+            durableMediaRuns: requestData.durableMediaRuns,
+            providerSafeMediaIntent: requestData.providerSafeMediaIntent,
+            mediaReferenceBindings: requestData.mediaReferenceBindings,
         }
 
         const timeoutHandle = setTimeout(() => {
@@ -411,7 +419,9 @@ export abstract class BaseProvider {
             } else {
                 err(`Workflow failed for ${this.instanceKey}: ${message}`)
             }
-            this.streamPublisher.error(message)
+            this.streamPublisher.error(initialState.durableGenerationRequestId
+                ? 'The provider could not complete this generation attempt.'
+                : message)
             if (initialState.generationRun?.requestKind !== 'media-generation-matrix') {
                 this.streamPublisher.completeKnownMediaGenerationRequests()
             }
@@ -524,8 +534,15 @@ export abstract class BaseProvider {
             mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
         })
-
         this.streamPublisher?.mediaLineagePlanned(lineagePlan, nextGenerationRun)
+        await this.streamPublisher?.drainPendingWrites()
+        if (state.durableGenerationRequestId) {
+            await new MediaGenerationRequestService().bindRunsToLineagePlan({
+                generationRequestId: state.durableGenerationRequestId,
+                workspaceId: state.workspaceId,
+                lineagePlan,
+            })
+        }
         info(`[BaseProvider] media branch lineage planned ${JSON.stringify({
             workspaceId: state.workspaceId,
             aiChatThreadId: state.aiChatThreadId,
@@ -548,6 +565,20 @@ export abstract class BaseProvider {
         if (!state.messages?.length) throw new Error('messages list is required')
         if (!state.workspaceId) throw new Error('workspaceId is required')
         if (!state.aiChatThreadId) throw new Error('aiChatThreadId is required')
+        if (state.providerSafeMediaIntent) {
+            const compiledReferencePayload = this.deps.mediaProviderDefinition.referenceRules.compile(
+                state.providerSafeMediaIntent,
+            )
+            assertNoForbiddenMediaReferenceLeak({
+                payload: {
+                    compiledReferencePayload,
+                    messages: state.messages,
+                    workspaceContextSnapshot: state.workspaceContextSnapshot,
+                    mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
+                },
+                forbiddenNameVariants: state.providerSafeMediaIntent.forbiddenNameVariants,
+            })
+        }
         if (state.metricsAdmissionApproved) return {}
         return this.metricsCheck(state)
     }
@@ -653,7 +684,9 @@ export abstract class BaseProvider {
             try {
                 await discardPendingCapabilityOutputsForState(state)
                 state.pendingCapabilityOutputFinalizations = []
-                this.streamPublisher?.error(message)
+                this.streamPublisher?.error(state.durableGenerationRequestId
+                    ? 'The provider could not complete this generation attempt.'
+                    : message)
                 if (state.generationRun?.requestKind !== 'media-generation-matrix') {
                     this.streamPublisher?.completeKnownMediaGenerationRequests()
                 }
@@ -763,6 +796,7 @@ export abstract class BaseProvider {
             }
         }
 
+        this.assertProviderMediaPayload(state, state.generatedImagePrompt)
         const imageResult = await this.deps.runImageRouter(state, {
             onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
             getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
@@ -794,15 +828,24 @@ export abstract class BaseProvider {
             }
         }
 
+        this.assertProviderMediaPayload(state, state.generatedVideoPrompt)
         const videoResult = await this.deps.runVideoRouter(state, {
             onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
             getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
-            signal: this.signal,
+            ...(this.abortController ? { signal: this.abortController.signal } : {}),
         })
         if (videoResult.error) {
             this.streamPublisher?.error(videoResult.error, videoResult.errorCode, videoResult.errorType)
         }
         return videoResult
+    }
+
+    protected assertProviderMediaPayload(state: ProviderState, prompt: string | undefined): void {
+        if (!state.providerSafeMediaIntent || !prompt) return
+        assertNoForbiddenMediaReferenceLeak({
+            payload: { prompt },
+            forbiddenNameVariants: state.providerSafeMediaIntent.forbiddenNameVariants,
+        })
     }
 
     protected async executeMediaFanout(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -870,6 +913,13 @@ export abstract class BaseProvider {
         if (imageModels.length === 0) return {}
 
         const settledResults = await Promise.allSettled(imageModels.map(async (imageModelMetaInfo, imageIndex): Promise<FanoutRouterResult> => {
+            const durableRun = state.durableMediaRuns?.find(run => (
+                run.reasoningIndex === state.generationRun?.reasoningIndex
+                && run.modelId === catalogModelIdFor(imageModelMetaInfo)
+            ))
+            if (durableRun && ['completed', 'failed', 'cancelled'].includes(durableRun.status)) {
+                return { generatedImages: [] }
+            }
             const generationRun = this.buildMediaRun(state, imageModelMetaInfo, 'image', imageIndex, imageModels.length)
             const imageModelOptions = state.mediaFanoutPlan?.imageModelOptions?.[catalogModelIdFor(imageModelMetaInfo)]
             let fanoutState: ProviderState = {
@@ -962,6 +1012,13 @@ export abstract class BaseProvider {
         if (videoModels.length === 0) return {}
 
         const settledResults = await Promise.allSettled(videoModels.map(async (videoModelMetaInfo, videoIndex): Promise<FanoutRouterResult> => {
+            const durableRun = state.durableMediaRuns?.find(run => (
+                run.reasoningIndex === state.generationRun?.reasoningIndex
+                && run.modelId === catalogModelIdFor(videoModelMetaInfo)
+            ))
+            if (durableRun && ['completed', 'failed', 'cancelled'].includes(durableRun.status)) {
+                return { generatedVideos: [] }
+            }
             const generationRun = this.buildMediaRun(state, videoModelMetaInfo, 'video', videoIndex, videoModels.length)
             const videoModelOptions = state.mediaFanoutPlan?.videoModelOptions?.[catalogModelIdFor(videoModelMetaInfo)]
             const normalizedVideoAspectRatio = normalizeModelOption(
@@ -1006,7 +1063,7 @@ export abstract class BaseProvider {
             const videoResult = await this.deps.runVideoRouter(fanoutState, {
                 onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
                 getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
-                signal: this.signal,
+                ...(this.abortController ? { signal: this.abortController.signal } : {}),
             })
             return {
                 error: videoResult.error,

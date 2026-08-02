@@ -41,6 +41,8 @@ duplicated inside `ContentDescriptor`. `Asset-Meta` projects its title, summary,
 catalog listing, while workspace placements resolve the authoritative Asset.
 `MediaDescriptor` is an alias for the same type.
 
+Descriptors feed the provider-safe reference boundary. Summary segments and existing entity/style tags can act as bounded local aliases and provide semantic context beside `REFERENCE_n`; the mutable Asset title and original filename cannot. `Asset.depictionMedium` is derived separately from descriptor evidence, while `Asset.subjectIdentity` is a user/lineage assertion. A watercolor descriptor may yield medium `painting` but never automatically asserts `fictional`.
+
 ```typescript
 export type ContentDescriptor = {
     status: 'analyzing' | 'ready' | 'failed'

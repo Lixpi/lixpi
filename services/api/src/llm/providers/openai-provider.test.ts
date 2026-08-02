@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { OpenAIProvider } from './openai-provider.ts'
 import type { BaseProviderDeps } from './base-provider.ts'
+import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 
 const debugTools = vi.hoisted(() => ({
     info: vi.fn(),
@@ -60,6 +61,7 @@ const makeDeps = (): BaseProviderDeps => ({
     } as any,
     runImageRouter: vi.fn(),
     runVideoRouter: vi.fn(),
+    mediaProviderDefinition: CURRENT_MEDIA_PROVIDER_DEFINITIONS.OpenAI,
 })
 
 const getUploadedFiles = (formData: FormData): File[] => {

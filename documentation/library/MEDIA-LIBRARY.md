@@ -59,6 +59,8 @@ Title and descriptor are Asset-level fields. Updating either uses Asset `revisio
 
 Node position, dimensions, edges, and selection remain workspace-local.
 
+The inspector mounts the same five-position Subject identity `slidingSwitch` as the canvas Asset information panel: Unknown, No person, Fictional, Me, and Authorized. A change directly writes the versioned append-only attestation and current Asset projection with optimistic revision rollback. There is no modal, proof upload, or second confirmation. Depiction medium remains independently derived. Provider-native verification is requested later only when a selected provider requires it. See [Media Reference Identity and Provider Moderation](../media-generation/MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md).
+
 ## Scope
 
 Assets can be workspace, user, or organization scoped. Scope change validates all existing workspace references against the target accessible-workspace set before moving the catalog/Meta projection. It never moves or copies Blob objects.

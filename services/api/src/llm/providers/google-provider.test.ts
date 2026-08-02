@@ -20,6 +20,7 @@ const debugTools = vi.hoisted(() => ({
 vi.mock('@lixpi/debug-tools', () => debugTools)
 
 import { type BaseProviderDeps } from './base-provider.ts'
+import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 import {
     buildVeoReferenceImages,
     getGoogleImageResponseSummary,
@@ -71,6 +72,7 @@ const createProviderDeps = (): BaseProviderDeps => ({
     usageReporter: {} as any,
     runImageRouter: vi.fn(),
     runVideoRouter: vi.fn(),
+    mediaProviderDefinition: CURRENT_MEDIA_PROVIDER_DEFINITIONS.Google,
 })
 
 const resetGoogleMocks = () => {
@@ -237,16 +239,19 @@ describe('GoogleProvider construction', () => {
         usageReporter: {} as any,
         runImageRouter: vi.fn(),
         runVideoRouter: vi.fn(),
+        mediaProviderDefinition: CURRENT_MEDIA_PROVIDER_DEFINITIONS.Google,
     }) as unknown as BaseProviderDeps
 
     beforeEach(() => {
         process.env.GOOGLE_API_KEY = 'test-key'
+        process.env.GOOGLE_VEO_PERSON_GENERATION_PROFILE = 'standard'
         resetGoogleMocks()
     })
 
     afterEach(() => {
         vi.restoreAllMocks()
         delete process.env.GOOGLE_API_KEY
+        delete process.env.GOOGLE_VEO_PERSON_GENERATION_PROFILE
     })
 
     it('requires GOOGLE_API_KEY to instantiate provider', () => {
@@ -265,16 +270,19 @@ describe('GoogleProvider internals', () => {
         usageReporter: {} as any,
         runImageRouter: vi.fn(),
         runVideoRouter: vi.fn(),
+        mediaProviderDefinition: CURRENT_MEDIA_PROVIDER_DEFINITIONS.Google,
     }) as unknown as BaseProviderDeps
 
     beforeEach(() => {
         process.env.GOOGLE_API_KEY = 'test-key'
+        process.env.GOOGLE_VEO_PERSON_GENERATION_PROFILE = 'standard'
         resetGoogleMocks()
     })
 
     afterEach(() => {
         vi.restoreAllMocks()
         delete process.env.GOOGLE_API_KEY
+        delete process.env.GOOGLE_VEO_PERSON_GENERATION_PROFILE
     })
 
     it('maps legacy and modern function-call payload fields in summaries', () => {
@@ -893,8 +901,9 @@ describe('GoogleProvider internals', () => {
             messages: [{ role: 'user', content: 'make a cinematic shot' }],
         } as any)
 
-        expect(update.error).toBe('VEO: operation completed without a video')
-        expect(videoPublisher.error).toHaveBeenCalledWith('VEO: operation completed without a video')
+        const expectedError = 'VEO: operation completed without a video (operation=operations/veo-empty, generatedVideoCount=0, raiMediaFilteredCount=0)'
+        expect(update.error).toBe(expectedError)
+        expect(videoPublisher.error).toHaveBeenCalledWith(expectedError)
         expect(update.generatedVideos).toBeUndefined()
     })
 
@@ -1026,7 +1035,7 @@ describe('GoogleProvider internals', () => {
             }),
         })
         expect(debugTools.warn).toHaveBeenCalledWith(
-            '[Google:ws-1:thread-1] media fanout AUTO mode skipped the tool; retrying with forced function call',
+            '[Google:ws-1:thread-1] AUTO tool selection did not satisfy the media request; retrying with forced function call {"explicitVideoToolRequired":false,"forcedFunctionNames":["generate_image"],"detectedImage":false,"detectedVideo":false,"textCharacterCount":23,"finishReasons":[],"functionCallNames":[]}',
         )
         expect(update.generatedImagePrompt).toBe('Auto-promote the request')
         expect(update.generatedVideoPrompt).toBeUndefined()

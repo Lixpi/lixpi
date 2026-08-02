@@ -786,7 +786,18 @@ export class GoogleProvider extends BaseProvider {
         const usesImageConditioning = !!firstFrameImage || !!lastFrameImage
         // VEO validates personGeneration by input mode: text-to-video and extension
         // require allow_all, while image/frame-conditioned requests require allow_adult.
-        veoConfig.personGeneration = usesImageConditioning ? 'allow_adult' : 'allow_all'
+        const configuredRegionProfile = process.env.GOOGLE_VEO_PERSON_GENERATION_PROFILE
+        const regionProfile = configuredRegionProfile === 'restricted' || configuredRegionProfile === 'standard'
+            ? configuredRegionProfile
+            : undefined
+        Object.assign(
+            veoConfig,
+            this.deps.mediaProviderDefinition.moderation.settings(
+                modelVersion,
+                usesImageConditioning ? 'image-conditioned' : extensionVideo ? 'video-extension' : 'text',
+                regionProfile ? { regionProfile } : undefined,
+            ),
+        )
 
         info(`[Google:${this.instanceKey}] VEO submit ${JSON.stringify({
             model: modelVersion,
@@ -858,7 +869,15 @@ export class GoogleProvider extends BaseProvider {
 
             if (operation.error) {
                 const opErr = operation.error
-                throw new Error(`VEO operation error: ${typeof opErr === 'object' ? JSON.stringify(opErr) : String(opErr)}`)
+                const providerReason = typeof opErr === 'object' && typeof opErr?.message === 'string'
+                    ? opErr.message
+                    : 'The provider operation failed.'
+                const providerCode = typeof opErr === 'object'
+                    ? opErr?.code ?? opErr?.status
+                    : undefined
+                throw Object.assign(new Error(`VEO operation error: ${providerReason}`), {
+                    ...(providerCode !== undefined ? { code: String(providerCode) } : {}),
+                })
             }
 
             const video = operation.response?.generatedVideos?.[0]?.video

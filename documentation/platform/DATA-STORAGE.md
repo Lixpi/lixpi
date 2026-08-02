@@ -39,6 +39,10 @@ The Asset/Blob tables and their prompt-reference projections are defined in [`Dy
 | `Blobs` | `blobKey = organizationId#sha256` | — | none |
 | `Blob-References` | `blobKey` | `referenceKey` | none |
 | `Prompt-Reference-Recents` | `userId` | `referenceKey` | LSI `updatedAt` |
+| `Media-Generation-Requests` | `generationRequestId` | `workspaceId` | none |
+| `Media-Generation-Requests-Meta` | `workspaceId` | `generationRequestId` | LSI `updatedAt`, LSI `statusUpdatedAt` |
+| `Media-Generation-Requests-Access-List` | `generationRequestId` | `principalId` | none |
+| `Asset-Subject-Identity-Attestations` | `assetId` | `attestationId` | none |
 
 There are no GSIs on these tables. Listing queries bounded `Assets-Meta` partitions. Prompt autocomplete queries authorized `Assets-Search` partitions by media-category or `capabilityArtifact#<artifactTypeId>` prefixes, merges and deduplicates thin rows, and still point-authorizes the selected Asset before use. Conversation Assets are not projected into search. Authorization and ordinary maintenance use point reads or one Asset/Blob partition. Maintenance-only orphan collection scans staging Blob rows and organization IDs; request paths do not.
 
@@ -62,6 +66,8 @@ type Asset = {
   artifact?: { artifactTypeId: string; schemaVersion: string }
   lineage?: AssetLineage
   descriptor?: ContentDescriptor
+  depictionMedium: DepictionMedium
+  subjectIdentity: AssetSubjectIdentity
   states: AssetStates
   referenceCount: number
   revision: number
@@ -141,6 +147,8 @@ Object Store writes cannot participate in DynamoDB transactions. Recovery theref
 
 Capability package references use `capability#<capabilityId>#manifest` and `capability#<capabilityId>#resource#<resourceId>`. Asset document and rendition references use `asset#<assetId>#document#<role>` and `asset#<assetId>#rendition#<name>`.
 
+Media-generation checkpoints use `mediaGenerationRequest#<generationRequestId>#checkpoint`. They are immutable canonical JSON containing the structured prompt, stable selected references, and request configuration—never media bytes, biometric material, provider secrets, or callback tokens. Completed requests release the reference after terminal durable state settles. Failed/action-required requests retain it until explicit dismissal/cancellation or Workspace deletion; no TTL cancels a waiting request.
+
 Capability manifests and resources use the system Blob bucket for deployment-owned global entries and the owning organization bucket for user or organization entries. Catalog edits store and verify new resources first, store canonical manifest JSON, then conditionally swap the catalog pointer. A sealed run keeps its captured hashes, so superseded Blob references remain readable through the retirement grace period. See [Capability Storage and Operations](../library/CAPABILITY-STORAGE.md).
 
 ## Renditions
@@ -196,3 +204,9 @@ Workspace archives contain `manifest.json` plus `blobs/<sha256>`. The manifest i
 Import validates the entire graph, every byte size, and every SHA-256 before writes. It generates new Asset IDs, remaps canvas/panel/lineage identities, rewrites and rehashes every ProseMirror snapshot containing Asset identities, assigns target-workspace ownership/scope, creates fresh owner ACL/catalog/reference rows, then replaces canvas state. Exported ACLs and external catalog grants are never imported.
 
 The only version-1 boundary is the offline converter documented in [Workspace Export & Import](../library/WORKSPACE-EXPORT-IMPORT.md).
+
+## Durable media requests and identity attestations
+
+Media generation adds the standard primary/meta/access triad `Media-Generation-Requests`, `Media-Generation-Requests-Meta`, and `Media-Generation-Requests-Access-List`. The primary record is the CAS authority for request status, safe bindings, ambiguity resolutions, per-model runs, provider-verification sessions, operation-node IDs, and the checkpoint Blob pointer. Meta supports bounded Workspace recovery; access rows contain owner and Workspace principals.
+
+`Asset-Subject-Identity-Attestations` is an append-only child table authorized through its parent Asset. Each event records actor, organization, Asset revision, classification, server-owned statement version, supersession, and time. `Asset.subjectIdentity` is the current projection; `Asset.depictionMedium` remains a separate automatically derived fact. See [Media Reference Identity and Provider Moderation](../media-generation/MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md).

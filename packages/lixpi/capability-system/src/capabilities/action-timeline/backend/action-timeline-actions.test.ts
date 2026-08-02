@@ -133,7 +133,7 @@ describe('Action Timeline registered actions', () => {
             startMs: slotIndex * 1000,
             endMs: (slotIndex + 1) * 1000,
         }))
-        expect(planActionTimelineBatches(grid, 1408).map(batch => batch.length)).toEqual([4, 4, 2])
+        expect(planActionTimelineBatches(grid, 5120).map(batch => batch.length)).toEqual([4, 4, 2])
         expect(planActionTimelineBatches(grid, 100).every(batch => batch.length === 1)).toBe(true)
     })
 

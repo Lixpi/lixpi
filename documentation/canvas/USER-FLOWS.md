@@ -112,7 +112,7 @@ sequenceDiagram
 
 ## Adding a File
 
-The canvas upload control accepts images, videos, audio, PDFs, office documents, text, and Markdown. The browser posts the selected file to the Workspace Asset endpoint; the API sniffs the bytes, stores a content-addressed original Blob in the Workspace organization's bucket, creates an Asset, and queues the NEX rendition workload. The browser keeps an `uploadPlaceholder` until the Asset has the rendition required by its node kind.
+The canvas upload control accepts images, videos, audio, PDFs, office documents, text, and Markdown. The browser posts the selected file to the Workspace Asset endpoint; the API sniffs the bytes, stores a content-addressed original Blob in the Workspace organization's bucket, creates an Asset, and queues the NEX rendition workload. The browser keeps a generic `operationStatus` upload node until the Asset has the rendition required by its node kind.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
@@ -137,7 +137,7 @@ sequenceDiagram
         activate Picker
         Picker->>Svelte: File selected
         activate Svelte
-        Svelte->>Svelte: Insert uploadPlaceholder
+        Svelte->>Svelte: Insert operationStatus upload node
         Svelte->>API: POST multipart file
         activate API
         API->>API: sniff bytes + apply MEDIA_POLICY

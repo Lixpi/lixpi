@@ -187,7 +187,19 @@ const addEdge = (edges: WorkspaceEdge[], sourceNodeId: string | undefined, targe
 } => {
     if (!sourceNodeId) return { edges, changed: false }
     const edgeId = `edge-${sourceNodeId}-${targetNodeId}`
-    if (edges.some((edge) => edge.edgeId === edgeId)) return { edges, changed: false }
+    const existingEdgeIndex = edges.findIndex((edge) => edge.edgeId === edgeId)
+    if (existingEdgeIndex >= 0) {
+        const existingEdge = edges[existingEdgeIndex]!
+        if (existingEdge.sourceHandle === 'right' && existingEdge.targetHandle === 'left') {
+            return { edges, changed: false }
+        }
+        return {
+            edges: edges.map((edge, index) => index === existingEdgeIndex
+                ? { ...edge, sourceHandle: 'right', targetHandle: 'left' }
+                : edge),
+            changed: true,
+        }
+    }
     return {
         edges: [...edges, {
             edgeId,

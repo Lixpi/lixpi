@@ -22,6 +22,7 @@ import { aiInteractionSubjects, setLlmModule } from './NATS/subscriptions/ai-int
 import { mediaDescriptorSubjects } from './NATS/subscriptions/media-descriptor-subjects.ts'
 import { workspaceSubjects } from './NATS/subscriptions/workspace-subjects.ts'
 import { assetSubjects } from './NATS/subscriptions/asset-subjects.ts'
+import { mediaGenerationRequestSubjects } from './NATS/subscriptions/media-generation-request-subjects.ts'
 import {
     capabilitySubjects,
     setCapabilityRunDispatcher,
@@ -34,6 +35,7 @@ import assetRoutes from './routes/asset-routes.ts'
 import transientMediaRoutes from './routes/transient-media-routes.ts'
 import workspaceExportRoutes from './routes/workspace-export-routes.ts'
 import capabilityRoutes from './routes/capability-routes.ts'
+import providerVerificationRoutes from './routes/provider-verification-routes.ts'
 
 import { createLlmModule } from './llm/index.ts'
 import { startAssetMaintenanceWorker } from './services/asset-maintenance-worker.ts'
@@ -82,6 +84,7 @@ const subscriptions = [
 
     // AI orchestration, replay streams, and media description.
     ...aiInteractionSubjects,
+    ...mediaGenerationRequestSubjects,
     ...mediaDescriptorSubjects,
 
     // Workspace records and unified Asset authority.
@@ -299,6 +302,7 @@ app.use('/api/transient-media', transientMediaRoutes)
 // Workspace export routes
 app.use('/api/workspaces', workspaceExportRoutes)
 app.use('/api/capabilities', capabilityRoutes)
+app.use('/api/provider-verification', providerVerificationRoutes)
 
 
 

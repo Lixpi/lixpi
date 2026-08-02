@@ -4,6 +4,8 @@ import process from 'process'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 import { GoogleGenAI } from '@google/genai'
+import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock'
+import { fromSSO } from '@aws-sdk/credential-providers'
 import DynamoDBService, { marshall, unmarshall } from '@lixpi/dynamodb-service'
 
 //INFO: do not remove unused imports!
@@ -203,6 +205,9 @@ export class AiModelsSync {
     private readonly dynamoDBService: DynamoDBService
     private readonly openai: OpenAI
     private readonly anthropic: Anthropic
+    // When the API routes Anthropic inference through AWS Bedrock there may be no Anthropic
+    // API key at all, so the catalog is sourced from the Bedrock foundation-model list instead.
+    private readonly useBedrockForAnthropic: boolean
     private readonly google: GoogleGenAI
     private readonly aiModelsListTableName: string
     private readonly serviceName: string
@@ -224,6 +229,7 @@ export class AiModelsSync {
         this.anthropic = new Anthropic({
             apiKey: options.anthropicApiKey || env.ANTHROPIC_API_KEY,
         })
+        this.useBedrockForAnthropic = env.ANTHROPIC_USE_AWS_BEDROCK_INFERENCE?.trim().toLowerCase() === 'true'
 
         this.google = new GoogleGenAI({
             apiKey: options.googleApiKey || env.GOOGLE_API_KEY,
@@ -876,8 +882,85 @@ export class AiModelsSync {
         }
     }
 
+    // Blacklist/snapshot filtering applied to Anthropic models regardless of where the list
+    // came from (the Anthropic API or the AWS Bedrock foundation-model catalog).
+    private filterAnthropicModels(models: AnthropicModel[]): AnthropicModel[] {
+        const blacklist = AiModelsSync.MODELS_BLACKLIST.Anthropic
+
+        return models.filter(model => {
+            const modelId = model.id
+
+            if (blacklist.exact.includes(modelId)) {
+                return false
+            }
+            if (blacklist.prefix.some(prefix => modelId.startsWith(prefix))) {
+                return false
+            }
+            if (blacklist.contains.some(substring => modelId.includes(substring))) {
+                return false
+            }
+            // Skip minor versions/snapshots with date patterns
+            if (this.isMinorVersion(modelId)) {
+                return false
+            }
+
+            return true
+        })
+    }
+
+    // Fetch available Anthropic models from the AWS Bedrock foundation-model catalog and
+    // project the Bedrock ids back onto the vendor-API ids the rest of the platform uses
+    // (`anthropic.claude-haiku-4-5-20251001-v1:0` -> `claude-haiku-4-5`). The API's Bedrock
+    // path re-resolves the vendor id to the concrete Bedrock id at invocation time.
+    private async fetchAnthropicModelsFromBedrock(): Promise<AnthropicModel[]> {
+        const env = process.env
+        const region = env.AWS_REGION?.trim()
+        if (!region) {
+            throw new Error('AWS_REGION is required to list Anthropic models on AWS Bedrock')
+        }
+
+        const ssoProfile = env.AWS_PROFILE?.trim()
+        const client = new BedrockClient({
+            region,
+            ...((env.ENVIRONMENT === 'local' && ssoProfile) && { credentials: fromSSO({ profile: ssoProfile }) }),
+        })
+
+        const response = await client.send(new ListFoundationModelsCommand({ byProvider: 'Anthropic' }))
+        const summaries = response.modelSummaries ?? []
+
+        const byModelId = new Map<string, AnthropicModel>()
+        for (const summary of summaries) {
+            const bedrockModelId = summary.modelId
+            if (!bedrockModelId) continue
+            const match = /^anthropic\.(.+?)(?:-(\d{8}))?-v\d+(?::\d+)?$/i.exec(bedrockModelId)
+            if (!match) continue
+            const modelId = match[1]!
+            if (byModelId.has(modelId)) continue
+            byModelId.set(modelId, {
+                id: modelId,
+                display_name: summary.modelName || modelId,
+                // Bedrock exposes no creation timestamp; the release date embedded in the
+                // model id is the closest equivalent the catalog can carry.
+                ...(match[2] && {
+                    created_at: `${match[2].slice(0, 4)}-${match[2].slice(4, 6)}-${match[2].slice(6, 8)}`,
+                }),
+            })
+        }
+
+        const models = this.filterAnthropicModels([...byModelId.values()])
+        if (models.length === 0) {
+            throw new Error(`AWS Bedrock returned no usable Anthropic models in region ${region}`)
+        }
+        return models
+    }
+
     // Fetch available models from Anthropic API using SDK
     private async fetchAnthropicModels(): Promise<AnthropicModel[]> {
+        if (this.useBedrockForAnthropic) {
+            info('Sourcing Anthropic models from the AWS Bedrock foundation-model catalog (ANTHROPIC_USE_AWS_BEDROCK_INFERENCE=true)')
+            return await this.fetchAnthropicModelsFromBedrock()
+        }
+
         const apiKey = this.anthropic.apiKey
         if (!apiKey) {
             throw new Error('Anthropic API key is required but not provided')
@@ -890,37 +973,7 @@ export class AiModelsSync {
                 }) as any
 
                 if (page?.data) {
-                    const models = page.data as AnthropicModel[]
-
-                    // Filter models based on blacklist
-                    const blacklist = AiModelsSync.MODELS_BLACKLIST.Anthropic
-
-                    const filteredModels = models.filter(model => {
-                        const modelId = model.id
-
-                        // Check exact blacklist matches
-                        if (blacklist.exact.includes(modelId)) {
-                            return false
-                        }
-
-                        // Check prefix blacklist matches
-                        if (blacklist.prefix.some(prefix => modelId.startsWith(prefix))) {
-                            return false
-                        }
-
-                        // Check contains blacklist matches
-                        if (blacklist.contains.some(substring => modelId.includes(substring))) {
-                            return false
-                        }
-
-                        // Skip minor versions/snapshots with date patterns
-                        if (this.isMinorVersion(modelId)) {
-                            return false
-                        }
-
-                        return true
-                    })
-                    return filteredModels
+                    return this.filterAnthropicModels(page.data as AnthropicModel[])
                 }
             }
 

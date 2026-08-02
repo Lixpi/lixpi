@@ -372,7 +372,7 @@ const buildCandidateFromWorkspaceNode = async (
         : ['base-context']
 
     return {
-        candidateId: `node:${node.nodeId}`,
+        candidateId: node.nodeId,
         nodeId: node.nodeId,
         assetId: node.assetId,
         imageUrl,

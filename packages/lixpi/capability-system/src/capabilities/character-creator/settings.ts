@@ -2,7 +2,7 @@
 
 // Character Creator capability settings. Every tunable this capability owns
 // lives here, in the capability itself. Same shape as
-// services/web-ui/src/settings.ts and services/api/src/settings.ts.
+// the consuming frontend and backend settings.
 export type CharacterCreatorSettings = {
     actionTimeoutsMs: {
         validateRequest: number

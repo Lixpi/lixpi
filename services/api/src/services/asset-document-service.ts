@@ -45,12 +45,49 @@ import {
     collectEmbeddedAssetIds,
     type AssetReferenceDocumentRole,
 } from './prosemirror-asset-references.ts'
+import {
+    KeyedIdleBatchScheduler,
+    KeyedOperationCoordinator,
+    runOperationWithRetry,
+} from './keyed-operation-coordinator.ts'
 
 const { ORG_NAME, STAGE } = process.env
 const assetsTableName = (): string => getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE)
 const SETTLED_STEP_REPLAY_GRACE_MS = 5 * 60 * 1000
 const RESUME_EVENT_SCAN_LIMIT = 1000
 const RESUME_EVENT_REPLY_BUDGET_BYTES = 256 * 1024
+const ASSET_DOCUMENT_SETTLEMENT_MAX_ATTEMPTS = 5
+const ASSET_DOCUMENT_SETTLEMENT_IDLE_MS = 1000
+const assetDocumentSettlementCoordinator = new KeyedOperationCoordinator()
+
+type AssetDocumentSettlementRequest = {
+    organizationId: string
+    assetId: string
+    role: AssetDocumentRole
+    workspaceId: string
+    leaseId: string
+    holderId?: string
+    requester?: AssetRequesterContext
+}
+
+type AssetDocumentSettlementTrigger = 'direct' | 'final-snapshot' | 'step-idle'
+
+type AssetDocumentSettlementExecution = AssetDocumentSettlementRequest & {
+    trigger: AssetDocumentSettlementTrigger
+    coalescedBatchCount: number
+}
+
+const getAssetDocumentSettlementKey = ({
+    organizationId,
+    assetId,
+    role,
+}: Pick<AssetDocumentSettlementRequest, 'organizationId' | 'assetId' | 'role'>): string =>
+    `${organizationId}:${assetId}:${role}`
+
+const getSettlementErrorFields = (error: unknown): { errorName: string; errorMessage: string } => ({
+    errorName: error instanceof Error ? error.name : 'UnknownError',
+    errorMessage: error instanceof Error ? error.message : String(error),
+})
 
 const getDocumentType = (role: AssetDocumentRole) => {
     if (role === 'content') return DOCUMENT_TYPE.ASSET_CONTENT
@@ -258,7 +295,7 @@ const validateEmbeddedAssetReferences = async ({
     }
 }
 
-const settle = async ({
+const settleOnce = async ({
     asset,
     role,
     workspaceId,
@@ -412,7 +449,11 @@ const settle = async ({
             }
             await validateEmbeddedAssetReferences({ hostAsset: asset, doc: json, role })
         }
-        await dynamoDBService.transactWrite({ operations, origin: 'AssetDocumentService.settle' })
+        await dynamoDBService.transactWrite({
+            operations,
+            logConditionalCheckFailures: false,
+            origin: 'AssetDocumentService.settle',
+        })
     } catch (error) {
         for (const embeddedAssetId of newlyAttachedEmbeddedAssetIds) {
             await enqueueAssetSurfaceCleanup({
@@ -463,6 +504,125 @@ const settle = async ({
         }
     }
     return pointer
+}
+
+const settleImmediately = async ({
+    organizationId,
+    assetId,
+    role,
+    workspaceId,
+    leaseId,
+    holderId,
+    requester,
+    trigger,
+    coalescedBatchCount,
+}: AssetDocumentSettlementExecution): Promise<AssetDocumentPointer> => {
+    const key = getAssetDocumentSettlementKey({ organizationId, assetId, role })
+    const startedAt = Date.now()
+    let attempts = 0
+    console.info('[AssetDocumentSettlement] started', {
+        key,
+        organizationId,
+        assetId,
+        role,
+        trigger,
+        coalescedBatchCount,
+    })
+    try {
+        const pointer = await assetDocumentSettlementCoordinator.run(
+            key,
+            async () => await runOperationWithRetry({
+                operation: async () => {
+                    attempts += 1
+                    const asset = await getAssetRecord(
+                        assetId,
+                        'AssetDocumentService.settle:getCurrent',
+                    )
+                    if (!asset || asset.organizationId !== organizationId) throw new Error('ASSET_NOT_FOUND')
+                    return await settleOnce({
+                        asset,
+                        role,
+                        workspaceId,
+                        leaseId,
+                        holderId,
+                        requester,
+                    })
+                },
+                shouldRetry: isTransactionConditionalCheckFailure,
+                maxAttempts: ASSET_DOCUMENT_SETTLEMENT_MAX_ATTEMPTS,
+            }),
+        )
+        console.info('[AssetDocumentSettlement] completed', {
+            key,
+            organizationId,
+            assetId,
+            role,
+            trigger,
+            coalescedBatchCount,
+            version: pointer.version,
+            attempts,
+            durationMs: Date.now() - startedAt,
+        })
+        return pointer
+    } catch (error) {
+        console.error('[AssetDocumentSettlement] failed', {
+            key,
+            organizationId,
+            assetId,
+            role,
+            trigger,
+            coalescedBatchCount,
+            attempts,
+            durationMs: Date.now() - startedAt,
+            ...getSettlementErrorFields(error),
+        })
+        throw error
+    }
+}
+
+const assetDocumentSettlementScheduler = new KeyedIdleBatchScheduler<AssetDocumentSettlementRequest>({
+    delayMs: ASSET_DOCUMENT_SETTLEMENT_IDLE_MS,
+    onFlush: async ({ value, coalescedRequestCount }) => {
+        await settleImmediately({
+            ...value,
+            trigger: 'step-idle',
+            coalescedBatchCount: coalescedRequestCount,
+        })
+    },
+    onError: (error, batch) => {
+        console.error('[AssetDocumentSettlement] idle flush rejected', {
+            key: batch.key,
+            coalescedBatchCount: batch.coalescedRequestCount,
+            ...getSettlementErrorFields(error),
+        })
+    },
+})
+
+const settle = async ({
+    trigger = 'direct',
+    ...request
+}: AssetDocumentSettlementRequest & {
+    trigger?: AssetDocumentSettlementTrigger
+}): Promise<AssetDocumentPointer> => {
+    const key = getAssetDocumentSettlementKey(request)
+    const cancelledBatchCount = trigger === 'step-idle'
+        ? 0
+        : assetDocumentSettlementScheduler.cancel(key)
+    if (cancelledBatchCount > 0) {
+        console.info('[AssetDocumentSettlement] pending idle flush cancelled', {
+            key,
+            organizationId: request.organizationId,
+            assetId: request.assetId,
+            role: request.role,
+            trigger,
+            cancelledBatchCount,
+        })
+    }
+    return await settleImmediately({
+        ...request,
+        trigger,
+        coalescedBatchCount: trigger === 'step-idle' ? 1 : cancelledBatchCount,
+    })
 }
 
 const replaceSystemSnapshot = async ({
@@ -579,7 +739,11 @@ const AssetDocumentService = {
             || payload.baseVersion < 0
             || !Number.isSafeInteger(payload.expectedVersion)
             || payload.expectedVersion < 0) return { error: 'INVALID_DOCUMENT_VERSION' }
-        const authorized = await AssetModel.get({ assetId: payload.assetId, requester })
+        const authorized = await AssetModel.get({
+            assetId: payload.assetId,
+            requester,
+            origin: 'AssetDocumentService.submitSteps:authorize',
+        })
         if ('error' in authorized) return authorized
         const asset = authorized
         if (asset.organizationId !== payload.organizationId) return { error: 'NOT_FOUND' }
@@ -588,32 +752,19 @@ const AssetDocumentService = {
         if (!verifyLease(asset, payload.workspaceId, payload.leaseId, payload.holderId)) return { error: 'LEASE_INVALID' }
         const result = await AssetProseMirrorStepTransport.fromSingleton().submitSteps(payload)
         if (result.status === 'ACCEPTED') {
-            const timer = setTimeout(() => {
-                void (async () => {
-                    try {
-                        for (let attempt = 0; attempt < 5; attempt += 1) {
-                            const current = await getAssetRecord(payload.assetId)
-                            if (!current) return
-                            try {
-                                await settle({
-                                    asset: current,
-                                    role: payload.role,
-                                    workspaceId: payload.workspaceId,
-                                    leaseId: payload.leaseId,
-                                    holderId: payload.holderId,
-                                    requester,
-                                })
-                                return
-                            } catch (error) {
-                                if (!isTransactionConditionalCheckFailure(error) || attempt === 4) throw error
-                            }
-                        }
-                    } catch (error) {
-                        console.error('Asset document settlement failed:', error)
-                    }
-                })()
-            }, 1000)
-            if (typeof timer === 'object' && 'unref' in timer) timer.unref()
+            const settlementRequest: AssetDocumentSettlementRequest = {
+                organizationId: payload.organizationId,
+                assetId: payload.assetId,
+                role: payload.role,
+                workspaceId: payload.workspaceId,
+                leaseId: payload.leaseId,
+                holderId: payload.holderId,
+                requester,
+            }
+            assetDocumentSettlementScheduler.schedule(
+                getAssetDocumentSettlementKey(settlementRequest),
+                settlementRequest,
+            )
         }
         return result
     },
@@ -640,7 +791,11 @@ const AssetDocumentService = {
             || !Number.isSafeInteger(localStreamSeq) || localStreamSeq < 0) {
             return { error: 'INVALID_DOCUMENT_CURSOR' }
         }
-        const authorized = await AssetModel.get({ assetId: coordinate.assetId, requester })
+        const authorized = await AssetModel.get({
+            assetId: coordinate.assetId,
+            requester,
+            origin: 'AssetDocumentService.resume:authorize',
+        })
         if ('error' in authorized) return authorized
         if (authorized.organizationId !== coordinate.organizationId) return { error: 'NOT_FOUND' }
         if (!authorized.documents[coordinate.role]) return { error: 'DOCUMENT_ROLE_NOT_FOUND' }

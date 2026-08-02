@@ -158,6 +158,29 @@ export const createNexNodeService = async (args: NexNodeServiceArgs) => {
         })
     })
 
+    // Read-only Bedrock catalog access. With ANTHROPIC_USE_AWS_BEDROCK_INFERENCE=true the
+    // models-sync workload lists Anthropic models from Bedrock instead of the Anthropic API,
+    // because that setup may carry no Anthropic api key at all. No invoke permissions here —
+    // the workload never runs inference.
+    const bedrockCatalogPolicy = new aws.iam.Policy(`${serviceName}-bedrock-catalog-policy`, {
+        policy: JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [{
+                Effect: 'Allow',
+                Action: [
+                    'bedrock:ListFoundationModels',
+                    'bedrock:GetFoundationModel',
+                ],
+                Resource: '*',
+            }],
+        }),
+    })
+
+    new aws.iam.RolePolicyAttachment(`${serviceName}-bedrock-catalog-attachment`, {
+        role: taskRole.name,
+        policyArn: bedrockCatalogPolicy.arn,
+    })
+
     // Egress-only security group: the node is a client (connects out to NATS,
     // DynamoDB, and provider APIs). Nothing connects to it, so no ingress.
     const securityGroup = new aws.ec2.SecurityGroup(`${serviceName}-sg`, {

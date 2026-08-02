@@ -7,8 +7,11 @@ import NATS_Service from '@lixpi/nats-service'
 import {
     ACCESS_LEVEL,
     ASSET_EDIT_LEASE_DURATION_MS,
+    DEFAULT_ASSET_SUBJECT_IDENTITY,
+    DEPICTION_MEDIA,
     getDynamoDbTableStageName,
     NATS_SUBJECTS,
+    SUBJECT_IDENTITY_CLASSIFICATIONS,
     isAssetDocumentRole,
     type Asset,
     type AssetAccessList,
@@ -135,6 +138,8 @@ export const buildAssetMeta = (asset: Asset, scopeAndOwner?: string): AssetMeta 
         ...(typeof asset.media?.durationSeconds === 'number' ? { durationSeconds: asset.media.durationSeconds } : {}),
         ...(typeof asset.media?.aspectRatio === 'number' ? { aspectRatio: asset.media.aspectRatio } : {}),
         ...(asset.descriptor?.summary ? { descriptorSummary: asset.descriptor.summary } : {}),
+        depictionMedium: asset.depictionMedium,
+        subjectIdentityClassification: asset.subjectIdentity.classification,
         ...(asset.descriptor?.entityTags ? { entityTags: asset.descriptor.entityTags } : {}),
         ...(asset.descriptor?.styleTags ? { styleTags: asset.descriptor.styleTags } : {}),
         ...(asset.artifact ? {
@@ -167,13 +172,19 @@ const buildAssetSearchDelete = (asset: Asset, scopeAndOwner: string): TransactOp
     }] : []
 }
 
-export const getAssetRecord = async (assetId: string): Promise<Asset | undefined> =>
-    await dynamoDBService.getItem({
+export const getAssetRecord = async (
+    assetId: string,
+    origin = 'Asset.getRecord',
+): Promise<Asset | undefined> => {
+    const asset = await dynamoDBService.getItem({
         tableName: assetsTableName(),
         key: { assetId },
         consistentRead: true,
-        origin: 'Asset.getRecord',
+        origin,
     }) as Asset | undefined
+    if (asset) assertAssetComponents(asset)
+    return asset
+}
 
 const getAccess = async (assetId: string, principalId: string): Promise<AssetAccessList | undefined> =>
     await dynamoDBService.getItem({
@@ -226,12 +237,14 @@ const getAuthorizedAsset = async ({
     assetId,
     requester,
     includeDeleting = false,
+    origin,
 }: {
     assetId: string
     requester: AssetRequesterContext
     includeDeleting?: boolean
+    origin?: string
 }): Promise<Asset | { error: string }> => {
-    const asset = await getAssetRecord(assetId)
+    const asset = await getAssetRecord(assetId, origin)
     if (!asset || (!includeDeleting && asset.states.lifecycle === 'deleting')) return { error: 'NOT_FOUND' }
     if (!requester.organizationIds.includes(asset.organizationId)) return { error: 'PERMISSION_DENIED' }
     if (canReadBaseScope(asset, requester)) return asset
@@ -591,13 +604,33 @@ type CreateAssetInput = Pick<
     | 'lineage'
     | 'generatedOutputReview'
     | 'descriptor'
+    | 'depictionMedium'
+    | 'subjectIdentity'
     | 'states'
     | 'importedFromAssetId'
 >> & {
     workspaceReference?: Pick<AssetReference, 'workspaceId' | 'nodeIds' | 'surfaceIds'>
 }
 
-const assertAssetComponents = (asset: Asset): void => {
+export const assertAssetComponents = (asset: Asset): void => {
+    if (!DEPICTION_MEDIA.includes(asset.depictionMedium)) throw new Error('INVALID_ASSET_DEPICTION_MEDIUM')
+    if (!asset.subjectIdentity
+        || !SUBJECT_IDENTITY_CLASSIFICATIONS.includes(asset.subjectIdentity.classification)
+        || !['user-attestation', 'automatic-lineage', 'inherited-lineage'].includes(asset.subjectIdentity.source)
+        || !Array.isArray(asset.subjectIdentity.providerVerifications)) {
+        throw new Error('INVALID_ASSET_SUBJECT_IDENTITY')
+    }
+    for (const verification of asset.subjectIdentity.providerVerifications) {
+        if (!verification.providerAccountScope
+            || !verification.subjectHandle
+            || !['provider-hosted-session', 'provider-direct-upload'].includes(verification.strategy)
+            || !['valid', 'expired', 'revoked'].includes(verification.status)
+            || !['not-allowed', 'same-provider-account', 'documented-lineage'].includes(verification.derivativeReuse)
+            || !verification.policyProfileVersion
+            || !Number.isSafeInteger(verification.verifiedAt)) {
+            throw new Error('INVALID_ASSET_PROVIDER_IDENTITY_VERIFICATION')
+        }
+    }
     if (!asset.media && !asset.artifact && !asset.lineage && Object.keys(asset.documents).length === 0) {
         throw new Error('ASSET_COMPONENT_REQUIRED')
     }
@@ -683,6 +716,8 @@ const AssetModel = {
         lineage,
         generatedOutputReview,
         descriptor,
+        depictionMedium = 'unknown',
+        subjectIdentity = DEFAULT_ASSET_SUBJECT_IDENTITY,
         states,
         importedFromAssetId,
         workspaceReference,
@@ -768,6 +803,8 @@ const AssetModel = {
             ...(lineage ? { lineage } : {}),
             ...(generatedOutputReview ? { generatedOutputReview } : {}),
             ...(descriptor ? { descriptor } : {}),
+            depictionMedium,
+            subjectIdentity: structuredClone(subjectIdentity),
             states: states ?? {
                 lifecycle: media ? 'creating' : 'active',
                 media: media ? 'processing' : 'none',
@@ -835,10 +872,12 @@ const AssetModel = {
     get: async ({
         assetId,
         requester,
+        origin,
     }: {
         assetId: string
         requester: AssetRequesterContext
-    }): Promise<Asset | { error: string }> => await getAuthorizedAsset({ assetId, requester }),
+        origin?: string
+    }): Promise<Asset | { error: string }> => await getAuthorizedAsset({ assetId, requester, origin }),
 
     listAvailable: async ({
         scopeAndOwners,
@@ -1021,12 +1060,14 @@ const AssetModel = {
         expectedRevision,
         title,
         descriptor,
+        depictionMedium,
     }: {
         assetId: string
         requester: AssetRequesterContext
         expectedRevision: number
         title?: string
         descriptor?: Asset['descriptor']
+        depictionMedium?: Asset['depictionMedium']
     }): Promise<Asset | { error: string }> => {
         const authorized = await getAuthorizedAsset({ assetId, requester })
         if ('error' in authorized) return authorized
@@ -1034,12 +1075,16 @@ const AssetModel = {
         if (authorized.revision !== expectedRevision) return { error: 'REVISION_CONFLICT' }
         if (title !== undefined && !title.trim()) return { error: 'TITLE_REQUIRED' }
         if (descriptor !== undefined && !isValidDescriptor(descriptor)) return { error: 'INVALID_DESCRIPTOR' }
+        if (depictionMedium !== undefined && !DEPICTION_MEDIA.includes(depictionMedium)) {
+            return { error: 'INVALID_DEPICTION_MEDIUM' }
+        }
 
         const now = Date.now()
         const next: Asset = {
             ...authorized,
             ...(title !== undefined ? { title: title.trim() } : {}),
             ...(descriptor !== undefined ? { descriptor } : {}),
+            ...(depictionMedium !== undefined ? { depictionMedium } : {}),
             revision: authorized.revision + 1,
             updatedAt: now,
         }
@@ -1052,6 +1097,7 @@ const AssetModel = {
                     updates: {
                         title: next.title,
                         ...(descriptor !== undefined ? { descriptor } : {}),
+                        ...(depictionMedium !== undefined ? { depictionMedium } : {}),
                         revision: next.revision,
                         updatedAt: now,
                     },

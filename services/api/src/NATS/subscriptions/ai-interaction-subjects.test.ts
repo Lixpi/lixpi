@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => ({
     workspace: {
         getWorkspace: vi.fn(),
     },
+    organization: {
+        getOrganization: vi.fn(),
+    },
     asset: {
         get: vi.fn(),
         acquireLease: vi.fn(),
@@ -37,6 +40,14 @@ const mocks = vi.hoisted(() => ({
     },
     pipelineEventLog: {
         replayPipelineEvents: vi.fn(),
+    },
+    mediaRequestModel: {
+        getAuthorized: vi.fn(),
+    },
+    mediaRequestService: {
+        create: vi.fn(),
+        getCheckpoint: vi.fn(),
+        pauseForBranchResolution: vi.fn(),
     },
     capabilities: {
         resolve: vi.fn(),
@@ -73,7 +84,18 @@ vi.mock('@lixpi/nats-service', () => ({
 
 vi.mock('../../models/ai-model.ts', () => ({ default: mocks.aiModel }))
 vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
+vi.mock('../../models/organization.ts', () => ({ default: mocks.organization }))
 vi.mock('../../models/asset.ts', () => ({ default: mocks.asset }))
+vi.mock('../../models/media-generation-request.ts', () => ({
+    default: mocks.mediaRequestModel,
+}))
+vi.mock('../../services/media-generation-request-service.ts', () => ({
+    MediaGenerationRequestService: class {
+        create = mocks.mediaRequestService.create
+        getCheckpoint = mocks.mediaRequestService.getCheckpoint
+        pauseForBranchResolution = mocks.mediaRequestService.pauseForBranchResolution
+    },
+}))
 vi.mock('../../models/blob.ts', () => ({ default: {} }))
 vi.mock('../../services/asset-requester-context.ts', () => ({ getAssetRequesterContext: mocks.requesterContext.get }))
 vi.mock('../../services/asset-document-service.ts', () => ({ default: mocks.assetDocumentService }))
@@ -194,6 +216,17 @@ describe('AI interaction message routing', () => {
         mocks.eventRelay.ensure.mockReturnValue('live-subject')
         mocks.aiModel.getAiModel.mockResolvedValue({ modelVersion: '1' })
         mocks.workspace.getWorkspace.mockResolvedValue(workspace)
+        mocks.organization.getOrganization.mockResolvedValue({ organizationId: 'org-1' })
+        mocks.mediaRequestModel.getAuthorized.mockResolvedValue(undefined)
+        mocks.mediaRequestService.create.mockImplementation(async (input: any) => ({
+            ...input,
+            status: input.unresolvedBindings.length > 0 ? 'awaiting_reference_resolution' : 'submitted',
+            revision: 1,
+            resolvedReferences: [],
+            checkpointBlobHash: 'checkpoint-hash',
+            createdAt: 1,
+            updatedAt: 1,
+        }))
         mocks.pipelineEventLog.replayPipelineEvents.mockResolvedValue({
             streamName: 'PIPELINE_EVENTS_workspace-1',
             subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.conv-1`,
@@ -238,10 +271,18 @@ describe('AI interaction message routing', () => {
                 organizationId: 'org-1',
                 workspaceId: 'workspace-1',
                 aiChatThreadId: 'conv-1',
+                generationRequestId: 'request-1',
             },
         }))
         expect(mocks.llmModule.process).not.toHaveBeenCalled()
-        expect(mocks.nats.publish).not.toHaveBeenCalled()
+        expect(mocks.nats.publish).toHaveBeenCalledWith(
+            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.org-1.conv-1`,
+            expect.objectContaining({
+                generationRequestId: 'request-1',
+                status: 'submitted',
+                requestRevision: 1,
+            }),
+        )
     })
 
     it('skips ai model lookup entirely when media generation request path is taken', async () => {
@@ -259,6 +300,29 @@ describe('AI interaction message routing', () => {
         expect(mocks.aiModel.getAiModel).not.toHaveBeenCalled()
         expect(mocks.llmModule.process).not.toHaveBeenCalled()
         expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledTimes(1)
+    })
+
+    it('defers scalar media runs until reasoning selects the requested modality', async () => {
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            mediaGenerationRequest: undefined,
+        })
+        await flushPromises()
+
+        expect(mocks.mediaRequestService.create).toHaveBeenCalledWith(expect.objectContaining({
+            checkpoint: expect.objectContaining({
+                modelSelection: {
+                    reasoningModelIds: ['openai:gpt-4'],
+                    mediaModelIds: ['google:imagen3', 'openai:gpt-4o-video'],
+                },
+            }),
+            runs: [],
+        }))
+        expect(mocks.llmModule.process).toHaveBeenCalledWith(
+            'workspace-1:conv-1',
+            'openai',
+            expect.objectContaining({ durableMediaRuns: [] }),
+        )
     })
 
     it('rejects the send with AI_MODEL_REQUIRED when no reasoning model and no media generation request are given', async () => {

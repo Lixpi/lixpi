@@ -12,7 +12,7 @@ Write like you're explaining it to a coworker at their desk. Plain, direct, no f
 - Use plain words. "Use," not "utilize." "Enough," not "sufficient." "Before," not "prior to." "Because," not "due to the fact that."
 - Prefer short sentences. Break up anything with three commas in it.
 - Use concrete nouns and real names: the actual file, function, endpoint, flag. `authController.js:62`, not "the relevant handler."
-- Write headings that say what's in the section: "Why CORE-81746 broke," not "Background" or "Deep dive."
+- Write headings that say what's in the section: "Why LIX-12 broke," not "Background" or "Deep dive."
 - Explain the reasoning, not just the conclusion. A coworker wants to know *why*, briefly.
 - Use tables and code blocks when they're genuinely clearer than prose. Don't pad them out.
 - When answering a set of questions, quote each question plainly and answer it directly underneath.
@@ -40,7 +40,10 @@ Write like you're explaining it to a coworker at their desk. Plain, direct, no f
 ## Voice
 
 - Second person and plain active voice: "We drop the email branch," "You'll see the field vanish."
-- It's fine to be a little blunt. "That's the leak." "This is what CORE-81746 was missing." Confidence reads as human; hedging reads as generated.
+- Write in complete sentences. Short is good, but a sentence still needs a subject and a verb. Clipped fragments like "Security isn't moving." or "Not worth it." read as generated, because nobody talks that way at a desk.
+- Say who is doing the thing. "I don't want to touch the auth code," not "The auth code stays as-is." "I'd rather we document it," not "Documentation is the deliverable."
+- Let sentences connect. Use "so," "because," "and," "but" to join ideas instead of stacking standalone statements. Two sentences that clearly relate should say how they relate.
+- It's fine to be a little blunt, but say it as a sentence: "I don't think that's worth it," not "Not worth it." Confidence reads as human; hedging reads as generated.
 - Contractions are good: "don't," "it's," "we'll."
 
 ## Quick before/after
@@ -61,11 +64,13 @@ Messages to a coworker in Slack, a chat reply, a quick status update. Shorter an
 
 ### Do
 
-- Open with the answer or the state: "Fixed and deployed." "Not the fetcher." "Still broken, looking now." Then explain.
-- Write the way you'd actually say it out loud to the person. If you wouldn't say a sentence at their desk, delete it.
+- Open with the answer or the state, as a sentence: "It's fixed and deployed." "It wasn't the fetcher." "This is still broken and I'm looking at it now." Then explain.
+- Write the way you'd actually say it out loud to the person. If you wouldn't say a sentence at their desk, delete it. Read it back and check every sentence would survive being said out loud.
+- It's fine to say what you think and why: "I think there are a couple of problems with how that got framed," "I'd rather we just say it isn't supported anymore." Owning the opinion reads as human.
 - Match the reader. Talk to QE about behavior and what to check. Talk to a dev about the mechanism. Don't send commit hashes, file paths, function names, or line numbers to someone who doesn't touch the code. It's noise to them.
 - Explain a problem by what it does, not how the code does it: "one bad framework was killing the whole run," not the class and method that threw.
-- Keep it to a few short lines. One idea per line. Loose fragments are fine: "Re-triggered all 3, they finished clean."
+- Keep it to a few short paragraphs, one idea each. Short is still full sentences: "I re-triggered all 3 and they finished clean," not "Re-triggered all 3, they finished clean."
+- Don't over-structure a chat reply. Headings, bold labels and bullet lists in Slack are the clearest tell that a model wrote it. Write paragraphs.
 - End with the real next step or the actual open question. "Any idea how the regression subs get set up?" Ask the thing you need.
 
 ### Don't
@@ -85,11 +90,17 @@ Before (slop):
 
 After (plain):
 
-> Fixed and deployed.
+> It's fixed and deployed.
 >
-> It wasn't the apex fetcher. The 3 integrations reference APEX frameworks that aren't in the hierarchy, and one bad framework was killing the whole run, so they triggered but processed nothing. Changed it to skip a missing framework instead of failing everything.
+> It wasn't the apex fetcher. The 3 integrations point at APEX frameworks that aren't in the hierarchy, and one bad framework was killing the whole run, so they triggered but didn't process anything. I changed it to skip a missing framework instead of failing everything.
 >
-> I re-triggered all 3, they finished clean and pulled real content through.
+> I re-triggered all 3 and they finished clean with real content coming through.
+
+Still clipped (don't do this):
+
+> Not the apex fetcher. Bad framework, whole run died. Fixed. Re-triggered, all clean.
+
+Every one of those is missing a subject or a verb. It reads like notes, not like a person talking.
 
 ## How to use this
 

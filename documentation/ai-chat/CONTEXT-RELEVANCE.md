@@ -29,7 +29,9 @@ Plain canvas proximity, connector edges, branch membership, recency, and descrip
 7. Prompt-reference media and context-chip media are merged into the explicit media candidate set.
 8. `resolveMediaBranch()` may inspect those explicit media pixels to assign target, style, and lineage roles. Every explicit candidate remains in `referenceCandidateIds`, so role assignment cannot remove an attached reference or introduce another canvas node.
 
-If media-role assignment is ambiguous or low-confidence, generation continues as a targetless fresh branch with every explicit reference attached. Ambiguity does not fail the generation request.
+If attached free-form reference matching or media-role target assignment is ambiguous, the API persists the authorized candidates and pauses the durable media request. The planned operation node opens an anchored picker. Choosing one candidate reauthorizes every binding and resumes the same request/revision chain; closing or reloading does nothing, and only explicit Cancel cancels it.
+
+For media-generation turns, the provider projection replaces attached Asset display titles and matched filename/title variants with request-scoped `REFERENCE_n` aliases before reasoning. Authorized descriptors, depiction medium, and subject-identity classification preserve meaning. Unmatched text remains unchanged user intent. See [Media Reference Identity and Provider Moderation](../media-generation/MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md).
 
 ## Browser Payloads
 

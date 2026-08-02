@@ -22,6 +22,16 @@
 			"RESUME": "ai.interaction.capability.run.resume",
 			"EVENTS": "ai.interaction.capability.run.events",
 			"STATUS": "ai.interaction.capability.run.status"
+		},
+		"MEDIA_GENERATION_REQUEST": {
+			"GET": "ai.interaction.mediaGeneration.request.get",
+			"RESOLVE_REFERENCE": "ai.interaction.mediaGeneration.reference.resolve",
+			"CANCEL": "ai.interaction.mediaGeneration.request.cancel",
+			"VERIFICATION_START": "ai.interaction.mediaGeneration.verification.start",
+			"VERIFICATION_COMPLETE": "ai.interaction.mediaGeneration.verification.complete",
+			"STATUS": "ai.interaction.mediaGeneration.status",
+			"REPLAY": "ai.interaction.mediaGeneration.replay",
+			"EVENTS": "ai.interaction.mediaGeneration.events"
 		}
 	},
 	"ASSET_SUBJECTS": {
@@ -31,6 +41,7 @@
 		"UPDATE_METADATA": "asset.metadata.update",
 		"CHANGE_SCOPE": "asset.scope.change",
 		"REVIEW_GENERATED_OUTPUT": "asset.generatedOutput.review",
+		"SUBJECT_IDENTITY_ATTEST": "asset.subjectIdentity.attest",
 		"ATTACH": "asset.reference.attach",
 		"DETACH": "asset.reference.detach",
 		"ACQUIRE_LEASE": "asset.lease.acquire",

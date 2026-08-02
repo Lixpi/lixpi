@@ -18,6 +18,7 @@ import AiModelModel from '../../models/ai-model.ts'
 import { settlePersistedAiChatGenerationRequest } from '../../prosemirror/ai-chat-stream-assembler.ts'
 import { settleMediaGenerationRequestOnCanvas } from '../../services/asset-canvas-projection.ts'
 import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
+import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import type { ProviderState } from '../graph/state.ts'
@@ -725,6 +726,10 @@ export class MediaGenerationMatrixOrchestrator {
             videoDurationSeconds: primaryVideoOptions?.duration ? Number(primaryVideoOptions.duration) : undefined,
             videoSourceForExtension: normalized.videoSourceForExtension,
             generationRun,
+            durableGenerationRequestId: requestData.durableGenerationRequestId,
+            durableMediaRuns: requestData.durableMediaRuns,
+            providerSafeMediaIntent: requestData.providerSafeMediaIntent,
+            mediaReferenceBindings: requestData.mediaReferenceBindings,
         }
 
         // Each resolver runs against the accumulating `state` because later
@@ -858,6 +863,13 @@ export class MediaGenerationMatrixOrchestrator {
         resolvedRecord.proseMirrorContentHandler = matrixProseMirrorContentHandler
         resolvedRecord.proseMirrorSnapshotProvider = matrixProseMirrorSnapshotProvider
         await publisher.drainPendingWrites()
+        if (requestData.durableGenerationRequestId) {
+            await new MediaGenerationRequestService().bindRunsToLineagePlan({
+                generationRequestId: requestData.durableGenerationRequestId,
+                workspaceId: requestData.workspaceId,
+                lineagePlan: mediaBranchLineagePlan,
+            })
+        }
 
         return { state: resolved, publisher }
     }

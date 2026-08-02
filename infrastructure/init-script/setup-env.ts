@@ -66,8 +66,12 @@ type EnvConfig = {
     // API Keys
     openaiApiKey: string
     anthropicApiKey: string
+    // When true, anthropicApiKey is ignored and inference goes through AWS Bedrock.
+    anthropicUseAwsBedrockInference: boolean
     googleApiKey: string
     stableDiffusionApiKey: string
+    // When true, stableDiffusionApiKey is ignored and inference goes through AWS Bedrock.
+    stabilityUseAwsBedrockInference: boolean
     arkApiKey: string
     stripePublicKey: string
 }
@@ -600,13 +604,25 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         return null
     }
 
-    const anthropicApiKey = await prompts.text({
-        message: 'Anthropic API Key',
-        placeholder: 'sk-ant-...',
+    const anthropicUseAwsBedrockInference = await prompts.confirm({
+        message: 'Run Anthropic inference through AWS Bedrock (uses your AWS SSO profile instead of an API key)?',
+        initialValue: false,
     })
-    if (prompts.isCancel(anthropicApiKey)) {
+    if (prompts.isCancel(anthropicUseAwsBedrockInference)) {
         prompts.cancel('Setup cancelled')
         return null
+    }
+
+    let anthropicApiKey: string | symbol = ''
+    if (!anthropicUseAwsBedrockInference) {
+        anthropicApiKey = await prompts.text({
+            message: 'Anthropic API Key',
+            placeholder: 'sk-ant-...',
+        })
+        if (prompts.isCancel(anthropicApiKey)) {
+            prompts.cancel('Setup cancelled')
+            return null
+        }
     }
 
     const googleApiKey = await prompts.text({
@@ -618,13 +634,25 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         return null
     }
 
-    const stableDiffusionApiKey = await prompts.text({
-        message: 'Stable Diffusion API Key',
-        placeholder: 'sk-...',
+    const stabilityUseAwsBedrockInference = await prompts.confirm({
+        message: 'Run Stability image generation through AWS Bedrock (uses your AWS SSO profile instead of an API key)?',
+        initialValue: false,
     })
-    if (prompts.isCancel(stableDiffusionApiKey)) {
+    if (prompts.isCancel(stabilityUseAwsBedrockInference)) {
         prompts.cancel('Setup cancelled')
         return null
+    }
+
+    let stableDiffusionApiKey: string | symbol = ''
+    if (!stabilityUseAwsBedrockInference) {
+        stableDiffusionApiKey = await prompts.text({
+            message: 'Stable Diffusion API Key',
+            placeholder: 'sk-...',
+        })
+        if (prompts.isCancel(stableDiffusionApiKey)) {
+            prompts.cancel('Setup cancelled')
+            return null
+        }
     }
 
     const arkApiKey = await prompts.text({
@@ -687,8 +715,10 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         cloudwatchContainerInsightsEnabled,
         openaiApiKey: (openaiApiKey as string) || '',
         anthropicApiKey: (anthropicApiKey as string) || '',
+        anthropicUseAwsBedrockInference: anthropicUseAwsBedrockInference as boolean,
         googleApiKey: (googleApiKey as string) || '',
         stableDiffusionApiKey: (stableDiffusionApiKey as string) || '',
+        stabilityUseAwsBedrockInference: stabilityUseAwsBedrockInference as boolean,
         arkApiKey: (arkApiKey as string) || '',
         stripePublicKey: (stripePublicKey as string) || '',
     }
@@ -739,8 +769,10 @@ function generateEnvFileContent(config: EnvConfig): string {
         '{{METRICS_ENABLED}}': 'false',
         '{{OPENAI_API_KEY}}': config.openaiApiKey,
         '{{ANTHROPIC_API_KEY}}': config.anthropicApiKey,
+        '{{ANTHROPIC_USE_AWS_BEDROCK_INFERENCE}}': String(config.anthropicUseAwsBedrockInference),
         '{{GOOGLE_API_KEY}}': config.googleApiKey,
         '{{STABLE_DIFFUSION_API_KEY}}': config.stableDiffusionApiKey,
+        '{{STABILITY_USE_AWS_BEDROCK_INFERENCE}}': String(config.stabilityUseAwsBedrockInference),
         '{{ARK_API_KEY}}': config.arkApiKey,
         '{{VITE_MOCK_AUTH}}': String(config.useLocalAuth0Mock),
         '{{VITE_MOCK_AUTH0_DOMAIN}}': config.useLocalAuth0Mock ? 'localhost:3000' : '',

@@ -234,6 +234,64 @@ describe('Capability Artifact generated-output chrome parity', () => {
 	})
 })
 
+describe('Workspace canvas — durable media request recovery and identity', () => {
+	const ts = loadTs()
+	const identityControl = readSourceFile('assetSubjectIdentityControl.ts')
+	const library = readSourceFile('mediaLibraryPanel.ts')
+
+	it('uses the scope selector dropdown for all five subject identity options in both Asset surfaces', () => {
+		expectSourceToContain(identityControl, "{ title: 'Unknown', value: 'unknown'")
+		expectSourceToContain(identityControl, "{ title: 'No person', value: 'no-person'")
+		expectSourceToContain(identityControl, "{ title: 'Fictional', value: 'fictional'")
+		expectSourceToContain(identityControl, "{ title: 'Me', value: 'self'")
+		expectSourceToContain(identityControl, "{ title: 'Authorized', value: 'authorized-real-person'")
+		expectSourceToContain(identityControl, 'this.dropdown = createPureDropdown({')
+		expectSourceToContain(identityControl, "theme: 'dark'")
+		expectSourceToContain(identityControl, 'ignoreColorValuesForOptions: true')
+		expectSourceToContain(identityControl, 'ignoreColorValuesForSelectedValue: true')
+		expectSourceToContain(identityControl, 'renderIconForSelectedValue: false')
+		expectSourceToContain(identityControl, 'renderIconForOptions: false')
+		expectSourceToContain(identityControl, 'mountToBody: false')
+		expectSourceToContain(identityControl, 'disableAutoPositioning: true')
+		expectSourceToContain(identityControl, 'this.assetService.attestSubjectIdentity(')
+		expectSourceToContain(identityControl, 'requestedAssetId,')
+		expectSourceToContain(identityControl, 'this.currentAsset.revision,')
+		expectSourceToContain(identityControl, 'nextClassification,')
+		expectSourceToContain(identityControl, 'this.syncSelectedClassification(previousClassification)')
+		expectSourceNotToContain(identityControl, 'createSlidingSwitch')
+		expectSourceToContain(ts, 'mountAssetSubjectIdentityControl({')
+		expectSourceToContain(library, 'mountAssetSubjectIdentityControl({')
+		expectSourceNotToContain(identityControl, 'modal')
+	})
+
+	it('subscribes live before replay and deduplicates stream sequences after reload', () => {
+		const recoveryStart = ts.indexOf('function createOperationStatusNode(node: OperationStatusCanvasNode): HTMLElement')
+		const recoveryEnd = ts.indexOf('function syncExistingOperationStatusNodeToDOM', recoveryStart)
+		const recovery = ts.slice(recoveryStart, recoveryEnd)
+		expect(recovery.indexOf("servicesStore.getData('nats')!.subscribe(result.liveSubject")).toBeGreaterThan(-1)
+		expect(recovery.indexOf('return replayMediaGenerationRequest({')).toBeGreaterThan(
+			recovery.indexOf("servicesStore.getData('nats')!.subscribe(result.liveSubject")
+		)
+		expectExcerptToContain(recovery, 'if (seenSequences.has(envelope.streamSequence)) return', 'operation recovery')
+		expectExcerptToContain(recovery, 'applyRecoveredMediaGenerationRequest(result.request)', 'operation recovery')
+		expectExcerptToContain(recovery, 'applyRecoveredMediaGenerationRequestEvent(envelope.event)', 'operation recovery')
+		expectExcerptToContain(recovery, 'applyRecoveredMediaGenerationRequest(replay.request)', 'operation recovery')
+		expectExcerptToContain(recovery, 'if (seenSequences.has(envelope.streamSequence)) continue', 'operation recovery')
+		expectExcerptNotToContain(recovery, 'loadWorkspaceRouteData(workspaceId)', 'operation recovery')
+	})
+
+	it('renders explicit ambiguity, provider verification, failure, edit, cancel, and dismiss actions', () => {
+		expectSourceToContain(ts, 'createContextPreviewTile({')
+		expectSourceToContain(ts, "addActionButton('Verify with provider'")
+		expectSourceToContain(ts, "addActionButton('Cancel'")
+		expectSourceToContain(ts, "addActionButton('Edit request'")
+		expectSourceToContain(ts, 'response.checkpoint.selectedReferences.flatMap')
+		expectSourceToContain(ts, 'addContextChips(restoredContextNodeIds)')
+		expectSourceToContain(ts, "addActionButton('Dismiss'")
+		expectSourceToContain(ts, 'node.problem.providerReason ?? node.problem.detail')
+	})
+})
+
 function extractNodeElClickHandler(source: string): string {
 	const listener = "nodeEl.addEventListener('click',"
 	const listenerIndex = source.indexOf(listener)
@@ -583,7 +641,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectExcerptToContain(completeHandler, 'applyApiCanvasGeometry(data.canvasGeometry)', 'complete image handler')
 		expectExcerptNotToContain(completeHandler, 'currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 }', 'complete image handler')
 		expectExcerptToContain(errorHandler, 'const existing = partialImageTracker.get(runKey)', 'error image handler')
-		expectExcerptToContain(errorHandler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'error image handler')
+		expectExcerptNotToContain(errorHandler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'error image handler')
 		expectExcerptToContain(errorHandler, 'finishFailedGeneratedMediaRun(threadId, generationRun)', 'error image handler')
 		expectSourceToContain(ts, 'commitCanvasStatePreservingEditors({')
 		expectSourceToContain(ts, 'commitCanvasState({')
@@ -683,9 +741,9 @@ describe('Workspace canvas — generated image preview rendering', () => {
 	it('keeps in-progress generated media aligned with API-owned lineage identity', () => {
 		expectSourceToContain(ts, 'buildBranchMarkerTurnProjectionFromThreadContent')
 		expectSourceToContain(ts, 'getPendingGeneratedMediaNodeId')
-		expectSourceToContain(ts, 'allowLatestTurnFallback: isBranchMarkerGenerationActive(marker)')
-		expectSourceToContain(ts, '|| Boolean(marker.pendingState)')
-		expectSourceToContain(ts, '|| getBranchMarkerGeneratedArtifactNodes(marker).length > 0')
+		expectSourceToContain(ts, 'allowLatestTurnFallback: canUseLatestBranchMarkerTurnFallback(marker)')
+		expectSourceToContain(ts, '|| Boolean(node.pendingState)')
+		expectSourceToContain(ts, '|| getBranchMarkerGeneratedArtifactNodes(node).length > 0')
 		expectSourceToContain(ts, 'const expectedNodeId = lineageAssignment ? getPendingGeneratedMediaNodeId(lineageAssignment) : \'\'')
 		expectSourceToContain(ts, 'const completedNodeId = generationRun?.lineageAssignment\n                ? getPendingGeneratedMediaNodeId(generationRun.lineageAssignment)\n                : \'\'')
 		expectSourceToContain(ts, 'const nodeId = getPendingGeneratedMediaNodeId(lineageAssignment)')
@@ -721,7 +779,8 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptToContain(pendingHandler, 'applyApiCanvasGeometry(canvasGeometry)', 'video pending handler')
 		expectExcerptToContain(completeHandler, 'applyApiCanvasGeometry(data.canvasGeometry)', 'video complete handler')
 		expectExcerptNotToContain(completeHandler, 'commitCanvasState({', 'video complete handler')
-		expectExcerptToContain(errorHandler, 'const errorNodeId = existing.nodeId', 'video error handler')
+		expectExcerptToContain(errorHandler, 'videoGenerationTracker.delete(runKey)', 'video error handler')
+		expectExcerptNotToContain(errorHandler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'video error handler')
 	})
 
 	it('renders shared SVG controls for completed video nodes in the chrome layer', () => {
@@ -866,7 +925,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptNotToContain(artifactHistory, '<strong>Generation history</strong>', 'Capability Artifact node history')
 		expectExcerptToContain(panelKey, "'branch-marker-panel'", 'Capability Artifact branch history key')
 		expectExcerptNotToContain(panelKey, 'generated-artifact-panel', 'Capability Artifact branch history key')
-		expectSourceToContain(ts, 'getBranchMarkerGeneratedArtifactNodes(marker).length > 0')
+		expectSourceToContain(ts, 'getBranchMarkerGeneratedArtifactNodes(node).length > 0')
 		expectSourceNotToContain(ts, 'function getCapabilityArtifactLineageProjection')
 		expectSourceNotToContain(ts, 'function createCapabilityArtifactBranchHistoryPanel')
 	})
@@ -1070,12 +1129,13 @@ describe('Workspace canvas — video node interaction', () => {
 		})
 
 		it('keeps uploaded exotic media inert until the canonical object is returned', () => {
-			expectSourceToContain(svelte, "type: 'uploadPlaceholder',")
+			expectSourceToContain(svelte, "type: 'operationStatus',")
+			expectSourceToContain(svelte, "operation: 'upload',")
 			expectSourceToContain(svelte, 'placeholderNodeId = insertUploadPlaceholder(file.name)')
 			expectSourceToContain(svelte, 'placeholderNodeId = insertUploadPlaceholder(getRemotePlaceholderName(url))')
 			expectSourceToContain(svelte, 'renderer?.replaceUploadPlaceholder(placeholderNodeId, node, false)')
 			expectSourceToContain(svelte, 'renderer?.commitTransientCanvasNodeInsertion(nextCanvasState, nodeId, placeholderNodeId ?? undefined)')
-			expectSourceToContain(ts, "candidate.type === 'uploadPlaceholder' && candidate.nodeId === placeholderNodeId")
+			expectSourceToContain(ts, "candidate.type === 'operationStatus' && candidate.operation === 'upload' && candidate.nodeId === placeholderNodeId")
 			expectSourceToContain(ts, 'viewportEl.querySelector(`[data-node-id="${replacedPlaceholderNodeId}"]`)?.remove()')
 			expectSourceToContain(ts, 'appendCanvasNodeToDOM(insertedNode)')
 			expectSourceToContain(ts, 'queueCanvasMediaAnalysis(preparedNode.nodeId, getMediaDescriptorStillAssetId(preparedNode))')
@@ -1088,11 +1148,11 @@ describe('Workspace canvas — video node interaction', () => {
 			expectSourceNotToContain(svelte, 'new Image()')
 		})
 
-		it('renders upload placeholders and non-image upload node shells after reload', () => {
+		it('renders generic operation status and non-image upload node shells after reload', () => {
 			expectSourceToContain(ts, "node.type === 'mediaDocument'")
 			expectSourceToContain(ts, "node.type === 'audio'")
-			expectSourceToContain(ts, "node.type === 'uploadPlaceholder'")
-			expectSourceToContain(ts, 'function createUploadPlaceholderNode(node: UploadPlaceholderCanvasNode): HTMLElement')
+			expectSourceToContain(ts, "node.type === 'operationStatus'")
+			expectSourceToContain(ts, 'function createOperationStatusNode(node: OperationStatusCanvasNode): HTMLElement')
 			expectSourceToContain(scss, '.workspace-upload-placeholder-node')
 			expectSourceToContain(ts, 'workspace-upload-placeholder-loading-spinner ai-response-loading-spinner')
 			const loadingSpinnerBlock = extractBlock(scss, '.workspace-upload-placeholder-loading-spinner')
@@ -1291,9 +1351,22 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptToContain(submitPersistedBody, 'editorView.state.doc.descendants', 'persisted detached submit')
 		expectExcerptToContain(submitPersistedBody, 'node.type?.name === \'aiChatThread\' && node.attrs?.threadId === threadId', 'persisted detached submit')
 		expectExcerptToContain(submitPersistedBody, 'setMeta(USE_AI_CHAT_META, { threadId, nodePos })', 'persisted detached submit')
-		expectExcerptToContain(markerContentBody, 'getBranchMarkerPromptParts(\n            threadPreview?.userMessage,', 'detached marker Capability badge order')
+		expectExcerptToContain(markerContentBody, 'getBranchMarkerPromptPartsForNode(node, threadPreview)', 'detached marker Capability badge order')
 		expectExcerptToContain(markerContentBody, 'renderBranchMarkerPromptParts(promptPreviewParts, {', 'detached marker Capability badge order')
 		expectExcerptNotToContain(markerContentBody, '${promptReferenceBadges}', 'detached marker Capability badge order')
+	})
+
+	it('keeps exact submitted prompt atoms in the preflight marker and uses deterministic sizing', () => {
+		const submitBody = extractFunctionBody(ts, 'createDetachedCanvasThreadEditor')
+		const promptPartsBody = extractFunctionBody(ts, 'getBranchMarkerPromptPartsForNode')
+		const screenProjectionBody = extractFunctionBody(ts, 'applyPendingBranchMarkerScreenProjection')
+
+		expectExcerptToContain(submitBody, 'const promptParts = getBranchMarkerPromptParts({', 'preflight prompt snapshot')
+		expectExcerptToContain(submitBody, 'promptParts,', 'preflight prompt snapshot')
+		expectExcerptToContain(promptPartsBody, 'if (node.pendingState)', 'preflight prompt snapshot')
+		expectExcerptToContain(promptPartsBody, 'pendingGeneratedImagePlacements.get(placementKey)?.promptParts', 'preflight prompt snapshot')
+		expectExcerptNotToContain(screenProjectionBody, 'scrollWidth', 'preflight marker sizing')
+		expectExcerptNotToContain(screenProjectionBody, "width: 'max-content'", 'preflight marker sizing')
 	})
 
 	it('restores preflight markers from persisted standalone canvas threads after early reload', () => {
@@ -1415,7 +1488,7 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		// The thread's persisted content now resolves through the Asset document
 		// model (assetService + assetDocumentsStore) instead of a dedicated
 		// aiChatThreadService lookup.
-		expectExcerptToContain(refreshBody, 'const asset = await assetService.get(threadId)', 'persisted AI thread refresh')
+		expectExcerptToContain(refreshBody, 'const asset = await assetService.get(threadId, workspaceId)', 'persisted AI thread refresh')
 		expectExcerptToContain(refreshBody, "await assetService.resumeDocument({", 'persisted AI thread refresh')
 		expectExcerptToContain(refreshBody, "const snapshot = assetDocumentsStore.get(asset.assetId, 'conversation')", 'persisted AI thread refresh')
 		expectExcerptToContain(refreshBody, 'if (fetchedVersion < currentVersion) return', 'persisted AI thread refresh')
@@ -1423,8 +1496,9 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptToContain(refreshBody, 'liveAiChatThreadContentOverrides.delete(threadId)', 'persisted AI thread refresh')
 		expectExcerptToContain(refreshBody, 'refreshBranchMarkersForAiChatThread(threadId)', 'persisted AI thread refresh')
 		expectExcerptToContain(scheduleBody, 'window.clearTimeout(timer)', 'persisted AI thread refresh scheduler')
-		expectExcerptToContain(scheduleBody, 'const timers = [400, 1400, 3000].map(delayMs =>', 'persisted AI thread refresh scheduler')
-		expectExcerptToContain(scheduleBody, 'void refreshPersistedAiChatThreadForBranchMarkers(threadId).catch', 'persisted AI thread refresh scheduler')
+		expectExcerptToContain(scheduleBody, 'const retryDelaysMs = [400, 1000, 1600, 3000]', 'persisted AI thread refresh scheduler')
+		expectExcerptToContain(scheduleBody, 'void refreshPersistedAiChatThreadForBranchMarkers(threadId)', 'persisted AI thread refresh scheduler')
+		expectExcerptToContain(scheduleBody, 'scheduleAttempt(attempt + 1)', 'persisted AI thread refresh scheduler')
 	})
 })
 
@@ -1844,7 +1918,7 @@ describe('Right side panel — TS infrastructure', () => {
 		// client just flags the chip node ids into that snapshot instead of locally
 		// extracting a selected-context subset.
 		expectSourceToContain(ts, 'const chipNodeIds = aiChatPanelState.contextChips.slice()')
-		expectSourceToContain(ts, 'contextChipNodeIds: chipNodeIds,')
+		expectSourceToContain(ts, 'contextChipNodeIds: explicitContextNodeIds,')
 		// The session-history toggle is retained.
 		expectSourceToContain(ts, 'aiChatPanelToggleHistoryIcon')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-control')
@@ -1952,13 +2026,14 @@ describe('Right side panel — TS infrastructure', () => {
 		const settingsTs = loadSettings()
 
 		expectSourceToContain(ts, 'function rememberStandaloneGeneratedImagePlacement(')
-		expectSourceToContain(ts, 'const referenceNodeIds = getStandaloneGeneratedMediaReferenceNodeIds()')
+		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds(explicitReferenceNodeIds)')
 		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(threadId, candidateNodeIds)')
 		expectSourceNotToContain(ts, '...Array.from(selectedNodeIds),')
 		expectSourceToContain(ts, 'const placementAnchorNodeId = referenceNodeIds[0] ?? activeTargetNodeId ?? candidateNodeIds[0]')
 		expectSourceToContain(ts, '...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),')
 		expectSourceToContain(ts, 'referenceNodeIds: candidateNodeIds,')
-		expectSourceToContain(ts, 'rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)')
+		expectSourceToContain(ts, 'rememberStandaloneGeneratedImagePlacement(')
+		expectSourceToContain(ts, 'explicitContextNodeIds,')
 		expectSourceToContain(ts, 'const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)')
 		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(generationRun, [branchOriginNode, branchForkNode, branchLineNode])')
 		expectSourceToContain(ts, 'partialImageTracker.set(runKey, {')
@@ -2834,14 +2909,14 @@ describe('Image generation error cleanup', () => {
 		expectSourceNotToContain(ts, 'image-error-placeholder')
 	})
 
-	it('removes the failed partial image node from state and DOM immediately', () => {
+	it('retains the failed planned node for visible terminal status and explicit user action', () => {
 		const handler = getImageErrorHandler()
 
 		expectExcerptToContain(handler, 'const runKey = getGeneratedMediaRunKey(threadId, generationRun)', 'onImageErrorToCanvas')
 		expectExcerptToContain(handler, 'const existing = partialImageTracker.get(runKey)', 'onImageErrorToCanvas')
 		expectExcerptToContain(handler, 'partialImageTracker.delete(runKey)', 'onImageErrorToCanvas')
 		expectExcerptToContain(handler, 'selectedNodeIds.delete(existing.nodeId)', 'onImageErrorToCanvas')
-		expectExcerptToContain(handler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'onImageErrorToCanvas')
+		expectExcerptNotToContain(handler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'onImageErrorToCanvas')
 		expectExcerptToContain(handler, 'finishFailedGeneratedMediaRun(threadId, generationRun)', 'onImageErrorToCanvas')
 		expectExcerptNotToContain(handler, 'setTimeout', 'onImageErrorToCanvas')
 	})

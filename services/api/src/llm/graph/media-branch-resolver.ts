@@ -370,17 +370,10 @@ const sanitizeResolution = (args: {
     let rationale = typeof args.parsed.rationale === 'string' ? args.parsed.rationale.trim() : ''
     let confidence = Math.max(0, Math.min(1, Number(args.parsed.confidence) || 0))
     if (mode === 'ambiguous' || confidence < 0.2) {
-        targetCandidateId = null
-        parentCandidateId = undefined
-        includeGeneratedCandidateIds = []
-        styleReferenceCandidateIds = []
-        mode = 'fresh-branch'
-        operationKind = 'fresh_branch'
-        confidence = 1
-        rationale = appendRationale(
-            rationale,
-            'Resolver guard kept every explicit reference and omitted target lineage because no target role could be assigned safely.',
-        )
+        throw new MediaBranchAmbiguityError({
+            candidateAssetIds: snapshot.candidates.map(candidate => candidate.assetId),
+            rationale: rationale || 'The referenced branch could not be selected safely.',
+        })
     }
 
     if (parentCandidateId && !candidateById.has(parentCandidateId)) {
@@ -432,6 +425,16 @@ const sanitizeResolution = (args: {
         confidence,
         rationale,
         decisions,
+    }
+}
+
+export class MediaBranchAmbiguityError extends Error {
+    readonly candidateAssetIds: string[]
+
+    constructor({ candidateAssetIds, rationale }: { candidateAssetIds: string[]; rationale: string }) {
+        super(`MEDIA_BRANCH_REFERENCE_AMBIGUITY:${rationale}`)
+        this.name = 'MediaBranchAmbiguityError'
+        this.candidateAssetIds = [...new Set(candidateAssetIds)]
     }
 }
 
@@ -585,18 +588,54 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
                 candidates: resolvedCandidates,
             },
         }
-        const result: VlmCallResult<MediaBranchVlmRawResolution> = await callVlm({
-            provider,
-            modelVersion,
-            systemPrompt: SYSTEM_PROMPT,
-            userMessages: buildResolverMessages(resolverState),
-            schema: RESOLUTION_SCHEMA,
-            natsService: deps.natsService,
-            temperature: 0.1,
-            maxTokens: Math.min(state.aiModelMetaInfo.maxCompletionSize ?? 4096, 4096),
-            maxOutputTokensCeiling: state.aiModelMetaInfo.maxCompletionSize,
-            abortSignal: deps.abortSignal,
-        })
+        const resolvedTarget = snapshot.resolvedTargetCandidateId
+            ? resolvedCandidates.find(candidate => candidate.candidateId === snapshot.resolvedTargetCandidateId)
+            : undefined
+        if (snapshot.resolvedTargetCandidateId && !resolvedTarget) {
+            throw new Error('MEDIA_BRANCH_RESOLVED_TARGET_NOT_FOUND')
+        }
+        const result: VlmCallResult<MediaBranchVlmRawResolution> = resolvedTarget
+            ? {
+                parsed: {
+                    mode: 'edit-active-branch',
+                    operationKind: 'edit_existing',
+                    targetCandidateId: resolvedTarget.candidateId,
+                    parentCandidateId: resolvedTarget.candidateId,
+                    branchId: resolvedTarget.branchId ?? '',
+                    includeGeneratedCandidateIds: [],
+                    referenceCandidateIds: resolvedCandidates.map(candidate => candidate.candidateId),
+                    sourceContextNodeIds: resolvedCandidates.flatMap(candidate => candidate.nodeId ? [candidate.nodeId] : []),
+                    styleReferenceCandidateIds: [],
+                    excludedCandidateIds: [],
+                    visualEntitySummary: resolvedTarget.visualEntitySummary ?? '',
+                    visualStyleSummary: resolvedTarget.visualStyleSummary ?? '',
+                    entityTags: resolvedTarget.entityTags ?? [],
+                    styleTags: resolvedTarget.styleTags ?? [],
+                    confidence: 1,
+                    rationale: 'The user selected this attached Asset to resolve branch ambiguity.',
+                    decisions: [{
+                        candidateId: resolvedTarget.candidateId,
+                        role: 'target',
+                        reason: 'Explicit user selection.',
+                    }],
+                },
+                rawText: '',
+                modelName: 'user-selection',
+                promptTokens: 0,
+                completionTokens: 0,
+            }
+            : await callVlm({
+                provider,
+                modelVersion,
+                systemPrompt: SYSTEM_PROMPT,
+                userMessages: buildResolverMessages(resolverState),
+                schema: RESOLUTION_SCHEMA,
+                natsService: deps.natsService,
+                temperature: 0.1,
+                maxTokens: Math.min(state.aiModelMetaInfo.maxCompletionSize ?? 4096, 4096),
+                maxOutputTokensCeiling: state.aiModelMetaInfo.maxCompletionSize,
+                abortSignal: deps.abortSignal,
+            })
 
         const resolution = sanitizeResolution({
             parsed: result.parsed,

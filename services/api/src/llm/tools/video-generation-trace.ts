@@ -1,7 +1,6 @@
 'use strict'
 
 import type {
-    MediaBranchCandidateImage,
     MediaBranchVlmReferenceDecision,
     ImageGenerationTraceExcludedReference,
     ImageGenerationTraceReference,
@@ -64,7 +63,7 @@ export const VIDEO_MODEL_PROFILES: Record<VideoModelProfileName, VideoModelProfi
     seedance: {
         qualityDirection: 'SEEDANCE QUALITY DIRECTION: produce one cohesive cinematic shot with a clear subject, physically natural motion, stable identity, consistent scale, smooth temporal continuity, deliberate camera movement, filmic lighting, and synchronized audio. Keep the subject crisp and materially consistent throughout the motion, and render every described element affirmatively.',
         referenceImageDirection: 'REFERENCE-IMAGE DIRECTION: use the attached reference images as asset/content references for the subject, product, character, material, or visual ingredient they show. Preserve the useful visual evidence without blending unrelated identities.',
-        imageConditioningSafetyDirection: 'SEEDANCE IMAGE SAFETY CONTEXT: selected image references that come from generated or stylized canvas media are synthetic visual works with fictional character or subject designs. Preserve the provided references as closely as possible: composition, silhouette, proportions, pose, facial expression, hairstyle, wardrobe, props, palette, lighting, material behavior, rendering style, and medium-specific texture should remain visibly continuous through motion. Treat identity as fictional character continuity inside the reference\'s own visual style, privacy-safe and non-biometric, separate from celebrity likeness or real-person identity matching.',
+        imageConditioningSafetyDirection: 'SEEDANCE REFERENCE CONTINUITY: preserve the supplied reference evidence as closely as possible: composition, silhouette, proportions, pose, expression, hairstyle, wardrobe, props, palette, lighting, material behavior, rendering style, and medium-specific texture should remain visibly continuous through motion. Do not infer whether a depicted subject is fictional or real from visual style.',
         negativePrompt: null,
     },
 }
@@ -99,50 +98,9 @@ const buildInputModeDirection = (state: ProviderState, profile: VideoModelProfil
     return 'TEXT-TO-VIDEO DIRECTION: generate one focused short-video moment with a clear subject, coherent physical action, deliberate camera movement, consistent lighting, and synchronized audio.'
 }
 
-const STYLIZED_OR_SYNTHETIC_REFERENCE_RE =
-    /\b(ai[- ]generated|generated|synthetic|fictional|illustration|illustrated|painting|painted|painterly|watercolor|gouache|anime|cartoon|comic|sketch|drawing|rendered|stylized|storybook|fantasy|character)\b/i
-
-const candidateHasStylizedOrSyntheticSignals = (candidate: MediaBranchCandidateImage): boolean => {
-    if (candidate.roleHints.includes('generated-variant')) return true
-
-    const text = [
-        candidate.visualEntitySummary,
-        candidate.visualStyleSummary,
-        candidate.promptText,
-        ...(candidate.entityTags ?? []),
-        ...(candidate.styleTags ?? []),
-    ].filter((part): part is string => typeof part === 'string' && part.length > 0).join(' ')
-
-    return STYLIZED_OR_SYNTHETIC_REFERENCE_RE.test(text)
-}
-
-const getVideoConditioningImageUrls = (state: ProviderState): Set<string> => {
-    return new Set(
-        [state.videoFirstFrameImage, ...(state.videoReferenceImages ?? [])]
-            .filter((url): url is string => typeof url === 'string' && url.length > 0),
-    )
-}
-
-const getSelectedVideoReferenceCandidateIds = (state: ProviderState): Set<string> => {
-    const candidateIds = new Set<string>()
-    const resolution = state.mediaBranchResolution
-    if (resolution?.targetCandidateId) candidateIds.add(resolution.targetCandidateId)
-    for (const candidateId of resolution?.referenceCandidateIds ?? []) candidateIds.add(candidateId)
-    return candidateIds
-}
-
 const buildImageConditioningSafetyDirection = (state: ProviderState, profile: VideoModelProfile): string | undefined => {
     if (!profile.imageConditioningSafetyDirection) return undefined
-
-    const conditioningImageUrls = getVideoConditioningImageUrls(state)
-    if (conditioningImageUrls.size === 0) return undefined
-
-    const selectedCandidateIds = getSelectedVideoReferenceCandidateIds(state)
-    const selectedCandidates = (state.mediaBranchCandidateSnapshot?.candidates ?? []).filter((candidate) =>
-        selectedCandidateIds.has(candidate.candidateId ?? candidate.nodeId ?? '') || conditioningImageUrls.has(candidate.imageUrl),
-    )
-
-    return selectedCandidates.some(candidateHasStylizedOrSyntheticSignals)
+    return state.videoFirstFrameImage || (state.videoReferenceImages?.length ?? 0) > 0
         ? profile.imageConditioningSafetyDirection
         : undefined
 }

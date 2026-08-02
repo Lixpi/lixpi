@@ -9,6 +9,9 @@ import type {
     MediaBranchLineagePlan,
     MediaGenerationConfigSelectionGroup,
     MediaGenerationRunMeta,
+    MediaGenerationRun,
+    MediaReferenceBinding,
+    ProviderSafeMediaIntent,
     ProviderName,
     WorkspaceContextResolution,
     WorkspaceContextSnapshot,
@@ -222,6 +225,10 @@ export type ProviderState = {
     mediaFanoutPlan?: MediaFanoutPlan | undefined
     replayMediaPrompts?: ReplayMediaPrompt[] | undefined
     preflightResolved?: boolean | undefined
+    durableGenerationRequestId?: string | undefined
+    durableMediaRuns?: MediaGenerationRun[] | undefined
+    providerSafeMediaIntent?: ProviderSafeMediaIntent | undefined
+    mediaReferenceBindings?: MediaReferenceBinding[] | undefined
 }
 
 // replace if defined, else keep — mirrors Python TypedDict(total=False) partial-overlay semantics
@@ -302,4 +309,8 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     mediaFanoutPlan: { reducer: keep },
     replayMediaPrompts: { reducer: keep },
     preflightResolved: { reducer: keep, default: () => false },
+    durableGenerationRequestId: { reducer: keep },
+    durableMediaRuns: { reducer: keep },
+    providerSafeMediaIntent: { reducer: keep },
+    mediaReferenceBindings: { reducer: keep },
 }

@@ -1,8 +1,8 @@
 'use strict'
 
 // Style Extraction capability settings. Every tunable this capability owns lives
-// here, in the capability itself. Same shape as services/web-ui/src/settings.ts
-// and services/api/src/settings.ts.
+// here, in the capability itself. It uses the same nested settings shape as
+// the consuming frontend and backend.
 export type StyleExtractionSettings = {
     actionTimeoutsMs: {
         initialize: number

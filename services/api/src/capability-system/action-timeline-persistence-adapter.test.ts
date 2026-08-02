@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     getAssetRecord: vi.fn(),
     getAssetRequesterContext: vi.fn(),
     getWorkspace: vi.fn(),
+    getOrganization: vi.fn(),
     projectGeneratedArtifactNode: vi.fn(),
     buildAssetCanvasGeometryUpdate: vi.fn(),
 }))
@@ -31,6 +32,9 @@ vi.mock('../models/blob.ts', () => ({
 }))
 vi.mock('../models/workspace.ts', () => ({
     default: { getWorkspace: mocks.getWorkspace },
+}))
+vi.mock('../models/organization.ts', () => ({
+    default: { getOrganization: mocks.getOrganization },
 }))
 vi.mock('../services/asset-requester-context.ts', () => ({
     getAssetRequesterContext: mocks.getAssetRequesterContext,
@@ -81,6 +85,15 @@ beforeEach(() => {
         workspaceIds: ['workspace-1'],
         organizationIds: ['organization-1'],
     })
+    mocks.getWorkspace.mockResolvedValue({
+        workspaceId: 'workspace-1',
+        organizationId: 'organization-1',
+        accessList: [{ userId: 'user-1', accessLevel: 'owner' }],
+        updatedAt: 5,
+        canvasStateUpdatedAt: 5,
+        canvasState: { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [] },
+    })
+    mocks.getOrganization.mockResolvedValue({ organizationId: 'organization-1' })
     mocks.blobStore
         .mockResolvedValueOnce({ blobHash: 'artifact-hash' })
         .mockResolvedValueOnce({ blobHash: 'provenance-hash' })
@@ -125,7 +138,10 @@ describe('Action Timeline Artifact publication', () => {
             assetId: 'source-1',
             surfaceId: expect.stringMatching(/^capabilityArtifact#/),
         }))
-        expect(mocks.getWorkspace).not.toHaveBeenCalled()
+        expect(mocks.getWorkspace).toHaveBeenCalledWith({
+            workspaceId: 'workspace-1',
+            userId: 'user-1',
+        })
         expect(mocks.projectGeneratedArtifactNode).not.toHaveBeenCalled()
     })
 
@@ -146,6 +162,9 @@ describe('Action Timeline Artifact publication', () => {
             createdAt: 1,
         })
         mocks.getWorkspace.mockResolvedValue({
+            workspaceId: 'workspace-1',
+            organizationId: 'organization-1',
+            accessList: [{ userId: 'user-1', accessLevel: 'owner' }],
             updatedAt: 5,
             canvasStateUpdatedAt: 5,
             canvasState: { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [] },

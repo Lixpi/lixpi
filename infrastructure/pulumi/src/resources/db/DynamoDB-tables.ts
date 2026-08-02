@@ -140,6 +140,33 @@ export const getTableDefinitions = () => ({
         'runId',
         'workspaceId',
     ),
+    mediaGenerationRequestsTable: table(
+        'MEDIA_GENERATION_REQUESTS',
+        [{ name: 'generationRequestId', type: 'S' }, { name: 'workspaceId', type: 'S' }],
+        'generationRequestId',
+        'workspaceId',
+    ),
+    mediaGenerationRequestsMetaTable: table(
+        'MEDIA_GENERATION_REQUESTS_META',
+        [
+            { name: 'workspaceId', type: 'S' },
+            { name: 'generationRequestId', type: 'S' },
+            { name: 'updatedAt', type: 'N' },
+            { name: 'statusUpdatedAt', type: 'N' },
+        ],
+        'workspaceId',
+        'generationRequestId',
+        [
+            { name: 'updatedAt', rangeKey: 'updatedAt', projectionType: 'ALL' },
+            { name: 'statusUpdatedAt', rangeKey: 'statusUpdatedAt', projectionType: 'ALL' },
+        ],
+    ),
+    mediaGenerationRequestsAccessListTable: table(
+        'MEDIA_GENERATION_REQUESTS_ACCESS_LIST',
+        [{ name: 'generationRequestId', type: 'S' }, { name: 'principalId', type: 'S' }],
+        'generationRequestId',
+        'principalId',
+    ),
     assetsTable: table('ASSETS', [{ name: 'assetId', type: 'S' }], 'assetId'),
     assetsMetaTable: table(
         'ASSETS_META',
@@ -169,6 +196,12 @@ export const getTableDefinitions = () => ({
         [{ name: 'assetId', type: 'S' }, { name: 'referenceKey', type: 'S' }],
         'assetId',
         'referenceKey',
+    ),
+    assetSubjectIdentityAttestationsTable: table(
+        'ASSET_SUBJECT_IDENTITY_ATTESTATIONS',
+        [{ name: 'assetId', type: 'S' }, { name: 'attestationId', type: 'S' }],
+        'assetId',
+        'attestationId',
     ),
     promptReferenceRecentsTable: table(
         'PROMPT_REFERENCE_RECENTS',

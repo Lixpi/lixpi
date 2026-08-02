@@ -284,13 +284,10 @@ describe('ImageRouter', () => {
         expect(layoutRequest.captureOnlyImageGeneration).toBe(true)
         expect(layoutRequest.messages).toHaveLength(1)
         expect(layoutRequest.messages[0]?.content).toEqual(
-            expect.stringContaining('Reference image 1 depicts the authoritative character to reproduce'),
+            expect.stringContaining('Image 1 is the authoritative character identity'),
         )
         expect(layoutRequest.messages[0]?.content).toEqual(
-            expect.stringContaining('AUTHORITATIVE CHARACTER-SHEET OUTPUT TEMPLATE'),
-        )
-        expect(layoutRequest.messages[0]?.content).toEqual(
-            expect.stringContaining('A simplified portrait/front/left/right/back/3/4/walk strip is invalid'),
+            expect.stringContaining('Image 2 is the authoritative output-layout template'),
         )
         expect(layoutRequest.imageGenerationReferences).toEqual([
             {
@@ -370,7 +367,7 @@ describe('ImageRouter', () => {
         }
         expect(request.imageSize).toBe('1536x1024')
         expect(request.messages[0]?.content).toEqual(
-            expect.stringContaining('Reference image 1 depicts the authoritative character to reproduce'),
+            expect.stringContaining('Image 1 is the authoritative character identity'),
         )
         expect(request.imageGenerationReferences).toEqual([
             {
@@ -399,5 +396,70 @@ describe('ImageRouter', () => {
                 fileName: 'character-source-1',
             },
         ])
+    })
+
+    it('deduplicates one Character Creator source selected through multiple candidate records', async () => {
+        const { router, process } = createRouter([
+            { generatedImages: [TINY_PNG_BASE64] },
+            { generatedImages: ['nats-obj://workspace-workspace-1-files/character-sheet.png'] },
+        ])
+        const sharedSource = 'nats-obj://workspace-images/shared-character.png'
+        const state = createState({
+            capabilityUsageMode: 'character-creator',
+            capabilityUsagePrompt: 'Use the fixed multi-view layout.',
+            capabilityReferenceImages: ['data:image/jpeg;base64,character-sheet-layout'],
+            mediaBranchCandidateSnapshot: {
+                promptText: 'Create character',
+                candidates: [
+                    { candidateId: 'candidate-node', nodeId: 'node-1', imageUrl: sharedSource },
+                    { candidateId: 'candidate-asset', assetId: 'asset-1', imageUrl: sharedSource },
+                ],
+            } as any,
+            mediaBranchResolution: {
+                referenceCandidateIds: ['candidate-node', 'candidate-asset'],
+            } as any,
+        })
+
+        await router.execute(state)
+
+        expect(process.mock.calls[0]?.[0].imageGenerationReferences).toEqual([
+            {
+                url: sharedSource,
+                role: 'character-source',
+                fileName: 'character-source-1',
+            },
+            {
+                url: 'data:image/jpeg;base64,character-sheet-layout',
+                role: 'character-layout-example',
+                fileName: 'character-layout-example-1',
+            },
+        ])
+    })
+
+    it('keeps the routed Stability Character Creator prompt below the provider limit', async () => {
+        const { router, process } = createRouter([
+            { generatedImages: [TINY_PNG_BASE64] },
+            { generatedImages: ['nats-obj://workspace-workspace-1-files/character-sheet.png'] },
+        ])
+        const state = createState({
+            capabilityUsageMode: 'character-creator',
+            capabilityUsagePrompt: 'x'.repeat(8500),
+            capabilityReferenceImages: ['data:image/jpeg;base64,character-sheet-layout'],
+            imageProviderName: 'Stability',
+            imageModelVersion: 'sd3.5-large',
+            imageModelMetaInfo: {
+                provider: 'Stability',
+                model: 'Stable Diffusion 3.5 Large',
+                modelVersion: 'sd3.5-large',
+                imagePromptMaxChars: 10000,
+            },
+        })
+
+        await router.execute(state)
+
+        const routedPrompt = process.mock.calls[0]?.[0].messages[0]?.content
+        expect(typeof routedPrompt).toBe('string')
+        expect((routedPrompt as string).length).toBeLessThanOrEqual(10000)
+        expect(routedPrompt).toEqual(expect.stringContaining('CHARACTER CREATOR BRIEF'))
     })
 })

@@ -3,7 +3,6 @@
 import { randomUUID } from 'node:crypto'
 
 import { err } from '@lixpi/debug-tools'
-import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
 import {
     STREAM_STATUS,
@@ -1167,23 +1166,16 @@ export class AiChatProseMirrorStreamAssembler {
 
     private async persistFinalSnapshot(finalVersion: number): Promise<boolean> {
         try {
-            for (let attempt = 0; attempt < 5; attempt += 1) {
-                const asset = await getAssetRecord(this.coordinate.assetId)
-                if (!asset) throw new Error('CONVERSATION_ASSET_NOT_FOUND')
-                try {
-                    await AssetDocumentService.settle({
-                        asset,
-                        role: 'conversation',
-                        workspaceId: this.config.workspaceId,
-                        leaseId: this.config.leaseId,
-                        holderId: this.config.leaseHolderId,
-                    })
-                    return true
-                } catch (error) {
-                    if (!isTransactionConditionalCheckFailure(error) || attempt === 4) throw error
-                }
-            }
-            return false
+            await AssetDocumentService.settle({
+                organizationId: this.coordinate.organizationId,
+                assetId: this.coordinate.assetId,
+                role: 'conversation',
+                workspaceId: this.config.workspaceId,
+                leaseId: this.config.leaseId,
+                holderId: this.config.leaseHolderId,
+                trigger: 'final-snapshot',
+            })
+            return true
         } catch (error) {
             err('[AiChatProseMirrorStreamAssembler] final snapshot persistence failed:', error)
             await this.publishControl('ERROR', {

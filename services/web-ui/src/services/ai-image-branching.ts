@@ -253,14 +253,17 @@ export function buildMediaBranchCandidateSnapshot({
     }
 
     const candidates = Array.from(candidatesById.values())
-    const activeTargetCandidateId = activeTargetNodeId ? `node:${activeTargetNodeId}` : undefined
+    const activeTargetCandidateId = activeTargetNodeId && candidates.some(candidate => candidate.nodeId === activeTargetNodeId)
+        ? `node:${activeTargetNodeId}`
+        : undefined
+    const explicitReferenceCandidateIds = candidates.map(candidate => candidate.candidateId)
     return {
         resolverVersion: RESOLVER_VERSION,
         conversationAssetId,
         regionNodeId,
         ...(activeTargetCandidateId ? { activeTargetCandidateId } : {}),
-        ...(explicitContextNodeIds.length ? {
-            explicitReferenceCandidateIds: explicitContextNodeIds.map(nodeId => `node:${nodeId}`),
+        ...(explicitReferenceCandidateIds.length ? {
+            explicitReferenceCandidateIds,
         } : {}),
         promptText: prompt,
         promptFingerprint: fingerprintPrompt(prompt),
@@ -297,7 +300,10 @@ export function buildExplicitMediaCandidateSnapshot({
     }
 
     const candidates = Array.from(candidatesById.values())
-    const activeTargetCandidateId = activeTargetNodeId ? `node:${activeTargetNodeId}` : undefined
+    const activeTargetCandidateId = activeTargetNodeId && candidates.some(candidate => candidate.nodeId === activeTargetNodeId)
+        ? `node:${activeTargetNodeId}`
+        : undefined
+    const explicitReferenceCandidateIds = candidates.map(candidate => candidate.candidateId)
     return {
         resolverVersion: RESOLVER_VERSION,
         conversationAssetId: generationRunId,
@@ -306,8 +312,8 @@ export function buildExplicitMediaCandidateSnapshot({
         // thread-less canvas run has no chat/source node to root on.
         regionNodeId: `standalone:${generationRunId}`,
         ...(activeTargetCandidateId ? { activeTargetCandidateId } : {}),
-        ...(referenceNodeIds.length ? {
-            explicitReferenceCandidateIds: referenceNodeIds.map(nodeId => `node:${nodeId}`),
+        ...(explicitReferenceCandidateIds.length ? {
+            explicitReferenceCandidateIds,
         } : {}),
         promptText: prompt,
         promptFingerprint: fingerprintPrompt(prompt),

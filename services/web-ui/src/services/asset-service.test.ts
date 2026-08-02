@@ -1,9 +1,14 @@
 'use strict'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { NATS_SUBJECTS, type Asset } from '@lixpi/constants'
+import {
+    getAssetEventSubject,
+    NATS_SUBJECTS,
+    type Asset,
+    type CanvasState,
+} from '@lixpi/constants'
 
-import AssetService from './asset-service.ts'
+import AssetService, { getWorkspaceCanvasAssetIds } from './asset-service.ts'
 
 const mocks = vi.hoisted(() => ({
     getTokenSilently: vi.fn(),
@@ -14,6 +19,9 @@ const mocks = vi.hoisted(() => ({
     setAssets: vi.fn(),
     setError: vi.fn(),
     upsert: vi.fn(),
+    remove: vi.fn(),
+    subscribe: vi.fn(),
+    unsubscribe: vi.fn(),
 }))
 
 vi.mock('$src/services/auth-service.ts', () => ({
@@ -24,7 +32,10 @@ vi.mock('$src/services/auth-service.ts', () => ({
 
 vi.mock('$src/stores/servicesStore.ts', () => ({
     servicesStore: {
-        getData: vi.fn(() => ({ request: mocks.request })),
+        getData: vi.fn(() => ({
+            request: mocks.request,
+            subscribe: mocks.subscribe,
+        })),
     },
 }))
 
@@ -35,6 +46,7 @@ vi.mock('$src/stores/assetsStore.ts', () => ({
         setAssets: mocks.setAssets,
         setError: mocks.setError,
         upsert: mocks.upsert,
+        remove: mocks.remove,
     },
 }))
 
@@ -79,6 +91,36 @@ function makeAsset(overrides: Partial<Asset> & Pick<Asset, 'assetId' | 'title'>)
         ...overrides,
     }
 }
+
+describe('AssetService.startWorkspaceSynchronization', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mocks.subscribe.mockReturnValue({ unsubscribe: mocks.unsubscribe })
+        mocks.getAsset.mockReturnValue(undefined)
+    })
+
+    it('does not reload the workspace catalog for events about unloaded Assets', () => {
+        vi.useFakeTimers()
+        const service = new AssetService()
+        const loadWorkspaceAssets = vi.spyOn(service, 'loadWorkspaceAssets').mockResolvedValue([])
+        const stop = service.startWorkspaceSynchronization('workspace-1')
+        const updatedSubject = getAssetEventSubject(
+            'user-1',
+            NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED,
+        )
+        const updatedSubscription = mocks.subscribe.mock.calls.find(
+            ([subject]) => subject === updatedSubject,
+        )
+        const onUpdated = updatedSubscription?.[1] as ((data: { assetId: string }) => void) | undefined
+
+        expect(onUpdated).toBeTypeOf('function')
+        onUpdated?.({ assetId: 'unloaded-asset' })
+        expect(loadWorkspaceAssets).not.toHaveBeenCalled()
+
+        stop()
+        vi.useRealTimers()
+    })
+})
 
 describe('AssetService.create', () => {
     beforeEach(() => {
@@ -170,7 +212,6 @@ describe('AssetService.loadWorkspaceAssets', () => {
             if (payload.assetId === 'timeline-asset') return timelineAsset
             if (payload.assetId === 'shelby-asset') return shelbyAsset
             if (payload.assetId === 'train-asset') return trainAsset
-            if (payload.primaryCategory) return { items: [] }
             return { error: 'NOT_FOUND' }
         })
 
@@ -183,6 +224,67 @@ describe('AssetService.loadWorkspaceAssets', () => {
             ['train-asset', 'Slop Train'],
         ])
         expect(mocks.setAssets).toHaveBeenCalledWith('workspace-1', assets)
+        expect(mocks.request).toHaveBeenCalledTimes(3)
+        expect(mocks.request).not.toHaveBeenCalledWith(
+            NATS_SUBJECTS.ASSET_SUBJECTS.LIST,
+            expect.anything(),
+            expect.anything(),
+        )
+    })
+})
+
+describe('getWorkspaceCanvasAssetIds', () => {
+    it('returns only Assets reachable from the canvas and conversation panel', () => {
+        const canvasState: CanvasState = {
+            viewport: { x: 0, y: 0, zoom: 1 },
+            edges: [],
+            nodes: [
+                {
+                    nodeId: 'generated-image-node',
+                    type: 'image',
+                    assetId: 'generated-image-asset',
+                    position: { x: 0, y: 0 },
+                    dimensions: { width: 400, height: 300 },
+                    generatedBy: {
+                        conversationAssetId: 'generated-image-conversation',
+                        responseId: 'response-1',
+                        aiModel: 'Stability:sd3.5-large',
+                        revisedPrompt: 'portrait',
+                    },
+                },
+                {
+                    nodeId: 'branch-node',
+                    type: 'branchLine',
+                    branchId: 'branch-1',
+                    generationRequestId: 'generation-request-1',
+                    conversationAssetId: 'branch-conversation',
+                    position: { x: 500, y: 0 },
+                    dimensions: { width: 400, height: 100 },
+                    temporary: true,
+                },
+            ],
+            lastActiveConversationAssetId: 'active-conversation',
+            aiChatPanel: {
+                isOpen: true,
+                isSessionHistoryOpen: false,
+                topLevelMode: 'aiThreads',
+                tabs: [{
+                    tabId: 'tab-1',
+                    type: 'thread',
+                    refId: 'tab-conversation',
+                    title: 'Conversation',
+                }],
+                contextChips: [],
+            },
+        }
+
+        expect(getWorkspaceCanvasAssetIds(canvasState)).toEqual([
+            'generated-image-asset',
+            'generated-image-conversation',
+            'branch-conversation',
+            'tab-conversation',
+            'active-conversation',
+        ])
     })
 })
 

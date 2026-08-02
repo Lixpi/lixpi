@@ -1,6 +1,6 @@
-# Shared ".env.* picker" used by start.sh and set-env.sh. Must be sourced,
-# not executed — it defines lixpi_select_env_file() and leaves the chosen
-# filename in $selected_env when that function returns 0.
+# Shared ".env.* picker" used by start.sh, set-env.sh, and aws-sso-login.sh.
+# Must be sourced, not executed: it defines lixpi_select_env_file() and leaves
+# the chosen filename in $selected_env when that function returns 0.
 #
 #   source ./scripts/partials/select-env-file.sh
 #   lixpi_select_env_file || exit 1

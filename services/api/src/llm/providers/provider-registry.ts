@@ -4,11 +4,15 @@ import type NatsService from '@lixpi/nats-service'
 import { info, warn } from '@lixpi/debug-tools'
 
 import type { BaseProvider, BaseProviderDeps } from './base-provider.ts'
-import type { ProviderName } from '@lixpi/constants'
+import { PROVIDER_NAMES, type ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
 import type { MetricsClient } from '../../metrics/metrics-client.ts'
+import {
+    assertValidMediaProviderDefinition,
+    type MediaProviderDefinition,
+} from './media-provider-definition.ts'
 
 // Metrics dependencies threaded into every provider's graph deps.
 export type MetricsDeps = {
@@ -30,20 +34,26 @@ export class ProviderRegistry {
     private readonly instances = new Map<string, BaseProvider>()
     private readonly activeTasks = new Map<string, Promise<void>>()
     private readonly requestGroups = new Map<string, Set<string>>()
-    private readonly providerCtors: Map<ProviderName, ProviderConstructor>
+    private readonly providerDefinitions: Map<ProviderName, MediaProviderDefinition>
     private readonly usageReporter: UsageReporter
     private imageRouter?: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
     private videoRouter?: (state: ProviderState, options?: MediaRouterOptions) => Promise<Partial<ProviderState>>
 
     constructor(
         private readonly natsService: NatsService,
-        // Partial: not every ProviderName must have a registered constructor
-        // (e.g. a video-only provider added before its class lands). Unregistered
-        // providers throw "Unsupported provider" on lookup in getOrCreate/createTransient.
-        ctors: Partial<Record<ProviderName, ProviderConstructor>>,
+        definitions: Partial<Record<ProviderName, MediaProviderDefinition>>,
         private readonly metricsDeps: MetricsDeps = {},
     ) {
-        this.providerCtors = new Map(Object.entries(ctors) as Array<[ProviderName, ProviderConstructor]>)
+        const missingProviders = PROVIDER_NAMES.filter(provider => !definitions[provider])
+        if (missingProviders.length > 0) {
+            throw new Error(`MEDIA_PROVIDER_DEFINITION_REQUIRED:${missingProviders.join(',')}`)
+        }
+        for (const [provider, definition] of Object.entries(definitions)) {
+            if (!definition) continue
+            assertValidMediaProviderDefinition(definition)
+            if (provider !== definition.provider) throw new Error(`MEDIA_PROVIDER_DEFINITION_KEY_MISMATCH:${provider}`)
+        }
+        this.providerDefinitions = new Map(Object.entries(definitions) as Array<[ProviderName, MediaProviderDefinition]>)
         this.usageReporter = new UsageReporter()
     }
 
@@ -57,7 +67,7 @@ export class ProviderRegistry {
         this.videoRouter = router
     }
 
-    private buildDeps(): BaseProviderDeps {
+    private buildDeps(definition: MediaProviderDefinition): BaseProviderDeps {
         return {
             natsService: this.natsService,
             usageReporter: this.usageReporter,
@@ -74,6 +84,7 @@ export class ProviderRegistry {
                 return this.videoRouter(state, options)
             },
             metrics: this.metricsDeps.metrics,
+            mediaProviderDefinition: definition,
         }
     }
 
@@ -83,12 +94,12 @@ export class ProviderRegistry {
             info(`Reusing existing instance: ${instanceKey}`)
             return existing
         }
-        const Ctor = this.providerCtors.get(providerName)
-        if (!Ctor) {
+        const definition = this.providerDefinitions.get(providerName)
+        if (!definition) {
             throw new Error(`Unsupported provider: ${providerName}`)
         }
         info(`Creating new ${providerName} instance: ${instanceKey}`)
-        const provider = new Ctor(instanceKey, this.buildDeps())
+        const provider = new definition.constructor(instanceKey, this.buildDeps(definition))
         this.instances.set(instanceKey, provider)
         return provider
     }
@@ -113,6 +124,12 @@ export class ProviderRegistry {
 
     get(instanceKey: string): BaseProvider | undefined {
         return this.instances.get(instanceKey)
+    }
+
+    getDefinition(providerName: ProviderName): MediaProviderDefinition {
+        const definition = this.providerDefinitions.get(providerName)
+        if (!definition) throw new Error(`Unsupported provider: ${providerName}`)
+        return definition
     }
 
     // Deduplicates concurrent invocations — drops the duplicate if a request is already in flight.

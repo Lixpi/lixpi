@@ -16,6 +16,8 @@ import {
     buildImageGenerationReferences,
     type ImageGenerationReference,
 } from '../image-generation-references.ts'
+import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
+import type { MediaGenerationProblem } from '@lixpi/constants'
 
 // Short fingerprint for a reference image URL — enough to spot duplicates
 // or wrong-image issues in logs without dumping base64.
@@ -103,6 +105,50 @@ export class ImageRouter {
             return {}
         }
 
+        const requestService = new MediaGenerationRequestService()
+        const recordRunStatus = async (
+            status: 'running' | 'completed' | 'failed',
+            error?: unknown,
+        ): Promise<MediaGenerationProblem | undefined> => {
+            if (!state.durableGenerationRequestId || !generationRun?.mediaModelId) return
+            const problem = error === undefined ? undefined : this.registry.getDefinition(imageProvider).normalizeProblem(error, {
+                generationRequestId: state.durableGenerationRequestId,
+                modelId: generationRun.mediaModelId,
+                stage: 'submit',
+            })
+            if (problem) warn(`[MediaGenerationProblem] ${JSON.stringify({
+                supportCode: problem.supportCode,
+                category: problem.category,
+                stage: problem.stage,
+                provider: problem.provider,
+                modelId: problem.modelId,
+                providerCode: problem.providerCode,
+            })}`)
+            await requestService.recordRunStatus({
+                generationRequestId: state.durableGenerationRequestId,
+                workspaceId,
+                mediaModelId: generationRun.mediaModelId,
+                reasoningIndex: generationRun.reasoningIndex,
+                status,
+                ...(problem ? { problem } : {}),
+            })
+            return problem
+        }
+        const presentFailure = (
+            error: string,
+            errorCode: string | undefined,
+            errorType: string | undefined,
+            problem: MediaGenerationProblem | undefined,
+        ): Partial<ProviderState> => state.durableGenerationRequestId && problem ? {
+            error: problem.detail,
+            errorCode: problem.providerCode ?? problem.category,
+            errorType: problem.category,
+        } : {
+            error,
+            ...(errorCode ? { errorCode } : {}),
+            ...(errorType ? { errorType } : {}),
+        }
+
         const instanceKey = generationRun?.mediaRunId
             ? `${workspaceId}:${aiChatThreadId}:${generationRun.mediaRunId}`
             : `${workspaceId}:${aiChatThreadId}:image`
@@ -174,6 +220,9 @@ export class ImageRouter {
                     captureOnlyImageGeneration: args.captureOnly,
                     capabilityUsageMode: state.capabilityUsageMode,
                     capabilityUsagePrompt: state.capabilityUsagePrompt,
+                    durableGenerationRequestId: state.durableGenerationRequestId,
+                    providerSafeMediaIntent: state.providerSafeMediaIntent,
+                    mediaReferenceBindings: state.mediaReferenceBindings,
                 })
             } finally {
                 options.signal?.removeEventListener('abort', stopForAbort)
@@ -182,6 +231,7 @@ export class ImageRouter {
         }
 
         try {
+            await recordRunStatus('running')
             let draftState: ProviderState | undefined
             let finalState: ProviderState
             const requiresFidelityPass = state.capabilityUsageMode === 'character-creator'
@@ -197,17 +247,15 @@ export class ImageRouter {
                 })
                 if (draftState.error) {
                     err(`[ImageRouter] Character layout synthesis failed: ${draftState.error}`)
-                    return {
-                        error: draftState.error,
-                        errorCode: draftState.errorCode,
-                        errorType: draftState.errorType,
-                    }
+                    const problem = await recordRunStatus('failed', { message: draftState.error, code: draftState.errorCode })
+                    return presentFailure(draftState.error, draftState.errorCode, draftState.errorType, problem)
                 }
                 const draftImage = draftState.generatedImages?.[0]
                 if (!draftImage) {
                     const message = 'Character layout synthesis failed: provider completed without a generated image'
                     err(`[ImageRouter] ${message}`)
-                    return { error: message }
+                    const problem = await recordRunStatus('failed', { message, code: 'PROVIDER_OUTPUT_MISSING' })
+                    return presentFailure(message, undefined, undefined, problem)
                 }
 
                 const fidelityReferences: ImageGenerationReference[] = [
@@ -248,21 +296,20 @@ export class ImageRouter {
 
             if (finalState.error) {
                 err(`[ImageRouter] Image generation failed: ${finalState.error}`)
-                return {
-                    error: finalState.error,
-                    errorCode: finalState.errorCode,
-                    errorType: finalState.errorType,
-                }
+                const problem = await recordRunStatus('failed', { message: finalState.error, code: finalState.errorCode })
+                return presentFailure(finalState.error, finalState.errorCode, finalState.errorType, problem)
             }
 
             const generatedImages = finalState.generatedImages ?? []
             if (generatedImages.length === 0) {
                 const message = 'Image generation failed: provider completed without a generated image'
                 err(`[ImageRouter] ${message}`)
-                return { error: message }
+                const problem = await recordRunStatus('failed', { message, code: 'PROVIDER_OUTPUT_MISSING' })
+                return presentFailure(message, undefined, undefined, problem)
             }
 
             info(`[ImageRouter] Completed successfully instanceKey=${instanceKey}`)
+            await recordRunStatus('completed')
             const generatedCount = (draftState?.imageUsage?.generatedCount ?? (draftState ? 1 : 0))
                 + (finalState.imageUsage?.generatedCount ?? generatedImages.length)
             return {
@@ -275,7 +322,17 @@ export class ImageRouter {
         } catch (e: any) {
             const message = e?.message ?? String(e)
             err(`[ImageRouter] Image generation failed: ${message}`)
-            return { error: message }
+            const problem = await recordRunStatus('failed', e).catch(persistenceError => {
+                err(`[ImageRouter] Failed to persist durable media problem: ${(persistenceError as Error).message}`)
+                return state.durableGenerationRequestId
+                    ? this.registry.getDefinition(imageProvider).normalizeProblem(e, {
+                        generationRequestId: state.durableGenerationRequestId,
+                        modelId: generationRun?.mediaModelId,
+                        stage: 'submit',
+                    })
+                    : undefined
+            })
+            return presentFailure(message, undefined, undefined, problem)
         }
     }
 }

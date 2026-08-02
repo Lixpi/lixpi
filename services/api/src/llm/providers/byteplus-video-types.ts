@@ -115,7 +115,7 @@ const parseJsonOrThrow = async (res: Response, action: string): Promise<any> => 
 
     if (json === undefined) {
         throw new BytePlusModelArkError(
-            `ModelArk ${action} returned a non-JSON response: ${text.slice(0, 200)}`,
+            `ModelArk ${action} returned a non-JSON response (HTTP ${res.status})`,
             { httpStatus: res.status },
         )
     }

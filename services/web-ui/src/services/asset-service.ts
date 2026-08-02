@@ -2,10 +2,12 @@ import {
     getAssetEventSubject,
     NATS_SUBJECTS,
     type Asset,
+    type CanvasState,
     type AssetDocumentRole,
     type AssetMeta,
     type AssetPrimaryCategory,
     type AssetScope,
+    type SubjectIdentityClassification,
     type GeneratedOutputReviewRequest,
     type GeneratedOutputReviewResponse,
 } from '@lixpi/constants'
@@ -67,6 +69,37 @@ async function mapWithConcurrency<T, R>(
     )
     await Promise.all(workers)
     return results
+}
+
+export function getWorkspaceCanvasAssetIds(canvasState: CanvasState | undefined): string[] {
+    if (!canvasState) return []
+
+    const assetIds = new Set<string>()
+    for (const node of canvasState.nodes) {
+        if ('assetId' in node && typeof node.assetId === 'string' && node.assetId) {
+            assetIds.add(node.assetId)
+        }
+        if ('conversationAssetId' in node
+            && typeof node.conversationAssetId === 'string'
+            && node.conversationAssetId) {
+            assetIds.add(node.conversationAssetId)
+        }
+        if ('generatedBy' in node
+            && node.generatedBy
+            && typeof node.generatedBy.conversationAssetId === 'string'
+            && node.generatedBy.conversationAssetId) {
+            assetIds.add(node.generatedBy.conversationAssetId)
+        }
+    }
+    for (const tab of canvasState.aiChatPanel?.tabs ?? []) {
+        if (tab.type === 'thread' && typeof tab.refId === 'string' && tab.refId) {
+            assetIds.add(tab.refId)
+        }
+    }
+    if (canvasState.lastActiveConversationAssetId) {
+        assetIds.add(canvasState.lastActiveConversationAssetId)
+    }
+    return [...assetIds]
 }
 
 export class AssetService {
@@ -155,9 +188,7 @@ export class AssetService {
                         void this.refresh(assetId, workspaceId).then((result) => {
                             if ('error' in result) assetsStore.remove(assetId)
                         })
-                        return
                     }
-                    void synchronize()
                 },
             ))
             : []
@@ -193,32 +224,13 @@ export class AssetService {
         assetsStore.setLoading(workspaceId)
         try {
             const workspace = workspaceStore.getData()
-            const assetIds = new Set<string>()
-            for (const node of workspace?.canvasState?.nodes ?? []) {
-                if (typeof node.assetId === 'string') assetIds.add(node.assetId)
-            }
-            for (const tab of workspace?.canvasState?.aiChatPanel?.tabs ?? []) {
-                if (tab.type === 'thread' && typeof tab.refId === 'string') assetIds.add(tab.refId)
-            }
-            if (typeof workspace?.canvasState?.lastActiveConversationAssetId === 'string') {
-                assetIds.add(workspace.canvasState.lastActiveConversationAssetId)
-            }
-            for (const primaryCategory of ['document', 'conversation', 'capabilityArtifact'] as const) {
-                let cursor: string | undefined
-                do {
-                    const page = await this.list({ workspaceId, primaryCategory, limit: 100, cursor })
-                    for (const item of page.items) {
-                        if (item.scopeAndOwner === `workspace#${workspaceId}`) assetIds.add(item.assetId)
-                    }
-                    cursor = page.cursor
-                } while (cursor)
-            }
-            const prioritizedAssetIds = [...assetIds].sort((left, right) => {
-                const activeConversationAssetId = workspace?.canvasState?.lastActiveConversationAssetId
-                if (left === activeConversationAssetId) return -1
-                if (right === activeConversationAssetId) return 1
-                return 0
-            })
+            const prioritizedAssetIds = getWorkspaceCanvasAssetIds(workspace?.canvasState)
+                .sort((left, right) => {
+                    const activeConversationAssetId = workspace?.canvasState?.lastActiveConversationAssetId
+                    if (left === activeConversationAssetId) return -1
+                    if (right === activeConversationAssetId) return 1
+                    return 0
+                })
             const directAssets = await this.loadAssetsById(prioritizedAssetIds, workspaceId)
             const directAssetIds = new Set(directAssets.map(asset => asset.assetId))
             const lineageSourceAssetIds = [...new Set(directAssets.flatMap(asset => asset.lineage?.sourceAssetIds ?? []))]
@@ -381,6 +393,20 @@ export class AssetService {
         descriptor?: Asset['descriptor']
     }): Promise<Asset | { error: string }> {
         const result = await request<Asset | { error: string }>(ASSET_SUBJECTS.UPDATE_METADATA, { assetId, expectedRevision, ...updates })
+        if (!('error' in result)) assetsStore.upsert(result)
+        return result
+    }
+
+    async attestSubjectIdentity(
+        assetId: string,
+        assetRevision: number,
+        classification: SubjectIdentityClassification,
+    ): Promise<Asset | { error: string }> {
+        const result = await request<Asset | { error: string }>(ASSET_SUBJECTS.SUBJECT_IDENTITY_ATTEST, {
+            assetId,
+            assetRevision,
+            classification,
+        })
         if (!('error' in result)) assetsStore.upsert(result)
         return result
     }

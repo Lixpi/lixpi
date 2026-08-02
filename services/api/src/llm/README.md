@@ -66,6 +66,8 @@ asset.document.events.<userIdToken>.<organizationId>.<conversationAssetId>.conve
 
 `AiChatProseMirrorStreamAssembler` is the single writer for AI transcript steps. It parses streamed Markdown, updates reasoning/trace/generated-output nodes, and publishes expected-sequence step/control events through `AssetProseMirrorStepTransport`. Media generation trace blocks are keyed by the full media run inside a reasoning section, so image/video model fanout preserves one final prompt and trace per output instead of overwriting sibling variants. Capability generation traces use the same collapsible node and retain Tool identity, run ID, output Assets, and workflow-step summaries beside the provider's continued assistant response.
 
+Conversation snapshot settlement is serialized per organization, Asset, and document role. Every attempt reloads the current Asset revision before the transaction, retries bounded revision conflicts, and suppresses logging only for those expected conditional losses; non-conditional transaction failures remain terminal and logged. Accepted client step batches are coalesced behind one idle-debounced settlement per Asset role. Final-response persistence cancels that pending idle settlement before using the same coordinator, so it cannot race a queued client settlement inside one API process. Structured settlement logs identify the trigger, coalesced batch count, current-Asset read origin, attempts, version, and duration.
+
 Matrix requests carry an explicit `outputMediaTypes` list. Lineage planning, pending Asset creation, provider tool availability, and fanout use only those output sections; a default singular model from an inactive section must not become an extra branch assignment.
 Before provider invocation, the API rebuilds messages and the current prompt from that authoritative conversation document; browser-serialized transcript history and prompt fingerprints are not trusted.
 
@@ -73,9 +75,13 @@ Generated-output replay is an explicit exception to reasoning prompt creation, n
 
 ## Media preflight and Asset creation
 
+Media-model requests first cross the durable [media reference and moderation boundary](../../../documentation/media-generation/MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md). The NATS handler authorizes structured ProseMirror references, assigns `REFERENCE_n`, runs bounded local free-form matching, stores the immutable checkpoint, and returns before any reasoning/media call when ambiguity exists. Provider-safe messages and candidate/workspace snapshots exclude Asset titles and filenames. Leak assertions run after compilation and at provider transport. System-owned generated-media placeholder names are still compiled and sanitized as aliases, but their normalized `generated` token is not treated as an identity-bearing forbidden name because it also appears in trusted structural fields such as the `generated-variant` role hint.
+
+`MediaGenerationRequestService` owns CAS status/run transitions, checkpoint retention, operation-node projection, same-request ambiguity/verification resume, and explicit cancellation. `MediaGenerationRequestEventLog` owns non-expiring wait events and tokenized replay/live recovery. Provider adapters register through `MediaProviderDefinition`; missing profiles fail startup, current moderation settings are explicit, normalized problems are sanitized, and automatic paid retry is always forbidden.
+
 `MediaBranchLineagePlanner` enumerates reasoning/media axes and returns marker topology plus one `MediaRunLineageAssignment` per concrete output. Each assignment includes its stable output `assetId`, every selected `referenceAssetId`, and the node-backed `referenceNodeId` subset. Asset-only references contribute provenance but never canvas topology.
 
-For a plain single-model request, reasoning chooses `generate_image` or `generate_video` before lineage planning, so only the chosen modality receives an assignment even though both scalar model selectors are configured. A Google reasoning run that skips tool selection for an explicit video-generation request is retried with `generate_video` as the only allowed function; a second miss fails the run explicitly instead of publishing a zero-assignment lineage plan. Character Creator is image-only: request routing selects the Tool before provider execution, retains the selected reasoning/image axes, and removes every video model and video option before matrix normalization or scalar provider setup. Explicit matrix requests still enumerate every requested model axis allowed by the selected Tool. `ImageRouter` packages every source and capability image into the typed `imageGenerationReferences` contract. `BaseProvider` resolves and fingerprints that ordered list exactly once before any image-provider workflow runs; OpenAI, Google, Stability, and future provider adapters consume the same `resolvedImageGenerationReferences` state instead of reparsing vendor-specific message blocks. Character Creator therefore preserves the authoritative character source first and the packaged sheet-layout example second across every provider. The Character Creator action logs the packaged example's byte length and SHA-256 when it leaves capability storage, and the shared resolver logs the same fingerprint at provider ingress, so a run can prove that the repository resource—not a prompt-only substitute—reached the media adapter.
+For a plain single-model request, reasoning chooses `generate_image` or `generate_video` before lineage planning, so only the chosen modality receives an assignment even though both scalar model selectors are configured. A Google reasoning run that skips tool selection for an explicit video-generation request is retried with `generate_video` as the only allowed function; a second miss fails the run explicitly instead of publishing a zero-assignment lineage plan. Character Creator is image-only: request routing selects the Tool before provider execution, retains the selected reasoning/image axes, and removes every video model and video option before matrix normalization or scalar provider setup. Explicit matrix requests still enumerate every requested model axis allowed by the selected Tool. `ImageRouter` packages every source and capability image into the typed `imageGenerationReferences` contract. Duplicate candidate records for the same source URL collapse before roles and filenames are assigned. The Character Creator visual contract bounds only its variable user-request section, then the router adds a compact image-role preface so the complete Stability request remains below its provider prompt limit without dropping the fixed sheet or fidelity contract. `BaseProvider` resolves and fingerprints that ordered list exactly once before any image-provider workflow runs; OpenAI, Google, Stability, and future provider adapters consume the same `resolvedImageGenerationReferences` state instead of reparsing vendor-specific message blocks. Character Creator therefore preserves the authoritative character source first and the packaged sheet-layout example second across every provider. The Character Creator action logs the packaged example's byte length and SHA-256 when it leaves capability storage, and the shared resolver logs the same fingerprint at provider ingress, so a run can prove that the repository resource—not a prompt-only substitute—reached the media adapter.
 
 Shared preflight creates pending Assets with:
 
@@ -158,6 +164,25 @@ llm/
 ../services/asset-provenance-materializer.ts
 ```
 
+## AWS Bedrock inference
+
+Anthropic and Stability inference can run through AWS Bedrock instead of each vendor's own API. A provider opts in through its own env flag, separately from its api key:
+
+| Flag | Effect |
+|------|--------|
+| `ANTHROPIC_USE_AWS_BEDROCK_INFERENCE=true` | `AnthropicProvider` and the structured-VLM client invoke Bedrock, and `ANTHROPIC_API_KEY` goes unused |
+| `STABILITY_USE_AWS_BEDROCK_INFERENCE=true` | `StabilityProvider` invokes Bedrock, and `STABLE_DIFFUSION_API_KEY` goes unused |
+
+`STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE` is accepted as an alias of the Stability flag, so you can keep the flag next to the api-key name your `.env` already uses.
+
+Bedrock requests go to `AWS_REGION` and are signed with AWS credentials instead of an api key. Locally that is the SSO profile named by `AWS_PROFILE`, resolved against the developer's `~/.aws` SSO cache that docker-compose mounts into the container. On AWS it is the ECS task role, which carries Bedrock invoke and catalog-read permissions.
+
+`providers/bedrock-inference.ts` owns the flags, the region, credential resolution, and the translation from a catalog model id to a Bedrock model id. It discovers that translation from the Bedrock control plane and caches it per process: it normalizes the catalog id to a Bedrock model-name stem, matches it against `ListFoundationModels`, and for models that Bedrock does not serve on demand it picks the cross-region inference profile covering the model. New model releases need no code change because of that, and only a renamed id needs an alias entry.
+
+Bedrock serves Stability as text-to-image and image-to-image only, so it has no equivalent of the `control/*` endpoints the direct API path uses. Reference-driven requests fall back to image-to-image with a strength chosen per routing mode, the secondary style reference is dropped, and the provider logs a warning naming the fallback. Anthropic behaves the same on both paths.
+
+The `ai-models-synchronization` NEX workload reads `ANTHROPIC_USE_AWS_BEDROCK_INFERENCE` too. With the flag on it lists Anthropic models from the Bedrock foundation-model catalog and projects the Bedrock ids back onto vendor ids, so the catalog stays populated when there is no Anthropic api key.
+
 ## Provider invariants
 
 - Provider state updates are partial overlays; undefined fields do not erase state.
@@ -174,6 +199,9 @@ llm/
 - Every reasoning adapter measures the complete translated provider-native request against the selected model's context window before invocation, reserves its completion budget, and rejects overflow without clipping text or media inputs.
 - Usage uses synchronized model pricing and decimal arithmetic.
 - Every request has an AbortController and the global timeout.
+- Attached Asset display titles/original filenames never enter provider-safe reasoning or media payloads; final adapters fail closed on a forbidden variant.
+- Every current provider has one validated policy definition with explicit moderation, verification, retention, sensitive-data, documentation, review, and problem-normalization fields.
+- Provider failures are terminal per run. Recovery requires Edit request plus a new explicit Submit; no adapter automatically retries a cosmetically rewritten prompt.
 
 ## Related docs
 

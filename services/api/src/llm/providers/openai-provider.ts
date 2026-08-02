@@ -210,7 +210,7 @@ export class OpenAIProvider extends BaseProvider {
         return [{
             type: 'image_generation',
             quality: 'high',
-            moderation: 'low',
+            ...this.deps.mediaProviderDefinition.moderation.settings('', 'text'),
             input_fidelity: 'high',
             partial_images: 3,
             size: imageSize || 'auto',
@@ -535,6 +535,7 @@ export class OpenAIProvider extends BaseProvider {
                     ? referenceFiles.map(r => r.file)
                     : referenceFiles[0]!.file,
                 prompt,
+                ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'image-conditioned'),
                 quality: 'high',
                 ...(inputFidelity ? { input_fidelity: inputFidelity } : {}),
                 size: resolvedSize,
@@ -544,6 +545,7 @@ export class OpenAIProvider extends BaseProvider {
             : await this.client.images.generate({
                 model: args.modelVersion,
                 prompt,
+                ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'text'),
                 quality: 'high',
                 size: resolvedSize,
                 stream: true,

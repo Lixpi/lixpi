@@ -163,7 +163,9 @@ Successful settlement stores the original Blob, starts rendition generation, att
 
 Provider failure or cancellation materializes terminal provenance for every unfinished planned Asset. Failed Assets use lifecycle/media `failed`; cancelled Assets use lifecycle `failed` and media/provenance `cancelled`. They remain addressable through their catalog/reference rows until explicitly removed.
 
-Request settlement removes transient pending node IDs for unfinished assignments and rebalances remaining markers/completed outputs. Completed siblings are never removed by a later cancellation.
+Durable media requests also project one generic `operationStatus` node per concrete run. After lineage planning, each temporary request node is rebound to the pending output ID and exact API-planned parent slot. Success replaces that slot with the generated Asset node. Ambiguity or missing provider verification changes it to action-required; provider failure keeps it as a failed node with sanitized details and Edit request. The lineage edge remains intact.
+
+Request settlement removes unfinished pending Asset placements and rebalances remaining markers/completed outputs, but it does not silently erase the durable failed operation node. Completed siblings are never removed by a later failure or cancellation. Only explicit Cancel/Dismiss removes waiting/failed recovery state and releases its retained checkpoint.
 
 ## Invariants
 
@@ -178,6 +180,8 @@ Request settlement removes transient pending node IDs for unfinished assignments
 - Existing-prompt replay never invokes a reasoning provider and never rewrites sibling media prompts.
 - Generated media topology and coordinates are persisted by the API before clients render them.
 - No generated output depends on a workspace Object Store key or a chat-thread table row.
+- A user-selected ambiguous target resumes the same request and bypasses another target-selection call.
+- No provider rejection automatically retries or rewrites a paid request.
 
 ## Relevant code
 

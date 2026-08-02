@@ -155,6 +155,12 @@ VEO generation is asynchronous: the API submits a `generateVideos` operation, po
 
 On the canvas, PIXI renders the poster/placeholder for stable geometry, while a visible browser-composited `<video>` element owns actual playback, seeking, scrubbing, and fullscreen. Hovering the video reveals the shared SVG control bar. Prior video nodes can be piped into later AI threads as representative stills, or extended directly through VEO's video input using **Extend video in new thread**. See [Video Generation](media-generation/VIDEO-GENERATION.md) for the full architecture.
 
+### Durable media reference boundary
+
+Before any media-capable reasoning call, the API stores a durable media request and compiles attached ProseMirror references into request-scoped `REFERENCE_n` aliases. Mutable Asset titles and filenames remain in the checkpoint for restoration/audit but are forbidden from provider-safe reasoning and generation payloads. Safe descriptors preserve visual meaning; depiction medium and subject identity remain distinct Asset facts.
+
+Close free-form matches pause in the planned canvas slot for explicit selection. Providers use mandatory versioned policy profiles with their documented least-restrictive controls. Missing native identity verification also pauses before spending, while a provider rejection remains a visible terminal attempt with Edit request rather than an automatic retry. Request state, checkpoint retention, replay/live events, five-position identity attestations, and provider onboarding are documented in [Media Reference Identity and Provider Moderation](media-generation/MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md).
+
 ---
 
 ## 6. System Architecture
@@ -409,5 +415,5 @@ This page is the product-level picture. For the technical deep dives, start at t
 - **Platform** — [System Architecture](platform/SYSTEM-ARCHITECTURE.md), [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md), [Streaming & Events](platform/STREAMING-AND-EVENTS.md), [Authentication](platform/AUTHENTICATION.md).
 - **Canvas** — [Workspace Model](canvas/WORKSPACE-MODEL.md), [Rendering Engine](canvas/RENDERING-ENGINE.md).
 - **AI chat**: [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md), [Explicit Workspace Context](ai-chat/CONTEXT-RELEVANCE.md).
-- **Media generation** — [Image Generation](media-generation/IMAGE-GENERATION.md), [Video Generation](media-generation/VIDEO-GENERATION.md), [Branch Lineage & Provenance](media-generation/BRANCH-LINEAGE.md).
+- **Media generation** — [Image Generation](media-generation/IMAGE-GENERATION.md), [Video Generation](media-generation/VIDEO-GENERATION.md), [Branch Lineage & Provenance](media-generation/BRANCH-LINEAGE.md), [Media Reference Identity and Provider Moderation](media-generation/MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md).
 - **Library** - [Tools and Skills](library/TOOLS-AND-SKILLS.md), [Character Creator](library/CHARACTER-CREATOR.md), [Style Extraction Tool](library/STYLE-EXTRACTION-TOOL.md), [Media Library](library/MEDIA-LIBRARY.md), [Workspace Export & Import](library/WORKSPACE-EXPORT-IMPORT.md).

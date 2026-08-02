@@ -30,39 +30,19 @@ export const normalizeImageSize = (imageProvider: ProviderName | undefined, imag
 
 export const getImageSourceReferenceImages = (state: ProviderState): string[] => {
     const selectedCandidateIds = state.mediaBranchResolution?.referenceCandidateIds ?? []
-    if (selectedCandidateIds.length === 0) return state.referenceImages ?? []
+    if (selectedCandidateIds.length === 0) return [...new Set(state.referenceImages ?? [])]
 
     const candidateById = new Map(
         (state.mediaBranchCandidateSnapshot?.candidates ?? []).map(candidate => [candidate.candidateId ?? candidate.nodeId, candidate]),
     )
-    return selectedCandidateIds.map(candidateId => {
+    const selectedReferences = selectedCandidateIds.map(candidateId => {
         const imageUrl = candidateById.get(candidateId)?.imageUrl
         if (!imageUrl) {
             throw new Error(`IMAGE_GENERATION_SELECTED_REFERENCE_MISSING:${candidateId}`)
         }
         return imageUrl
     })
-}
-
-const buildSelectedCharacterEvidence = (state: ProviderState): string | undefined => {
-    const selectedCandidateIds = state.mediaBranchResolution?.referenceCandidateIds ?? []
-    if (selectedCandidateIds.length === 0) return undefined
-
-    const candidateById = new Map(
-        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map(candidate => [candidate.candidateId ?? candidate.nodeId, candidate]),
-    )
-    const evidence = selectedCandidateIds.flatMap((candidateId, index) => {
-        const candidate = candidateById.get(candidateId)
-        const identity = candidate?.visualEntitySummary?.trim()
-        const style = candidate?.visualStyleSummary?.trim()
-        if (!identity && !style) return []
-        return [
-            `Reference image ${index + 1}:`,
-            identity ? `- Character evidence: ${identity}` : undefined,
-            style ? `- Rendering evidence: ${style}` : undefined,
-        ].filter((line): line is string => typeof line === 'string').join('\n')
-    })
-    return evidence.length > 0 ? evidence.join('\n') : undefined
+    return [...new Set(selectedReferences)]
 }
 
 export const buildCharacterFidelityRestorationPrompt = (sourceReferenceCount: number): string => {
@@ -108,37 +88,29 @@ export const buildImageModelPrompt = (state: ProviderState): string => {
         const sourceReferenceCount = getImageSourceReferenceImages(state).length
         const capabilityReferenceCount = capabilityReferenceImages.length
         const hasSourceReferences = sourceReferenceCount > 0
-        const selectedCharacterEvidence = buildSelectedCharacterEvidence(state)
         const originalCharacterRequest = state.mediaBranchCandidateSnapshot?.promptText?.trim()
             || state.mediaBranchLineagePlan?.promptText?.trim()
             || prompt
+        const sourceImageRange = sourceReferenceCount === 1
+            ? 'Image 1'
+            : `Images 1-${sourceReferenceCount}`
+        const templateImageStart = sourceReferenceCount + 1
+        const templateImageRange = capabilityReferenceCount === 1
+            ? `Image ${templateImageStart}`
+            : `Images ${templateImageStart}-${templateImageStart + capabilityReferenceCount - 1}`
         return [
             'MANDATORY CHARACTER CREATOR GENERATION:',
-            'Generate the requested character as one coherent design sheet using the attached authoritative template and its matching textual contract below.',
-            capabilityUsagePrompt ? `CHARACTER CREATOR BRIEF:\n${capabilityUsagePrompt}` : undefined,
-            'USER CHARACTER REQUEST:',
-            originalCharacterRequest,
             hasSourceReferences
                 ? [
-                    'REFERENCE FIDELITY OVERRIDE — HIGHEST PRIORITY:',
-                    `Reference image${sourceReferenceCount === 1 ? '' : 's'} 1${sourceReferenceCount === 1 ? '' : `-${sourceReferenceCount}`} depict${sourceReferenceCount === 1 ? 's' : ''} the authoritative character to reproduce, not merely a style reference and not a request to invent a different person.`,
-                    'Preserve the same apparent identity, face, hair style and color, skin tone, body proportions, clothing construction and colors, accessories, materials, and illustration style across every view.',
-                    'Preserve the source medium itself: facial construction, line presence and weight variation, contour color, interior linework, edge behavior, brush or pencil marks, wash behavior, pigment density, shading method, palette relationships, substrate grain, surface texture, and detail density.',
-                    'The source medium must construct every face, garment, body, and prop. Do not preserve texture only in the background while replacing the character with smooth generic digital concept art.',
-                    'Do not clean up, beautify, photorealize, vectorize, smooth, airbrush, homogenize, modernize, or genericize the source character or its rendering style.',
-                    'Do not change the character identity, gender presentation, hair, outfit, or palette unless the original user request above explicitly asks for that exact change.',
-                    'Ignore any conflicting character changes invented by an intermediate reasoning prompt.',
-                    selectedCharacterEvidence ? `SELECTED REFERENCE EVIDENCE:\n${selectedCharacterEvidence}` : '',
-                    capabilityReferenceCount > 0
-                        ? [
-                            `The final ${capabilityReferenceCount} attached image${capabilityReferenceCount === 1 ? '' : 's'} ${capabilityReferenceCount === 1 ? 'is' : 'are'} the AUTHORITATIVE CHARACTER-SHEET OUTPUT TEMPLATE, not character-appearance inspiration.`,
-                            'Reproduce the complete landscape template organization: five aligned full-body turnaround views; five head-turnaround views; expression, mouth, eye, hands, feet, and props panels; costume notes, color palette, material notes, and distinguishing-details panels; six pose silhouettes; anatomical alignment guides; and technical labels.',
-                            'Populate every template section with the authoritative source character. Preserve the template geometry and view coverage while never copying or blending character identity, face, hair, clothing, colors, or body from the template.',
-                            'A simplified portrait/front/left/right/back/3/4/walk strip is invalid and must not replace the attached template.',
-                        ].join('\n')
-                        : '',
+                    'IMAGE ROLES — HIGHEST PRIORITY:',
+                    `${sourceImageRange} ${sourceReferenceCount === 1 ? 'is' : 'are'} the authoritative character identity, construction, colors, materials, and rendering-style source.`,
+                    `${templateImageRange} ${capabilityReferenceCount === 1 ? 'is' : 'are'} the authoritative output-layout template, never character-appearance inspiration.`,
+                    'Populate the complete template with the source character. Preserve source identity and medium in every depiction while preserving the template geometry, labels, guides, panels, and view coverage.',
                 ].join('\n')
                 : undefined,
+            capabilityUsagePrompt
+                ? `CHARACTER CREATOR BRIEF:\n${capabilityUsagePrompt}`
+                : `USER CHARACTER REQUEST:\n${originalCharacterRequest}`,
         ].filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n\n')
     }
 

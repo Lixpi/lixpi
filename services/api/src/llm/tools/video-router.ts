@@ -1,5 +1,7 @@
 'use strict'
 
+import * as process from 'node:process'
+
 import { info, warn, err } from '@lixpi/debug-tools'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
@@ -8,6 +10,8 @@ import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../
 import { getVideoMaxReferenceImages } from '../graph/state.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import { buildVideoModelPrompt } from './video-generation-trace.ts'
+import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
+import type { MediaGenerationProblem } from '@lixpi/constants'
 
 const fingerprintRef = (url: string): string => {
     if (!url) return '<empty>'
@@ -86,6 +90,76 @@ export class VideoRouter {
             return {}
         }
 
+        const requestService = new MediaGenerationRequestService()
+        const recordRunStatus = async (
+            status: 'running' | 'completed' | 'failed',
+            error?: unknown,
+        ): Promise<MediaGenerationProblem | undefined> => {
+            if (!state.durableGenerationRequestId || !generationRun?.mediaModelId) return
+            const problem = error === undefined ? undefined : this.registry.getDefinition(videoProvider).normalizeProblem(error, {
+                generationRequestId: state.durableGenerationRequestId,
+                modelId: generationRun.mediaModelId,
+                stage: 'submit',
+            })
+            if (problem) warn(`[MediaGenerationProblem] ${JSON.stringify({
+                supportCode: problem.supportCode,
+                category: problem.category,
+                stage: problem.stage,
+                provider: problem.provider,
+                modelId: problem.modelId,
+                providerCode: problem.providerCode,
+            })}`)
+            await requestService.recordRunStatus({
+                generationRequestId: state.durableGenerationRequestId,
+                workspaceId,
+                mediaModelId: generationRun.mediaModelId,
+                reasoningIndex: generationRun.reasoningIndex,
+                status,
+                ...(problem ? { problem } : {}),
+            })
+            return problem
+        }
+        const presentFailure = (
+            error: string,
+            errorCode: string | undefined,
+            errorType: string | undefined,
+            problem: MediaGenerationProblem | undefined,
+        ): Partial<ProviderState> => state.durableGenerationRequestId && problem ? {
+            error: problem.detail,
+            errorCode: problem.providerCode ?? problem.category,
+            errorType: problem.category,
+        } : {
+            error,
+            ...(errorCode ? { errorCode } : {}),
+            ...(errorType ? { errorType } : {}),
+        }
+        if (videoProvider === 'BytePlus' && state.durableGenerationRequestId && generationRun?.mediaModelId) {
+            const accountScope = process.env.BYTEPLUS_ACCOUNT_SCOPE
+            const now = Date.now()
+            const requiredAssetIds = (state.providerSafeMediaIntent?.bindings ?? [])
+                .filter(binding => ['self', 'authorized-real-person'].includes(binding.subjectIdentity.classification))
+                .filter(binding => !binding.subjectIdentity.providerVerifications.some(verification =>
+                    verification.provider === 'BytePlus'
+                    && verification.providerAccountScope === accountScope
+                    && verification.status === 'valid'
+                    && (!verification.expiresAt || verification.expiresAt > now)))
+                .map(binding => binding.assetId)
+            if (requiredAssetIds.length > 0) {
+                await requestService.requireProviderVerification({
+                    generationRequestId: state.durableGenerationRequestId,
+                    workspaceId,
+                    mediaModelId: generationRun.mediaModelId,
+                    reasoningIndex: generationRun.reasoningIndex,
+                    assetIds: requiredAssetIds,
+                })
+                return {
+                    error: 'PROVIDER_VERIFICATION_REQUIRED',
+                    errorCode: 'PROVIDER_VERIFICATION_REQUIRED',
+                    errorType: 'action-required',
+                }
+            }
+        }
+
         const instanceKey = generationRun?.mediaRunId
             ? `${workspaceId}:${aiChatThreadId}:${generationRun.mediaRunId}`
             : `${workspaceId}:${aiChatThreadId}:video`
@@ -123,6 +197,7 @@ export class VideoRouter {
         }
 
         try {
+            await recordRunStatus('running')
             const provider = this.registry.createTransient(instanceKey, videoProvider)
 
             const requestData = {
@@ -143,26 +218,28 @@ export class VideoRouter {
                 proseMirrorContentHandler: options.onProseMirrorContent,
                 proseMirrorSnapshotProvider: options.getProseMirrorSnapshot,
                 abortSignal: options.signal,
+                durableGenerationRequestId: state.durableGenerationRequestId,
+                providerSafeMediaIntent: state.providerSafeMediaIntent,
+                mediaReferenceBindings: state.mediaReferenceBindings,
             }
 
             const finalState = await provider.process(requestData)
             if (finalState.error) {
                 err(`[VideoRouter] Video generation failed: ${finalState.error}`)
-                return {
-                    error: finalState.error,
-                    errorCode: finalState.errorCode,
-                    errorType: finalState.errorType,
-                }
+                const problem = await recordRunStatus('failed', { message: finalState.error, code: finalState.errorCode })
+                return presentFailure(finalState.error, finalState.errorCode, finalState.errorType, problem)
             }
 
             const generatedVideos = finalState.generatedVideos ?? []
             if (generatedVideos.length === 0) {
                 const message = 'Video generation failed: provider completed without a generated video'
                 err(`[VideoRouter] ${message}`)
-                return { error: message }
+                const problem = await recordRunStatus('failed', { message, code: 'PROVIDER_OUTPUT_MISSING' })
+                return presentFailure(message, undefined, undefined, problem)
             }
 
             info(`[VideoRouter] Completed successfully instanceKey=${instanceKey}`)
+            await recordRunStatus('completed')
             return {
                 ...finalState,
                 generatedVideos,
@@ -175,7 +252,17 @@ export class VideoRouter {
         } catch (e: any) {
             const message = e?.message ?? String(e)
             err(`[VideoRouter] Video generation failed: ${message}`)
-            return { error: message }
+            const problem = await recordRunStatus('failed', e).catch(persistenceError => {
+                err(`[VideoRouter] Failed to persist durable media problem: ${(persistenceError as Error).message}`)
+                return state.durableGenerationRequestId
+                    ? this.registry.getDefinition(videoProvider).normalizeProblem(e, {
+                        generationRequestId: state.durableGenerationRequestId,
+                        modelId: generationRun?.mediaModelId,
+                        stage: 'submit',
+                    })
+                    : undefined
+            })
+            return presentFailure(message, undefined, undefined, problem)
         } finally {
             this.registry.remove?.(instanceKey)
         }

@@ -96,6 +96,7 @@ Rendering modules can consume `shared` plans, but shared/backend modules must ne
 - `shared/collision`: geometry-agnostic rectangle collision resolver.
 - `shared/canvas-node`: adapters that apply shared collision output to canvas-node groups.
 - `shared/tree-layout`: geometry-agnostic tidy-tree layout for abstract node boxes.
+- `shared/branch-tree-layout`: deterministic branch topology plus prompt-aware marker dimensions that reserve the browser's pending-control chrome as well as visible text.
 - `shared/zoom-scaling`: deterministic bounded zoom-scaling helpers for canvas chrome.
 - `frontend/animation`: shared easing curves used by Canvas, PIXI, and SVG transitions.
 - `frontend/connectors`: frontend-only connector path helpers. These depend on `@xyflow/system`, emit SVG path strings, and are not backend-safe shared geometry.

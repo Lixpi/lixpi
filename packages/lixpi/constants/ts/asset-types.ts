@@ -1,6 +1,6 @@
 'use strict'
 
-import type { AccessLevel, ContentDescriptor } from './types.ts'
+import type { AccessLevel, ContentDescriptor, ProviderName } from './types.ts'
 
 export type AssetScope = 'workspace' | 'user' | 'organization'
 export type AssetPrimaryCategory = 'image' | 'video' | 'audio' | 'document' | 'conversation' | 'capabilityArtifact'
@@ -79,6 +79,70 @@ export type AssetLineage = {
     promptFingerprint?: string
 }
 
+export const DEPICTION_MEDIA = [
+    'photograph',
+    'live-action-video',
+    'illustration',
+    'painting',
+    'animation',
+    '3d-render',
+    'mixed',
+    'unknown',
+] as const
+export type DepictionMedium = typeof DEPICTION_MEDIA[number]
+
+export const SUBJECT_IDENTITY_CLASSIFICATIONS = [
+    'unknown',
+    'no-person',
+    'fictional',
+    'self',
+    'authorized-real-person',
+] as const
+export type SubjectIdentityClassification = typeof SUBJECT_IDENTITY_CLASSIFICATIONS[number]
+
+export type SubjectIdentitySource = 'user-attestation' | 'automatic-lineage' | 'inherited-lineage'
+
+export type ProviderIdentityVerification = {
+    provider: ProviderName
+    providerAccountScope: string
+    strategy: 'provider-hosted-session' | 'provider-direct-upload'
+    subjectHandle: string
+    status: 'valid' | 'expired' | 'revoked'
+    verifiedAt: number
+    expiresAt?: number
+    derivativeReuse: 'not-allowed' | 'same-provider-account' | 'documented-lineage'
+    policyProfileVersion: string
+}
+
+export type AssetSubjectIdentity = {
+    classification: SubjectIdentityClassification
+    source: SubjectIdentitySource
+    identityGroupId?: string
+    currentAttestationId?: string
+    inheritedFromAssetIds?: string[]
+    derivationVersion?: string
+    providerVerifications: ProviderIdentityVerification[]
+}
+
+export type AssetSubjectIdentityAttestation = {
+    attestationId: string
+    assetId: string
+    assetRevision: number
+    organizationId: string
+    attestedByUserId: string
+    classification: SubjectIdentityClassification
+    statementVersion: string
+    status: 'active' | 'superseded' | 'revoked'
+    supersedesAttestationId?: string
+    createdAt: number
+}
+
+export const DEFAULT_ASSET_SUBJECT_IDENTITY: AssetSubjectIdentity = {
+    classification: 'unknown',
+    source: 'automatic-lineage',
+    providerVerifications: [],
+}
+
 export type AssetEditLease = {
     workspaceId: string
     leaseId: string
@@ -126,6 +190,8 @@ export type Asset = {
     lineage?: AssetLineage
     generatedOutputReview?: GeneratedOutputReview
     descriptor?: ContentDescriptor
+    depictionMedium: DepictionMedium
+    subjectIdentity: AssetSubjectIdentity
     states: AssetStates
     referenceCount: number
     editLease?: AssetEditLease
@@ -156,6 +222,8 @@ export type AssetMeta = {
     durationSeconds?: number
     aspectRatio?: number
     descriptorSummary?: string
+    depictionMedium: DepictionMedium
+    subjectIdentityClassification: SubjectIdentityClassification
     artifactTypeId?: string
     artifactSchemaVersion?: string
     entityTags?: string[]
@@ -213,7 +281,7 @@ export type BlobRecord = {
     updatedAt: number
 }
 
-export type BlobOwnerType = 'asset' | 'capability'
+export type BlobOwnerType = 'asset' | 'capability' | 'mediaGenerationRequest'
 
 export type BlobReference = {
     blobKey: string

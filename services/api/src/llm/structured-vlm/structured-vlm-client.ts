@@ -3,6 +3,7 @@
 import * as process from 'process'
 
 import Anthropic from '@anthropic-ai/sdk'
+import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
 import OpenAI from 'openai'
 import { GoogleGenAI } from '@google/genai'
 import type NatsService from '@lixpi/nats-service'
@@ -10,6 +11,7 @@ import { warn, info, err } from '@lixpi/debug-tools'
 
 import type { ProviderName } from '@lixpi/constants'
 import type { ChatMessage } from '../graph/state.ts'
+import { bedrockInference } from '../providers/bedrock-inference.ts'
 import { convertAttachmentsForProvider, resolveImageUrls, type AttachmentFormat } from '../utils/attachments.ts'
 import {
     assertProviderMessageInputKinds,
@@ -143,12 +145,19 @@ class VlmOutputTruncatedError extends Error {
     }
 }
 
-let _anthropic: Anthropic | undefined
+let _anthropic: Anthropic | AnthropicBedrock | undefined
 let _openai: OpenAI | undefined
 let _google: GoogleGenAI | undefined
 
-const getAnthropic = (): Anthropic => {
+// Mirrors AnthropicProvider: with ANTHROPIC_USE_AWS_BEDROCK_INFERENCE=true the structured-VLM
+// calls go through Bedrock and are signed with AWS credentials instead of an api key.
+const getAnthropic = (): Anthropic | AnthropicBedrock => {
     if (!_anthropic) {
+        if (bedrockInference.isEnabledFor('anthropic')) {
+            bedrockInference.logRouting('anthropic', 'vlm')
+            _anthropic = new AnthropicBedrock({ awsRegion: bedrockInference.region })
+            return _anthropic
+        }
         const apiKey = process.env.ANTHROPIC_API_KEY
         if (!apiKey) throw new Error('ANTHROPIC_API_KEY environment variable is required')
         _anthropic = new Anthropic({ apiKey })
@@ -236,6 +245,9 @@ const callAnthropicOnce = async <T>(args: VlmCallArgs, caps: ModelCapabilities, 
     const client = getAnthropic()
     const formatted = await resolveAndConvert(args.userMessages, args.natsService, 'ANTHROPIC')
     const request = buildAnthropicRequest(args, caps, budget, formatted, useThinking)
+    if (bedrockInference.isEnabledFor('anthropic')) {
+        request.model = await bedrockInference.resolveModelId('anthropic', args.modelVersion)
+    }
 
     const stream = client.messages.stream(request as any, { signal: args.abortSignal })
 

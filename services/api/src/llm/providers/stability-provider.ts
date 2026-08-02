@@ -4,9 +4,11 @@ import * as process from 'process'
 import { createHash, randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 
+import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
 import { info, warn, err } from '@lixpi/debug-tools'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
+import { bedrockInference } from './bedrock-inference.ts'
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState, ChatMessage } from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
@@ -25,6 +27,27 @@ const STYLE_CONTROL_FIDELITY = 0.7
 const STRUCTURE_CONTROL_STRENGTH = 0.9
 const MAX_STABILITY_REFERENCE_PIXELS = 9437184
 const STABILITY_REFERENCE_TILE_SIZE = 768
+
+type StabilityRoutingMode = 'generate' | 'style-control' | 'structure-control' | 'style-transfer'
+
+// AWS Bedrock offers Stability inference only as text-to-image and image-to-image; the
+// /v2beta/stable-image/control/* endpoints used by the direct-API path have no Bedrock
+// equivalent. Reference-driven requests therefore degrade to image-to-image, where `strength`
+// is how far the model may move away from the init image (0 = identical, 1 = ignore it).
+// These values are the closest analogue of the control parameters above.
+const BEDROCK_IMAGE_TO_IMAGE_STRENGTH: Record<Exclude<StabilityRoutingMode, 'generate'>, number> = {
+    // Reference supplies style only, so the model needs room to compose new content.
+    'style-control': 0.65,
+    // The reference is a layout template whose structure must survive.
+    'structure-control': 0.35,
+    // Draft plus style evidence: restyle heavily while keeping the draft's composition.
+    'style-transfer': 0.6,
+}
+
+type StabilityGenerationResult = {
+    imageBase64: string
+    finishReason: string
+}
 
 const resizeReferenceForStability = async (
     ref: ResolvedImageGenerationReference,
@@ -156,9 +179,13 @@ const resolveAspectRatio = (imageSize: string | undefined): string => {
 
 export class StabilityProvider extends BaseProvider {
     readonly providerName: ProviderName = 'Stability'
+    private readonly useBedrock: boolean
+    private bedrockClient?: BedrockRuntimeClient
 
     constructor(instanceKey: string, deps: BaseProviderDeps) {
         super(instanceKey, deps)
+        this.useBedrock = bedrockInference.isEnabledFor('stability')
+        if (this.useBedrock) bedrockInference.logRouting('stability', `Stability:${instanceKey}`)
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -166,8 +193,9 @@ export class StabilityProvider extends BaseProvider {
             throw new Error('Stability AI is an image-only provider and requires enableImageGeneration=true')
         }
 
+        // On the Bedrock path the request is signed with AWS credentials, so no api key is involved.
         const apiKey = process.env.STABLE_DIFFUSION_API_KEY
-        if (!apiKey) throw new Error('STABLE_DIFFUSION_API_KEY is not configured')
+        if (!apiKey && !this.useBedrock) throw new Error('STABLE_DIFFUSION_API_KEY is not configured')
 
         const modelVersion = state.modelVersion
         const imageSize = state.imageSize ?? '1:1'
@@ -193,7 +221,7 @@ export class StabilityProvider extends BaseProvider {
         const characterLayoutRef = allRefs.find(reference => reference.role === 'character-layout-example')
         const characterDraftRef = allRefs.find(reference => reference.role === 'character-sheet-draft')
         const characterSourceRefs = allRefs.filter(reference => reference.role === 'character-source')
-        let routingMode: 'generate' | 'style-control' | 'structure-control' | 'style-transfer' = 'generate'
+        let routingMode: StabilityRoutingMode = 'generate'
         let primaryRef: ResolvedImageGenerationReference | undefined
         let styleRef: ResolvedImageGenerationReference | undefined
 
@@ -232,6 +260,81 @@ export class StabilityProvider extends BaseProvider {
         await this.imagePub.partial('', 0)
 
         const requestId = randomUUID()
+        const { imageBase64, finishReason } = this.useBedrock
+            ? await this.generateViaBedrock({
+                prompt,
+                modelVersion,
+                aspectRatio,
+                routingMode,
+                primaryRef,
+                styleRef,
+                logPrefix,
+            })
+            : await this.generateViaStabilityApi({
+                apiKey: apiKey!,
+                prompt,
+                modelVersion,
+                aspectRatio,
+                routingMode,
+                primaryRef,
+                styleRef,
+                referenceCount: allRefs.length,
+            })
+
+        if (finishReason === 'CONTENT_FILTERED') {
+            throw new Error('Image was filtered by Stability AI content moderation. Please try a different prompt.')
+        }
+        if (!imageBase64) {
+            throw new Error('Stability API returned empty image data')
+        }
+
+        await this.imagePub.complete({
+            imageBase64,
+            responseId: requestId,
+            revisedPrompt: prompt,
+            imageModelId: modelVersion,
+        })
+
+        return {
+            usage: {
+                promptTokens: 0,
+                promptAudioTokens: 0,
+                promptCachedTokens: 0,
+                completionTokens: 0,
+                completionAudioTokens: 0,
+                completionReasoningTokens: 0,
+                totalTokens: 0,
+            },
+            aiVendorRequestId: requestId,
+            imageUsage: {
+                generatedCount: 1,
+                size: aspectRatio,
+                quality: 'high',
+            },
+            generatedImages: [imageBase64],
+        }
+    }
+
+    // Stability's own REST API — the full surface, including the control/* endpoints.
+    private async generateViaStabilityApi({
+        apiKey,
+        prompt,
+        modelVersion,
+        aspectRatio,
+        routingMode,
+        primaryRef,
+        styleRef,
+        referenceCount,
+    }: {
+        apiKey: string
+        prompt: string
+        modelVersion: string
+        aspectRatio: string
+        routingMode: StabilityRoutingMode
+        primaryRef?: ResolvedImageGenerationReference
+        styleRef?: ResolvedImageGenerationReference
+        referenceCount: number
+    }): Promise<StabilityGenerationResult> {
         const formData = new FormData()
         formData.set('prompt', prompt)
         formData.set('output_format', 'png')
@@ -270,7 +373,7 @@ export class StabilityProvider extends BaseProvider {
 
         info(
             `[Stability:${this.instanceKey}] API request endpoint=${endpoint} model=${modelVersion} ` +
-            `aspect=${aspectRatio} refs=${allRefs.length} mode=${routingMode} promptLen=${prompt.length}`,
+            `aspect=${aspectRatio} refs=${referenceCount} mode=${routingMode} promptLen=${prompt.length}`,
         )
 
         const response = await fetch(`https://api.stability.ai${endpoint}`, {
@@ -307,37 +410,86 @@ export class StabilityProvider extends BaseProvider {
             `imageLen=${imageBase64.length}`,
         )
 
-        if (finishReason === 'CONTENT_FILTERED') {
-            throw new Error('Image was filtered by Stability AI content moderation. Please try a different prompt.')
-        }
-        if (!imageBase64) {
-            throw new Error('Stability API returned empty image data')
-        }
+        return { imageBase64, finishReason }
+    }
 
-        await this.imagePub.complete({
-            imageBase64,
-            responseId: requestId,
-            revisedPrompt: prompt,
-            imageModelId: modelVersion,
+    // AWS Bedrock InvokeModel. Bedrock exposes only Stability's text-to-image and
+    // image-to-image inference, so every reference-driven routing mode collapses onto
+    // image-to-image with a mode-specific strength.
+    private async generateViaBedrock({
+        prompt,
+        modelVersion,
+        aspectRatio,
+        routingMode,
+        primaryRef,
+        styleRef,
+        logPrefix,
+    }: {
+        prompt: string
+        modelVersion: string
+        aspectRatio: string
+        routingMode: StabilityRoutingMode
+        primaryRef?: ResolvedImageGenerationReference
+        styleRef?: ResolvedImageGenerationReference
+        logPrefix: string
+    }): Promise<StabilityGenerationResult> {
+        const modelId = await bedrockInference.resolveModelId('stability', modelVersion)
+        this.bedrockClient ??= new BedrockRuntimeClient({
+            region: bedrockInference.region,
+            ...bedrockInference.credentials(),
         })
 
-        return {
-            usage: {
-                promptTokens: 0,
-                promptAudioTokens: 0,
-                promptCachedTokens: 0,
-                completionTokens: 0,
-                completionAudioTokens: 0,
-                completionReasoningTokens: 0,
-                totalTokens: 0,
-            },
-            aiVendorRequestId: requestId,
-            imageUsage: {
-                generatedCount: 1,
-                size: aspectRatio,
-                quality: 'high',
-            },
-            generatedImages: [imageBase64],
+        const useImageToImage = routingMode !== 'generate' && !!primaryRef
+        const body: Record<string, any> = {
+            prompt,
+            output_format: 'png',
         }
+        if (useImageToImage) {
+            const strength = BEDROCK_IMAGE_TO_IMAGE_STRENGTH[routingMode as Exclude<StabilityRoutingMode, 'generate'>]
+            body.mode = 'image-to-image'
+            body.image = primaryRef!.bytes.toString('base64')
+            body.strength = strength
+            warn(
+                `${logPrefix} Bedrock has no equivalent of the Stability control/* endpoints; ` +
+                `${routingMode} degraded to image-to-image strength=${strength}` +
+                (styleRef ? ' and the separate style reference was dropped' : ''),
+            )
+        } else {
+            body.mode = 'text-to-image'
+            body.aspect_ratio = aspectRatio
+            if (routingMode !== 'generate') {
+                warn(`${logPrefix} ${routingMode} requested without a usable reference; falling back to text-to-image`)
+            }
+        }
+
+        info(
+            `${logPrefix} Bedrock request modelId=${modelId} catalogModel=${modelVersion} ` +
+            `mode=${body.mode} aspect=${aspectRatio} promptLen=${prompt.length}`,
+        )
+
+        const response = await this.bedrockClient.send(
+            new InvokeModelCommand({
+                modelId,
+                contentType: 'application/json',
+                accept: 'application/json',
+                body: JSON.stringify(body),
+            }),
+            { abortSignal: this.signal },
+        )
+
+        if (!response.body) throw new Error('Stability Bedrock invocation returned an empty body')
+        const payload: any = JSON.parse(new TextDecoder().decode(response.body))
+        const imageBase64: string = payload.images?.[0] ?? ''
+        // Bedrock reports one finish reason per image; it is null on success and a moderation
+        // message otherwise. Normalize to the direct-API sentinel the caller checks.
+        const rawFinishReason = payload.finish_reasons?.[0] ?? null
+        const finishReason = rawFinishReason ? 'CONTENT_FILTERED' : ''
+        if (rawFinishReason) {
+            err(`${logPrefix} Bedrock finish reason: ${rawFinishReason}`)
+        }
+
+        info(`${logPrefix} Bedrock generation complete filtered=${!!rawFinishReason} imageLen=${imageBase64.length}`)
+
+        return { imageBase64, finishReason }
     }
 }

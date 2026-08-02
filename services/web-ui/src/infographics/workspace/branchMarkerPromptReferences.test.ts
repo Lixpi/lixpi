@@ -38,6 +38,31 @@ const submittedMessage = {
 }
 
 describe('branch marker prompt content', () => {
+    it('reads submitted composer content before the persisted user message is available', () => {
+        const parts = getBranchMarkerPromptParts({
+            type: 'doc',
+            content: [{
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'create a character sheet ' },
+                    {
+                        type: 'prompt_reference',
+                        attrs: {
+                            referenceType: 'capability-module',
+                            moduleId: 'character-creator',
+                            displayName: 'Character Creator',
+                        },
+                    },
+                ],
+            }],
+        }, 'create a character sheet')
+
+        expect(getBranchMarkerPromptDisplayText(parts)).toBe(
+            'create a character sheet Character Creator',
+        )
+        expect(parts.at(-1)?.type).toBe('capability-module')
+    })
+
     it('keeps the submitted Capability badge in its exact inline position', () => {
         const parts = getBranchMarkerPromptParts(submittedMessage, '')
 
@@ -86,7 +111,8 @@ describe('branch marker prompt content', () => {
     it('never degrades a partially visible Capability badge into plain text', () => {
         const parts = truncateBranchMarkerPromptParts(getBranchMarkerPromptParts(submittedMessage, ''), 12)
 
-        expect(parts).toEqual([{ type: 'text', text: 'Create ...' }])
+        expect(getBranchMarkerPromptDisplayText(parts)).toBe('Create Action Timeline...')
+        expect(parts[1]?.type).toBe('capability-module')
     })
 
     it('keeps the complete Capability badge in a compact accepted-output preview', () => {
@@ -146,6 +172,42 @@ describe('branch marker prompt content', () => {
         expect((rendered[1] as HTMLElement).querySelector('.prompt-reference-chip-name')?.textContent).toBe('Shelby')
         expect((rendered[1] as HTMLElement).querySelector('.workspace-ai-chat-panel-context-preview-popover-title')?.textContent)
             .toBe('Shelby')
+    })
+
+    it('keeps the media reference when its stored label crosses the marker preview limit', () => {
+        const parts = getBranchMarkerPromptParts({
+            type: 'aiUserMessage',
+            content: [{
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Create character ' },
+                    {
+                        type: 'prompt_reference',
+                        attrs: {
+                            referenceType: 'capability-module',
+                            moduleId: 'character-creator',
+                            displayName: 'Character Creator',
+                        },
+                    },
+                    { type: 'text', text: ' for ' },
+                    {
+                        type: 'prompt_reference',
+                        attrs: {
+                            referenceType: 'media',
+                            assetId: 'asset-kitten',
+                            mediaKind: 'image',
+                            displayName: 'generated-image-with-a-long-storage-name.png',
+                        },
+                    },
+                ],
+            }],
+        }, '')
+        const truncated = truncateBranchMarkerPromptParts(parts, 45)
+
+        expect(truncated.at(-1)?.type).toBe('media')
+        expect(getBranchMarkerPromptDisplayText(truncated)).toBe(
+            'Create character Character Creator for generated-image-with-a-long-storage-name.png',
+        )
     })
 
     it('uses a lighter Capability accent on the dark branch message without changing marker layout', () => {

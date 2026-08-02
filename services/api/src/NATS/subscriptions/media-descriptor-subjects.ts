@@ -22,6 +22,7 @@ import { settings } from '../../settings.ts'
 import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 import AssetDocumentService from '../../services/asset-document-service.ts'
 import { createAssetRequesterForWorkspaceUser } from '../../services/workspace-reference-scope.ts'
+import { deriveDepictionMedium } from '../../services/asset-subject-identity-service.ts'
 
 const { MEDIA_DESCRIBE } = NATS_SUBJECTS.AI_INTERACTION_SUBJECTS
 
@@ -77,6 +78,7 @@ const persistDescriptor = async ({
             requester,
             expectedRevision: current.revision,
             descriptor,
+            depictionMedium: deriveDepictionMedium({ media: current.media, descriptor }),
             ...(title ? { title } : {}),
         })
         if (!('error' in persisted) || persisted.error !== 'REVISION_CONFLICT') return persisted
