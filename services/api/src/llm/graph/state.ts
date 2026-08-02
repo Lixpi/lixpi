@@ -4,11 +4,15 @@ import type {
     CapabilityJsonValue,
     CapabilityPromptReference,
     CapabilityReasoningModelVariant,
+    ImageInputFidelityPolicy,
     MediaBranchCandidateSnapshot,
     MediaBranchVlmResolution,
     MediaBranchLineagePlan,
     MediaGenerationConfigSelectionGroup,
     MediaGenerationRunMeta,
+    MediaGenerationRun,
+    MediaReferenceBinding,
+    ProviderSafeMediaIntent,
     ProviderName,
     WorkspaceContextResolution,
     WorkspaceContextSnapshot,
@@ -63,6 +67,7 @@ export type AiModelMetaInfo = {
     defaultTemperature?: number
     supportsSystemPrompt?: boolean
     imagePromptMaxChars?: number
+    imageInputFidelity?: ImageInputFidelityPolicy
     videoMaxReferenceImages?: number
     pricing?: Record<string, any>
     [key: string]: unknown
@@ -112,6 +117,9 @@ export const getVideoMaxReferenceImages = (meta: AiModelMetaInfo | undefined): n
     const raw = meta?.videoMaxReferenceImages
     return typeof raw === 'number' && raw > 0 ? raw : DEFAULT_VIDEO_MAX_REFERENCE_IMAGES
 }
+
+export const hasHighImageInputFidelity = (meta: AiModelMetaInfo | undefined): boolean =>
+    meta?.imageInputFidelity?.level === 'high'
 
 export type ChatMessage = {
     role: 'user' | 'assistant' | 'system' | string
@@ -173,8 +181,8 @@ export type ProviderState = {
     canvasVisibleArea?: { width: number; height: number } | undefined
 
     // Video generation (VEO) — async submit/poll routing. Mirrors the image
-    // fields above; the VLM branch resolution is shared (reused for first-frame
-    // + reference selection), so no separate video resolution field is needed.
+    // fields above; the VLM branch resolution is shared for first-frame and
+    // role assignment within the explicit reference set.
     enableVideoGeneration?: boolean | undefined
     videoModelMetaInfo?: AiModelMetaInfo | undefined
     videoModelVersion?: string | undefined
@@ -222,6 +230,10 @@ export type ProviderState = {
     mediaFanoutPlan?: MediaFanoutPlan | undefined
     replayMediaPrompts?: ReplayMediaPrompt[] | undefined
     preflightResolved?: boolean | undefined
+    durableGenerationRequestId?: string | undefined
+    durableMediaRuns?: MediaGenerationRun[] | undefined
+    providerSafeMediaIntent?: ProviderSafeMediaIntent | undefined
+    mediaReferenceBindings?: MediaReferenceBinding[] | undefined
 }
 
 // replace if defined, else keep — mirrors Python TypedDict(total=False) partial-overlay semantics
@@ -302,4 +314,8 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     mediaFanoutPlan: { reducer: keep },
     replayMediaPrompts: { reducer: keep },
     preflightResolved: { reducer: keep, default: () => false },
+    durableGenerationRequestId: { reducer: keep },
+    durableMediaRuns: { reducer: keep },
+    providerSafeMediaIntent: { reducer: keep },
+    mediaReferenceBindings: { reducer: keep },
 }

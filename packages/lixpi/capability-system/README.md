@@ -41,11 +41,15 @@ Backend code owns the reusable Capability engine:
 - first-class Capability-module registration and Tool/Skill package installation;
 - provider-neutral model-tool definitions and provider payload conversion.
 
+Provider payload conversion projects the sealed canonical Tool input schema to each provider's accepted JSON Schema subset. OpenAI projections omit unsupported annotations and constraints such as `$schema` and `uniqueItems`; the Capability dispatcher still validates model arguments against the complete sealed schema before execution.
+
 Tool execution policy is explicit: `required` runs in server preflight, `model-required` is exposed as a direct Tool that each selected reasoning provider must call once before continuing its response, and `model-choice` remains optional. The backend definition records policy and Capability identity; provider adapters own their native forced-tool payload shape.
 
 The backend accepts storage, search, event, and persistence adapters through constructors or function arguments. It must not import a service implementation.
 
 Concrete module backend code also lives in this package. Each module accepts typed service ports for application persistence, provider calls, Asset materialization, and events. Module code never imports `services/api`.
+
+Character Creator treats the packaged example as a layout-only reference. Character-source Assets control identity and rendering class: photographs require photorealistic repeated depictions, while illustrated sources retain their specific medium. Its restoration contract permits complete replacement of draft character pixels while preserving the non-character sheet structure.
 
 ### `src/frontend`
 
@@ -54,6 +58,8 @@ Frontend code owns the transport-injected catalog client, cache, deterministic e
 Concrete module frontend definitions live beside their shared/backend definitions. They provide canvas, editor-plugin, optional prompt-control, generated-output info/replay, prompt-reference, and library factories through generic browser host ports. Action Timeline intentionally provides no prompt-control factory: `/` keeps the standard module badge and the API extracts timing from authoritative prompt text. Module code never imports `services/web-ui`.
 
 Action Timeline's canvas frontend renders its editable document as compact, flat segment rows on the same steel-blue surface used by branch-lineage markers. Timecodes, inline Asset references, and generated-output metrics use typography and color instead of nested cards or bordered pills; the consuming application installs the package-owned stylesheet once per browser document. Generated reference atoms persist the canonical Asset title and media kind instead of using the Asset ID as display content. The module requests thumbnail and inline Asset-reference views through one opaque host factory, so authenticated media loading, canonical Asset titles, hover previews, and legacy-reference repair stay in the application's shared reference-preview system instead of being reimplemented by the module.
+
+Action Timeline model-output schemas use provider-supported unions and retain semantic validation after generation. Artifact lineage records every explicitly authorized generation-source Asset even when the model does not mention every source in the final segment text; inline document references remain the subset actually emitted by the model.
 
 ## Service integration
 

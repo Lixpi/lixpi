@@ -10,6 +10,7 @@ import {
     STYLE_EXTRACTION_AXES,
     STYLE_EXTRACTION_CAPABILITY_IDS,
 } from './style-extraction-definition.ts'
+import { styleExtractionSettings } from '../settings.ts'
 
 export type StyleExtractionRuntimeState = {
     input: Record<string, unknown>
@@ -56,7 +57,7 @@ export function registerStyleExtractionActions(
     const extractorLimiter = new ActionConcurrencyLimiter(dependencies.extractorConcurrency ?? 4)
     registerIfMissing(registry, {
         key: 'style.initialize',
-        timeoutMs: 1_000,
+        timeoutMs: styleExtractionSettings.actionTimeoutsMs.initialize,
         validateInput: validateObject,
         validateOutput: validateStateOutput,
         authorize: authorizeStyleExtraction,
@@ -69,7 +70,7 @@ export function registerStyleExtractionActions(
     })
     registerIfMissing(registry, {
         key: 'style.route',
-        timeoutMs: 180_000,
+        timeoutMs: styleExtractionSettings.actionTimeoutsMs.route,
         validateInput: validateStateInput,
         validateOutput: validateStateOutput,
         authorize: authorizeStyleExtraction,
@@ -92,7 +93,7 @@ export function registerStyleExtractionActions(
     })
     registerIfMissing(registry, {
         key: 'style.extract-axis',
-        timeoutMs: 180_000,
+        timeoutMs: styleExtractionSettings.actionTimeoutsMs.extractAxis,
         validateInput: validateAxisInput,
         validateOutput: validateAxisOutput,
         authorize: authorizeStyleExtraction,
@@ -114,7 +115,7 @@ export function registerStyleExtractionActions(
     })
     registerIfMissing(registry, {
         key: 'style.materialize-crops',
-        timeoutMs: 180_000,
+        timeoutMs: styleExtractionSettings.actionTimeoutsMs.materializeCrops,
         validateInput: validateStateInput,
         validateOutput: validateCropsOutput,
         authorize: authorizeStyleExtraction,
@@ -128,7 +129,7 @@ export function registerStyleExtractionActions(
     })
     registerIfMissing(registry, {
         key: 'style.merge-analysis',
-        timeoutMs: 1_000,
+        timeoutMs: styleExtractionSettings.actionTimeoutsMs.mergeAnalysis,
         validateInput: validateMergeInput,
         validateOutput: validateStateOutput,
         authorize: authorizeStyleExtraction,
@@ -157,7 +158,7 @@ export function registerStyleExtractionActions(
     })
     registerIfMissing(registry, {
         key: 'style.synthesize',
-        timeoutMs: 180_000,
+        timeoutMs: styleExtractionSettings.actionTimeoutsMs.synthesize,
         validateInput: validateStateInput,
         validateOutput: validateStateOutput,
         authorize: authorizeStyleExtraction,
@@ -174,7 +175,7 @@ export function registerStyleExtractionActions(
     })
     registerIfMissing(registry, {
         key: 'style.generate-samples',
-        timeoutMs: 300_000,
+        timeoutMs: styleExtractionSettings.actionTimeoutsMs.generateSamples,
         validateInput: validateStateInput,
         validateOutput: validateStateOutput,
         authorize: authorizeStyleExtraction,
@@ -190,7 +191,7 @@ export function registerStyleExtractionActions(
     })
     registerIfMissing(registry, {
         key: 'style.persist',
-        timeoutMs: 120_000,
+        timeoutMs: styleExtractionSettings.actionTimeoutsMs.persist,
         validateInput: validateStateInput,
         validateOutput: validatePersistOutput,
         authorize: authorizeStyleExtraction,
@@ -217,7 +218,7 @@ export function registerStyleExtractionActions(
     })
     registerIfMissing(registry, {
         key: 'visual-style.apply',
-        timeoutMs: 5_000,
+        timeoutMs: styleExtractionSettings.actionTimeoutsMs.applyVisualStyle,
         validateInput: validateVisualStyleInput,
         validateOutput: validateVisualStyleOutput,
         authorize: context => context.rootCapabilityId.startsWith('visual-style.'),

@@ -177,7 +177,7 @@ describe('downloadImage — HTTP(S) URLs (navigation path)', () => {
 
         expect(removeChildSpy).not.toHaveBeenCalled()
 
-        await vi.advanceTimersByTimeAsync(30_000)
+        await vi.advanceTimersByTimeAsync(30000)
         expect(removeChildSpy).toHaveBeenCalledWith(iframe)
     })
 })

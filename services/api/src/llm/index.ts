@@ -5,11 +5,7 @@ import type { ProviderName } from '@lixpi/constants'
 import type { CapabilityModuleCatalog } from '@lixpi/capability-system/backend'
 
 import { ProviderRegistry } from './providers/provider-registry.ts'
-import { OpenAIProvider } from './providers/openai-provider.ts'
-import { AnthropicProvider } from './providers/anthropic-provider.ts'
-import { GoogleProvider } from './providers/google-provider.ts'
-import { StabilityProvider } from './providers/stability-provider.ts'
-import { BytePlusProvider } from './providers/byteplus-provider.ts'
+import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './providers/current-media-provider-definitions.ts'
 import { ImageRouter } from './tools/image-router.ts'
 import { VideoRouter } from './tools/video-router.ts'
 import { MediaGenerationMatrixOrchestrator, type MatrixRequestData } from './orchestration/media-generation-matrix.ts'
@@ -40,13 +36,7 @@ export type LlmModuleDeps = {
 export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
     const registry = new ProviderRegistry(
         deps.natsService,
-        {
-            OpenAI: OpenAIProvider,
-            Anthropic: AnthropicProvider,
-            Google: GoogleProvider,
-            Stability: StabilityProvider,
-            BytePlus: BytePlusProvider,
-        },
+        CURRENT_MEDIA_PROVIDER_DEFINITIONS,
         {
             metrics: deps.metrics,
         },

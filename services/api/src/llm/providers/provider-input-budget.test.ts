@@ -31,9 +31,9 @@ describe('provider translated-request context admission', () => {
     })
 
     it('accounts translated media separately from base64 text inflation', () => {
-        const bytes = Buffer.alloc(2_400).toString('base64')
+        const bytes = Buffer.alloc(2400).toString('base64')
         const result = assessProviderInputBudget({
-            state: state(10_000),
+            state: state(10000),
             request: {
                 contents: [{
                     parts: [{ inlineData: { mimeType: 'audio/wav', data: bytes } }],
@@ -44,9 +44,9 @@ describe('provider translated-request context admission', () => {
         expect(result).toEqual(expect.objectContaining({
             mediaTokens: 100,
             reservedCompletionTokens: 100,
-            contextWindow: 10_000,
+            contextWindow: 10000,
         }))
-        expect(result!.inputTokens).toBeLessThan(1_000)
+        expect(result!.inputTokens).toBeLessThan(1000)
     })
 
     it('defers admission only for legacy fixtures without model context metadata', () => {

@@ -10,6 +10,7 @@ import {
 } from '../../../backend/capability-action-registry.ts'
 import { CapabilityError } from '../../../shared/capability-errors.ts'
 import { CHARACTER_CREATOR_CAPABILITY_IDS } from './character-creator-definition.ts'
+import { characterCreatorSettings } from '../settings.ts'
 import {
     buildCharacterCreatorImagePrompt,
     buildCharacterSheetCorrectionPrompt,
@@ -57,7 +58,7 @@ export function registerCharacterCreatorActions(
 ): void {
     registerIfMissing(registry, {
         key: 'character.validate-request',
-        timeoutMs: 1_000,
+        timeoutMs: characterCreatorSettings.actionTimeoutsMs.validateRequest,
         validateInput: validateObject,
         validateOutput: validateObject,
         authorize: authorizeCharacterCreator,
@@ -68,7 +69,7 @@ export function registerCharacterCreatorActions(
     })
     registerIfMissing(registry, {
         key: 'asset.resolve-references',
-        timeoutMs: 30_000,
+        timeoutMs: characterCreatorSettings.actionTimeoutsMs.resolveReferences,
         validateInput: validateObject,
         validateOutput: validateObject,
         authorize: authorizeCharacterCreator,
@@ -89,7 +90,7 @@ export function registerCharacterCreatorActions(
     })
     registerIfMissing(registry, {
         key: 'character.build-prompt',
-        timeoutMs: 1_000,
+        timeoutMs: characterCreatorSettings.actionTimeoutsMs.buildPrompt,
         validateInput: validateObject,
         validateOutput: validateGenerationContextOutput,
         authorize: authorizeCharacterCreator,
@@ -131,7 +132,7 @@ export function registerCharacterCreatorActions(
     })
     registerIfMissing(registry, {
         key: 'image.generate',
-        timeoutMs: 180_000,
+        timeoutMs: characterCreatorSettings.actionTimeoutsMs.generateImage,
         validateInput: validateObject,
         validateOutput: validateImageCandidate,
         authorize: authorizeCharacterCreator,
@@ -147,7 +148,7 @@ export function registerCharacterCreatorActions(
     })
     registerIfMissing(registry, {
         key: 'character-sheet.validate',
-        timeoutMs: 90_000,
+        timeoutMs: characterCreatorSettings.actionTimeoutsMs.validateSheet,
         validateInput: validateImageInput,
         validateOutput: validateSheetValidationOutput,
         authorize: authorizeCharacterCreator,
@@ -161,7 +162,7 @@ export function registerCharacterCreatorActions(
     })
     registerIfMissing(registry, {
         key: 'character.build-correction-prompt',
-        timeoutMs: 1_000,
+        timeoutMs: characterCreatorSettings.actionTimeoutsMs.buildCorrectionPrompt,
         validateInput: validateObject,
         validateOutput: validateCorrectionPromptOutput,
         authorize: authorizeCharacterCreator,
@@ -178,7 +179,7 @@ export function registerCharacterCreatorActions(
     })
     registerIfMissing(registry, {
         key: 'character-sheet.persist',
-        timeoutMs: 60_000,
+        timeoutMs: characterCreatorSettings.actionTimeoutsMs.persistSheet,
         validateInput: validateObject,
         validateOutput: validatePersistOutput,
         authorize: authorizeCharacterCreator,
@@ -263,7 +264,7 @@ function validateCharacterCreatorRequest(input: Readonly<Record<string, unknown>
     referenceAssetIds: string[]
 } {
     const prompt = readString(input.prompt, 'prompt').trim()
-    if (prompt.length > 8_000) throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Character prompt exceeds 8000 characters')
+    if (prompt.length > 8000) throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Character prompt exceeds 8000 characters')
     const referenceAssetIds = [...new Set(readStringArray(input.referenceAssetIds, 'referenceAssetIds', true))]
     if (referenceAssetIds.length > 8) {
         throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Character Creator accepts at most 8 reference Assets')

@@ -47,7 +47,7 @@ describe('convertDocumentToPdf', () => {
         expect(runProcessMock).toHaveBeenCalledWith(
             'soffice',
             expect.arrayContaining(['--headless', '--convert-to', 'pdf', '--outdir']),
-            { timeoutMs: 120_000 },
+            { timeoutMs: 120000 },
         )
     })
 
@@ -74,7 +74,7 @@ describe('renderPdfFirstPagePoster', () => {
         expect(runProcessMock).toHaveBeenCalledWith(
             'pdftocairo',
             ['-png', '-f', '1', '-l', '1', '-singlefile', '-scale-to', '1024', expect.any(String), expect.any(String)],
-            { timeoutMs: 60_000 },
+            { timeoutMs: 60000 },
         )
     })
 

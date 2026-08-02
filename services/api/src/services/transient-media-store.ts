@@ -24,7 +24,7 @@ const EXTENSION_MIME_TYPES = Object.fromEntries(
 
 export type TransientMediaMimeType = keyof typeof MIME_TYPE_EXTENSIONS
 
-const TRANSIENT_MEDIA_TTL_NANOS = 60 * 60 * 1_000_000_000
+const TRANSIENT_MEDIA_TTL_NANOS = 60 * 60 * 1000000000
 
 export const getTransientMediaBucketName = (organizationId: string): string =>
     `transient-media-${organizationId}-files`

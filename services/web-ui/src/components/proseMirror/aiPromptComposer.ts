@@ -94,6 +94,7 @@ export type AiPromptComposerInstance = {
     readonly editorView: EditorView | null
     triggerGradientAnimation: () => void
     focus: () => void
+    restoreContent: (content: object) => void
     destroy: () => void
 }
 
@@ -170,6 +171,15 @@ class AiPromptComposer implements AiPromptComposerInstance {
 
     focus(): void {
         this.editor?.editorView?.focus()
+    }
+
+    restoreContent(content: object): void {
+        const view = this.editor?.editorView
+        if (!view) throw new Error('AI_PROMPT_COMPOSER_NOT_READY')
+        const restored = view.state.schema.nodeFromJSON(content)
+        restored.check()
+        view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, restored.content))
+        view.focus()
     }
 
     destroy(): void {

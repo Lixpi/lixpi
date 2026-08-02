@@ -21,6 +21,7 @@ import {
 import { AiChatProseMirrorStreamAssembler } from '../../prosemirror/ai-chat-stream-assembler.ts'
 import {
     logCanvasProjectionError,
+    settleFailedGeneratedMediaRunOnCanvas,
     settleMediaGenerationRequestOnCanvas,
     upsertMediaLineagePlanToCanvas,
 } from '../../services/asset-canvas-projection.ts'
@@ -32,7 +33,7 @@ import {
 import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
 import { attachPlannedGeneratedAssetNodes } from '../../services/generated-asset-storage.ts'
 
-const PIPELINE_EVENT_PURGE_RETRY_MS = 60_000
+const PIPELINE_EVENT_PURGE_RETRY_MS = 60000
 
 const MEDIA_RESPONSE_PUBLISH_STATUSES: ReadonlySet<StreamStatus> = new Set([
     STREAM_STATUS.IMAGE_GENERATION_TRACE,
@@ -344,6 +345,18 @@ export class StreamPublisher {
         })
         if (content.status === STREAM_STATUS.IMAGE_ERROR || content.status === STREAM_STATUS.VIDEO_ERROR) {
             const generationRun = content.generationRun
+            if (generationRun?.lineageAssignment) {
+                this.enqueueCanvasProjection(
+                    async () => {
+                        const canvasGeometry = await settleFailedGeneratedMediaRunOnCanvas({
+                            workspaceId: this.workspaceId,
+                            generationRun,
+                        })
+                        this.canvasGeometryResolved(canvasGeometry, generationRun)
+                    },
+                    'failed to settle failed generated media run on canvas',
+                )
+            }
             const assetId = generationRun?.lineageAssignment?.assetId
             const organizationId = this.options.organizationId
             if (generationRun && assetId && organizationId) {

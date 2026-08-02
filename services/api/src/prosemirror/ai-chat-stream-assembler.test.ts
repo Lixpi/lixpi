@@ -62,7 +62,7 @@ describe('AiChatProseMirrorStreamAssembler Capability generation history', () =>
             capabilityRunId: 'timeline-run',
             chatModelProvider: 'Google',
             chatModelId: 'Google:gemini-2.5-flash',
-            input: { durationMs: 15_000, precisionMs: 2_000 },
+            input: { durationMs: 15000, precisionMs: 2000 },
             outputAssetIds: ['timeline-asset'],
             steps: [{ stepId: 'persist', title: 'Persist timeline', status: 'completed' }],
         }

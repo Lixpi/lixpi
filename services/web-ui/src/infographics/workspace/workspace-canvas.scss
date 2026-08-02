@@ -1040,6 +1040,17 @@
         border-bottom: 1px solid rgba(34, 40, 49, 0.06);
     }
 
+    .canvas-asset-subject-identity-row {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .canvas-asset-subject-identity-control {
+        min-height: 28px;
+        width: 100%;
+    }
+
     .canvas-asset-details-status,
     .canvas-asset-renditions,
     .canvas-asset-lineage {
@@ -2042,6 +2053,50 @@
 
 .workspace-upload-placeholder-node.is-failed .workspace-upload-placeholder-message {
     color: #991b1b;
+}
+
+.workspace-media-operation-actions {
+    position: relative;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+    pointer-events: auto;
+}
+
+.workspace-media-operation-action,
+.workspace-media-operation-candidate {
+    min-height: 28px;
+    padding: 5px 9px;
+    border: 1px solid rgba(95, 143, 207, 0.38);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.9);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+
+    &:disabled {
+        cursor: progress;
+        opacity: 0.55;
+    }
+}
+
+.workspace-media-operation-problem {
+    flex-basis: 100%;
+    font-size: 11px;
+
+    summary {
+        cursor: pointer;
+        font-weight: 650;
+    }
+
+    span,
+    code {
+        display: block;
+        margin-top: 4px;
+        white-space: normal;
+    }
 }
 
 .upload-placeholder-drag-overlay {

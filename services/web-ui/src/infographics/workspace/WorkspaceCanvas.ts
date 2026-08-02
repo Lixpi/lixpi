@@ -21,7 +21,7 @@ import {
     type VideoCanvasNode,
     type AudioCanvasNode,
     type CapabilityArtifactCanvasNode,
-    type UploadPlaceholderCanvasNode,
+    type OperationStatusCanvasNode,
     type BranchOriginCanvasNode,
     type BranchForkCanvasNode,
     type BranchForkLineagePlan,
@@ -43,6 +43,8 @@ import {
     type WorkspaceContextResolution,
     type WorkspaceContextSelection,
     type MediaGenerationRunMeta,
+    type MediaGenerationRequest,
+    type MediaGenerationRequestEvent,
     type ImageGenerationTraceReference,
     type ImageGenerationTrace,
     type VideoGenerationTrace,
@@ -84,11 +86,11 @@ import {
     PROMPT_REFERENCE_NODE_TYPE,
 } from '@lixpi/prosemirror/shared/prompt-reference'
 import {
+    collectProseMirrorPromptReferences,
     collectProseMirrorText,
     findAiChatThreadContentNode,
     getBranchMarkerConversationPreviewFromThreadContent,
     parseProseMirrorJsonContent,
-    shouldShowBranchMarkerConversationResponseLine,
     type BranchMarkerConversationPreview,
     type BranchMarkerTurnDescriptor,
     type ProseMirrorJsonNode,
@@ -120,7 +122,14 @@ import {
     type ReadOnlyAiChatThreadRendererInstance,
 } from '$src/components/proseMirror/readOnlyAiChatThreadRenderer.ts'
 import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
-import AiInteractionService, { stopAiChatMessageForThread } from '$src/services/ai-interaction-service.ts'
+import AiInteractionService, {
+    cancelMediaGenerationRequest,
+    getMediaGenerationRequest,
+    replayMediaGenerationRequest,
+    resolveMediaGenerationReference,
+    startMediaGenerationVerification,
+    stopAiChatMessageForThread,
+} from '$src/services/ai-interaction-service.ts'
 import {
     aiChatPanelCollapseIcon,
     aiChatPanelToggleHistoryIcon,
@@ -196,6 +205,11 @@ import {
 } from '$src/infographics/workspace/workspaceRenderStatePlan.ts'
 import { shouldPreserveLiveViewportForSameWorkspaceRender } from '$src/infographics/workspace/workspaceViewportStatePlan.ts'
 import { planWorkspaceRenderTransition } from '$src/infographics/workspace/workspaceRenderTransitionPlan.ts'
+import {
+    applyMediaGenerationRequestEventToOperationNodes,
+    applyMediaGenerationRequestToOperationNodes,
+    type MediaGenerationOperationRecoveryResult,
+} from '$src/infographics/workspace/mediaGenerationOperationRecovery.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { loadWorkspaceRouteData } from '$src/services/router-service.ts'
@@ -216,9 +230,8 @@ import { describeMedia } from '$src/services/media-descriptor-service.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     buildMediaBranchCandidateSnapshot,
-    buildCanvasWideCandidateSnapshot,
+    buildExplicitMediaCandidateSnapshot,
     buildWorkspaceContextSnapshot,
-    getGeneratedImageTextByNodeIdFromThreadContent,
     getPromptTextFromMessages,
 } from '$src/services/ai-image-branching.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
@@ -243,12 +256,17 @@ import { createPixiMediaLayer, type GeneratingMediaOutlineTarget, type PixiMedia
 import { createWorkspaceLoadingOutline, type WorkspaceLoadingOutlineInstance } from '$src/infographics/workspace/workspaceLoadingOutline.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 import { createMediaLibraryPanel } from '$src/infographics/workspace/mediaLibraryPanel.ts'
+import {
+    mountAssetSubjectIdentityControl,
+    type AssetSubjectIdentityControlInstance,
+} from '$src/infographics/workspace/assetSubjectIdentityControl.ts'
 import { createArtifactLibraryPanel } from '$src/infographics/workspace/artifactLibraryPanel.ts'
 import {
     capabilityArtifactFrontendRegistry,
     capabilityArtifactSharedRegistry,
     ensureCapabilityStyles,
 } from '$src/installed-capabilities.ts'
+import type { CapabilityReplaySubmitData } from '@lixpi/capability-system/frontend'
 import { createCapabilityLibraryPanel, type CapabilityLibraryPanelInstance } from '$src/infographics/workspace/capabilityLibraryPanel.ts'
 import {
     getAiChatPanelState,
@@ -376,7 +394,7 @@ function getBranchMarkerStackGap(): number {
 const BRANCH_MARKER_SPINNER_PERIOD_MS = 800
 const GENERATED_OUTPUT_HISTORY_PREVIEW_MAX_CHARACTERS = 22
 const MEDIA_DESCRIPTOR_ANALYSIS_RETRY_DELAYS_MS = [1000, 3000, 8000] as const
-const GENERATED_IMAGE_COMPLETION_OUTLINE_FALLBACK_MS = 30_000
+const GENERATED_IMAGE_COMPLETION_OUTLINE_FALLBACK_MS = 30000
 const branchMarkerMediaModelCircleGlassCssImageByColor = new Map<string, string>()
 const branchMarkerMediaModelCircleTextureCssImageByColor = new Map<string, string>()
 type BranchMarkerDimensionOptions = {
@@ -769,7 +787,7 @@ type WorkspaceCanvasNodeInsertion =
     | Omit<VideoCanvasNode, 'position'>
     | Omit<AudioCanvasNode, 'position'>
     | Omit<CapabilityArtifactCanvasNode, 'position'>
-    | Omit<UploadPlaceholderCanvasNode, 'position'>
+    | Omit<OperationStatusCanvasNode, 'position'>
 
 type PendingGeneratedMediaTracker = {
     nodeId: string
@@ -785,12 +803,12 @@ type GeneratedOutputRegenerationRequest = {
     scope: 'output-node'
     mode: 'existing-prompt'
     targetNodeId: string
-    mediaNodes: Array<ImageCanvasNode | VideoCanvasNode>
+    outputNodes: GeneratedOutputCanvasNode[]
 } | {
     scope: 'branch-lineage'
     mode: 'existing-prompt' | 'regenerate-prompt'
     targetNodeId: string
-    mediaNodes: Array<ImageCanvasNode | VideoCanvasNode>
+    outputNodes: GeneratedOutputCanvasNode[]
 }
 
 type WorkspaceCanvasInsertionStatePatch = Omit<Partial<CanvasState>, 'nodes' | 'edges' | 'viewport'>
@@ -1011,6 +1029,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const generatedMediaInfoRenderers: Map<string, ReadOnlyAiChatThreadRendererInstance> = new Map()
     const generatedMediaAssetEditors: Map<string, ProseMirrorEditor> = new Map()
     const generatedMediaAssetDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
+    const generatedMediaIdentityControls: Map<string, AssetSubjectIdentityControlInstance> = new Map()
     const branchMarkerReviewDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const RESET_GENERATED_MEDIA_CHROME_SYNC_KEY = '\u0000reset-generated-media-chrome'
@@ -1082,6 +1101,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const DETACHED_CANVAS_PREFLIGHT_REATTACH_WINDOW_MS = 30 * 60 * 1000
     const activeContextChipTrayEls: Set<HTMLDivElement> = new Set()
     const contextPreviewTilesByTray: Map<HTMLDivElement, Set<ContextPreviewTileInstance>> = new Map()
+    const operationStatusPreviewTiles = new Map<string, Set<ContextPreviewTileInstance>>()
+    const recoveredMediaOperationRequestIds = new Set<string>()
+    const mediaOperationLiveSubjects = new Set<string>()
+    const mediaOperationEventSequences = new Map<string, Set<number>>()
+    const mediaOperationRequestRevisions = new Map<string, number>()
     let contextPreviewRefreshVersion = 0
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
     let artifactLibraryPanelInstance: ReturnType<typeof createArtifactLibraryPanel> | null = null
@@ -2117,9 +2141,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 threadId,
                 forceGenerationDetailsOpen: true,
                 lineageProjectionScope,
-                allowLatestTurnFallback: isBranchMarkerGenerationActive(marker)
-                    || Boolean(marker.pendingState)
-                    || getBranchMarkerGeneratedArtifactNodes(marker).length > 0,
+                allowLatestTurnFallback: canUseLatestBranchMarkerTurnFallback(marker),
             },
         )
         if (!projection) return null
@@ -2332,6 +2354,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     </div>
                 </div>
                 <div className="canvas-asset-storage-lineage">
+                    <div className="canvas-asset-detail-row canvas-asset-subject-identity-row">
+                        <span className="canvas-asset-diagnostics-label">Subject identity</span>
+                        <div className="canvas-asset-subject-identity-control"></div>
+                    </div>
                     <div className="canvas-asset-detail-row">
                         <span className="canvas-asset-diagnostics-label">Status</span>
                         <div className="canvas-asset-details-status"></div>
@@ -2351,6 +2377,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const renditionsEl = section.querySelector('.canvas-asset-renditions') as HTMLElement
         const lineageEl = section.querySelector('.canvas-asset-lineage') as HTMLElement
         const storageLabel = section.querySelector('.canvas-asset-storage-label') as HTMLElement
+        const identityControlMount = section.querySelector('.canvas-asset-subject-identity-control') as HTMLElement
+        const identityError = (message: string): void => {
+            statusEl.textContent = `Subject identity update failed: ${message}`
+            statusEl.classList.add('is-error')
+        }
+        generatedMediaIdentityControls.get(node.nodeId)?.destroy()
+        generatedMediaIdentityControls.set(node.nodeId, mountAssetSubjectIdentityControl({
+            host: identityControlMount,
+            asset,
+            onUpdated: updated => {
+                assetsStore.upsert(updated)
+                statusEl.classList.remove('is-error')
+                statusEl.textContent = `${updated.states.lifecycle} · ${updated.states.media} · ${updated.states.provenance}`
+            },
+            onError: identityError,
+        }))
         statusEl.textContent = `${asset.states.lifecycle} · ${asset.states.media} · ${asset.states.provenance}`
         if (node.type === 'capabilityArtifact') {
             storageLabel.textContent = 'Documents'
@@ -2962,6 +3004,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return assetsStore.get(node.assetId)?.generatedOutputReview?.status === 'accepted'
     }
 
+    // Single readiness rule for every generated output kind. Artifacts publish
+    // their payload as a capability document, media publishes an original
+    // rendition; both additionally require a sealed provenance history before
+    // they can be accepted or replayed.
+    function isGeneratedOutputReviewReady(node: GeneratedOutputCanvasNode): boolean {
+        const asset = assetsStore.get(node.assetId)
+        if (!asset || asset.states.provenance !== 'sealed') return false
+        return node.type === 'capabilityArtifact'
+            ? Boolean(asset.documents.capabilityArtifact)
+            : asset.media?.renditions.original?.status === 'ready'
+    }
+
     async function acceptGeneratedOutput(scope: 'output-node' | 'branch-lineage', nodeId: string): Promise<void> {
         const result = await assetService.reviewGeneratedOutput({
             workspaceId,
@@ -2979,6 +3033,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     type GeneratedMediaReplayDescriptor = {
+        kind: 'media'
         node: ImageCanvasNode | VideoCanvasNode
         reasoningModelId: AiModelId
         mediaModelId: AiModelId
@@ -2989,6 +3044,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         videoResolution?: string
         videoDuration?: string
     }
+
+    type GeneratedArtifactReplayDescriptor = {
+        kind: 'artifact'
+        node: CapabilityArtifactCanvasNode
+        reasoningModelId: AiModelId
+        capabilityInputs: CapabilityReplaySubmitData['capabilityInputs']
+    }
+
+    type GeneratedOutputReplayDescriptor = GeneratedMediaReplayDescriptor | GeneratedArtifactReplayDescriptor
 
     function getGeneratedMediaTrace(
         node: ImageCanvasNode | VideoCanvasNode,
@@ -3035,6 +3099,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!trace?.finalPrompt || !reasoningModelId || !mediaModelId) return null
         if (trace.traceVersion === 'image-generation-trace-v1') {
             return {
+                kind: 'media',
                 node,
                 reasoningModelId,
                 mediaModelId: mediaModelId as AiModelId,
@@ -3044,6 +3109,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
         return {
+            kind: 'media',
             node,
             reasoningModelId,
             mediaModelId: mediaModelId as AiModelId,
@@ -3055,13 +3121,47 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function getGeneratedArtifactReplayDescriptor(
+        node: CapabilityArtifactCanvasNode,
+    ): GeneratedArtifactReplayDescriptor | null {
+        if (!node.generatedBy) return null
+        const definition = capabilityArtifactFrontendRegistry.require(node.artifactTypeId)
+        const replay = definition.buildReplaySubmitData({ provenance: getCapabilityArtifactProvenance(node) })
+        const reasoningModelId = replay.reasoningModelIds[0]
+        if (!reasoningModelId) return null
+        return {
+            kind: 'artifact',
+            node,
+            reasoningModelId: reasoningModelId as AiModelId,
+            capabilityInputs: replay.capabilityInputs,
+        }
+    }
+
+    // Single entry point that turns any generated output node into its replay
+    // descriptor, so review controls never branch on the output kind.
+    function getGeneratedOutputReplayDescriptor(
+        node: GeneratedOutputCanvasNode,
+    ): GeneratedOutputReplayDescriptor | null {
+        return node.type === 'capabilityArtifact'
+            ? getGeneratedArtifactReplayDescriptor(node)
+            : getGeneratedMediaReplayDescriptor(node)
+    }
+
     function buildRegenerationSubmitData(
-        descriptors: GeneratedMediaReplayDescriptor[],
+        descriptors: GeneratedOutputReplayDescriptor[],
         promptText: string,
     ): AiPromptComposerSubmitData {
         const reasoningModels = uniqueAiModelIds(descriptors.map(descriptor => descriptor.reasoningModelId))
-        const imageDescriptors = descriptors.filter(descriptor => descriptor.mediaType === 'image')
-        const videoDescriptors = descriptors.filter(descriptor => descriptor.mediaType === 'video')
+        const mediaDescriptors = descriptors
+            .filter((descriptor): descriptor is GeneratedMediaReplayDescriptor => descriptor.kind === 'media')
+        const capabilityInputs = descriptors.reduce<CapabilityReplaySubmitData['capabilityInputs']>(
+            (merged, descriptor) => descriptor.kind === 'artifact'
+                ? { ...merged, ...descriptor.capabilityInputs }
+                : merged,
+            {},
+        )
+        const imageDescriptors = mediaDescriptors.filter(descriptor => descriptor.mediaType === 'image')
+        const videoDescriptors = mediaDescriptors.filter(descriptor => descriptor.mediaType === 'video')
         const imageModels = uniqueAiModelIds(imageDescriptors.map(descriptor => descriptor.mediaModelId))
         const videoModels = uniqueAiModelIds(videoDescriptors.map(descriptor => descriptor.mediaModelId))
         const firstImage = imageDescriptors[0]
@@ -3072,7 +3172,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             useMultipleReasoningModels: reasoningModels.length > 1,
             useMultipleImageModels: imageModels.length > 1,
             useMultipleVideoModels: videoModels.length > 1,
-            capabilityInputs: {},
+            capabilityInputs,
             ...(imageModels.length > 0 ? {
                 imageOptions: {
                     aiImageModels: imageModels,
@@ -3111,11 +3211,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     async function regenerateGeneratedOutputs(request: GeneratedOutputRegenerationRequest): Promise<void> {
-        const { scope, targetNodeId, mediaNodes } = request
+        const { scope, targetNodeId, outputNodes } = request
         const regeneratePrompt = request.mode === 'regenerate-prompt'
-        await Promise.all(mediaNodes.map(async (node) => {
+        await Promise.all(outputNodes.map(async (node) => {
             if (assetDocumentsStore.get(node.assetId, 'provenance')?.doc) return
-            const result = await assetService.refresh(node.assetId)
+            const result = await assetService.refresh(node.assetId, workspaceId)
             if ('error' in result) {
                 console.error('[CANVAS][generated-output-review] Unable to load sealed provenance:', {
                     assetId: node.assetId,
@@ -3123,32 +3223,38 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
             }
         }))
-        const descriptors = mediaNodes
-            .map(getGeneratedMediaReplayDescriptor)
-            .filter((descriptor): descriptor is GeneratedMediaReplayDescriptor => Boolean(descriptor))
-        if (descriptors.length !== mediaNodes.length) {
+        const descriptors = outputNodes
+            .map(getGeneratedOutputReplayDescriptor)
+            .filter((descriptor): descriptor is GeneratedOutputReplayDescriptor => Boolean(descriptor))
+        if (descriptors.length !== outputNodes.length) {
             console.error('[CANVAS][generated-output-review] Generation history is not ready for regeneration.', {
                 targetNodeId,
-                mediaNodeIds: mediaNodes.map(node => node.nodeId),
+                outputNodeIds: outputNodes.map(node => node.nodeId),
                 descriptorCount: descriptors.length,
             })
             return
         }
-        const promptText = getGeneratedOutputUserMessageText(mediaNodes[0]!)
+        const mediaDescriptors = descriptors
+            .filter((descriptor): descriptor is GeneratedMediaReplayDescriptor => descriptor.kind === 'media')
+        const promptText = getGeneratedOutputUserMessageText(outputNodes[0]!)
         if (!promptText) return
         const lineageParentNodeId = scope === 'branch-lineage'
             ? targetNodeId
-            : mediaNodes[0]?.generatedBy?.lineageParentNodeId
-                ?? mediaNodes[0]?.generatedBy?.branchLineNodeId
-                ?? mediaNodes[0]?.generatedBy?.branchForkNodeId
-                ?? mediaNodes[0]?.generatedBy?.branchOriginNodeId
-        const branchId = mediaNodes[0]?.generatedBy?.branchId
+            : outputNodes[0]?.generatedBy?.lineageParentNodeId
+                ?? outputNodes[0]?.generatedBy?.branchLineNodeId
+                ?? outputNodes[0]?.generatedBy?.branchForkNodeId
+                ?? outputNodes[0]?.generatedBy?.branchOriginNodeId
+        const branchId = outputNodes[0]?.generatedBy?.branchId
         const lineageParentNode = lineageParentNodeId ? findCanvasNodeById(lineageParentNodeId) : undefined
         const lineageParentType = lineageParentNode
             && ['branchOrigin', 'branchFork', 'branchLine'].includes(lineageParentNode.type)
             ? lineageParentNode.type as 'branchOrigin' | 'branchFork' | 'branchLine'
             : undefined
-        if (!regeneratePrompt && (!lineageParentNodeId || !lineageParentType || !branchId)) {
+        // Replaying an existing prompt needs a media trace to pin the branch to.
+        // Artifact-only branches carry no media trace, so they re-run from their
+        // sealed capability inputs with the lineage preserved by the supersede call.
+        const replaysExistingPrompt = !regeneratePrompt && mediaDescriptors.length > 0
+        if (replaysExistingPrompt && (!lineageParentNodeId || !lineageParentType || !branchId)) {
             console.error('[CANVAS][generated-output-review] Branch lineage is unavailable.', {
                 targetNodeId,
                 lineageParentNodeId,
@@ -3157,12 +3263,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
             return
         }
-        const explicitContextNodeIds = [...new Set(mediaNodes.flatMap(node => [
-            ...(node.generatedBy?.referenceImageNodeIds ?? []),
-            ...(node.generatedBy?.sourceContextNodeIds ?? []),
+        // Reference and context node IDs are media-generation inputs; artifacts
+        // carry their own inputs inside capabilityInputs instead.
+        const explicitContextNodeIds = [...new Set(mediaDescriptors.flatMap(descriptor => [
+            ...(descriptor.node.generatedBy?.referenceImageNodeIds ?? []),
+            ...(descriptor.node.generatedBy?.sourceContextNodeIds ?? []),
         ]))]
         const excludedCanvasNodeIds = [
-            ...mediaNodes.map(node => node.nodeId),
+            ...outputNodes.map(node => node.nodeId),
             ...(regeneratePrompt ? [targetNodeId] : []),
         ]
         const result = request.scope === 'output-node'
@@ -3196,13 +3304,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     mode: 'regenerate-prompt',
                     forceFreshLineage: true,
                 } as const,
-            } : lineageParentNodeId && lineageParentType && branchId ? {
+            } : replaysExistingPrompt && lineageParentNodeId && lineageParentType && branchId ? {
                 regeneration: {
                     mode: 'existing-prompt',
                     branchId,
                     lineageParentNodeId,
                     lineageParentType,
-                    replayPrompts: descriptors.map(descriptor => ({
+                    replayPrompts: mediaDescriptors.map(descriptor => ({
                         sourceAssetId: descriptor.node.assetId,
                         reasoningModelId: descriptor.reasoningModelId,
                         mediaModelId: descriptor.mediaModelId,
@@ -3219,8 +3327,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (isGeneratedOutputAccepted(node)) return null
         const asset = assetsStore.get(node.assetId)
         if (!asset || asset.generatedOutputReview?.status === 'superseded') return null
-        const disabled = asset.media?.renditions.original?.status !== 'ready'
-            || asset.states.provenance !== 'sealed'
+        const disabled = !isGeneratedOutputReviewReady(node)
         const handleClick = (event: MouseEvent): void => {
             event.preventDefault()
             event.stopPropagation()
@@ -3245,8 +3352,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!node.generatedBy) return null
         const asset = assetsStore.get(node.assetId)
         if (!asset || isGeneratedOutputAccepted(node) || asset.generatedOutputReview?.status === 'superseded') return null
-        const disabled = asset.media?.renditions.original?.status !== 'ready'
-            || asset.states.provenance !== 'sealed'
+        const disabled = !isGeneratedOutputReviewReady(node)
         const regenerate = (event: MouseEvent): void => {
             event.preventDefault()
             event.stopPropagation()
@@ -3254,7 +3360,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 scope: 'output-node',
                 mode: 'existing-prompt',
                 targetNodeId: node.nodeId,
-                mediaNodes: [node],
+                outputNodes: [node],
             })
         }
         const controls = html`
@@ -3420,7 +3526,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!node.generatedBy || isGeneratedOutputAccepted(node)) return null
         const asset = assetsStore.get(node.assetId)
         if (!asset || asset.generatedOutputReview?.status === 'superseded') return null
-        const disabled = !asset.documents.capabilityArtifact || asset.states.provenance !== 'sealed'
+        const disabled = !isGeneratedOutputReviewReady(node)
         const button = html`<button
             className="media-review-action media-review-accept nopan"
             type="button"
@@ -3436,37 +3542,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return button
     }
 
-    async function regenerateCapabilityArtifact(node: CapabilityArtifactCanvasNode): Promise<void> {
-        const asset = assetsStore.get(node.assetId)
-        if (!asset || !node.generatedBy) return
-        const provenance = getCapabilityArtifactProvenance(node)
-        const definition = capabilityArtifactFrontendRegistry.require(node.artifactTypeId)
-        const replay = definition.buildReplaySubmitData({ provenance })
-        const prompt = typeof provenance.input?.prompt === 'string'
-            ? provenance.input.prompt
-            : typeof node.generatedBy.input?.prompt === 'string'
-                ? node.generatedBy.input.prompt
-                : ''
-        if (!prompt || replay.reasoningModelIds.length === 0) return
-        const reviewed = await assetService.reviewGeneratedOutput({
-            workspaceId,
-            scope: 'output-node',
-            action: 'supersede',
-            nodeId: node.nodeId,
-            preserveLineage: true,
-        })
-        if ('error' in reviewed) return
-        applyApiCanvasGeometry(reviewed.canvasGeometry)
-        await submitCanvasGenerationRun({
-            contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: prompt }] }],
-            aiReasoningModels: replay.reasoningModelIds as AiModelId[],
-            useMultipleReasoningModels: replay.reasoningModelIds.length > 1,
-            useMultipleImageModels: false,
-            useMultipleVideoModels: false,
-            capabilityInputs: replay.capabilityInputs,
-        })
-    }
-
     function createCapabilityArtifactRegenerationControls(node: CapabilityArtifactCanvasNode): HTMLDivElement | null {
         if (!node.generatedBy || isGeneratedOutputAccepted(node)) return null
         const asset = assetsStore.get(node.assetId)
@@ -3477,11 +3552,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             title="Generate another Artifact from the sealed request"
             aria-label="Regenerate Artifact"
         ><span className="media-review-action-icon" innerHTML=${refreshIcon} aria-hidden="true"></span></button>` as HTMLButtonElement
-        button.disabled = !asset.documents.provenance || asset.states.provenance !== 'sealed'
+        button.disabled = !isGeneratedOutputReviewReady(node)
         button.addEventListener('click', (event) => {
             event.preventDefault()
             event.stopPropagation()
-            void regenerateCapabilityArtifact(node)
+            void regenerateGeneratedOutputs({
+                scope: 'output-node',
+                mode: 'existing-prompt',
+                targetNodeId: node.nodeId,
+                outputNodes: [node],
+            })
         })
         return html`<div className="media-regeneration-controls nopan">${button}</div>` as HTMLDivElement
     }
@@ -3794,6 +3874,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         generatedMediaAssetEditors.clear()
         for (const dropdown of generatedMediaAssetDropdowns.values()) dropdown.destroy()
         generatedMediaAssetDropdowns.clear()
+        for (const control of generatedMediaIdentityControls.values()) control.destroy()
+        generatedMediaIdentityControls.clear()
         for (const tile of generatedMediaInfoPreviewTiles) {
             tile.destroy()
         }
@@ -5800,7 +5882,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!Number.isFinite(updatedAt)) return ''
 
         const elapsedMs = Math.max(0, Date.now() - updatedAt)
-        const minuteMs = 60_000
+        const minuteMs = 60000
         const hourMs = 60 * minuteMs
         const dayMs = 24 * hourMs
         const weekMs = 7 * dayMs
@@ -6221,6 +6303,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 chunks.push(node)
                 return
             }
+            if (node.type === PROMPT_REFERENCE_NODE_TYPE || node.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE) {
+                const reference = collectProseMirrorPromptReferences(node as ProseMirrorJsonNode)[0]
+                if (reference?.displayName) chunks.push(reference.displayName)
+                return
+            }
             if (node.type === 'text' && typeof node.text === 'string') chunks.push(node.text)
             if (node.type === 'hard_break') chunks.push('\n')
             if (Array.isArray(node.content)) {
@@ -6239,6 +6326,37 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return node.type === PROMPT_REFERENCE_NODE_TYPE
             || node.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
             || (Array.isArray(node.content) && node.content.some(contentJSONHasPromptReference))
+    }
+
+    function getPromptReferenceCanvasNodeIds(contentJSON: unknown): string[] {
+        const root = Array.isArray(contentJSON)
+            ? { type: 'doc', content: contentJSON as ProseMirrorJsonNode[] }
+            : parseProseMirrorJsonContent(contentJSON)
+        if (!root) return []
+        return Array.from(new Set(
+            collectProseMirrorPromptReferences(root)
+                .flatMap(reference => 'nodeId' in reference && reference.nodeId ? [reference.nodeId] : [])
+        ))
+    }
+
+    function getLatestUserPromptReferenceCanvasNodeIds(content: unknown, threadId: string): string[] {
+        const root = parseProseMirrorJsonContent(content)
+        if (!root) return []
+        const threadNode = findAiChatThreadContentNode(root, threadId)
+        const latestUserMessage = [...(threadNode?.content ?? [])]
+            .reverse()
+            .find(child => child.type === 'aiUserMessage')
+        return latestUserMessage ? getPromptReferenceCanvasNodeIds(latestUserMessage) : []
+    }
+
+    function getLatestUserPromptText(content: unknown, threadId: string): string {
+        const root = parseProseMirrorJsonContent(content)
+        if (!root) return ''
+        const threadNode = findAiChatThreadContentNode(root, threadId)
+        const latestUserMessage = [...(threadNode?.content ?? [])]
+            .reverse()
+            .find(child => child.type === 'aiUserMessage')
+        return latestUserMessage ? extractPromptTextFromContentJSON(latestUserMessage) : ''
     }
 
     function openAiChatPanel(): void {
@@ -6658,6 +6776,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     useMultipleVideoModels,
                     imageOptions,
                     videoOptions,
+                    referenceNodeIds: submittedReferenceNodeIds = [],
                 }: any) => {
                     gradient?.triggerAnimation()
 
@@ -6665,6 +6784,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         // Explicit context chips are always force-included. The thread has
                         // no canvas node, so all context comes from the chips.
                         const chipNodeIds = aiChatPanelState.contextChips.slice()
+                        const currentThreadContent = editor.editorView?.state.doc.toJSON()
+                        const explicitContextNodeIds = Array.from(new Set([
+                            ...chipNodeIds,
+                            ...submittedReferenceNodeIds,
+                            ...getLatestUserPromptReferenceCanvasNodeIds(currentThreadContent, panelThreadId),
+                        ]))
                         // The branch-resolver snapshot is reused for video generation too —
                         // VEO image-to-video / reference-image inputs come from the same VLM
                         // resolution, so the snapshot must be built whenever an image OR
@@ -6673,12 +6798,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             imageOptions?.aiImageModels?.length
                             || videoOptions?.aiVideoModels?.length
                         )
-                        const imagePlacement = rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)
+                        const imagePlacement = rememberStandaloneGeneratedImagePlacement(
+                            panelThreadId,
+                            messages,
+                            hasMediaModel,
+                            explicitContextNodeIds,
+                            getLatestUserPromptText(currentThreadContent, panelThreadId),
+                        )
                         const mediaBranchCandidateSnapshot = imagePlacement.mediaBranchCandidateSnapshot
 
-                        // Whole-workspace, descriptors-only index for the API relevance stage.
-                        // Built every turn (text-only included); chips + the rooted thread's
-                        // edge-connected nodes are flagged so the API can force-include them.
+                        // Explicit composer context only. Unselected canvas nodes are not
+                        // included in the request.
                         const workspaceContextSnapshot = currentCanvasState
                             ? buildWorkspaceContextSnapshot({
                                 workspaceId,
@@ -6686,7 +6816,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                                 prompt: imagePlacement.promptText,
                                 nodes: currentCanvasState.nodes,
                                 edges: currentCanvasState.edges,
-                                contextChipNodeIds: chipNodeIds,
+                                contextChipNodeIds: explicitContextNodeIds,
                                 titlesByNodeId: buildWorkspaceContextTitlesByNodeId(currentCanvasState.nodes),
                             })
                             : undefined
@@ -7036,6 +7166,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 useMultipleVideoModels,
                 imageOptions,
                 videoOptions,
+                referenceNodeIds: submittedReferenceNodeIds = [],
             }: any) => {
                 try {
                     if (!submittedData) return
@@ -7052,17 +7183,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const edges = (currentCanvasState?.edges ?? [])
                         .filter(edge => !excludedCanvasNodeIdSet.has(edge.sourceNodeId)
                             && !excludedCanvasNodeIdSet.has(edge.targetNodeId))
-                    const promptText = getPromptTextFromMessages(messages)
-                    const explicitMediaReferenceNodeIds = getExistingMediaNodeIds(
-                        explicitContextNodeIds.filter(nodeId => !excludedCanvasNodeIdSet.has(nodeId))
-                    )
+                    // ContentExtractor.toMessages intentionally serializes prompt-reference
+                    // atoms as non-text context, so its scalar text omits their visible label.
+                    // The canvas marker and media preflight must preserve the exact submitted
+                    // composer prompt (for example, "Use Action Timeline to generate video").
+                    const promptText = extractPromptTextFromContentJSON(submittedData.contentJSON)
+                        || getPromptTextFromMessages(messages)
+                    const promptParts = getBranchMarkerPromptParts({
+                        type: 'doc',
+                        content: submittedData.contentJSON as ProseMirrorJsonNode[],
+                    }, promptText)
+                    const submittedExplicitContextNodeIds = Array.from(new Set([
+                        ...explicitContextNodeIds,
+                        ...submittedReferenceNodeIds,
+                    ])).filter(nodeId => !excludedCanvasNodeIdSet.has(nodeId))
+                    const explicitMediaReferenceNodeIds = getExistingMediaNodeIds(submittedExplicitContextNodeIds)
                     const hasMediaModel = Boolean(
                         imageOptions?.aiImageModels?.length
                         || videoOptions?.aiVideoModels?.length
                     )
 
                     const mediaBranchCandidateSnapshot = hasMediaModel
-                        ? buildCanvasWideCandidateSnapshot({
+                        ? buildExplicitMediaCandidateSnapshot({
                             generationRunId: threadId,
                             nodes,
                             prompt: promptText,
@@ -7077,19 +7219,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             prompt: promptText,
                             nodes,
                             edges,
-                            contextChipNodeIds: explicitContextNodeIds
-                                .filter(nodeId => !excludedCanvasNodeIdSet.has(nodeId)),
+                            contextChipNodeIds: submittedExplicitContextNodeIds,
                             titlesByNodeId: buildWorkspaceContextTitlesByNodeId(nodes),
                         })
                         : undefined
 
                     if (mediaBranchCandidateSnapshot) {
-                        const candidateNodeIds = explicitMediaReferenceNodeIds.length > 0
-                            ? explicitMediaReferenceNodeIds
-                            : mediaBranchCandidateSnapshot.candidates.flatMap((candidate) => candidate.nodeId ? [candidate.nodeId] : [])
+                        const candidateNodeIds = explicitMediaReferenceNodeIds
                         pendingGeneratedImagePlacements.set(threadId, {
                             referenceNodeIds: candidateNodeIds,
                             promptText,
+                            promptParts,
                             mediaBranchCandidateSnapshot,
                             createdAt: Date.now(),
                         })
@@ -7265,7 +7405,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!promptText && !hasPromptReference) return
 
         const threadId = uuidv4()
-        const explicitContextNodeIds = options.explicitContextNodeIds ?? aiChatPanelState.contextChips.slice()
+        const explicitContextNodeIds = Array.from(new Set([
+            ...(options.explicitContextNodeIds ?? aiChatPanelState.contextChips),
+            ...getPromptReferenceCanvasNodeIds(data.contentJSON),
+        ]))
         const useMultipleReasoningModels = Boolean(data.useMultipleReasoningModels)
         const useMultipleImageModels = Boolean(data.useMultipleImageModels)
         const useMultipleVideoModels = Boolean(data.useMultipleVideoModels)
@@ -7372,9 +7515,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         referenceNodeIds?: string[]
         lineagePlan?: MediaBranchLineagePlan
         promptText: string
+        promptParts?: BranchMarkerPromptPart[]
         mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
         mediaBranchResolution?: MediaBranchVlmResolution
         activeRunKeys?: Set<string>
+        promptHandoffRunKeys?: Set<string>
         createdAt: number
     }
 
@@ -7773,12 +7918,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const reasoningModelIds = data.useMultipleReasoningModels
             ? uniqueAiModelIds(data.aiReasoningModels)
             : uniqueAiModelIds(data.aiReasoningModels.slice(0, 1))
-        const imageModelIds = data.useMultipleImageModels
+        const selectedImageModelIds = data.useMultipleImageModels
             ? uniqueAiModelIds(data.imageOptions?.aiImageModels ?? [])
             : uniqueAiModelIds((data.imageOptions?.aiImageModels ?? []).slice(0, 1))
-        const videoModelIds = data.useMultipleVideoModels
+        const selectedVideoModelIds = data.useMultipleVideoModels
             ? uniqueAiModelIds(data.videoOptions?.aiVideoModels ?? [])
             : uniqueAiModelIds((data.videoOptions?.aiVideoModels ?? []).slice(0, 1))
+        const hasExplicitMediaFanout = data.useMultipleImageModels || data.useMultipleVideoModels
+        const imageModelIds = hasExplicitMediaFanout && !data.useMultipleImageModels
+            ? []
+            : selectedImageModelIds
+        const videoModelIds = hasExplicitMediaFanout && !data.useMultipleVideoModels
+            ? []
+            : selectedVideoModelIds
         return {
             phase: 'preflight',
             promptText,
@@ -7874,13 +8026,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         nodeEl.classList.add('workspace-branch-marker-screen-fixed')
 
-        // The docked pill hugs its single-line content (no trailing dead space):
-        // measure the intrinsic content width instead of a char-count heuristic, then
-        // cap it so its on-screen width never exceeds 80% of the prompt input field —
-        // beyond that the message truncates with an ellipsis.
+        // Screen-fixed sizing uses the same prompt parts as rendering. Intrinsic
+        // DOM measurement here included hidden scalar fallback text before submitted
+        // reference atoms were available, which produced a blank reserved tail.
         const composerBounds = (globalCanvasComposer?.element ?? globalCanvasComposerHostEl)?.getBoundingClientRect()
-        applyStyle(nodeEl, { width: 'max-content', height: `${dimensions.height}px` })
-        let dockedWidth = Math.max(getBranchMarkerScreenFixedMinWidth(), nodeEl.scrollWidth || dimensions.width)
+        let dockedWidth = Math.max(getBranchMarkerScreenFixedMinWidth(), dimensions.width)
         if (composerBounds && composerBounds.width > 0) {
             // Preflight markers are screen-space UI, not canvas chrome. Keep the
             // width cap independent from zoom; zoom only matters after promotion.
@@ -8188,14 +8338,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             parseAiModelSelectionAttr(attrs.aiReasoningModels),
             useMultipleReasoningModels,
         ))
-        const imageModelIds = uniqueAiModelIds(collapseForMode(
+        const selectedImageModelIds = uniqueAiModelIds(collapseForMode(
             parseAiModelSelectionAttr(attrs.aiImageModels),
             useMultipleImageModels,
         ))
-        const videoModelIds = uniqueAiModelIds(collapseForMode(
+        const selectedVideoModelIds = uniqueAiModelIds(collapseForMode(
             parseAiModelSelectionAttr(attrs.aiVideoModels),
             useMultipleVideoModels,
         ))
+        const hasExplicitMediaFanout = useMultipleImageModels || useMultipleVideoModels
+        const imageModelIds = hasExplicitMediaFanout && !useMultipleImageModels
+            ? []
+            : selectedImageModelIds
+        const videoModelIds = hasExplicitMediaFanout && !useMultipleVideoModels
+            ? []
+            : selectedVideoModelIds
         const focusedReasoningModelIds: Array<AiModelId | undefined> = reasoningModelIds.length > 0
             ? reasoningModelIds
             : [undefined]
@@ -8300,14 +8457,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const pendingStates = getPendingBranchMarkerModelStates(data, promptText)
         const pendingNodes: BranchLineCanvasNode[] = []
-        const screenFixedDimensionsByIndex = pendingStates.map(() => getBranchMarkerScreenFixedDimensions(promptText))
+        const submittedPromptParts = pendingGeneratedImagePlacements.get(placementKey)?.promptParts
+        const submittedPromptText = submittedPromptParts?.length
+            ? getBranchMarkerPromptDisplayText(submittedPromptParts)
+            : promptText
+        const screenFixedDimensionsByIndex = pendingStates.map(() => getBranchMarkerScreenFixedDimensions(submittedPromptText))
         const stackOffsets = getPendingBranchMarkerStackOffsets(screenFixedDimensionsByIndex)
         const stackHeight = getPendingBranchMarkerStackHeight(screenFixedDimensionsByIndex)
         pendingStates.forEach((pendingState, index) => {
-            const dimensions = getBranchMarkerContentDimensions(promptText)
+            const dimensions = getBranchMarkerContentDimensions(submittedPromptText)
             // The node carries on-canvas dimensions, but its initial preflight pose is
             // projected from the compact screen-fixed size.
-            const screenFixedDimensions = screenFixedDimensionsByIndex[index] ?? getBranchMarkerScreenFixedDimensions(promptText)
+            const screenFixedDimensions = screenFixedDimensionsByIndex[index]
+                ?? getBranchMarkerScreenFixedDimensions(submittedPromptText)
             const projection = getPendingBranchMarkerScreenProjection(screenFixedDimensions, stackOffsets[index] ?? 0, stackHeight)
             const nodeId = `pending-branch-${uuidv4()}`
             const basePendingNode: BranchLineCanvasNode = {
@@ -8547,6 +8709,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return {
             ...placement,
             activeRunKeys: placement.activeRunKeys ? new Set(placement.activeRunKeys) : undefined,
+            promptHandoffRunKeys: placement.promptHandoffRunKeys
+                ? new Set(placement.promptHandoffRunKeys)
+                : undefined,
         }
     }
 
@@ -9702,10 +9867,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return mediaNodeIds
     }
 
-    function getStandaloneGeneratedMediaReferenceNodeIds(): string[] {
-        return getExistingMediaNodeIds(aiChatPanelState.contextChips)
-    }
-
     function findPendingLineageNode(
         nodeId: string,
         pendingNodes: Array<BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode | undefined>,
@@ -10027,9 +10188,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function clearGeneratingReferenceNodeIdsForPromptHandoff(threadId: string, generationRun?: MediaGenerationRunMeta): void {
+        const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
+        const placement = ensurePendingGeneratedMediaPlacementForApiRun(threadId, generationRun)
+        const expectedRunKeys = placement?.lineagePlan?.runAssignments
+            .map(assignment => assignment.mediaRunId ?? assignment.reasoningRunId)
+            .filter((runKey): runKey is string => Boolean(runKey))
+            ?? []
+        if (placement && expectedRunKeys.length > 0) {
+            const promptHandoffRunKeys = new Set(placement.promptHandoffRunKeys ?? [])
+            promptHandoffRunKeys.add(getGeneratedMediaRunKey(threadId, generationRun))
+            pendingGeneratedImagePlacements.set(placementKey, {
+                ...placement,
+                promptHandoffRunKeys,
+            })
+            if (expectedRunKeys.some(runKey => !promptHandoffRunKeys.has(runKey))) return
+        }
+
         const keysToClear = new Set<string>([
             threadId,
-            getGeneratedMediaPlacementKey(threadId, generationRun),
+            placementKey,
         ])
         let didClear = false
         for (const key of keysToClear) {
@@ -10070,16 +10247,33 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             : [...currentAiChatThreads, thread]
     }
 
-    async function refreshPersistedAiChatThreadForBranchMarkers(threadId: string): Promise<void> {
-        const asset = await assetService.get(threadId)
-        if ('error' in asset || !asset.documents.conversation) return
+    function branchMarkerThreadSnapshotIsComplete(threadId: string, content: unknown): boolean {
+        const markers = (currentCanvasState?.nodes ?? [])
+            .filter((node: CanvasNode): node is BranchMarkerNode =>
+                isBranchMarkerNode(node) && getBranchMarkerThreadId(node) === threadId)
+        if (markers.length === 0) return true
+
+        return markers.every((marker) => {
+            const preview = getBranchMarkerConversationPreviewFromThreadContent(
+                content,
+                threadId,
+                getBranchMarkerTurnDescriptor(marker),
+                { allowLatestTurnFallback: canUseLatestBranchMarkerTurnFallback(marker, content) },
+            )
+            return Boolean(preview?.userMessage && preview.responseText.trim())
+        })
+    }
+
+    async function refreshPersistedAiChatThreadForBranchMarkers(threadId: string): Promise<boolean> {
+        const asset = await assetService.get(threadId, workspaceId)
+        if ('error' in asset || !asset.documents.conversation) return false
         await assetService.resumeDocument({
             organizationId: asset.organizationId,
             assetId: asset.assetId,
             role: 'conversation',
         })
         const snapshot = assetDocumentsStore.get(asset.assetId, 'conversation')
-        if (!snapshot) return
+        if (!snapshot) return false
         const thread = {
             threadId: asset.assetId,
             assetId: asset.assetId,
@@ -10097,27 +10291,46 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const currentThread = getPersistedAiChatThread(threadId)
         const currentVersion = getStoredProseMirrorVersion(currentThread)
         const fetchedVersion = getStoredProseMirrorVersion(thread)
-        if (fetchedVersion < currentVersion) return
+        if (fetchedVersion < currentVersion) return false
 
         rememberAiChatThreadRecord(thread)
-        liveAiChatThreadContentOverrides.delete(threadId)
+        const snapshotIsComplete = branchMarkerThreadSnapshotIsComplete(threadId, snapshot.doc)
+        if (snapshotIsComplete) liveAiChatThreadContentOverrides.delete(threadId)
         refreshBranchMarkersForAiChatThread(threadId)
         refreshGeneratedMediaProjectionsForAiChatThread(threadId)
+        return snapshotIsComplete
     }
 
     function schedulePersistedAiChatThreadRefreshForBranchMarkers(threadId: string): void {
         for (const timer of pendingAiChatThreadRefreshTimers.get(threadId) ?? []) {
             window.clearTimeout(timer)
         }
+        pendingAiChatThreadRefreshTimers.delete(threadId)
 
-        const timers = [400, 1400, 3000].map(delayMs =>
-            window.setTimeout(() => {
-                void refreshPersistedAiChatThreadForBranchMarkers(threadId).catch((error) => {
-                    console.error('[CANVAS] failed to refresh AI chat thread after media completion', { threadId, error })
-                })
+        const retryDelaysMs = [400, 1000, 1600, 3000]
+        const scheduleAttempt = (attempt: number): void => {
+            const delayMs = retryDelaysMs[attempt]
+            if (delayMs === undefined) {
+                pendingAiChatThreadRefreshTimers.delete(threadId)
+                return
+            }
+            const timer = window.setTimeout(() => {
+                void refreshPersistedAiChatThreadForBranchMarkers(threadId)
+                    .then((complete) => {
+                        if (complete) {
+                            pendingAiChatThreadRefreshTimers.delete(threadId)
+                            return
+                        }
+                        scheduleAttempt(attempt + 1)
+                    })
+                    .catch((error) => {
+                        console.error('[CANVAS] failed to refresh AI chat thread after media completion', { threadId, error })
+                        scheduleAttempt(attempt + 1)
+                    })
             }, delayMs)
-        )
-        pendingAiChatThreadRefreshTimers.set(threadId, timers)
+            pendingAiChatThreadRefreshTimers.set(threadId, [timer])
+        }
+        scheduleAttempt(0)
     }
 
     function getAiChatThreadContentForProjection(threadId: string): unknown {
@@ -10215,11 +10428,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function isBranchMarkerGenerationGroupActive(node: BranchMarkerNode): boolean {
         if (isBranchMarkerGenerationCancelled(node)) return false
-        const generatedMediaNodes = getBranchMarkerGeneratedMediaNodes(node)
-        const everyGeneratedMediaNodeCompleted = generatedMediaNodes.length > 0
-            && generatedMediaNodes.every((mediaNode) =>
-                assetsStore.get(mediaNode.assetId)?.media?.renditions.original?.status === 'ready')
-        if (everyGeneratedMediaNodeCompleted) return false
+        const generatedOutputNodes = getBranchMarkerGeneratedOutputNodes(node)
+        const everyGeneratedOutputCompleted = generatedOutputNodes.length > 0
+            && generatedOutputNodes.every(outputNode => outputNode.type === 'capabilityArtifact'
+                ? Boolean(assetsStore.get(outputNode.assetId)?.documents.capabilityArtifact)
+                : assetsStore.get(outputNode.assetId)?.media?.renditions.original?.status === 'ready')
+        if (everyGeneratedOutputCompleted) return false
         if (node.pendingState || isBranchMarkerPendingForUi(node)) return true
 
         const threadId = getBranchMarkerThreadId(node)
@@ -10270,7 +10484,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             getAiChatThreadContentForBranchMarker(threadId),
             threadId,
             getBranchMarkerTurnDescriptor(node),
-            { generationActive: isBranchMarkerGenerationActive(node) },
+            {
+                generationActive: isBranchMarkerGenerationActive(node),
+                allowLatestTurnFallback: canUseLatestBranchMarkerTurnFallback(node),
+            },
         )
         if (!preview || !isBranchMarkerGenerationCancelled(node)) return preview
         return {
@@ -10285,37 +10502,74 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         node: BranchMarkerNode,
         preview: BranchMarkerConversationPreview | null | undefined,
     ): boolean {
-        return shouldShowBranchMarkerConversationResponseLine(preview)
+        return Boolean(getBranchMarkerReasoningResponseText(node, preview))
+    }
+
+    function canUseLatestBranchMarkerTurnFallback(
+        node: BranchMarkerNode,
+        content: unknown = getAiChatThreadContentForBranchMarker(getBranchMarkerThreadId(node) ?? ''),
+    ): boolean {
+        const userMessageCount = countProseMirrorNodesByType(content, new Set(['aiUserMessage']))
+        const responseMessageCount = countProseMirrorNodesByType(content, new Set(['aiResponseMessage']))
+        return isBranchMarkerGenerationActive(node)
+            || isBranchMarkerGenerationGroupActive(node)
+            || Boolean(node.pendingState)
+            || getBranchMarkerGeneratedArtifactNodes(node).length > 0
+            || (userMessageCount === 1 && responseMessageCount <= 1)
+    }
+
+    function getBranchMarkerReasoningResponseText(
+        node: BranchMarkerNode,
+        preview: BranchMarkerConversationPreview | null | undefined,
+    ): string {
+        return preview?.responseText.trim()
+            || node.provenance?.reasoningResponseText?.trim()
+            || ''
+    }
+
+    function getBranchMarkerPromptPartsForNode(
+        node: BranchMarkerNode,
+        preview: BranchMarkerConversationPreview | null | undefined,
+    ): BranchMarkerPromptPart[] {
+        if (node.pendingState) {
+            for (const placementKey of getBranchMarkerPlacementKeys(node)) {
+                const submittedParts = pendingGeneratedImagePlacements.get(placementKey)?.promptParts
+                if (submittedParts?.length) return submittedParts
+            }
+        }
+        return getBranchMarkerPromptParts(
+            preview?.userMessage,
+            preview?.userText ?? getBranchMarkerPromptText(node),
+        )
     }
 
     function getBranchMarkerVisiblePromptText(
         node: BranchMarkerNode,
         preview: BranchMarkerConversationPreview | null,
     ): string {
-        return getBranchMarkerPromptDisplayText(getBranchMarkerPromptParts(
-            preview?.userMessage,
-            preview?.userText ?? getBranchMarkerPromptText(node),
-        ))
+        return getBranchMarkerPromptDisplayText(getBranchMarkerPromptPartsForNode(node, preview))
     }
 
     function resizeBranchMarkerNodeFromProseMirror(node: BranchMarkerNode): BranchMarkerNode {
         const preview = getBranchMarkerConversationPreview(node)
+        const responseText = getBranchMarkerReasoningResponseText(node, preview)
         return resizeBranchMarkerNodeToDimensions(
             node,
             getBranchMarkerContentDimensions(getBranchMarkerVisiblePromptText(node, preview), {
                 responseLine: shouldShowBranchMarkerResponseLine(node, preview),
-                responseText: preview?.responseText ?? '',
+                responseText,
             }),
         )
     }
 
     function getBranchMarkerScreenFixedDimensionsForNode(node: BranchMarkerNode): { width: number; height: number } {
         const preview = getBranchMarkerConversationPreview(node)
+        const responseText = getBranchMarkerReasoningResponseText(node, preview)
         return getBranchMarkerScreenFixedDimensions(
             getBranchMarkerVisiblePromptText(node, preview),
             {
                 responseLine: shouldShowBranchMarkerResponseLine(node, preview),
-                responseText: preview?.responseText ?? '',
+                responseText,
             },
         )
     }
@@ -10414,14 +10668,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (hasOpenGeneratedMediaProjectionForAiChatThread(threadId)) {
             scheduleGeneratedMediaChromeSync()
         }
-    }
-
-    function getGeneratedImageTextByNodeIdForThread(threadId: string): Record<string, string> {
-        return getGeneratedImageTextByNodeIdFromThreadContent(
-            getAiChatThreadContentForBranchMarker(threadId),
-            currentCanvasState?.nodes ?? [],
-            threadId
-        )
     }
 
     // A new generated output is positioned relative to its most recent sibling.
@@ -10526,14 +10772,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         threadId: string,
         messages: any[],
         hasImageModel: boolean,
+        explicitReferenceNodeIds: string[] = aiChatPanelState.contextChips,
+        explicitPromptText = '',
     ): { promptText: string; mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot } {
         if (!hasImageModel) {
             clearPendingGeneratedMediaPlacementsForThread(threadId)
             return { promptText: '' }
         }
 
-        const promptText = getPromptTextFromMessages(messages)
-        const referenceNodeIds = getStandaloneGeneratedMediaReferenceNodeIds()
+        const promptText = explicitPromptText.trim() || getPromptTextFromMessages(messages)
+        const referenceNodeIds = getExistingMediaNodeIds(explicitReferenceNodeIds)
         const activeTargetNodeId = referenceNodeIds.length === 1 ? referenceNodeIds[0] : undefined
         const mediaBranchCandidateSnapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: `standalone:${threadId}`,
@@ -10543,7 +10791,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             edges: currentCanvasState?.edges ?? [],
             prompt: promptText,
             contextMediaNodeIds: referenceNodeIds,
-            generatedImageTextByNodeId: getGeneratedImageTextByNodeIdForThread(threadId),
         })
         const candidateNodeIds = mediaBranchCandidateSnapshot.candidates.flatMap(
             (candidate: MediaBranchCandidateSnapshot['candidates'][number]) => candidate.nodeId ? [candidate.nodeId] : [],
@@ -10697,35 +10944,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             nodes: rebalanceGeneratedMediaTrees(pruned.nodes, pruned.edges),
             edges: pruned.edges,
         }
-    }
-
-    function getRemovedBranchMarkerNodeIds(beforeNodes: CanvasNode[], afterNodes: CanvasNode[]): string[] {
-        const afterNodeIds = new Set(afterNodes.map((node: CanvasNode) => node.nodeId))
-        return beforeNodes
-            .filter((node: CanvasNode): node is BranchMarkerNode =>
-                isBranchMarkerNode(node) && !afterNodeIds.has(node.nodeId)
-            )
-            .map(node => node.nodeId)
-    }
-
-    function removeFailedGeneratedMediaNodeFromCanvas(errorNodeId: string): void {
-        if (!currentCanvasState) return
-
-        const remainingNodes = currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== errorNodeId)
-        const remainingEdges = currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
-            edge.sourceNodeId !== errorNodeId && edge.targetNodeId !== errorNodeId
-        )
-        const resolvedTreeState = resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)
-        const removedBranchMarkerNodeIds = getRemovedBranchMarkerNodeIds(remainingNodes, resolvedTreeState.nodes)
-        const nextState: CanvasState = {
-            ...currentCanvasState,
-            viewport: currentCanvasState.viewport,
-            nodes: resolvedTreeState.nodes,
-            edges: resolvedTreeState.edges,
-        }
-        commitCanvasStatePreservingEditors(nextState)
-        viewportEl.querySelector(`[data-node-id="${errorNodeId}"]`)?.remove()
-        cleanupBranchMarkerArtifacts(removedBranchMarkerNodeIds)
     }
 
     function ensureImageGenerationPlaceholderForRun({
@@ -10999,7 +11217,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return
         }
         try {
-            const result = await describeMedia({ assetId: stillAssetId })
+            const result = await describeMedia({ assetId: stillAssetId, workspaceId })
             if (!currentMediaStillMatches(nodeId, stillAssetId)) return
             if (result.error || !result.summary) {
                 if (scheduleCanvasMediaAnalysisRetry(nodeId, stillAssetId, analysisAttempt)) return
@@ -11061,13 +11279,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     ): Promise<void> {
         scheduleGeneratedMediaChromeSync()
         try {
-            const result = await assetService.refresh(node.assetId)
+            const result = await assetService.refresh(node.assetId, workspaceId)
             if ('error' in result) return
+            const currentNode = getCurrentCanvasMediaNode(node.nodeId)
+            if (attempt === 0
+                && currentNode?.type === 'video'
+                && currentNode.assetId === node.assetId
+                && result.media?.renditions.original?.status === 'ready') {
+                videoNodeHandler?.retryAssetSources(new Set([node.assetId]), { force: true })
+                pixiMediaLayer?.retryAssetTextures(new Set([node.assetId]))
+                syncPixiMediaLayer(currentCanvasState)
+                appendVideoNodeToDOM(currentNode)
+            }
             scheduleGeneratedMediaChromeSync()
             syncBranchMarkerNodeContents()
             queueCanvasMediaAnalysis(node.nodeId, getMediaDescriptorStillAssetId(node))
             if (result.states.provenance !== 'sealed' && attempt < 5) {
-                const retryDelaysMs = [250, 500, 1_000, 2_000, 4_000]
+                const retryDelaysMs = [250, 500, 1000, 2000, 4000]
                 window.setTimeout(() => {
                     const currentNode = getCurrentCanvasMediaNode(node.nodeId)
                     if (currentNode?.assetId === node.assetId) {
@@ -11418,18 +11646,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         else if (node.type === 'capabilityArtifact') appendCapabilityArtifactNodeToDOM(node)
     }
 
-    function syncExistingUploadPlaceholderNodeToDOM(node: UploadPlaceholderCanvasNode): void {
+    function syncExistingOperationStatusNodeToDOM(node: OperationStatusCanvasNode): void {
         const existingNodeEl = viewportEl.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
         if (!existingNodeEl) return
 
-        const nodeEl = createUploadPlaceholderNode(node)
+        const nodeEl = createOperationStatusNode(node)
         existingNodeEl.replaceWith(nodeEl)
         connectionManager?.registerNodeElement(node.nodeId, nodeEl as HTMLDivElement)
         syncConnectionsAfterManualNodeAppend()
     }
 
     function prepareUploadReplacementNode(
-        placeholderNode: UploadPlaceholderCanvasNode,
+        placeholderNode: OperationStatusCanvasNode,
         node: WorkspaceCanvasNodeInsertion,
     ): CanvasNode {
         const position = {
@@ -11446,8 +11674,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         commit = true,
     ): CanvasState | null {
         if (!currentCanvasState) return null
-        const placeholderNode = currentCanvasState.nodes.find((candidate: CanvasNode): candidate is UploadPlaceholderCanvasNode =>
-            candidate.type === 'uploadPlaceholder' && candidate.nodeId === placeholderNodeId
+        const placeholderNode = currentCanvasState.nodes.find((candidate: CanvasNode): candidate is OperationStatusCanvasNode =>
+            candidate.type === 'operationStatus' && candidate.operation === 'upload' && candidate.nodeId === placeholderNodeId
         )
         if (!placeholderNode) return null
 
@@ -11479,9 +11707,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function markUploadPlaceholderFailedInternal(placeholderNodeId: string, message: string): CanvasState | null {
         if (!currentCanvasState) return null
-        let failedNode: UploadPlaceholderCanvasNode | null = null
+        let failedNode: OperationStatusCanvasNode | null = null
         const nodes = currentCanvasState.nodes.map((node: CanvasNode): CanvasNode => {
-            if (node.type !== 'uploadPlaceholder' || node.nodeId !== placeholderNodeId) return node
+            if (node.type !== 'operationStatus' || node.operation !== 'upload' || node.nodeId !== placeholderNodeId) return node
             failedNode = {
                 ...node,
                 status: 'failed',
@@ -11494,7 +11722,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const nextState: CanvasState = { ...currentCanvasState, nodes }
         commitCanvasStatePreservingEditors(nextState)
-        syncExistingUploadPlaceholderNodeToDOM(failedNode)
+        syncExistingOperationStatusNodeToDOM(failedNode)
 
         return nextState
     }
@@ -11865,7 +12093,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     setAiGeneratedImageCallbacks({
         onAddToCanvas: async (data) => {
             if (!data.assetId) return
-            await loadWorkspaceRouteData(workspaceId)
+            const refreshed = await assetService.refresh(data.assetId, workspaceId)
+            if ('error' in refreshed) throw new Error(`GENERATED_ASSET_REFRESH_FAILED:${refreshed.error}`)
         },
 
         onMediaBranchResolvedToCanvas: ({ threadId, resolution, generationRun }) => {
@@ -12009,7 +12238,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             selectedNodeIds.delete(existing.nodeId)
             syncPixiGeneratingImageNodes()
 
-            removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)
             finishFailedGeneratedMediaRun(threadId, generationRun)
         },
 
@@ -12437,10 +12665,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             videoGenerationTracker.delete(runKey)
             syncPixiGeneratingImageNodes()
 
-            const errorNodeId = existing.nodeId
-            setTimeout(() => {
-                removeFailedGeneratedMediaNodeFromCanvas(errorNodeId)
-            }, 3000)
             finishFailedGeneratedMediaRun(threadId, generationRun)
         },
     })
@@ -13500,7 +13724,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     async function refreshCapabilityArtifactNode(node: CapabilityArtifactCanvasNode): Promise<void> {
         try {
-            const result = await assetService.refresh(node.assetId)
+            const result = await assetService.refresh(node.assetId, workspaceId)
             if ('error' in result || !currentCanvasState?.nodes.some(candidate => candidate.nodeId === node.nodeId)) return
             await assetService.ensureAssetsLoaded(result.lineage?.sourceAssetIds ?? [])
             if (!currentCanvasState?.nodes.some(candidate => candidate.nodeId === node.nodeId)) return
@@ -13702,12 +13926,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
-    // Dismiss a (typically failed) upload placeholder: drop it from canvas state
-    // + DOM so a failed upload can be cleared instead of lingering forever.
-    function removeUploadPlaceholderInternal(placeholderNodeId: string): CanvasState | null {
+    function removeOperationStatusNodeInternal(placeholderNodeId: string, operation?: OperationStatusCanvasNode['operation']): CanvasState | null {
         if (!currentCanvasState) return null
         const exists = currentCanvasState.nodes.some((candidate: CanvasNode): boolean =>
-            candidate.type === 'uploadPlaceholder' && candidate.nodeId === placeholderNodeId
+            candidate.type === 'operationStatus'
+            && (!operation || candidate.operation === operation)
+            && candidate.nodeId === placeholderNodeId
         )
         if (!exists) return null
 
@@ -13720,11 +13944,96 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         commitCanvasStatePreservingEditors(nextState)
         viewportEl.querySelector(`[data-node-id="${placeholderNodeId}"]`)?.remove()
         selectedNodeIds.delete(placeholderNodeId)
+        for (const preview of operationStatusPreviewTiles.get(placeholderNodeId) ?? []) preview.destroy()
+        operationStatusPreviewTiles.delete(placeholderNodeId)
 
         return nextState
     }
 
-    function createUploadPlaceholderNode(node: UploadPlaceholderCanvasNode): HTMLElement {
+    function applyMediaOperationRecoveryResult(result: MediaGenerationOperationRecoveryResult): void {
+        if (!result.changed || !currentCanvasState) return
+        commitTransientCanvasStatePreservingEditors(result.state)
+
+        for (const nodeId of result.removedNodeIds) {
+            viewportEl.querySelector(`[data-node-id="${nodeId}"]`)?.remove()
+            selectedNodeIds.delete(nodeId)
+            for (const preview of operationStatusPreviewTiles.get(nodeId) ?? []) preview.destroy()
+            operationStatusPreviewTiles.delete(nodeId)
+        }
+        for (const nodeId of result.updatedNodeIds) {
+            const updatedNode = currentCanvasState.nodes.find((candidate): candidate is OperationStatusCanvasNode => (
+                candidate.type === 'operationStatus' && candidate.nodeId === nodeId
+            ))
+            if (updatedNode) syncExistingOperationStatusNodeToDOM(updatedNode)
+        }
+        syncConnectionsAfterManualNodeAppend()
+    }
+
+    function applyRecoveredMediaGenerationRequest(request: MediaGenerationRequest): void {
+        const knownRevision = mediaOperationRequestRevisions.get(request.generationRequestId) ?? 0
+        if (request.revision < knownRevision) return
+        mediaOperationRequestRevisions.set(request.generationRequestId, request.revision)
+        if (!currentCanvasState) return
+        applyMediaOperationRecoveryResult(
+            applyMediaGenerationRequestToOperationNodes(currentCanvasState, request),
+        )
+    }
+
+    function applyRecoveredMediaGenerationRequestEvent(event: MediaGenerationRequestEvent): void {
+        const knownRevision = mediaOperationRequestRevisions.get(event.generationRequestId) ?? 0
+        if (event.requestRevision < knownRevision) return
+        mediaOperationRequestRevisions.set(event.generationRequestId, event.requestRevision)
+        if (!currentCanvasState) return
+        applyMediaOperationRecoveryResult(
+            applyMediaGenerationRequestEventToOperationNodes(currentCanvasState, event),
+        )
+    }
+
+    function createOperationStatusNode(node: OperationStatusCanvasNode): HTMLElement {
+        for (const preview of operationStatusPreviewTiles.get(node.nodeId) ?? []) preview.destroy()
+        operationStatusPreviewTiles.delete(node.nodeId)
+        if (node.operation === 'media-generation'
+            && node.status !== 'failed'
+            && node.generationRequestId
+            && !recoveredMediaOperationRequestIds.has(node.generationRequestId)) {
+            recoveredMediaOperationRequestIds.add(node.generationRequestId)
+            void getMediaGenerationRequest({
+                generationRequestId: node.generationRequestId,
+                workspaceId,
+                includeCheckpoint: false,
+            }).then(result => {
+                applyRecoveredMediaGenerationRequest(result.request)
+                const seenSequences = mediaOperationEventSequences.get(node.generationRequestId!) ?? new Set<number>()
+                mediaOperationEventSequences.set(node.generationRequestId!, seenSequences)
+                if (!mediaOperationLiveSubjects.has(result.liveSubject)) {
+                    mediaOperationLiveSubjects.add(result.liveSubject)
+                    servicesStore.getData('nats')!.subscribe(result.liveSubject, (envelope: {
+                        event?: MediaGenerationRequestEvent
+                        streamSequence?: number
+                    }) => {
+                        if (typeof envelope?.streamSequence === 'number') {
+                            if (seenSequences.has(envelope.streamSequence)) return
+                            seenSequences.add(envelope.streamSequence)
+                        }
+                        if (envelope.event) applyRecoveredMediaGenerationRequestEvent(envelope.event)
+                    })
+                }
+                return replayMediaGenerationRequest({
+                    generationRequestId: node.generationRequestId!,
+                    workspaceId,
+                }).then(replay => {
+                    applyRecoveredMediaGenerationRequest(replay.request)
+                    for (const envelope of replay.replay.events) {
+                        if (seenSequences.has(envelope.streamSequence)) continue
+                        seenSequences.add(envelope.streamSequence)
+                        applyRecoveredMediaGenerationRequestEvent(envelope.event)
+                    }
+                })
+            }).catch(error => {
+                recoveredMediaOperationRequestIds.delete(node.generationRequestId!)
+                console.error('[CANVAS] Media operation recovery failed:', error)
+            })
+        }
         const { nodeEl, dragOverlay } = createBaseNodeElement(
             node,
             `workspace-upload-placeholder-node is-${node.status}`,
@@ -13733,27 +14042,200 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         dragOverlay.className = 'upload-placeholder-drag-overlay nopan'
 
-        const label = node.status === 'failed' ? 'Conversion failed' : 'Converting upload'
+        const label = node.status === 'failed'
+            ? `${node.operation === 'upload' ? 'Conversion' : 'Generation'} failed`
+            : node.status === 'action-required'
+                ? 'Action required'
+                : node.operation === 'upload' ? 'Converting upload' : 'Generating media'
         const message = node.message ?? (node.status === 'failed'
             ? 'The file could not be converted to a supported format.'
             : 'Creating a supported copy before adding it to the canvas.')
         const content = html`
             <div className="workspace-upload-placeholder-content">
                 <span className="workspace-upload-placeholder-status">${label}</span>
-                <span className="workspace-upload-placeholder-name">${node.fileName}</span>
+                <span className="workspace-upload-placeholder-name">${node.title}</span>
                 <span className="workspace-upload-placeholder-message">${message}</span>
             </div>
         ` as HTMLDivElement
         nodeEl.appendChild(content)
 
-        if (node.status === 'converting') {
+        if (node.status === 'in-progress') {
             const spinner = html`<span className="workspace-upload-placeholder-loading-spinner ai-response-loading-spinner" aria-hidden="true"></span>` as HTMLSpanElement
             nodeEl.appendChild(spinner)
         }
 
+        const actions = html`<div className="workspace-media-operation-actions nopan"></div>` as HTMLDivElement
+        const setActionError = (error: unknown): void => {
+            const element = content.querySelector('.workspace-upload-placeholder-message')
+            if (element) element.textContent = error instanceof Error ? error.message : String(error)
+        }
+        const addActionButton = (label: string, action: () => Promise<void>): HTMLButtonElement => {
+            const button = html`<button type="button" className="workspace-media-operation-action nopan">${label}</button>` as HTMLButtonElement
+            button.addEventListener('pointerdown', event => event.stopPropagation())
+            button.addEventListener('click', event => {
+                event.stopPropagation()
+                button.disabled = true
+                void action().catch(setActionError).finally(() => { button.disabled = false })
+            })
+            actions.appendChild(button)
+            return button
+        }
+
+        if (node.operation === 'media-generation'
+            && node.status === 'action-required'
+            && node.generationRequestId
+            && node.requestRevision !== undefined) {
+            if (node.candidateAssetIds?.length && node.unresolvedBindingId) {
+                const previews = new Set<ContextPreviewTileInstance>()
+                for (const assetId of node.candidateAssetIds) {
+                    const asset = assetsStore.get(assetId)
+                    const candidateNode = currentCanvasState?.nodes.find(candidate =>
+                        'assetId' in candidate && candidate.assetId === assetId)
+                    const choose = async (): Promise<void> => {
+                        await resolveMediaGenerationReference({
+                            generationRequestId: node.generationRequestId!,
+                            workspaceId,
+                            requestRevision: node.requestRevision!,
+                            bindingId: node.unresolvedBindingId!,
+                            assetId,
+                        })
+                    }
+                    if (candidateNode) {
+                        const trigger = html`<button type="button" className="workspace-media-operation-candidate nopan">${asset?.title ?? 'Attached Asset'}</button>` as HTMLButtonElement
+                        const preview = createContextPreviewTile({
+                            node: candidateNode,
+                            getNode: () => currentCanvasState?.nodes.find(candidate => candidate.nodeId === candidateNode.nodeId),
+                            environment: getContextPreviewEnvironment(),
+                            preferredPlacement: 'top',
+                            inlinePopover: true,
+                            triggerContent: trigger,
+                            titleOverride: asset?.title,
+                        })
+                        preview.dom.addEventListener('click', event => {
+                            event.stopPropagation()
+                            void choose().catch(setActionError)
+                        })
+                        actions.appendChild(preview.dom)
+                        previews.add(preview)
+                    } else {
+                        addActionButton(asset?.title ?? 'Attached Asset', choose)
+                    }
+                }
+                operationStatusPreviewTiles.set(node.nodeId, previews)
+            }
+            if (node.verificationAssetId && node.generationRun !== undefined) {
+                addActionButton('Verify with provider', async () => {
+                    const session = await startMediaGenerationVerification({
+                        generationRequestId: node.generationRequestId!,
+                        workspaceId,
+                        requestRevision: node.requestRevision!,
+                        generationRun: node.generationRun!,
+                        assetId: node.verificationAssetId!,
+                    })
+                    window.open(session.verificationUrl, '_blank', 'noopener,noreferrer')
+                })
+            }
+            addActionButton('Cancel', async () => {
+                await cancelMediaGenerationRequest({
+                    generationRequestId: node.generationRequestId!,
+                    workspaceId,
+                    requestRevision: node.requestRevision!,
+                })
+                removeOperationStatusNodeInternal(node.nodeId, 'media-generation')
+            })
+        }
+
+        if (node.operation === 'media-generation'
+            && node.status === 'failed'
+            && node.generationRequestId
+            && node.requestRevision !== undefined) {
+            if (node.problem) {
+                const details = html`
+                    <details className="workspace-media-operation-problem nopan">
+                        <summary>Provider details</summary>
+                        <span className="workspace-media-operation-provider-reason"></span>
+                        <code className="workspace-media-operation-provider-code"></code>
+                        <code className="workspace-media-operation-support-code"></code>
+                    </details>
+                ` as HTMLDetailsElement
+                ;(details.querySelector('.workspace-media-operation-provider-reason') as HTMLElement).textContent =
+                    node.problem.providerReason ?? node.problem.detail
+                ;(details.querySelector('.workspace-media-operation-provider-code') as HTMLElement).textContent =
+                    node.problem.providerCode ?? ''
+                ;(details.querySelector('.workspace-media-operation-support-code') as HTMLElement).textContent =
+                    node.problem.supportCode
+                actions.appendChild(details)
+            }
+            addActionButton('Edit request', async () => {
+                const response = await getMediaGenerationRequest({
+                    generationRequestId: node.generationRequestId!,
+                    workspaceId,
+                })
+                if (!response.checkpoint) throw new Error('Media request checkpoint is no longer available.')
+                const promptDocument = response.checkpoint.promptDocument as { content?: unknown[] }
+                const selection = response.checkpoint.modelSelection as {
+                    reasoningModelIds?: string[]
+                    mediaModelIds?: string[]
+                }
+                const generation = (response.checkpoint.configuration as {
+                    generation?: AiInteractionMediaGenerationRequest
+                }).generation
+                const restoredContextNodeIds = response.checkpoint.selectedReferences.flatMap(reference => {
+                    const explicitNode = reference.nodeId
+                        ? currentCanvasState?.nodes.find(candidate => candidate.nodeId === reference.nodeId)
+                        : undefined
+                    const assetNode = currentCanvasState?.nodes.find(candidate => (
+                        'assetId' in candidate && candidate.assetId === reference.assetId
+                    ))
+                    const nodeId = explicitNode?.nodeId ?? assetNode?.nodeId
+                    return nodeId ? [nodeId] : []
+                })
+                addContextChips(restoredContextNodeIds)
+                const imageModelIds = generation?.imageModelIds ?? selection.mediaModelIds?.filter(modelId =>
+                    !modelId.toLocaleLowerCase().includes('video')) ?? []
+                const videoModelIds = generation?.videoModelIds ?? selection.mediaModelIds?.filter(modelId =>
+                    modelId.toLocaleLowerCase().includes('video')) ?? []
+                globalCanvasComposer?.restoreContent({
+                    type: 'doc',
+                    content: [{
+                        type: 'aiPromptInput',
+                        attrs: {
+                            aiReasoningModels: serializeAiModelSelectionAttr(selection.reasoningModelIds ?? []),
+                            useMultipleReasoningModels: (selection.reasoningModelIds?.length ?? 0) > 1,
+                            useMultipleImageModels: imageModelIds.length > 1,
+                            useMultipleVideoModels: videoModelIds.length > 1,
+                            aiImageModels: serializeAiModelSelectionAttr(imageModelIds),
+                            imageGenerationSize: generation?.imageOptions?.imageSize ?? 'auto',
+                            imageGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(
+                                generation?.imageOptions?.configGroups ?? [],
+                            ),
+                            aiVideoModels: serializeAiModelSelectionAttr(videoModelIds),
+                            videoAspectRatio: generation?.videoOptions?.aspectRatio ?? '',
+                            videoResolution: generation?.videoOptions?.resolution ?? '',
+                            videoDuration: generation?.videoOptions?.duration ?? '',
+                            videoGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(
+                                generation?.videoOptions?.configGroups ?? [],
+                            ),
+                            capabilityInputs: '',
+                        },
+                        content: promptDocument.content ?? [{ type: 'paragraph' }],
+                    }],
+                })
+            })
+            addActionButton('Dismiss', async () => {
+                await cancelMediaGenerationRequest({
+                    generationRequestId: node.generationRequestId!,
+                    workspaceId,
+                    requestRevision: node.requestRevision!,
+                })
+                removeOperationStatusNodeInternal(node.nodeId, 'media-generation')
+            })
+        }
+        if (actions.childElementCount > 0) content.appendChild(actions)
+
         // Failed uploads get a dismiss (×) button so they can be cleared. It sits
         // above the transparent drag overlay (z-index) so its click isn't swallowed.
-        if (node.status === 'failed') {
+        if (node.status === 'failed' && node.operation === 'upload') {
             const dismissBtn = document.createElement('button')
             dismissBtn.type = 'button'
             dismissBtn.className = 'workspace-upload-placeholder-dismiss nopan'
@@ -13762,7 +14244,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             dismissBtn.addEventListener('pointerdown', (e: Event) => { e.stopPropagation() })
             dismissBtn.addEventListener('click', (e: Event) => {
                 e.stopPropagation()
-                removeUploadPlaceholderInternal(node.nodeId)
+                removeOperationStatusNodeInternal(node.nodeId, node.operation)
             })
             nodeEl.appendChild(dismissBtn)
         }
@@ -13782,6 +14264,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return getBranchGeneratedArtifactNodes('branchLineNodeId', node.nodeId)
     }
 
+    // Every generated output hanging off the marker, regardless of kind. Branch
+    // marker chrome must never vary by what was generated.
+    function getBranchMarkerGeneratedOutputNodes(node: BranchMarkerNode): GeneratedOutputCanvasNode[] {
+        return [
+            ...getBranchMarkerGeneratedMediaNodes(node),
+            ...getBranchMarkerGeneratedArtifactNodes(node),
+        ]
+    }
+
     function getBranchMarkerReasoningModelDescriptors(node: BranchMarkerNode): BranchMarkerModelDescriptor[] {
         const descriptors: BranchMarkerModelDescriptor[] = []
         if (node.pendingState?.reasoningModelId) {
@@ -13793,8 +14284,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (node.reasoningModelId) descriptors.push({ modelId: node.reasoningModelId })
             if (node.provenance?.reasoningModelId) descriptors.push({ modelId: node.provenance.reasoningModelId })
         }
-        for (const mediaNode of getBranchMarkerGeneratedMediaNodes(node)) {
-            const reasoningModelId = mediaNode.generatedBy?.reasoningModelId
+        for (const outputNode of getBranchMarkerGeneratedOutputNodes(node)) {
+            const reasoningModelId = outputNode.generatedBy?.reasoningModelId
             if (reasoningModelId) descriptors.push({ modelId: reasoningModelId })
         }
         return descriptors
@@ -13997,8 +14488,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const threadId = getBranchMarkerThreadId(node)
         if (!threadId) return
 
-        const generationRequestId = node.generationRequestId && !node.generationRequestId.startsWith('canvas-')
-            ? node.generationRequestId
+        const projectionGenerationRequestId = node.generationRequestId || undefined
+        const generationRequestId = projectionGenerationRequestId && !projectionGenerationRequestId.startsWith('canvas-')
+            ? projectionGenerationRequestId
             : undefined
 
         if (generationRequestId) cancelledMediaGenerationRequestIds.add(generationRequestId)
@@ -14014,11 +14506,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         try {
-            await stopAiChatMessageForThread({
+            const result = await stopAiChatMessageForThread({
                 workspaceId,
                 conversationAssetId: threadId,
-                ...(generationRequestId ? { generationRequestId } : {}),
+                ...(projectionGenerationRequestId ? { generationRequestId: projectionGenerationRequestId } : {}),
             })
+            if (result.canvasGeometry) applyApiCanvasGeometry(result.canvasGeometry)
             await refreshPersistedAiChatThreadForBranchMarkers(threadId)
         } catch (error) {
             console.error('[CANVAS] failed to stop branch-marker generation', {
@@ -14086,14 +14579,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createBranchMarkerReviewControls(node: BranchMarkerNode): HTMLDivElement | null {
         branchMarkerReviewDropdowns.get(node.nodeId)?.destroy()
         branchMarkerReviewDropdowns.delete(node.nodeId)
-        const mediaNodes = getBranchMarkerGeneratedMediaNodes(node)
-            .filter(mediaNode => !isGeneratedOutputAccepted(mediaNode))
-        if (mediaNodes.length === 0 || isBranchMarkerGenerationGroupActive(node)) return null
-        const canAcceptAll = mediaNodes.every((mediaNode) => {
-            const asset = assetsStore.get(mediaNode.assetId)
-            return asset?.media?.renditions.original?.status === 'ready'
-                && asset.states.provenance === 'sealed'
-        })
+        const outputNodes = getBranchMarkerGeneratedOutputNodes(node)
+            .filter(outputNode => !isGeneratedOutputAccepted(outputNode))
+        if (outputNodes.length === 0 || isBranchMarkerGenerationGroupActive(node)) return null
+        const canAcceptAll = outputNodes.every(isGeneratedOutputReviewReady)
         const handleAcceptAll = (event: MouseEvent): void => {
             event.preventDefault()
             event.stopPropagation()
@@ -14104,7 +14593,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 scope: 'branch-lineage',
                 mode,
                 targetNodeId: node.nodeId,
-                mediaNodes,
+                outputNodes,
             })
         }
         const stopPointerEvent = (event: PointerEvent): void => {
@@ -14199,10 +14688,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         label: string
     }): HTMLDivElement {
         const threadPreview = getBranchMarkerConversationPreview(node)
-        const promptParts = getBranchMarkerPromptParts(
-            threadPreview?.userMessage,
-            threadPreview?.userText ?? getBranchMarkerPromptText(node),
-        )
+        const promptParts = getBranchMarkerPromptPartsForNode(node, threadPreview)
         const promptText = getBranchMarkerPromptDisplayText(promptParts)
         const promptPreview = getBranchMarkerPromptPreview(promptText)
         const promptPreviewParts = truncateBranchMarkerPromptParts(
@@ -14220,7 +14706,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Live reasoning stream (pending markers only). An empty receiving
         // response shell keeps the marker as a single user row; streamed
         // response text creates the separator and moves progress to row two.
-        const responseText = threadPreview?.responseText || ''
+        const responseText = getBranchMarkerReasoningResponseText(node, threadPreview)
         const responsePhase = threadPreview?.phase ?? 'preamble'
         const responseIsReceiving = Boolean(threadPreview?.isReceiving)
         const showResponseLine = shouldShowBranchMarkerResponseLine(node, threadPreview)
@@ -14663,8 +15149,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodeEl = createAudioNode(node as AudioCanvasNode)
             } else if (node.type === 'capabilityArtifact') {
                 nodeEl = createCapabilityArtifactNode(node as CapabilityArtifactCanvasNode)
-            } else if (node.type === 'uploadPlaceholder') {
-                nodeEl = createUploadPlaceholderNode(node as UploadPlaceholderCanvasNode)
+            } else if (node.type === 'operationStatus') {
+                nodeEl = createOperationStatusNode(node as OperationStatusCanvasNode)
             } else if (node.type === 'branchOrigin') {
                 if (shouldDeferPlannedBranchMarkerViewportRender(node as BranchOriginCanvasNode)) continue
                 nodeEl = createBranchOriginNode(node as BranchOriginCanvasNode)
@@ -14754,6 +15240,69 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .map(t => `${t.threadId}:${t.content ? 'loaded' : 'pending'}`)
             .sort()
             .join(',')
+    }
+
+    function getAiChatThreadContentWeight(thread: AiChatThread): number {
+        if (!thread.content) return 0
+        const messageCount = countProseMirrorNodesByType(
+            thread.content,
+            new Set(['aiUserMessage', 'aiResponseMessage', 'aiReasoningSection', 'prompt_reference']),
+        )
+        return messageCount * 1000000 + JSON.stringify(thread.content).length
+    }
+
+    function getCanvasConversationThreadIds(canvasState: CanvasState | null): Set<string> {
+        const threadIds = new Set<string>()
+        for (const node of canvasState?.nodes ?? []) {
+            if (isBranchMarkerNode(node) && node.conversationAssetId) {
+                threadIds.add(node.conversationAssetId)
+                continue
+            }
+            if ((node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact')
+                && node.generatedBy?.conversationAssetId) {
+                threadIds.add(node.generatedBy.conversationAssetId)
+            }
+        }
+        return threadIds
+    }
+
+    function mergeIncomingAiChatThreads(
+        incomingThreads: AiChatThread[],
+        canvasState: CanvasState | null,
+        workspaceChanged: boolean,
+    ): AiChatThread[] {
+        if (workspaceChanged) return incomingThreads
+
+        const nextById = new Map(incomingThreads.map((thread) => [thread.threadId, thread]))
+        const retainedThreadIds = getCanvasConversationThreadIds(canvasState)
+        for (const threadId of activeCanvasRunIds) retainedThreadIds.add(threadId)
+        for (const threadId of detachedAiChatThreadEditors.keys()) retainedThreadIds.add(threadId)
+        for (const threadId of liveAiChatThreadContentOverrides.keys()) retainedThreadIds.add(threadId)
+
+        for (const currentThread of currentAiChatThreads) {
+            const incomingThread = nextById.get(currentThread.threadId)
+            if (!incomingThread) {
+                if (retainedThreadIds.has(currentThread.threadId)) nextById.set(currentThread.threadId, currentThread)
+                continue
+            }
+
+            const currentVersion = getStoredProseMirrorVersion(currentThread)
+            const incomingVersion = getStoredProseMirrorVersion(incomingThread)
+            const preserveCurrentContent = currentVersion > incomingVersion
+                || (currentVersion === incomingVersion
+                    && getAiChatThreadContentWeight(currentThread) > getAiChatThreadContentWeight(incomingThread))
+                || (!incomingThread.content && Boolean(currentThread.content))
+            if (!preserveCurrentContent) continue
+
+            nextById.set(currentThread.threadId, {
+                ...incomingThread,
+                content: currentThread.content,
+                proseMirrorVersion: currentVersion,
+                updatedAt: Math.max(incomingThread.updatedAt, currentThread.updatedAt),
+            })
+        }
+
+        return [...nextById.values()]
     }
 
     let lastDocumentsKey = getDocumentsKey(currentDocuments)
@@ -14937,7 +15486,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         type: 'capabilityArtifact',
                         artifactTypeId: item.artifactTypeId,
                         assetId: item.assetId,
-                        dimensions: { width: 520, height: 360 },
+                        dimensions: { ...capabilityArtifactFrontendRegistry.require(item.artifactTypeId).initialCanvasDimensions },
                     }
                     const nextState = insertNodeAtViewportCenterInternal(insertion, {}, false)
                     await onAssetAttach({ assetId: item.assetId, nodeId, canvasState: nextState })
@@ -15056,7 +15605,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (observedAssetRevisions.get(assetId) !== revision) changedAssetIds.add(assetId)
         }
         observedAssetRevisions = nextAssetRevisions
+        videoNodeHandler?.retryAssetSources(changedAssetIds)
         pixiMediaLayer?.retryAssetTextures(changedAssetIds)
+        if (changedAssetIds.size > 0) syncPixiMediaLayer(currentCanvasState)
         scheduleGeneratedMediaChromeSync()
         syncBranchMarkerNodeContents()
     })
@@ -15203,9 +15754,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             // Only node structure and workspace identity rebuild the canvas DOM.
             // Document and thread hydration update their mounted surfaces in place.
+            const mergedAiChatThreads = mergeIncomingAiChatThreads(
+                newAiChatThreads,
+                effectiveCanvasState,
+                workspaceChanged,
+            )
             const nextNodeStructureKey = getNodeStructureKey(effectiveCanvasState)
             const nextDocumentsKey = getDocumentsKey(newDocuments)
-            const nextThreadsKey = getAiChatThreadsKey(newAiChatThreads)
+            const nextThreadsKey = getAiChatThreadsKey(mergedAiChatThreads)
             const nodeStructureChanged = nextNodeStructureKey !== lastNodeStructureKey
             const documentsKeyChanged = nextDocumentsKey !== lastDocumentsKey
             const threadsKeyChanged = nextThreadsKey !== lastThreadsKey
@@ -15271,14 +15827,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ? { ...effectiveCanvasState, viewport: liveViewport }
                 : effectiveCanvasState
             currentDocuments = newDocuments
-            currentAiChatThreads = newAiChatThreads
+            currentAiChatThreads = mergedAiChatThreads
             if (shouldResetMediaLifecycle) {
             }
             syncActiveAiChatPanelFromState()
 
             // 1. Rebuild DOM first so image nodes exist when PIXI syncs DOM ownership.
             if (transitionPlan.shouldClearVisualContent) {
-                clearWorkspaceVisualContent(newDocuments, newAiChatThreads)
+                clearWorkspaceVisualContent(newDocuments, mergedAiChatThreads)
             } else if (needsRerender) {
                 renderNodes()
             } else {
@@ -15294,7 +15850,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             lastDocumentsKey = nextDocumentsKey
             lastThreadsKey = nextThreadsKey
             if (currentCanvasState) renderedWorkspaceId = workspaceId
-            refreshBranchMarkerPreviewsForLoadedThreads(newAiChatThreads)
+            refreshBranchMarkerPreviewsForLoadedThreads(mergedAiChatThreads)
             reattachDetachedCanvasRunListenersForActiveMarkers()
 
             // 2. Sync PIXI state BEFORE applying the viewport. This ensures
@@ -15478,6 +16034,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             destroyActiveAiChatPanel(true, activeAiChatPanelThreadId ?? activeAiChatThreadId, false, true)
             destroyContextPreviewTiles()
+            for (const previews of operationStatusPreviewTiles.values()) {
+                for (const preview of previews) preview.destroy()
+            }
+            operationStatusPreviewTiles.clear()
+            for (const subject of mediaOperationLiveSubjects) {
+                servicesStore.getData('nats')?.getSubscriptions([subject])
+                    .forEach((subscription: { unsubscribe: () => void }) => subscription.unsubscribe())
+            }
+            mediaOperationLiveSubjects.clear()
+            mediaOperationEventSequences.clear()
+            mediaOperationRequestRevisions.clear()
             activeContextChipTrayEls.clear()
 
             promptInputController.destroy()

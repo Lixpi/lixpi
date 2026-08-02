@@ -166,8 +166,8 @@ function actionTimelineState(provider: 'OpenAI' | 'Anthropic') {
         capabilityInputs: {
             'action-timeline': {
                 prompt: 'Create a 15 second timeline with 2 second gaps',
-                durationMs: 15_000,
-                precisionMs: 2_000,
+                durationMs: 15000,
+                precisionMs: 2000,
             },
         },
         generationRun: {
@@ -347,7 +347,7 @@ describe('Capability provider adapters', () => {
         expect(anthropicMocks.messagesStream.mock.calls[1]?.[0]?.system).toContain('Do not include code')
         expect(anthropicMocks.messagesStream.mock.calls[0]?.[0]?.system).not.toContain('Do not include code')
         expect(use).toHaveBeenCalledWith(expect.objectContaining({
-            arguments: expect.objectContaining({ durationMs: 15_000, precisionMs: 2_000 }),
+            arguments: expect.objectContaining({ durationMs: 15000, precisionMs: 2000 }),
         }))
         expect(publisher.capabilityGenerationTrace).toHaveBeenCalledOnce()
         expect(publisher.chunk).toHaveBeenCalledWith('The action timeline is ready.')
@@ -459,7 +459,7 @@ describe('Capability provider adapters', () => {
         expect(openaiMocks.responsesCreate.mock.calls[1]?.[0]?.instructions).toContain('Do not include code')
         expect(openaiMocks.responsesCreate.mock.calls[0]?.[0]?.instructions).not.toContain('Do not include code')
         expect(use).toHaveBeenCalledWith(expect.objectContaining({
-            arguments: expect.objectContaining({ durationMs: 15_000, precisionMs: 2_000 }),
+            arguments: expect.objectContaining({ durationMs: 15000, precisionMs: 2000 }),
         }))
         expect(publisher.capabilityGenerationTrace).toHaveBeenCalledOnce()
         expect(publisher.chunk).toHaveBeenCalledWith('The action timeline is ready.')

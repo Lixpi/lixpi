@@ -266,6 +266,13 @@ function isMidSideAnchorNode(node: CanvasNode | undefined): boolean {
 	return node?.type === 'image' || node?.type === 'video' || isBranchLineageMarkerNode(node)
 }
 
+function shouldDefaultTargetHandleToLeft(node: CanvasNode | undefined): boolean {
+	return node?.type === 'image'
+		|| node?.type === 'video'
+		|| node?.type === 'capabilityArtifact'
+		|| (node?.type === 'operationStatus' && node.operation === 'media-generation')
+}
+
 function resolveEdgeAnchorT(node: CanvasNode | undefined, t: number | undefined): number {
 	return isMidSideAnchorNode(node) ? 0.5 : t ?? 0.5
 }
@@ -1393,7 +1400,11 @@ export class WorkspaceConnectionManager {
 				continue
 			}
 
-			const { source, target } = getEdgeAnchorPositions(e)
+			const edgeTargetNode = nodeById.get(e.targetNodeId)
+			const { source, target: storedTarget } = getEdgeAnchorPositions(e)
+			const target = e.targetHandle == null && shouldDefaultTargetHandleToLeft(edgeTargetNode)
+				? 'left'
+				: storedTarget
 			const isSelected = e.edgeId === this.selectedEdgeId
 
 			// Use spread t values to prevent convergence, fall back to stored values
@@ -1432,7 +1443,6 @@ export class WorkspaceConnectionManager {
 			// sit mid-connector, not at a destination, so the incoming segment must
 			// not draw an arrowhead into them — the arrowhead belongs only on the
 			// segment landing on the next generated media node.
-			const edgeTargetNode = this.nodes.find(n => n.nodeId === e.targetNodeId)
 			const targetIsLineageMarker = edgeTargetNode?.type === 'branchLine' || edgeTargetNode?.type === 'branchFork'
 			const renderedSourceNodeId = this.getRenderedEdgeSourceNodeId(e, nodeById, worldNodeMap)
 

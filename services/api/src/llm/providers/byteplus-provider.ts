@@ -72,13 +72,33 @@ export class BytePlusProvider extends BaseProvider {
         const first = state.messages[0]
         const prompt = typeof first?.content === 'string' ? first.content : ''
         if (!prompt) throw new Error('Seedance: missing prompt in user message')
+        const providerPrompt = prompt.replace(/\bREFERENCE_(\d+)\b/gu, 'image $1')
+        const accountScope = process.env.BYTEPLUS_ACCOUNT_SCOPE
+        const now = Date.now()
+        const verifiedAssetUris = (state.providerSafeMediaIntent?.bindings ?? []).flatMap(binding => {
+            if (binding.subjectIdentity.classification !== 'self'
+                && binding.subjectIdentity.classification !== 'authorized-real-person') return []
+            const verification = binding.subjectIdentity.providerVerifications.find(candidate => (
+                candidate.provider === 'BytePlus'
+                && candidate.providerAccountScope === accountScope
+                && candidate.status === 'valid'
+                && (!candidate.expiresAt || candidate.expiresAt > now)
+            ))
+            if (!verification) throw new Error(`BYTEPLUS_PROVIDER_ASSET_HANDLE_REQUIRED:${binding.assetId}`)
+            return [`asset://${verification.subjectHandle}`]
+        })
+        const existingFrames = [state.videoFirstFrameImage, ...(state.videoReferenceImages ?? [])]
+            .filter((value): value is string => Boolean(value))
+        const providerFrames = verifiedAssetUris.length > 0
+            ? [...verifiedAssetUris, ...existingFrames.slice(verifiedAssetUris.length)]
+            : existingFrames
 
         // References reaching the provider are already capped to the provider-aware
         // budget upstream by the VideoRouter (which holds the full model metadata).
-        const content = buildSeedanceContent(prompt, {
+        const content = buildSeedanceContent(providerPrompt, {
             videoSourceForExtension: state.videoSourceForExtension,
-            videoFirstFrameImage: state.videoFirstFrameImage,
-            videoReferenceImages: state.videoReferenceImages,
+            videoFirstFrameImage: providerFrames[0],
+            videoReferenceImages: providerFrames.slice(1, 2),
         })
         const duration = Number(state.videoDurationSeconds) || undefined
 
@@ -99,7 +119,7 @@ export class BytePlusProvider extends BaseProvider {
             ratio: payload.ratio,
             resolution: payload.resolution,
             duration: payload.duration,
-            promptLen: prompt.length,
+            promptLen: providerPrompt.length,
             hasFirstFrame,
             hasLastFrame,
         }, null, 0)}`)
@@ -148,7 +168,7 @@ export class BytePlusProvider extends BaseProvider {
                 aspectRatio,
                 hasAudio,
                 responseId: taskId,
-                revisedPrompt: prompt,
+                revisedPrompt: providerPrompt,
                 videoModelId: modelVersion,
             })
 

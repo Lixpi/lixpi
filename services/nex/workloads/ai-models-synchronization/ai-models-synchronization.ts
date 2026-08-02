@@ -4,6 +4,8 @@ import process from 'process'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 import { GoogleGenAI } from '@google/genai'
+import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock'
+import { fromSSO } from '@aws-sdk/credential-providers'
 import DynamoDBService, { marshall, unmarshall } from '@lixpi/dynamodb-service'
 
 //INFO: do not remove unused imports!
@@ -130,7 +132,7 @@ type ProviderBlacklist = {
 // Default model capability/settings per provider.
 type ModelDefaults = Pick<
     AiModel,
-    'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'supportsSystemPrompt' | 'modalities' | 'pricing' | 'color' | 'iconName' | 'colorIconName'
+    'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'supportsSystemPrompt' | 'modalities' | 'pricing' | 'color' | 'iconName' | 'colorIconName' | 'imageInputFidelity'
 > & {
     imagePromptMaxChars?: number
     imageSizeMode?: ImageSizeMode
@@ -203,6 +205,9 @@ export class AiModelsSync {
     private readonly dynamoDBService: DynamoDBService
     private readonly openai: OpenAI
     private readonly anthropic: Anthropic
+    // When the API routes Anthropic inference through AWS Bedrock there may be no Anthropic
+    // API key at all, so the catalog is sourced from the Bedrock foundation-model list instead.
+    private readonly useBedrockForAnthropic: boolean
     private readonly google: GoogleGenAI
     private readonly aiModelsListTableName: string
     private readonly serviceName: string
@@ -224,6 +229,7 @@ export class AiModelsSync {
         this.anthropic = new Anthropic({
             apiKey: options.anthropicApiKey || env.ANTHROPIC_API_KEY,
         })
+        this.useBedrockForAnthropic = env.ANTHROPIC_USE_AWS_BEDROCK_INFERENCE?.trim().toLowerCase() === 'true'
 
         this.google = new GoogleGenAI({
             apiKey: options.googleApiKey || env.GOOGLE_API_KEY,
@@ -390,10 +396,10 @@ export class AiModelsSync {
                 // O4 Mini Deep Research: 200k context, 100k max output (per page)
                 { prefix: 'o4-mini-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '8.00' } } } } } },
                 // GPT Image family: image generation models
-                { prefix: 'gpt-image-2', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
-                { prefix: 'gpt-image-1.5', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
-                { prefix: 'gpt-image-1-mini', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '2.50', completion: '8.00' } } } },
-                { prefix: 'gpt-image-1', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '10.00', completion: '40.00' } } } },
+                { prefix: 'gpt-image-2', values: { modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'high' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
+                { prefix: 'gpt-image-1.5', values: { modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'high', requestValue: 'high' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
+                { prefix: 'gpt-image-1-mini', values: { modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'standard' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '2.50', completion: '8.00' } } } },
+                { prefix: 'gpt-image-1', values: { modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'high', requestValue: 'high' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '10.00', completion: '40.00' } } } },
             ],
             contains: [],
             fallback: {
@@ -510,12 +516,14 @@ export class AiModelsSync {
                     contextWindow: 1048576,
                     maxCompletionSize: 65536,
                     modalities: ['text', 'image', 'image_generation'],
+                    imageInputFidelity: { level: 'high' },
                     pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
                 },
                 'gemini-2.5-flash-image': {
                     contextWindow: 1048576,
                     maxCompletionSize: 65536,
                     modalities: ['text', 'image', 'image_generation'],
+                    imageInputFidelity: { level: 'high' },
                     pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
                 },
             },
@@ -525,9 +533,9 @@ export class AiModelsSync {
                 // Gemini 2.5 Flash family (text-only, image generation only in gemini-2.5-flash-image)
                 { prefix: 'gemini-2.5-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
                 // Gemini 3 Pro Image (Nano Banana Pro)
-                { prefix: 'gemini-3-pro-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '5.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
+                { prefix: 'gemini-3-pro-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'high' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '5.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
                 // Gemini 3.1 Flash Image (Nano Banana 2)
-                { prefix: 'gemini-3.1-flash-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
+                { prefix: 'gemini-3.1-flash-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'high' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
                 // Gemini 3.1 Pro
                 { prefix: 'gemini-3.1-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
                 // Gemini 3.1 Flash
@@ -631,10 +639,12 @@ export class AiModelsSync {
             exact: {
                 'stability-ultra': {
                     modalities: ['image_generation'],
+                    imageInputFidelity: { level: 'high' },
                     pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '8.00' } }
                 },
                 'sd3.5-large': {
                     modalities: ['image_generation'],
+                    imageInputFidelity: { level: 'high' },
                     pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '6.50' } }
                 },
             },
@@ -770,6 +780,14 @@ export class AiModelsSync {
             modalities: Array.isArray(p.modalities) ? p.modalities : fallback.modalities,
             imageSizeMode: typeof p.imageSizeMode === 'string' ? p.imageSizeMode : fallback.imageSizeMode,
             imageSizes: Array.isArray(p.imageSizes) ? p.imageSizes : fallback.imageSizes,
+            imageInputFidelity: p.imageInputFidelity?.level
+                ? {
+                    level: p.imageInputFidelity.level,
+                    ...(p.imageInputFidelity.requestValue
+                        ? { requestValue: p.imageInputFidelity.requestValue }
+                        : {}),
+                }
+                : fallback.imageInputFidelity,
             videoAspectRatios: Array.isArray(p.videoAspectRatios) ? p.videoAspectRatios : fallback.videoAspectRatios,
             videoResolutions: Array.isArray(p.videoResolutions) ? p.videoResolutions : fallback.videoResolutions,
             videoDurations: Array.isArray(p.videoDurations) ? p.videoDurations : fallback.videoDurations,
@@ -876,8 +894,94 @@ export class AiModelsSync {
         }
     }
 
+    // Bedrock exposes concrete dated releases rather than the vendor's moving aliases.
+    // Preserve those releases so persisted selections remain exact catalog keys.
+    private filterAnthropicModels(models: AnthropicModel[], includeSnapshots = false): AnthropicModel[] {
+        const blacklist = AiModelsSync.MODELS_BLACKLIST.Anthropic
+
+        return models.filter(model => {
+            const modelId = model.id
+
+            if (blacklist.exact.includes(modelId)) {
+                return false
+            }
+            if (blacklist.prefix.some(prefix => modelId.startsWith(prefix))) {
+                return false
+            }
+            if (blacklist.contains.some(substring => modelId.includes(substring))) {
+                return false
+            }
+            // Skip minor versions/snapshots with date patterns
+            if (!includeSnapshots && this.isMinorVersion(modelId)) {
+                return false
+            }
+
+            return true
+        })
+    }
+
+    // Fetch available Anthropic models from the AWS Bedrock foundation-model catalog and
+    // project the Bedrock ids back onto the exact vendor-API snapshot ids the rest of the
+    // platform persists (`anthropic.claude-haiku-4-5-20251001-v1:0` ->
+    // `claude-haiku-4-5-20251001`).
+    private projectBedrockAnthropicModel(
+        bedrockModelId: string,
+        displayName: string | undefined,
+    ): AnthropicModel | undefined {
+        const match = /^anthropic\.(.+?)(?:-(\d{8}))?-v\d+(?::\d+)?$/i.exec(bedrockModelId)
+        if (!match) return undefined
+
+        const modelId = match[2] ? `${match[1]}-${match[2]}` : match[1]!
+        return {
+            id: modelId,
+            display_name: displayName || modelId,
+            // Bedrock exposes no creation timestamp; the release date embedded in the
+            // model id is the closest equivalent the catalog can carry.
+            ...(match[2] && {
+                created_at: `${match[2].slice(0, 4)}-${match[2].slice(4, 6)}-${match[2].slice(6, 8)}`,
+            }),
+        }
+    }
+
+    private async fetchAnthropicModelsFromBedrock(): Promise<AnthropicModel[]> {
+        const env = process.env
+        const region = env.AWS_REGION?.trim()
+        if (!region) {
+            throw new Error('AWS_REGION is required to list Anthropic models on AWS Bedrock')
+        }
+
+        const ssoProfile = env.AWS_PROFILE?.trim()
+        const client = new BedrockClient({
+            region,
+            ...((env.ENVIRONMENT === 'local' && ssoProfile) && { credentials: fromSSO({ profile: ssoProfile }) }),
+        })
+
+        const response = await client.send(new ListFoundationModelsCommand({ byProvider: 'Anthropic' }))
+        const summaries = response.modelSummaries ?? []
+
+        const byModelId = new Map<string, AnthropicModel>()
+        for (const summary of summaries) {
+            const bedrockModelId = summary.modelId
+            if (!bedrockModelId) continue
+            const model = this.projectBedrockAnthropicModel(bedrockModelId, summary.modelName)
+            if (!model || byModelId.has(model.id)) continue
+            byModelId.set(model.id, model)
+        }
+
+        const models = this.filterAnthropicModels([...byModelId.values()], true)
+        if (models.length === 0) {
+            throw new Error(`AWS Bedrock returned no usable Anthropic models in region ${region}`)
+        }
+        return models
+    }
+
     // Fetch available models from Anthropic API using SDK
     private async fetchAnthropicModels(): Promise<AnthropicModel[]> {
+        if (this.useBedrockForAnthropic) {
+            info('Sourcing Anthropic models from the AWS Bedrock foundation-model catalog (ANTHROPIC_USE_AWS_BEDROCK_INFERENCE=true)')
+            return await this.fetchAnthropicModelsFromBedrock()
+        }
+
         const apiKey = this.anthropic.apiKey
         if (!apiKey) {
             throw new Error('Anthropic API key is required but not provided')
@@ -890,37 +994,7 @@ export class AiModelsSync {
                 }) as any
 
                 if (page?.data) {
-                    const models = page.data as AnthropicModel[]
-
-                    // Filter models based on blacklist
-                    const blacklist = AiModelsSync.MODELS_BLACKLIST.Anthropic
-
-                    const filteredModels = models.filter(model => {
-                        const modelId = model.id
-
-                        // Check exact blacklist matches
-                        if (blacklist.exact.includes(modelId)) {
-                            return false
-                        }
-
-                        // Check prefix blacklist matches
-                        if (blacklist.prefix.some(prefix => modelId.startsWith(prefix))) {
-                            return false
-                        }
-
-                        // Check contains blacklist matches
-                        if (blacklist.contains.some(substring => modelId.includes(substring))) {
-                            return false
-                        }
-
-                        // Skip minor versions/snapshots with date patterns
-                        if (this.isMinorVersion(modelId)) {
-                            return false
-                        }
-
-                        return true
-                    })
-                    return filteredModels
+                    return this.filterAnthropicModels(page.data as AnthropicModel[])
                 }
             }
 
@@ -1009,6 +1083,7 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
+            imageInputFidelity: modelDefaults.imageInputFidelity,
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1051,6 +1126,7 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
+            imageInputFidelity: modelDefaults.imageInputFidelity,
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1097,6 +1173,7 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
+            imageInputFidelity: modelDefaults.imageInputFidelity,
             videoAspectRatios: modelDefaults.videoAspectRatios,
             videoResolutions: modelDefaults.videoResolutions,
             videoDurations: modelDefaults.videoDurations,
@@ -1479,6 +1556,7 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
+            imageInputFidelity: modelDefaults.imageInputFidelity,
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1621,6 +1699,7 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
+            imageInputFidelity: modelDefaults.imageInputFidelity,
             videoAspectRatios: modelDefaults.videoAspectRatios,
             videoResolutions: modelDefaults.videoResolutions,
             videoDurations: modelDefaults.videoDurations,

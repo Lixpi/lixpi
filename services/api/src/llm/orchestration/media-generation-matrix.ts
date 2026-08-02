@@ -18,6 +18,7 @@ import AiModelModel from '../../models/ai-model.ts'
 import { settlePersistedAiChatGenerationRequest } from '../../prosemirror/ai-chat-stream-assembler.ts'
 import { settleMediaGenerationRequestOnCanvas } from '../../services/asset-canvas-projection.ts'
 import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
+import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import type { ProviderState } from '../graph/state.ts'
@@ -68,6 +69,7 @@ type ResolvedAiModel = ParsedAiModelId & {
 type NormalizedMatrixRequest = {
     generationRequestId: string
     requestGroupKey: string
+    outputMediaTypes: Array<'image' | 'video'>
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
     useMultipleVideoModels: boolean
@@ -264,6 +266,7 @@ export class MediaGenerationMatrixOrchestrator {
             useMultipleReasoningModels: normalized.useMultipleReasoningModels,
             useMultipleImageModels: normalized.useMultipleImageModels,
             useMultipleVideoModels: normalized.useMultipleVideoModels,
+            outputMediaTypes: normalized.outputMediaTypes,
             requestedReasoningModelIds: requestData.mediaGenerationRequest?.reasoningModelIds ?? requestData.aiReasoningModels ?? [],
             requestedImageModelIds: requestData.mediaGenerationRequest?.imageModelIds ?? requestData.aiImageModels ?? [],
             requestedVideoModelIds: requestData.mediaGenerationRequest?.videoModelIds ?? requestData.aiVideoModels ?? [],
@@ -374,6 +377,7 @@ export class MediaGenerationMatrixOrchestrator {
                     mediaGenerationRequest: {
                         requestVersion: 'media-generation-matrix-v1',
                         generationRequestId: normalized.generationRequestId,
+                        outputMediaTypes: normalized.outputMediaTypes,
                         useMultipleReasoningModels: normalized.useMultipleReasoningModels,
                         useMultipleImageModels: normalized.useMultipleImageModels,
                         useMultipleVideoModels: normalized.useMultipleVideoModels,
@@ -482,11 +486,28 @@ export class MediaGenerationMatrixOrchestrator {
         const useMultipleImageModels = request?.useMultipleImageModels ?? ((request?.imageModelIds?.length ?? 0) > 1)
         const hasExplicitVideoSource = Boolean(request?.videoOptions?.sourceForExtension ?? requestData.videoSourceForExtension)
         const useMultipleVideoModels = request?.useMultipleVideoModels ?? ((request?.videoModelIds?.length ?? 0) > 1)
+        const hasExplicitMediaFanout = useMultipleImageModels || useMultipleVideoModels
+        const outputMediaTypes = request?.outputMediaTypes?.length
+            ? Array.from(new Set(request.outputMediaTypes))
+            : [
+                ...((hasExplicitMediaFanout
+                    ? useMultipleImageModels
+                    : (request?.imageModelIds?.length ?? requestData.aiImageModels?.length ?? 0) > 0
+                ) ? ['image' as const] : []),
+                ...((hasExplicitMediaFanout
+                    ? useMultipleVideoModels || hasExplicitVideoSource
+                    : (request?.videoModelIds?.length ?? requestData.aiVideoModels?.length ?? 0) > 0 || hasExplicitVideoSource
+                )
+                    ? ['video' as const]
+                    : []),
+            ]
         const includeVideoModels = request
-            ? (request.videoModelIds?.length ?? 0) > 0 || hasExplicitVideoSource
+            ? outputMediaTypes.includes('video') && ((request.videoModelIds?.length ?? 0) > 0 || hasExplicitVideoSource)
             : (requestData.aiVideoModels?.length ?? 0) > 0
         const reasoningModelIds = normalizeModelIdsForMode(useMultipleReasoningModels, request?.reasoningModelIds, requestData.aiReasoningModels?.[0])
-        const imageModelIds = normalizeModelIdsForMode(useMultipleImageModels, request?.imageModelIds, requestData.aiImageModels?.[0])
+        const imageModelIds = outputMediaTypes.includes('image')
+            ? normalizeModelIdsForMode(useMultipleImageModels, request?.imageModelIds, requestData.aiImageModels?.[0])
+            : []
         const videoModelIds = includeVideoModels
             ? normalizeModelIdsForMode(useMultipleVideoModels, request?.videoModelIds, requestData.aiVideoModels?.[0])
             : []
@@ -508,6 +529,7 @@ export class MediaGenerationMatrixOrchestrator {
                 requestData.aiChatThreadId,
                 generationRequestId,
             ),
+            outputMediaTypes,
             useMultipleReasoningModels,
             useMultipleImageModels,
             useMultipleVideoModels,
@@ -704,6 +726,10 @@ export class MediaGenerationMatrixOrchestrator {
             videoDurationSeconds: primaryVideoOptions?.duration ? Number(primaryVideoOptions.duration) : undefined,
             videoSourceForExtension: normalized.videoSourceForExtension,
             generationRun,
+            durableGenerationRequestId: requestData.durableGenerationRequestId,
+            durableMediaRuns: requestData.durableMediaRuns,
+            providerSafeMediaIntent: requestData.providerSafeMediaIntent,
+            mediaReferenceBindings: requestData.mediaReferenceBindings,
         }
 
         // Each resolver runs against the accumulating `state` because later
@@ -837,6 +863,13 @@ export class MediaGenerationMatrixOrchestrator {
         resolvedRecord.proseMirrorContentHandler = matrixProseMirrorContentHandler
         resolvedRecord.proseMirrorSnapshotProvider = matrixProseMirrorSnapshotProvider
         await publisher.drainPendingWrites()
+        if (requestData.durableGenerationRequestId) {
+            await new MediaGenerationRequestService().bindRunsToLineagePlan({
+                generationRequestId: requestData.durableGenerationRequestId,
+                workspaceId: requestData.workspaceId,
+                lineagePlan: mediaBranchLineagePlan,
+            })
+        }
 
         return { state: resolved, publisher }
     }

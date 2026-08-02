@@ -177,6 +177,7 @@ export const runRouter = async (state: StyleExtractionState, logger: StageLogger
             natsService,
             temperature: 0.2,
             maxTokens: state.input.analysisModel.maxCompletionSize ?? 4096,
+            maxOutputTokensCeiling: state.input.analysisModel.maxCompletionSize,
             enableThinking: state.input.analysisProvider === 'Anthropic',
             thinkingBudgetTokens: 4096,
             onTextChunk: (text) => logger.chunk(text),

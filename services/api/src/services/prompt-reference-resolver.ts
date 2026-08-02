@@ -34,6 +34,10 @@ import AssetDocumentService from './asset-document-service.ts'
 import { capabilityArtifactBackendRegistry } from '../capability-system/capability-artifacts.ts'
 import { resolveAuthorizedAssetModelInput } from '../capability-system/capability-model-input-adapter.ts'
 import { collectDocumentText } from './prosemirror-text.ts'
+import {
+    isAssetAvailableInWorkspaceScope,
+    scopeAssetRequesterToWorkspace,
+} from './workspace-reference-scope.ts'
 
 export type AuthorizedPromptReferenceResolution = {
     references: PromptReference[]
@@ -94,9 +98,10 @@ export async function authorizePromptReferences({
     workspace: Workspace
     moduleCatalog: CapabilityModuleCatalog
 }): Promise<AuthorizedPromptReferenceResolution> {
+    const scopedRequester = scopeAssetRequesterToWorkspace(requester, workspace)
     const capabilityRequester: CapabilityRequesterContext = {
-        userId: requester.userId,
-        organizationIds: requester.organizationIds,
+        userId: scopedRequester.userId,
+        organizationIds: scopedRequester.organizationIds,
         canManageGlobalCapabilities: false,
     }
     const capabilityReferences: CapabilityPromptReference[] = []
@@ -131,8 +136,8 @@ export async function authorizePromptReferences({
             continue
         }
 
-        const asset = await AssetModel.get({ assetId: reference.assetId, requester })
-        if ('error' in asset || asset.organizationId !== workspace.organizationId
+        const asset = await AssetModel.get({ assetId: reference.assetId, requester: scopedRequester })
+        if ('error' in asset || !isAssetAvailableInWorkspaceScope(asset, workspace)
             || asset.states.lifecycle !== 'active' || asset.documents.conversation) {
             throw new Error(`PROMPT_REFERENCE_ASSET_UNAVAILABLE:${reference.assetId}`)
         }
@@ -155,8 +160,8 @@ export async function authorizePromptReferences({
             definition.assertInitialDocument(snapshot.doc)
             const citedAssetIds = definition.collectReferencedAssetIds(snapshot.doc)
             const citedAssets = await Promise.all(citedAssetIds.map(async assetId => {
-                const cited = await AssetModel.get({ assetId, requester })
-                if ('error' in cited || cited.organizationId !== workspace.organizationId
+                const cited = await AssetModel.get({ assetId, requester: scopedRequester })
+                if ('error' in cited || !isAssetAvailableInWorkspaceScope(cited, workspace)
                     || cited.states.lifecycle !== 'active') {
                     throw new Error(`PROMPT_REFERENCE_ARTIFACT_CITED_ASSET_UNAVAILABLE:${assetId}`)
                 }
@@ -229,7 +234,7 @@ export async function authorizePromptReferences({
     }
 
     const modelInputs = await Promise.all([...modelInputAssets.values()].map(async asset =>
-        await resolveAuthorizedAssetModelInput(asset, requester)))
+        await resolveAuthorizedAssetModelInput(asset, scopedRequester)))
     const deduplicatedMediaCandidates = [...new Map(
         mediaCandidates.map(candidate => [candidate.assetId, candidate]),
     ).values()]

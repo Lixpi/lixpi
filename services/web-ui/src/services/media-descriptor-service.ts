@@ -22,15 +22,18 @@ export type DescribeMediaResult = {
 export const describeMedia = async ({
     assetId,
     aiModel,
+    workspaceId,
 }: {
     assetId: string
     aiModel?: string
+    workspaceId?: string
 }): Promise<DescribeMediaResult> => {
     const nats = servicesStore.getData('nats')
     if (!nats) return { error: 'OFFLINE' }
     return nats.request(MEDIA_DESCRIBE, {
         token: await AuthService.getTokenSilently(),
         assetId,
+        ...(workspaceId ? { workspaceId } : {}),
         ...(aiModel ? { aiModel } : {}),
     }) as Promise<DescribeMediaResult>
 }

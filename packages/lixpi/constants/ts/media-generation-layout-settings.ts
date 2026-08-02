@@ -135,7 +135,9 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
         approxCharWidth: 8,
         lineWrapCharWidth: 10,
         horizontalPadding: 60,
-        screenFixedHorizontalPadding: 34,
+        // Includes the compact pose's asymmetric stop-control padding plus its
+        // reasoning icon, progress spinner, flex gaps, and inline-reference icon.
+        screenFixedHorizontalPadding: 124,
         promptPreviewMaxChars: 120,
         responsePreviewMaxChars: 50,
         verticalPadding: 30,

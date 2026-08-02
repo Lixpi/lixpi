@@ -26,11 +26,11 @@ The workspace Media picker filters this authorized catalog to Assets attachable 
 
 ## Prompt-reference search
 
-The inline `@` picker uses the separate `Assets-Search` projection for bounded prefix autocomplete rather than loading the full library. Media search rows are keyed by authorized scope and `<media-kind>#<normalized-title>#<assetId>`. Artifact rows use `capabilityArtifact#<artifactTypeId>#<normalized-title>#<assetId>` and carry the registered type/schema discriminators. Both contain thin display metadata and exclude conversation Assets. Scope and principal-grant rows mirror `Assets-Meta`; create, title/scope update, grant/revoke, repair, and deletion maintain both projections.
+The inline `@` picker uses the separate `Assets-Search` projection for bounded prefix autocomplete rather than loading the full library. Unlike the account-wide Media library, its partitions are restricted to the active workspace, current user, active workspace organization, and explicit principal grants. Workspace-scoped Assets from sibling workspaces and Assets from other organizations are never queried or returned. Media search rows are keyed by authorized scope and `<media-kind>#<normalized-title>#<assetId>`. Artifact rows use `capabilityArtifact#<artifactTypeId>#<normalized-title>#<assetId>` and carry the registered type/schema discriminators. An Artifact is returned only when every Asset cited by its document is also usable from the active workspace. Both contain thin display metadata and exclude conversation Assets. Scope and principal-grant rows mirror `Assets-Meta`; create, title/scope update, grant/revoke, repair, and deletion maintain both projections.
 
 Deployment backfill uses the existing `asset.maintenance.repairProjections` job: enqueue one repair for each active Asset so the same authoritative projection repair populates missing search rows and deletes stale ones.
 
-Search rows are advisory and never authorize content. The API point-authorizes every selected Asset when it reads `prompt_reference` atoms from the submitted conversation. If the Asset also has a current-canvas placement, that placement ranks first and may carry its real `nodeId`; otherwise the reference remains Asset-only. Selecting either form does not call `asset.reference.attach` and does not mutate the canvas.
+Search rows are advisory and never authorize content. The API point-authorizes every selected Asset when it reads `prompt_reference` atoms from the submitted conversation and separately verifies that its scope is usable from the active workspace. If the Asset also has a current-canvas placement, that placement ranks first and may carry its real `nodeId`; otherwise the reference remains Asset-only. Selecting either form does not call `asset.reference.attach` and does not mutate the canvas.
 
 ## Library cards
 
@@ -58,6 +58,8 @@ The API authorizes scope/access and commits the node plus workspace reference at
 Title and descriptor are Asset-level fields. Updating either uses Asset `revision` and rewrites all relevant Meta projections in the same transaction. Every placement resolves the same title/descriptor after the Asset event or reload.
 
 Node position, dimensions, edges, and selection remain workspace-local.
+
+The inspector mounts the same five-position Subject identity `slidingSwitch` as the canvas Asset information panel: Unknown, No person, Fictional, Me, and Authorized. A change directly writes the versioned append-only attestation and current Asset projection with optimistic revision rollback. There is no modal, proof upload, or second confirmation. Depiction medium remains independently derived. Provider-native verification is requested later only when a selected provider requires it. See [Media Reference Identity and Provider Moderation](../media-generation/MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md).
 
 ## Scope
 

@@ -121,7 +121,7 @@ describe('TransientMediaStore', () => {
 
         expect(nats.createObjectStore).toHaveBeenCalledWith('transient-media-org-1-files', expect.objectContaining({
             description: 'Transient generation media for org-1',
-            ttl: 3_600_000_000_000,
+            ttl: 3600000000000,
         }))
         expect(nats.putObject).toHaveBeenCalledWith(
             'transient-media-org-1-files',

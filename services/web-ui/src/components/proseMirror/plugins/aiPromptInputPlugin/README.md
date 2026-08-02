@@ -180,7 +180,7 @@ The NodeView mirrors empty state with `data-empty="true"` or `data-empty="false"
 
 ## Workspace Surfaces
 
-`WorkspaceCanvas.ts` mounts this plugin in the bottom-center canvas composer. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished; activating it publishes cancellation for the marker's own thread id.
+`WorkspaceCanvas.ts` mounts this plugin in the bottom-center canvas composer. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished. Activating it cancels the request and removes the request's persisted canvas projection.
 
 ## Styling
 

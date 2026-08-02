@@ -20,12 +20,20 @@ const mocks = vi.hoisted(() => ({
     asset: {
         removeAllWorkspaceReferences: vi.fn(),
     },
+    mediaRequests: {
+        cleanupWorkspace: vi.fn(),
+    },
 }))
 
 vi.mock('@lixpi/debug-tools', () => ({ info: vi.fn(), err: vi.fn(), warn: vi.fn() }))
 vi.mock('../../models/workspace.ts', () => ({ default: mocks.workspace }))
 vi.mock('../../models/organization.ts', () => ({ default: mocks.organization }))
 vi.mock('../../models/asset.ts', () => ({ default: mocks.asset }))
+vi.mock('../../services/media-generation-request-service.ts', () => ({
+    MediaGenerationRequestService: class {
+        cleanupWorkspace = mocks.mediaRequests.cleanupWorkspace
+    },
+}))
 
 import { workspaceSubjects } from './workspace-subjects.ts'
 
@@ -52,6 +60,7 @@ describe('Workspace subject handlers', () => {
         mocks.workspace.updateCanvasState.mockResolvedValue({ status: 'canvas-saved' })
         mocks.organization.getUserOrganizations.mockResolvedValue([{ organizationId: 'organization-1' }])
         mocks.asset.removeAllWorkspaceReferences.mockResolvedValue(2)
+        mocks.mediaRequests.cleanupWorkspace.mockResolvedValue(1)
     })
 
     // =========================================================================
@@ -167,6 +176,7 @@ describe('Workspace subject handlers', () => {
         })
 
         expect(mocks.workspace.markDeleting).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
+        expect(mocks.mediaRequests.cleanupWorkspace).toHaveBeenCalledWith('ws-1')
         expect(mocks.asset.removeAllWorkspaceReferences).toHaveBeenCalledWith({
             workspaceId: 'ws-1',
             requester: expect.objectContaining({ userId: 'user-1' }),

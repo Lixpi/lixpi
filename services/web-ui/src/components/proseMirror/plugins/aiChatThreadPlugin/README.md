@@ -192,6 +192,8 @@ The request payload includes:
 
 Each section's selection is a single JSON-like model-id array parsed with `parseAiModelSelectionAttr()`. Multi-model mode is controlled independently per section through `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels`; when a flag is off, that section's array is collapsed to its first model before submit.
 
+When a media section enters multi-model mode, it is an explicit output fanout section. A video-only multi-model request sends only its video models in `mediaGenerationRequest.outputMediaTypes`; the default singular image selection remains available to ordinary reasoning requests but does not create an extra image lineage assignment or pending output.
+
 Media configuration group attrs are JSON strings parsed through `parseMediaGenerationConfigSelectionAttr()`. They come from the API-authored media generation config matrix and are forwarded to `mediaGenerationRequest.imageOptions.configGroups` / `videoOptions.configGroups`; thread code does not derive provider-specific controls from selected model metadata.
 
 `ContentExtractor.getActiveThreadContent()` extracts only `aiUserMessage` and

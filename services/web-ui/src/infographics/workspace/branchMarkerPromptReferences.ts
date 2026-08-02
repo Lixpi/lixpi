@@ -107,24 +107,44 @@ export function truncateBranchMarkerPromptParts(
     parts: readonly BranchMarkerPromptPart[],
     maximumCharacters: number,
 ): BranchMarkerPromptPart[] {
+    const boundedMaximumCharacters = Math.max(0, Math.floor(maximumCharacters))
     const displayText = getBranchMarkerPromptDisplayText(parts)
-    if (displayText.length <= maximumCharacters) return [...parts]
+    if (displayText.length <= boundedMaximumCharacters) return [...parts]
 
     const truncated: BranchMarkerPromptPart[] = []
-    let remainingCharacters = maximumCharacters
-    for (const part of parts) {
-        if (remainingCharacters <= 0) break
+    let displayedCharacters = 0
+    let didTruncate = false
+    for (const [index, part] of parts.entries()) {
         const partText = part.type === 'text' ? part.text : part.reference.displayName
-        if (partText.length <= remainingCharacters) {
+        if (part.type === 'capability-module' || part.type === 'media') {
+            if (displayedCharacters >= boundedMaximumCharacters) {
+                didTruncate = true
+                break
+            }
             truncated.push(part)
-            remainingCharacters -= partText.length
+            displayedCharacters += partText.length
+            if (displayedCharacters >= boundedMaximumCharacters && index < parts.length - 1) {
+                didTruncate = true
+                break
+            }
             continue
         }
-        if (part.type === 'capability-module' || part.type === 'media') break
+
+        const remainingCharacters = boundedMaximumCharacters - displayedCharacters
+        if (remainingCharacters <= 0) {
+            didTruncate = true
+            break
+        }
+        if (partText.length <= remainingCharacters) {
+            appendText(truncated, partText)
+            displayedCharacters += partText.length
+            continue
+        }
         appendText(truncated, partText.slice(0, remainingCharacters))
-        remainingCharacters = 0
+        didTruncate = true
+        break
     }
-    appendText(truncated, '...')
+    if (didTruncate) appendText(truncated, '...')
     return truncated
 }
 

@@ -94,11 +94,19 @@ const LEGACY_CANVAS_STORAGE_FIELDS = new Set([
 
 const assertRevision2CanvasStorage = (canvasState: CanvasState): void => {
     for (const node of canvasState.nodes as Array<Record<string, unknown>>) {
+        if (node.type === 'uploadPlaceholder') throw new Error('LEGACY_UPLOAD_PLACEHOLDER_REJECTED')
         for (const field of LEGACY_CANVAS_STORAGE_FIELDS) {
             if (field in node) throw new Error(`LEGACY_CANVAS_STORAGE_FIELD_REJECTED:${field}`)
         }
         if (['image', 'video', 'audio', 'mediaDocument', 'document', 'capabilityArtifact'].includes(String(node.type)) && !node.assetId) {
             throw new Error('CANVAS_ASSET_ID_REQUIRED')
+        }
+        if (node.type === 'operationStatus'
+            && (!['upload', 'media-generation'].includes(String(node.operation))
+                || !['in-progress', 'action-required', 'failed'].includes(String(node.status))
+                || typeof node.title !== 'string'
+                || typeof node.message !== 'string')) {
+            throw new Error('INVALID_OPERATION_STATUS_NODE')
         }
     }
 }

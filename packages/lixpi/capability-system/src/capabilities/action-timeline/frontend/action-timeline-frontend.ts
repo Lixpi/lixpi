@@ -24,6 +24,7 @@ import {
     createActionTimelineDocumentSchema,
     formatTimelineTime,
 } from '../shared/action-timeline.ts'
+import { actionTimelineSettings } from '../settings.ts'
 
 type JsonNode = {
     type?: string
@@ -290,6 +291,7 @@ export const ACTION_TIMELINE_FRONTEND_STYLES = `
 export const actionTimelineFrontendDefinition: CapabilityArtifactFrontendDefinition = {
     artifactTypeId: ACTION_TIMELINE_ARTIFACT_TYPE_ID,
     iconId: 'ordered-list',
+    initialCanvasDimensions: actionTimelineSettings.canvas.initialDimensions,
     createEditorPlugins: createActionTimelineEditorPlugins,
     createCanvasNodeView: createActionTimelineCanvasView,
     createGeneratedOutputInfoView: createActionTimelineInfoView,

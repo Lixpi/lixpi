@@ -81,7 +81,7 @@ describe('CapabilityDispatcher detached runs', () => {
         const registry = new CapabilityActionRegistry()
         registry.register({
             key: 'test.wait',
-            timeoutMs: 10_000,
+            timeoutMs: 10000,
             validateInput: () => ({ valid: true }),
             validateOutput: () => ({ valid: true }),
             authorize: () => true,

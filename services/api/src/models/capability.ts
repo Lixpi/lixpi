@@ -135,7 +135,7 @@ function decodeCursor(
             || parsed.completed.some((cursorKey) => typeof cursorKey !== 'string' || !allowedCursorKeys.has(cursorKey)))) {
             throw new Error('INVALID_CURSOR')
         }
-        if (parsed.buffered && (!Array.isArray(parsed.buffered) || parsed.buffered.length > 1_000
+        if (parsed.buffered && (!Array.isArray(parsed.buffered) || parsed.buffered.length > 1000
             || parsed.buffered.some((key) => {
                 if (!key || typeof key !== 'object' || Array.isArray(key)
                     || typeof key.scopeAndOwner !== 'string' || typeof key.searchKey !== 'string') return true
@@ -553,16 +553,16 @@ type CapabilityBlobRetirementResult = {
 export async function retireSupersededCapabilityBlobReferences({
     now = Date.now(),
     limit = 100,
-    scanLimit = 1_000,
+    scanLimit = 1000,
 }: {
     now?: number
     limit?: number
     scanLimit?: number
 } = {}): Promise<CapabilityBlobRetirementResult> {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) {
         throw new Error('INVALID_CAPABILITY_BLOB_RETIREMENT_LIMIT')
     }
-    if (!Number.isSafeInteger(scanLimit) || scanLimit < 1 || scanLimit > 1_000) {
+    if (!Number.isSafeInteger(scanLimit) || scanLimit < 1 || scanLimit > 1000) {
         throw new Error('INVALID_CAPABILITY_BLOB_RETIREMENT_SCAN_LIMIT')
     }
     const [referenceResult, capabilityResult, runResult] = await Promise.all([

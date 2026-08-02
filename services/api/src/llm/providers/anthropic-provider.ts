@@ -3,9 +3,11 @@
 import * as process from 'process'
 
 import Anthropic from '@anthropic-ai/sdk'
+import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
 import { info, warn, err } from '@lixpi/debug-tools'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
+import { bedrockInference } from './bedrock-inference.ts'
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import { getSystemPrompt, formatUserMessageWithHack } from '../prompts/load-prompts.ts'
@@ -34,10 +36,21 @@ import { assessProviderInputBudget } from './provider-input-budget.ts'
 
 export class AnthropicProvider extends BaseProvider {
     readonly providerName: ProviderName = 'Anthropic'
-    private readonly client: Anthropic
+    private readonly client: Anthropic | AnthropicBedrock
+    private readonly useBedrock: boolean
 
     constructor(instanceKey: string, deps: BaseProviderDeps) {
         super(instanceKey, deps)
+        this.useBedrock = bedrockInference.isEnabledFor('anthropic')
+        if (this.useBedrock) {
+            bedrockInference.logRouting('anthropic', `Anthropic:${instanceKey}`)
+            // No api key is involved on this path. AnthropicBedrock exposes no credential-provider
+            // option, so it signs with the default AWS provider chain — which resolves AWS_PROFILE
+            // against the SSO cache mounted into the container locally and the task role on AWS,
+            // and refreshes expiring credentials on its own.
+            this.client = new AnthropicBedrock({ awsRegion: bedrockInference.region })
+            return
+        }
         const apiKey = process.env.ANTHROPIC_API_KEY
         if (!apiKey) throw new Error('ANTHROPIC_API_KEY environment variable is required')
         this.client = new Anthropic({ apiKey })
@@ -95,13 +108,19 @@ export class AnthropicProvider extends BaseProvider {
         try {
             this.publisher.start()
 
+            // Bedrock exposes the same models under its own ids (and cross-region inference
+            // profiles), so the catalog id is translated here while logs keep the catalog id.
+            const requestModel = this.useBedrock
+                ? await bedrockInference.resolveModelId('anthropic', modelVersion)
+                : modelVersion
+
             let roundMessages = formatted
             let finalMessage: any
             let promptTokens = 0
             let completionTokens = 0
             for (let round = 0; round <= 4; round++) {
                 const streamArgs: Record<string, any> = {
-                    model: modelVersion,
+                    model: requestModel,
                     messages: roundMessages,
                     max_tokens: maxTokens,
                     system: capabilityToolExecutor?.withCompletionInstruction(systemPrompt) ?? systemPrompt,

@@ -2,10 +2,12 @@ import {
     getAssetEventSubject,
     NATS_SUBJECTS,
     type Asset,
+    type CanvasState,
     type AssetDocumentRole,
     type AssetMeta,
     type AssetPrimaryCategory,
     type AssetScope,
+    type SubjectIdentityClassification,
     type GeneratedOutputReviewRequest,
     type GeneratedOutputReviewResponse,
 } from '@lixpi/constants'
@@ -26,11 +28,11 @@ import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 
 const { ASSET_SUBJECTS } = NATS_SUBJECTS
-const WORKSPACE_RECONCILIATION_INTERVAL_MS = 5 * 60_000
+const WORKSPACE_RECONCILIATION_INTERVAL_MS = 5 * 60000
 const ASSET_LOAD_CONCURRENCY = 8
 const ASSET_DOCUMENT_RESUME_CONCURRENCY = 4
 const ASSET_DOCUMENT_STORE_BATCH_SIZE = 16
-const ASSET_DOCUMENT_RESUME_TIMEOUT_MS = 15_000
+const ASSET_DOCUMENT_RESUME_TIMEOUT_MS = 15000
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 const request = async <T>(
@@ -69,11 +71,42 @@ async function mapWithConcurrency<T, R>(
     return results
 }
 
+export function getWorkspaceCanvasAssetIds(canvasState: CanvasState | undefined): string[] {
+    if (!canvasState) return []
+
+    const assetIds = new Set<string>()
+    for (const node of canvasState.nodes) {
+        if ('assetId' in node && typeof node.assetId === 'string' && node.assetId) {
+            assetIds.add(node.assetId)
+        }
+        if ('conversationAssetId' in node
+            && typeof node.conversationAssetId === 'string'
+            && node.conversationAssetId) {
+            assetIds.add(node.conversationAssetId)
+        }
+        if ('generatedBy' in node
+            && node.generatedBy
+            && typeof node.generatedBy.conversationAssetId === 'string'
+            && node.generatedBy.conversationAssetId) {
+            assetIds.add(node.generatedBy.conversationAssetId)
+        }
+    }
+    for (const tab of canvasState.aiChatPanel?.tabs ?? []) {
+        if (tab.type === 'thread' && typeof tab.refId === 'string' && tab.refId) {
+            assetIds.add(tab.refId)
+        }
+    }
+    if (canvasState.lastActiveConversationAssetId) {
+        assetIds.add(canvasState.lastActiveConversationAssetId)
+    }
+    return [...assetIds]
+}
+
 export class AssetService {
-    private async loadAssetsById(assetIds: readonly string[]): Promise<Asset[]> {
+    private async loadAssetsById(assetIds: readonly string[], workspaceId?: string): Promise<Asset[]> {
         const results = await mapWithConcurrency([...assetIds], ASSET_LOAD_CONCURRENCY, async (assetId) => {
             try {
-                return await this.get(assetId)
+                return await this.get(assetId, workspaceId)
             } catch (error) {
                 console.warn('[AssetService] Asset load failed; synchronization will retry it', { assetId, error })
                 return { error: 'ASSET_LOAD_FAILED' }
@@ -96,8 +129,11 @@ export class AssetService {
         return snapshot
     }
 
-    async get(assetId: string): Promise<Asset | { error: string }> {
-        return await request(ASSET_SUBJECTS.GET, { assetId })
+    async get(assetId: string, workspaceId?: string): Promise<Asset | { error: string }> {
+        return await request(ASSET_SUBJECTS.GET, {
+            assetId,
+            ...(workspaceId ? { workspaceId } : {}),
+        })
     }
 
     async ensureAssetsLoaded(assetIds: readonly string[]): Promise<Asset[]> {
@@ -108,8 +144,8 @@ export class AssetService {
         return loadedAssets
     }
 
-    async refresh(assetId: string): Promise<Asset | { error: string }> {
-        const asset = await this.get(assetId)
+    async refresh(assetId: string, workspaceId?: string): Promise<Asset | { error: string }> {
+        const asset = await this.get(assetId, workspaceId)
         if ('error' in asset) return asset
         assetsStore.upsert(asset)
         for (const role of Object.keys(asset.documents) as AssetDocumentRole[]) {
@@ -149,12 +185,10 @@ export class AssetService {
                         return
                     }
                     if (assetId && assetsStore.get(assetId)) {
-                        void this.refresh(assetId).then((result) => {
+                        void this.refresh(assetId, workspaceId).then((result) => {
                             if ('error' in result) assetsStore.remove(assetId)
                         })
-                        return
                     }
-                    void synchronize()
                 },
             ))
             : []
@@ -167,17 +201,19 @@ export class AssetService {
     }
 
     async list({
+        workspaceId,
         primaryCategory,
         limit = 50,
         cursor,
     }: {
+        workspaceId?: string
         primaryCategory?: AssetPrimaryCategory
         limit?: number
         cursor?: string
     } = {}): Promise<{ items: AssetMeta[]; cursor?: string }> {
         const result = await request<{ items: AssetMeta[]; cursor?: string } | { error: string }>(
             ASSET_SUBJECTS.LIST,
-            { primaryCategory, limit, cursor },
+            { workspaceId, primaryCategory, limit, cursor },
         )
         if ('error' in result) throw new Error(`Asset list failed: ${result.error}`)
         if (!Array.isArray(result.items)) throw new Error('Asset list failed: invalid response')
@@ -188,37 +224,18 @@ export class AssetService {
         assetsStore.setLoading(workspaceId)
         try {
             const workspace = workspaceStore.getData()
-            const assetIds = new Set<string>()
-            for (const node of workspace?.canvasState?.nodes ?? []) {
-                if (typeof node.assetId === 'string') assetIds.add(node.assetId)
-            }
-            for (const tab of workspace?.canvasState?.aiChatPanel?.tabs ?? []) {
-                if (tab.type === 'thread' && typeof tab.refId === 'string') assetIds.add(tab.refId)
-            }
-            if (typeof workspace?.canvasState?.lastActiveConversationAssetId === 'string') {
-                assetIds.add(workspace.canvasState.lastActiveConversationAssetId)
-            }
-            for (const primaryCategory of ['document', 'conversation', 'capabilityArtifact'] as const) {
-                let cursor: string | undefined
-                do {
-                    const page = await this.list({ primaryCategory, limit: 100, cursor })
-                    for (const item of page.items) {
-                        if (item.scopeAndOwner === `workspace#${workspaceId}`) assetIds.add(item.assetId)
-                    }
-                    cursor = page.cursor
-                } while (cursor)
-            }
-            const prioritizedAssetIds = [...assetIds].sort((left, right) => {
-                const activeConversationAssetId = workspace?.canvasState?.lastActiveConversationAssetId
-                if (left === activeConversationAssetId) return -1
-                if (right === activeConversationAssetId) return 1
-                return 0
-            })
-            const directAssets = await this.loadAssetsById(prioritizedAssetIds)
+            const prioritizedAssetIds = getWorkspaceCanvasAssetIds(workspace?.canvasState)
+                .sort((left, right) => {
+                    const activeConversationAssetId = workspace?.canvasState?.lastActiveConversationAssetId
+                    if (left === activeConversationAssetId) return -1
+                    if (right === activeConversationAssetId) return 1
+                    return 0
+                })
+            const directAssets = await this.loadAssetsById(prioritizedAssetIds, workspaceId)
             const directAssetIds = new Set(directAssets.map(asset => asset.assetId))
             const lineageSourceAssetIds = [...new Set(directAssets.flatMap(asset => asset.lineage?.sourceAssetIds ?? []))]
                 .filter(assetId => !directAssetIds.has(assetId))
-            const lineageSourceAssets = await this.loadAssetsById(lineageSourceAssetIds)
+            const lineageSourceAssets = await this.loadAssetsById(lineageSourceAssetIds, workspaceId)
             const assets = [...directAssets, ...lineageSourceAssets]
             assetsStore.setAssets(workspaceId, Array.isArray(assets) ? assets : [])
             const documentCoordinates = assets
@@ -376,6 +393,20 @@ export class AssetService {
         descriptor?: Asset['descriptor']
     }): Promise<Asset | { error: string }> {
         const result = await request<Asset | { error: string }>(ASSET_SUBJECTS.UPDATE_METADATA, { assetId, expectedRevision, ...updates })
+        if (!('error' in result)) assetsStore.upsert(result)
+        return result
+    }
+
+    async attestSubjectIdentity(
+        assetId: string,
+        assetRevision: number,
+        classification: SubjectIdentityClassification,
+    ): Promise<Asset | { error: string }> {
+        const result = await request<Asset | { error: string }>(ASSET_SUBJECTS.SUBJECT_IDENTITY_ATTEST, {
+            assetId,
+            assetRevision,
+            classification,
+        })
         if (!('error' in result)) assetsStore.upsert(result)
         return result
     }

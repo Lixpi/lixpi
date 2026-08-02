@@ -4,9 +4,9 @@ import * as process from 'process'
 
 import OpenAI, { toFile } from 'openai'
 import { info, warn, err } from '@lixpi/debug-tools'
+import type { ImageInputFidelityPolicy, ProviderName } from '@lixpi/constants'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
-import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import { assertProviderMessageInputKinds, detectCapabilities } from './provider-capabilities.ts'
@@ -56,15 +56,6 @@ export const buildOpenAIImageReferenceFiles = async (
     mediaType: reference.mediaType,
     sha256: reference.sha256,
 })))
-
-const supportsConfigurableImageInputFidelity = (modelVersion: string): boolean => {
-    if (modelVersion.startsWith('gpt-image-2')) return false
-    if (modelVersion.startsWith('gpt-image-1-mini')) return false
-    return modelVersion === 'gpt-image-1'
-        || modelVersion.startsWith('gpt-image-1-')
-        || modelVersion === 'gpt-image-1.5'
-        || modelVersion.startsWith('gpt-image-1.5-')
-}
 
 export class OpenAIProvider extends BaseProvider {
     readonly providerName: ProviderName = 'OpenAI'
@@ -137,7 +128,11 @@ export class OpenAIProvider extends BaseProvider {
             }
         }
 
-        const tools = this.buildImageGenerationTools(enableImageGeneration, imageSize) ?? []
+        const tools = this.buildImageGenerationTools(
+            enableImageGeneration,
+            imageSize,
+            state.aiModelMetaInfo.imageInputFidelity,
+        ) ?? []
         if (injectTool) {
             tools.push(getToolForProvider('OpenAI', state.imageModelMetaInfo, state.imageProviderName))
         }
@@ -205,13 +200,16 @@ export class OpenAIProvider extends BaseProvider {
     private buildImageGenerationTools(
         enableImageGeneration: boolean,
         imageSize: string,
+        imageInputFidelity: ImageInputFidelityPolicy | undefined,
     ): Array<Record<string, any>> | undefined {
         if (!enableImageGeneration) return undefined
         return [{
             type: 'image_generation',
             quality: 'high',
-            moderation: 'low',
-            input_fidelity: 'high',
+            ...this.deps.mediaProviderDefinition.moderation.settings('', 'text'),
+            ...(imageInputFidelity?.requestValue
+                ? { input_fidelity: imageInputFidelity.requestValue }
+                : {}),
             partial_images: 3,
             size: imageSize || 'auto',
         }]
@@ -265,7 +263,7 @@ export class OpenAIProvider extends BaseProvider {
                 model: args.modelVersion,
                 imageSize: args.state.imageSize,
                 quality: 'high',
-                inputFidelity: 'high',
+                inputFidelity: args.state.aiModelMetaInfo.imageInputFidelity?.level ?? 'provider-default',
                 moderation: 'low',
                 partialImages: 3,
                 inputMessageCount: args.inputMessages.length,
@@ -500,15 +498,14 @@ export class OpenAIProvider extends BaseProvider {
         if (!prompt) throw new Error('No user prompt found for image generation')
 
         const hasReferences = referenceFiles.length > 0
-        const inputFidelity = supportsConfigurableImageInputFidelity(args.modelVersion)
-            ? 'high'
-            : undefined
+        const imageInputFidelity = args.state.aiModelMetaInfo.imageInputFidelity
+        const inputFidelityRequestValue = imageInputFidelity?.requestValue
         info(`[OpenAI:${this.instanceKey}] image SDK call ${JSON.stringify({
             api: hasReferences ? 'images.edit' : 'images.generate',
             model: args.modelVersion,
             size: args.imageSize,
             quality: 'high',
-            inputFidelity: inputFidelity ?? (args.modelVersion.startsWith('gpt-image-2') ? 'automatic-high' : 'provider-default'),
+            inputFidelity: imageInputFidelity?.level ?? 'provider-default',
             partialImages: 3,
             referenceFiles: referenceFiles.length,
             referenceFileNames: referenceFiles.map(r => r.name),
@@ -535,8 +532,9 @@ export class OpenAIProvider extends BaseProvider {
                     ? referenceFiles.map(r => r.file)
                     : referenceFiles[0]!.file,
                 prompt,
+                ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'image-conditioned'),
                 quality: 'high',
-                ...(inputFidelity ? { input_fidelity: inputFidelity } : {}),
+                ...(inputFidelityRequestValue ? { input_fidelity: inputFidelityRequestValue } : {}),
                 size: resolvedSize,
                 stream: true,
                 partial_images: 3,
@@ -544,6 +542,7 @@ export class OpenAIProvider extends BaseProvider {
             : await this.client.images.generate({
                 model: args.modelVersion,
                 prompt,
+                ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'text'),
                 quality: 'high',
                 size: resolvedSize,
                 stream: true,

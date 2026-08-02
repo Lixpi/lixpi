@@ -132,16 +132,44 @@ function isOpenAIStrictSchemaCompatible(value: unknown): boolean {
     return true
 }
 
+function projectOpenAISchemaMap(value: unknown): unknown {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return projectOpenAIInputSchema(value)
+    }
+    return Object.fromEntries(Object.entries(value).map(([name, schema]) => [
+        name,
+        projectOpenAIInputSchema(schema),
+    ]))
+}
+
+function projectOpenAIInputSchema(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(child => projectOpenAIInputSchema(child))
+    if (!value || typeof value !== 'object') return value
+
+    const projected: Record<string, unknown> = {}
+    for (const [key, child] of Object.entries(value)) {
+        // OpenAI function parameters support only a subset of JSON Schema.
+        // The sealed canonical schema still enforces these constraints on use.
+        if (key === '$schema' || key === 'uniqueItems') continue
+        const childIsSchemaMap = key === 'properties' || key === '$defs' || key === 'definitions'
+        projected[key] = childIsSchemaMap
+            ? projectOpenAISchemaMap(child)
+            : projectOpenAIInputSchema(child)
+    }
+    return projected
+}
+
 export function asOpenAITool(definition: CapabilityModelToolDefinition): Record<string, unknown> {
+    const inputSchema = projectOpenAIInputSchema(definition.inputSchema) as Record<string, unknown>
     return {
         type: 'function',
         name: definition.name,
         description: definition.description,
-        parameters: definition.inputSchema,
+        parameters: inputSchema,
         // Capability inputs are always validated again by the sealed server-side
         // schema. Strict mode is used only when the schema can represent every
         // property under OpenAI's closed-object requirements.
-        strict: isOpenAIStrictSchemaCompatible(definition.inputSchema),
+        strict: isOpenAIStrictSchemaCompatible(inputSchema),
     }
 }
 

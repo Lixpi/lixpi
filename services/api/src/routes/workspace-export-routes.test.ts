@@ -317,7 +317,7 @@ describe('Workspace import route', () => {
         const sourceWorkspaceId = 'source-workspace-1'
         const nodeId = 'capability-artifact-node-1'
         const document = buildActionTimelineDocument(
-            { durationMs: 2_000, precisionMs: 2_000 },
+            { durationMs: 2000, precisionMs: 2000 },
             [{ slotIndex: 0, runs: [{ text: 'The subject crosses the frame.' }] }],
         )
         const documentBytes = Buffer.from(JSON.stringify(document))

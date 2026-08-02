@@ -174,6 +174,7 @@ function createState(overrides: {
             promptText,
             promptFingerprint: 'prompt-test',
             transcriptContext: 'candidate labels',
+            explicitReferenceCandidateIds: candidates.map(candidate => candidate.candidateId),
             candidates,
         },
     }
@@ -275,7 +276,7 @@ describe('resolveMediaBranch', () => {
         expect(publisher.mediaBranchResolutionError).not.toHaveBeenCalled()
     })
 
-    it('preserves feature images and removes unselected candidate images from provider messages', async () => {
+    it('preserves feature images and every explicitly attached candidate in provider messages', async () => {
         const { deps, publisher, callVlm } = createDeps({
             mode: 'context-only',
             operationKind: 'new_image',
@@ -306,20 +307,24 @@ describe('resolveMediaBranch', () => {
         expect(callVlm).toHaveBeenCalledOnce()
         expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
         expect(update.mediaBranchResolution?.resolverKind).toBe('structured-vlm')
-        expect(update.mediaBranchResolution?.referenceCandidateIds).toEqual(['portrait-source', 'landscape-source'])
+        expect(update.mediaBranchResolution?.referenceCandidateIds).toEqual([
+            'portrait-source',
+            'landscape-source',
+            'person-generated',
+        ])
         expect(getImageUrls(callVlm.mock.calls[0]?.[0].userMessages ?? [])).toEqual([
             resolvedTinyPngUrl,
             resolvedTinyPngUrl,
             resolvedTinyPngUrl,
         ])
         expect(imageUrls).toContain(featureUrl)
-        expect(imageUrls.filter((url) => url === resolvedTinyPngUrl)).toHaveLength(2)
+        expect(imageUrls.filter((url) => url === resolvedTinyPngUrl)).toHaveLength(3)
         expect(imageUrls).not.toContain(portraitUrl)
         expect(imageUrls).not.toContain(landscapeUrl)
         expect(imageUrls).not.toContain(personUrl)
     })
 
-    it('continues a generated identity branch when the VLM returns targetless fresh-branch', async () => {
+    it('does not invent a generated identity target when the VLM returns a fresh branch', async () => {
         const { deps, publisher } = createDeps(createParsedResolution({
             mode: 'fresh-branch',
             operationKind: 'new_image',
@@ -352,18 +357,16 @@ describe('resolveMediaBranch', () => {
 
         expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
         expect(resolution).toMatchObject({
-            mode: 'edit-active-branch',
-            operationKind: 'style_transfer',
-            targetCandidateId: 'person-generated',
-            parentCandidateId: 'person-generated',
-            branchId: 'branch-person',
-            referenceCandidateIds: ['portrait-source', 'landscape-source', 'person-generated'],
-            excludedCandidateIds: ['goat-generated'],
+            mode: 'fresh-branch',
+            operationKind: 'new_image',
+            targetCandidateId: null,
+            parentCandidateId: undefined,
+            referenceCandidateIds: ['portrait-source', 'landscape-source', 'person-generated', 'goat-generated'],
+            excludedCandidateIds: [],
         })
-        expect(resolution?.rationale).toContain('Resolver guard continued generated branch')
-        expect(getImageUrls(update.messages ?? []).filter((url) => url === resolvedTinyPngUrl)).toHaveLength(3)
+        expect(resolution?.branchId).toMatch(/^branch-/)
+        expect(getImageUrls(update.messages ?? []).filter((url) => url === resolvedTinyPngUrl)).toHaveLength(4)
         expect(getImageUrls(update.messages ?? [])).toContain(featureUrl)
-        expect(getImageUrls(update.messages ?? [])).not.toContain(goatUrl)
     })
 
     it('does not continue lineage from generated references used only as style evidence', async () => {
@@ -392,8 +395,8 @@ describe('resolveMediaBranch', () => {
             operationKind: 'new_image',
             targetCandidateId: null,
             parentCandidateId: undefined,
-            branchId: 'branch-new-subject',
         })
+        expect(update.mediaBranchResolution?.branchId).toMatch(/^branch-/)
     })
 
     it('preserves the target candidate branch id over an invented VLM branch id', async () => {
@@ -453,13 +456,13 @@ describe('resolveMediaBranch', () => {
             mode: 'fresh-branch',
             operationKind: 'new_image',
             targetCandidateId: null,
-            branchId: 'branch-goat-request',
-            referenceCandidateIds: ['landscape-source'],
-            excludedCandidateIds: ['person-generated'],
+            referenceCandidateIds: ['portrait-source', 'landscape-source', 'person-generated'],
+            excludedCandidateIds: [],
         })
+        expect(update.mediaBranchResolution?.branchId).toMatch(/^branch-/)
     })
 
-    it('fails when the VLM excludes its own target', async () => {
+    it('ignores a VLM exclusion of an explicitly attached target', async () => {
         const { deps, publisher } = createDeps(createParsedResolution({
             mode: 'edit-active-branch',
             operationKind: 'edit_existing',
@@ -472,12 +475,18 @@ describe('resolveMediaBranch', () => {
             ],
         }))
 
-        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('excluded its own targetCandidateId')
-        expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
-        expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
+        const update = await resolveMediaBranch(createState(), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            targetCandidateId: 'person-generated',
+            referenceCandidateIds: ['portrait-source', 'landscape-source', 'person-generated'],
+            excludedCandidateIds: [],
+        })
+        expect(publisher.mediaBranchResolutionError).not.toHaveBeenCalled()
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
     })
 
-    it('fails when the VLM target is not included in referenceCandidateIds', async () => {
+    it('restores an explicitly attached target omitted by the VLM reference list', async () => {
         const { deps, publisher } = createDeps(createParsedResolution({
             mode: 'edit-active-branch',
             operationKind: 'edit_existing',
@@ -489,9 +498,14 @@ describe('resolveMediaBranch', () => {
             ],
         }))
 
-        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('targetCandidateId is not in referenceCandidateIds')
-        expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
-        expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
+        const update = await resolveMediaBranch(createState(), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            targetCandidateId: 'person-generated',
+            referenceCandidateIds: ['portrait-source', 'landscape-source', 'person-generated'],
+        })
+        expect(publisher.mediaBranchResolutionError).not.toHaveBeenCalled()
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
     })
 
     it('fails visibly when the VLM returns an ambiguous resolution', async () => {
@@ -515,7 +529,7 @@ describe('resolveMediaBranch', () => {
             decisions: [],
         })
 
-        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('could not disambiguate')
+        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('MEDIA_BRANCH_REFERENCE_AMBIGUITY:The referent is unclear.')
         expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
         expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
     })
@@ -686,12 +700,12 @@ describe('resolveMediaBranch', () => {
     it('rejects low-confidence resolutions even when references are present', async () => {
         const { deps, publisher } = createDeps(createParsedResolution({ confidence: 0.1 }))
 
-        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('confidence too low (0.1): Resolved from visible candidates.')
+        await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('MEDIA_BRANCH_REFERENCE_AMBIGUITY:Resolved from visible candidates.')
         expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
         expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
     })
 
-    it('continues a targetless mode with a single generated non-style reference even without decision hints', async () => {
+    it('keeps a targetless mode targetless without explicit resolver target evidence', async () => {
         const { deps, publisher } = createDeps(createParsedResolution({
             mode: 'fresh-branch',
             operationKind: 'new_image',
@@ -704,11 +718,10 @@ describe('resolveMediaBranch', () => {
 
         expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
         expect(update.mediaBranchResolution).toMatchObject({
-            mode: 'edit-active-branch',
-            operationKind: 'style_transfer',
-            targetCandidateId: 'person-generated',
-            parentCandidateId: 'person-generated',
-            branchId: 'branch-person',
+            mode: 'fresh-branch',
+            operationKind: 'new_image',
+            targetCandidateId: null,
+            parentCandidateId: undefined,
         })
     })
 
@@ -766,10 +779,10 @@ describe('resolveMediaBranch', () => {
 
         expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
         expect(update.mediaBranchResolution).toMatchObject({
-            referenceCandidateIds: ['portrait-source', 'landscape-source'],
-            sourceContextNodeIds: ['landscape-source'],
+            referenceCandidateIds: ['portrait-source', 'landscape-source', 'person-generated', 'goat-generated'],
+            sourceContextNodeIds: ['portrait-source', 'landscape-source', 'person-generated', 'goat-generated'],
             styleReferenceCandidateIds: ['person-generated'],
-            excludedCandidateIds: ['person-generated'],
+            excludedCandidateIds: [],
             includeGeneratedCandidateIds: ['goat-generated'],
         })
     })

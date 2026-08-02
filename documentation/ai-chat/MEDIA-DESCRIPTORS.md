@@ -1,6 +1,6 @@
 ---
 title: Media and Content Descriptors
-description: The compact text descriptor stored on each context-bearing Asset, how it is sourced, repaired, and surfaced.
+description: The compact text descriptor stored on each context-bearing Asset, how it is sourced and surfaced.
 ---
 
 # Media and Content Descriptors
@@ -14,16 +14,14 @@ canonical shared contract is now `ContentDescriptor` because documents and AI
 conversation Assets use the same shape. Canvas nodes carry only `assetId`; they
 resolve the descriptor from `assetsStore` and never persist a copy.
 
-Descriptors exist so workspace-wide features can tell nodes apart and feed short
-textual hints into model context without re-analyzing every artifact. They are
-the cheap reduction that lets the workspace narrow a whole canvas down to a
-handful of relevant nodes before any expensive pixel work runs. Their main
-consumers are [Workspace Context Relevance](./CONTEXT-RELEVANCE.md) and
-[Branch Lineage](../media-generation/BRANCH-LINEAGE.md). The canvas info panel
-also renders ready descriptors for media nodes.
+Descriptors let the UI and model-facing traces identify explicitly selected
+media without re-analyzing it. Their main consumers are
+[Explicit Workspace Context](./CONTEXT-RELEVANCE.md),
+[Branch Lineage](../media-generation/BRANCH-LINEAGE.md), and the canvas media
+info panel. Descriptors do not select context or add canvas nodes to a request.
 
-The descriptor is deliberately short so it can fit into a resolver transcript or
-workspace relevance prompt without bloat. The summary is capped at
+The descriptor is deliberately short so it can fit into a resolver transcript
+without bloat. The summary is capped at
 `MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH` (280 chars) and stamped with
 `MEDIA_DESCRIPTOR_VERSION` so stale descriptors can be detected later. Media
 titles are capped at `MEDIA_DESCRIPTOR_TITLE_MAX_WORDS` (three words).
@@ -42,6 +40,8 @@ if it is otherwise `ready`.
 duplicated inside `ContentDescriptor`. `Asset-Meta` projects its title, summary, and tags for
 catalog listing, while workspace placements resolve the authoritative Asset.
 `MediaDescriptor` is an alias for the same type.
+
+Descriptors feed the provider-safe reference boundary. Summary segments and existing entity/style tags can act as bounded local aliases and provide semantic context beside `REFERENCE_n`; the mutable Asset title and original filename cannot. `Asset.depictionMedium` is derived separately from descriptor evidence, while `Asset.subjectIdentity` is a user/lineage assertion. A watercolor descriptor may yield medium `painting` but never automatically asserts `fictional`.
 
 ```typescript
 export type ContentDescriptor = {
@@ -113,32 +113,17 @@ revision.
 ### Document and conversation Assets — text analysis
 
 Document and conversation Assets get descriptors from their text
-content/transcript. Plain canvas document typing and Asset creation do not
-proactively request descriptor analysis. Missing or weak document/conversation descriptors are
-repaired during workspace context self-heal when an AI turn needs the node.
-These descriptors let the workspace relevance engine rank documents and
-conversations alongside media using one uniform contract.
+content/transcript when `MEDIA_DESCRIBE` is requested for that Asset. Plain
+canvas document typing and Asset creation do not proactively request descriptor
+analysis. Explicit context loads the authoritative document content regardless
+of descriptor availability.
 
-## Self-Heal
+## Descriptor Requests
 
-[`resolveWorkspaceContext`](../platform/AI-GENERATION-PIPELINE.md) can repair
-weak descriptors inside the same chat turn. Assets resolved through nodes with missing, failed,
-analyzing, or too-thin descriptors can be flagged by the relevance model. The
-API improves flagged descriptors once, persists them through an Asset revision
-update, re-ranks the workspace snapshot, and streams
-`improvedDescriptors` in `CONTEXT_RELEVANCE_RESOLVED`.
-
-{% callout type="important" %}
-Self-heal is **bounded to one improvement round per turn**. The resolver does
-not loop until every descriptor is perfect; it repairs the flagged set once,
-re-ranks, and proceeds. This keeps a single chat turn from fanning out into an
-unbounded number of VLM captions.
-{% /callout %}
-
-The browser applies improved descriptors to `assetsStore` so every placement's
-analyzing indicator and info panel updates without a reload. See
-[Workspace Context Relevance](./CONTEXT-RELEVANCE.md) for how self-heal sits
-inside the larger rank → force-include → assemble flow.
+`MEDIA_DESCRIBE` is the only descriptor analysis entry point. Media requests use
+the configured media VLM; text Assets require an explicit text model. Context
+resolution does not repair descriptors, call a descriptor model, or re-rank a
+submitted snapshot.
 
 ## Canvas Analyzing Indicator
 
@@ -149,8 +134,7 @@ and its title/aria-label explains what is happening. Opening the panel shows an
 top of the node, while the expanded panel renders the summary and tags first,
 before Asset diagnostics and provenance.
 
-Documents and conversation nodes use descriptors for relevance, not media chrome —
-they do not render the analyzing pulse. See
+Documents and conversation nodes do not render the media analyzing pulse. See
 [Workspace Model](../canvas/WORKSPACE-MODEL.md) for the canvas node chrome these
 indicators attach to.
 
@@ -165,9 +149,9 @@ and VEO anchoring.
 
 ## References
 
-- [Workspace Context Relevance](./CONTEXT-RELEVANCE.md) — workspace relevance, self-heal, and automatic selections
-- [Branch Lineage](../media-generation/BRANCH-LINEAGE.md) — how descriptors/tags feed branch grounding
-- [Image Generation](../media-generation/IMAGE-GENERATION.md) — generated-image completion and final-frame storage
-- [Video Generation](../media-generation/VIDEO-GENERATION.md) — mid-frame extraction and VEO image-to-video anchoring
-- [Workspace Model](../canvas/WORKSPACE-MODEL.md) — canvas media nodes and chrome
-- [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md) — the `resolveWorkspaceContext` workflow node that drives self-heal
+- [Explicit Workspace Context](./CONTEXT-RELEVANCE.md): prompt references, context chips, and authorization
+- [Branch Lineage](../media-generation/BRANCH-LINEAGE.md): how descriptors/tags feed branch grounding
+- [Image Generation](../media-generation/IMAGE-GENERATION.md): generated-image completion and final-frame storage
+- [Video Generation](../media-generation/VIDEO-GENERATION.md): mid-frame extraction and VEO image-to-video anchoring
+- [Workspace Model](../canvas/WORKSPACE-MODEL.md): canvas media nodes and chrome
+- [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md): the shared generation workflow

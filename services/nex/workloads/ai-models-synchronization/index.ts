@@ -27,7 +27,7 @@ import { AiModelsSync } from './ai-models-synchronization.ts'
 
 const { AI_MODELS_SUBJECTS } = NATS_SUBJECTS
 
-const DEFAULT_INTERVAL_MS = 3_600_000 // 1 hour
+const DEFAULT_INTERVAL_MS = 3600000 // 1 hour
 const intervalMs = Number(process.env.LIXPI_SYNC_INTERVAL_MS) || DEFAULT_INTERVAL_MS
 
 // Reads AWS/DynamoDB/ORG_NAME/STAGE/provider keys from env (unchanged class).

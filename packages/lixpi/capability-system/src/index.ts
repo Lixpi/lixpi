@@ -1,8 +1,11 @@
 'use strict'
 
 export * from './shared/index.ts'
+export * from './capabilities/action-timeline/settings.ts'
 export * from './capabilities/action-timeline/shared/index.ts'
 export * from './capabilities/action-timeline/frontend/index.ts'
+export * from './capabilities/character-creator/settings.ts'
 export * from './capabilities/character-creator/shared/character-creator-routing.ts'
+export * from './capabilities/style-extraction/settings.ts'
 export * as backend from './backend/index.ts'
 export * as frontend from './frontend/index.ts'

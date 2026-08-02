@@ -93,6 +93,12 @@ export type CapabilityArtifactLibraryView = {
 export type CapabilityArtifactFrontendDefinition = {
     artifactTypeId: string
     iconId: string
+    // Canvas-unit size used when the artifact is inserted from a library panel.
+    // Owned by the capability's settings file so canvas geometry is tuned in one place.
+    initialCanvasDimensions: {
+        width: number
+        height: number
+    }
     createEditorPlugins?: () => Plugin[]
     createPromptControls?: (host: CapabilityPromptControlHost) => CapabilityPromptControls
     createCanvasNodeView: (host: CapabilityArtifactCanvasHost) => CapabilityArtifactCanvasView
@@ -131,6 +137,10 @@ export class CapabilityArtifactFrontendRegistry {
 function assertCompleteFrontendDefinition(definition: CapabilityArtifactFrontendDefinition): void {
     if (!definition.artifactTypeId.trim()) throw new Error('CAPABILITY_ARTIFACT_FRONTEND_TYPE_ID_REQUIRED')
     if (!definition.iconId.trim()) throw new Error(`CAPABILITY_ARTIFACT_FRONTEND_ICON_REQUIRED:${definition.artifactTypeId}`)
+    const { width, height } = definition.initialCanvasDimensions ?? {}
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+        throw new Error(`CAPABILITY_ARTIFACT_FRONTEND_DIMENSIONS_INVALID:${definition.artifactTypeId}`)
+    }
     const requiredFactories = [
         definition.createCanvasNodeView,
         definition.createGeneratedOutputInfoView,

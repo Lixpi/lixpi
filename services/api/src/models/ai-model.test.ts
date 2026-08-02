@@ -255,6 +255,7 @@ describe('AiModel.getAiModel', () => {
             providerTitle: 'Google',
             imageSizeMode: 'resolution',
             imageSizes: [{ value: '1024x1024' }],
+            imageInputFidelity: { level: 'high' },
             modalities: [{ modality: 'image_generation' }],
             pricing: {
                 input: 0.1,
@@ -278,6 +279,7 @@ describe('AiModel.getAiModel', () => {
             providerTitle: 'Google',
             imageSizeMode: 'resolution',
             imageSizes: [{ value: '1024x1024' }],
+            imageInputFidelity: { level: 'high' },
         })
         expect(model).not.toHaveProperty('pricing')
     })
@@ -298,4 +300,5 @@ describe('AiModel.getAiModel', () => {
 
         expect(model).toHaveProperty('pricing', { input: 0.1, output: 0.2 })
     })
+
 })

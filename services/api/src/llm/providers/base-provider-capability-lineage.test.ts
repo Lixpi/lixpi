@@ -50,13 +50,14 @@ describe('BaseProvider Capability output lineage', () => {
             },
         })
         const mediaLineagePlanned = vi.fn()
+        const drainPendingWrites = vi.fn(async () => undefined)
         const provider = new CapabilityLineageProvider('workspace-1:thread-1', {
             natsService: { publish: vi.fn() } as any,
             usageReporter: {} as any,
             runImageRouter: vi.fn(),
             runVideoRouter: vi.fn(),
         })
-        provider.setPublisher({ mediaLineagePlanned })
+        provider.setPublisher({ mediaLineagePlanned, drainPendingWrites })
 
         const update = await provider.plan({
             workspaceId: 'workspace-1',
@@ -124,5 +125,6 @@ describe('BaseProvider Capability output lineage', () => {
         ])
         expect(mocks.ensurePendingGeneratedAssets).toHaveBeenCalledOnce()
         expect(mediaLineagePlanned).toHaveBeenCalledOnce()
+        expect(drainPendingWrites).toHaveBeenCalledOnce()
     })
 })

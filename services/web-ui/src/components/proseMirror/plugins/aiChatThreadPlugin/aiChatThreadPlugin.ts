@@ -19,6 +19,7 @@ import {
     aiReasoningSectionNodeType,
     aiResponseMessageNodeType,
     aiUserMessageNodeType,
+    collectProseMirrorPromptReferences,
     getAiLineageEventsForProjection,
     LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
     parseAiModelSelectionAttr,
@@ -86,6 +87,7 @@ type SendAiRequestHandler = (data: AiInteractionChatSubmitPayload & {
     useMultipleVideoModels?: boolean
     imageOptions?: ImageOptions
     videoOptions?: VideoOptions
+    referenceNodeIds?: string[]
 }) => void | Promise<void>
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 export type AiChatThreadRenderContext = {
@@ -2462,6 +2464,20 @@ class AiChatThreadPluginClass {
         // Pass threadId for Workspace mode to ensure current thread is always included
         const threadContent = ContentExtractor.getActiveThreadContent(newState, threadContext, nodePos, threadId)
         const messages = ContentExtractor.toMessages(threadContent)
+        const userMessages: ProseMirrorNode[] = []
+        threadNode.forEach((child: ProseMirrorNode) => {
+            if (child.type.name === aiUserMessageNodeType) userMessages.push(child)
+        })
+        const latestUserMessage = userMessages.at(-1)
+        const referenceNodeIds = Array.from(new Set([
+            ...(Array.isArray(latestUserMessage?.attrs?.referenceNodeIds)
+                ? latestUserMessage.attrs.referenceNodeIds.filter((nodeId: unknown): nodeId is string => (
+                    typeof nodeId === 'string' && nodeId.length > 0
+                ))
+                : []),
+            ...collectProseMirrorPromptReferences(latestUserMessage?.toJSON())
+                .flatMap(reference => 'nodeId' in reference && reference.nodeId ? [reference.nodeId] : []),
+        ]))
 
         // Build image generation options if an image model is selected
         const imageOptions = effectiveImageModel ? {
@@ -2505,6 +2521,7 @@ class AiChatThreadPluginClass {
             useMultipleImageModels: imageModelsEnabled,
             useMultipleVideoModels: videoModelsEnabled,
             conversationAssetId: threadId,
+            referenceNodeIds,
             imageOptions,
             videoOptions,
         }
