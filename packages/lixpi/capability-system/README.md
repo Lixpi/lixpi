@@ -49,6 +49,8 @@ The backend accepts storage, search, event, and persistence adapters through con
 
 Concrete module backend code also lives in this package. Each module accepts typed service ports for application persistence, provider calls, Asset materialization, and events. Module code never imports `services/api`.
 
+Character Creator treats the packaged example as a layout-only reference. Character-source Assets control identity and rendering class: photographs require photorealistic repeated depictions, while illustrated sources retain their specific medium. Its restoration contract permits complete replacement of draft character pixels while preserving the non-character sheet structure.
+
 ### `src/frontend`
 
 Frontend code owns the transport-injected catalog client, cache, deterministic empty-query ranking, manifest JSON parsing, catalog management calls, and run replay/subscription filtering. Svelte state, editor components, authentication, and the concrete NATS client stay in `services/web-ui` and call this package.

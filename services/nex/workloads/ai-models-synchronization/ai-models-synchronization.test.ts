@@ -38,6 +38,31 @@ describe('AiModelsSync — image generation option metadata', () => {
         expect(model.imageSizeMode).toBe('aspectRatio')
         expect(model.imageSizes?.map((o: any) => o.value)).toContain('16:9')
     })
+
+    it('synchronizes OpenAI reference-fidelity behavior per model', () => {
+        const gptImage2 = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-2' }, 1)
+        const gptImage15 = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1.5' }, 2)
+        const gptImageMini = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1-mini' }, 3)
+        const gptImage1 = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1' }, 4)
+
+        expect(gptImage2.imageInputFidelity).toEqual({ level: 'high' })
+        expect(gptImage15.imageInputFidelity).toEqual({ level: 'high', requestValue: 'high' })
+        expect(gptImageMini.imageInputFidelity).toEqual({ level: 'standard' })
+        expect(gptImage1.imageInputFidelity).toEqual({ level: 'high', requestValue: 'high' })
+    })
+
+    it('synchronizes high reference fidelity for non-OpenAI image providers', () => {
+        const geminiImage = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-flash-image-preview' }, 1)
+        const stabilityImage = sync.mapStabilityModelToAiModel({
+            id: 'sd3.5-large',
+            displayName: 'SD 3.5 Large',
+        }, 2)
+        const geminiText = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-pro' }, 3)
+
+        expect(geminiImage.imageInputFidelity).toEqual({ level: 'high' })
+        expect(stabilityImage.imageInputFidelity).toEqual({ level: 'high' })
+        expect(geminiText.imageInputFidelity).toBeUndefined()
+    })
 })
 
 // =============================================================================
@@ -263,6 +288,31 @@ describe('AiModelsSync — Anthropic model fetch failure modes', () => {
         })
 
         await expect(sync.fetchAnthropicModels()).rejects.toThrow('Anthropic API key is required but not provided')
+    })
+
+    it('keeps exact dated Anthropic model ids when filtering the Bedrock catalog', () => {
+        const sync: any = new AiModelsSync({
+            dynamoDBService: {} as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: 'test-key',
+            googleApiKey: 'test-key',
+        })
+        const projected = sync.projectBedrockAnthropicModel(
+            'anthropic.claude-haiku-4-5-20251001-v1:0',
+            'Claude Haiku 4.5',
+        )
+        const models = sync.filterAnthropicModels([projected], true)
+
+        expect(models).toEqual([{
+            id: 'claude-haiku-4-5-20251001',
+            display_name: 'Claude Haiku 4.5',
+            created_at: '2025-10-01',
+        }])
+        expect(sync.mapAnthropicModelToAiModel(models[0], 1)).toMatchObject({
+            provider: 'Anthropic',
+            model: 'claude-haiku-4-5-20251001',
+            modelVersion: 'claude-haiku-4-5-20251001',
+        })
     })
 
     it('propagates errors from models.list()', async () => {

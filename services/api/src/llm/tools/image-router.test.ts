@@ -29,7 +29,12 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
         aiRequestReceivedAt: 1,
         enableImageGeneration: true,
         imageSize: '1024x1024',
-        imageModelMetaInfo: { provider: 'Google', model: 'Gemini Image', modelVersion: 'gemini-2.5-flash-image' },
+        imageModelMetaInfo: {
+            provider: 'Google',
+            model: 'Gemini Image',
+            modelVersion: 'gemini-2.5-flash-image',
+            imageInputFidelity: { level: 'high' },
+        },
         imageModelVersion: 'gemini-2.5-flash-image',
         imageProviderName: 'Google',
         generatedImagePrompt: 'Paint a cat in watercolor with the new style.',
@@ -311,7 +316,7 @@ describe('ImageRouter', () => {
             expect.stringContaining('CHARACTER FIDELITY RESTORATION EDIT'),
         )
         expect(fidelityRequest.messages[0]?.content).toEqual(
-            expect.stringContaining('Do not clean up, beautify, photorealize, vectorize, smooth'),
+            expect.stringContaining('fully re-render every character depiction as photorealistic photography'),
         )
         expect(fidelityRequest.imageGenerationReferences).toEqual([
             {
@@ -326,6 +331,57 @@ describe('ImageRouter', () => {
             },
         ])
         expect(result.imageUsage).toEqual({ generatedCount: 2, size: '3:2', quality: 'high' })
+    })
+
+    it('rejects reference-conditioned Character Creator when routed metadata declares standard fidelity', async () => {
+        const { router, process, createTransient } = createRouter()
+        const state = createState({
+            capabilityUsageMode: 'character-creator',
+            capabilityUsagePrompt: 'Use the fixed multi-view layout.',
+            capabilityReferenceImages: ['data:image/jpeg;base64,character-sheet-layout'],
+            referenceImages: ['data:image/jpeg;base64,user-character-reference'],
+            imageProviderName: 'Google',
+            imageModelVersion: 'reference-lite-image',
+            imageModelMetaInfo: {
+                provider: 'Google',
+                model: 'Reference Lite Image',
+                modelVersion: 'reference-lite-image',
+                imageInputFidelity: { level: 'standard' },
+            },
+        })
+
+        const result = await router.execute(state)
+
+        expect(result.error).toContain('CHARACTER_CREATOR_REFERENCE_FIDELITY_UNSUPPORTED')
+        expect(result.error).toContain('Reference Lite Image')
+        expect(result.error).toContain('synchronized metadata declares high fidelity')
+        expect(createTransient).not.toHaveBeenCalled()
+        expect(process).not.toHaveBeenCalled()
+    })
+
+    it('routes by fidelity metadata without inspecting provider or model names', async () => {
+        const { router, process } = createRouter([
+            { generatedImages: [TINY_PNG_BASE64] },
+            { generatedImages: ['nats-obj://workspace-workspace-1-files/character-sheet.png'] },
+        ])
+
+        const result = await router.execute(createState({
+            capabilityUsageMode: 'character-creator',
+            capabilityUsagePrompt: 'Use the fixed multi-view layout.',
+            capabilityReferenceImages: ['data:image/jpeg;base64,character-sheet-layout'],
+            referenceImages: ['data:image/jpeg;base64,user-character-reference'],
+            imageProviderName: 'OpenAI',
+            imageModelVersion: 'gpt-image-1-mini',
+            imageModelMetaInfo: {
+                provider: 'OpenAI',
+                model: 'GPT Image 1 Mini',
+                modelVersion: 'gpt-image-1-mini',
+                imageInputFidelity: { level: 'high' },
+            },
+        }))
+
+        expect(result.error).toBeUndefined()
+        expect(process).toHaveBeenCalledTimes(2)
     })
 
     it('takes Character Creator source images from the authoritative branch resolution when reasoning extraction fails', async () => {
@@ -344,6 +400,7 @@ describe('ImageRouter', () => {
                 provider: 'OpenAI',
                 model: 'GPT Image 2',
                 modelVersion: 'gpt-image-2',
+                imageInputFidelity: { level: 'high' },
             },
             mediaBranchCandidateSnapshot: {
                 promptText: 'Create character',
@@ -452,6 +509,7 @@ describe('ImageRouter', () => {
                 model: 'Stable Diffusion 3.5 Large',
                 modelVersion: 'sd3.5-large',
                 imagePromptMaxChars: 10000,
+                imageInputFidelity: { level: 'high' },
             },
         })
 

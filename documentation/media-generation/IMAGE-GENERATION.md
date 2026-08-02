@@ -43,7 +43,7 @@ graph LR
 
 All three paths receive the same input from the `ImageRouter`: the text model's enhanced prompt as the user message, plus the VLM-approved reference images as content blocks, plus `image_size`. They are invoked with `enable_image_generation: true`, which is what makes the transient image provider skip its own `START_STREAM` / `END_STREAM` and route into the image path rather than the normal text path. They differ only in the vendor API and in how partial frames (if any) are produced.
 
-### OpenAI — GPT Image Models (`gpt-image-1`, `gpt-image-1.5`, `gpt-image-1-mini`)
+### OpenAI — GPT Image Models (`gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, `gpt-image-1-mini`)
 
 GPT Image models use the dedicated **Image API**, *not* the Responses API. The provider's `_stream_impl` dispatches on the model prefix:
 
@@ -62,6 +62,8 @@ Within the Image API path, the presence of reference images selects the endpoint
 | With reference images | `client.images.edit(image=files, stream=True, partial_images=3)` | `images.edit()` is the endpoint that accepts reference images; `images.generate()` is text-only. |
 
 Reference-image data URLs are converted to `BytesIO` file objects via `_data_url_to_file()` before being passed to the SDK. The streaming response yields `ImageGenPartialImageEvent` objects (each carrying progressive base64) and a terminal `ImageGenCompletedEvent` (final base64 + usage data). `partial_images=3` is what drives the up-to-three progressive previews the canvas paints into the placeholder node.
+
+Reference-conditioned Character Creator requires high-fidelity image input handling. The NEX model-synchronization workload stores `imageInputFidelity` on each image-model record: `level` describes the effective routed fidelity and optional `requestValue` describes a vendor parameter that must be sent. `ImageRouter` accepts reference-conditioned Character Creator only when the selected record declares `level: high`; the OpenAI adapter forwards `requestValue` without inspecting the model ID.
 
 ### OpenAI — Responses API Models (`gpt-4.1`, `gpt-5`, …)
 

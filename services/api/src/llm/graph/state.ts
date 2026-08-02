@@ -4,6 +4,7 @@ import type {
     CapabilityJsonValue,
     CapabilityPromptReference,
     CapabilityReasoningModelVariant,
+    ImageInputFidelityPolicy,
     MediaBranchCandidateSnapshot,
     MediaBranchVlmResolution,
     MediaBranchLineagePlan,
@@ -66,6 +67,7 @@ export type AiModelMetaInfo = {
     defaultTemperature?: number
     supportsSystemPrompt?: boolean
     imagePromptMaxChars?: number
+    imageInputFidelity?: ImageInputFidelityPolicy
     videoMaxReferenceImages?: number
     pricing?: Record<string, any>
     [key: string]: unknown
@@ -115,6 +117,9 @@ export const getVideoMaxReferenceImages = (meta: AiModelMetaInfo | undefined): n
     const raw = meta?.videoMaxReferenceImages
     return typeof raw === 'number' && raw > 0 ? raw : DEFAULT_VIDEO_MAX_REFERENCE_IMAGES
 }
+
+export const hasHighImageInputFidelity = (meta: AiModelMetaInfo | undefined): boolean =>
+    meta?.imageInputFidelity?.level === 'high'
 
 export type ChatMessage = {
     role: 'user' | 'assistant' | 'system' | string

@@ -146,6 +146,8 @@ describe('buildImageModelPrompt', () => {
         expect(prompt).toContain('Image 1 is the authoritative character identity')
         expect(prompt).toContain('Image 2 is the authoritative output-layout template')
         expect(prompt).toContain('Preserve source identity and medium in every depiction')
+        expect(prompt).toContain('A photographic source requires photorealistic character depictions')
+        expect(prompt).toContain('Never copy the template\'s illustrated rendering style')
         expect(prompt).toContain('Use rough watercolor paper and visible brush texture.')
         expect(prompt.length).toBeLessThan(1_000)
         expect(prompt).not.toContain('Invent a blonde character in green clothing.')
@@ -164,7 +166,11 @@ describe('buildCharacterFidelityRestorationPrompt', () => {
         expect(prompt).toContain('exact facial construction and proportions')
         expect(prompt).toContain('line presence and line-weight variation')
         expect(prompt).toContain('visible grain, surface texture')
+        expect(prompt).toContain('If the authoritative source medium is photography')
+        expect(prompt).toContain('fully re-render every character depiction as photorealistic photography')
+        expect(prompt).toContain('Replace every character depiction completely wherever necessary')
         expect(prompt).toContain('generic polished concept art or generic AI illustration')
+        expect(prompt).not.toContain('Do not clean up, beautify, photorealize')
     })
 
     it('requires at least one authoritative source image', () => {

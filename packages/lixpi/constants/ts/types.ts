@@ -177,6 +177,11 @@ export type ImageSizeOption = {
 
 export type ImageSizeMode = 'resolution' | 'aspectRatio'
 
+export type ImageInputFidelityPolicy = {
+    level: 'standard' | 'high'
+    requestValue?: 'low' | 'high'
+}
+
 export type MediaGenerationConfigControlKey =
     | 'imageSize'
     | 'aspectRatio'
@@ -1797,6 +1802,9 @@ export type AiModel = {
     // Describes what imageSizes values mean for this image-generation model.
     imageSizeMode?: ImageSizeMode
     imageSizes?: ImageSizeOption[]
+    // Effective fidelity for reference-conditioned image generation. A provider
+    // request value is included only when the model API requires one.
+    imageInputFidelity?: ImageInputFidelityPolicy
     // Video generation option lists (VEO and future video providers). Reuse the
     // ImageSizeOption { value, label } shape the size dropdown already consumes.
     videoAspectRatios?: ImageSizeOption[]

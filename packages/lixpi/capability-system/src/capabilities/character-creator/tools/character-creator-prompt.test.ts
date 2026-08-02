@@ -43,6 +43,8 @@ describe('Character Creator prompt construction', () => {
         expect(prompt.includes('Do not replace it with a simplified portrait-and-turnaround strip.')).toBe(true)
         expect(prompt.includes('REFERENCE ASSETS (2 authorized images)')).toBe(true)
         expect(prompt.includes('Preserve identity from references.')).toBe(true)
+        expect(prompt.includes('When the authoritative source medium is photography, every character depiction must remain photorealistic')).toBe(true)
+        expect(prompt.includes('The illustrated character inside the layout template is a negative style reference')).toBe(true)
         expect(prompt.includes('Every section from the attached template must be present')).toBe(true)
         expect(prompt.includes('Do not crop any full-height view.')).toBe(true)
     })

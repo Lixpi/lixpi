@@ -56,6 +56,7 @@ export const buildCharacterFidelityRestorationPrompt = (sourceReferenceCount: nu
         '',
         'IMAGE ROLES',
         'Image 1 is the generated character-design sheet to edit. It is authoritative for the complete canvas, layout, panel geometry, alignment guides, labels, typography, notes, swatches, spacing, framing, poses, and view placement.',
+        'Image 1 is not authoritative for character identity, anatomy, facial likeness, clothing details, materials, or rendering medium. Its rendered characters are disposable placeholders.',
         `${sourceRange} ${sourceReferenceCount === 1 ? 'is' : 'are'} the authoritative source ${sourceReferenceCount === 1 ? 'image' : 'images'} for the character identity, design, and original rendering style.`,
         '',
         'LOCKED SHEET INVARIANTS',
@@ -68,11 +69,14 @@ export const buildCharacterFidelityRestorationPrompt = (sourceReferenceCount: nu
         '',
         'AUTHORITATIVE RENDERING-STYLE INVARIANTS',
         `Render every character depiction in the same visual medium as ${sourceRange}, matching its concrete medium signature, line presence and line-weight variation, contour color, interior linework, edge softness or hardness, brush or pencil mark morphology, wash behavior, pigment density, shading method, palette relationships, contrast, paper or canvas substrate, visible grain, surface texture, and detail density.`,
+        'If the authoritative source medium is photography, fully re-render every character depiction as photorealistic photography. Preserve recognizable facial likeness, real human anatomy, natural skin pores and tonal variation, individual hair detail, photographic fabric and material response, and physically coherent neutral studio lighting.',
+        'For a photographic source, remove every cartoon, drawing, painting, concept-art, cel-shaded, outlined, paper-textured, or otherwise illustrated trait inherited from Image 1. Do not preserve the draft character rendering merely because Image 1 controls composition.',
+        'If the authoritative source medium is illustration, preserve that exact illustrated medium and do not convert it to photography.',
         'The source medium must construct the character itself at every scale. Preserve source-specific marks on faces, hair, skin, garments, and props—not merely on the page background.',
-        'Do not clean up, beautify, photorealize, vectorize, smooth, sharpen, airbrush, homogenize, modernize, or reinterpret the source rendering. Do not replace distinctive facial construction or handmade texture with generic polished concept art or generic AI illustration.',
+        'Do not clean up, beautify, vectorize, smooth, sharpen, airbrush, homogenize, modernize, or reinterpret the source rendering. Do not replace distinctive facial construction or handmade texture with generic polished concept art or generic AI illustration.',
         '',
         'OUTPUT',
-        'Return the complete edited landscape sheet as one image. Keep everything from Image 1 unchanged except the minimum character pixels required to restore the exact identity, design, and rendering style from the authoritative source images.',
+        'Return the complete edited landscape sheet as one image. Replace every character depiction completely wherever necessary to restore the exact identity, design, and rendering style from the authoritative source images. Keep the sheet background, panels, labels, guides, notes, swatches, spacing, framing, poses, and view placement unchanged.',
     ].join('\n')
 }
 
@@ -106,6 +110,8 @@ export const buildImageModelPrompt = (state: ProviderState): string => {
                     `${sourceImageRange} ${sourceReferenceCount === 1 ? 'is' : 'are'} the authoritative character identity, construction, colors, materials, and rendering-style source.`,
                     `${templateImageRange} ${capabilityReferenceCount === 1 ? 'is' : 'are'} the authoritative output-layout template, never character-appearance inspiration.`,
                     'Populate the complete template with the source character. Preserve source identity and medium in every depiction while preserving the template geometry, labels, guides, panels, and view coverage.',
+                    'A photographic source requires photorealistic character depictions with recognizable facial likeness, real human anatomy, natural skin and hair detail, photographic materials, and physically coherent studio lighting.',
+                    'Never copy the template\'s illustrated rendering style. Its depicted figure, linework, shading, facial simplification, and paper texture are negative style references.',
                 ].join('\n')
                 : undefined,
             capabilityUsagePrompt

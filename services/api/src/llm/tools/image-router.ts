@@ -3,7 +3,7 @@
 import { info, warn, err } from '@lixpi/debug-tools'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
-import type { ProviderState } from '../graph/state.ts'
+import { hasHighImageInputFidelity, type ProviderState } from '../graph/state.ts'
 import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import {
@@ -236,6 +236,16 @@ export class ImageRouter {
             let finalState: ProviderState
             const requiresFidelityPass = state.capabilityUsageMode === 'character-creator'
                 && sourceReferenceImages.length > 0
+            if (requiresFidelityPass && !hasHighImageInputFidelity(imageMeta)) {
+                let modelLabel = imageModel
+                if (typeof imageMeta.model === 'string') modelLabel = imageMeta.model
+                if (typeof imageMeta.title === 'string') modelLabel = imageMeta.title
+                throw new Error(
+                    'CHARACTER_CREATOR_REFERENCE_FIDELITY_UNSUPPORTED: '
+                    + `${modelLabel} does not advertise high-fidelity image input support; `
+                    + 'select an image model whose synchronized metadata declares high fidelity.',
+                )
+            }
 
             if (requiresFidelityPass) {
                 const draftInstanceKey = `${instanceKey}:layout-synthesis`
