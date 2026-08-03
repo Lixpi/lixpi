@@ -301,10 +301,16 @@ services:
             # @lixpi workspace packages the workload imports (mirrors lixpi-api)
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
+            # Every file `constants/ts/index.ts` re-exports must be listed here. An
+            # unlisted one silently resolves to the copy baked into the image, so host
+            # edits never arrive and any runtime value added to it surfaces in this
+            # service as "does not provide an export named ...".
+            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/metrics-contracts.ts:/usr/src/service/packages/lixpi/constants/ts/metrics-contracts.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
@@ -392,10 +398,16 @@ services:
             - ./packages/lixpi/canvas-engine/src:/usr/src/service/packages/lixpi/canvas-engine/src:ro,cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
+            # Every file `constants/ts/index.ts` re-exports must be listed here. An
+            # unlisted one silently resolves to the copy baked into the image, so host
+            # edits never arrive and any runtime value added to it surfaces in this
+            # service as "does not provide an export named ...".
+            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/metrics-contracts.ts:/usr/src/service/packages/lixpi/constants/ts/metrics-contracts.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
@@ -529,10 +541,16 @@ services:
             - ./packages/lixpi/canvas-engine/src:/usr/src/service/packages/lixpi/canvas-engine/src:ro,cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
             - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
+            # Every file `constants/ts/index.ts` re-exports must be listed here. An
+            # unlisted one silently resolves to the copy baked into the image, so host
+            # edits never arrive and any runtime value added to it surfaces in this
+            # service as "does not provide an export named ...".
+            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/packages/lixpi/constants/ts/asset-types.ts:ro,cached
             - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/metrics-contracts.ts:/usr/src/service/packages/lixpi/constants/ts/metrics-contracts.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
