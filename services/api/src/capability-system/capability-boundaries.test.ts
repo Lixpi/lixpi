@@ -22,6 +22,26 @@ async function readSources(directory: string): Promise<Array<{ path: string; sou
     })))
 }
 
+function expectSourceNotToContain(source: string, snippet: string, label: string): void {
+    expect(
+        source.includes(snippet),
+        `${label} should not contain:\n${snippet}`,
+    ).toBe(false)
+}
+
+function publishedMediaStrategyNames(moduleSource: string, moduleId: string): string[] {
+    const mediaStrategies = moduleSource.match(/mediaStrategies\s*:\s*\[([\s\S]*?)\]/u)?.[1]
+    if (!mediaStrategies) return []
+    const names = [...mediaStrategies.matchAll(/\bnew\s+([A-Z][A-Za-z0-9]*)\s*\(/gu)]
+        .map(match => match[1])
+        .filter(name => name !== undefined)
+    expect(
+        names.length,
+        `${moduleId} must construct each published media strategy in its module definition`,
+    ).toBeGreaterThan(0)
+    return names
+}
+
 describe('Capability module architecture boundaries', () => {
     const capabilitiesRoot = new URL(
         '../../../shared/capability-system/src/capabilities/',
@@ -45,8 +65,8 @@ describe('Capability module architecture boundaries', () => {
     it('keeps packaged Capability modules independent of service implementations', async () => {
         const moduleSources = await readSources(capabilitiesRoot.pathname)
         for (const { path, source } of moduleSources) {
-            expect(source.includes('services/api'), `${path} imports the API service`).toBe(false)
-            expect(source.includes('services/web-ui'), `${path} imports the web UI service`).toBe(false)
+            expectSourceNotToContain(source, 'services/api', `${path} imports the API service`)
+            expectSourceNotToContain(source, 'services/web-ui', `${path} imports the web UI service`)
         }
     })
 
@@ -73,8 +93,56 @@ describe('Capability module architecture boundaries', () => {
             for (const other of moduleDirectories.filter(candidate => candidate.name !== entry.name)) {
                 const sources = await readSources(moduleRoot.pathname)
                 for (const { path, source } of sources) {
-                    expect(source.includes(`/capabilities/${other.name}/`), `${path} imports ${other.name}`).toBe(false)
+                    expectSourceNotToContain(
+                        source,
+                        `/capabilities/${other.name}/`,
+                        `${path} imports ${other.name}`,
+                    )
                 }
+            }
+        }
+    })
+
+    it('keeps module-published media runtimes owned by their Capability modules', async () => {
+        const moduleDirectories = (await readdir(capabilitiesRoot, { withFileTypes: true }))
+            .filter(entry => entry.isDirectory())
+        const apiSources = await readSources(new URL('../', import.meta.url).pathname)
+        const genericBackendSources = (await readSources(new URL('../backend/', capabilitiesRoot).pathname))
+            .filter(({ path }) => !path.endsWith('/index.ts'))
+
+        for (const moduleDirectory of moduleDirectories) {
+            const moduleId = moduleDirectory.name
+            const moduleBackendSource = await readFile(
+                new URL(`${moduleId}/backend/index.ts`, capabilitiesRoot),
+                'utf8',
+            )
+            const strategyNames = publishedMediaStrategyNames(moduleBackendSource, moduleId)
+
+            for (const { path, source } of apiSources) {
+                expectSourceNotToContain(
+                    source,
+                    `/capabilities/${moduleId}/backend/`,
+                    `${path} imports the concrete ${moduleId} backend`,
+                )
+                if (strategyNames.length === 0) continue
+                expect(
+                    path.includes(`/${moduleId}-runtime`),
+                    `${path} places the ${moduleId} media runtime in the API service`,
+                ).toBe(false)
+                for (const strategyName of strategyNames) {
+                    expectSourceNotToContain(
+                        source,
+                        strategyName,
+                        `${path} imports the concrete ${moduleId} media strategy`,
+                    )
+                }
+            }
+            for (const { path, source } of genericBackendSources) {
+                expectSourceNotToContain(
+                    source,
+                    `/capabilities/${moduleId}/`,
+                    `${path} couples generic Capability infrastructure to ${moduleId}`,
+                )
             }
         }
     })
@@ -95,8 +163,8 @@ describe('Capability module architecture boundaries', () => {
             }
             const sources = await readSources(skillsDirectory.pathname)
             for (const { path, source } of sources) {
-                expect(source.includes('registerActions'), `${path} registers executable Tool actions`).toBe(false)
-                expect(source.includes('ActionDependencies'), `${path} owns executable Tool dependencies`).toBe(false)
+                expectSourceNotToContain(source, 'registerActions', `${path} registers executable Tool actions`)
+                expectSourceNotToContain(source, 'ActionDependencies', `${path} owns executable Tool dependencies`)
             }
         }
     })

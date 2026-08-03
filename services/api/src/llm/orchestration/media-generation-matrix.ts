@@ -778,6 +778,7 @@ export class MediaGenerationMatrixOrchestrator {
                 modelVersion: model.meta.modelVersion,
                 contextWindow: model.meta.contextWindow,
                 maxCompletionSize: model.meta.maxCompletionSize,
+                inferenceCapabilities: model.meta.inferenceCapabilities,
             })),
         ))
         const capabilityOnlyOutput = requiredCapabilityProducedCapabilityOnlyOutput(state)

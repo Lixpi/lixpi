@@ -1,6 +1,6 @@
 'use strict'
 
-import { describe, it, expect, beforeAll, afterEach } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PROVIDER_NAMES } from '@lixpi/constants'
 
@@ -39,19 +39,20 @@ describe('AiModelsSync — image generation option metadata', () => {
         expect(model.imageSizes?.map((o: any) => o.value)).toContain('16:9')
     })
 
-    it('synchronizes OpenAI reference-fidelity behavior per model', () => {
+    it('synchronizes OpenAI image-reference capabilities per model', () => {
         const gptImage2 = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-2' }, 1)
         const gptImage15 = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1.5' }, 2)
         const gptImageMini = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1-mini' }, 3)
         const gptImage1 = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1' }, 4)
 
-        expect(gptImage2.imageInputFidelity).toEqual({ level: 'high' })
-        expect(gptImage15.imageInputFidelity).toEqual({ level: 'high', requestValue: 'high' })
-        expect(gptImageMini.imageInputFidelity).toEqual({ level: 'standard' })
-        expect(gptImage1.imageInputFidelity).toEqual({ level: 'high', requestValue: 'high' })
+        expect(gptImage2.imageReferenceCapabilities.inputFidelity).toBe('provider-managed')
+        expect(gptImage15.imageReferenceCapabilities.inputFidelity).toBe('high')
+        expect(gptImageMini.imageReferenceCapabilities.inputFidelity).toBe('standard')
+        expect(gptImage1.imageReferenceCapabilities.inputFidelity).toBe('high')
+        expect(gptImage1.imageReferenceCapabilities.maxIdentityReferenceImages).toBe(5)
     })
 
-    it('synchronizes high reference fidelity for non-OpenAI image providers', () => {
+    it('synchronizes provider-specific reference controls for non-OpenAI image providers', () => {
         const geminiImage = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-flash-image-preview' }, 1)
         const stabilityImage = sync.mapStabilityModelToAiModel({
             id: 'sd3.5-large',
@@ -59,9 +60,70 @@ describe('AiModelsSync — image generation option metadata', () => {
         }, 2)
         const geminiText = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-pro' }, 3)
 
-        expect(geminiImage.imageInputFidelity).toEqual({ level: 'high' })
-        expect(stabilityImage.imageInputFidelity).toEqual({ level: 'high' })
-        expect(geminiText.imageInputFidelity).toBeUndefined()
+        expect(geminiImage.imageReferenceCapabilities.conditioningModes).toContain('identity')
+        expect(stabilityImage.imageReferenceCapabilities.conditioningModes).not.toContain('identity')
+        expect(geminiText.imageReferenceCapabilities).toBeUndefined()
+    })
+})
+
+// =============================================================================
+// INFERENCE CAPABILITIES — provider request behavior synchronized per model
+// =============================================================================
+
+describe('AiModelsSync — inference capabilities', () => {
+    let sync: any
+
+    beforeAll(() => {
+        process.env.ORG_NAME = process.env.ORG_NAME || 'test-org'
+        process.env.STAGE = process.env.STAGE || 'test'
+        sync = new AiModelsSync({
+            dynamoDBService: {} as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: 'test-key',
+            googleApiKey: 'test-key',
+        })
+    })
+
+    it('synchronizes Sonnet 5 without temperature and with adaptive thinking', () => {
+        const model = sync.mapAnthropicModelToAiModel({ id: 'claude-sonnet-5' }, 1)
+
+        expect(model.inferenceCapabilities).toMatchObject({
+            thinkingMode: 'anthropic-adaptive',
+            requiresAutoToolChoiceWithThinking: true,
+            supportsTemperature: false,
+            requiresClosedJsonSchema: false,
+            supportedInputKinds: ['image', 'video-frame', 'document-text'],
+        })
+    })
+
+    it('synchronizes OpenAI temperature support without requiring API model-name matching', () => {
+        const gpt5 = sync.mapOpenAIModelToAiModel({ id: 'gpt-5-chat-latest' }, 1)
+        const gpt41 = sync.mapOpenAIModelToAiModel({ id: 'gpt-4.1' }, 2)
+
+        expect(gpt5.inferenceCapabilities.supportsTemperature).toBe(false)
+        expect(gpt41.inferenceCapabilities.supportsTemperature).toBe(true)
+        expect(gpt41.inferenceCapabilities.requiresClosedJsonSchema).toBe(true)
+    })
+
+    it('synchronizes provider-native Google thinking modes', () => {
+        const gemini25 = sync.mapGoogleModelToAiModel({ name: 'gemini-2.5-flash-image' }, 1)
+        const gemini31 = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-pro' }, 2)
+
+        expect(gemini25.inferenceCapabilities.thinkingMode).toBe('google-budget')
+        expect(gemini31.inferenceCapabilities.thinkingMode).toBe('google-level')
+        expect(gemini31.inferenceCapabilities.supportedInputKinds).toContain('audio')
+    })
+
+    it('synchronizes non-reasoning media models with a closed inference profile', () => {
+        const veo = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-generate-preview' }, 1)
+        const stability = sync.mapStabilityModelToAiModel({ id: 'sd3.5-large', displayName: 'SD 3.5 Large' }, 2)
+
+        expect(veo.inferenceCapabilities).toMatchObject({
+            thinkingMode: 'none',
+            supportsTemperature: false,
+            supportsSystemPrompt: false,
+        })
+        expect(stability.inferenceCapabilities).toEqual(veo.inferenceCapabilities)
     })
 })
 
@@ -267,13 +329,20 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
 
 describe('AiModelsSync — Anthropic model fetch failure modes', () => {
     const originalAnthropicApiKey = process.env.ANTHROPIC_API_KEY
+    let consoleWarnSpy: ReturnType<typeof vi.spyOn> | null = null
 
     beforeAll(() => {
         process.env.ORG_NAME = process.env.ORG_NAME || 'test-org'
         process.env.STAGE = process.env.STAGE || 'test'
     })
 
+    beforeEach(() => {
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    })
+
     afterEach(() => {
+        consoleWarnSpy?.mockRestore()
+        consoleWarnSpy = null
         if (originalAnthropicApiKey === undefined) delete process.env.ANTHROPIC_API_KEY
         else process.env.ANTHROPIC_API_KEY = originalAnthropicApiKey
     })
@@ -313,6 +382,52 @@ describe('AiModelsSync — Anthropic model fetch failure modes', () => {
             model: 'claude-haiku-4-5-20251001',
             modelVersion: 'claude-haiku-4-5-20251001',
         })
+    })
+
+    it('keeps current pinned dateless Anthropic model ids from the Bedrock catalog', () => {
+        const sync: any = new AiModelsSync({
+            dynamoDBService: {} as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: 'test-key',
+            googleApiKey: 'test-key',
+        })
+        const projected = sync.projectBedrockAnthropicModel(
+            'anthropic.claude-sonnet-5',
+            'Claude Sonnet 5',
+        )
+        const models = sync.filterAnthropicModels([projected], true)
+
+        expect(models).toEqual([{
+            id: 'claude-sonnet-5',
+            display_name: 'Claude Sonnet 5',
+        }])
+        expect(sync.mapAnthropicModelToAiModel(models[0], 1)).toMatchObject({
+            provider: 'Anthropic',
+            model: 'claude-sonnet-5',
+            modelVersion: 'claude-sonnet-5',
+            title: 'Claude Sonnet 5',
+            shortTitle: 'Sonnet 5',
+            contextWindow: 1000000,
+            maxCompletionSize: 128000,
+        })
+    })
+
+    it('rejects Bedrock compatibility aliases that are not invocable base model ids', () => {
+        const sync: any = new AiModelsSync({
+            dynamoDBService: {} as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: 'test-key',
+            googleApiKey: 'test-key',
+        })
+
+        expect(sync.projectBedrockAnthropicModel(
+            'anthropic.claude-3-haiku-20240307-v1:0:48k',
+            'Claude 3 Haiku',
+        )).toBeUndefined()
+        expect(sync.projectBedrockAnthropicModel(
+            'anthropic.claude-3-haiku-20240307-v1:0:200k',
+            'Claude 3 Haiku',
+        )).toBeUndefined()
     })
 
     it('propagates errors from models.list()', async () => {

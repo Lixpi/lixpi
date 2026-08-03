@@ -171,6 +171,7 @@ export const runRouter = async (state: StyleExtractionState, logger: StageLogger
         const result = await callStructuredVlm<SceneAssessment>({
             provider: state.input.analysisProvider,
             modelVersion: state.input.analysisModel.modelVersion,
+            inferenceCapabilities: state.input.analysisModel.inferenceCapabilities,
             systemPrompt: SYSTEM_PROMPT,
             userMessages: messages,
             schema,

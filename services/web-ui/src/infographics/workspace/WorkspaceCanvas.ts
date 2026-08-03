@@ -63,8 +63,12 @@ import {
     type AiPromptComposerSubmitData,
 } from '$src/components/proseMirror/aiPromptComposer.ts'
 import { createDefaultCapabilityCatalogClient } from '$src/services/capability-catalog-client.ts'
-import { createPromptReferenceCatalogClient } from '$src/services/prompt-reference-catalog-client.ts'
 import {
+    createPromptReferenceCatalogClient,
+    type PromptReferenceCatalogClient,
+} from '$src/services/prompt-reference-catalog-client.ts'
+import {
+    CapabilityModulePromiseCache,
     createMediaPromptReferencePreview,
     type PromptReferencePreviewRenderer,
 } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
@@ -926,6 +930,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         onAssetAttach,
     } = options
     let workspaceId = options.workspaceId
+    const capabilityModuleCache = new CapabilityModulePromiseCache()
+    let promptReferenceCatalogClient: PromptReferenceCatalogClient | undefined
+    let promptReferenceCatalogOrganizationId = ''
+    const getPromptReferenceCatalogClient = (organizationId = String(workspaceStore.getData('organizationId') ?? '')): PromptReferenceCatalogClient => {
+        if (!promptReferenceCatalogClient || organizationId !== promptReferenceCatalogOrganizationId) {
+            promptReferenceCatalogOrganizationId = organizationId
+            promptReferenceCatalogClient = createPromptReferenceCatalogClient(workspaceId, organizationId)
+        }
+        return promptReferenceCatalogClient
+    }
     const debugLoggingEnabled = isWorkspaceCanvasDebugEnabled()
     const connectorStyles = settings.connector.styles
     const selectionStyles = settings.selection.styles
@@ -6063,6 +6077,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return {
             getNode: getPromptReferencePreviewNode,
             environment: getContextPreviewEnvironment(),
+            getCapabilityModule: async moduleId => (await getPromptReferenceCatalogClient().getModule(moduleId)).meta,
+            capabilityModuleCache,
             ...options,
         }
     }
@@ -6996,10 +7012,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             className: 'workspace-canvas-global-composer',
             controlFactories: createDefaultPromptControlFactories(),
             initialContent: readGlobalComposerDraft(),
-            promptReferenceCatalog: createPromptReferenceCatalogClient(
-                workspaceId,
-                workspaceStore.getData('organizationId') as string,
-            ),
+            promptReferenceCatalog: getPromptReferenceCatalogClient(),
             promptReferencePreviewRenderer: getPromptReferencePreviewRenderer(),
             onContentChange: (value: object) => {
                 try {
@@ -13812,10 +13825,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         schema,
                         plugins,
                         enablePromptReferences: true,
-                        promptReferenceCatalog: createPromptReferenceCatalogClient(
-                            workspaceId,
-                            asset.organizationId,
-                        ),
+                        promptReferenceCatalog: getPromptReferenceCatalogClient(asset.organizationId),
                         promptReferencePreviewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true }),
                         proseMirrorAuthority: {
                             organizationId: asset.organizationId,

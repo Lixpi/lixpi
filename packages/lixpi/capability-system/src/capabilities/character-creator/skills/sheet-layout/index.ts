@@ -12,8 +12,8 @@ export function createCharacterSheetLayoutSkillPackage(storage: InstructionSkill
     return createInstructionSkillPackage({
         capabilityId: CHARACTER_SHEET_LAYOUT_SKILL_ID,
         name: 'Character Sheet Layout',
-        description: 'Fixed multi-view layout and composition constraints for character sheets.',
-        summary: 'Fixed portrait, turnaround, and pose layout for one-image character sheets.',
+        description: 'Provider-neutral panel graph and deterministic composition constraints for character sheets.',
+        summary: 'Isolated character panels assembled into a deterministic 3840x2560 sheet.',
         tags: ['character', 'layout', 'turnaround'],
         exportName: 'layout',
         resourceId: CHARACTER_SHEET_LAYOUT_RESOURCE_ID,

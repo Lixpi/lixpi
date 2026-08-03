@@ -16,14 +16,13 @@ import {
 import { CHARACTER_CREATOR_TOOL_ID } from '../shared/character-creator-routing.ts'
 
 export function createCharacterCreatorToolPackage(
-    dependencies: CharacterCreatorActionDependencies,
     storage: CharacterCreatorCapabilityStorage,
 ): CapabilityToolPackageInstaller {
     return {
         kind: 'tool',
         capabilityId: CHARACTER_CREATOR_TOOL_ID,
         registerActions: (registry: CapabilityActionRegistry): void => {
-            registerCharacterCreatorActions(registry, dependencies)
+            registerCharacterCreatorActions(registry)
         },
         seed: async (context: CapabilityPackageSeedContext): Promise<void> => {
             await seedCharacterCreatorTool(context, storage)

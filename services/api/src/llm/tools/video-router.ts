@@ -108,6 +108,7 @@ export class VideoRouter {
                 provider: problem.provider,
                 modelId: problem.modelId,
                 providerCode: problem.providerCode,
+                providerReason: problem.providerReason,
             })}`)
             await requestService.recordRunStatus({
                 generationRequestId: state.durableGenerationRequestId,

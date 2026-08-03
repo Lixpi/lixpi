@@ -13,7 +13,7 @@ import type {
     MediaGenerationProblem,
     MediaBranchLineagePlan,
 } from '@lixpi/constants'
-import { getPendingGeneratedMediaNodeId } from '@lixpi/canvas-engine'
+import { getMediaGenerationOperationNodeId } from '@lixpi/canvas-engine'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 
 import BlobModel from '../models/blob.ts'
@@ -110,7 +110,7 @@ const createDurableRunsFromLineagePlan = (lineagePlan: MediaBranchLineagePlan): 
             provider: provider as MediaGenerationRun['provider'],
             modelId: assignment.mediaModelId,
             status: 'pending',
-            operationNodeId: getPendingGeneratedMediaNodeId(assignment),
+            operationNodeId: getMediaGenerationOperationNodeId(assignment),
         }
     })
 }
@@ -265,7 +265,7 @@ export class MediaGenerationRequestService {
             }))
             const bindings = runs.map(run => ({
                 previousNodeId: run.operationNodeId,
-                operationNodeId: getPendingGeneratedMediaNodeId(assignmentByRun.get(run.generationRun)!),
+                operationNodeId: getMediaGenerationOperationNodeId(assignmentByRun.get(run.generationRun)!),
                 lineageParentNodeId: assignmentByRun.get(run.generationRun)!.lineageParentNodeId
                     ?? assignmentByRun.get(run.generationRun)!.branchLineNodeId
                     ?? assignmentByRun.get(run.generationRun)!.branchForkNodeId
@@ -274,7 +274,7 @@ export class MediaGenerationRequestService {
                     ?? '',
                 run: {
                     ...run,
-                    operationNodeId: getPendingGeneratedMediaNodeId(assignmentByRun.get(run.generationRun)!),
+                    operationNodeId: getMediaGenerationOperationNodeId(assignmentByRun.get(run.generationRun)!),
                 },
             }))
             const alreadyBound = !runsWereDeferred

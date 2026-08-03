@@ -3,7 +3,7 @@ import {
     PROMPT_REFERENCE_NODE_TYPE,
 } from '@lixpi/prosemirror'
 import { NodeSelection, TextSelection } from 'prosemirror-state'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
     atomIcon,
@@ -14,6 +14,7 @@ import {
     videoPlayGlyphIcon,
     videoVolumeHighGlyphIcon,
 } from '$src/svgIcons/index.ts'
+import { CapabilityModulePromiseCache } from './capabilityPromptReferencePreview.ts'
 import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import {
     createStateWithNodeSelection,
@@ -29,6 +30,27 @@ import {
     getPromptReferenceIcon,
     PromptReferenceNodeView,
 } from './promptReferenceNodeView.ts'
+
+const capabilityMeta = {
+    moduleId: 'global.character-creator',
+    name: 'Character Creator',
+    normalizedName: 'character creator',
+    summary: 'Creates a panel-first character sheet.',
+    tags: ['character'],
+    status: 'active' as const,
+    descriptionSheet: {
+        purpose: 'Creates a complete character description sheet from a prompt and optional references.',
+        expectedInputs: [{
+            name: 'Prompt',
+            requirement: 'required' as const,
+            accepts: ['prompt' as const],
+            description: 'Describe the character and requested changes.',
+        }],
+        bestResults: ['Supply 3 to 5 high-resolution views, including face and full-body views.'],
+        limitations: ['Missing angles and regions are inferred. Identity preservation is best effort.'],
+        executionCharacteristics: { cost: 'high' as const, latency: 'high' as const, summary: 'Generates and validates panels before assembly.' },
+    },
+}
 
 describe('PromptReferenceNodeView', () => {
     it.each([
@@ -72,6 +94,97 @@ describe('PromptReferenceNodeView', () => {
         expect(nodeView.dom.querySelector('.prompt-reference-chip-icon svg')).not.toBeNull()
         expect(nodeView.dom.querySelector('input')).toBeNull()
         expect(nodeView.dom.querySelector('.action-timeline-controls')).toBeNull()
+    })
+
+    it('loads the capability description through the shared context-preview card on focus', async () => {
+        const getCapabilityModule = vi.fn(async () => capabilityMeta)
+        const node = promptReference({
+            referenceType: 'capability-module',
+            moduleId: 'global.character-creator',
+            displayName: 'Character Creator',
+        })
+        const nodeView = new PromptReferenceNodeView(node, {
+            getNode: () => undefined,
+            getCapabilityModule,
+            environment: {
+                getDocuments: () => [],
+                getThreads: () => [],
+                getApiBaseUrl: () => '',
+                getAuthToken: async () => '',
+            },
+        })
+        document.body.append(nodeView.dom)
+        expect(nodeView.dom.classList.contains('workspace-ai-chat-panel-context-preview-tooltip-inline-label')).toBe(true)
+        const trigger = nodeView.dom.querySelector<HTMLElement>('.help-tooltip-trigger')!
+        trigger.focus()
+        const popover = document.body.querySelector<HTMLElement>('.help-tooltip-content')!
+        expect(popover.classList.contains('workspace-ai-chat-panel-context-preview-popover')).toBe(true)
+        expect(popover.querySelector('[role="status"]')?.textContent).toContain('Loading')
+        await new Promise(resolve => setTimeout(resolve, 0))
+        expect(popover.querySelector('.capability-description-card h2')?.textContent).toBe('Character Creator')
+        expect(popover.querySelectorAll('.capability-description-card section')).toHaveLength(4)
+        expect(Array.from(popover.querySelectorAll('.capability-description-card h3')).map(heading => heading.textContent))
+            .toEqual(['Expected inputs', 'Best results', 'Limitations', 'Execution'])
+        expect(popover.querySelector('.capability-description-columns')).toBeNull()
+        expect(getCapabilityModule).toHaveBeenCalledOnce()
+        nodeView.destroy()
+        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+    })
+
+    it('uses the shared canvas portal and viewport scale for capability and media cards', async () => {
+        const pane = document.createElement('div')
+        pane.className = 'workspace-pane'
+        const viewport = document.createElement('div')
+        viewport.className = 'workspace-viewport'
+        viewport.style.transform = 'matrix(1.5, 0, 0, 1.5, 0, 0)'
+        pane.append(viewport)
+        document.body.append(pane)
+        const node = promptReference({
+            referenceType: 'capability-module',
+            moduleId: 'global.character-creator',
+            displayName: 'Character Creator',
+        })
+        const nodeView = new PromptReferenceNodeView(node, {
+            inlinePopover: true,
+            getNode: () => undefined,
+            getCapabilityModule: async () => capabilityMeta,
+            environment: {
+                getDocuments: () => [],
+                getThreads: () => [],
+                getApiBaseUrl: () => '',
+                getAuthToken: async () => '',
+            },
+        })
+        viewport.append(nodeView.dom)
+
+        const popover = nodeView.dom.querySelector<HTMLElement>('.context-preview-inline-popover')!
+        nodeView.dom.dispatchEvent(new PointerEvent('pointerenter'))
+        await new Promise(resolve => setTimeout(resolve, 0))
+
+        expect(popover.parentElement).toBe(pane)
+        expect(popover.classList.contains('context-preview-inline-popover-portaled')).toBe(true)
+        expect(popover.classList.contains('context-preview-inline-popover-top')).toBe(true)
+        expect(popover.style.transform).toContain('scale(1.5)')
+        expect(popover.querySelector('.capability-description-card h2')?.textContent).toBe('Character Creator')
+
+        nodeView.destroy()
+        expect(popover.isConnected).toBe(false)
+    })
+
+    it('shares in-flight metadata lookups and evicts rejected cache entries for retry', async () => {
+        const cache = new CapabilityModulePromiseCache()
+        const load = vi.fn()
+            .mockRejectedValueOnce(new Error('offline'))
+            .mockResolvedValue(capabilityMeta)
+        await expect(cache.get('global.character-creator', load)).rejects.toThrow('offline')
+        const [left, right] = await Promise.all([
+            cache.get('global.character-creator', load),
+            cache.get('global.character-creator', load),
+        ])
+
+        expect(left).toBe(capabilityMeta)
+        expect(right).toBe(capabilityMeta)
+        expect(load).toHaveBeenCalledTimes(2)
     })
 
     it('renders an Action Timeline Artifact with its registered existing icon', () => {

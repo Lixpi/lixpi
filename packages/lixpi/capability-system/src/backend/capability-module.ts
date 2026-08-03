@@ -1,12 +1,16 @@
 'use strict'
 
 import type {
+    CapabilityExpectedInput,
     CapabilityJsonValue,
     CapabilityKind,
+    CapabilityModuleDescriptionSheet,
     CapabilityModuleMeta,
 } from '@lixpi/constants'
 
 import { CapabilityActionRegistry } from './capability-action-registry.ts'
+import type { CapabilityMediaStrategyRegistry } from './capability-media-strategy-registry.ts'
+import type { CapabilityMediaStrategy } from './capability-media-strategy.ts'
 
 export type CapabilityPackageSeedContext = {
     allowedActions: ReadonlySet<string>
@@ -45,6 +49,7 @@ export type CapabilityModuleDefinition = Omit<CapabilityModuleMeta, 'status'> & 
     }
     tools: CapabilityToolPackageInstaller[]
     skills: CapabilitySkillPackageInstaller[]
+    mediaStrategies?: CapabilityMediaStrategy[]
     routing?: CapabilityModuleRoutingDefinition
 }
 
@@ -74,6 +79,12 @@ export class CapabilityModuleCatalog {
     registerActions(registry: CapabilityActionRegistry): void {
         for (const definition of this.modules.values()) {
             for (const installer of definition.tools) installer.registerActions(registry)
+        }
+    }
+
+    registerMediaStrategies(registry: CapabilityMediaStrategyRegistry): void {
+        for (const definition of this.modules.values()) {
+            for (const strategy of definition.mediaStrategies ?? []) registry.register(strategy)
         }
     }
 
@@ -133,6 +144,7 @@ export class CapabilityModuleCatalog {
         if (definition.normalizedName !== definition.name.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US')) {
             throw new Error(`CAPABILITY_MODULE_NORMALIZED_NAME_INVALID:${definition.moduleId}`)
         }
+        validateDescriptionSheet(definition.moduleId, definition.descriptionSheet)
 
         const packages = [...definition.tools, ...definition.skills]
         const localIds = new Set<string>()
@@ -160,6 +172,114 @@ export class CapabilityModuleCatalog {
             summary: definition.summary,
             tags: [...definition.tags],
             status: 'active',
+            descriptionSheet: structuredClone(definition.descriptionSheet),
         }
     }
+}
+
+const DESCRIPTION_LIMITS = {
+    purpose: 320,
+    expectedInputCount: 12,
+    inputName: 80,
+    inputDescription: 280,
+    listItemCount: 8,
+    listItem: 280,
+    executionSummary: 240,
+} as const
+
+const EXPECTED_INPUT_REQUIREMENTS = new Set(['required', 'optional', 'conditional'])
+const EXPECTED_INPUT_KINDS = new Set(['prompt', 'image', 'video', 'audio', 'document', 'artifact', 'parameters'])
+const EXECUTION_BANDS = new Set(['low', 'medium', 'high'])
+const RAW_HTML_PATTERN = /<\/?[a-z][^>]*>/iu
+
+function validateBoundedText(
+    moduleId: string,
+    field: string,
+    value: unknown,
+    maximumLength: number,
+): asserts value is string {
+    if (typeof value !== 'string' || !value.trim()) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_${field}_REQUIRED:${moduleId}`)
+    }
+    if (value.length > maximumLength) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_${field}_TOO_LONG:${moduleId}`)
+    }
+    if (RAW_HTML_PATTERN.test(value)) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_${field}_HTML_FORBIDDEN:${moduleId}`)
+    }
+}
+
+function validateDescriptionList(
+    moduleId: string,
+    field: 'BEST_RESULTS' | 'LIMITATIONS',
+    value: unknown,
+): asserts value is string[] {
+    if (!Array.isArray(value) || value.length === 0) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_${field}_REQUIRED:${moduleId}`)
+    }
+    if (value.length > DESCRIPTION_LIMITS.listItemCount) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_${field}_TOO_MANY:${moduleId}`)
+    }
+    for (const item of value) {
+        validateBoundedText(moduleId, `${field}_ITEM`, item, DESCRIPTION_LIMITS.listItem)
+    }
+}
+
+function normalizeInputName(value: string): string {
+    return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US')
+}
+
+function validateExpectedInput(moduleId: string, input: CapabilityExpectedInput, names: Set<string>): void {
+    validateBoundedText(moduleId, 'INPUT_NAME', input?.name, DESCRIPTION_LIMITS.inputName)
+    const normalizedName = normalizeInputName(input.name)
+    if (names.has(normalizedName)) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_INPUT_NAME_DUPLICATE:${moduleId}:${normalizedName}`)
+    }
+    names.add(normalizedName)
+    if (!EXPECTED_INPUT_REQUIREMENTS.has(input.requirement)) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_INPUT_REQUIREMENT_INVALID:${moduleId}:${normalizedName}`)
+    }
+    if (!Array.isArray(input.accepts) || input.accepts.length === 0
+        || input.accepts.some(kind => !EXPECTED_INPUT_KINDS.has(kind))) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_INPUT_ACCEPTS_INVALID:${moduleId}:${normalizedName}`)
+    }
+    if (new Set(input.accepts).size !== input.accepts.length) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_INPUT_ACCEPTS_DUPLICATE:${moduleId}:${normalizedName}`)
+    }
+    validateBoundedText(moduleId, 'INPUT_DESCRIPTION', input.description, DESCRIPTION_LIMITS.inputDescription)
+}
+
+export function validateDescriptionSheet(
+    moduleId: string,
+    sheet: CapabilityModuleDescriptionSheet | undefined,
+): asserts sheet is CapabilityModuleDescriptionSheet {
+    if (!sheet || typeof sheet !== 'object') {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_SHEET_REQUIRED:${moduleId}`)
+    }
+    validateBoundedText(moduleId, 'PURPOSE', sheet.purpose, DESCRIPTION_LIMITS.purpose)
+    if (!Array.isArray(sheet.expectedInputs) || sheet.expectedInputs.length === 0) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_EXPECTED_INPUTS_REQUIRED:${moduleId}`)
+    }
+    if (sheet.expectedInputs.length > DESCRIPTION_LIMITS.expectedInputCount) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_EXPECTED_INPUTS_TOO_MANY:${moduleId}`)
+    }
+    const inputNames = new Set<string>()
+    for (const input of sheet.expectedInputs) validateExpectedInput(moduleId, input, inputNames)
+    validateDescriptionList(moduleId, 'BEST_RESULTS', sheet.bestResults)
+    validateDescriptionList(moduleId, 'LIMITATIONS', sheet.limitations)
+    if (!sheet.executionCharacteristics || typeof sheet.executionCharacteristics !== 'object') {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_EXECUTION_REQUIRED:${moduleId}`)
+    }
+    if (!EXECUTION_BANDS.has(sheet.executionCharacteristics.cost)) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_EXECUTION_COST_INVALID:${moduleId}`)
+    }
+    if (!EXECUTION_BANDS.has(sheet.executionCharacteristics.latency)) {
+        throw new Error(`CAPABILITY_MODULE_DESCRIPTION_EXECUTION_LATENCY_INVALID:${moduleId}`)
+    }
+    validateBoundedText(
+        moduleId,
+        'EXECUTION_SUMMARY',
+        sheet.executionCharacteristics.summary,
+        DESCRIPTION_LIMITS.executionSummary,
+    )
 }

@@ -12,6 +12,7 @@ import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import { getSystemPrompt, formatUserMessageWithHack } from '../prompts/load-prompts.ts'
 import {
+    assertMessageInputKindsSupported,
     convertAttachmentsForProvider,
     resolveImageUrls,
 } from '../utils/attachments.ts'
@@ -25,7 +26,6 @@ import {
     extractVideoToolCall,
     getVideoToolForProvider,
 } from '../tools/video-generation.ts'
-import { assertProviderMessageInputKinds, detectCapabilities } from './provider-capabilities.ts'
 import {
     buildAnthropicRequiredCapabilityToolChoice,
     CapabilityModelToolExecutor,
@@ -57,7 +57,12 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
-        assertProviderMessageInputKinds('Anthropic', state.modelVersion, state.messages)
+        assertMessageInputKindsSupported(
+            'Anthropic',
+            state.modelVersion,
+            state.aiModelMetaInfo.inferenceCapabilities,
+            state.messages,
+        )
         const update: Partial<ProviderState> = {}
 
         const messages = state.messages

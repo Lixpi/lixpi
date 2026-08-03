@@ -354,21 +354,38 @@ describe('BaseProvider request validation', () => {
             organizationId: 'organization-1',
             workspaceId: 'ws-1',
             aiChatThreadId: 'thread-1',
-            aiModelMetaInfo: { provider: 'OpenAI', model: 'gpt-image-1-mini', modelVersion: 'gpt-image-1-mini' },
+            aiModelMetaInfo: {
+                provider: 'OpenAI',
+                model: 'gpt-image-1-mini',
+                modelVersion: 'gpt-image-1-mini',
+                imageReferenceCapabilities: {
+                    maxReferenceImages: 16,
+                    maxIdentityReferenceImages: 5,
+                    conditioningModes: ['edit', 'identity', 'style'],
+                    inputFidelity: 'standard',
+                    supportsIterativeEdit: true,
+                    supportsMask: true,
+                    supportsStructureControl: false,
+                    supportsPoseControl: false,
+                    supportsDeterministicSeed: false,
+                    maxOutputPixels: 1572864,
+                    supportedAspectRatios: ['1:1', '3:2', '2:3'],
+                },
+            },
             messages: [{ role: 'user', content: 'Create a character sheet.' }],
             enableImageGeneration: true,
             imageGenerationReferences: [{
                 url: 'data:image/png;base64,c291cmNl',
-                role: 'character-source',
-                fileName: 'character-source-1',
+                role: 'original-source',
+                fileName: 'original-source-1',
             }],
         })
 
         expect(invoke).toHaveBeenCalledOnce()
         expect(result.resolvedImageGenerationReferences).toEqual([
             expect.objectContaining({
-                role: 'character-source',
-                fileName: 'character-source-1.png',
+                role: 'original-source',
+                fileName: 'original-source-1.png',
                 mediaType: 'image/png',
                 byteLength: 6,
                 bytes: Buffer.from('source'),

@@ -226,17 +226,30 @@ export const rebindMediaGenerationOperationNodes = async ({
             })
             for (const binding of bindings) {
                 if (nodes.some(node => node.nodeId === binding.operationNodeId)) continue
-                const previous = oldNodeById.get(binding.previousNodeId)
-                if (!previous) continue
                 changed = true
+                // Runs deferred until the lineage plan have no node to rebind
+                // from: the request was created before the model axes were
+                // resolved, so this is the operation card's first projection.
+                const previous = oldNodeById.get(binding.previousNodeId)
+                const dimensions = previous?.dimensions ?? DEFAULT_DIMENSIONS
                 const parent = nodes.find(node => node.nodeId === binding.lineageParentNodeId)
+                const now = Date.now()
                 nodes.push({
-                    ...previous,
+                    ...(previous ?? {
+                        nodeId: binding.operationNodeId,
+                        type: 'operationStatus',
+                        operation: 'media-generation',
+                        title: `Generating with ${binding.run.modelId}`,
+                        generationRequestId,
+                        generationRun: binding.run.generationRun,
+                        dimensions,
+                        createdAt: now,
+                    }),
                     nodeId: binding.operationNodeId,
                     status: binding.run.status === 'failed'
                         ? 'failed'
                         : binding.run.status === 'awaiting-provider-verification' ? 'action-required' : 'in-progress',
-                    message: binding.run.problem?.detail ?? previous.message,
+                    message: binding.run.problem?.detail ?? previous?.message ?? 'Preparing the media request.',
                     plannedMediaType: getPlannedMediaType(String(binding.run.modelId)),
                     ...(binding.run.problem ? { problem: binding.run.problem } : {}),
                     ...(binding.run.requiredVerificationAssetIds?.[0] ? {
@@ -245,9 +258,9 @@ export const rebindMediaGenerationOperationNodes = async ({
                     requestRevision,
                     position: parent ? {
                         x: parent.position.x + parent.dimensions.width + 80,
-                        y: parent.position.y + binding.run.generationRun * (previous.dimensions.height + 24),
-                    } : previous.position,
-                    updatedAt: Date.now(),
+                        y: parent.position.y + binding.run.generationRun * (dimensions.height + 24),
+                    } : previous?.position ?? { x: 80, y: 80 },
+                    updatedAt: now,
                 })
             }
             const edgeKeys = new Set<string>()

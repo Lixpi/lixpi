@@ -129,6 +129,7 @@ export const mediaDescriptorSubjects = [{
                 descriptor = await describeMediaStill({
                     provider: provider as ProviderName,
                     modelVersion: modelVersion!,
+                    inferenceCapabilities: aiModelMetaInfo.inferenceCapabilities,
                     imageUrl: `nats-obj://${blob.bucketName}/${blob.objectKey}`,
                     natsService,
                     maxTokens,
@@ -137,6 +138,7 @@ export const mediaDescriptorSubjects = [{
                 descriptor = await describeTextContent({
                     provider: provider as ProviderName,
                     modelVersion: modelVersion!,
+                    inferenceCapabilities: aiModelMetaInfo.inferenceCapabilities,
                     text: await loadAssetText(asset),
                     title: asset.title,
                     natsService,

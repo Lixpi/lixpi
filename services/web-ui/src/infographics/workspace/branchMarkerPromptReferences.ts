@@ -7,6 +7,7 @@ import {
 
 import {
     createMediaPromptReferencePreview,
+    createCapabilityPromptReferencePreview,
     createPromptReferenceChipElement,
     type PromptReferencePreviewRenderer,
 } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
@@ -162,6 +163,12 @@ export function renderBranchMarkerPromptParts(
                 inlinePopover: options.inlinePopover,
                 preferredPlacement: 'top',
             })?.dom ?? createPromptReferenceChipElement(part.reference)
+        }
+        if (part.type === 'capability-module' && options.previewRenderer?.getCapabilityModule) {
+            return createCapabilityPromptReferencePreview(part.reference, options.previewRenderer, {
+                inlinePopover: options.inlinePopover,
+                preferredPlacement: 'top',
+            }).dom
         }
         return createPromptReferenceChipElement(part.reference)
     })

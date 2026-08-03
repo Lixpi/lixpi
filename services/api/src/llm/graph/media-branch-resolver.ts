@@ -627,6 +627,7 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
             : await callVlm({
                 provider,
                 modelVersion,
+                inferenceCapabilities: state.aiModelMetaInfo.inferenceCapabilities,
                 systemPrompt: SYSTEM_PROMPT,
                 userMessages: buildResolverMessages(resolverState),
                 schema: RESOLUTION_SCHEMA,

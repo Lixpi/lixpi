@@ -5,7 +5,7 @@ import {
     type MediaBranchLineagePlan,
     type MediaGenerationRequest,
 } from '@lixpi/constants'
-import { getPendingGeneratedMediaNodeId } from '@lixpi/canvas-engine'
+import { getMediaGenerationOperationNodeId } from '@lixpi/canvas-engine'
 
 const mocks = vi.hoisted(() => ({
     mediaRequestModel: {
@@ -118,7 +118,7 @@ describe('media generation request lineage binding', () => {
     it('materializes only the selected image run for a deferred scalar request', async () => {
         const request = deferredRequest()
         const lineagePlan = imageLineagePlan()
-        const operationNodeId = getPendingGeneratedMediaNodeId(lineagePlan.runAssignments[0]!)
+        const operationNodeId = getMediaGenerationOperationNodeId(lineagePlan.runAssignments[0]!)
         mocks.mediaRequestModel.get.mockResolvedValue(request)
         mocks.mediaRequestModel.transition.mockImplementation(async ({ request: next }) => next)
 

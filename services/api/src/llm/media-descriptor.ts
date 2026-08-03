@@ -4,6 +4,7 @@ import type NatsService from '@lixpi/nats-service'
 import {
     MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH,
     MEDIA_DESCRIPTOR_TITLE_MAX_WORDS,
+    type AiModelInferenceCapabilities,
     type ProviderName,
 } from '@lixpi/constants'
 
@@ -30,6 +31,7 @@ export type ContentDescriptorResult = MediaDescriptorResult
 type DescribeMediaStillArgs = {
     provider: ProviderName
     modelVersion: string
+    inferenceCapabilities: AiModelInferenceCapabilities
     imageUrl: string
     natsService: NatsService
     maxTokens?: number
@@ -124,6 +126,7 @@ export const describeMediaStill = async (args: DescribeMediaStillArgs): Promise<
     const result = await callVlm({
         provider: args.provider,
         modelVersion: args.modelVersion,
+        inferenceCapabilities: args.inferenceCapabilities,
         systemPrompt: SYSTEM_PROMPT,
         userMessages: buildDescriptorMessages(args.imageUrl),
         schema: buildMediaDescriptorSchema(),
@@ -146,6 +149,7 @@ export const describeMediaStill = async (args: DescribeMediaStillArgs): Promise<
 type DescribeTextContentArgs = {
     provider: ProviderName
     modelVersion: string
+    inferenceCapabilities: AiModelInferenceCapabilities
     text: string
     title?: string
     natsService: NatsService
@@ -216,6 +220,7 @@ export const describeTextContent = async (args: DescribeTextContentArgs): Promis
     const result = await callVlm({
         provider: args.provider,
         modelVersion: args.modelVersion,
+        inferenceCapabilities: args.inferenceCapabilities,
         systemPrompt: TEXT_SYSTEM_PROMPT,
         userMessages: buildTextDescriptorMessages(text, args.title),
         schema: buildTextDescriptorSchema(),

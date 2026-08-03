@@ -6,6 +6,7 @@ import {
     SealedResolvedCapabilityPlan,
 } from '@lixpi/capability-system/backend'
 import type {
+    AiModelInferenceCapabilities,
     CapabilityManifest,
     CapabilityResourceRef,
     ResolvedCapabilityPlan,
@@ -65,6 +66,27 @@ const makeAsyncStream = <T>(chunks: T[]) => ({
     },
 }) as unknown as AsyncIterable<unknown>
 
+const GOOGLE_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    thinkingMode: 'google-budget',
+    requiresAutoToolChoiceWithThinking: false,
+    supportsTemperature: true,
+    supportsSystemPrompt: true,
+    requiresClosedJsonSchema: false,
+    supportedInputKinds: ['image', 'video-frame', 'audio', 'document-text'],
+}
+
+const googleModelMeta = (
+    modelVersion: string,
+    modalities: string[] = ['text'],
+    inferenceCapabilities: AiModelInferenceCapabilities = GOOGLE_INFERENCE_CAPABILITIES,
+) => ({
+    provider: 'Google',
+    model: modelVersion,
+    modelVersion,
+    inferenceCapabilities,
+    modalities: modalities.map(modality => ({ modality })),
+})
+
 const createProviderDeps = (): BaseProviderDeps => ({
     natsService: { publish: vi.fn() } as any,
     storeWorkspaceImage: vi.fn(),
@@ -117,7 +139,7 @@ const baseGoogleState = () => ({
     aiChatThreadId: 'thread-1',
     messages: [{ role: 'user', content: 'generate a scene' }],
     modelVersion: 'gemini-2.5-flash',
-    aiModelMetaInfo: { modelVersion: 'gemini-2.5-flash' } as any,
+    aiModelMetaInfo: googleModelMeta('gemini-2.5-flash') as any,
     maxCompletionSize: 1000,
     temperature: 0.7,
 })
@@ -366,20 +388,24 @@ describe('GoogleProvider internals', () => {
 
         const provider = new GoogleProvider('ws-1:thread-1', createProviderDeps())
         const { chunk, imagePublisher } = configureProviderInternals(provider)
-        const sourceBytes = Buffer.from('character-source')
-        const layoutBytes = Buffer.from('character-layout-example')
+        const sourceBytes = Buffer.from('original-source')
+        const layoutBytes = Buffer.from('structure-reference')
 
         const update = await (provider as any).streamImpl({
             ...baseGoogleState(),
             modelVersion: 'gemini-2.5-flash-image',
+            aiModelMetaInfo: googleModelMeta(
+                'gemini-2.5-flash-image',
+                ['text', 'image', 'image_generation'],
+            ),
             enableImageGeneration: true,
             imageSize: '16:9',
             messages: [{ role: 'user', content: 'show me a dog' }],
             resolvedImageGenerationReferences: [
                 {
                     url: 'source-url',
-                    role: 'character-source',
-                    fileName: 'character-source-1.jpg',
+                    role: 'original-source',
+                    fileName: 'original-source-1.jpg',
                     bytes: sourceBytes,
                     dataUrl: `data:image/jpeg;base64,${sourceBytes.toString('base64')}`,
                     mediaType: 'image/jpeg',
@@ -388,8 +414,8 @@ describe('GoogleProvider internals', () => {
                 },
                 {
                     url: 'layout-url',
-                    role: 'character-layout-example',
-                    fileName: 'character-layout-example-1.png',
+                    role: 'structure-reference',
+                    fileName: 'structure-reference-1.png',
                     bytes: layoutBytes,
                     dataUrl: `data:image/png;base64,${layoutBytes.toString('base64')}`,
                     mediaType: 'image/png',
@@ -405,11 +431,11 @@ describe('GoogleProvider internals', () => {
                 parts: [
                     { text: 'show me a dog' },
                     {
-                        text: 'REFERENCE IMAGE 1 — AUTHORITATIVE CHARACTER SOURCE. Preserve its identity, design, facial construction, and rendering style.',
+                        text: 'REFERENCE IMAGE 1 — AUTHORITATIVE SOURCE. Preserve observed identity and design evidence.',
                     },
                     { inlineData: { mimeType: 'image/jpeg', data: sourceBytes.toString('base64') } },
                     {
-                        text: 'REFERENCE IMAGE 2 — AUTHORITATIVE LAYOUT TEMPLATE. Use its organization only; never copy its depicted character.',
+                        text: 'REFERENCE IMAGE 2 — STRUCTURE REFERENCE. Use its composition without copying identity.',
                     },
                     { inlineData: { mimeType: 'image/png', data: layoutBytes.toString('base64') } },
                 ],
@@ -443,6 +469,38 @@ describe('GoogleProvider internals', () => {
         })
     })
 
+    it('configures native image thinking from synchronized capabilities instead of the model name', async () => {
+        generateContent.mockResolvedValueOnce({
+            candidates: [{
+                content: {
+                    parts: [{ inlineData: { data: 'iVBORw0KGgo=', mimeType: 'image/png' } }],
+                },
+            }],
+        })
+
+        const provider = new GoogleProvider('ws-1:thread-1', createProviderDeps())
+        configureProviderInternals(provider)
+
+        await (provider as any).streamImpl({
+            ...baseGoogleState(),
+            modelVersion: 'synchronized-image-model',
+            aiModelMetaInfo: googleModelMeta(
+                'synchronized-image-model',
+                ['text', 'image', 'image_generation'],
+                { ...GOOGLE_INFERENCE_CAPABILITIES, thinkingMode: 'google-level' },
+            ),
+            enableImageGeneration: true,
+            messages: [{ role: 'user', content: 'show me a dog' }],
+        })
+
+        expect(generateContent).toHaveBeenCalledWith(expect.objectContaining({
+            model: 'synchronized-image-model',
+            config: expect.objectContaining({
+                thinkingConfig: { includeThoughts: true },
+            }),
+        }))
+    })
+
     it('surfaces image-generation content errors when the provider returns no inline image data', async () => {
         generateContent.mockResolvedValueOnce({
             usageMetadata: {
@@ -459,6 +517,10 @@ describe('GoogleProvider internals', () => {
         const update = await (provider as any).streamImpl({
             ...baseGoogleState(),
             modelVersion: 'gemini-2.5-flash-image',
+            aiModelMetaInfo: googleModelMeta(
+                'gemini-2.5-flash-image',
+                ['text', 'image', 'image_generation'],
+            ),
             enableImageGeneration: true,
             messages: [{ role: 'user', content: 'try generating image' }],
         })
@@ -830,7 +892,7 @@ describe('GoogleProvider internals', () => {
         expect(update.generatedVideos).toBeUndefined()
     })
 
-    it('streams VEO path from model-version matching regex and updates media usage', async () => {
+    it('streams VEO from synchronized video modality metadata and updates media usage', async () => {
         googleMocks.generateVideos.mockResolvedValueOnce({
             done: true,
             name: 'operations/veo-123',
@@ -846,6 +908,10 @@ describe('GoogleProvider internals', () => {
         const update = await (provider as any).streamImpl({
             ...baseGoogleState(),
             modelVersion: 'veo-3.1-generate-preview',
+            aiModelMetaInfo: googleModelMeta(
+                'veo-3.1-generate-preview',
+                ['video', 'video_generation'],
+            ),
             enableVideoGeneration: true,
             videoModelVersion: 'veo-3.1-generate-preview',
             videoModelMetaInfo: { provider: 'Google', model: 'veo-3.1', modelVersion: 'veo-3.1-generate-preview' } as any,
@@ -894,6 +960,10 @@ describe('GoogleProvider internals', () => {
         const update = await (provider as any).streamImpl({
             ...baseGoogleState(),
             modelVersion: 'veo-3.1-generate-preview',
+            aiModelMetaInfo: googleModelMeta(
+                'veo-3.1-generate-preview',
+                ['video', 'video_generation'],
+            ),
             enableVideoGeneration: true,
             videoModelVersion: 'veo-3.1-generate-preview',
             videoModelMetaInfo: { provider: 'Google', model: 'veo-3.1', modelVersion: 'veo-3.1-generate-preview' } as any,

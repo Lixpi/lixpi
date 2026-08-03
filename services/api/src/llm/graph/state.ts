@@ -4,7 +4,8 @@ import type {
     CapabilityJsonValue,
     CapabilityPromptReference,
     CapabilityReasoningModelVariant,
-    ImageInputFidelityPolicy,
+    AiModelInferenceCapabilities,
+    ImageReferenceCapabilities,
     MediaBranchCandidateSnapshot,
     MediaBranchVlmResolution,
     MediaBranchLineagePlan,
@@ -17,11 +18,15 @@ import type {
     WorkspaceContextResolution,
     WorkspaceContextSnapshot,
 } from '@lixpi/constants'
-import type { SealedResolvedCapabilityPlan } from '@lixpi/capability-system/backend'
+import type {
+    CapabilityMediaExecutionPlan,
+    SealedResolvedCapabilityPlan,
+} from '@lixpi/capability-system/backend'
 import type {
     ImageGenerationReference,
     ResolvedImageGenerationReference,
 } from '../image-generation-references.ts'
+import type { ImageReferenceAdaptation } from '../providers/image-reference-adapters.ts'
 
 export type Usage = {
     promptTokens: number
@@ -65,9 +70,9 @@ export type AiModelMetaInfo = {
     modelVersion: string
     maxCompletionSize?: number
     defaultTemperature?: number
-    supportsSystemPrompt?: boolean
+    inferenceCapabilities: AiModelInferenceCapabilities
     imagePromptMaxChars?: number
-    imageInputFidelity?: ImageInputFidelityPolicy
+    imageReferenceCapabilities?: ImageReferenceCapabilities
     videoMaxReferenceImages?: number
     pricing?: Record<string, any>
     [key: string]: unknown
@@ -118,9 +123,6 @@ export const getVideoMaxReferenceImages = (meta: AiModelMetaInfo | undefined): n
     return typeof raw === 'number' && raw > 0 ? raw : DEFAULT_VIDEO_MAX_REFERENCE_IMAGES
 }
 
-export const hasHighImageInputFidelity = (meta: AiModelMetaInfo | undefined): boolean =>
-    meta?.imageInputFidelity?.level === 'high'
-
 export type ChatMessage = {
     role: 'user' | 'assistant' | 'system' | string
     content: string | Array<Record<string, any>>
@@ -168,6 +170,7 @@ export type ProviderState = {
     capabilityReferenceImages?: string[] | undefined
     imageGenerationReferences?: ImageGenerationReference[] | undefined
     resolvedImageGenerationReferences?: ResolvedImageGenerationReference[] | undefined
+    imageReferenceAdaptation?: ImageReferenceAdaptation | undefined
     capabilityReferenceImageTraceUrls?: string[] | undefined
     capabilityUsageMode?: 'visual-style' | 'character-creator' | undefined
     imagePromptRetryCount?: number | undefined
@@ -215,6 +218,8 @@ export type ProviderState = {
     pendingCapabilityOutputFinalizations?: PendingCapabilityOutputFinalization[] | undefined
 
     capabilityUsagePrompt?: string | undefined
+    capabilityMediaExecutionPlan?: CapabilityMediaExecutionPlan | undefined
+    capabilityMediaTrace?: CapabilityJsonValue | undefined
 
     // Metrics — transient per-run identity. workflowId is minted in validateRequest
     // and groups this run's calls; workflowSeq is a 1-based counter per confirmed
@@ -271,6 +276,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     capabilityReferenceImages: { reducer: keep },
     imageGenerationReferences: { reducer: keep },
     resolvedImageGenerationReferences: { reducer: keep },
+    imageReferenceAdaptation: { reducer: keep },
     capabilityReferenceImageTraceUrls: { reducer: keep },
     capabilityUsageMode: { reducer: keep },
     imagePromptRetryCount: { reducer: keep, default: () => 0 },
@@ -305,6 +311,8 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     capabilityOutputMediaAssetIds: { reducer: keep },
     pendingCapabilityOutputFinalizations: { reducer: keep },
     capabilityUsagePrompt: { reducer: keep },
+    capabilityMediaExecutionPlan: { reducer: keep },
+    capabilityMediaTrace: { reducer: keep },
     workflowId: { reducer: keep },
     workflowSeq: { reducer: keep },
     metricsOperationId: { reducer: keep },

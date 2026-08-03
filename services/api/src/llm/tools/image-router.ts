@@ -1,21 +1,21 @@
 'use strict'
 
 import { info, warn, err } from '@lixpi/debug-tools'
+import type {
+    CapabilityMediaExecutionContext,
+    CapabilityMediaStrategyRegistry,
+} from '@lixpi/capability-system/backend'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
-import { hasHighImageInputFidelity, type ProviderState } from '../graph/state.ts'
+import type { ProviderState } from '../graph/state.ts'
 import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import {
-    buildCharacterFidelityRestorationPrompt,
     buildImageModelPrompt,
     getImageSourceReferenceImages,
     normalizeImageSize,
 } from './image-generation-trace.ts'
-import {
-    buildImageGenerationReferences,
-    type ImageGenerationReference,
-} from '../image-generation-references.ts'
+import { buildImageGenerationReferences, type ImageGenerationReference } from '../image-generation-references.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 import type { MediaGenerationProblem } from '@lixpi/constants'
 
@@ -37,28 +37,6 @@ const fingerprintRef = (url: string): string => {
     return `${url.slice(0, 60)}…`
 }
 
-const normalizeCapturedImage = (value: string): string => {
-    if (value.startsWith('data:')) return value
-    if (!/^[A-Za-z0-9+/=\r\n]+$/u.test(value)) {
-        throw new Error('IMAGE_GENERATION_CAPTURE_FORMAT_INVALID')
-    }
-    const bytes = Buffer.from(value, 'base64')
-    if (bytes.length >= 8
-        && bytes[0] === 0x89
-        && bytes[1] === 0x50
-        && bytes[2] === 0x4e
-        && bytes[3] === 0x47) {
-        return `data:image/png;base64,${value}`
-    }
-    if (bytes.length >= 3
-        && bytes[0] === 0xff
-        && bytes[1] === 0xd8
-        && bytes[2] === 0xff) {
-        return `data:image/jpeg;base64,${value}`
-    }
-    throw new Error('IMAGE_GENERATION_CAPTURE_FORMAT_INVALID')
-}
-
 type ImageRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
     getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
@@ -72,7 +50,10 @@ type ImageRouterOptions = {
 export class ImageRouter {
     private readonly mediaGenerationRunPlanner = new MediaGenerationRunPlanner()
 
-    constructor(private readonly registry: ProviderRegistry) {}
+    constructor(
+        private readonly registry: ProviderRegistry,
+        private readonly capabilityMediaStrategies?: CapabilityMediaStrategyRegistry,
+    ) {}
 
     async execute(state: ProviderState, options: ImageRouterOptions = {}): Promise<Partial<ProviderState>> {
         const imageProvider = state.imageProviderName
@@ -81,10 +62,7 @@ export class ImageRouter {
         const prompt = state.generatedImagePrompt ?? ''
         const workspaceId = state.workspaceId
         const aiChatThreadId = state.aiChatThreadId
-        const requestedImageSize = state.capabilityUsageMode === 'character-creator'
-            ? '1536x1024'
-            : state.imageSize
-        const imageSize = normalizeImageSize(imageProvider, requestedImageSize)
+        const imageSize = normalizeImageSize(imageProvider, state.imageSize)
         const mediaModelId = imageProvider && imageModel
             ? this.mediaGenerationRunPlanner.buildMediaModelId(imageProvider, imageMeta.model, imageModel)
             : undefined
@@ -123,6 +101,7 @@ export class ImageRouter {
                 provider: problem.provider,
                 modelId: problem.modelId,
                 providerCode: problem.providerCode,
+                providerReason: problem.providerReason,
             })}`)
             await requestService.recordRunStatus({
                 generationRequestId: state.durableGenerationRequestId,
@@ -152,6 +131,25 @@ export class ImageRouter {
         const instanceKey = generationRun?.mediaRunId
             ? `${workspaceId}:${aiChatThreadId}:${generationRun.mediaRunId}`
             : `${workspaceId}:${aiChatThreadId}:image`
+        if (state.capabilityMediaExecutionPlan) {
+            if (!this.capabilityMediaStrategies) throw new Error('CAPABILITY_MEDIA_STRATEGY_REGISTRY_REQUIRED')
+            const strategy = this.capabilityMediaStrategies.get(state.capabilityMediaExecutionPlan)
+            try {
+                await recordRunStatus('running')
+                const context = buildCapabilityMediaExecutionContext(state, generationRun)
+                const result = await strategy.execute(context, state.capabilityMediaExecutionPlan, options)
+                if (result.error) {
+                    const problem = await recordRunStatus('failed', { message: result.error, code: result.errorCode })
+                    return presentFailure(result.error, result.errorCode, result.errorType, problem)
+                }
+                await recordRunStatus('completed')
+                return result
+            } catch (error) {
+                const message = (error as Error).message
+                const problem = await recordRunStatus('failed', error)
+                return presentFailure(message, undefined, undefined, problem)
+            }
+        }
         const capabilityReferenceImages = state.capabilityReferenceImages ?? []
         const sourceReferenceImages = getImageSourceReferenceImages(state)
         const referenceImages = buildImageGenerationReferences({
@@ -232,77 +230,12 @@ export class ImageRouter {
 
         try {
             await recordRunStatus('running')
-            let draftState: ProviderState | undefined
-            let finalState: ProviderState
-            const requiresFidelityPass = state.capabilityUsageMode === 'character-creator'
-                && sourceReferenceImages.length > 0
-            if (requiresFidelityPass && !hasHighImageInputFidelity(imageMeta)) {
-                let modelLabel = imageModel
-                if (typeof imageMeta.model === 'string') modelLabel = imageMeta.model
-                if (typeof imageMeta.title === 'string') modelLabel = imageMeta.title
-                throw new Error(
-                    'CHARACTER_CREATOR_REFERENCE_FIDELITY_UNSUPPORTED: '
-                    + `${modelLabel} does not advertise high-fidelity image input support; `
-                    + 'select an image model whose synchronized metadata declares high fidelity.',
-                )
-            }
-
-            if (requiresFidelityPass) {
-                const draftInstanceKey = `${instanceKey}:layout-synthesis`
-                draftState = await runProviderPass({
-                    passInstanceKey: draftInstanceKey,
-                    passPrompt: imageModelPrompt,
-                    passReferences: referenceImages,
-                    captureOnly: true,
-                })
-                if (draftState.error) {
-                    err(`[ImageRouter] Character layout synthesis failed: ${draftState.error}`)
-                    const problem = await recordRunStatus('failed', { message: draftState.error, code: draftState.errorCode })
-                    return presentFailure(draftState.error, draftState.errorCode, draftState.errorType, problem)
-                }
-                const draftImage = draftState.generatedImages?.[0]
-                if (!draftImage) {
-                    const message = 'Character layout synthesis failed: provider completed without a generated image'
-                    err(`[ImageRouter] ${message}`)
-                    const problem = await recordRunStatus('failed', { message, code: 'PROVIDER_OUTPUT_MISSING' })
-                    return presentFailure(message, undefined, undefined, problem)
-                }
-
-                const fidelityReferences: ImageGenerationReference[] = [
-                    {
-                        url: normalizeCapturedImage(draftImage),
-                        role: 'character-sheet-draft',
-                        fileName: 'character-sheet-draft',
-                    },
-                    ...sourceReferenceImages.map((url, index) => ({
-                        url,
-                        role: 'character-source' as const,
-                        fileName: `character-source-${index + 1}`,
-                    })),
-                ]
-                const fidelityPrompt = buildCharacterFidelityRestorationPrompt(sourceReferenceImages.length)
-                info(`[ImageRouter] Character fidelity restoration ${JSON.stringify({
-                    imageProvider,
-                    imageModel,
-                    imageSize,
-                    sourceReferenceCount: sourceReferenceImages.length,
-                    referenceRoles: fidelityReferences.map(reference => reference.role),
-                    promptLen: fidelityPrompt.length,
-                })}`)
-                finalState = await runProviderPass({
-                    passInstanceKey: instanceKey,
-                    passPrompt: fidelityPrompt,
-                    passReferences: fidelityReferences,
-                    captureOnly: options.captureOnly ?? false,
-                })
-            } else {
-                finalState = await runProviderPass({
-                    passInstanceKey: instanceKey,
-                    passPrompt: imageModelPrompt,
-                    passReferences: referenceImages,
-                    captureOnly: options.captureOnly ?? false,
-                })
-            }
+            const finalState = await runProviderPass({
+                passInstanceKey: instanceKey,
+                passPrompt: imageModelPrompt,
+                passReferences: referenceImages,
+                captureOnly: options.captureOnly ?? false,
+            })
 
             if (finalState.error) {
                 err(`[ImageRouter] Image generation failed: ${finalState.error}`)
@@ -320,8 +253,7 @@ export class ImageRouter {
 
             info(`[ImageRouter] Completed successfully instanceKey=${instanceKey}`)
             await recordRunStatus('completed')
-            const generatedCount = (draftState?.imageUsage?.generatedCount ?? (draftState ? 1 : 0))
-                + (finalState.imageUsage?.generatedCount ?? generatedImages.length)
+            const generatedCount = finalState.imageUsage?.generatedCount ?? generatedImages.length
             return {
                 ...finalState,
                 generatedImages,
@@ -344,5 +276,47 @@ export class ImageRouter {
             })
             return presentFailure(message, undefined, undefined, problem)
         }
+    }
+}
+
+const buildCapabilityMediaExecutionContext = (
+    state: ProviderState,
+    generationRun: ProviderState['generationRun'],
+): CapabilityMediaExecutionContext => {
+    const organizationId = state.eventMeta.organizationId
+    const userId = state.eventMeta.userId
+    const imageProvider = state.imageProviderName
+    const imageModelVersion = state.imageModelVersion
+    const imageModelMeta = state.imageModelMetaInfo
+    const plan = state.capabilityMediaExecutionPlan
+    if (!organizationId || !userId) throw new Error('CAPABILITY_MEDIA_EXECUTION_IDENTITY_REQUIRED')
+    if (!imageProvider || !imageModelVersion || !imageModelMeta) {
+        throw new Error('CAPABILITY_MEDIA_IMAGE_MODEL_REQUIRED')
+    }
+    if (!plan) throw new Error('CAPABILITY_MEDIA_EXECUTION_PLAN_REQUIRED')
+    return {
+        organizationId,
+        userId,
+        workspaceId: state.workspaceId,
+        conversationAssetId: state.aiChatThreadId,
+        generationRequestId: generationRun?.generationRequestId ?? plan.capabilityRunId,
+        mediaRunId: generationRun?.mediaRunId ?? plan.capabilityRunId,
+        reasoningModel: {
+            provider: state.provider,
+            modelVersion: state.modelVersion,
+            maxCompletionSize: state.maxCompletionSize,
+            inferenceCapabilities: state.aiModelMetaInfo.inferenceCapabilities,
+        },
+        imageModel: {
+            provider: imageProvider,
+            modelVersion: imageModelVersion,
+            meta: imageModelMeta,
+            requestedSize: state.imageSize,
+        },
+        eventMeta: state.eventMeta,
+        generationRun,
+        workflowId: state.workflowId,
+        metricsOperationId: state.metricsOperationId,
+        metricsAdmissionApproved: state.metricsAdmissionApproved,
     }
 }

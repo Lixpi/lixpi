@@ -1,98 +1,108 @@
 ---
 title: Character Creator
-description: How the Character Creator Capability module adds a fixed character-sheet contract to the ordinary image-model matrix and branch-lineage pipeline.
+description: How Character Creator plans identity-focused panels, validates them against source evidence, and assembles a deterministic character sheet through the selected image-model matrix.
 ---
 
 # Character Creator
 
-Character Creator is a built-in Capability module for character design requests. It does not own a separate generation pipeline. Its Tool prepares a provider-neutral visual brief and layout reference, then the normal selected-model matrix performs image generation, Asset settlement, and canvas lineage.
+Character Creator is a built-in Capability module for character design, model-sheet, and turnaround requests. It uses the selected reasoning and image-model matrix. It does not choose a hidden model, write a second Asset, or bypass normal lineage and settlement.
+
+The module produces a provider-neutral `CharacterSheetRenderPlan`. Its package-owned backend runtime renders isolated character panels, validates them against structured source evidence, and uses deterministic Sharp/SVG code to assemble one 3840x2560 PNG.
 
 ## Module composition
 
-The module lives at `packages/lixpi/capability-system/src/capabilities/character-creator/` and installs four runtime Capability packages through API-owned adapters:
+The module lives at `packages/lixpi/capability-system/src/capabilities/character-creator/` and installs four module-internal packages:
 
-| Package | Visibility | Responsibility |
-|---|---|---|
-| `global.character-creator` Tool | Module-internal entry | Validates the request and returns media-generation instructions and reference images. |
-| Character Sheet Layout Skill | Module-internal | Defines the fixed cell order, labels, framing, scale, and background. |
-| Reference Fidelity Skill | Module-internal | Defines identity, construction, material, and conflict-resolution rules for source references. |
-| Character Image Prompt Skill | Module-internal | Defines how to assemble one provider-neutral prompt for a single sheet image. |
+| Package | Responsibility |
+|---|---|
+| `global.character-creator` Tool | Validates the prompt and up to eight source Asset IDs, then emits the typed render plan. |
+| Character Sheet Layout Skill | Defines the panel dependency graph and deterministic composition contract. |
+| Reference Fidelity Skill | Defines observed evidence, inference, conflict resolution, and identity-preservation rules. |
+| Character Image Prompt Skill | Defines provider-neutral prompts for one isolated panel and targeted correction. |
 
-The Tool also stores `character-sheet-example.jpg` as an immutable example resource. Every package carries `parentModuleId: 'character-creator'` and `catalogExposure: 'module-internal'`. They remain independently stored and resolved, but none appears on standalone Tool or Skill surfaces; the module is the only user-facing entry point.
+Every package carries `parentModuleId: 'character-creator'` and `catalogExposure: 'module-internal'`. The module is the only user-facing catalog entry.
 
-## Activation
+## Activation and preflight
 
-Character Creator becomes active when either condition is true:
+Character Creator becomes active when the prompt contains an explicit module reference or the router recognizes a character creation request. Its Tool uses `executionPolicy: 'required'`, so it runs before the reasoning-model matrix fans out.
 
-- The prompt contains an explicit Character Creator module reference selected through `/` or the `@` Capabilities category.
-- The request router recognizes a character creation, character design, character sheet, model sheet, or turnaround request and adds the same Tool reference.
-
-The Tool uses `executionPolicy: 'required'`, so it runs during shared preflight before the reasoning-model matrix fans out.
-
-## Tool workflow
-
-The live manifest has two steps:
+The manifest has two steps:
 
 | Step | Action | Result |
 |---|---|---|
-| Validate request | `character.validate-request` | Trims the prompt, removes duplicate Asset IDs, enforces the 8-reference limit, and rejects invalid input. |
-| Build character prompt | `character.build-prompt` | Combines the three Skill resources, the user request, the reference count, and the one-shot example into `mediaGenerationMode`, `preserveUserPrompt`, `visualInstructions`, `referenceImages`, and `referenceImageTraceUrls`. |
+| Validate request | `character.validate-request` | Trims the prompt, removes duplicate Asset IDs, enforces the eight-reference limit, and rejects invalid input. |
+| Build render plan | `character.build-render-plan` | Returns `mediaGenerationMode`, `preserveUserPrompt`, and a validated `capabilityMediaExecutionPlan`. |
 
-The Tool sets `mediaGenerationMode` to `character-creator` and `preserveUserPrompt` to `true`. The abstract Capability runtime forwards these module-owned values through the generic media-generation output contract. It does not name Character Creator or inspect the Tool's Capability ID. The output is generation context, not an image, and contains no generated Asset ID. This boundary keeps model selection, fanout, metering, lineage, provider invocation, and Asset settlement in the ordinary media path.
+The plan carries the Capability run ID, source Asset IDs, user prompt, layout ID, one semantic retry limit, and 27 panel specifications. The Character Creator module definition publishes its strategy through `mediaStrategies`. The API installs module strategies through `CapabilityModuleCatalog`, and `ImageRouter` delegates the plan by kind without importing Character Creator.
 
-## Source and layout references
+The API supplies one typed platform adapter for authorized Asset reads, transient Object Store access, selected-provider image calls, structured VLM transport, and the NEX fidelity request. Character-specific evidence, graph, retry, assessment, prompt, composition, trace, and cleanup logic stays in the module directory.
 
-Explicit media prompt references become `referenceAssetIds` only after the API reads the authoritative conversation atom and authorizes its Asset identity. Asset-only references do not need canvas placements. The Capability Tool returns the packaged layout example separately. The image router combines both groups through `buildImageGenerationReferences()`:
+## Panel graph
 
-1. source references with role `character-source`
-2. Capability resources with role `character-layout-example`
+The base run generates 26 panels. It generates a 27th prop panel only when source analysis cannot produce a usable observed prop crop.
 
-`resolveImageGenerationReferences()` resolves each entry to bytes once, determines its media type, normalizes its filename, measures its size, and computes its SHA-256 hash. The normalized collection is stored in `resolvedImageGenerationReferences` before an image-provider workflow runs.
+| Group | Provider operations |
+|---|---:|
+| Full-body turnaround | 5 |
+| Matching head angles | 5 |
+| Expression variants | 4 |
+| Additional mouth variants | 4 |
+| Hand close-ups | 2 |
+| Conditional prop | 0 or 1 |
+| Action poses | 6 |
 
-Current and future image-provider adapters must consume that shared resolved collection. They must not rebuild Character Creator references from provider-specific message blocks. This single path keeps source images and the sheet template in the same order for OpenAI, Google, Stability, and later providers.
+The front body and front head establish canonical anchors. Adjacent turnaround panels depend on the closest accepted view. Head panels depend on the canonical head and matching body view. Action panels depend on the accepted body and head anchors.
 
-Source references control both character identity and rendering class. Photographic sources require photorealistic character depictions with recognizable facial likeness, natural anatomy, real skin and hair detail, photographic materials, and physically coherent studio lighting. The illustrated character inside the packaged layout is a negative style reference; only its layout, panels, guides, labels, and view placement may influence the output.
+Each panel receives one candidate and at most one semantic correction. The normal ceiling is therefore 52 image operations without a generated prop and 54 with one. Bounded transport retries are separate from this count. A moderation rejection is never retried with a rewritten prompt.
 
-Reference-conditioned runs use a second bounded restoration edit. The generated draft controls composition but its character pixels are disposable placeholders. The restoration edit may completely replace every character depiction to recover source identity and medium while keeping the non-character sheet structure unchanged. The NEX model-synchronization workload records each model's effective image-input fidelity. The router rejects a selected model before provider invocation unless that routed metadata declares `level: high`; provider-specific request values come from the same record.
+## Source evidence
 
-The Character Creator action logs the packaged layout resource ID, byte length, hash, manifest hash, and source Asset IDs. The shared resolver logs role, filename, byte length, media type, and hash at provider ingress. These two log points prove whether the exact Capability resource reached the media adapter.
+Every source Asset is reauthorized against the active user, workspace, and organization. Character Creator resolves `canonical` first and `original` second. It never uses `preview`.
 
-## Model matrix and video exclusion
+The selected reasoning model analyzes source pixels into structured evidence:
 
-The selected reasoning and image-model controls remain authoritative:
+- source medium;
+- observed and inferred facts for face, hair, skin, body, clothing, accessories, materials, and props;
+- source regions for lossless face, body/outfit, and prop crops;
+- target-angle and body-region coverage;
+- palette and design notes;
+- conflicts between references.
 
-- one selected reasoning model and one selected image model produce one image run
-- multiple selected reasoning or image models produce the ordinary matrix fanout
-- Character Creator removes video models, video options, and video replay prompts before normalization
-- provider adapters suppress `generate_video` while `capabilityUsageMode` is `character-creator`
+Observed facts require an authorized source and in-bounds coordinates. Explicit prompt changes override source facts. Otherwise observed evidence overrides descriptive prompt text, and evidence from the closest target angle wins. Unresolved conflicts remain in the trace.
 
-Character Creator never asks the reasoning model to choose an unselected image or video model.
+Role-specific PNG references are written to organization-scoped transient storage. Original sources are reduced only when the selected model's declared pixel limit requires it. Every transient object is removed after success, failure, or cancellation.
 
-## Branch lineage and Asset settlement
+When no source exists, the first accepted front head and body panels become canonical anchors. The final sheet says that its identity and hidden details were inferred.
 
-Shared preflight forwards the complete Capability patch to every reasoning child. That patch includes the visual instructions, Capability reference images, usage mode, and trace URLs. The media matrix then:
+## Provider capabilities and adapters
 
-1. builds the normal lineage plan from the selected model axes
-2. creates pending output Assets and canvas assignments
-3. sends each child through the normal reasoning and image-provider workflow
-4. settles partial and final media through the shared generated-Asset path
-5. publishes ordinary media completion events
+Every synchronized image model declares `imageReferenceCapabilities`: reference and identity budgets, conditioning modes, iterative-edit and control support, input-fidelity behavior, pixel limits, and aspect ratios. Character Creator fails before panel generation when the selected model cannot perform identity conditioning.
 
-The browser renders the API-owned branch markers and generated media. Character Creator does not create an extra branch marker, attach a generated Asset directly, or maintain a second canvas progress node.
+The common graph uses provider-neutral roles such as `original-source`, `face-crop`, `body-outfit-crop`, `canonical-anchor`, `adjacent-angle`, and `prop-crop`. Provider adapters reserve identity slots first, trim optional controls to the model's declared limits, and record included and omitted roles.
 
-## Fixed sheet contract
+- OpenAI uses the multi-image edit path and synchronized fidelity metadata.
+- Google interleaves explicit role labels with image parts.
+- Stability uses only the image, style, or structure controls supported by the selected endpoint. Style transfer is not treated as identity conditioning.
 
-The packaged Skills request one landscape image with these cells in order:
+Provider names do not appear in the Character graph or capability-media scheduler.
 
-1. portrait
-2. front full-height view
-3. left full-height profile
-4. right full-height profile
-5. back full-height view
-6. three-quarter full-height view
-7. walking full-height view
+## Assessment and correction
 
-Every full-height cell uses the same scale and identity. The prompt forbids cropped feet, extra characters, alternate outfits, scenery, logos, watermarks, and additional panels.
+The selected reasoning model compares each candidate with the target panel, source pixels, structured evidence, and accepted anchors. It scores the requested dimensions and emits concrete mismatch codes.
+
+Photographic head-bearing panels also request the internal NEX character-fidelity workload. The workload runs pinned YuNet and SFace ONNX artifacts through single-threaded WASM, returns detections and scalar cosine similarity, and never returns or persists embeddings. Illustration and unreliable-face cases produce a typed unavailable reason instead of a fabricated score.
+
+A correction prompt contains only failed dimensions and their mismatch codes. It preserves accepted dimensions and retries only that panel. When both valid candidates remain below the quality threshold, the higher-scoring candidate is accepted with a warning. A required missing, corrupt, or unsafe panel fails that matrix run. An unavailable optional prop leaves its cell blank.
+
+## Deterministic composition and settlement
+
+The compositor uses the owned `character-sheet-layout.svg` resource and deterministic bitmap glyphs. It normalizes panels, creates eye, mouth, and feet crops, draws labels and guides, adds analyzed palette swatches and design notes, and includes a plain source-coverage disclosure. It rejects missing required panels, corrupt pixels, the wrong output dimensions, and non-PNG output.
+
+The final PNG and trace return to the ordinary `ImageRouter` result. The existing image publisher stores the bytes on the preassigned Asset, starts renditions, attaches the API-owned canvas node, records usage and lineage, and publishes the normal completion event. Intermediate panel pixels never become Assets.
+
+## Capability description card
+
+Hovering or focusing a Character Creator prompt-reference chip opens the module's description sheet through the same context-preview component used by media references. Composer and panel cards use its viewport-clamped body portal. Canvas cards use its pane portal, viewport scale, placement, dismissal, and cleanup behavior. The description explains the required prompt, optional reference images, best reference set, best-effort identity limits, inferred regions, and high cost and latency. The same contract applies to every Capability module.
 
 ## Related pages
 

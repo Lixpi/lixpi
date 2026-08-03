@@ -10,6 +10,7 @@ import type {
 } from '@lixpi/constants'
 
 import type { ProviderConstructor } from './provider-registry.ts'
+import type { ImageReferenceAdapter } from './image-reference-adapters.ts'
 import {
     assertNoForbiddenMediaReferenceLeak,
     buildProviderSafeReferenceContext,
@@ -33,6 +34,7 @@ export type MediaProviderDefinition = {
     provider: ProviderName
     constructor: ProviderConstructor
     mediaCapabilities: Array<'image' | 'video'>
+    imageReferenceAdapter: ImageReferenceAdapter | null
     referenceRules: {
         aliases: 'positional-reference'
         supportedInputs: Array<'text' | 'image' | 'video'>
@@ -160,6 +162,12 @@ export const assertValidMediaProviderDefinition = (definition: MediaProviderDefi
     if (!definition.provider || typeof definition.constructor !== 'function') throw new Error('MEDIA_PROVIDER_CONSTRUCTOR_REQUIRED')
     if (definition.mediaCapabilities.length === 0 && definition.provider !== 'Anthropic') {
         throw new Error(`MEDIA_PROVIDER_CAPABILITY_REQUIRED:${definition.provider}`)
+    }
+    if (definition.mediaCapabilities.includes('image') && !definition.imageReferenceAdapter) {
+        throw new Error(`MEDIA_PROVIDER_IMAGE_REFERENCE_ADAPTER_REQUIRED:${definition.provider}`)
+    }
+    if (!definition.mediaCapabilities.includes('image') && definition.imageReferenceAdapter) {
+        throw new Error(`MEDIA_PROVIDER_IMAGE_REFERENCE_ADAPTER_UNEXPECTED:${definition.provider}`)
     }
     if (definition.referenceRules.aliases !== 'positional-reference'
         || definition.referenceRules.supportedInputs.length === 0

@@ -1,6 +1,6 @@
 # Capability System
 
-`@lixpi/capability-system` contains the reusable contracts and runtime for Lixpi Capabilities. A Capability is a first-class source-registered module with one owned entry package and explicit Tool/Skill package membership. A Skill package contributes instruction resources. A Tool package contributes an executable workflow whose steps call registered application actions. Standalone Tool and Skill packages are stored without module membership and remain independently selectable.
+`@lixpi/capability-system` contains the reusable contracts and runtime for Lixpi Capabilities. A Capability is a first-class source-registered module with one owned entry package, explicit Tool/Skill package membership, and a required description sheet. A Skill package contributes instruction resources. A Tool package contributes an executable workflow whose steps call registered application actions. Standalone Tool and Skill packages are stored without module membership and remain independently selectable.
 
 The package is split by runtime boundary:
 
@@ -37,6 +37,7 @@ Backend code owns the reusable Capability engine:
 - manifest and dependency resolution into a sealed plan;
 - action registration and allow-list enforcement;
 - workflow input, output, condition, retry, and binding handling;
+- dependency validation and deterministic ready-node scheduling through `CapabilityDagRunner`;
 - run dispatch and cancellation;
 - first-class Capability-module registration and Tool/Skill package installation;
 - provider-neutral model-tool definitions and provider payload conversion.
@@ -49,11 +50,11 @@ The backend accepts storage, search, event, and persistence adapters through con
 
 Concrete module backend code also lives in this package. Each module accepts typed service ports for application persistence, provider calls, Asset materialization, and events. Module code never imports `services/api`.
 
-Character Creator treats the packaged example as a layout-only reference. Character-source Assets control identity and rendering class: photographs require photorealistic repeated depictions, while illustrated sources retain their specific medium. Its restoration contract permits complete replacement of draft character pixels while preserving the non-character sheet structure.
+Character Creator owns its full backend runtime beside its Tool, Skills, shared plan, and resources. Its module definition registers the media strategy that reauthorizes source Assets through an injected port, analyzes evidence, prepares lossless crops, schedules and assesses panels, composes the deterministic 3840x2560 PNG, emits the trace, and clears transient work. It does not import API code, choose a hidden model, or persist an output Asset.
 
 ### `src/frontend`
 
-Frontend code owns the transport-injected catalog client, cache, deterministic empty-query ranking, manifest JSON parsing, catalog management calls, and run replay/subscription filtering. Svelte state, editor components, authentication, and the concrete NATS client stay in `services/web-ui` and call this package.
+Frontend code owns the transport-injected catalog client, cache, deterministic empty-query ranking, manifest JSON parsing, catalog management calls, and run replay/subscription filtering. Authorized module metadata includes the description sheet used by application-owned hover and focus cards. Svelte state, editor components, authentication, and the concrete NATS client stay in `services/web-ui` and call this package.
 
 Concrete module frontend definitions live beside their shared/backend definitions. They provide canvas, editor-plugin, optional prompt-control, generated-output info/replay, prompt-reference, and library factories through generic browser host ports. Action Timeline intentionally provides no prompt-control factory: `/` keeps the standard module badge and the API extracts timing from authoritative prompt text. Module code never imports `services/web-ui`.
 
@@ -63,7 +64,9 @@ Action Timeline model-output schemas use provider-supported unions and retain se
 
 ## Service integration
 
-An API service supplies adapters for catalog storage, resource loading, run persistence, event streams, model inputs, Artifact persistence, and chat event mirroring. It imports module factories from this package, binds those ports in its composition root, and registers one `CapabilityModuleDefinition` per concrete module. Registry validation requires unique module IDs, unique package ownership, and exactly one owned entry package with the declared kind.
+An API service supplies adapters for catalog storage, resource loading, run persistence, event streams, model inputs, media providers, authorized Assets, transient storage, Artifact persistence, and chat event mirroring. It imports module factories from this package and binds those ports in its composition root. A module can publish owned media strategies through `CapabilityModuleDefinition.mediaStrategies`; `CapabilityModuleCatalog.registerMediaStrategies()` installs them into the host registry without the API importing the concrete strategy. Registry validation requires a complete description sheet, unique module IDs, unique package ownership, and exactly one owned entry package with the declared kind.
+
+A consuming service must not contain a capability runtime. Capability-specific prompts, policy, orchestration, scheduling, retry, assessment, composition, tracing, and cleanup belong in `capabilities/<module-id>/`. Service adapters are limited to implementing package-owned ports with application infrastructure.
 
 A module-owned instruction Skill uses `createInstructionSkillPackage()` with an injected storage adapter. The module catalog supplies its `parentModuleId` and `catalogExposure: 'module-internal'` during seeding. Standalone package saves use `catalogExposure: 'standalone'` with no parent module. This keeps file parsing and manifest construction in the package while the API controls Blob persistence and catalog seeding.
 
@@ -73,5 +76,5 @@ A module-owned instruction Skill uses `createInstructionSkillPackage()` with an 
 - Put reusable server-side orchestration in `backend`.
 - Put browser-safe orchestration in `frontend`.
 - Put each concrete cross-runtime module in `capabilities/<module-id>` and colocate its shared, backend, frontend, Skills, Tools, schemas, resources, and tests.
-- Keep DynamoDB, NATS, LangGraph state, provider SDK clients, and application module registration in the consuming service.
+- Keep concrete DynamoDB, NATS, LangGraph state, provider SDK clients, and application module registration in the consuming service. Expose them to modules only through package-owned typed ports.
 - Add new public modules through the relevant `index.ts` file.

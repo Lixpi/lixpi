@@ -177,9 +177,72 @@ export type ImageSizeOption = {
 
 export type ImageSizeMode = 'resolution' | 'aspectRatio'
 
-export type ImageInputFidelityPolicy = {
-    level: 'standard' | 'high'
-    requestValue?: 'low' | 'high'
+export type ImageReferenceConditioningMode = 'edit' | 'identity' | 'style' | 'structure' | 'pose'
+
+export type ImageReferenceCapabilities = {
+    maxReferenceImages: number
+    maxIdentityReferenceImages: number
+    conditioningModes: ImageReferenceConditioningMode[]
+    inputFidelity: 'provider-managed' | 'standard' | 'high'
+    supportsIterativeEdit: boolean
+    supportsMask: boolean
+    supportsStructureControl: boolean
+    supportsPoseControl: boolean
+    supportsDeterministicSeed: boolean
+    maxOutputPixels: number
+    supportedAspectRatios: string[]
+}
+
+export type CharacterFidelityObjectCoordinate = {
+    organizationId: string
+    bucketName: string
+    objectKey: string
+    mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
+    byteLength: number
+}
+
+export type CharacterFidelityAssessmentRequest = {
+    jobId: string
+    organizationId: string
+    panelId: string
+    attemptId: string
+    sources: CharacterFidelityObjectCoordinate[]
+    candidate: CharacterFidelityObjectCoordinate
+    expectedFaceVisibility: 'required' | 'optional' | 'hidden'
+    sourceMedium: 'photograph' | 'illustration' | 'render' | 'mixed' | 'unknown'
+}
+
+export type CharacterFaceDetection = {
+    x: number
+    y: number
+    width: number
+    height: number
+    confidence: number
+}
+
+export type CharacterFidelityUnavailableReason =
+    | 'non-photographic'
+    | 'face-not-required'
+    | 'source-face-not-found'
+    | 'candidate-face-not-found'
+    | 'ambiguous-source-face'
+    | 'ambiguous-candidate-face'
+    | 'assessor-unavailable'
+
+export type CharacterFidelityAssessmentResponse = {
+    jobId: string
+    panelId: string
+    attemptId: string
+    metric: {
+        available: boolean
+        unavailableReason?: CharacterFidelityUnavailableReason
+        cosineSimilarity?: number
+    }
+    sourceDetections: CharacterFaceDetection[]
+    candidateDetections: CharacterFaceDetection[]
+    detector: { artifactId: string; sha256: string }
+    recognizer: { artifactId: string; sha256: string }
+    error?: { code: string; message: string }
 }
 
 export type MediaGenerationConfigControlKey =
@@ -1358,6 +1421,35 @@ export type CapabilityModuleMeta = {
     summary: string
     tags: string[]
     status: Extract<CapabilityStatus, 'active' | 'disabled'>
+    descriptionSheet: CapabilityModuleDescriptionSheet
+}
+
+export type CapabilityExpectedInputKind =
+    | 'prompt'
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'document'
+    | 'artifact'
+    | 'parameters'
+
+export type CapabilityExpectedInput = {
+    name: string
+    requirement: 'required' | 'optional' | 'conditional'
+    accepts: CapabilityExpectedInputKind[]
+    description: string
+}
+
+export type CapabilityModuleDescriptionSheet = {
+    purpose: string
+    expectedInputs: CapabilityExpectedInput[]
+    bestResults: string[]
+    limitations: string[]
+    executionCharacteristics: {
+        cost: 'low' | 'medium' | 'high'
+        latency: 'low' | 'medium' | 'high'
+        summary: string
+    }
 }
 
 export type CapabilityCatalogRecord = {
@@ -1504,6 +1596,7 @@ export type CapabilityReasoningModelVariant = {
     modelVersion: string
     contextWindow: number
     maxCompletionSize: number
+    inferenceCapabilities: AiModelInferenceCapabilities
 }
 
 export type CapabilityManifest = {
@@ -1775,6 +1868,24 @@ export type AiInteractionChatStopMessagePayload = {
     generationRequestId?: string
 }
 
+export type AiModelInputKind = 'image' | 'video-frame' | 'audio' | 'document-text'
+
+export type AiModelThinkingMode =
+    | 'none'
+    | 'anthropic-manual'
+    | 'anthropic-adaptive'
+    | 'google-budget'
+    | 'google-level'
+
+export type AiModelInferenceCapabilities = {
+    thinkingMode: AiModelThinkingMode
+    requiresAutoToolChoiceWithThinking: boolean
+    supportsTemperature: boolean
+    supportsSystemPrompt: boolean
+    requiresClosedJsonSchema: boolean
+    supportedInputKinds: AiModelInputKind[]
+}
+
 export type AiModel = {
     provider: string
     model: string
@@ -1790,7 +1901,7 @@ export type AiModel = {
     contextWindow: number
     maxCompletionSize: number
     defaultTemperature: number
-    supportsSystemPrompt: boolean
+    inferenceCapabilities: AiModelInferenceCapabilities
     color: string
     iconName: string
     // Colored brand-icon variant key (e.g. geminiColorIcon). Synced per model by
@@ -1802,9 +1913,9 @@ export type AiModel = {
     // Describes what imageSizes values mean for this image-generation model.
     imageSizeMode?: ImageSizeMode
     imageSizes?: ImageSizeOption[]
-    // Effective fidelity for reference-conditioned image generation. A provider
-    // request value is included only when the model API requires one.
-    imageInputFidelity?: ImageInputFidelityPolicy
+    // Required for image-generation models. Describes reference budgets and
+    // conditioning controls without leaking provider request syntax upstream.
+    imageReferenceCapabilities?: ImageReferenceCapabilities
     // Video generation option lists (VEO and future video providers). Reuse the
     // ImageSizeOption { value, label } shape the size dropdown already consumes.
     videoAspectRatios?: ImageSizeOption[]

@@ -11,6 +11,7 @@ import {
     normalizeProviderProblem,
     type MediaProviderDefinition,
 } from './media-provider-definition.ts'
+import { OPENAI_IMAGE_REFERENCE_ADAPTER } from './image-reference-adapters.ts'
 
 let debugInfoSpy: ReturnType<typeof vi.spyOn> | null = null
 let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
@@ -56,6 +57,7 @@ const createDefinition = (provider: ProviderName, constructor: any): MediaProvid
     provider,
     constructor,
     mediaCapabilities: provider === 'Anthropic' ? [] : ['image'],
+    imageReferenceAdapter: provider === 'Anthropic' ? null : OPENAI_IMAGE_REFERENCE_ADAPTER,
     referenceRules: {
         aliases: 'positional-reference',
         supportedInputs: ['text', 'image', 'video'],

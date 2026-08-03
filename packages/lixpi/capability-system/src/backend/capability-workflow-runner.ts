@@ -10,7 +10,6 @@ import {
     type CapabilityRunEvent,
     type CapabilityRunOrigin,
     type CapabilityReasoningModelVariant,
-    type CapabilityRunStepStatus,
     type CapabilityValueBinding,
     type CapabilityWorkflowStep,
 } from '@lixpi/constants'
@@ -24,6 +23,7 @@ import { validateCapabilityManifest } from '../shared/capability-validation.ts'
 import { CapabilityError, isCapabilityError } from '../shared/capability-errors.ts'
 import { validateJsonSchemaValue } from '../shared/capability-json-schema.ts'
 import { SealedResolvedCapabilityPlan } from './capability-resolver.ts'
+import { CapabilityDagRunner } from './capability-dag-runner.ts'
 
 export type CapabilityRunPersistence = {
     createRun: (run: CapabilityRun) => Promise<void>
@@ -173,7 +173,11 @@ export class CapabilityWorkflowRunner {
         await emit({ eventType: 'RUN_STARTED', runStatus: 'running' })
 
         const workflow = resolved.manifest.tool.workflow
-        const statuses = new Map(workflow.steps.map(step => [step.stepId, 'pending' as CapabilityRunStepStatus]))
+        const dag = new CapabilityDagRunner(workflow.steps.map(step => ({
+            nodeId: step.stepId,
+            dependsOn: step.dependsOn,
+            step,
+        })))
         const stepOutputs = new Map<string, unknown>()
         const bindingContext: BindingContext = {
             input: request.input,
@@ -183,14 +187,13 @@ export class CapabilityWorkflowRunner {
         }
 
         try {
-            while ([...statuses.values()].some(status => status === 'pending')) {
+            while (dag.hasPending()) {
                 if (request.signal?.aborted) {
-                    await this.cancelPendingSteps(workflow.steps, statuses, emit)
+                    await this.cancelPendingSteps(dag, emit)
                     throw cancelledError(request.signal)
                 }
 
-                const ready = workflow.steps.filter(step => statuses.get(step.stepId) === 'pending'
-                    && step.dependsOn.every(dependency => isSettledSuccess(statuses.get(dependency))))
+                const ready = dag.getReadyNodes().map(node => node.step)
                 if (ready.length === 0) {
                     throw new CapabilityError(
                         'CAPABILITY_WORKFLOW_INVALID',
@@ -201,7 +204,7 @@ export class CapabilityWorkflowRunner {
                 const executable: CapabilityWorkflowStep[] = []
                 for (const step of ready) {
                     if (step.condition && !evaluateCondition(step.condition, bindingContext)) {
-                        statuses.set(step.stepId, 'skipped')
+                        dag.setStatus(step.stepId, 'skipped')
                         await emit({
                             eventType: 'STEP_SKIPPED',
                             runStatus: 'running',
@@ -211,7 +214,7 @@ export class CapabilityWorkflowRunner {
                         })
                         continue
                     }
-                    statuses.set(step.stepId, 'running')
+                    dag.setStatus(step.stepId, 'running')
                     executable.push(step)
                 }
 
@@ -229,7 +232,7 @@ export class CapabilityWorkflowRunner {
                 let firstFailure: StepExecutionResult | undefined
 
                 for (const result of results) {
-                    statuses.set(result.step.stepId, result.status)
+                    dag.setStatus(result.step.stepId, result.status)
                     if (result.status === 'completed') {
                         stepOutputs.set(result.step.stepId, result.output)
                         run.outputAssetIds = deduplicateStrings([...run.outputAssetIds, ...result.outputAssetIds])
@@ -275,7 +278,7 @@ export class CapabilityWorkflowRunner {
                     outputAssetIds: run.outputAssetIds,
                 })
                 if (firstFailure) {
-                    await this.cancelPendingSteps(workflow.steps, statuses, emit)
+                    await this.cancelPendingSteps(dag, emit)
                     if (firstFailure.status === 'cancelled') throw cancelledError(request.signal)
                     throw normalizeActionError(firstFailure.error, firstFailure.step.action)
                 }
@@ -445,13 +448,11 @@ export class CapabilityWorkflowRunner {
     }
 
     private async cancelPendingSteps(
-        steps: CapabilityWorkflowStep[],
-        statuses: Map<string, CapabilityRunStepStatus>,
+        dag: CapabilityDagRunner<{ nodeId: string; dependsOn: string[]; step: CapabilityWorkflowStep }>,
         emit: (event: Omit<CapabilityRunEvent, 'runId' | 'sequence' | 'timestamp'>) => Promise<void>,
     ): Promise<void> {
-        for (const step of steps) {
-            if (statuses.get(step.stepId) !== 'pending') continue
-            statuses.set(step.stepId, 'cancelled')
+        for (const node of dag.cancelPending()) {
+            const step = node.step
             await emit({
                 eventType: 'STEP_CANCELLED',
                 runStatus: 'running',
@@ -620,10 +621,6 @@ function normalizeActionError(error: unknown, actionKey: string): CapabilityErro
         {},
         { cause: error },
     )
-}
-
-function isSettledSuccess(status: CapabilityRunStepStatus | undefined): boolean {
-    return status === 'completed' || status === 'skipped'
 }
 
 function isCancellation(error: unknown, signal: AbortSignal | undefined): boolean {

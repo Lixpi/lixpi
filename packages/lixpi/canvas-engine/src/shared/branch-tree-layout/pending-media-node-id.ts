@@ -30,3 +30,11 @@ export function getPendingGeneratedMediaNodeId(assignment: PendingMediaNodeIdAss
             .join(':')
     return `pending-${mediaType}-${normalizePendingMediaNodeIdPart(String(runIdentity))}`
 }
+
+// The operation-status card and the pending media placeholder are two distinct
+// nodes for the same run. They must never share a nodeId: a collision makes the
+// two projections overwrite each other's node type, which strands the node on
+// the canvas forever because neither settlement path recognizes it any more.
+export function getMediaGenerationOperationNodeId(assignment: PendingMediaNodeIdAssignment): string {
+    return `operation-${getPendingGeneratedMediaNodeId(assignment)}`
+}

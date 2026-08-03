@@ -23,6 +23,16 @@ A **Capability package** is one stored record with `kind: 'skill'` or `kind: 'to
 
 All packages owned by a module, including its entry package, are `module-internal`. The module is the only row shown on the Capability surface. Standalone packages remain directly selectable on the Tool or Skill surfaces. The API enforces this boundary before serialization; clients do not infer containment from names, folders, or tags.
 
+Every module definition includes a required description sheet. It contains:
+
+- a plain-language purpose;
+- every required, optional, or conditional input and its accepted media kinds;
+- concrete guidance for better results;
+- limitations that set honest expectations;
+- qualitative cost and latency bands with a short execution summary.
+
+Module registration rejects a missing, empty, or malformed sheet. Authorized module list and get responses include it. Prompt-reference chips keep only `moduleId` and `displayName`; hover or keyboard focus resolves current module metadata and opens the shared description card. An in-memory promise cache coalesces requests and evicts rejected entries so Retry performs a new authorized lookup.
+
 {% callout type="important" %}
 A manifest can describe resources, dependencies, and workflow bindings. It cannot register JavaScript, grant access to an action, embed credentials, or execute arbitrary code. Executable actions must be compiled into the API and registered in the allowlist.
 {% /callout %}
@@ -114,8 +124,9 @@ The integration contract contains:
 | `visualInstructions` | Adds provider-neutral instructions to the selected model runs. |
 | `referenceImages` | Adds authorized image bytes or data URLs to the shared reference resolver. |
 | `referenceImageTraceUrls` | Records auditable resource URLs without making providers resolve Capability resources themselves. |
+| `capabilityMediaExecutionPlan` | Delegates a typed provider-neutral media graph to a registered strategy while retaining normal selected-model lineage and settlement. |
 
-The module must include these fields in its output schema and workflow output bindings. The abstract Capability runtime validates the shape and forwards it without importing or naming the module. Provider adapters consume the single normalized `resolvedImageGenerationReferences` collection produced later by the media pipeline.
+Instruction/reference Tools include the applicable instruction and reference fields in their output schema and workflow bindings. Plan-based Tools include `capabilityMediaExecutionPlan`. The abstract Capability runtime validates and forwards both contracts without importing or naming the module. Provider adapters consume normalized references; plan strategies select the adapters through provider definitions.
 
 This boundary is important for extension. Adding another media-generation Tool requires a module-owned output mode and a media-policy implementation. It must not add provider-specific reference assembly or a concrete module check to `@lixpi/capability-system`.
 
@@ -166,29 +177,30 @@ packages/lixpi/capability-system/
     shared/                       cross-runtime validation, limits, schemas, errors
     backend/                      resolver, registry, runner, dispatcher, module/package contracts
     frontend/                     transport-injected catalog client, cache, ranking, validation
+    capabilities/
+      <module-id>/
+        shared/                   cross-runtime contracts and validation
+        backend/                  concrete orchestration and package-owned ports
+        frontend/                 optional browser behavior
+        tools/                    Tool package installers, schemas, resources
+        skills/                   Skill package installers and instructions
 
 services/api/src/
   capability-system/             API storage, NATS, LangGraph, and seeding adapters
-  capability-modules/
-    <module-id>/
-      index.ts                    module entry point
-      tools/                      Tool package installers and implementations
-        index.ts
-      skills/                     Skill package installers and resources
-        index.ts
-        <skill-id>/
-          index.ts
-          SKILL.md
   installed-capabilities.ts      built-in composition root
 ```
 
-`@lixpi/capability-system` contains the reusable system. `shared` is safe in the browser and backend. `backend` contains `CapabilityModuleDefinition`, Tool/Skill package installer contracts, manifest and resource resolution, the action registry, workflow runner, dispatcher, instruction-Skill construction, and provider-neutral model-tool conversion. The package accepts catalog search, Blob access, run persistence, event naming, and event mirroring as injected adapters. It does not import a service or name a concrete module.
+{% callout type="important" %}
+A concrete Capability is one self-contained module. Do not create a capability runtime under `services/api` or another consuming service. Put capability-specific prompts, policy, orchestration, scheduling, retry, assessment, composition, trace construction, and cleanup under `capabilities/<module-id>/`. Define typed ports there for the infrastructure the host must supply.
+{% /callout %}
 
-`services/api/src/capability-system/` supplies those injected adapters. It connects the package to DynamoDB-backed catalog models, Blob storage, Capability run records, JetStream events, chat event mirroring, and LangGraph state. Provider files consume the same model-tool definitions from the package; provider-specific SDK payload conversion does not fork Capability resolution or execution.
+`@lixpi/capability-system` contains the reusable system. `shared` is safe in the browser and backend. `backend` contains `CapabilityModuleDefinition`, Tool/Skill package installer contracts, manifest and resource resolution, action and media-strategy registries, DAG and workflow runners, dispatch, instruction-Skill construction, and provider-neutral model-tool conversion. Concrete module backends live under `capabilities/<module-id>/backend`; generic backend primitives do not import them. The package accepts application services through typed ports and never imports a consuming service.
+
+`services/api/src/capability-system/` supplies those injected adapters. It connects the package to DynamoDB-backed catalog models, Blob storage, Capability run records, JetStream events, chat event mirroring, LangGraph state, selected media providers, and internal NEX requests. Provider files consume the same model-tool definitions from the package; provider-specific SDK payload conversion does not fork Capability resolution or execution.
 
 `services/web-ui` imports the transport-injected catalog client from `@lixpi/capability-system/frontend` and manifest validation from `@lixpi/capability-system/shared`. Its authentication, concrete NATS transport, Svelte state, and UI remain application code.
 
-Every direct module directory has an `index.ts` that exports one `CapabilityModuleDefinition`. A module must own its declared entry package and may contain any number of additional Tool or Skill packages. `installed-capabilities.ts` is the built-in composition root and registers each definition once with `CapabilityModuleCatalog`.
+Every direct module directory has an `index.ts` that exports one `CapabilityModuleDefinition`. A module must own its declared entry package and may contain any number of additional Tool or Skill packages. A module that needs deep media integration publishes its own strategies through `mediaStrategies` and defines every required application dependency as a typed port. `installed-capabilities.ts` binds those ports and registers each definition once; `CapabilityModuleCatalog` installs the module-owned strategies into the generic media registry.
 
 ## Add a standalone Skill
 
@@ -215,18 +227,21 @@ Use a first-class module when one product behavior needs executable orchestratio
 3. Export all Skill modules from `skills/index.ts`.
 4. Put Tool schemas, action registration, workflow definition, resources, and implementation code under `tools/`.
 5. Add Skill references to the Tool manifest.
-6. Export one `CapabilityModuleDefinition` from the module root. Its entry and every installer are persisted with `catalogExposure: 'module-internal'` and the module's `parentModuleId`.
-7. Register the module definition once in `installed-capabilities.ts`.
+6. Add a complete `descriptionSheet` to the `CapabilityModuleDefinition`.
+7. Put all concrete backend orchestration under the module's `backend/` directory. Do not create a runtime directory in a consuming service. If the module needs application infrastructure, define package-owned ports and publish the owned strategy through `mediaStrategies`.
+8. Export the definition from the module root. Its entry and every installer are persisted with `catalogExposure: 'module-internal'` and the module's `parentModuleId`.
+9. Bind only the required platform ports and register the module definition once in `installed-capabilities.ts`.
 
-If the Tool augments media generation, also declare the shared media-generation output contract in its action result, output schema, and workflow outputs. Keep the mode value and its policy implementation outside the abstract Capability runtime.
+If the Tool augments media generation, also declare the shared media-generation output contract in its action result, output schema, and workflow outputs. The generic router owns dispatch and settlement; the concrete module owns its plan validation and media policy.
 
 Startup follows this order:
 
 1. Construct and validate the module catalog.
-2. Register actions from every Tool package installer.
-3. Capture the complete allowlisted action set.
-4. Seed module-internal Skill packages.
-5. Seed module-internal Tool packages.
+2. Install module-owned media strategies into the host registry.
+3. Register actions from every Tool package installer.
+4. Capture the complete allowlisted action set.
+5. Seed module-internal Skill packages.
+6. Seed module-internal Tool packages.
 
 Skills are seeded before Tools so Tool references resolve against installed Skill packages. Runtime dependency resolution remains kind-neutral, so a Tool or Skill may reference either kind without merging their package identities.
 
@@ -257,9 +272,9 @@ Style Extraction lives under `packages/lixpi/capability-system/src/capabilities/
 
 ### Character Creator
 
-Character Creator lives under `packages/lixpi/capability-system/src/capabilities/character-creator/`. Its module-internal entry Tool validates the request and builds a provider-neutral character-generation brief with an authorized layout example. Separate module-internal Skills define sheet layout, reference fidelity, and image-prompt rules.
+Character Creator lives under `packages/lixpi/capability-system/src/capabilities/character-creator/`. Its module-internal entry Tool validates the request and builds a typed provider-neutral plan for 26 required panels and one conditional prop panel. Separate module-internal Skills define the dependency graph, reference fidelity, and per-panel prompt rules.
 
-The Tool does not select a hidden media model or generate an Asset itself. The selected reasoning and image-model matrix remains authoritative. The normal media pipeline receives the Tool output, allocates branch lineage, sends the source and layout references through the shared provider-neutral reference resolver, and settles every variant through ordinary Asset and canvas paths. Character Creator excludes video generation. See [Character Creator](./CHARACTER-CREATOR.md).
+The Tool does not select a hidden media model or generate an Asset itself. The selected reasoning and image-model matrix remains authoritative. The media strategy reauthorizes canonical/original sources, analyzes structured evidence, generates and checks isolated panels, and assembles the final PNG with owned deterministic layout code. The final image settles through ordinary Asset and canvas paths. Character Creator excludes video generation. See [Character Creator](./CHARACTER-CREATOR.md).
 
 ### Action Timeline
 

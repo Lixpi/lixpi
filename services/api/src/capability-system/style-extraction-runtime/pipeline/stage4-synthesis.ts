@@ -126,6 +126,7 @@ export const synthesizeStyle = async (state: StyleExtractionState, logger: Stage
         const result = await callStructuredVlm<StyleDraft>({
             provider: state.input.analysisProvider,
             modelVersion: state.input.analysisModel.modelVersion,
+            inferenceCapabilities: state.input.analysisModel.inferenceCapabilities,
             systemPrompt: SYSTEM_PROMPT,
             userMessages: messages,
             schema,

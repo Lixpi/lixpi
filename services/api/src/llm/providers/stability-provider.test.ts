@@ -40,6 +40,19 @@ const OVERSIZED_WIDTH = 5000
 const OVERSIZED_HEIGHT = 3500
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
 const TINY_PNG_DATA_URL = `data:image/png;base64,${TINY_PNG_BASE64}`
+const IMAGE_REFERENCE_CAPABILITIES = {
+    maxReferenceImages: 2,
+    maxIdentityReferenceImages: 0,
+    conditioningModes: ['edit', 'style', 'structure'] as const,
+    inputFidelity: 'standard' as const,
+    supportsIterativeEdit: true,
+    supportsMask: false,
+    supportsStructureControl: true,
+    supportsPoseControl: false,
+    supportsDeterministicSeed: true,
+    maxOutputPixels: 4194304,
+    supportedAspectRatios: ['1:1', '3:2'],
+}
 
 type CapturedRequest = {
     url: string
@@ -59,18 +72,6 @@ const createOversizedJpegDataUrl = async (background: string): Promise<string> =
         .toBuffer()
 
     return `data:image/jpeg;base64,${bytes.toString('base64')}`
-}
-
-const createPngDataUrl = async (background: string): Promise<string> => {
-    const bytes = await sharp({
-        create: {
-            width: 64,
-            height: 64,
-            channels: 3,
-            background,
-        },
-    }).png().toBuffer()
-    return `data:image/png;base64,${bytes.toString('base64')}`
 }
 
 const getFormData = (request: CapturedRequest): FormData => {
@@ -137,6 +138,7 @@ const processWithMessages = async (overrides: Record<string, any> = {}): Promise
             provider: 'Stability',
             model: 'sd3.5-large',
             modelVersion: 'sd3.5-large',
+            imageReferenceCapabilities: IMAGE_REFERENCE_CAPABILITIES,
         },
         messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
         generationRun: {
@@ -272,27 +274,19 @@ describe('StabilityProvider reference image ingestion', () => {
         expect(formData.has('init_image')).toBe(true)
         expect(formData.has('style_image')).toBe(true)
         expect(formData.get('style_strength')).toBe('1')
-        // References without Character Creator roles fall back to byte-size ordering.
-        expect(getUploadedBlob(formData, 'init_image').type).toBe('image/jpeg')
-        expect(getUploadedBlob(formData, 'style_image').type).toBe('image/png')
+        expect(getUploadedBlob(formData, 'init_image').type).toBe('image/png')
+        expect(getUploadedBlob(formData, 'style_image').type).toBe('image/jpeg')
     })
 
-    it('uses the Character Creator template as structural control during layout synthesis', async () => {
+    it('uses an explicit structure reference as structural control', async () => {
         const largeLayoutExample = await createOversizedJpegDataUrl('#d8d8d8')
         const request = await processWithMessages({
-            messages: [{ role: 'user', content: 'Preserve the character and use the layout example only for sheet organization.' }],
-            imageGenerationReferences: [
-                {
-                    url: TINY_PNG_DATA_URL,
-                    role: 'character-source',
-                    fileName: 'character-source-1',
-                },
-                {
-                    url: largeLayoutExample,
-                    role: 'character-layout-example',
-                    fileName: 'character-layout-example-1',
-                },
-            ],
+            messages: [{ role: 'user', content: 'Use this image only for composition structure.' }],
+            imageGenerationReferences: [{
+                url: largeLayoutExample,
+                role: 'structure-reference',
+                fileName: 'structure-reference-1',
+            }],
         })
         const formData = getFormData(request)
 
@@ -302,44 +296,6 @@ describe('StabilityProvider reference image ingestion', () => {
         expect(getUploadedBlob(formData, 'image').type).toBe('image/jpeg')
         expect(formData.has('init_image')).toBe(false)
         expect(formData.has('style_image')).toBe(false)
-    })
-
-    it('uses the generated sheet as the target and every character source in one style-evidence board during fidelity restoration', async () => {
-        const draft = await createPngDataUrl('#eeeeee')
-        const sourceOne = await createPngDataUrl('#ff0000')
-        const sourceTwo = await createPngDataUrl('#0000ff')
-        const request = await processWithMessages({
-            messages: [{ role: 'user', content: 'Restore the exact character rendering style without changing the sheet layout.' }],
-            imageGenerationReferences: [
-                {
-                    url: draft,
-                    role: 'character-sheet-draft',
-                    fileName: 'character-sheet-draft',
-                },
-                {
-                    url: sourceOne,
-                    role: 'character-source',
-                    fileName: 'character-source-1',
-                },
-                {
-                    url: sourceTwo,
-                    role: 'character-source',
-                    fileName: 'character-source-2',
-                },
-            ],
-            imageSize: '3:2',
-        })
-        const formData = getFormData(request)
-
-        expect(request.url).toBe('https://api.stability.ai/v2beta/stable-image/control/style-transfer')
-        expect(getUploadedBlob(formData, 'init_image').type).toBe('image/png')
-        expect(getUploadedBlob(formData, 'style_image').type).toBe('image/png')
-        expect(formData.get('style_strength')).toBe('1')
-        const compositeBytes = Buffer.from(await getUploadedBlob(formData, 'style_image').arrayBuffer())
-        const compositeMetadata = await sharp(compositeBytes).metadata()
-        expect(compositeMetadata.width).toBe(1536)
-        expect(compositeMetadata.height).toBe(768)
-        expect(debugTools.warn).not.toHaveBeenCalledWith(expect.stringContaining('extra references skipped'))
     })
 
     it('resizes oversized style-control reference before upload', async () => {

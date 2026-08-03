@@ -90,6 +90,48 @@ describe('branch marker prompt content', () => {
         expect(rendered[2]).toBe(' 15s duration 2s gaps with imaginary plot')
     })
 
+    it('renders capability metadata previews in submitted branch markers', async () => {
+        const parts = getBranchMarkerPromptParts(submittedMessage, '')
+        const rendered = renderBranchMarkerPromptParts(parts, {
+            inlinePopover: true,
+            previewRenderer: {
+                getNode: () => undefined,
+                getCapabilityModule: async () => ({
+                    moduleId: 'action-timeline',
+                    name: 'Action Timeline',
+                    normalizedName: 'action timeline',
+                    summary: 'Creates an action timeline.',
+                    tags: [],
+                    status: 'active',
+                    descriptionSheet: {
+                        purpose: 'Creates a timed action plan.',
+                        expectedInputs: [{
+                            name: 'Prompt',
+                            requirement: 'required',
+                            accepts: ['prompt'],
+                            description: 'Describe the action.',
+                        }],
+                        bestResults: ['Specify timing.'],
+                        limitations: ['Timing is inferred when omitted.'],
+                        executionCharacteristics: { cost: 'medium', latency: 'medium', summary: 'Builds a structured timeline.' },
+                    },
+                }),
+                environment: {
+                    getDocuments: () => [],
+                    getThreads: () => [],
+                    getApiBaseUrl: () => '',
+                    getAuthToken: async () => '',
+                },
+            },
+        })
+        const preview = rendered[1] as HTMLElement
+        document.body.append(preview)
+        preview.dispatchEvent(new PointerEvent('pointerenter'))
+        await new Promise(resolve => setTimeout(resolve, 0))
+
+        expect(document.body.querySelector('.capability-description-card h2')?.textContent).toBe('Action Timeline')
+    })
+
     it('preserves normal marker text behavior when no Capability badge exists', () => {
         const parts = getBranchMarkerPromptParts({
             type: 'aiUserMessage',

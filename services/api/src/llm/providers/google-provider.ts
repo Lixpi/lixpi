@@ -10,6 +10,7 @@ import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState, ChatMessage } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import {
+    assertMessageInputKindsSupported,
     convertAttachmentsForProvider,
     parseDataUrl,
     resolveImageUrls,
@@ -32,7 +33,6 @@ import {
 } from '../../capability-system/capability-model-tool-executor.ts'
 import { asGoogleTool } from '@lixpi/capability-system/backend'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
-import { assertProviderMessageInputKinds } from './provider-capabilities.ts'
 import { assessProviderInputBudget } from './provider-input-budget.ts'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -200,12 +200,22 @@ const buildGoogleImageReferenceLabel = (
 ): string => {
     const prefix = `REFERENCE IMAGE ${index + 1}`
     switch (reference.role) {
-        case 'character-sheet-draft':
-            return `${prefix} — GENERATED SHEET TO EDIT. Preserve its exact layout, panels, labels, guides, and composition.`
-        case 'character-source':
-            return `${prefix} — AUTHORITATIVE CHARACTER SOURCE. Preserve its identity, design, facial construction, and rendering style.`
-        case 'character-layout-example':
-            return `${prefix} — AUTHORITATIVE LAYOUT TEMPLATE. Use its organization only; never copy its depicted character.`
+        case 'original-source':
+            return `${prefix} — AUTHORITATIVE SOURCE. Preserve observed identity and design evidence.`
+        case 'face-crop':
+            return `${prefix} — FACE IDENTITY CROP. Preserve observed facial construction.`
+        case 'body-outfit-crop':
+            return `${prefix} — BODY AND OUTFIT CROP. Preserve observed proportions, silhouette, and clothing.`
+        case 'canonical-anchor':
+            return `${prefix} — CANONICAL GENERATED ANCHOR. Keep the same generated character identity.`
+        case 'adjacent-angle':
+            return `${prefix} — ADJACENT GENERATED ANGLE. Keep cross-view continuity.`
+        case 'prop-crop':
+            return `${prefix} — OBSERVED PROP CROP. Preserve the visible prop.`
+        case 'pose-reference':
+            return `${prefix} — POSE REFERENCE. Use its pose without copying identity.`
+        case 'structure-reference':
+            return `${prefix} — STRUCTURE REFERENCE. Use its composition without copying identity.`
         case 'capability-reference':
             return `${prefix} — CAPABILITY REFERENCE.`
         case 'source-reference':
@@ -225,12 +235,18 @@ export class GoogleProvider extends BaseProvider {
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
-        assertProviderMessageInputKinds('Google', state.modelVersion, state.messages)
+        assertMessageInputKindsSupported(
+            'Google',
+            state.modelVersion,
+            state.aiModelMetaInfo.inferenceCapabilities,
+            state.messages,
+        )
         const messages = state.messages
         const modelVersion = state.modelVersion
         const maxTokens = state.maxCompletionSize
         const temperature = state.temperature ?? 0.7
-        const supportsSystemPrompt = state.aiModelMetaInfo?.supportsSystemPrompt ?? true
+        const capabilities = state.aiModelMetaInfo.inferenceCapabilities
+        const supportsSystemPrompt = capabilities.supportsSystemPrompt
         const enableImageGeneration = state.enableImageGeneration ?? false
         const imageSize = state.imageSize ?? 'auto'
 
@@ -239,15 +255,17 @@ export class GoogleProvider extends BaseProvider {
             const modality = typeof m === 'object' ? m?.modality : m
             return modality === 'image' || modality === 'image_generation'
         })
-        const modelNameImpliesImageOutput = /gemini-.*(?:-image|image-generation)/i.test(modelVersion)
-        const effectiveImageGen = enableImageGeneration && (modelSupportsImageOutput || modelNameImpliesImageOutput)
+        const effectiveImageGen = enableImageGeneration && modelSupportsImageOutput
 
         const hasImageModel = !!state.imageModelVersion
         const injectTool = hasImageModel && !enableImageGeneration
 
         const enableVideoGeneration = state.enableVideoGeneration ?? false
-        const modelNameImpliesVideoOutput = /veo/i.test(modelVersion)
-        const effectiveVideoGen = enableVideoGeneration && modelNameImpliesVideoOutput
+        const modelSupportsVideoOutput = Array.isArray(modalities) && modalities.some((m: any) => {
+            const modality = typeof m === 'object' ? m?.modality : m
+            return modality === 'video' || modality === 'video_generation'
+        })
+        const effectiveVideoGen = enableVideoGeneration && modelSupportsVideoOutput
 
         const hasVideoModel = !!state.videoModelVersion
         const injectVideoTool = hasVideoModel && !enableImageGeneration && !enableVideoGeneration
@@ -298,7 +316,8 @@ export class GoogleProvider extends BaseProvider {
             ]
         }
 
-        const config: Record<string, any> = { temperature }
+        const config: Record<string, any> = {}
+        if (capabilities.supportsTemperature) config.temperature = temperature
         if (maxTokens) config.maxOutputTokens = maxTokens
 
         if (effectiveImageGen) {
@@ -341,7 +360,7 @@ export class GoogleProvider extends BaseProvider {
         }
         if (systemInstruction) config.systemInstruction = systemInstruction
 
-        if (effectiveImageGen && !modelVersion.startsWith('gemini-2.5')) {
+        if (effectiveImageGen && capabilities.thinkingMode === 'google-level') {
             config.thinkingConfig = { includeThoughts: true }
         }
 

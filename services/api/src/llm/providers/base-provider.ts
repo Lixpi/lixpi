@@ -255,9 +255,22 @@ export abstract class BaseProvider {
         const organizationId = requestData.organizationId ?? requestData.eventMeta?.organizationId
         if (!organizationId) throw new Error('Provider request is missing organizationId')
         const imageGenerationReferences = requestData.imageGenerationReferences ?? []
-        const resolvedImageGenerationReferences = requestData.enableImageGeneration
+        const rawResolvedImageGenerationReferences = requestData.enableImageGeneration
             ? await resolveImageGenerationReferences(imageGenerationReferences, this.nats)
             : undefined
+        const imageReferenceCapabilities = requestData.aiModelMetaInfo?.imageReferenceCapabilities
+        if (rawResolvedImageGenerationReferences?.length && !imageReferenceCapabilities) {
+            throw new Error('IMAGE_REFERENCE_CAPABILITIES_REQUIRED')
+        }
+        const imageReferenceAdaptation = rawResolvedImageGenerationReferences?.length
+            ? this.deps.mediaProviderDefinition?.imageReferenceAdapter?.adapt({
+                references: rawResolvedImageGenerationReferences,
+                capabilities: imageReferenceCapabilities!,
+                requiresIdentity: requestData.capabilityMediaExecutionPlan?.kind === 'character-sheet',
+            })
+            : undefined
+        const resolvedImageGenerationReferences = imageReferenceAdaptation?.included
+            ?? rawResolvedImageGenerationReferences
         if (resolvedImageGenerationReferences) {
             info(`[ImageGenerationReferences:${this.instanceKey}] resolved ${JSON.stringify({
                 provider: this.providerName,
@@ -357,6 +370,7 @@ export abstract class BaseProvider {
             imagePromptRetryCount: 0,
             imageGenerationReferences,
             resolvedImageGenerationReferences,
+            imageReferenceAdaptation,
             workspaceContextSnapshot: requestData.workspaceContextSnapshot,
             workspaceContextResolution: requestData.workspaceContextResolution,
             mediaBranchCandidateSnapshot: requestData.mediaBranchCandidateSnapshot,
@@ -375,6 +389,7 @@ export abstract class BaseProvider {
             capabilityReferenceImageTraceUrls: requestData.capabilityReferenceImageTraceUrls,
             capabilityUsageMode: requestData.capabilityUsageMode,
             capabilityUsagePrompt: requestData.capabilityUsagePrompt,
+            capabilityMediaExecutionPlan: requestData.capabilityMediaExecutionPlan,
             enableVideoGeneration: characterCreatorSelected ? false : requestData.enableVideoGeneration ?? false,
             videoModelMetaInfo: characterCreatorSelected ? undefined : requestData.videoModelMetaInfo,
             videoModelVersion: characterCreatorSelected ? undefined : requestData.videoModelMetaInfo?.modelVersion,

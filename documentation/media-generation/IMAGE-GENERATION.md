@@ -63,7 +63,7 @@ Within the Image API path, the presence of reference images selects the endpoint
 
 Reference-image data URLs are converted to `BytesIO` file objects via `_data_url_to_file()` before being passed to the SDK. The streaming response yields `ImageGenPartialImageEvent` objects (each carrying progressive base64) and a terminal `ImageGenCompletedEvent` (final base64 + usage data). `partial_images=3` is what drives the up-to-three progressive previews the canvas paints into the placeholder node.
 
-Reference-conditioned Character Creator requires high-fidelity image input handling. The NEX model-synchronization workload stores `imageInputFidelity` on each image-model record: `level` describes the effective routed fidelity and optional `requestValue` describes a vendor parameter that must be sent. `ImageRouter` accepts reference-conditioned Character Creator only when the selected record declares `level: high`; the OpenAI adapter forwards `requestValue` without inspecting the model ID.
+Every synchronized image model carries a required `imageReferenceCapabilities` profile. It declares total and identity-reference budgets, supported conditioning modes, fidelity behavior, iterative-edit and control support, output pixel limits, and aspect ratios. Provider adapters consume the selected model's profile instead of inferring behavior from model names. OpenAI's adapter sends explicit input-fidelity values only when synchronized metadata requires one.
 
 ### OpenAI — Responses API Models (`gpt-4.1`, `gpt-5`, …)
 
@@ -117,6 +117,26 @@ all three block formats:
 {% callout type="note" %}
 The reference set the text model writes against is not "every attached photo" — it is the exact VLM-approved set produced by `resolveMediaBranch` *before* the text model streams. Which media become target, base-context, style-reference, comparison-target, or excluded — and how those choices drive canvas placement and branch lineage — is owned by [Branch Lineage](./BRANCH-LINEAGE.md). This section only covers the per-provider *format* of the blocks `extractReferenceImages()` reads.
 {% /callout %}
+
+## Provider-neutral reference adaptation
+
+`ImageRouter` and Capability media strategies use typed reference roles. Ordinary requests use source/style roles. Character Creator adds `original-source`, `face-crop`, `body-outfit-crop`, `canonical-anchor`, `adjacent-angle`, `prop-crop`, and optional pose or structure roles.
+
+`BaseProvider` resolves every reference to bytes once. The selected provider definition then adapts the ordered roles to its native API while enforcing `imageReferenceCapabilities`. Identity and original-source slots are reserved before optional controls. The resulting trace records included and omitted roles.
+
+- OpenAI uploads adapted references through the multi-image edit path.
+- Google interleaves role labels with image parts.
+- Stability uses only the image, style, and structure inputs exposed by the selected endpoint. Style transfer does not satisfy identity conditioning.
+
+A referenced-character plan fails before panel work when the selected image model lacks identity conditioning. The common routing and Character graph do not contain provider-name branches.
+
+## Character Creator panel execution
+
+Character Creator bypasses whole-sheet provider generation. Its Capability Tool emits a `CharacterSheetRenderPlan`, its module definition registers the package-owned media strategy, and `ImageRouter` delegates that plan without importing the concrete capability.
+
+The strategy generates 26 isolated panels plus a conditional prop panel. Each panel receives one candidate and at most one targeted correction. Accepted panels become dependencies for adjacent views. A structured reasoning-model assessment compares candidate pixels with authorized source evidence and accepted anchors. Photographic face-bearing panels also use the internal YuNet/SFace fidelity workload.
+
+Sharp and an owned SVG resource assemble the final 3840x2560 PNG. Providers never render labels, grids, notes, swatches, or the full sheet. Only the final composed PNG enters the ordinary preassigned-Asset settlement path; transient references and candidate panels are deleted at terminal cleanup. See [Character Creator](../library/CHARACTER-CREATOR.md).
 
 Before this extraction path, the [media reference boundary](./MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md) compiles explicit references and uniquely matched free-form Asset mentions to `REFERENCE_n`. Reasoning context contains aliases, safe descriptors, medium, and subject-identity classification—not mutable titles or filenames. OpenAI GPT Image requests use the registered `moderation: 'low'` profile. A provider rejection is normalized into the durable run problem and is never retried automatically.
 
