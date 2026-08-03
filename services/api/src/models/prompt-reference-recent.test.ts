@@ -52,7 +52,7 @@ describe('PromptReferenceRecentModel', () => {
                 referenceKey: `media#asset-${index}`,
                 referenceType: 'media',
                 referenceId: `asset-${index}`,
-                updatedAt: 1_000 - index,
+                updatedAt: 1000 - index,
             })),
         })
 

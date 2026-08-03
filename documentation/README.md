@@ -69,7 +69,7 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 | Page | What it covers |
 |------|----------------|
 | [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md) | The workspace-owned AI chat panel, standalone chats, Capability runs, tabs, Sessions, and persistence |
-| [Context Relevance](ai-chat/CONTEXT-RELEVANCE.md) | Descriptor-first workspace relevance, the resolver, explicit chips, automatic selections, data contracts, context-region removal |
+| [Explicit Workspace Context](ai-chat/CONTEXT-RELEVANCE.md) | Prompt reference atoms, composer context chips, authorization, and explicit-only media candidate routing |
 | [Media & Content Descriptors](ai-chat/MEDIA-DESCRIPTORS.md) | The `ContentDescriptor` shape, sourcing paths, self-heal, the canvas indicator |
 
 ## Media Generation
@@ -79,6 +79,7 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 | [Image Generation](media-generation/IMAGE-GENERATION.md) | The `generate_image` tool, provider paths (Image API / Responses API / Gemini native), sizes, image events |
 | [Video Generation](media-generation/VIDEO-GENERATION.md) | VEO submit/poll, the `generate_video` tool, the VEO provider, storage/durability, video events, the video node, model sync, usage, extension |
 | [Branch Lineage & Provenance](media-generation/BRANCH-LINEAGE.md) | The structured VLM resolver, candidate snapshot, persisted metadata, placement rules, branch-root provenance, balanced branch-tree layout, references-vs-lineage |
+| [Media Reference Identity and Provider Moderation](media-generation/MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md) | Provider-safe aliases, local ambiguity resolution, durable requests, Asset identity attestations, native verification, provider policy profiles, and recoverable operation nodes |
 | [Video Player Controls](media-generation/VIDEO-PLAYER-CONTROLS.md) | The shared SVG control bar, two mount points, scrubbing, accessibility |
 
 ## Library

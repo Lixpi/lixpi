@@ -52,6 +52,7 @@ const mocks = vi.hoisted(() => {
     const subscriptionSubjects = ['subscription-subject']
     const aiModelSubjects = ['ai-model-subject']
     const aiInteractionSubjects = ['ai-interaction-subject']
+    const mediaGenerationRequestSubjects = ['media-generation-request-subject']
     const mediaDescriptorSubjects = ['media-descriptor-subject']
     const workspaceSubjects = ['workspace-subject']
     const assetSubjects = ['asset-subject']
@@ -71,6 +72,7 @@ const mocks = vi.hoisted(() => {
     const workspaceExportRoutes = {}
     const capabilityRoutes = {}
     const transientMediaRoutes = {}
+    const providerVerificationRoutes = {}
 
     const createLlmModule = vi.fn()
     let llmModule: {
@@ -123,6 +125,7 @@ const mocks = vi.hoisted(() => {
         subscriptionSubjects,
         aiModelSubjects,
         aiInteractionSubjects,
+        mediaGenerationRequestSubjects,
         mediaDescriptorSubjects,
         workspaceSubjects,
         assetSubjects,
@@ -137,6 +140,7 @@ const mocks = vi.hoisted(() => {
         workspaceExportRoutes,
         capabilityRoutes,
         transientMediaRoutes,
+        providerVerificationRoutes,
         createLlmModule: createLlmModule.mockImplementation(() => {
             const module = {
                 capabilityModuleCatalog,
@@ -219,6 +223,9 @@ vi.mock('./NATS/subscriptions/ai-interaction-subjects.ts', () => ({
     aiInteractionSubjects: mocks.aiInteractionSubjects,
     setLlmModule: mocks.setLlmModule,
 }))
+vi.mock('./NATS/subscriptions/media-generation-request-subjects.ts', () => ({
+    mediaGenerationRequestSubjects: mocks.mediaGenerationRequestSubjects,
+}))
 vi.mock('./NATS/subscriptions/media-descriptor-subjects.ts', () => ({ mediaDescriptorSubjects: mocks.mediaDescriptorSubjects }))
 vi.mock('./NATS/subscriptions/workspace-subjects.ts', () => ({ workspaceSubjects: mocks.workspaceSubjects }))
 vi.mock('./NATS/subscriptions/asset-subjects.ts', () => ({ assetSubjects: mocks.assetSubjects }))
@@ -248,6 +255,9 @@ vi.mock('./routes/capability-routes.ts', () => ({
 }))
 vi.mock('./routes/transient-media-routes.ts', () => ({
     default: mocks.transientMediaRoutes,
+}))
+vi.mock('./routes/provider-verification-routes.ts', () => ({
+    default: mocks.providerVerificationRoutes,
 }))
 
 vi.mock('./llm/index.ts', () => ({
@@ -340,6 +350,7 @@ describe('services/api server startup', () => {
         ...mocks.subscriptionSubjects,
         ...mocks.aiModelSubjects,
         ...mocks.aiInteractionSubjects,
+        ...mocks.mediaGenerationRequestSubjects,
         ...mocks.mediaDescriptorSubjects,
         ...mocks.workspaceSubjects,
         ...mocks.assetSubjects,
@@ -406,7 +417,7 @@ describe('services/api server startup', () => {
             'NATS_NEX_NODE_NKEY_PUBLIC is not configured; NEX clients cannot authenticate through auth callout',
         )
 
-        expect(mocks.app.use).toHaveBeenCalledTimes(8)
+        expect(mocks.app.use).toHaveBeenCalledTimes(9)
         expect(mocks.expressJson).toHaveBeenCalledWith({ limit: '100mb' })
         expect(mocks.expressUrlencoded).toHaveBeenCalledWith({ limit: '100mb', extended: true })
         expect(mocks.cors).toHaveBeenCalledWith({ origin: 'https://api.example.test', credentials: true })
@@ -416,6 +427,7 @@ describe('services/api server startup', () => {
         expect(routeForPath('/api/workspaces')).toBe(mocks.workspaceExportRoutes)
         expect(routeForPath('/api/capabilities')).toBe(mocks.capabilityRoutes)
         expect(routeForPath('/api/transient-media')).toBe(mocks.transientMediaRoutes)
+        expect(routeForPath('/api/provider-verification')).toBe(mocks.providerVerificationRoutes)
         expect(mocks.capabilityRunEventRelayStart).toHaveBeenCalledTimes(1)
 
         const healthRoute = mocks.appGetCalls.find((call) => call.path === '/health-check')

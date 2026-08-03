@@ -14,7 +14,7 @@ import type { ProviderState } from '../llm/graph/state.ts'
 import { CapabilityModelResolverStore } from './capability-runtime-adapters.ts'
 import { capabilityActionRegistry } from './capability-runtime.ts'
 
-const MAX_SKILL_CONTEXT_CHARS = 64_000
+const MAX_SKILL_CONTEXT_CHARS = 64000
 
 export async function resolveCapabilitiesForState(
     state: ProviderState,

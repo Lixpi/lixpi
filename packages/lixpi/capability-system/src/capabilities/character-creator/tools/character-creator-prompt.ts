@@ -27,6 +27,8 @@ export type CharacterSheetValidation = CharacterSheetAssessment & {
     passed: boolean
 }
 
+export const CHARACTER_CREATOR_VISUAL_INSTRUCTIONS_MAX_CHARS = 8500
+
 const REQUIRED_ASSESSMENT_FLAGS: Array<keyof Omit<CharacterSheetAssessment, 'issues'>> = [
     'isSingleImage',
     'isLandscape',
@@ -76,16 +78,17 @@ export function buildCharacterCreatorImagePrompt(input: CharacterCreatorPromptIn
         throw new Error('CHARACTER_CREATOR_REFERENCE_COUNT_INVALID')
     }
 
-    return [
+    const renderPrompt = (boundedRequest: string): string => [
         'Create exactly one professional character design sheet containing one repeated character identity.',
         '',
         'CHARACTER REQUEST',
-        request,
+        boundedRequest,
         '',
         'AUTHORITATIVE ATTACHED TEMPLATE',
         'The attached character-sheet template image is the output-layout specification, not character-appearance inspiration.',
         'Reproduce its complete landscape organization, anatomical alignment guides, section positions, view coverage, technical labels, note panels, and pose panels. Populate every placeholder with the requested character.',
         'Character-source images define identity and design. The template defines layout. Do not replace it with a simplified portrait-and-turnaround strip.',
+        'The illustrated character inside the layout template is a negative style reference: never copy its drawing, linework, shading, proportions, facial simplification, or paper texture.',
         '',
         'TEMPLATE LAYOUT CONTRACT',
         input.layoutInstructions.trim(),
@@ -96,6 +99,10 @@ export function buildCharacterCreatorImagePrompt(input: CharacterCreatorPromptIn
             '',
             `REFERENCE ASSETS (${input.referenceCount} authorized image${input.referenceCount === 1 ? '' : 's'})`,
             input.referenceFidelityInstructions.trim(),
+            'Match the authoritative source rendering class exactly instead of choosing a generic character-sheet style.',
+            'When the authoritative source medium is photography, every character depiction must remain photorealistic, with recognizable facial likeness, natural anatomy, real skin and hair detail, photographic materials, and physically coherent studio lighting.',
+            'A photographic source must never become a cartoon, drawing, painting, concept-art rendering, cel-shaded figure, or other illustration. When the source is illustrated, preserve that specific illustrated medium instead of converting it to photography.',
+            'The illustrated character inside the layout template is a negative style reference and must never override the source medium.',
         ] : []),
         '',
         'FINAL OUTPUT CONSTRAINTS',
@@ -104,6 +111,15 @@ export function buildCharacterCreatorImagePrompt(input: CharacterCreatorPromptIn
         'Do not crop any full-height view. Do not omit the head, expression, hands, feet, props, notes, palette, materials, details, alignment-guide, or pose sections.',
         'Do not add extra characters, alternate outfits, scenery, logos, or watermarks.',
     ].join('\n')
+    const fixedPromptLength = renderPrompt('').length
+    const maximumRequestLength = Math.max(
+        1,
+        CHARACTER_CREATOR_VISUAL_INSTRUCTIONS_MAX_CHARS - fixedPromptLength,
+    )
+    const boundedRequest = request.length <= maximumRequestLength
+        ? request
+        : `${request.slice(0, Math.max(0, maximumRequestLength - 3)).trimEnd()}...`
+    return renderPrompt(boundedRequest)
 }
 
 export function normalizeCharacterSheetAssessment(input: unknown): CharacterSheetValidation {

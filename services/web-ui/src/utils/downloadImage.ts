@@ -107,7 +107,7 @@ async function downloadViaNavigation(imageUrl: string, getAuthToken?: () => Prom
 
     setTimeout(() => {
         document.body.removeChild(iframe)
-    }, 30_000)
+    }, 30000)
 }
 
 export async function downloadImage(imageUrl: string, options?: DownloadImageOptions): Promise<void> {

@@ -7,9 +7,10 @@ import {
 import type { CapabilityModuleCatalog } from '@lixpi/capability-system/backend'
 
 import Workspace from '../../models/workspace.ts'
+import Organization from '../../models/organization.ts'
 import PromptReferenceRecentModel from '../../models/prompt-reference-recent.ts'
-import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 import { PromptReferenceCatalogService } from '../../services/prompt-reference-catalog-service.ts'
+import { createAssetRequesterForWorkspaceUser } from '../../services/workspace-reference-scope.ts'
 
 const { CAPABILITY_SUBJECTS, PROMPT_REFERENCE_SUBJECTS } = NATS_SUBJECTS
 const VALID_CATEGORIES = new Set<PromptReferenceCategory>(['media', 'artifacts', 'capabilities', 'tools', 'skills'])
@@ -25,6 +26,17 @@ function getModuleCatalog(): CapabilityModuleCatalog {
     return moduleCatalog
 }
 
+const getWorkspaceCatalogContext = async (userId: string, workspaceId: string) => {
+    const workspace = await Workspace.getWorkspace({ userId, workspaceId })
+    if ('error' in workspace || workspace.deletingAt) return { error: 'WORKSPACE_ACCESS_DENIED' as const }
+    const organization = await Organization.getOrganization({ organizationId: workspace.organizationId, userId })
+    if ('error' in organization) return { error: 'ORGANIZATION_ACCESS_DENIED' as const }
+    return {
+        workspace,
+        requester: createAssetRequesterForWorkspaceUser(workspace, userId, true),
+    }
+}
+
 export const promptReferenceSubjects = [
     {
         subject: CAPABILITY_SUBJECTS.MODULES.LIST,
@@ -33,13 +45,16 @@ export const promptReferenceSubjects = [
         permissions: { pub: { allow: [CAPABILITY_SUBJECTS.MODULES.LIST] }, sub: { allow: [] } },
         handler: async (data: any) => {
             const userId = data.user.userId as string
-            const [workspace, requester] = await Promise.all([
-                Workspace.getWorkspace({ userId, workspaceId: data.workspaceId }),
-                getAssetRequesterContext(userId),
-            ])
-            if ('error' in workspace || workspace.deletingAt) return { error: 'WORKSPACE_ACCESS_DENIED' }
+            const context = await getWorkspaceCatalogContext(userId, data.workspaceId)
+            if ('error' in context) return context
             const service = new PromptReferenceCatalogService(getModuleCatalog())
-            return { items: await service.listModules(requester, typeof data.query === 'string' ? data.query : '') }
+            return {
+                items: await service.listModules(
+                    context.workspace,
+                    context.requester,
+                    typeof data.query === 'string' ? data.query : '',
+                ),
+            }
         },
     },
     {
@@ -49,13 +64,10 @@ export const promptReferenceSubjects = [
         permissions: { pub: { allow: [CAPABILITY_SUBJECTS.MODULES.GET] }, sub: { allow: [] } },
         handler: async (data: any) => {
             const userId = data.user.userId as string
-            const [workspace, requester] = await Promise.all([
-                Workspace.getWorkspace({ userId, workspaceId: data.workspaceId }),
-                getAssetRequesterContext(userId),
-            ])
-            if ('error' in workspace || workspace.deletingAt) return { error: 'WORKSPACE_ACCESS_DENIED' }
+            const context = await getWorkspaceCatalogContext(userId, data.workspaceId)
+            if ('error' in context) return context
             const module = await new PromptReferenceCatalogService(getModuleCatalog())
-                .getModule(requester, data.moduleId)
+                .getModule(context.workspace, context.requester, data.moduleId)
             return module ?? { error: 'CAPABILITY_MODULE_NOT_FOUND' }
         },
     },
@@ -69,14 +81,11 @@ export const promptReferenceSubjects = [
                 const category = data.category as PromptReferenceCategory
                 if (!VALID_CATEGORIES.has(category)) throw new Error('INVALID_PROMPT_REFERENCE_CATEGORY')
                 const userId = data.user.userId as string
-                const [workspace, requester] = await Promise.all([
-                    Workspace.getWorkspace({ userId, workspaceId: data.workspaceId }),
-                    getAssetRequesterContext(userId),
-                ])
-                if ('error' in workspace || workspace.deletingAt) throw new Error('WORKSPACE_ACCESS_DENIED')
+                const context = await getWorkspaceCatalogContext(userId, data.workspaceId)
+                if ('error' in context) throw new Error(context.error)
                 return await new PromptReferenceCatalogService(getModuleCatalog()).list({
-                    workspace,
-                    requester,
+                    workspace: context.workspace,
+                    requester: context.requester,
                     category,
                     query: typeof data.query === 'string' ? data.query : '',
                     limit: typeof data.limit === 'number' ? data.limit : undefined,

@@ -7,7 +7,7 @@ description: Fixed multi-view layout and composition instructions for one-image 
 
 Produce exactly one detailed landscape character-design sheet. The attached `character-sheet-example.jpg` is the authoritative output-layout specification. Populate its placeholders with the requested character while preserving its complete organization, view coverage, alignment system, panel hierarchy, and labels.
 
-The template controls layout. Character-source references control identity, outfit, materials, colors, and rendering style. Never copy character appearance from the template or replace the template with a simplified turnaround strip.
+The template controls layout. Character-source references control identity, outfit, materials, colors, and rendering style. The illustrated template character is a negative style reference: never copy its drawing, linework, shading, facial simplification, or paper texture. When character sources are photographs, render every character depiction as photorealistic studio photography with recognizable facial likeness. Never replace the template with a simplified turnaround strip.
 
 Preserve all template sections:
 

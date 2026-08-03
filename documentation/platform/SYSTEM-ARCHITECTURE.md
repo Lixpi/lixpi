@@ -152,9 +152,9 @@ The canvas engine (`WorkspaceCanvas.ts`) is pure vanilla TypeScript with zero fr
 
 Every AI request sends the full conversation history; no provider-specific session IDs are stored. A user can start a conversation with Claude, switch to GPT, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`. The shared LangGraph workflow resolves sealed Tools and Skills plus branch candidates, executes explicitly required Tools, streams the text model with `search_capabilities` and `use_capability`, then conditionally routes `generate_image` and `generate_video` calls through transient media providers before calculating usage and cleaning up. See [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md).
 
-### Client-Side Context Extraction
+### Explicit Context Extraction
 
-When a user sends a message, the canvas integration builds explicit context previews and a descriptor-only workspace snapshot from Asset-backed nodes. The API authorizes and resolves selected Asset renditions, applies relevance selection, and assembles provider inputs while preserving canvas node IDs separately from Asset IDs. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md).
+When a user sends a message, the canvas integration builds a workspace snapshot from the nodes explicitly attached to the composer. The API also extracts typed prompt references from the authoritative user message. It filters media candidates against the explicit allowlist, authorizes each Asset, resolves selected renditions, and assembles provider inputs while preserving canvas node IDs separately from Asset IDs. See [Explicit Workspace Context](../ai-chat/CONTEXT-RELEVANCE.md).
 
 ## Scalability & Load Balancing
 
@@ -212,5 +212,5 @@ Shared packages in `packages/lixpi/` keep service contracts in sync so that the 
 - [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md) — the LangGraph workflow, providers, and tool-call routing.
 - [Streaming & Events](./STREAMING-AND-EVENTS.md) — live AI events, durable replay logs, ProseMirror step streams, and the event catalog.
 - [Rendering Engine](../canvas/RENDERING-ENGINE.md) — the framework-agnostic canvas.
-- [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md) — how the client assembles multimodal context.
+- [Explicit Workspace Context](../ai-chat/CONTEXT-RELEVANCE.md): how prompt references and composer chips become multimodal context.
 - [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md) and [Scaling & Operations](./deployment/SCALING-AND-OPERATIONS.md) — the AWS topology, Pulumi, and production scaling.

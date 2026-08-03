@@ -5,6 +5,7 @@ import {
 } from '@lixpi/capability-system/backend'
 import {
     actionTimelineArtifactDefinition,
+    actionTimelineSettings,
 } from '@lixpi/capability-system'
 
 export const capabilityArtifactBackendRegistry = new CapabilityArtifactBackendRegistry()
@@ -12,8 +13,7 @@ export const capabilityArtifactBackendRegistry = new CapabilityArtifactBackendRe
 capabilityArtifactBackendRegistry.register({
     artifactTypeId: actionTimelineArtifactDefinition.artifactTypeId,
     shared: actionTimelineArtifactDefinition,
-    initialCanvasDimensions: {
-        width: 520,
-        height: 360,
-    },
+    // Node geometry is owned by the capability's own settings file, not by this
+    // registration, so the capability stays the single place it is tuned.
+    initialCanvasDimensions: actionTimelineSettings.canvas.initialDimensions,
 })

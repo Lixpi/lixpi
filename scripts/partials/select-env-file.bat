@@ -1,4 +1,5 @@
-:: Shared ".env.* picker" subroutine used by start.bat and set-env.bat.
+:: Shared ".env.* picker" subroutine used by start.bat, set-env.bat, and
+:: aws-sso-login.bat.
 :: Call it (not run it directly) from a script that already has
 :: `setlocal enabledelayedexpansion` active:
 ::

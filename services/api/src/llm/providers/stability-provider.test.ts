@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { StabilityProvider } from './stability-provider.ts'
 import type { BaseProviderDeps } from './base-provider.ts'
+import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 
 const debugTools = vi.hoisted(() => ({
     info: vi.fn(),
@@ -34,7 +35,7 @@ vi.mock('../../services/asset-maintenance-queue.ts', () => ({
     enqueueProvenanceRebuild: vi.fn(async () => undefined),
 }))
 
-const MAX_STABILITY_REFERENCE_PIXELS = 9_437_184
+const MAX_STABILITY_REFERENCE_PIXELS = 9437184
 const OVERSIZED_WIDTH = 5000
 const OVERSIZED_HEIGHT = 3500
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
@@ -109,6 +110,7 @@ const makeDeps = (): BaseProviderDeps => ({
     } as any,
     runImageRouter: vi.fn(),
     runVideoRouter: vi.fn(),
+    mediaProviderDefinition: CURRENT_MEDIA_PROVIDER_DEFINITIONS.Stability,
 })
 
 const processWithMessages = async (overrides: Record<string, any> = {}): Promise<CapturedRequest> => {

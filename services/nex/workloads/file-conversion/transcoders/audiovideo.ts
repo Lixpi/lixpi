@@ -40,7 +40,7 @@ export const transcodeAudioVideo = async (buffer: Buffer, canonicalMime: string)
                 throw new Error(`Unsupported audio/video canonical mime: ${canonicalMime}`)
         }
 
-        await runProcess('ffmpeg', args, { timeoutMs: 300_000 })
+        await runProcess('ffmpeg', args, { timeoutMs: 300000 })
         return readFile(outPath)
     })
 
@@ -99,7 +99,7 @@ export const probeMedia = async (buffer: Buffer): Promise<MediaProbe> => {
             await runProcess('sh', [
                 '-c',
                 `ffprobe -v quiet -print_format json -show_format -show_streams "${inPath}" > "${outPath}"`,
-            ], { timeoutMs: 30_000 })
+            ], { timeoutMs: 30000 })
 
             const probe = JSON.parse(await readFile(outPath, 'utf-8'))
             const streams: any[] = Array.isArray(probe.streams) ? probe.streams : []
@@ -135,6 +135,6 @@ export const createVideoPreview = async (buffer: Buffer): Promise<Buffer> =>
             '-c:a', 'aac', '-b:a', '128k',
             '-movflags', '+faststart',
             outPath,
-        ], { timeoutMs: 300_000 })
+        ], { timeoutMs: 300000 })
         return readFile(outPath)
     })

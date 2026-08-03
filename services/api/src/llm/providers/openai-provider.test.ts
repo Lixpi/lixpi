@@ -4,9 +4,11 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ImageInputFidelityPolicy } from '@lixpi/constants'
 
 import { OpenAIProvider } from './openai-provider.ts'
 import type { BaseProviderDeps } from './base-provider.ts'
+import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 
 const debugTools = vi.hoisted(() => ({
     info: vi.fn(),
@@ -60,6 +62,7 @@ const makeDeps = (): BaseProviderDeps => ({
     } as any,
     runImageRouter: vi.fn(),
     runVideoRouter: vi.fn(),
+    mediaProviderDefinition: CURRENT_MEDIA_PROVIDER_DEFINITIONS.OpenAI,
 })
 
 const getUploadedFiles = (formData: FormData): File[] => {
@@ -72,6 +75,7 @@ const getUploadedFiles = (formData: FormData): File[] => {
 
 const processWithCharacterReferences = async (
     modelVersion: string,
+    imageInputFidelity: ImageInputFidelityPolicy,
 ): Promise<CapturedOpenAIRequest> => {
     const layoutExampleBytes = await loadCharacterSheetExample()
     const capturedRequests: CapturedOpenAIRequest[] = []
@@ -111,6 +115,7 @@ const processWithCharacterReferences = async (
             provider: 'OpenAI',
             model: modelVersion,
             modelVersion,
+            imageInputFidelity,
         },
         messages: [{
             role: 'user',
@@ -170,7 +175,7 @@ describe('OpenAIProvider character-reference ingestion', () => {
     })
 
     it('uploads the authoritative character first and layout example second to the image-edit endpoint', async () => {
-        const captured = await processWithCharacterReferences('gpt-image-2')
+        const captured = await processWithCharacterReferences('gpt-image-2', { level: 'high' })
         const files = getUploadedFiles(captured.formData)
         const layoutExampleBytes = await loadCharacterSheetExample()
 
@@ -198,7 +203,7 @@ describe('OpenAIProvider character-reference ingestion', () => {
                 layoutExampleBytes.byteOffset + layoutExampleBytes.byteLength,
             ),
         )
-        expect(layoutExampleBytes.byteLength).toBe(460_138)
+        expect(layoutExampleBytes.byteLength).toBe(460138)
         expect(createHash('sha256').update(layoutExampleBytes).digest('hex')).toBe(
             '388e3c7a398f43b3e2ad9cebf6019d16c95e4a17289fb5b77a94bf62e11acadd',
         )
@@ -206,11 +211,20 @@ describe('OpenAIProvider character-reference ingestion', () => {
     })
 
     it.each(['gpt-image-1', 'gpt-image-1.5'])(
-        'requests high input fidelity for %s',
+        'applies synchronized high-fidelity request metadata for %s',
         async modelVersion => {
-            const captured = await processWithCharacterReferences(modelVersion)
+            const captured = await processWithCharacterReferences(modelVersion, {
+                level: 'high',
+                requestValue: 'high',
+            })
 
             expect(captured.formData.get('input_fidelity')).toBe('high')
         },
     )
+
+    it('does not infer an input-fidelity request from the model name', async () => {
+        const captured = await processWithCharacterReferences('gpt-image-1', { level: 'standard' })
+
+        expect(captured.formData.get('input_fidelity')).toBeNull()
+    })
 })

@@ -2,6 +2,7 @@
 
 import {
     estimateBranchMarkerDimensions,
+    getBranchMarkerResponsePreview,
     getGeneratedOutputChromeCollisionHeight,
     getPendingGeneratedMediaNodeId,
     rebalanceBranchTreesAndResolve,
@@ -9,6 +10,7 @@ import {
 } from '@lixpi/canvas-engine'
 import type {
     AiModelId,
+    AssetRequesterContext,
     BranchForkCanvasNode,
     BranchForkLineagePlan,
     BranchLineCanvasNode,
@@ -28,13 +30,17 @@ import type {
     VideoCanvasNode,
     WorkspaceEdge,
 } from '@lixpi/constants'
+import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 import { err } from '@lixpi/debug-tools'
 import {
+    findAiChatThreadContentNode,
     getBranchMarkerConversationPreviewFromThreadContent,
-    shouldShowBranchMarkerConversationResponseLine,
+    parseProseMirrorJsonContent,
+    type BranchMarkerConversationPreview,
     type BranchMarkerTurnDescriptor,
 } from '@lixpi/prosemirror/shared/thread-doc'
 
+import AssetModel, { getAssetRecord } from '../models/asset.ts'
 import Workspace from '../models/workspace.ts'
 import { settings } from '../settings.ts'
 
@@ -66,19 +72,49 @@ const markerTurnDescriptor = (node: MarkerNode): BranchMarkerTurnDescriptor => (
             : 'branchLineNodeId',
 })
 
+const getMarkerConversationPreview = (
+    node: MarkerNode,
+    proseMirrorThreadContent: unknown,
+): BranchMarkerConversationPreview | null => {
+    if (!node.conversationAssetId) return null
+    const descriptor = markerTurnDescriptor(node)
+    const exactPreview = getBranchMarkerConversationPreviewFromThreadContent(
+        proseMirrorThreadContent,
+        node.conversationAssetId,
+        descriptor,
+        { allowLatestTurnFallback: false },
+    )
+    if (exactPreview?.responseText) return exactPreview
+
+    // Detached canvas generations are one-turn conversations. If a workflow
+    // persisted the response before lineage attrs reached its section, using
+    // that sole turn is unambiguous and keeps the durable marker response from
+    // depending on provider-specific event ordering.
+    const root = parseProseMirrorJsonContent(proseMirrorThreadContent)
+    const thread = root ? findAiChatThreadContentNode(root, node.conversationAssetId) : null
+    if (!thread) return exactPreview
+    const userMessageCount = (thread.content ?? []).filter(child => child.type === 'aiUserMessage').length
+    const responseMessageCount = (thread.content ?? []).filter(child => child.type === 'aiResponseMessage').length
+    if (userMessageCount !== 1 || responseMessageCount > 1) return exactPreview
+
+    return getBranchMarkerConversationPreviewFromThreadContent(
+        proseMirrorThreadContent,
+        node.conversationAssetId,
+        descriptor,
+        { allowLatestTurnFallback: true },
+    ) ?? exactPreview
+}
+
 const markerDimensions = (node: MarkerNode, context: ProjectionContext = {}): { width: number; height: number } => {
     const preview = node.conversationAssetId && context.proseMirrorThreadContent
-        ? getBranchMarkerConversationPreviewFromThreadContent(
-            context.proseMirrorThreadContent,
-            node.conversationAssetId,
-            markerTurnDescriptor(node),
-        )
+        ? getMarkerConversationPreview(node, context.proseMirrorThreadContent)
         : null
     const promptText = preview?.userText || node.provenance?.promptText || node.pendingState?.promptText || ''
+    const responseText = preview?.responseText || node.provenance?.reasoningResponseText || ''
     if (!promptText) return { width: layout.markerWidth, height: layout.markerHeight }
     return estimateBranchMarkerDimensions(promptText, {
-        responseLine: shouldShowBranchMarkerConversationResponseLine(preview),
-        responseText: preview?.responseText ?? '',
+        responseLine: Boolean(responseText),
+        responseText,
     })
 }
 
@@ -117,9 +153,15 @@ const upsertNode = (nodes: CanvasNode[], next: CanvasNode): { nodes: CanvasNode[
     const index = nodes.findIndex((node) => node.nodeId === next.nodeId)
     if (index < 0) return { nodes: [...nodes, next], changed: true }
     const existing = nodes[index]!
+    const mergedProvenance = isMarkerNode(existing)
+        && isMarkerNode(next)
+        && (existing.provenance || next.provenance)
+        ? { ...existing.provenance, ...next.provenance }
+        : undefined
     const merged = {
         ...existing,
         ...next,
+        ...(mergedProvenance ? { provenance: mergedProvenance } : {}),
         position: existing.position,
         dimensions: existing.dimensions,
     } as CanvasNode
@@ -145,7 +187,19 @@ const addEdge = (edges: WorkspaceEdge[], sourceNodeId: string | undefined, targe
 } => {
     if (!sourceNodeId) return { edges, changed: false }
     const edgeId = `edge-${sourceNodeId}-${targetNodeId}`
-    if (edges.some((edge) => edge.edgeId === edgeId)) return { edges, changed: false }
+    const existingEdgeIndex = edges.findIndex((edge) => edge.edgeId === edgeId)
+    if (existingEdgeIndex >= 0) {
+        const existingEdge = edges[existingEdgeIndex]!
+        if (existingEdge.sourceHandle === 'right' && existingEdge.targetHandle === 'left') {
+            return { edges, changed: false }
+        }
+        return {
+            edges: edges.map((edge, index) => index === existingEdgeIndex
+                ? { ...edge, sourceHandle: 'right', targetHandle: 'left' }
+                : edge),
+            changed: true,
+        }
+    }
     return {
         edges: [...edges, {
             edgeId,
@@ -316,7 +370,21 @@ const rebalance = (
     state: CanvasState,
     context: ProjectionContext = {},
 ): { state: CanvasState; changed: boolean } => {
-    const resizedNodes = state.nodes.map((node): CanvasNode => {
+    const contentProjectedNodes = state.nodes.map((node): CanvasNode => {
+        if (!isMarkerNode(node)) return node
+        if (!node.conversationAssetId || !context.proseMirrorThreadContent || !node.provenance) return node
+        const preview = getMarkerConversationPreview(node, context.proseMirrorThreadContent)
+        const reasoningResponseText = getBranchMarkerResponsePreview(preview?.responseText ?? '')
+        if (!reasoningResponseText || node.provenance.reasoningResponseText === reasoningResponseText) return node
+        return {
+            ...node,
+            provenance: {
+                ...node.provenance,
+                reasoningResponseText,
+            },
+        } as MarkerNode
+    })
+    const resizedNodes = contentProjectedNodes.map((node): CanvasNode => {
         if (!isMarkerNode(node)) return node
         const dimensions = markerDimensions(node, context)
         return resizeBranchMarkerToDimensions(node, dimensions)
@@ -534,6 +602,82 @@ export const settleMediaGenerationRequestOnCanvas = async (params: {
         geometryNodes,
         removedNodeIds,
     })
+}
+
+export const settleFailedGeneratedMediaRunOnCanvas = async (params: {
+    workspaceId: string
+    generationRun: MediaGenerationRunMeta
+}): Promise<CanvasGeometryUpdate | null> => {
+    const assignment = params.generationRun.lineageAssignment
+    if (!assignment) return null
+
+    const pendingNodeId = getPendingGeneratedMediaNodeId(assignment)
+    const assetId = assignment.assetId
+    if (!assetId) return null
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        const asset = await getAssetRecord(assetId)
+        if (!asset) return null
+        const workspace = await Workspace.getWorkspace({
+            workspaceId: params.workspaceId,
+            userId: asset.ownerUserId,
+        })
+        if ('error' in workspace) throw new Error(workspace.error)
+
+        const pendingNode = workspace.canvasState.nodes.find((node) => node.nodeId === pendingNodeId)
+        const isRemovablePendingNode = pendingNode
+            && (pendingNode.type === 'image' || pendingNode.type === 'video')
+            && pendingNode.assetId === assetId
+            && pendingNode.mediaGenerationPhase === 'pending-before-first-frame'
+        if (!isRemovablePendingNode) return null
+
+        const stateWithoutPending: CanvasState = {
+            ...workspace.canvasState,
+            nodes: workspace.canvasState.nodes.filter((node) => node.nodeId !== pendingNodeId),
+            edges: (workspace.canvasState.edges ?? []).filter((edge) =>
+                edge.sourceNodeId !== pendingNodeId && edge.targetNodeId !== pendingNodeId
+            ),
+        }
+        const balanced = rebalance(stateWithoutPending)
+        const geometryNodes = geometryDiff(workspace.canvasState, balanced.state)
+        const persistedCanvasRevision = workspace.canvasStateUpdatedAt ?? workspace.updatedAt ?? 0
+        const canvasStateUpdatedAt = Math.max(Date.now(), persistedCanvasRevision + 1)
+
+        try {
+            const detached = await AssetModel.detachWorkspaceReference({
+                assetId,
+                workspaceId: params.workspaceId,
+                requester: {
+                    userId: asset.ownerUserId,
+                    workspaceIds: [params.workspaceId],
+                    editableWorkspaceIds: [params.workspaceId],
+                    organizationIds: [asset.organizationId],
+                },
+                nodeId: pendingNodeId,
+                workspaceMutation: {
+                    expectedCanvasStateUpdatedAt: workspace.canvasStateUpdatedAt,
+                    canvasStateUpdatedAt,
+                    canvasState: balanced.state,
+                },
+            })
+            if ('error' in detached) {
+                if (detached.error === 'STALE_CANVAS_STATE') continue
+                throw new Error(detached.error)
+            }
+            return buildAssetCanvasGeometryUpdate({
+                state: balanced.state,
+                layoutRevision: canvasStateUpdatedAt,
+                generationRequestId: params.generationRun.generationRequestId,
+                geometryNodes,
+                removedNodeIds: [pendingNodeId],
+            })
+        } catch (error) {
+            if (isTransactionConditionalCheckFailure(error)) continue
+            throw error
+        }
+    }
+
+    throw new Error(`FAILED_GENERATED_MEDIA_CANVAS_DETACH_EXHAUSTED:${assetId}`)
 }
 
 const generatedByLineage = (assignment: MediaRunLineageAssignment) => ({
@@ -951,6 +1095,192 @@ export const removeGeneratedOutputCandidateFromCanvas = ({
         removedNodeIds: [...removedNodeIds],
         removedEdgeIds,
     }
+}
+
+const isGeneratedOutputForRequest = (
+    node: CanvasNode,
+    generationRequestId: string,
+    conversationAssetId: string,
+): node is GeneratedOutputNode => {
+    if (node.type !== 'image' && node.type !== 'video' && node.type !== 'capabilityArtifact') return false
+    const generatedBy = node.generatedBy
+    return generatedBy?.generationRequestId === generationRequestId
+        && generatedBy.conversationAssetId === conversationAssetId
+}
+
+const removeGenerationRequestProjectionNode = ({
+    canvasState,
+    generationRequestId,
+    conversationAssetId,
+    assetNodeId,
+}: {
+    canvasState: CanvasState
+    generationRequestId: string
+    conversationAssetId: string
+    assetNodeId?: string
+}): {
+    canvasState: CanvasState
+    removedNodeIds: string[]
+    removedEdgeIds: string[]
+} => {
+    const removedNodeIds = new Set(assetNodeId ? [assetNodeId] : [])
+    const hasRemainingGeneratedOutput = canvasState.nodes.some((node) =>
+        node.nodeId !== assetNodeId
+        && isGeneratedOutputForRequest(node, generationRequestId, conversationAssetId)
+    )
+    if (!hasRemainingGeneratedOutput) {
+        for (const node of canvasState.nodes) {
+            if (isMarkerNode(node)
+                && node.generationRequestId === generationRequestId
+                && node.conversationAssetId === conversationAssetId) {
+                removedNodeIds.add(node.nodeId)
+            }
+        }
+    }
+    if (removedNodeIds.size === 0) {
+        return { canvasState, removedNodeIds: [], removedEdgeIds: [] }
+    }
+
+    const nodes = canvasState.nodes.filter((node) => !removedNodeIds.has(node.nodeId))
+    const edges = (canvasState.edges ?? []).filter((edge) =>
+        !removedNodeIds.has(edge.sourceNodeId) && !removedNodeIds.has(edge.targetNodeId)
+    )
+    const retainedEdgeIds = new Set(edges.map((edge) => edge.edgeId))
+    const removedEdgeIds = (canvasState.edges ?? [])
+        .filter((edge) => !retainedEdgeIds.has(edge.edgeId))
+        .map((edge) => edge.edgeId)
+    return {
+        canvasState: rebalance({ ...canvasState, nodes, edges }).state,
+        removedNodeIds: [...removedNodeIds],
+        removedEdgeIds,
+    }
+}
+
+export const removeMediaGenerationRequestFromCanvas = async ({
+    workspaceId,
+    generationRequestId,
+    conversationAssetId,
+    requester,
+}: {
+    workspaceId: string
+    generationRequestId: string
+    conversationAssetId: string
+    requester: AssetRequesterContext
+}): Promise<CanvasGeometryUpdate | null> => {
+    const removedNodeIds = new Set<string>()
+    const removedEdgeIds = new Set<string>()
+
+    for (let operation = 0; operation < 100; operation += 1) {
+        const workspace = await Workspace.getWorkspace({ workspaceId, userId: requester.userId })
+        if ('error' in workspace) throw new Error(workspace.error)
+        const assetNode = workspace.canvasState.nodes.find((node) =>
+            isGeneratedOutputForRequest(node, generationRequestId, conversationAssetId)
+        )
+
+        if (assetNode) {
+            const asset = await getAssetRecord(assetNode.assetId)
+            if (!asset) throw new Error(`GENERATION_REQUEST_ASSET_NOT_FOUND:${assetNode.assetId}`)
+            const removal = removeGenerationRequestProjectionNode({
+                canvasState: workspace.canvasState,
+                generationRequestId,
+                conversationAssetId,
+                assetNodeId: assetNode.nodeId,
+            })
+            const expectedCanvasStateUpdatedAt = workspace.canvasStateUpdatedAt ?? workspace.updatedAt
+            let detached: Awaited<ReturnType<typeof AssetModel.detachWorkspaceReference>>
+            try {
+                detached = await AssetModel.detachWorkspaceReference({
+                    assetId: assetNode.assetId,
+                    workspaceId,
+                    requester,
+                    nodeId: assetNode.nodeId,
+                    workspaceMutation: {
+                        expectedCanvasStateUpdatedAt,
+                        canvasStateUpdatedAt: Math.max(Date.now(), expectedCanvasStateUpdatedAt + 1),
+                        canvasState: removal.canvasState,
+                    },
+                })
+            } catch (error) {
+                if (isTransactionConditionalCheckFailure(error)) continue
+                throw error
+            }
+            if ('error' in detached) {
+                if (detached.error === 'STALE_CANVAS_STATE') continue
+                throw new Error(detached.error)
+            }
+            removal.removedNodeIds.forEach((nodeId) => removedNodeIds.add(nodeId))
+            removal.removedEdgeIds.forEach((edgeId) => removedEdgeIds.add(edgeId))
+
+            const sourceConversationAssetId = asset.lineage?.sourceConversationAssetId
+            const mediaRunId = asset.lineage?.mediaRunId ?? asset.lineage?.reasoningRunId
+            if (asset.lineage?.generationRequestId === generationRequestId
+                && sourceConversationAssetId === conversationAssetId
+                && mediaRunId) {
+                for (let attempt = 0; attempt < 3; attempt += 1) {
+                    try {
+                        await AssetModel.removeAssetSurfaceReferenceSystem({
+                            assetId: asset.assetId,
+                            organizationId: asset.organizationId,
+                            surfaceId: `conversation#${sourceConversationAssetId}#media#${mediaRunId}`,
+                        })
+                        break
+                    } catch (error) {
+                        if (attempt < 2) continue
+                        err(`[asset-canvas-projection] failed to remove cancelled generation Asset surface ${asset.assetId}:`, error)
+                    }
+                }
+            }
+            continue
+        }
+
+        let markerRemoval = removeGenerationRequestProjectionNode({
+            canvasState: workspace.canvasState,
+            generationRequestId,
+            conversationAssetId,
+        })
+        if (markerRemoval.removedNodeIds.length > 0) {
+            const persisted = await Workspace.mutateCanvasState({
+                workspaceId,
+                origin: 'removeCancelledMediaGenerationRequestFromCanvas',
+                mutate: (canvasState) => {
+                    markerRemoval = removeGenerationRequestProjectionNode({
+                        canvasState,
+                        generationRequestId,
+                        conversationAssetId,
+                    })
+                    return {
+                        canvasState: markerRemoval.canvasState,
+                        changed: markerRemoval.removedNodeIds.length > 0,
+                    }
+                },
+            })
+            if (!persisted.canvasState || persisted.canvasStateUpdatedAt === null) {
+                throw new Error('WORKSPACE_NOT_FOUND')
+            }
+            markerRemoval.removedNodeIds.forEach((nodeId) => removedNodeIds.add(nodeId))
+            markerRemoval.removedEdgeIds.forEach((edgeId) => removedEdgeIds.add(edgeId))
+            continue
+        }
+
+        if (removedNodeIds.size === 0) return null
+        const layoutRevision = workspace.canvasStateUpdatedAt ?? workspace.updatedAt
+        return {
+            generationRequestId,
+            layoutRevision,
+            nodes: workspace.canvasState.nodes.map((node) => ({
+                nodeId: node.nodeId,
+                position: node.position,
+                dimensions: node.dimensions,
+                ...(node.parentId ? { parentNodeId: node.parentId } : {}),
+            })),
+            nodeSnapshots: workspace.canvasState.nodes,
+            edgeSnapshots: workspace.canvasState.edges,
+            removedNodeIds: [...removedNodeIds],
+            removedEdgeIds: [...removedEdgeIds],
+        }
+    }
+
+    throw new Error(`GENERATION_REQUEST_CANVAS_REMOVAL_EXHAUSTED:${generationRequestId}`)
 }
 
 export const logCanvasProjectionError = (context: string, error: unknown): void => {

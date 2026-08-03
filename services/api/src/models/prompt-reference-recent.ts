@@ -57,7 +57,7 @@ const PromptReferenceRecentModel = {
             tableName: recentsTableName(),
             indexName: 'updatedAt',
             keyConditions: { userId },
-            limit: 1_000,
+            limit: 1000,
             fetchAllItems: true,
             scanIndexForward: false,
             consistentRead: true,

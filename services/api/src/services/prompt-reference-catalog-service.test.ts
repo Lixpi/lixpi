@@ -265,7 +265,7 @@ describe('PromptReferenceCatalogService', () => {
     })
 
     it('lists registered Artifacts canvas-first with module-owned metadata', async () => {
-        const document = buildActionTimelineDocument({ durationMs: 2_500, precisionMs: 1_000 }, [
+        const document = buildActionTimelineDocument({ durationMs: 2500, precisionMs: 1000 }, [
             { slotIndex: 0, runs: [{ text: 'Establish ' }, { assetId: 'asset-portrait' }] },
             { slotIndex: 1, runs: [{ text: 'Continue' }] },
             { slotIndex: 2, runs: [{ text: 'Finish' }] },
@@ -337,8 +337,8 @@ describe('PromptReferenceCatalogService', () => {
                 nodeId: 'node-artifact',
                 source: 'canvas',
                 displayMetadata: {
-                    durationMs: 2_500,
-                    precisionMs: 1_000,
+                    durationMs: 2500,
+                    precisionMs: 1000,
                     segmentCount: 3,
                     referencedAssetIds: ['asset-portrait'],
                 },
@@ -354,7 +354,7 @@ describe('PromptReferenceCatalogService', () => {
         }))
     })
 
-    it('resolves same-organization cross-workspace Asset recents without showing another organization', async () => {
+    it('rejects cross-workspace Asset recents even within the same organization', async () => {
         mocks.listRecents.mockResolvedValue([{
             userId: 'user-1',
             referenceKey: 'media#asset-recent',
@@ -387,10 +387,11 @@ describe('PromptReferenceCatalogService', () => {
             query: '',
             limit: 5,
         })
-        expect(page.items).toEqual([expect.objectContaining({
-            assetId: 'asset-recent',
-            source: 'library',
-        })])
+        expect(page.items).toEqual([])
+        expect(mocks.removeRecents).toHaveBeenLastCalledWith({
+            userId: 'user-1',
+            referenceKeys: ['media#asset-recent'],
+        })
 
         mocks.getAsset.mockResolvedValue({
             assetId: 'asset-recent',

@@ -54,6 +54,9 @@ export const getAssetEventSubject = (userId: string, canonicalSubject: string): 
 export const getCapabilityUserEventSubject = (userId: string, canonicalSubject: string): string =>
     `${canonicalSubject}.${getNatsUserSubjectToken(userId)}`
 
+export const getMediaGenerationUserEventSubject = (userId: string, canonicalSubject: string): string =>
+    `${canonicalSubject}.${getNatsUserSubjectToken(userId)}`
+
 // AI interaction constants
 export const AI_INTERACTION_CONSTANTS = aiInteractionConstants
 export const STREAM_STATUS = AI_INTERACTION_CONSTANTS.STREAM_STATUS as {

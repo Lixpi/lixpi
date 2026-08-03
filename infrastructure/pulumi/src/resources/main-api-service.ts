@@ -74,8 +74,10 @@ export type MainApiServiceArgs = {
 
         OPENAI_API_KEY: string
         ANTHROPIC_API_KEY: string
+        ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: string
         GOOGLE_API_KEY: string
         STABLE_DIFFUSION_API_KEY: string
+        STABILITY_USE_AWS_BEDROCK_INFERENCE: string
         ARK_API_KEY: string
         LLM_TIMEOUT_SECONDS: string
     }
@@ -203,6 +205,45 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
     new aws.iam.RolePolicyAttachment(`${formattedServiceName}-ssm-attachment`, {
         role: taskRole.name,
         policyArn: ssmPolicy.arn,
+    })
+
+    // Allow the task role to run AWS Bedrock inference for the providers whose
+    // {PROVIDER}_USE_AWS_BEDROCK_INFERENCE flag is on. The list actions back the runtime
+    // catalog-id -> Bedrock-id resolution (see services/api/src/llm/providers/bedrock-inference.ts);
+    // both are harmless when every provider stays on its own API.
+    const bedrockPolicy = new aws.iam.Policy(`${formattedServiceName}-bedrock-policy`, {
+        policy: JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [
+                {
+                    Effect: 'Allow',
+                    Action: [
+                        'bedrock:ListFoundationModels',
+                        'bedrock:GetFoundationModel',
+                        'bedrock:ListInferenceProfiles',
+                        'bedrock:GetInferenceProfile',
+                    ],
+                    Resource: '*',
+                },
+                {
+                    Effect: 'Allow',
+                    Action: [
+                        'bedrock:InvokeModel',
+                        'bedrock:InvokeModelWithResponseStream',
+                    ],
+                    Resource: [
+                        `arn:aws:bedrock:*::foundation-model/anthropic.*`,
+                        `arn:aws:bedrock:*::foundation-model/stability.*`,
+                        `arn:aws:bedrock:*:${aws.config.accountId}:inference-profile/*`,
+                    ],
+                },
+            ],
+        }),
+    })
+
+    new aws.iam.RolePolicyAttachment(`${formattedServiceName}-bedrock-attachment`, {
+        role: taskRole.name,
+        policyArn: bedrockPolicy.arn,
     })
 
     // Create CloudWatch Log Group for Container

@@ -7,7 +7,7 @@ import { MAX_UPLOAD_FILE_SIZE } from '@lixpi/constants'
 import { assertRemoteImageUrlIsPublic } from './remote-image-import.ts'
 
 const MAX_REDIRECTS = 4
-const FETCH_TIMEOUT_MS = 15_000
+const FETCH_TIMEOUT_MS = 15000
 
 const readBoundedBody = async (response: Response): Promise<Buffer> => {
     const declaredLength = Number(response.headers.get('content-length') ?? 0)

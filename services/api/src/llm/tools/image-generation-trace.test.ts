@@ -130,7 +130,7 @@ describe('buildImageModelPrompt', () => {
         expect(prompt).toContain('Paint the same man in a restrained orange monochrome palette.')
     })
 
-    it('treats Character Creator attachments as authoritative character sources without claiming a sample is attached', () => {
+    it('maps Character Creator attachments to source and template roles without re-expanding the capability brief', () => {
         const prompt = buildImageModelPrompt(createState({
             capabilityUsageMode: 'character-creator',
             capabilityReferenceImages: ['data:image/jpeg;base64,layout-example'],
@@ -142,16 +142,14 @@ describe('buildImageModelPrompt', () => {
             },
         }))
 
-        expect(prompt).toContain('Reference image 1 depicts the authoritative character to reproduce')
-        expect(prompt).toContain('Preserve the same apparent identity, face, hair style and color')
-        expect(prompt).toContain('line presence and weight variation')
-        expect(prompt).toContain('Do not clean up, beautify, photorealize, vectorize, smooth')
-        expect(prompt).toContain('Character evidence: expressive painted portrait of the man')
-        expect(prompt).toContain('AUTHORITATIVE CHARACTER-SHEET OUTPUT TEMPLATE')
-        expect(prompt).toContain('five aligned full-body turnaround views')
-        expect(prompt).toContain('expression, mouth, eye, hands, feet, and props panels')
-        expect(prompt).toContain('A simplified portrait/front/left/right/back/3/4/walk strip is invalid')
-        expect(prompt).toContain('Create a character sheet from the selected character.')
+        expect(prompt).toContain('IMAGE ROLES — HIGHEST PRIORITY')
+        expect(prompt).toContain('Image 1 is the authoritative character identity')
+        expect(prompt).toContain('Image 2 is the authoritative output-layout template')
+        expect(prompt).toContain('Preserve source identity and medium in every depiction')
+        expect(prompt).toContain('A photographic source requires photorealistic character depictions')
+        expect(prompt).toContain('Never copy the template\'s illustrated rendering style')
+        expect(prompt).toContain('Use rough watercolor paper and visible brush texture.')
+        expect(prompt.length).toBeLessThan(1_000)
         expect(prompt).not.toContain('Invent a blonde character in green clothing.')
         expect(prompt).not.toContain('capability reference image')
         expect(prompt).not.toContain('example character')
@@ -168,7 +166,11 @@ describe('buildCharacterFidelityRestorationPrompt', () => {
         expect(prompt).toContain('exact facial construction and proportions')
         expect(prompt).toContain('line presence and line-weight variation')
         expect(prompt).toContain('visible grain, surface texture')
+        expect(prompt).toContain('If the authoritative source medium is photography')
+        expect(prompt).toContain('fully re-render every character depiction as photorealistic photography')
+        expect(prompt).toContain('Replace every character depiction completely wherever necessary')
         expect(prompt).toContain('generic polished concept art or generic AI illustration')
+        expect(prompt).not.toContain('Do not clean up, beautify, photorealize')
     })
 
     it('requires at least one authoritative source image', () => {

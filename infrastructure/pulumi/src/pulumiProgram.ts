@@ -28,6 +28,7 @@ const {
     AWS_ROUTE53_PARENT_HOSTED_ZONE_ID,       // Optional parent zone for delegation
     OPENAI_API_KEY,
     ANTHROPIC_API_KEY,
+    ANTHROPIC_USE_AWS_BEDROCK_INFERENCE,
     STAGE,
     ENVIRONMENT,
     NODE_OPTIONS,
@@ -52,6 +53,7 @@ const {
     NATS_AUTH_XKEY_ISSUER_PUBLIC,
     GOOGLE_API_KEY,
     STABLE_DIFFUSION_API_KEY,
+    STABILITY_USE_AWS_BEDROCK_INFERENCE,
     ARK_API_KEY,
     BYTEPLUS_ARK_API_KEY,
     LLM_TIMEOUT_SECONDS,
@@ -328,6 +330,10 @@ export const createInfrastructure = async () => {
                 capabilitiesMetaTable: dynamoDBtables.capabilitiesMetaTable,
                 capabilitiesAccessListTable: dynamoDBtables.capabilitiesAccessListTable,
                 capabilityRunsTable: dynamoDBtables.capabilityRunsTable,
+                mediaGenerationRequestsTable: dynamoDBtables.mediaGenerationRequestsTable,
+                mediaGenerationRequestsMetaTable: dynamoDBtables.mediaGenerationRequestsMetaTable,
+                mediaGenerationRequestsAccessListTable: dynamoDBtables.mediaGenerationRequestsAccessListTable,
+                assetSubjectIdentityAttestationsTable: dynamoDBtables.assetSubjectIdentityAttestationsTable,
                 aiModelsListTable: dynamoDBtables.aiModelsListTable,
             },
         },
@@ -353,9 +359,12 @@ export const createInfrastructure = async () => {
             AUTH0_API_IDENTIFIER: AUTH0_API_IDENTIFIER!,
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: SAVE_LLM_RESPONSES_TO_DEBUG_DIR!,
             OPENAI_API_KEY: OPENAI_API_KEY!,
-            ANTHROPIC_API_KEY: ANTHROPIC_API_KEY!,
+            // An api key may be empty when its provider runs through Bedrock and signs with the task role.
+            ANTHROPIC_API_KEY: ANTHROPIC_API_KEY ?? '',
+            ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ANTHROPIC_USE_AWS_BEDROCK_INFERENCE ?? 'false',
             GOOGLE_API_KEY: GOOGLE_API_KEY ?? '',
             STABLE_DIFFUSION_API_KEY: STABLE_DIFFUSION_API_KEY ?? '',
+            STABILITY_USE_AWS_BEDROCK_INFERENCE: STABILITY_USE_AWS_BEDROCK_INFERENCE ?? 'false',
             // BytePlus ModelArk (Seedance video). Accept either env name and emit the
             // canonical ARK_API_KEY on the task def; || (not ??) so an empty string from
             // one name falls through to the other. The provider reads ARK_API_KEY as a fallback.
@@ -401,7 +410,10 @@ export const createInfrastructure = async () => {
             // (creds arrive through the ECS metadata endpoint, forwarded to the workload
             // by the entrypoint via AWS_CONTAINER_CREDENTIALS_RELATIVE_URI).
             OPENAI_API_KEY: OPENAI_API_KEY!,
-            ANTHROPIC_API_KEY: ANTHROPIC_API_KEY!,
+            ANTHROPIC_API_KEY: ANTHROPIC_API_KEY ?? '',
+            // With Bedrock inference on there may be no Anthropic api key, so the models-sync
+            // workload lists Anthropic models from the Bedrock foundation-model catalog instead.
+            ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ANTHROPIC_USE_AWS_BEDROCK_INFERENCE ?? 'false',
             GOOGLE_API_KEY: GOOGLE_API_KEY ?? '',
             STABLE_DIFFUSION_API_KEY: STABLE_DIFFUSION_API_KEY ?? '',
             // Forwarded for parity with the API task def + nex entrypoint key set; the

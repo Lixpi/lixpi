@@ -80,6 +80,7 @@ export const runAxisVlm = async <T = Record<string, any>>(args: {
         natsService,
         temperature: 0.2,
         maxTokens: args.state.input.analysisModel.maxCompletionSize ?? 4096,
+        maxOutputTokensCeiling: args.state.input.analysisModel.maxCompletionSize,
     })
 
     return {

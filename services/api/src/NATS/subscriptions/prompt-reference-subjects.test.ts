@@ -5,6 +5,7 @@ import { NATS_SUBJECTS } from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({
     getWorkspace: vi.fn(),
+    getOrganization: vi.fn(),
     getRequester: vi.fn(),
     listReferences: vi.fn(),
     listModules: vi.fn(),
@@ -14,6 +15,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../models/workspace.ts', () => ({
     default: { getWorkspace: mocks.getWorkspace },
+}))
+vi.mock('../../models/organization.ts', () => ({
+    default: { getOrganization: mocks.getOrganization },
 }))
 vi.mock('../../models/prompt-reference-recent.ts', () => ({
     default: { recordAccepted: mocks.recordAccepted },
@@ -59,7 +63,13 @@ const moduleCatalog = {
 beforeEach(() => {
     vi.clearAllMocks()
     setPromptReferenceModuleCatalog(moduleCatalog as any)
-    mocks.getWorkspace.mockResolvedValue({ workspaceId: 'workspace-1', canvasState: { nodes: [], edges: [] } })
+    mocks.getWorkspace.mockResolvedValue({
+        workspaceId: 'workspace-1',
+        organizationId: 'organization-1',
+        accessList: [{ userId: 'user-1', accessLevel: 'owner' }],
+        canvasState: { nodes: [], edges: [] },
+    })
+    mocks.getOrganization.mockResolvedValue({ organizationId: 'organization-1' })
     mocks.getRequester.mockResolvedValue({
         userId: 'user-1',
         workspaceIds: ['workspace-1'],

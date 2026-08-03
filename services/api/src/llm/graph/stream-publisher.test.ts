@@ -346,7 +346,7 @@ describe('StreamPublisher extraction progress', () => {
             capabilityRunId: 'timeline-run',
             chatModelProvider: 'Anthropic',
             chatModelId: 'Anthropic:claude-sonnet-4-6',
-            input: { durationMs: 15_000, precisionMs: 2_000 },
+            input: { durationMs: 15000, precisionMs: 2000 },
             outputAssetIds: ['timeline-asset'],
             steps: [{ stepId: 'persist', title: 'Persist timeline', status: 'completed' }],
         })

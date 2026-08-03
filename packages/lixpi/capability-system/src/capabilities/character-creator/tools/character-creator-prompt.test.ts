@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
     buildCharacterCreatorImagePrompt,
     buildCharacterSheetCorrectionPrompt,
+    CHARACTER_CREATOR_VISUAL_INSTRUCTIONS_MAX_CHARS,
     normalizeCharacterSheetAssessment,
     type CharacterSheetAssessment,
 } from './character-creator-prompt.ts'
@@ -42,6 +43,8 @@ describe('Character Creator prompt construction', () => {
         expect(prompt.includes('Do not replace it with a simplified portrait-and-turnaround strip.')).toBe(true)
         expect(prompt.includes('REFERENCE ASSETS (2 authorized images)')).toBe(true)
         expect(prompt.includes('Preserve identity from references.')).toBe(true)
+        expect(prompt.includes('When the authoritative source medium is photography, every character depiction must remain photorealistic')).toBe(true)
+        expect(prompt.includes('The illustrated character inside the layout template is a negative style reference')).toBe(true)
         expect(prompt.includes('Every section from the attached template must be present')).toBe(true)
         expect(prompt.includes('Do not crop any full-height view.')).toBe(true)
     })
@@ -63,6 +66,21 @@ describe('Character Creator prompt construction', () => {
             referenceCount: 0,
         })
         expect(prompt.includes('must-not-appear')).toBe(false)
+    })
+
+    it('bounds an oversized request without dropping the fixed template contract', () => {
+        const prompt = buildCharacterCreatorImagePrompt({
+            prompt: `A courier ${'with intricate character details '.repeat(400)}`,
+            layoutInstructions: 'Use every required template section.',
+            referenceFidelityInstructions: 'Preserve the referenced identity and design.',
+            promptConstructionInstructions: 'Keep the complete template organization.',
+            referenceCount: 1,
+        })
+
+        expect(prompt.length).toBeLessThanOrEqual(CHARACTER_CREATOR_VISUAL_INSTRUCTIONS_MAX_CHARS)
+        expect(prompt).toContain('CHARACTER REQUEST\nA courier with intricate character details')
+        expect(prompt).toContain('FINAL OUTPUT CONSTRAINTS')
+        expect(prompt).toContain('Do not add extra characters, alternate outfits, scenery, logos, or watermarks.')
     })
 })
 

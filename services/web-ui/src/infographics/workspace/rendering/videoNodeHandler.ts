@@ -25,6 +25,9 @@ type VideoEntry = {
     videoElement: HTMLVideoElement
     posterTexture: Texture | null
     sourceKey: string
+    sourceRevision: number
+    posterNeedsRetry: boolean
+    videoNeedsRetry: boolean
     worldRect: { x: number; y: number; width: number; height: number }
     isPlaying: boolean
     removeEventListeners: () => void
@@ -41,6 +44,7 @@ export type VideoNodeHandlerControl = MediaNodeHandler<VideoCanvasNode> & {
     play: (nodeId: string) => Promise<void>
     pause: (nodeId: string) => void
     toggle: (nodeId: string) => Promise<void>
+    retryAssetSources: (assetIds: ReadonlySet<string>, options?: { force?: boolean }) => void
     isPlaying: (nodeId: string) => boolean
     hasEntry: (nodeId: string) => boolean
     getVideoElement: (nodeId: string) => HTMLVideoElement | null
@@ -79,6 +83,15 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
         })
     }
 
+    const buildRevisionedAssetRenditionPath = (
+        assetId: string,
+        rendition: 'original' | 'poster',
+        sourceRevision: number,
+    ): string => {
+        const path = buildAssetRenditionPath(assetId, rendition)
+        return sourceRevision > 0 ? `${path}?sourceRevision=${sourceRevision}` : path
+    }
+
     const getBorderRadius = (w: number, h: number): number => {
         const borderRadius = settings.mediaNode.styles.borderRadius
         if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
@@ -97,7 +110,11 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
         // without paying the cost of decoding the MP4 just to extract frame 0.
         if (node.assetId) {
             try {
-                const posterSrc = await buildAuthenticatedUrl(buildAssetRenditionPath(node.assetId, 'poster'))
+                const posterSrc = await buildAuthenticatedUrl(buildRevisionedAssetRenditionPath(
+                    node.assetId,
+                    'poster',
+                    entry.sourceRevision,
+                ))
                 // The same element is shown directly on the canvas node by
                 // createVideoControlsChrome. Give it a native poster so the DOM
                 // surface and PIXI poster agree before playback starts.
@@ -114,25 +131,33 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
                     entry.posterTexture.destroy()
                 }
                 entry.posterTexture = posterTexture
+                entry.posterNeedsRetry = false
                 if (!entry.isPlaying) {
                     entry.sprite.texture = posterTexture
                 }
                 onRender?.()
             } catch (e) {
+                entry.posterNeedsRetry = true
                 console.warn('[videoNodeHandler] poster load failed', e)
             }
         }
 
         if (node.assetId) {
             try {
-                const videoSrc = await buildAuthenticatedUrl(buildAssetRenditionPath(node.assetId, 'original'))
+                const videoSrc = await buildAuthenticatedUrl(buildRevisionedAssetRenditionPath(
+                    node.assetId,
+                    'original',
+                    entry.sourceRevision,
+                ))
                 if (destroyed) return
-                if (entry.videoElement.src !== videoSrc) {
+                if (entry.videoElement.src !== videoSrc || entry.videoNeedsRetry) {
+                    entry.videoNeedsRetry = false
                     entry.videoElement.src = videoSrc
                     entry.videoElement.load()
                 }
                 onVideoElementReady?.(node.nodeId)
             } catch (e) {
+                entry.videoNeedsRetry = true
                 console.warn('[videoNodeHandler] video src apply failed', e)
             }
         }
@@ -187,8 +212,12 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
                 const vw = videoElement.videoWidth
                 const vh = videoElement.videoHeight
                 if (vw > 0 && vh > 0) {
+                    entryRef.videoNeedsRetry = false
                     onIntrinsicSize?.({ nodeId: node.nodeId, width: vw, height: vh })
                 }
+            }
+            const handleError = () => {
+                entryRef.videoNeedsRetry = true
             }
             const handlePlay = () => {
                 entryRef.isPlaying = true
@@ -198,6 +227,7 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
             }
 
             videoElement.addEventListener('loadedmetadata', handleLoadedMetadata)
+            videoElement.addEventListener('error', handleError)
             videoElement.addEventListener('play', handlePlay)
             videoElement.addEventListener('pause', handlePause)
             videoElement.addEventListener('ended', handlePause)
@@ -209,10 +239,14 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
                 videoElement,
                 posterTexture: null,
                 sourceKey: '',
+                sourceRevision: 0,
+                posterNeedsRetry: false,
+                videoNeedsRetry: false,
                 worldRect: { x, y, width: w, height: h },
                 isPlaying: false,
                 removeEventListeners: () => {
                     videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata)
+                    videoElement.removeEventListener('error', handleError)
                     videoElement.removeEventListener('play', handlePlay)
                     videoElement.removeEventListener('pause', handlePause)
                     videoElement.removeEventListener('ended', handlePause)
@@ -347,6 +381,36 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
         else await play(nodeId)
     }
 
+    const retryAssetSources = (
+        assetIds: ReadonlySet<string>,
+        options: { force?: boolean } = {},
+    ): void => {
+        if (destroyed || assetIds.size === 0) return
+        for (const entry of entries.values()) {
+            if (!assetIds.has(entry.sourceKey)) continue
+            const retryPoster = options.force === true || entry.posterNeedsRetry
+            const retryVideo = options.force === true || entry.videoNeedsRetry
+            if (!retryPoster && !retryVideo) continue
+
+            entry.sourceKey = ''
+            entry.sourceRevision += 1
+            if (retryPoster) {
+                entry.posterNeedsRetry = false
+                entry.videoElement.removeAttribute('poster')
+            }
+            if (retryVideo) {
+                entry.videoNeedsRetry = false
+                try {
+                    entry.videoElement.pause()
+                    entry.videoElement.removeAttribute('src')
+                    entry.videoElement.load()
+                } catch {
+                    entry.videoNeedsRetry = true
+                }
+            }
+        }
+    }
+
     return {
         canHandle,
         upsert,
@@ -356,6 +420,7 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
         play,
         pause,
         toggle,
+        retryAssetSources,
         isPlaying: (nodeId: string) => entries.get(nodeId)?.isPlaying ?? false,
         hasEntry: (nodeId: string) => entries.has(nodeId),
         getVideoElement: (nodeId: string) => entries.get(nodeId)?.videoElement ?? null,

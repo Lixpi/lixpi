@@ -105,7 +105,7 @@ const RESOLUTION_SCHEMA: VlmJsonSchema = {
             referenceCandidateIds: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'Exact candidate identities that should be sent to the image or video model as visual references.',
+                description: 'Every explicitly attached candidate identity. Copy all candidate ids exactly.',
             },
             sourceContextNodeIds: {
                 type: 'array',
@@ -120,7 +120,7 @@ const RESOLUTION_SCHEMA: VlmJsonSchema = {
             excludedCandidateIds: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'Candidate identities that should not be sent because they are unrelated or would contaminate identity/style.',
+                description: 'Always an empty array because every candidate was explicitly attached.',
             },
             visualEntitySummary: {
                 type: 'string',
@@ -145,7 +145,7 @@ const RESOLUTION_SCHEMA: VlmJsonSchema = {
             },
             rationale: {
                 type: 'string',
-                description: 'Brief visual-grounding rationale naming selected and excluded references.',
+                description: 'Brief visual-grounding rationale for the assigned target and style roles.',
             },
             decisions: {
                 type: 'array',
@@ -192,11 +192,11 @@ const SYSTEM_PROMPT = [
     'Resolve visual references only — never judge feasibility. Do not refuse, lower confidence, or return mode="ambiguous" because the request is for a video, because it asks for motion, animation, camera movement, or audio, or because of any perceived capability limit. Motion and clip requests are ordinary video generation and must be grounded exactly like image requests. For video, the target identity you pick becomes the first frame (image-to-video) and your selected style references become the video reference images.',
     'Always ground decisions in the actual candidate pixels. Do not route from regexes, recency, prompt text alone, or guessed entity tags.',
     'If the candidate metadata includes roleHints containing "active-target" or the prompt context names an Active target candidateId, treat that as a weak UI selection hint only. It is not visual truth and must never override the user prompt or candidate pixels.',
-    'Purely deictic prompts like "this", "that", "it", or "make it" usually refer to the active-target candidate. Deictic prompts with an explicit visible subject like "that man", "that guy", "that person", "that goat", "that portrait", or "that landscape" must target a candidate whose pixels match that named subject. If the active target visibly conflicts with the named subject, exclude it and choose the matching candidate; if no candidate matches, return mode="ambiguous" with low confidence.',
-    'For style/medium changes to an active-target candidate, return mode="edit-active-branch", operationKind="edit_existing", targetCandidateId set to the active target candidateId, and include the active target as a reference only when the prompt is purely deictic or the active target visibly matches the named subject. Do not use the active target for a different visible subject or a fresh unrelated image.',
+    'Purely deictic prompts like "this", "that", "it", or "make it" usually refer to the active-target candidate. Deictic prompts with an explicit visible subject like "that man", "that guy", "that person", "that goat", "that portrait", or "that landscape" must target a candidate whose pixels match that named subject. If the active target visibly conflicts with the named subject, keep it as attached base context and choose the matching candidate as target; if no candidate matches, return mode="ambiguous" with low confidence.',
+    'For style/medium changes to an active-target candidate, return mode="edit-active-branch", operationKind="edit_existing", and set targetCandidateId to the active target only when the prompt is purely deictic or its pixels match the named subject. Do not assign the active target as target for a different visible subject or a fresh unrelated image.',
     'If the prompt identifies an existing generated candidate or branch as the subject/identity, continue that generated branch even when the requested palette, medium, or style changes substantially. If you include a generated candidate as the target/identity reference, set targetCandidateId and parentCandidateId to that candidate, preserve its branchId when available, and do not return targetless mode="fresh-branch".',
-    'Separate target identity from style/source evidence. A phrase like "draw a goat in the style of that landscape painting" means the goat is the requested subject and the landscape can be style evidence; unrelated generated portraits must be excluded.',
-    'referenceCandidateIds is authoritative: include only candidate identities that should be sent to the image or video model. Exclude distractors aggressively because unrelated generated variants contaminate identity.',
+    'Every candidate was explicitly attached by the user in the message or composer context. Include every candidate in referenceCandidateIds and never exclude one. Your role is to assign target/style/branch roles, not to decide whether an attached reference reaches generation.',
+    'Separate target identity from style/source evidence. A phrase like "draw a goat in the style of that landscape painting" means the goat is the requested subject and the landscape can be style evidence.',
     'Reserve mode="ambiguous" strictly for when the visual referent genuinely cannot be determined from the candidate pixels — never to flag an unsupported output type or a request you believe cannot be fulfilled. If the prompt is genuinely impossible to resolve from the candidate images, return mode="ambiguous" with low confidence and explain why.',
 ].join('\n')
 
@@ -336,37 +336,6 @@ const sanitizeDecisions = (
     return out
 }
 
-const isGeneratedCandidate = (candidate: MediaBranchCandidateImage): boolean =>
-    candidate.roleHints.includes('generated-variant')
-
-const findGeneratedTargetReference = (args: {
-    candidateById: Map<string, MediaBranchCandidateImage>
-    referenceCandidateIds: string[]
-    styleReferenceCandidateIds: string[]
-    decisions: MediaBranchVlmReferenceDecision[]
-}): MediaBranchCandidateImage | undefined => {
-    const styleReferenceCandidateIds = new Set(args.styleReferenceCandidateIds)
-    const decisionByCandidateId = new Map(args.decisions.map((decision) => [decision.candidateId, decision]))
-    const generatedReferences = args.referenceCandidateIds
-        .map((candidateId) => args.candidateById.get(candidateId))
-        .filter((candidate): candidate is MediaBranchCandidateImage => Boolean(candidate && isGeneratedCandidate(candidate)))
-        .filter((candidate) => !styleReferenceCandidateIds.has(candidate.candidateId))
-        .filter((candidate) => decisionByCandidateId.get(candidate.candidateId)?.role !== 'style-reference')
-
-    const explicitTargetReferences = generatedReferences.filter((candidate) => {
-        const role = decisionByCandidateId.get(candidate.candidateId)?.role
-        return role === 'target' || role === 'base-context'
-    })
-    let targetReferences = explicitTargetReferences
-    if (targetReferences.length === 0 && args.decisions.length === 0) {
-        targetReferences = generatedReferences
-    }
-    if (targetReferences.length === 1) return targetReferences[0]
-
-    const leafReferences = targetReferences.filter((candidate) => candidate.roleHints.includes('branch-leaf'))
-    return leafReferences.length === 1 ? leafReferences[0] : undefined
-}
-
 const sanitizeResolution = (args: {
     parsed: MediaBranchVlmRawResolution
     state: ProviderState
@@ -384,32 +353,27 @@ const sanitizeResolution = (args: {
 
     let targetCandidateId = normalizeOptionalCandidateId(args.parsed.targetCandidateId)
     let parentCandidateId = normalizeOptionalCandidateId(args.parsed.parentCandidateId) ?? targetCandidateId ?? undefined
-    const includeGeneratedCandidateIds = normalizeStringArray(args.parsed.includeGeneratedCandidateIds)
-    const referenceCandidateIds = normalizeStringArray(args.parsed.referenceCandidateIds)
-    const sourceContextNodeIds = normalizeStringArray(args.parsed.sourceContextNodeIds)
-    const styleReferenceCandidateIds = normalizeStringArray(args.parsed.styleReferenceCandidateIds)
-    let excludedCandidateIds = normalizeStringArray(args.parsed.excludedCandidateIds)
-    const decisions = sanitizeDecisions(args.parsed.decisions, candidateById)
+    let includeGeneratedCandidateIds = normalizeStringArray(args.parsed.includeGeneratedCandidateIds)
+    const referenceCandidateIds = snapshot.candidates.map((candidate) => candidate.candidateId)
+    const sourceContextNodeIds = [...new Set(snapshot.candidates.flatMap((candidate) =>
+        candidate.nodeId ? [candidate.nodeId] : []))]
+    let styleReferenceCandidateIds = normalizeStringArray(args.parsed.styleReferenceCandidateIds)
+    const decisions = sanitizeDecisions(args.parsed.decisions, candidateById).map((decision) =>
+        decision.role === 'excluded'
+            ? {
+                ...decision,
+                role: 'base-context' as const,
+                reason: appendRationale(decision.reason, 'The reference remains attached because the user selected it explicitly.'),
+            }
+            : decision)
 
     let rationale = typeof args.parsed.rationale === 'string' ? args.parsed.rationale.trim() : ''
-    if (!targetCandidateId && (mode === 'fresh-branch' || operationKind === 'new_image' || operationKind === 'fresh_branch')) {
-        const generatedTarget = findGeneratedTargetReference({
-            candidateById,
-            referenceCandidateIds,
-            styleReferenceCandidateIds,
-            decisions,
+    let confidence = Math.max(0, Math.min(1, Number(args.parsed.confidence) || 0))
+    if (mode === 'ambiguous' || confidence < 0.2) {
+        throw new MediaBranchAmbiguityError({
+            candidateAssetIds: snapshot.candidates.map(candidate => candidate.assetId),
+            rationale: rationale || 'The referenced branch could not be selected safely.',
         })
-        if (generatedTarget) {
-            targetCandidateId = generatedTarget.candidateId
-            parentCandidateId = generatedTarget.candidateId
-            mode = 'edit-active-branch'
-            if (operationKind === 'new_image' || operationKind === 'fresh_branch') operationKind = 'style_transfer'
-            excludedCandidateIds = excludedCandidateIds.filter((candidateId) => candidateId !== generatedTarget.candidateId)
-            rationale = appendRationale(
-                rationale,
-                `Resolver guard continued generated branch via selected target reference ${generatedTarget.candidateId}.`,
-            )
-        }
     }
 
     if (parentCandidateId && !candidateById.has(parentCandidateId)) {
@@ -428,36 +392,16 @@ const sanitizeResolution = (args: {
     assertKnownCandidateIds('targetCandidateId', targetCandidateId ? [targetCandidateId] : [], candidateById)
     assertKnownCandidateIds('parentCandidateId', parentCandidateId ? [parentCandidateId] : [], candidateById)
     assertKnownCandidateIds('includeGeneratedCandidateIds', includeGeneratedCandidateIds, candidateById)
-    assertKnownCandidateIds('referenceCandidateIds', referenceCandidateIds, candidateById)
     assertKnownCandidateIds('styleReferenceCandidateIds', styleReferenceCandidateIds, candidateById)
-    assertKnownCandidateIds('excludedCandidateIds', excludedCandidateIds, candidateById)
-    const knownSourceNodeIds = new Set(snapshot.candidates.flatMap(candidate => [
-        ...(candidate.nodeId ? [candidate.nodeId] : []),
-        ...candidate.sourceContextNodeIds,
-    ]))
-    const unknownSourceNodeIds = sourceContextNodeIds.filter(nodeId => !knownSourceNodeIds.has(nodeId))
-    if (unknownSourceNodeIds.length > 0) {
-        throw new Error(`Image branch resolver returned unknown sourceContextNodeIds: ${unknownSourceNodeIds.join(', ')}`)
-    }
-
-    if (targetCandidateId && excludedCandidateIds.includes(targetCandidateId)) {
-        throw new Error(`Image branch resolver excluded its own targetCandidateId: ${targetCandidateId}`)
-    }
     if (targetCandidateId && !referenceCandidateIds.includes(targetCandidateId)) {
         throw new Error(`Image branch resolver targetCandidateId is not in referenceCandidateIds: ${targetCandidateId}`)
     }
 
-    const confidence = Math.max(0, Math.min(1, Number(args.parsed.confidence) || 0))
-    if (mode === 'ambiguous') {
-        throw new Error(`Image branch resolver could not disambiguate: ${rationale || 'ambiguous visual reference'}`)
-    }
-    if (confidence < 0.2) {
-        throw new Error(`Image branch resolver confidence too low (${confidence}): ${rationale || 'no rationale provided'}`)
-    }
-
     const targetCandidate = targetCandidateId ? candidateById.get(targetCandidateId) : undefined
     const rawBranchId = normalizeOptionalCandidateId(args.parsed.branchId)
-    const branchId = targetCandidate?.branchId ?? rawBranchId ?? `branch-${randomUUID()}`
+    const branchId = targetCandidate?.branchId
+        ?? (mode === 'fresh-branch' ? undefined : rawBranchId)
+        ?? `branch-${randomUUID()}`
 
     return {
         resolverKind: RESOLVER_KIND,
@@ -473,7 +417,7 @@ const sanitizeResolution = (args: {
         referenceCandidateIds,
         sourceContextNodeIds,
         styleReferenceCandidateIds,
-        excludedCandidateIds,
+        excludedCandidateIds: [],
         visualEntitySummary: args.parsed.visualEntitySummary?.trim() || undefined,
         visualStyleSummary: args.parsed.visualStyleSummary?.trim() || undefined,
         entityTags: normalizeStringArray(args.parsed.entityTags),
@@ -481,6 +425,16 @@ const sanitizeResolution = (args: {
         confidence,
         rationale,
         decisions,
+    }
+}
+
+export class MediaBranchAmbiguityError extends Error {
+    readonly candidateAssetIds: string[]
+
+    constructor({ candidateAssetIds, rationale }: { candidateAssetIds: string[]; rationale: string }) {
+        super(`MEDIA_BRANCH_REFERENCE_AMBIGUITY:${rationale}`)
+        this.name = 'MediaBranchAmbiguityError'
+        this.candidateAssetIds = [...new Set(candidateAssetIds)]
     }
 }
 
@@ -634,17 +588,54 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
                 candidates: resolvedCandidates,
             },
         }
-        const result: VlmCallResult<MediaBranchVlmRawResolution> = await callVlm({
-            provider,
-            modelVersion,
-            systemPrompt: SYSTEM_PROMPT,
-            userMessages: buildResolverMessages(resolverState),
-            schema: RESOLUTION_SCHEMA,
-            natsService: deps.natsService,
-            temperature: 0.1,
-            maxTokens: Math.min(state.aiModelMetaInfo.maxCompletionSize ?? 4096, 4096),
-            abortSignal: deps.abortSignal,
-        })
+        const resolvedTarget = snapshot.resolvedTargetCandidateId
+            ? resolvedCandidates.find(candidate => candidate.candidateId === snapshot.resolvedTargetCandidateId)
+            : undefined
+        if (snapshot.resolvedTargetCandidateId && !resolvedTarget) {
+            throw new Error('MEDIA_BRANCH_RESOLVED_TARGET_NOT_FOUND')
+        }
+        const result: VlmCallResult<MediaBranchVlmRawResolution> = resolvedTarget
+            ? {
+                parsed: {
+                    mode: 'edit-active-branch',
+                    operationKind: 'edit_existing',
+                    targetCandidateId: resolvedTarget.candidateId,
+                    parentCandidateId: resolvedTarget.candidateId,
+                    branchId: resolvedTarget.branchId ?? '',
+                    includeGeneratedCandidateIds: [],
+                    referenceCandidateIds: resolvedCandidates.map(candidate => candidate.candidateId),
+                    sourceContextNodeIds: resolvedCandidates.flatMap(candidate => candidate.nodeId ? [candidate.nodeId] : []),
+                    styleReferenceCandidateIds: [],
+                    excludedCandidateIds: [],
+                    visualEntitySummary: resolvedTarget.visualEntitySummary ?? '',
+                    visualStyleSummary: resolvedTarget.visualStyleSummary ?? '',
+                    entityTags: resolvedTarget.entityTags ?? [],
+                    styleTags: resolvedTarget.styleTags ?? [],
+                    confidence: 1,
+                    rationale: 'The user selected this attached Asset to resolve branch ambiguity.',
+                    decisions: [{
+                        candidateId: resolvedTarget.candidateId,
+                        role: 'target',
+                        reason: 'Explicit user selection.',
+                    }],
+                },
+                rawText: '',
+                modelName: 'user-selection',
+                promptTokens: 0,
+                completionTokens: 0,
+            }
+            : await callVlm({
+                provider,
+                modelVersion,
+                systemPrompt: SYSTEM_PROMPT,
+                userMessages: buildResolverMessages(resolverState),
+                schema: RESOLUTION_SCHEMA,
+                natsService: deps.natsService,
+                temperature: 0.1,
+                maxTokens: Math.min(state.aiModelMetaInfo.maxCompletionSize ?? 4096, 4096),
+                maxOutputTokensCeiling: state.aiModelMetaInfo.maxCompletionSize,
+                abortSignal: deps.abortSignal,
+            })
 
         const resolution = sanitizeResolution({
             parsed: result.parsed,
@@ -675,7 +666,7 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
             rationale: resolution.rationale,
         }, null, 0)}`)
 
-        // For video generation, map the VLM-selected references onto the video
+        // For video generation, map the explicit references and VLM-assigned roles onto the video
         // provider's inputs as FRAME CONDITIONING ONLY (never asset/style refs):
         //   - 1 image  -> start frame (image-to-video)
         //   - 2 images -> start frame + stop frame (first/last-frame interpolation)

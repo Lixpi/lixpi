@@ -51,6 +51,10 @@ Explicit media prompt references become `referenceAssetIds` only after the API r
 
 Current and future image-provider adapters must consume that shared resolved collection. They must not rebuild Character Creator references from provider-specific message blocks. This single path keeps source images and the sheet template in the same order for OpenAI, Google, Stability, and later providers.
 
+Source references control both character identity and rendering class. Photographic sources require photorealistic character depictions with recognizable facial likeness, natural anatomy, real skin and hair detail, photographic materials, and physically coherent studio lighting. The illustrated character inside the packaged layout is a negative style reference; only its layout, panels, guides, labels, and view placement may influence the output.
+
+Reference-conditioned runs use a second bounded restoration edit. The generated draft controls composition but its character pixels are disposable placeholders. The restoration edit may completely replace every character depiction to recover source identity and medium while keeping the non-character sheet structure unchanged. The NEX model-synchronization workload records each model's effective image-input fidelity. The router rejects a selected model before provider invocation unless that routed metadata declares `level: high`; provider-specific request values come from the same record.
+
 The Character Creator action logs the packaged layout resource ID, byte length, hash, manifest hash, and source Asset IDs. The shared resolver logs role, filename, byte length, media type, and hash at provider ingress. These two log points prove whether the exact Capability resource reached the media adapter.
 
 ## Model matrix and video exclusion

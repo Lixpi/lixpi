@@ -61,7 +61,7 @@ describe('transcodeImage', () => {
         expect(runProcessMock).toHaveBeenCalledWith(
             'heif-convert',
             ['-q', '90', expect.stringContaining('in.heic'), expect.stringContaining('out.jpg')],
-            { timeoutMs: 120_000 },
+            { timeoutMs: 120000 },
         )
         expect(output.toString()).toBe('converted-heif')
     })

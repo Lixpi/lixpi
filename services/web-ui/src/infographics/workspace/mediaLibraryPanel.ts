@@ -14,6 +14,10 @@ import { html } from '$src/utils/domTemplates.ts'
 import { resolveMediaUrl } from '$src/utils/mediaUrls.ts'
 import type { AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
+import {
+    mountAssetSubjectIdentityControl,
+    type AssetSubjectIdentityControlInstance,
+} from '$src/infographics/workspace/assetSubjectIdentityControl.ts'
 
 export type MediaLibraryPanelInstance = {
     readonly rootEl: HTMLElement
@@ -68,6 +72,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
     private loadSequence = 0
     private assetDetailEditor: ProseMirrorEditor | null = null
     private provenanceRenderer: ReadOnlyAiChatThreadRendererInstance | null = null
+    private subjectIdentityControl: AssetSubjectIdentityControlInstance | null = null
 
     constructor(private readonly options: MediaLibraryPanelOptions) {
         this.rootEl = html`<div className="media-library-panel media-library-panel-embedded media-library-panel-images nopan nowheel">
@@ -121,7 +126,11 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
             const assets: AssetMeta[] = []
             let cursor: string | undefined
             do {
-                const page = await this.assetService.list({ limit: 100, cursor })
+                const page = await this.assetService.list({
+                    workspaceId: this.options.workspaceId,
+                    limit: 100,
+                    cursor,
+                })
                 assets.push(...page.items)
                 cursor = page.cursor
             } while (cursor)
@@ -224,7 +233,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
     private async renderAssetInspector(assetId: string): Promise<void> {
         this.inspectorEl.replaceChildren(html`<div className="media-library-state">Loading Asset…</div>`)
         try {
-            const asset = await this.assetService.get(assetId)
+            const asset = await this.assetService.get(assetId, this.options.workspaceId)
             if (!this.isMounted || this.selectedAssetId !== assetId || !this.inspectorEl.isConnected) return
             if ('error' in asset) {
                 this.inspectorEl.replaceChildren(html`<div className="media-library-state media-library-state-error">Asset unavailable: ${asset.error}</div>`)
@@ -254,6 +263,8 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
                 <option value="organization">Organization</option>
             </select>
             <p className="media-library-detail-state"></p>
+            <label>Subject identity</label>
+            <div className="media-library-detail-subject-identity"></div>
             <p className="media-library-detail-descriptor"></p>
             <p className="media-library-detail-lineage"></p>
             <button type="button" className="media-library-detail-remove">Remove from library</button>
@@ -266,6 +277,16 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
         titleInput.value = asset.title
         scopeSelect.value = asset.scope
         this.refreshAssetState(stateEl, asset)
+        const identityMount = detail.querySelector('.media-library-detail-subject-identity') as HTMLElement
+        this.subjectIdentityControl = mountAssetSubjectIdentityControl({
+            host: identityMount,
+            asset,
+            onUpdated: updated => {
+                assetsStore.upsert(updated)
+                this.refreshAssetState(stateEl, updated)
+            },
+            onError: message => { stateEl.textContent = `Subject identity update failed: ${message}` },
+        })
         ;(detail.querySelector('.media-library-detail-descriptor') as HTMLElement).textContent = asset.descriptor?.summary ?? 'No descriptor'
         ;(detail.querySelector('.media-library-detail-lineage') as HTMLElement).textContent = asset.lineage
             ? `Sources: ${[asset.lineage.parentAssetId, ...asset.lineage.sourceAssetIds].filter(Boolean).join(', ') || 'conversation only'}`
@@ -292,7 +313,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
     }
 
     private async updateAssetTitle(asset: Asset, titleInput: HTMLInputElement, stateEl: HTMLElement): Promise<void> {
-        const current = await this.assetService.get(asset.assetId)
+        const current = await this.assetService.get(asset.assetId, this.options.workspaceId)
         if ('error' in current) return
         const updated = await this.assetService.updateMetadata(current.assetId, current.revision, { title: titleInput.value.trim() })
         if ('error' in updated) {
@@ -305,7 +326,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
     }
 
     private async updateAssetScope(asset: Asset, scopeSelect: HTMLSelectElement, stateEl: HTMLElement): Promise<void> {
-        const current = await this.assetService.get(asset.assetId)
+        const current = await this.assetService.get(asset.assetId, this.options.workspaceId)
         if ('error' in current) return
         const scope = scopeSelect.value as Asset['scope']
         const scopeOwnerId = scope === 'workspace'
@@ -384,6 +405,8 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
         this.assetDetailEditor = null
         this.provenanceRenderer?.destroy()
         this.provenanceRenderer = null
+        this.subjectIdentityControl?.destroy()
+        this.subjectIdentityControl = null
     }
 }
 

@@ -23,7 +23,7 @@ const heifConvert = async (buffer: Buffer, canonicalMime: string): Promise<Buffe
         const inPath = join(dir, 'in.heic')
         const outPath = join(dir, `out.${ext}`)
         await writeFile(inPath, buffer)
-        await runProcess('heif-convert', ['-q', '90', inPath, outPath], { timeoutMs: 120_000 })
+        await runProcess('heif-convert', ['-q', '90', inPath, outPath], { timeoutMs: 120000 })
         return readFile(outPath)
     })
 

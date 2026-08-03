@@ -13,6 +13,8 @@ A Lixpi-owned [NATS NEX](https://github.com/synadia-io/nex) **node**: a process 
 | `file-conversion` | `native` / `service` | Active responder on `blob.processing.generateRenditions`. It runs heavy image/video/audio/document transcoding and probing (sharp/ffmpeg/libreoffice/poppler) off the API. Jobs read content-addressed originals from the organization Blob bucket and write immutable canonical, preview, thumbnail, poster, and representative-frame outputs without DynamoDB access. Connects as the AUTH-account `regular_user` to reach Object Store. ([`workloads/file-conversion`](./workloads/file-conversion)) |
 | `system-reporter` | `native` / `service` | Trivial smoke-test workload (echoes uptime every 30 s). Deployed **manually** to prove the substrate. ([`workloads/system-reporter`](./workloads/system-reporter)) |
 
+`ai-models-sync` is also the source of truth for model-specific media behavior. Each synchronized image model can declare `imageInputFidelity.level` and an optional provider `requestValue`; API routing and provider adapters consume those fields from the selected model record without matching provider or model names. Anthropic models sourced from Bedrock retain their dated vendor snapshot ids so saved selections continue to address exact DynamoDB keys.
+
 ## How it works
 
 The image (`Dockerfile`) is a `node:23-alpine` base + the pinned static `nex` binary. On start, [`entrypoint.sh`](./entrypoint.sh):

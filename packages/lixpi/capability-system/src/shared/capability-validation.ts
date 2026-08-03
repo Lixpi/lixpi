@@ -14,7 +14,7 @@ export const CAPABILITY_LIMITS = {
     maxAggregateTextResourceBytes: 1024 * 1024,
     maxWorkflowSteps: 128,
     maxRetryAttempts: 3,
-    maxRetryBackoffMs: 60_000,
+    maxRetryBackoffMs: 60000,
 } as const
 
 export type CapabilityValidationIssueCode =

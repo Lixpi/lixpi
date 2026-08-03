@@ -15,6 +15,7 @@
         "dev": "nodemon -L",
         "test:run": "vitest run",
         "test": "vitest",
+        "migrate:unified-media-reference": "node ./src/debug-tools/migrate-unified-media-reference.ts",
         "aws-login": "aws sso login --use-device-code --sso-session=lixpi"
     },
     "dependencies": {
@@ -43,6 +44,10 @@
         "jwks-rsa": "*",
         "openai": "*",
         "@anthropic-ai/sdk": "*",
+        "@anthropic-ai/bedrock-sdk": "*",
+        "@aws-sdk/client-bedrock": "*",
+        "@aws-sdk/client-bedrock-runtime": "*",
+        "@aws-sdk/credential-providers": "*",
         "@google/genai": "*",
         "@langchain/langgraph": "*",
         "@langchain/core": "*",

@@ -9,7 +9,7 @@ import type { ProviderState } from '../graph/state.ts'
 // and under-counting is not. No tokenizer dependency by design.
 const TEXT_CHARACTERS_PER_TOKEN = 3
 const AUDIO_BYTES_PER_TOKEN = 24
-const IMAGE_INPUT_TOKENS = 1_600
+const IMAGE_INPUT_TOKENS = 1600
 
 export type ProviderInputTokenEstimate = {
     textTokens: number

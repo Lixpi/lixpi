@@ -119,7 +119,7 @@ The toggle switch uses explicit `width`/`height` when supplied. If `height` is o
 
 ## AI Chat Panel Integration
 
-The workspace AI Chat panel no longer uses this component. The old `Include Upstream Context`, Follow Selection, and Pinned Context controls were removed when the panel moved to explicit context chips plus automatic workspace relevance. Use `toggleSwitch` for generic binary SVG controls only.
+The workspace AI Chat panel does not use this component. It uses explicit context chips in the composer. Use `toggleSwitch` for generic binary SVG controls only.
 
 
 ## Implementation Notes

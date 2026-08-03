@@ -19,14 +19,14 @@ export const ensureAssetMaintenanceQueue = async (natsService: NATS_Service = ge
         subjects: ['asset.maintenance.>', 'blob.maintenance.>'],
         retention: 'workqueue',
         storage: 'file',
-        max_age: 30 * 24 * 60 * 60 * 1_000_000_000,
+        max_age: 30 * 24 * 60 * 60 * 1000000000,
     })
     await natsService.ensureJetStreamConsumer(ASSET_MAINTENANCE_STREAM_NAME, {
         durable_name: ASSET_MAINTENANCE_CONSUMER_NAME,
         ack_policy: 'explicit',
         deliver_policy: 'all',
         filter_subject: '>',
-        ack_wait: 60 * 1_000_000_000,
+        ack_wait: 60 * 1000000000,
         max_deliver: -1,
     })
 }

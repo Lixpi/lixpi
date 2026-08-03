@@ -19,6 +19,8 @@
         "@nats-io/transport-node": "*",
         "openai": "*",
         "@anthropic-ai/sdk": "*",
+        "@aws-sdk/client-bedrock": "*",
+        "@aws-sdk/credential-providers": "*",
         "@google/genai": "*",
         "sharp": "*",
         "type-fest": "*"

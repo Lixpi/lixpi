@@ -76,7 +76,7 @@ describe('UsageReporter.reportVideoUsage', () => {
         expect(report?.video.totalTokens).toBe(184320)
         expect(report?.video.pricePer).toBe('1000000')
         expect(report?.video.price).toBe('4.3')
-        // 184320 × 4.30 / 1_000_000 = 0.792576 (the proposal's "$0.000793" is an arithmetic slip).
+        // 184320 × 4.30 / 1000000 = 0.792576 (the proposal's "$0.000793" is an arithmetic slip).
         expect(report?.video.purchasedFor).toBe('0.792576')
         expect(report?.video.soldToClientFor).toBe('0.792576')
         expect(report?.video.pricePerSecond).toBeUndefined()

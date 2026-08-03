@@ -154,6 +154,7 @@ export function createCharacterCreatorActionDependencies(
                     schema: CHARACTER_SHEET_ASSESSMENT_JSON_SCHEMA,
                 },
                 natsService: options.natsService,
+                maxOutputTokensCeiling: reasoningModel.maxCompletionSize,
                 abortSignal: context.signal,
                 temperature: 0,
             })

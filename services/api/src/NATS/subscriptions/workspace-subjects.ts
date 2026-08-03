@@ -7,6 +7,7 @@ import Workspace from '../../models/workspace.ts'
 import AssetModel from '../../models/asset.ts'
 import Organization from '../../models/organization.ts'
 import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
+import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 
 const { WORKSPACE_SUBJECTS } = NATS_SUBJECTS
 
@@ -100,6 +101,8 @@ export const workspaceSubjects = [
             }
             await Workspace.markDeleting({ workspaceId })
             try {
+                const removedMediaRequests = await new MediaGenerationRequestService().cleanupWorkspace(workspaceId)
+                info(`Removed ${removedMediaRequests} media generation requests for ${workspaceId}`)
                 const requester = await getAssetRequesterContext(userId)
                 const removedAssetReferences = await AssetModel.removeAllWorkspaceReferences({ workspaceId, requester })
                 info(`Removed ${removedAssetReferences} Asset references for ${workspaceId}`)

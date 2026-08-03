@@ -36,7 +36,8 @@ describe('Media Library panel contract', () => {
     })
 
     it('loads cataloged Assets and excludes conversation and Artifact records', () => {
-        expectSourceToContain(panelSource, 'await this.assetService.list({ limit: 100, cursor })')
+        expectSourceToContain(panelSource, 'workspaceId: this.options.workspaceId,')
+        expectSourceToContain(panelSource, 'limit: 100,')
         expectSourceToContain(panelSource, "asset.primaryCategory !== 'conversation' && asset.primaryCategory !== 'capabilityArtifact'")
         expectSourceToContain(panelSource, 'for (const asset of this.allAssets)')
     })

@@ -172,13 +172,6 @@ const uploadedVideoNode = {
     },
 } satisfies CanvasNode
 
-const branchOriginNode = {
-    nodeId: 'branch-origin-1',
-    type: 'branchOrigin',
-    position: { x: 200, y: 0 },
-    dimensions: { width: 48, height: 48 },
-} satisfies CanvasNode
-
 const cubistDocNode = {
     nodeId: 'cubist-doc',
     type: 'document',
@@ -228,67 +221,84 @@ beforeEach(() => {
     }
 })
 
-function buildSnapshot(prompt: string, generatedNodes: CanvasNode[] = [personGeneratedNode]) {
-    return buildMediaBranchCandidateSnapshot({
-        regionNodeId: 'thread-node-1',
-        conversationAssetId: 'thread-1',
-        nodes: [rootNode, portraitSourceNode, landscapeSourceNode, ...generatedNodes],
-        edges: generatedNodes.map((node) => ({
-            edgeId: `edge-root-${node.nodeId}`,
-            sourceNodeId: 'thread-node-1',
-            targetNodeId: node.nodeId,
-        })) as WorkspaceEdge[],
-        prompt,
-    })
-}
-
 describe('buildMediaBranchCandidateSnapshot', () => {
-    it('collects base context and generated branches without selecting a target', () => {
-        const snapshot = buildSnapshot('draw a goat in the style of that landscape painting')
-
-        expect(snapshot.promptText).toBe('draw a goat in the style of that landscape painting')
-        expect(snapshot.candidates.map((candidate) => candidate.nodeId).sort()).toEqual([
-            'landscape-source',
-            'person-generated',
-            'portrait-source',
-        ])
-        expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'landscape-source')?.roleHints).toEqual(['base-context'])
-        expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'person-generated')?.roleHints).toContain('generated-variant')
-        expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'person-generated')?.roleHints).toContain('branch-leaf')
-    })
-
-    it('preserves separate visual labels for goat and person candidates', () => {
-        const snapshot = buildSnapshot('make the goat wearing sunglasses', [personGeneratedNode, goatGeneratedNode])
-
-        const personCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'person-generated')
-        const goatCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'goat-generated')
-
-        expect(personCandidate?.branchId).toBe('branch-person')
-        expect(personCandidate?.visualEntitySummary).toBe('front-facing male portrait with glasses')
-        expect(personCandidate?.entityTags).toEqual(['person'])
-        expect(goatCandidate?.branchId).toBe('branch-goat')
-        expect(goatCandidate?.visualEntitySummary).toBe('brown goat in colorful painterly landscape')
-        expect(goatCandidate?.entityTags).toEqual(['goat'])
-    })
-
-    it('grounds candidates by their Asset rendition path so the API VLM can fetch candidate pixels', () => {
-        const snapshot = buildSnapshot('make a painting of that guy look like cubist oil painting')
-
-        expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).toContain('/api/assets/person-generated-file/renditions/preview')
-        expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).toContain('/api/assets/portrait-file/renditions/preview')
-    })
-
-    it('adds an active-target hint without moving that candidate ahead of other candidates', () => {
+    it('includes only media explicitly attached to the submitted request', () => {
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             conversationAssetId: 'thread-1',
-            activeTargetNodeId: 'goat-generated',
             nodes: [rootNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, goatGeneratedNode],
             edges: [
                 { edgeId: 'edge-root-person', sourceNodeId: 'thread-node-1', targetNodeId: 'person-generated' },
                 { edgeId: 'edge-root-goat', sourceNodeId: 'thread-node-1', targetNodeId: 'goat-generated' },
             ],
-            prompt: 'make that guy orange monochrome',
+            contextMediaNodeIds: ['landscape-source', 'goat-generated'],
+            prompt: 'make the goat wear sunglasses',
+        })
+
+        expect(snapshot.candidates.map((candidate) => candidate.nodeId)).toEqual([
+            'landscape-source',
+            'goat-generated',
+        ])
+        expect(snapshot.explicitReferenceCandidateIds).toEqual([
+            'node:landscape-source',
+            'node:goat-generated',
+        ])
+        expect(snapshot.candidates.some((candidate) => candidate.nodeId === 'person-generated')).toBe(false)
+        expect(snapshot.candidates.some((candidate) => candidate.nodeId === 'portrait-source')).toBe(false)
+    })
+
+    it('preserves authorized generated-media lineage and visual descriptor fields', () => {
+        const snapshot = buildMediaBranchCandidateSnapshot({
+            regionNodeId: 'thread-node-1',
+            conversationAssetId: 'thread-1',
+            nodes: [personGeneratedNode, goatGeneratedNode],
+            edges: [],
+            contextMediaNodeIds: ['person-generated', 'goat-generated'],
+            prompt: 'make the goat wear sunglasses',
+        })
+
+        const personCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'person-generated')
+        const goatCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'goat-generated')
+
+        expect(personCandidate).toMatchObject({
+            branchId: 'branch-person',
+            visualEntitySummary: 'front-facing male portrait with glasses',
+            entityTags: ['person'],
+            roleHints: ['base-context', 'generated-variant'],
+        })
+        expect(goatCandidate).toMatchObject({
+            branchId: 'branch-goat',
+            visualEntitySummary: 'brown goat in colorful painterly landscape',
+            entityTags: ['goat'],
+            roleHints: ['base-context', 'generated-variant'],
+        })
+    })
+
+    it('grounds attached images by canonical Asset rendition path', () => {
+        const snapshot = buildMediaBranchCandidateSnapshot({
+            regionNodeId: 'thread-node-1',
+            conversationAssetId: 'thread-1',
+            nodes: [portraitSourceNode, personGeneratedNode],
+            edges: [],
+            contextMediaNodeIds: ['portrait-source', 'person-generated'],
+            prompt: 'make the portrait cubist',
+        })
+
+        expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).toEqual([
+            '/api/assets/portrait-file/renditions/preview',
+            '/api/assets/person-generated-file/renditions/preview',
+        ])
+    })
+
+    it('adds an active-target hint without changing attachment order', () => {
+        const snapshot = buildMediaBranchCandidateSnapshot({
+            regionNodeId: 'thread-node-1',
+            conversationAssetId: 'thread-1',
+            activeTargetNodeId: 'goat-generated',
+            nodes: [personGeneratedNode, goatGeneratedNode],
+            edges: [],
+            contextMediaNodeIds: ['person-generated', 'goat-generated'],
+            prompt: 'make the goat orange monochrome',
         })
 
         const candidateIds = snapshot.candidates.map((candidate) => candidate.nodeId)
@@ -301,191 +311,41 @@ describe('buildMediaBranchCandidateSnapshot', () => {
         expect(snapshot.transcriptContext).toContain('candidateId=node:goat-generated | nodeId=goat-generated | assetId=')
     })
 
-    it('marks generated ancestors and leaves so the API can preserve branch lineage', () => {
+    it('carries a selected generated Asset parent identity without attaching its parent implicitly', () => {
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             conversationAssetId: 'thread-1',
-            nodes: [rootNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
-            edges: [
-                { edgeId: 'edge-person-refined', sourceNodeId: 'person-generated', targetNodeId: 'person-refined' },
-            ],
+            nodes: [portraitSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
+            edges: [],
+            contextMediaNodeIds: ['person-refined'],
             prompt: 'make that guy more monochromatic',
         })
 
-        const firstBranchImage = snapshot.candidates.find((candidate) => candidate.nodeId === 'person-generated')
         const branchLeaf = snapshot.candidates.find((candidate) => candidate.nodeId === 'person-refined')
 
-        expect(firstBranchImage?.roleHints).toContain('branch-ancestor')
-        expect(branchLeaf?.roleHints).toContain('branch-leaf')
         expect(branchLeaf).toMatchObject({
             branchId: 'branch-person',
             parentImageNodeId: 'person-generated',
             ancestorNodeIds: ['person-generated', 'person-refined'],
-            sourceContextNodeIds: ['portrait-source', 'landscape-source'],
+            sourceContextNodeIds: ['person-refined'],
         })
+        expect(snapshot.candidates.map((candidate) => candidate.nodeId)).toEqual(['person-refined'])
     })
 
-    it('inherits a parent branchId when a generated candidate omits it', () => {
-        const parentImage = {
-            ...personGeneratedNode,
-            nodeId: 'parent-branch-node',
-            generatedBy: {
-                ...personGeneratedNode.generatedBy,
-                branchId: 'parent-branch',
-            },
-        } satisfies CanvasNode
-
-        const childImage = {
-            ...goatGeneratedNode,
-            nodeId: 'child-branch-node',
-            generatedBy: {
-                ...goatGeneratedNode.generatedBy,
-                responseId: 'response-child-branch',
-                branchId: undefined,
-                parentImageNodeId: 'parent-branch-node',
-                sourceContextNodeIds: ['portrait-source'],
-                parentMediaNodeId: undefined,
-            },
-        } satisfies CanvasNode
-
+    it('deduplicates attachment IDs and ignores document IDs', () => {
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             conversationAssetId: 'thread-1',
-            nodes: [rootNode, portraitSourceNode, parentImage, childImage],
-            edges: [{
-                edgeId: 'edge-parent-child',
-                sourceNodeId: 'parent-branch-node',
-                targetNodeId: 'child-branch-node',
-            }],
-            prompt: 'continue the chain',
-        })
-
-        const child = snapshot.candidates.find((candidate) => candidate.nodeId === 'child-branch-node')
-
-        expect(child?.branchId).toBe('parent-branch')
-        expect(child?.ancestorNodeIds).toContain('parent-branch-node')
-        expect(child?.sourceContextNodeIds).toContain('portrait-source')
-    })
-
-    it('merges base and generated prompt contributions for the same generated media node', () => {
-        const generatedImageTextByNodeId = {
-            'person-generated': 'a response message with extra constraints',
-        }
-
-        const snapshot = buildMediaBranchCandidateSnapshot({
-            regionNodeId: 'thread-node-1',
-            conversationAssetId: 'thread-1',
-            nodes: [rootNode, portraitSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
-            edges: [{
-                edgeId: 'edge-person-refined',
-                sourceNodeId: 'person-generated',
-                targetNodeId: 'person-refined',
-            }],
-            prompt: 'make this more cinematic',
-            generatedImageTextByNodeId,
-        })
-        const personCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'person-generated')
-
-        expect(personCandidate?.promptText).toContain('make that guy more expressive')
-        expect(personCandidate?.promptText).toContain('a response message with extra constraints')
-        expect(personCandidate?.promptText).toContain('front-facing male portrait with glasses')
-    })
-
-    it('handles malformed thread content gracefully when extracting generated message text', () => {
-        const generatedImageTextByNodeId = getGeneratedImageTextByNodeIdFromThreadContent(
-            null,
-            [personGeneratedNode],
-            'thread-1',
-        )
-
-        expect(generatedImageTextByNodeId).toEqual({})
-    })
-
-    it('does not crash when a generated branch is connected through a non-media branch origin', () => {
-        const snapshot = buildMediaBranchCandidateSnapshot({
-            regionNodeId: 'thread-node-1',
-            conversationAssetId: 'thread-1',
-            nodes: [rootNode, branchOriginNode, personGeneratedNode],
-            edges: [
-                { edgeId: 'edge-origin-person', sourceNodeId: 'branch-origin-1', targetNodeId: 'person-generated' },
-            ] as WorkspaceEdge[],
-            prompt: 'make this more cinematic',
-        })
-        const candidate = snapshot.candidates.find((item) => item.nodeId === 'person-generated')
-
-        expect(candidate?.ancestorNodeIds).toEqual(['person-generated'])
-        expect(candidate?.roleHints).toContain('branch-leaf')
-    })
-
-    it('folds thread response text into generated branch prompt text', () => {
-        const threadContent = {
-            type: 'doc',
-            content: [
-                {
-                    type: 'aiUserMessage',
-                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'make him painterly' }] }],
-                },
-                {
-                    type: 'aiResponseMessage',
-                    attrs: { id: 'response-refined-message' },
-                    content: [
-                        { type: 'paragraph', content: [{ type: 'text', text: 'Created a refined painted portrait.' }] },
-                        { type: 'aiGeneratedImage', attrs: { revisedPrompt: 'thread image prompt text' } },
-                    ],
-                },
-            ],
-        }
-        const generatedImageTextByNodeId = getGeneratedImageTextByNodeIdFromThreadContent(
-            threadContent,
-            [personGeneratedNode, refinedPersonGeneratedNode],
-            'thread-1'
-        )
-        const snapshot = buildMediaBranchCandidateSnapshot({
-            regionNodeId: 'thread-node-1',
-            conversationAssetId: 'thread-1',
-            nodes: [rootNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
-            edges: [
-                { edgeId: 'edge-person-refined', sourceNodeId: 'person-generated', targetNodeId: 'person-refined' },
-            ],
-            prompt: 'make that guy more painterly',
-            generatedImageTextByNodeId,
-        })
-        const branchLeaf = snapshot.candidates.find((candidate) => candidate.nodeId === 'person-refined')
-
-        expect(generatedImageTextByNodeId['person-refined']).toContain('make him painterly')
-        expect(generatedImageTextByNodeId['person-refined']).toContain('Created a refined painted portrait.')
-        expect(generatedImageTextByNodeId['person-refined']).toContain('thread image prompt text')
-        expect(branchLeaf?.promptText).toContain('make the same man orange monochrome')
-        expect(branchLeaf?.promptText).toContain('thread image prompt text')
-        expect(branchLeaf?.visualEntitySummary).toBe('orange monochrome portrait of the same man with glasses')
-    })
-
-    it('injects explicit context media IDs even when they are not in the thread graph', () => {
-        const disconnectedContextNode = {
-            nodeId: 'disconnected-source',
-            type: 'image',
-            assetId: 'disconnected-source-file',
-            workspaceId: 'workspace-1',
-            src: '/api/images/workspace-1/disconnected-source-file',
-            aspectRatio: 1,
-            position: { x: 900, y: 0 },
-            dimensions: { width: 100, height: 100 },
-        } satisfies CanvasNode
-
-        const snapshot = buildMediaBranchCandidateSnapshot({
-            regionNodeId: 'thread-node-1',
-            conversationAssetId: 'thread-1',
-            nodes: [rootNode, portraitSourceNode, disconnectedContextNode],
+            nodes: [rootNode, portraitSourceNode],
             edges: [],
-            contextMediaNodeIds: ['disconnected-source'],
-            prompt: 'focus only this disconnected context',
+            contextMediaNodeIds: ['portrait-source', 'portrait-source', 'thread-node-1'],
+            prompt: 'use this portrait',
         })
 
-        const candidateIds = snapshot.candidates.map((candidate) => candidate.nodeId).sort()
-        expect(candidateIds).toEqual(['disconnected-source', 'portrait-source'])
-        expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'disconnected-source')?.roleHints).toEqual(['base-context'])
-        expect(snapshot.candidates.find((candidate) => candidate.nodeId === 'portrait-source')?.roleHints).toEqual(['base-context'])
-        expect(snapshot.explicitReferenceCandidateIds).toEqual(['node:disconnected-source'])
+        expect(snapshot.candidates.map((candidate) => candidate.nodeId)).toEqual(['portrait-source'])
+        expect(snapshot.explicitReferenceCandidateIds).toEqual([
+            'node:portrait-source',
+        ])
     })
 })
 
@@ -591,7 +451,7 @@ describe('getGeneratedImageTextByNodeIdFromThreadContent', () => {
 })
 
 describe('buildCanvasWideCandidateSnapshot', () => {
-    it('includes only media nodes and excludes thread/document entries', () => {
+    it('returns no candidates when the request has no explicit media references', () => {
         const snapshot = buildCanvasWideCandidateSnapshot({
             generationRunId: 'run-wide-1',
             nodes: [
@@ -608,11 +468,8 @@ describe('buildCanvasWideCandidateSnapshot', () => {
         expect(snapshot.resolverVersion).toBe('image-branch-vlm-v1')
         expect(snapshot.conversationAssetId).toBe('run-wide-1')
         expect(snapshot.regionNodeId).toBe('standalone:run-wide-1')
-        expect(snapshot.candidates.map((candidate) => candidate.nodeId).sort()).toEqual([
-            'person-generated',
-            'portrait-source',
-            'video-generated',
-        ])
+        expect(snapshot.candidates).toEqual([])
+        expect(snapshot.explicitReferenceCandidateIds).toBeUndefined()
     })
 
     it('marks the only referenced node as active target', () => {
@@ -641,7 +498,7 @@ describe('buildCanvasWideCandidateSnapshot', () => {
         expect(snapshot.candidates.some((candidate) => candidate.roleHints.includes('active-target'))).toBe(false)
     })
 
-    it('keeps the candidate list unfiltered but carries explicit refs for API-side exclusivity', () => {
+    it('keeps the candidate list request-bounded and carries explicit refs for API authorization', () => {
         const snapshot = buildCanvasWideCandidateSnapshot({
             generationRunId: 'run-wide-4',
             nodes: [portraitSourceNode, landscapeSourceNode, personGeneratedNode],
@@ -649,11 +506,7 @@ describe('buildCanvasWideCandidateSnapshot', () => {
             referenceNodeIds: ['portrait-source'],
         })
 
-        expect(snapshot.candidates.map((candidate) => candidate.nodeId).sort()).toEqual([
-            'landscape-source',
-            'person-generated',
-            'portrait-source',
-        ])
+        expect(snapshot.candidates.map((candidate) => candidate.nodeId)).toEqual(['portrait-source'])
         expect(snapshot.explicitReferenceCandidateIds).toEqual(['node:portrait-source'])
     })
 
@@ -674,7 +527,14 @@ describe('buildCanvasWideCandidateSnapshot', () => {
 
 describe('buildMediaBranchCandidateSnapshot — video media', () => {
     it('grounds a generated video by its representative-frame rendition, never the MP4', () => {
-        const snapshot = buildSnapshot('extend that seaside clip', [videoGeneratedNode])
+        const snapshot = buildMediaBranchCandidateSnapshot({
+            regionNodeId: 'thread-node-1',
+            conversationAssetId: 'thread-1',
+            nodes: [videoGeneratedNode],
+            edges: [],
+            contextMediaNodeIds: ['video-generated'],
+            prompt: 'extend that seaside clip',
+        })
         const videoCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'video-generated')
 
         expect(videoCandidate?.mediaKind).toBe('video')
@@ -684,7 +544,14 @@ describe('buildMediaBranchCandidateSnapshot — video media', () => {
     })
 
     it('keeps a generated video on its branch so an edit continues lineage', () => {
-        const snapshot = buildSnapshot('make the dawn light warmer', [videoGeneratedNode])
+        const snapshot = buildMediaBranchCandidateSnapshot({
+            regionNodeId: 'thread-node-1',
+            conversationAssetId: 'thread-1',
+            nodes: [videoGeneratedNode],
+            edges: [],
+            contextMediaNodeIds: ['video-generated'],
+            prompt: 'make the dawn light warmer',
+        })
         const videoCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'video-generated')
 
         expect(videoCandidate?.branchId).toBe('branch-video')
@@ -698,6 +565,7 @@ describe('buildMediaBranchCandidateSnapshot — video media', () => {
             conversationAssetId: 'thread-1',
             nodes: [rootNode, uploadedVideoNode],
             edges: [],
+            contextMediaNodeIds: ['video-uploaded'],
             prompt: 'make the car blue',
         })
         const uploaded = snapshot.candidates.find((candidate) => candidate.nodeId === 'video-uploaded')
@@ -734,13 +602,14 @@ describe('buildWorkspaceContextSnapshot', () => {
         actionTimelineNode,
     ]
 
-    it('indexes every context-bearing node, descriptors-only (no pixel data)', () => {
+    it('indexes every explicitly attached context-bearing node without pixel data', () => {
         const snapshot = buildWorkspaceContextSnapshot({
             workspaceId: 'workspace-1',
             conversationAssetId: 'thread-1',
             prompt: 'summarize my canvas',
             nodes: workspaceNodes,
             edges: [],
+            contextChipNodeIds: workspaceNodes.map((node) => node.nodeId),
         })
 
         expect(snapshot.resolverVersion).toBe('workspace-context-v1')
@@ -764,6 +633,7 @@ describe('buildWorkspaceContextSnapshot', () => {
             prompt: 'x',
             nodes: workspaceNodes,
             edges: [],
+            contextChipNodeIds: workspaceNodes.map((node) => node.nodeId),
         })
         const byId = new Map(snapshot.nodes.map((node) => [node.nodeId, node]))
 
@@ -810,6 +680,7 @@ describe('buildWorkspaceContextSnapshot', () => {
             prompt: 'now make it warmer',
             nodes: [rootNode, otherThreadImage],
             edges: [],
+            contextChipNodeIds: ['other-thread-generated'],
         })
         const generated = snapshot.nodes.find((node) => node.nodeId === 'other-thread-generated')
 
@@ -817,7 +688,7 @@ describe('buildWorkspaceContextSnapshot', () => {
         expect(generated?.isCurrentConversationGenerated).toBeUndefined()
     })
 
-    it('flags explicit chips and edge-forced nodes (edges + parent children)', () => {
+    it('omits ambient edge-connected nodes and marks only explicit chips', () => {
         const snapshot = buildWorkspaceContextSnapshot({
             workspaceId: 'workspace-1',
             conversationAssetId: 'thread-1',
@@ -831,19 +702,11 @@ describe('buildWorkspaceContextSnapshot', () => {
         })
         const byId = new Map(snapshot.nodes.map((node) => [node.nodeId, node]))
 
-        // Edge-connected node is forced.
-        expect(byId.get('person-generated')?.isEdgeForced).toBe(true)
-        expect(byId.get('person-generated')?.isExplicitChip).toBe(false)
-        // Parent-child of the root thread is forced too (mirrors findConnectedNodes).
-        expect(byId.get('video-uploaded')?.isEdgeForced).toBe(true)
-        // Explicit chip is forced but not edge-derived.
+        expect(snapshot.nodes.map((node) => node.nodeId)).toEqual(['cubist-doc'])
         expect(byId.get('cubist-doc')?.isExplicitChip).toBe(true)
         expect(byId.get('cubist-doc')?.isEdgeForced).toBe(false)
-        // Unconnected, unchipped node is neither.
-        expect(byId.get('goat-generated')?.isEdgeForced).toBe(false)
-        expect(byId.get('goat-generated')?.isExplicitChip).toBe(false)
-        // The root thread node is not forced by itself.
-        expect(byId.get('thread-node-1')?.isEdgeForced).toBe(false)
+        expect(byId.has('person-generated')).toBe(false)
+        expect(byId.has('video-uploaded')).toBe(false)
     })
 
     it('carries explicit Capability Artifacts with their registered type identity', () => {
@@ -889,6 +752,7 @@ describe('buildWorkspaceContextSnapshot', () => {
             prompt: 'x',
             nodes: workspaceNodes,
             edges: [],
+            contextChipNodeIds: ['cubist-doc', 'thread-context', 'person-generated'],
             titlesByNodeId: { 'cubist-doc': 'Cubist Dog', 'thread-context': 'Seaside chat' },
         })
         const byId = new Map(snapshot.nodes.map((node) => [node.nodeId, node]))

@@ -1,6 +1,7 @@
 'use strict'
 
 import type { Merge, Except } from 'type-fest'
+import type { AssetSubjectIdentity, DepictionMedium } from './asset-types.ts'
 
 export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability', 'BytePlus'] as const
 export type ProviderName = typeof PROVIDER_NAMES[number]
@@ -121,7 +122,7 @@ export const MAX_UPLOAD_FILE_SIZE = 1024 * 1024 * 1024
 // NOTE: 'document' is an editable content-Asset node (server-authoritative ProseMirror).
 // Uploaded documents use the distinct 'mediaDocument' type to avoid colliding
 // with it. 'audio' is the uploaded-audio node.
-export type CanvasNodeType = 'document' | 'mediaDocument' | 'image' | 'video' | 'audio' | 'uploadPlaceholder' | 'branchOrigin' | 'branchFork' | 'branchLine' | 'capabilityArtifact'
+export type CanvasNodeType = 'document' | 'mediaDocument' | 'image' | 'video' | 'audio' | 'operationStatus' | 'branchOrigin' | 'branchFork' | 'branchLine' | 'capabilityArtifact'
 
 export type CanvasNodePosition = {
     x: number
@@ -175,6 +176,11 @@ export type ImageSizeOption = {
 }
 
 export type ImageSizeMode = 'resolution' | 'aspectRatio'
+
+export type ImageInputFidelityPolicy = {
+    level: 'standard' | 'high'
+    requestValue?: 'low' | 'high'
+}
 
 export type MediaGenerationConfigControlKey =
     | 'imageSize'
@@ -267,10 +273,11 @@ export type MediaBranchCandidateSnapshot = {
     conversationAssetId: string
     regionNodeId: string
     activeTargetCandidateId?: string
-    // Candidate identities the user explicitly attached as context. Asset-only
-    // references have no canvas node, so resolver routing must never key on
-    // nodeId. The candidate list itself stays unfiltered; the API remains the
-    // source of truth for authorization and exclusivity.
+    resolvedTargetCandidateId?: string
+    // Candidate identities the user explicitly attached in the message or
+    // composer context. Asset-only references have no canvas node, so resolver
+    // routing must never key on nodeId. The API filters against this allowlist
+    // before authorizing or resolving candidate media.
     explicitReferenceCandidateIds?: string[]
     promptText: string
     promptFingerprint: string
@@ -278,10 +285,8 @@ export type MediaBranchCandidateSnapshot = {
     transcriptContext: string
 }
 
-// One compact, descriptors-only entry per context-bearing canvas node. The
-// browser builds these for the whole workspace each chat turn so the API
-// relevance stage can rank on text alone. The API resolves Asset renditions
-// only for the narrowed, selected set.
+// One compact entry per canvas node explicitly attached to the submitted turn.
+// Unselected workspace nodes are omitted from the request.
 export type WorkspaceContextNode = {
     nodeId: string
     type: CanvasNodeType
@@ -296,6 +301,7 @@ export type WorkspaceContextNode = {
     sourceConversationAssetId?: string
     isCurrentConversationGenerated?: boolean
     isExplicitChip: boolean
+    // Transport compatibility only. Context resolution ignores canvas edges.
     isEdgeForced: boolean
 }
 
@@ -307,7 +313,7 @@ export type WorkspaceContextSnapshot = {
     nodes: WorkspaceContextNode[]
 }
 
-export type WorkspaceContextSelectionRole = 'forced-chip' | 'forced-edge' | 'auto'
+export type WorkspaceContextSelectionRole = 'forced-chip'
 
 export type WorkspaceContextSelection = {
     nodeId: string
@@ -362,6 +368,7 @@ export type MediaBranchVlmResolution = {
 export type BranchOriginProvenance = {
     kind: 'branch-root-fork-decision'
     promptText: string
+    reasoningResponseText?: string
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -372,6 +379,7 @@ export type BranchOriginProvenance = {
 export type BranchForkProvenance = {
     kind: 'reasoning-run'
     promptText: string
+    reasoningResponseText?: string
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -386,6 +394,7 @@ export type BranchForkProvenance = {
 export type BranchLineProvenance = {
     kind: 'branch-continuation'
     promptText: string
+    reasoningResponseText?: string
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -540,6 +549,183 @@ export type MediaGenerationRequestCompletePayload = {
     status: 'MEDIA_GENERATION_REQUEST_COMPLETE'
     aiProvider: string
     generationRequestId: string
+}
+
+export type MediaPromptSegment =
+    | { kind: 'text'; text: string; from: number; to: number }
+    | {
+        kind: 'reference'
+        referenceType: 'media'
+        assetId: string
+        nodeId?: string
+        mediaKind: MediaKind
+        displayName: string
+        from: number
+        to: number
+    }
+
+export type MediaReferenceBinding = {
+    assetId: string
+    assetRevision: number
+    nodeId?: string
+    mediaKind: MediaKind
+    alias: `REFERENCE_${number}`
+    displayNameSnapshot: string
+    forbiddenNameVariants: string[]
+    semanticDescriptor: string
+    depictionMedium: DepictionMedium
+    subjectIdentity: AssetSubjectIdentity
+}
+
+export type UnresolvedReferenceBinding = {
+    bindingId: string
+    promptRange: { from: number; to: number }
+    originalText: string
+    matcherVersion: string
+    candidates: Array<{
+        assetId: string
+        score: number
+        previewRenditionName: string
+    }>
+}
+
+export type ProviderSafeMediaIntent = {
+    intentVersion: 'media-provider-safe-intent-v1'
+    originalSegments: MediaPromptSegment[]
+    safePrompt: string
+    bindings: MediaReferenceBinding[]
+    forbiddenNameVariants: string[]
+    promptFingerprint: string
+}
+
+export type MediaGenerationRequestStatus =
+    | 'submitted'
+    | 'awaiting-reference-resolution'
+    | 'running'
+    | 'action-required'
+    | 'completed'
+    | 'completed-with-errors'
+    | 'failed'
+    | 'cancelled'
+
+export type MediaGenerationRunStatus =
+    | 'pending'
+    | 'awaiting-provider-verification'
+    | 'running'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+
+export type MediaGenerationProblem = {
+    problemVersion: '1'
+    type: `urn:lixpi:media-problem:${string}`
+    title: string
+    detail: string
+    category:
+        | 'reference-ambiguity'
+        | 'provider-verification-required'
+        | 'provider-moderation'
+        | 'provider-configuration'
+        | 'provider-capacity'
+        | 'provider-transport'
+        | 'provider-output'
+        | 'internal'
+    stage: 'preflight' | 'submit' | 'poll' | 'download' | 'persist'
+    generationRequestId: string
+    generationRun?: number
+    provider?: ProviderName
+    modelId?: AiModelId
+    providerCode?: string
+    providerReason?: string
+    supportCode: string
+    action: 'resolve-reference' | 'verify-with-provider' | 'edit-request' | 'none'
+}
+
+export type MediaGenerationRun = {
+    generationRun: number
+    reasoningModelId: AiModelId
+    reasoningIndex: number
+    provider: ProviderName
+    modelId: AiModelId
+    status: MediaGenerationRunStatus
+    operationNodeId: string
+    providerOperationId?: string
+    requiredVerificationAssetIds?: string[]
+    problem?: MediaGenerationProblem
+    startedAt?: number
+    completedAt?: number
+}
+
+export type ProviderVerificationSession = {
+    sessionId: string
+    generationRun: number
+    provider: ProviderName
+    assetId: string
+    providerAccountScope: string
+    status: 'pending' | 'consumed' | 'expired' | 'cancelled'
+    stateNonceHash: string
+    providerSessionTokenHash?: string
+    expiresAt: number
+    createdAt: number
+    consumedAt?: number
+}
+
+export type MediaGenerationRequest = {
+    generationRequestId: string
+    workspaceId: string
+    organizationId: string
+    userId: string
+    conversationAssetId: string
+    status: MediaGenerationRequestStatus
+    checkpointBlobHash: string
+    checkpointSchemaVersion: string
+    bindings: MediaReferenceBinding[]
+    unresolvedBindings: UnresolvedReferenceBinding[]
+    resolvedReferences: Array<{
+        bindingId: string
+        originalText: string
+        assetId: string
+        resolvedByUserId: string
+        resolvedAt: number
+    }>
+    runs: MediaGenerationRun[]
+    plannedCanvasNodeIds: string[]
+    verificationSessions?: ProviderVerificationSession[]
+    revision: number
+    createdAt: number
+    updatedAt: number
+    statusUpdatedAt: number
+}
+
+export type MediaGenerationRequestMeta = Pick<
+    MediaGenerationRequest,
+    | 'generationRequestId'
+    | 'workspaceId'
+    | 'organizationId'
+    | 'conversationAssetId'
+    | 'status'
+    | 'revision'
+    | 'createdAt'
+    | 'updatedAt'
+    | 'statusUpdatedAt'
+>
+
+export type MediaGenerationRequestAccessList = {
+    generationRequestId: string
+    principalId: string
+    accessLevel: AccessLevel
+    createdAt: number
+    updatedAt: number
+}
+
+export type MediaGenerationRequestEvent = {
+    eventId: string
+    generationRequestId: string
+    sequence: number
+    status: 'MEDIA_GENERATION_REQUEST_STATUS' | 'MEDIA_GENERATION_ACTION_REQUIRED' | 'MEDIA_GENERATION_PROBLEM'
+    requestRevision: number
+    payload: Record<string, unknown>
+    createdAt: number
 }
 
 // One node's API-resolved canvas geometry. Positions are world-absolute for
@@ -746,6 +932,9 @@ export type MediaGenerationRunMeta = {
 
 export type GeneratedOutputVariantMetadata = {
     outputKind?: 'image' | 'video' | 'capabilityArtifact'
+    // Branch lineage is assigned by the API for every generated output kind,
+    // artifacts included, so it belongs to the shared variant metadata.
+    branchId?: string
     generationRequestId?: string
     reasoningRunId?: string
     mediaRunId?: string
@@ -811,7 +1000,6 @@ export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     imageModelProvider?: string
     revisedPrompt: string
     responseMessageId?: string
-    branchId?: string
     // Image-named schema alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
@@ -887,8 +1075,6 @@ export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     hasAudio?: boolean
     veoOperationName?: string
     sourceVideoNodeId?: string    // set for extend/edit continuations (Phase 6)
-    // reused branch-lineage audit fields (identical names to images)
-    branchId?: string
     // Image-named schema alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
@@ -959,14 +1145,23 @@ export type DocumentMediaCanvasNode = CanvasNodeParentingFields & {
     dimensions: CanvasNodeDimensions
 }
 
-export type UploadPlaceholderCanvasNode = CanvasNodeParentingFields & {
+export type OperationStatusCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
-    type: 'uploadPlaceholder'
-    fileName: string
-    status: 'converting' | 'failed'
-    message?: string
+    type: 'operationStatus'
+    operation: 'upload' | 'media-generation'
+    status: 'in-progress' | 'action-required' | 'failed'
+    title: string
+    message: string
     assetId?: string
     kind?: MediaKind
+    generationRequestId?: string
+    generationRun?: number
+    plannedMediaType?: 'image' | 'video'
+    problem?: MediaGenerationProblem
+    candidateAssetIds?: string[]
+    unresolvedBindingId?: string
+    requestRevision?: number
+    verificationAssetId?: string
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     createdAt: number
@@ -1026,7 +1221,7 @@ export type BranchLineCanvasNode = CanvasNodeParentingFields & {
     temporary: true
 }
 
-export type CanvasNode = DocumentCanvasNode | DocumentMediaCanvasNode | ImageCanvasNode | VideoCanvasNode | AudioCanvasNode | UploadPlaceholderCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode | CapabilityArtifactCanvasNode
+export type CanvasNode = DocumentCanvasNode | DocumentMediaCanvasNode | ImageCanvasNode | VideoCanvasNode | AudioCanvasNode | OperationStatusCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode | CapabilityArtifactCanvasNode
 
 export type CanvasViewport = {
     x: number
@@ -1510,8 +1705,7 @@ export type AiInteractionChatSendMessagePayload = {
     conversationAssetId: string
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
     mediaGenerationRequest?: AiInteractionMediaGenerationRequest
-    // Whole-workspace, descriptors-only index sent each turn and consumed by
-    // the API `resolveWorkspaceContext` relevance stage.
+    // Explicit composer context attached to this submitted turn.
     workspaceContextSnapshot?: WorkspaceContextSnapshot
     canvasVisibleArea?: {
         width: number
@@ -1529,6 +1723,7 @@ export type AiInteractionChatSubmitPayload = AiInteractionChatSendMessagePayload
 export type AiInteractionMediaGenerationRequest = {
     requestVersion: 'media-generation-matrix-v1'
     generationRequestId: string
+    outputMediaTypes?: Array<'image' | 'video'>
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
@@ -1607,6 +1802,9 @@ export type AiModel = {
     // Describes what imageSizes values mean for this image-generation model.
     imageSizeMode?: ImageSizeMode
     imageSizes?: ImageSizeOption[]
+    // Effective fidelity for reference-conditioned image generation. A provider
+    // request value is included only when the model API requires one.
+    imageInputFidelity?: ImageInputFidelityPolicy
     // Video generation option lists (VEO and future video providers). Reuse the
     // ImageSizeOption { value, label } shape the size dropdown already consumes.
     videoAspectRatios?: ImageSizeOption[]

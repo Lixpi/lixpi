@@ -16,7 +16,7 @@ The API owns both mappings. The browser renders plans and authoritative geometry
 
 Before provider fan-out, the API resolves:
 
-1. descriptor-first workspace context;
+1. explicitly attached prompt and composer context;
 2. media branch candidates using authorized Asset renditions;
 3. the operation kind and target/parent node;
 4. reasoning and media run axes;
@@ -60,6 +60,7 @@ The assignment’s topology fields are node IDs. They are not Asset IDs.
 - A simple fresh single generation may connect directly from its origin without a per-run marker.
 
 Markers store prompt/provenance information and `conversationAssetId`. Their positions and dimensions are persisted in the Workspace.
+At request settlement, the API projects the marker's bounded reasoning-run response preview into `provenance.reasoningResponseText`. The conversation response is authoritative while mounted; the persisted marker field guarantees the reasoning row survives reloads and prompt-replay workflows. If a provider emits only a media Tool call, the Tool prompt stored in that run's generation trace is the response fallback instead of an empty row.
 
 ## Pending output Assets
 
@@ -91,13 +92,15 @@ The browser sees stable Asset IDs from `MEDIA_LINEAGE_PLANNED` before partial/fi
 
 ## Candidate media
 
-Canvas candidate snapshots contain `nodeId` plus `assetId`, roles, branch hints, descriptors, and prompt metadata. Browser-supplied byte URLs are not trusted. The API point-authorizes each Asset and resolves a model-safe Blob:
+Canvas candidate snapshots contain `nodeId` plus `assetId`, roles, branch hints, descriptors, and prompt metadata. `explicitReferenceCandidateIds` is the allowlist; the API drops every other candidate before Asset reads or branch resolution. Prompt reference atoms can add Asset-only candidates without canvas node IDs. Browser-supplied byte URLs are not trusted. The API point-authorizes each allowed Asset and resolves a model-safe Blob:
 
 - image: canonical/original or preview as required;
 - video grounding: representative frame, falling back to poster;
 - explicit video extension: canonical/original MP4.
 
 Videos cost one still image in branch resolution. The MP4 is used only by the explicit extension path.
+
+The branch VLM assigns target, style, and lineage roles only within the explicit candidate set. Every explicit candidate remains a generation reference. If the VLM cannot assign a target safely, the API keeps all explicit references and plans a targetless fresh branch instead of failing preflight.
 
 ## Canvas projection
 
@@ -160,7 +163,9 @@ Successful settlement stores the original Blob, starts rendition generation, att
 
 Provider failure or cancellation materializes terminal provenance for every unfinished planned Asset. Failed Assets use lifecycle/media `failed`; cancelled Assets use lifecycle `failed` and media/provenance `cancelled`. They remain addressable through their catalog/reference rows until explicitly removed.
 
-Request settlement removes transient pending node IDs for unfinished assignments and rebalances remaining markers/completed outputs. Completed siblings are never removed by a later cancellation.
+Durable media requests also project one generic `operationStatus` node per concrete run. After lineage planning, each temporary request node is rebound to the pending output ID and exact API-planned parent slot. Success replaces that slot with the generated Asset node. Ambiguity or missing provider verification changes it to action-required; provider failure keeps it as a failed node with sanitized details and Edit request. The lineage edge remains intact.
+
+Request settlement removes unfinished pending Asset placements and rebalances remaining markers/completed outputs, but it does not silently erase the durable failed operation node. Completed siblings are never removed by a later failure or cancellation. Only explicit Cancel/Dismiss removes waiting/failed recovery state and releases its retained checkpoint.
 
 ## Invariants
 
@@ -175,6 +180,8 @@ Request settlement removes transient pending node IDs for unfinished assignments
 - Existing-prompt replay never invokes a reasoning provider and never rewrites sibling media prompts.
 - Generated media topology and coordinates are persisted by the API before clients render them.
 - No generated output depends on a workspace Object Store key or a chat-thread table row.
+- A user-selected ambiguous target resumes the same request and bypasses another target-selection call.
+- No provider rejection automatically retries or rewrites a paid request.
 
 ## Relevant code
 

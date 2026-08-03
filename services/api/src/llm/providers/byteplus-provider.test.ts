@@ -11,6 +11,7 @@ vi.mock('@lixpi/debug-tools', () => debugTools)
 
 import { BytePlusProvider } from './byteplus-provider.ts'
 import type { BaseProviderDeps } from './base-provider.ts'
+import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 
 const byteplusMocks = vi.hoisted(() => ({
     createVideoGenerationTask: vi.fn(),
@@ -37,6 +38,7 @@ const makeDeps = (): BaseProviderDeps => ({
     usageReporter: {} as any,
     runImageRouter: vi.fn(),
     runVideoRouter: vi.fn(),
+    mediaProviderDefinition: CURRENT_MEDIA_PROVIDER_DEFINITIONS.BytePlus,
 })
 
 const setProviderPublishers = (provider: BytePlusProvider) => {

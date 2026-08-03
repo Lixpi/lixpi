@@ -35,22 +35,22 @@ export function buildCandidateTranscriptContext(
     ].filter((line): line is string => typeof line === 'string').join('\n')
 }
 
-// The browser sends the snapshot unfiltered by design — the API is the source
-// of truth for explicit-context exclusivity. When the user attached explicit
-// references, drop every other candidate and rebuild the transcript so the VLM
-// never sees (or selects) non-explicit media.
+// Only explicitly attached references may reach branch resolution. Rebuild the
+// transcript from that allowlist even when the browser submits extra candidates
+// or omits the allowlist entirely.
 export function restrictSnapshotToExplicitRefs(
     snapshot: MediaBranchCandidateSnapshot | undefined,
 ): MediaBranchCandidateSnapshot | undefined {
-    if (!snapshot?.explicitReferenceCandidateIds?.length) return snapshot
+    if (!snapshot) return undefined
 
-    const explicitCandidateIds = new Set(snapshot.explicitReferenceCandidateIds)
+    const explicitCandidateIds = new Set(snapshot.explicitReferenceCandidateIds ?? [])
     const candidates = snapshot.candidates.filter((candidate) => explicitCandidateIds.has(candidate.candidateId))
-    if (candidates.length === snapshot.candidates.length) return snapshot
-
     const activeTargetCandidateId = snapshot.activeTargetCandidateId && explicitCandidateIds.has(snapshot.activeTargetCandidateId)
         ? snapshot.activeTargetCandidateId
         : undefined
+    if (candidates.length === snapshot.candidates.length
+        && activeTargetCandidateId === snapshot.activeTargetCandidateId) return snapshot
+
     const restricted: MediaBranchCandidateSnapshot = {
         ...snapshot,
         candidates,
