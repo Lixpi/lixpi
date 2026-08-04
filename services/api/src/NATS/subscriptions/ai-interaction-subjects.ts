@@ -657,12 +657,22 @@ export const aiInteractionSubjects = [
             if (regeneration?.mode === 'existing-prompt') {
                 const canonicalReplayPrompts: typeof regeneration.replayPrompts = []
                 const lineageNode = workspaceNodes.find(node => node.nodeId === regeneration.lineageParentNodeId)
+                const sourceNode = regeneration.sourceNodeId
+                    ? workspaceNodes.find(node => node.nodeId === regeneration.sourceNodeId)
+                    : undefined
                 if (!lineageNode
                     || !['branchOrigin', 'branchFork', 'branchLine'].includes(lineageNode.type)
                     || lineageNode.type !== regeneration.lineageParentType
                     || !('branchId' in lineageNode)
                     || lineageNode.branchId !== regeneration.branchId) {
                     return rejectSend('REGENERATION_LINEAGE_NOT_FOUND')
+                }
+                if (regeneration.sourceNodeId && (!sourceNode
+                    || (sourceNode.type !== 'image' && sourceNode.type !== 'video')
+                    || sourceNode.generatedBy?.branchId !== regeneration.branchId
+                    || regeneration.replayPrompts.length !== 1
+                    || sourceNode.assetId !== regeneration.replayPrompts[0]?.sourceAssetId)) {
+                    return rejectSend('REGENERATION_SOURCE_NOT_FOUND')
                 }
                 if (!regeneration.replayPrompts.length
                     || regeneration.replayPrompts.some(prompt =>
@@ -677,8 +687,8 @@ export const aiInteractionSubjects = [
                     const sourceAsset = await AssetModel.get({ assetId: replayPrompt.sourceAssetId, requester })
                     if ('error' in sourceAsset
                         || !isAssetAvailableInWorkspaceScope(sourceAsset, workspace)
-                        || sourceAsset.generatedOutputReview?.status !== 'superseded'
-                        || sourceAsset.generatedOutputReview?.regenerationMode !== 'existing-prompt'
+                        || (!sourceNode && (sourceAsset.generatedOutputReview?.status !== 'superseded'
+                            || sourceAsset.generatedOutputReview?.regenerationMode !== 'existing-prompt'))
                         || sourceAsset.states.provenance !== 'sealed'
                         || sourceAsset.lineage?.reasoningModelId !== replayPrompt.reasoningModelId
                         || sourceAsset.lineage?.mediaModelId !== replayPrompt.mediaModelId) {

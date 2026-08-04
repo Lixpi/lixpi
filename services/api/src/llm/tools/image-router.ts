@@ -1,10 +1,12 @@
 'use strict'
 
 import { info, warn, err } from '@lixpi/debug-tools'
+import type NatsService from '@lixpi/nats-service'
 import type {
     CapabilityMediaExecutionContext,
     CapabilityMediaStrategyRegistry,
 } from '@lixpi/capability-system/backend'
+import type { CapabilityJsonValue, MediaGenerationProblem } from '@lixpi/constants'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
@@ -17,7 +19,7 @@ import {
 } from './image-generation-trace.ts'
 import { buildImageGenerationReferences, type ImageGenerationReference } from '../image-generation-references.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
-import type { MediaGenerationProblem } from '@lixpi/constants'
+import { ImagePublisher } from '../graph/image-publisher.ts'
 
 // Short fingerprint for a reference image URL — enough to spot duplicates
 // or wrong-image issues in logs without dumping base64.
@@ -40,6 +42,7 @@ const fingerprintRef = (url: string): string => {
 type ImageRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
     getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
+    onCapabilityMediaTrace?: (trace: CapabilityJsonValue) => void
     signal?: AbortSignal
     captureOnly?: boolean
 }
@@ -53,6 +56,7 @@ export class ImageRouter {
     constructor(
         private readonly registry: ProviderRegistry,
         private readonly capabilityMediaStrategies?: CapabilityMediaStrategyRegistry,
+        private readonly natsService?: NatsService,
     ) {}
 
     async execute(state: ProviderState, options: ImageRouterOptions = {}): Promise<Partial<ProviderState>> {
@@ -137,10 +141,66 @@ export class ImageRouter {
             try {
                 await recordRunStatus('running')
                 const context = buildCapabilityMediaExecutionContext(state, generationRun)
-                const result = await strategy.execute(context, state.capabilityMediaExecutionPlan, options)
+                const imagePublisher = this.natsService && generationRun
+                    ? new ImagePublisher(
+                        this.natsService,
+                        context.organizationId,
+                        workspaceId,
+                        aiChatThreadId,
+                        imageProvider,
+                        generationRun,
+                        undefined,
+                        options.onProseMirrorContent,
+                        undefined,
+                        options.getProseMirrorSnapshot,
+                        options.captureOnly ?? false,
+                    )
+                    : undefined
+                const result = await strategy.execute(context, state.capabilityMediaExecutionPlan, {
+                    ...options,
+                    reportProgress: async progress => {
+                        if (!state.durableGenerationRequestId || !generationRun?.mediaModelId) return
+                        try {
+                            await requestService.recordRunProgress({
+                                generationRequestId: state.durableGenerationRequestId,
+                                workspaceId,
+                                mediaModelId: generationRun.mediaModelId,
+                                reasoningIndex: generationRun.reasoningIndex,
+                                progress,
+                            })
+                        } catch (error) {
+                            warn(`[ImageRouter] Unable to persist capability progress: ${(error as Error).message}`)
+                        }
+                    },
+                    publishImagePartial: async (imageBase64, partialIndex) => {
+                        if (!imagePublisher) return
+                        try {
+                            await imagePublisher.partial(imageBase64, partialIndex)
+                        } catch (error) {
+                            warn(`[ImageRouter] Unable to publish capability partial: ${(error as Error).message}`)
+                        }
+                    },
+                })
                 if (result.error) {
                     const problem = await recordRunStatus('failed', { message: result.error, code: result.errorCode })
                     return presentFailure(result.error, result.errorCode, result.errorType, problem)
+                }
+                const finalImage = result.generatedImages?.[0]
+                if (!finalImage) throw new Error('CAPABILITY_IMAGE_PROVIDER_OUTPUT_MISSING')
+                if (result.capabilityMediaTrace) {
+                    try {
+                        options.onCapabilityMediaTrace?.(result.capabilityMediaTrace)
+                    } catch (error) {
+                        warn(`[ImageRouter] Unable to publish capability review trace: ${(error as Error).message}`)
+                    }
+                }
+                if (imagePublisher) {
+                    await imagePublisher.complete({
+                        imageBase64: finalImage,
+                        responseId: `capability:${state.capabilityMediaExecutionPlan.capabilityRunId}`,
+                        revisedPrompt: prompt,
+                        imageModelId: generationRun?.mediaModelId ?? mediaModelId ?? imageModel,
+                    })
                 }
                 await recordRunStatus('completed')
                 return result

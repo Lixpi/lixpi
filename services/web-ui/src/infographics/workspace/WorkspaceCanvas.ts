@@ -3100,8 +3100,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 && run?.mediaModelId === generatedBy.mediaModelId
             )
         }
-        return traces.find(matchesRun)
-            ?? (usesSealedProvenance && traces.length === 1 ? traces[0]! : null)
+        for (let index = traces.length - 1; index >= 0; index -= 1) {
+            const trace = traces[index]
+            if (trace && matchesRun(trace)) return trace
+        }
+        return usesSealedProvenance && traces.length === 1 ? traces[0]! : null
     }
 
     function getGeneratedMediaReplayDescriptor(
@@ -3227,6 +3230,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     async function regenerateGeneratedOutputs(request: GeneratedOutputRegenerationRequest): Promise<void> {
         const { scope, targetNodeId, outputNodes } = request
         const regeneratePrompt = request.mode === 'regenerate-prompt'
+        if (scope === 'branch-lineage' && !regeneratePrompt && outputNodes.length > 1) {
+            for (const outputNode of outputNodes) {
+                await regenerateGeneratedOutputs({
+                    scope: 'output-node',
+                    mode: 'existing-prompt',
+                    targetNodeId: outputNode.nodeId,
+                    outputNodes: [outputNode],
+                })
+            }
+            return
+        }
         await Promise.all(outputNodes.map(async (node) => {
             if (assetDocumentsStore.get(node.assetId, 'provenance')?.doc) return
             const result = await assetService.refresh(node.assetId, workspaceId)
@@ -3268,6 +3282,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Artifact-only branches carry no media trace, so they re-run from their
         // sealed capability inputs with the lineage preserved by the supersede call.
         const replaysExistingPrompt = !regeneratePrompt && mediaDescriptors.length > 0
+        const sourceMediaNode = replaysExistingPrompt && mediaDescriptors.length === 1
+            ? mediaDescriptors[0]!.node
+            : undefined
         if (replaysExistingPrompt && (!lineageParentNodeId || !lineageParentType || !branchId)) {
             console.error('[CANVAS][generated-output-review] Branch lineage is unavailable.', {
                 targetNodeId,
@@ -3287,28 +3304,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ...outputNodes.map(node => node.nodeId),
             ...(regeneratePrompt ? [targetNodeId] : []),
         ]
-        const result = request.scope === 'output-node'
-            ? await assetService.reviewGeneratedOutput({
-                workspaceId,
-                scope: 'output-node',
-                action: 'supersede',
-                nodeId: targetNodeId,
-                preserveLineage: true,
-            })
-            : await assetService.reviewGeneratedOutput({
-                workspaceId,
-                scope: 'branch-lineage',
-                action: 'supersede',
-                nodeId: targetNodeId,
-                preserveLineage: request.mode === 'existing-prompt',
-            })
-        if ('error' in result) {
-            console.error('[CANVAS][generated-output-review] Unable to supersede generated output:', result.error)
-            return
+        if (!sourceMediaNode) {
+            const result = request.scope === 'output-node'
+                ? await assetService.reviewGeneratedOutput({
+                    workspaceId,
+                    scope: 'output-node',
+                    action: 'supersede',
+                    nodeId: targetNodeId,
+                    preserveLineage: true,
+                })
+                : await assetService.reviewGeneratedOutput({
+                    workspaceId,
+                    scope: 'branch-lineage',
+                    action: 'supersede',
+                    nodeId: targetNodeId,
+                    preserveLineage: request.mode === 'existing-prompt',
+                })
+            if ('error' in result) {
+                console.error('[CANVAS][generated-output-review] Unable to supersede generated output:', result.error)
+                return
+            }
+            applyApiCanvasGeometry(result.canvasGeometry)
+            scheduleGeneratedMediaChromeSync()
+            syncBranchMarkerNodeContents()
         }
-        applyApiCanvasGeometry(result.canvasGeometry)
-        scheduleGeneratedMediaChromeSync()
-        syncBranchMarkerNodeContents()
         const submitData = buildRegenerationSubmitData(descriptors, promptText)
         await submitCanvasGenerationRun(submitData, {
             explicitContextNodeIds,
@@ -3324,6 +3343,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     branchId,
                     lineageParentNodeId,
                     lineageParentType,
+                    ...(sourceMediaNode ? { sourceNodeId: sourceMediaNode.nodeId } : {}),
                     replayPrompts: mediaDescriptors.map(descriptor => ({
                         sourceAssetId: descriptor.node.assetId,
                         reasoningModelId: descriptor.reasoningModelId,
@@ -9497,7 +9517,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 threadId,
             ),
         })
-        if (lineagePlan.regenerationTarget) {
+        if (lineagePlan.regenerationTarget && !lineagePlan.regenerationTarget.sourceMediaNodeId) {
             resolvePendingBranchMarkerWithLineagePlan(threadId, generationRun)
             return
         }

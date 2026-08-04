@@ -46,15 +46,16 @@ Character Creator's strategy:
 1. reauthorizes canonical or original source Assets;
 2. analyzes source pixels with the selected reasoning model;
 3. writes lossless role crops to transient storage;
-4. executes dependency-ready panels with bounded concurrency;
+4. executes a configurable 3-to-10-shot dependency graph with bounded concurrency and one provider attempt per shot;
 5. adapts provider-neutral reference roles through the selected image provider;
-6. validates each panel with structured VLM assessment and optional NEX face similarity;
-7. retries only failed semantic dimensions once;
-8. assembles one deterministic 3840x2560 PNG;
-9. returns that PNG to the normal image-settlement path;
-10. clears transient objects on success, failure, or cancellation.
+6. publishes a progressive composite after every terminal shot result;
+7. compares rendered shots with structured VLM assessment and optional NEX face similarity;
+8. surfaces failed dimensions without automatically retrying or replacing pixels;
+9. assembles one deterministic 3840x2560 PNG;
+10. returns that PNG and its review trace to the normal image-settlement path;
+11. clears transient objects on success, failure, or cancellation.
 
-Transport retries belong to the DAG executor and do not consume semantic correction slots. Required panel failure terminates only that concrete matrix run. An optional panel can fail without invalidating the final sheet.
+The default graph contains a detailed front face and two full-body shots. Free-form prompt text can request 3 to 10 shots and prioritize belongings, expressions, profiles, back views, face angles, or poses. Automatic paid and semantic retries are disabled. A failed shot remains visible as an unavailable cell while the runtime composes every successful shot; another attempt requires explicit user action and creates a preserved lineage variant.
 
 ## Provider capability profiles
 

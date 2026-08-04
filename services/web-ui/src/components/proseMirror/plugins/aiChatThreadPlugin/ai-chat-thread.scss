@@ -728,7 +728,8 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     .ai-image-generation-final-prompt-section,
     .ai-image-generation-reference-section,
     .ai-image-generation-resolver-section,
-    .ai-capability-generation-details-section {
+    .ai-capability-generation-details-section,
+    .ai-capability-media-review-section {
         margin: 0;
 
         // Fading gradient separator between sections — mirrors the branch lineage
@@ -772,6 +773,59 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 
     .ai-capability-generation-details-section .ai-image-generation-section-label {
         display: block;
+    }
+
+    .ai-capability-media-review-section .ai-image-generation-section-label {
+        display: block;
+    }
+
+    .ai-capability-media-review-summary,
+    .ai-capability-media-review-recommendation {
+        margin: 0 0 0.65rem;
+        color: rgba(0, 0, 0, 0.62);
+        font-size: 0.72rem;
+        line-height: 1.4;
+    }
+
+    .ai-capability-media-review-recommendation {
+        margin: 0.65rem 0 0;
+    }
+
+    .ai-capability-media-review-steps {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .ai-capability-media-review-step {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) max-content;
+        gap: 0.15rem 0.75rem;
+        padding: 0.48rem 0.56rem;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.035);
+    }
+
+    .ai-capability-media-review-step-title {
+        color: rgba(0, 0, 0, 0.68);
+        font-size: 0.72rem;
+        font-weight: 650;
+    }
+
+    .ai-capability-media-review-step-status {
+        color: rgba(0, 0, 0, 0.48);
+        font-size: 0.68rem;
+    }
+
+    .ai-capability-media-review-step-issues {
+        grid-column: 1 / -1;
+        color: #a63f3f;
+        font-size: 0.7rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
     }
 
     .ai-capability-generation-metadata {

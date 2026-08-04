@@ -1,12 +1,17 @@
 'use strict'
 
-export const CHARACTER_SHEET_TRACE_SCHEMA_VERSION = 'character-sheet-trace-v1' as const
+import type { CapabilityMediaReviewTrace } from '@lixpi/constants'
+
+export const CHARACTER_SHEET_TRACE_SCHEMA_VERSION = 'character-sheet-trace-v2' as const
 
 export type CharacterPanelTrace = {
     panelId: string
-    attempts: number
-    selectedAttempt: number
+    title: string
+    attempts: 0 | 1
+    selectedAttempt: 0 | 1
     score: number
+    status: 'completed' | 'needs-review' | 'unavailable'
+    failedDimensions: string[]
     warning?: string
     vlmAssessor: string
     providerOperationIds: string[]
@@ -14,12 +19,12 @@ export type CharacterPanelTrace = {
     omittedReferenceRoles: string[]
 }
 
-export type CharacterSheetTrace = {
+export type CharacterSheetTrace = CapabilityMediaReviewTrace & {
     schemaVersion: typeof CHARACTER_SHEET_TRACE_SCHEMA_VERSION
     capabilityRunId: string
     provider: string
     modelVersion: string
-    compositor: 'sharp-character-sheet-3840x2560-v1'
+    compositor: 'sharp-character-sheet-3840x2560-v2'
     panels: CharacterPanelTrace[]
     inferredFeatures: string[]
     totalProviderOperations: number

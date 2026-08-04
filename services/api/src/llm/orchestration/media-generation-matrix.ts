@@ -824,6 +824,14 @@ export class MediaGenerationMatrixOrchestrator {
                     branchId: normalized.regeneration.branchId,
                     lineageParentNodeId: normalized.regeneration.lineageParentNodeId,
                     lineageParentType: normalized.regeneration.lineageParentType,
+                    ...(normalized.regeneration.sourceNodeId
+                        ? {
+                            sourceMediaNodeId: normalized.regeneration.sourceNodeId,
+                            ...(normalized.regeneration.replayPrompts[0]?.sourceAssetId
+                                ? { sourceMediaAssetId: normalized.regeneration.replayPrompts[0]!.sourceAssetId }
+                                : {}),
+                        }
+                        : {}),
                 },
             } : {}),
             forceFreshLineage: normalized.regeneration?.mode === 'regenerate-prompt'

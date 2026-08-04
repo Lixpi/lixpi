@@ -115,7 +115,9 @@ export const mediaDescriptorSubjects = [{
         const [provider, modelVersion] = descriptorModelId.split(':')
         const aiModelMetaInfo = await AiModel.getAiModel({ provider: provider!, model: modelVersion!, omitPricing: true })
         const maxTokens = aiModelMetaInfo?.maxCompletionSize || (isMedia ? settings.mediaDescriptor.defaultVlmMaxTokens : undefined)
-        if (!maxTokens) return { error: `AI_MODEL_NOT_FOUND:${descriptorModelId}` }
+        const inferenceCapabilities = aiModelMetaInfo?.inferenceCapabilities
+            ?? (isMedia ? settings.mediaDescriptor.defaultVlmInferenceCapabilities : undefined)
+        if (!maxTokens || !inferenceCapabilities) return { error: `AI_MODEL_NOT_FOUND:${descriptorModelId}` }
         const natsService = NATS_Service.getInstance()
         if (!natsService) return { error: 'NATS_UNAVAILABLE' }
 
@@ -129,7 +131,7 @@ export const mediaDescriptorSubjects = [{
                 descriptor = await describeMediaStill({
                     provider: provider as ProviderName,
                     modelVersion: modelVersion!,
-                    inferenceCapabilities: aiModelMetaInfo.inferenceCapabilities,
+                    inferenceCapabilities,
                     imageUrl: `nats-obj://${blob.bucketName}/${blob.objectKey}`,
                     natsService,
                     maxTokens,
@@ -138,7 +140,7 @@ export const mediaDescriptorSubjects = [{
                 descriptor = await describeTextContent({
                     provider: provider as ProviderName,
                     modelVersion: modelVersion!,
-                    inferenceCapabilities: aiModelMetaInfo.inferenceCapabilities,
+                    inferenceCapabilities,
                     text: await loadAssetText(asset),
                     title: asset.title,
                     natsService,

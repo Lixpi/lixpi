@@ -29,18 +29,3 @@ export function selectCharacterPanelCandidate(
             : {}),
     }
 }
-
-export function buildCharacterPanelCorrectionPrompt(args: {
-    basePrompt: string
-    assessment: CharacterPanelAssessment
-}): string {
-    const failures = args.assessment.dimensions
-        .filter(dimension => args.assessment.failedDimensions.includes(dimension.dimension))
-        .map(dimension => `${dimension.dimension}: ${dimension.mismatchCodes.join(', ') || 'below threshold'}`)
-    return [
-        args.basePrompt,
-        'Correct only these failed dimensions:',
-        ...failures.map(failure => `- ${failure}`),
-        'Preserve every accepted identity, design, medium, crop, and framing dimension exactly.',
-    ].join('\n')
-}

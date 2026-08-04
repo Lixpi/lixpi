@@ -42,6 +42,8 @@ export type MediaBranchLineagePlannerInput = {
         branchId: string
         lineageParentNodeId: string
         lineageParentType: 'branchOrigin' | 'branchFork' | 'branchLine'
+        sourceMediaNodeId?: string
+        sourceMediaAssetId?: string
     }
     forceFreshLineage?: boolean
     createdAt?: number
@@ -120,7 +122,13 @@ export class MediaBranchLineagePlanner {
         const providedReferenceNodeIds = this.getProvidedReferenceNodeIds(input.workspaceContextSnapshot)
         const sourceContextNodeIds = referenceResolution?.sourceContextNodeIds ?? []
         const createdAt = input.createdAt ?? Date.now()
-        const sourceDecision = this.getSourceDecision(lineageResolution, snapshot, referenceNodeIds)
+        const sourceDecision: SourceDecision = input.regenerationTarget?.sourceMediaNodeId
+            ? {
+                sourceNodeId: input.regenerationTarget.sourceMediaNodeId,
+                placementAnchorNodeId: input.regenerationTarget.sourceMediaNodeId,
+                parentMediaNodeId: input.regenerationTarget.sourceMediaNodeId,
+            }
+            : this.getSourceDecision(lineageResolution, snapshot, referenceNodeIds)
         const mediaRuns = this.enumerateMediaRuns(input)
         const reasoningRuns = this.enumerateReasoningRuns(mediaRuns)
         const usesReasoningForks = this.shouldCreateReasoningForks(reasoningRuns)
@@ -136,7 +144,8 @@ export class MediaBranchLineagePlanner {
             usesReasoningForks,
             reasoningBranchCount: reasoningRuns.length,
         })
-        const parentBranchNodeId = input.regenerationTarget?.lineageParentNodeId
+        const parentBranchNodeId = sourceDecision.parentMediaNodeId
+            ?? input.regenerationTarget?.lineageParentNodeId
             ?? sourceDecision.sourceNodeId
             ?? branchOrigin?.nodeId
         const markerArgs = {
@@ -154,7 +163,9 @@ export class MediaBranchLineagePlanner {
             usesReasoningForks,
         }
         const branchForks = input.regenerationTarget ? [] : this.buildBranchForks(markerArgs)
-        const branchLines = input.regenerationTarget ? [] : this.buildBranchLines(markerArgs)
+        const branchLines = input.regenerationTarget && !sourceDecision.parentMediaNodeId
+            ? []
+            : this.buildBranchLines(markerArgs)
         const runAssignments = this.buildRunAssignments({
             input,
             branchId,
@@ -465,13 +476,13 @@ export class MediaBranchLineagePlanner {
                 ...(args.branchOrigin ? { branchOriginNodeId: args.branchOrigin.nodeId } : {}),
                 ...(branchFork ? { branchForkNodeId: branchFork.nodeId } : {}),
                 ...(branchLine ? { branchLineNodeId: branchLine.nodeId } : {}),
-                ...(args.regenerationLineageParentNodeId && args.regenerationLineageParentType === 'branchOrigin'
+                ...(!branchLine && args.regenerationLineageParentNodeId && args.regenerationLineageParentType === 'branchOrigin'
                     ? { branchOriginNodeId: args.regenerationLineageParentNodeId }
                     : {}),
-                ...(args.regenerationLineageParentNodeId && args.regenerationLineageParentType === 'branchFork'
+                ...(!branchLine && args.regenerationLineageParentNodeId && args.regenerationLineageParentType === 'branchFork'
                     ? { branchForkNodeId: args.regenerationLineageParentNodeId }
                     : {}),
-                ...(args.regenerationLineageParentNodeId && args.regenerationLineageParentType === 'branchLine'
+                ...(!branchLine && args.regenerationLineageParentNodeId && args.regenerationLineageParentType === 'branchLine'
                     ? { branchLineNodeId: args.regenerationLineageParentNodeId }
                     : {}),
                 ...(lineageParentNodeId ? { lineageParentNodeId } : {}),

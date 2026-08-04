@@ -44,8 +44,6 @@ const EVIDENCE_SYSTEM_PROMPT = [
     'Coordinates are pixel coordinates in the named source image. Keep them inside that image.',
 ].join(' ')
 
-const PANEL_ASSESSMENT_ATTEMPTS = 2
-
 const PANEL_SYSTEM_PROMPT = [
     'Judge one generated character panel against the supplied source images, structured evidence, accepted anchors, and target panel requirements.',
     'Score each requested dimension from 0 to 1. Weight directly observed evidence over polish.',
@@ -72,41 +70,33 @@ export function createCharacterVlmPorts(args: CharacterVlmArgs): {
                     maxTokens: 8_192,
                     maxOutputTokensCeiling: args.maxOutputTokensCeiling,
                     abortSignal: request.signal,
-                    enableThinking: true,
+                    enableThinking: false,
+                    singleAttempt: true,
                 })
                 return normalizeEvidence(result.parsed)
             },
         },
         panelAssessor: {
-            // Structured output is occasionally returned without the scored
-            // dimensions even under a forced tool call, so one clean re-ask is
-            // made before the caller has to fall back to an unscored panel.
+            // Comparison is advisory and runs once. A malformed response is
+            // surfaced as comparison-unavailable; it never triggers paid work.
             assess: async request => {
-                let lastError: unknown
-                for (let attempt = 1; attempt <= PANEL_ASSESSMENT_ATTEMPTS; attempt += 1) {
-                    const result = await callVlm({
-                        provider: args.provider,
-                        modelVersion: args.modelVersion,
-                        inferenceCapabilities: args.inferenceCapabilities,
-                        systemPrompt: PANEL_SYSTEM_PROMPT,
-                        userMessages: buildPanelMessages(request),
-                        schema: buildPanelAssessmentSchema(request.panel.acceptanceDimensions),
-                        temperature: 0,
-                        maxTokens: 2_048,
-                        maxOutputTokensCeiling: args.maxOutputTokensCeiling,
-                        abortSignal: request.signal,
-                    })
-                    try {
-                        return {
-                            dimensions: normalizePanelDimensions(result.parsed, request.panel.acceptanceDimensions),
-                            assessor: `${args.provider}/${result.modelName || args.modelVersion}`,
-                        }
-                    } catch (error) {
-                        if (request.signal?.aborted) throw error
-                        lastError = error
-                    }
+                const result = await callVlm({
+                    provider: args.provider,
+                    modelVersion: args.modelVersion,
+                    inferenceCapabilities: args.inferenceCapabilities,
+                    systemPrompt: PANEL_SYSTEM_PROMPT,
+                    userMessages: buildPanelMessages(request),
+                    schema: buildPanelAssessmentSchema(request.panel.acceptanceDimensions),
+                    temperature: 0,
+                    maxTokens: 2_048,
+                    maxOutputTokensCeiling: args.maxOutputTokensCeiling,
+                    abortSignal: request.signal,
+                    singleAttempt: true,
+                })
+                return {
+                    dimensions: normalizePanelDimensions(result.parsed, request.panel.acceptanceDimensions),
+                    assessor: `${args.provider}/${result.modelName || args.modelVersion}`,
                 }
-                throw lastError
             },
         },
     }

@@ -264,6 +264,12 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
                     <div className="ai-image-generation-section-label">Execution steps</div>
                     <ol className="ai-capability-generation-steps"></ol>
                 </section>
+                <section className="ai-capability-media-review-section">
+                    <div className="ai-image-generation-section-label">Capability media comparison</div>
+                    <p className="ai-capability-media-review-summary"></p>
+                    <ol className="ai-capability-media-review-steps"></ol>
+                    <p className="ai-capability-media-review-recommendation"></p>
+                </section>
             </div>
         </div>
     ` as HTMLElement
@@ -282,6 +288,10 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
     const capabilitySection = wrapper.querySelector('.ai-capability-generation-details-section') as HTMLElement
     const capabilityMetadata = wrapper.querySelector('.ai-capability-generation-metadata') as HTMLElement
     const capabilitySteps = wrapper.querySelector('.ai-capability-generation-steps') as HTMLElement
+    const capabilityReviewSection = wrapper.querySelector('.ai-capability-media-review-section') as HTMLElement
+    const capabilityReviewSummary = wrapper.querySelector('.ai-capability-media-review-summary') as HTMLElement
+    const capabilityReviewSteps = wrapper.querySelector('.ai-capability-media-review-steps') as HTMLElement
+    const capabilityReviewRecommendation = wrapper.querySelector('.ai-capability-media-review-recommendation') as HTMLElement
 
     let renderedSignature = ''
     let renderedTrace: GenerationTrace | null = null
@@ -308,6 +318,9 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         toolPromptFallbackText,
     }: RenderImageGenerationTraceDetailsParams) => {
         const trace = getImageGenerationTrace(attrs)
+        const capabilityReview = trace?.traceVersion === 'image-generation-trace-v1'
+            ? trace.capabilityReview
+            : undefined
         const capabilityTrace = attrs.capabilityGenerationTrace ?? null
         const hasTrace = Boolean(trace)
         const fallbackText = toolPromptFallbackText ?? trace?.toolPrompt ?? ''
@@ -320,6 +333,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
             forceToolPromptFallback ? 'force-fallback' : 'content-fallback',
             fallbackText,
             capabilityTrace?.capabilityRunId ?? '',
+            capabilityReview?.summary ?? '',
         ].join('|')
 
         if (signature === renderedSignature && trace === renderedTrace) {
@@ -332,6 +346,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
 
         wrapper.classList.toggle('has-image-generation-trace', hasTrace)
         wrapper.classList.toggle('has-capability-generation-trace', Boolean(capabilityTrace))
+        wrapper.classList.toggle('has-capability-media-review', Boolean(capabilityReview))
         wrapper.classList.toggle('is-streaming', attrs.isStreaming)
 
         capabilitySection.hidden = !capabilityTrace
@@ -357,6 +372,27 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         } else {
             capabilityMetadata.replaceChildren()
             capabilitySteps.replaceChildren()
+        }
+
+        capabilityReviewSection.hidden = !capabilityReview
+        if (capabilityReview) {
+            capabilityReviewSummary.textContent = `${capabilityReview.summary} Automatic retries: ${capabilityReview.automaticRetries}.`
+            capabilityReviewSteps.replaceChildren(...capabilityReview.steps.map(step => html`
+                <li className="ai-capability-media-review-step" data=${{ status: step.status }}>
+                    <span className="ai-capability-media-review-step-title">${step.title}</span>
+                    <span className="ai-capability-media-review-step-status">
+                        ${formatImageGenerationTraceRole(step.status)}${step.score === undefined ? '' : ` · ${Math.round(step.score * 100)}%`}
+                    </span>
+                    ${step.issues.length > 0
+                        ? html`<span className="ai-capability-media-review-step-issues">${step.issues.join(', ')}</span>`
+                        : null}
+                </li>
+            `))
+            capabilityReviewRecommendation.textContent = capabilityReview.recommendation ?? ''
+        } else {
+            capabilityReviewSummary.textContent = ''
+            capabilityReviewSteps.replaceChildren()
+            capabilityReviewRecommendation.textContent = ''
         }
 
         const shouldShowFallback = Boolean(fallbackText && (forceToolPromptFallback || childCount === 0))

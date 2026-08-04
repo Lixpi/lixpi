@@ -12,6 +12,7 @@ import type {
     UnresolvedReferenceBinding,
     MediaGenerationProblem,
     MediaBranchLineagePlan,
+    MediaGenerationRunProgress,
 } from '@lixpi/constants'
 import { getMediaGenerationOperationNodeId } from '@lixpi/canvas-engine'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
@@ -622,6 +623,67 @@ export class MediaGenerationRequestService {
         throw new Error('MEDIA_REQUEST_CAS_RETRY_EXHAUSTED')
     }
 
+    async recordRunProgress({
+        generationRequestId,
+        workspaceId,
+        mediaModelId,
+        reasoningIndex,
+        progress,
+    }: {
+        generationRequestId: string
+        workspaceId: string
+        mediaModelId: AiModelId
+        reasoningIndex: number
+        progress: MediaGenerationRunProgress
+    }): Promise<MediaGenerationRequest> {
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            const request = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
+            if (!request) throw new Error('MEDIA_REQUEST_NOT_FOUND')
+            const run = request.runs.find(candidate =>
+                candidate.modelId === mediaModelId && candidate.reasoningIndex === reasoningIndex)
+            if (!run) throw new Error('MEDIA_REQUEST_RUN_NOT_FOUND')
+            if (['completed', 'failed', 'cancelled'].includes(run.status)) return request
+            const now = Date.now()
+            const runs = request.runs.map(candidate => candidate.generationRun === run.generationRun
+                ? { ...candidate, progress }
+                : candidate)
+            const next: MediaGenerationRequest = {
+                ...request,
+                status: request.status === 'submitted' ? 'running' : request.status,
+                runs,
+                revision: request.revision + 1,
+                updatedAt: now,
+                statusUpdatedAt: request.status === 'submitted' ? now : request.statusUpdatedAt,
+            }
+            try {
+                await MediaGenerationRequestModel.transition({ request: next, expectedRevision: request.revision })
+            } catch (error) {
+                if (isTransactionConditionalCheckFailure(error) && attempt < 7) continue
+                throw error
+            }
+            await updateMediaGenerationOperationNode({
+                workspaceId,
+                operationNodeId: run.operationNodeId,
+                status: 'in-progress',
+                message: progress.message,
+                requestRevision: next.revision,
+            })
+            await this.events().append({
+                userId: request.userId,
+                workspaceId,
+                event: eventFor(next, 'MEDIA_GENERATION_PROGRESS', {
+                    status: next.status,
+                    runStatus: run.status,
+                    generationRun: run.generationRun,
+                    progress,
+                    message: progress.message,
+                }),
+            })
+            return next
+        }
+        throw new Error('MEDIA_REQUEST_CAS_RETRY_EXHAUSTED')
+    }
+
     private async reconcileRunProjection({
         request,
         run,
@@ -641,7 +703,7 @@ export class MediaGenerationRequestService {
                 operationNodeId: run.operationNodeId,
                 status: run.status === 'failed' ? 'failed' : 'in-progress',
                 message: run.status === 'running'
-                    ? 'The provider is generating media.'
+                    ? run.progress?.message ?? 'The provider is generating media.'
                     : problem?.detail ?? 'Generation failed.',
                 ...(problem ? { problem } : {}),
                 requestRevision: request.revision,

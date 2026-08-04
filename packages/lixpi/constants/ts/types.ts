@@ -557,6 +557,8 @@ export type MediaBranchLineagePlan = {
         branchId: string
         lineageParentNodeId: string
         lineageParentType: 'branchOrigin' | 'branchFork' | 'branchLine'
+        sourceMediaNodeId?: string
+        sourceMediaAssetId?: string
     }
     branchOrigin?: BranchOriginLineagePlan
     branchForks: BranchForkLineagePlan[]
@@ -679,6 +681,13 @@ export type MediaGenerationRunStatus =
     | 'failed'
     | 'cancelled'
 
+export type MediaGenerationRunProgress = {
+    phase: 'preparing' | 'rendering' | 'assessing' | 'composing'
+    completedSteps: number
+    totalSteps: number
+    message: string
+}
+
 export type MediaGenerationProblem = {
     problemVersion: '1'
     type: `urn:lixpi:media-problem:${string}`
@@ -715,6 +724,7 @@ export type MediaGenerationRun = {
     providerOperationId?: string
     requiredVerificationAssetIds?: string[]
     problem?: MediaGenerationProblem
+    progress?: MediaGenerationRunProgress
     startedAt?: number
     completedAt?: number
 }
@@ -785,7 +795,7 @@ export type MediaGenerationRequestEvent = {
     eventId: string
     generationRequestId: string
     sequence: number
-    status: 'MEDIA_GENERATION_REQUEST_STATUS' | 'MEDIA_GENERATION_ACTION_REQUIRED' | 'MEDIA_GENERATION_PROBLEM'
+    status: 'MEDIA_GENERATION_REQUEST_STATUS' | 'MEDIA_GENERATION_PROGRESS' | 'MEDIA_GENERATION_ACTION_REQUIRED' | 'MEDIA_GENERATION_PROBLEM'
     requestRevision: number
     payload: Record<string, unknown>
     createdAt: number
@@ -868,6 +878,23 @@ export type ImageGenerationTraceExcludedReference = {
     branchId?: string
 }
 
+export type CapabilityMediaReviewStep = {
+    stepId: string
+    title: string
+    status: 'completed' | 'needs-review' | 'unavailable'
+    score?: number
+    issues: string[]
+}
+
+export type CapabilityMediaReviewTrace = {
+    traceVersion: 'capability-media-review-v1'
+    capabilityId: string
+    summary: string
+    automaticRetries: 0
+    recommendation?: string
+    steps: CapabilityMediaReviewStep[]
+}
+
 export type ImageGenerationTrace = {
     traceVersion: 'image-generation-trace-v1'
     generationRun?: MediaGenerationRunMeta
@@ -881,6 +908,7 @@ export type ImageGenerationTrace = {
     promptWasChanged: boolean
     referenceImages: ImageGenerationTraceReference[]
     excludedReferences: ImageGenerationTraceExcludedReference[]
+    capabilityReview?: CapabilityMediaReviewTrace
     resolver?: {
         resolverKind: 'structured-vlm'
         resolverVersion: string
@@ -1840,6 +1868,7 @@ export type AiInteractionMediaGenerationRequest = {
         branchId: string
         lineageParentNodeId: string
         lineageParentType: 'branchOrigin' | 'branchFork' | 'branchLine'
+        sourceNodeId?: string
         replayPrompts: Array<{
             sourceAssetId: string
             reasoningModelId: AiModelId

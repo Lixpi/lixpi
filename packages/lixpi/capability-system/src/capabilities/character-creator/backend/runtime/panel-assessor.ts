@@ -65,9 +65,8 @@ export async function assessCharacterPanel(args: {
 }): Promise<CharacterPanelAssessment> {
     await assertUsablePanel(args.candidateBytes)
     const candidateDataUrl = `data:image/png;base64,${args.candidateBytes.toString('base64')}`
-    // The assessment decides whether to re-render a panel; it is not what makes
-    // the panel usable. An assessor that cannot produce scores leaves the
-    // candidate unscored so the sheet still completes with rendered panels.
+    // Assessment is advisory. An assessor that cannot produce scores leaves the
+    // preserved candidate unscored so the sheet still completes.
     let vlmAssessment: CharacterPanelVlmAssessmentResult
     try {
         vlmAssessment = await args.vlm.assess({
@@ -112,7 +111,7 @@ export async function assessCharacterPanel(args: {
 
 const assessFaceFidelity = async (args: Parameters<typeof assessCharacterPanel>[0]): Promise<CharacterFidelityAssessmentResponse> => {
     if (!args.fidelity || args.evidence.medium !== 'photograph'
-        || !['head', 'expression', 'mouth', 'action'].includes(args.panel.kind)) {
+        || !['head', 'expression', 'action'].includes(args.panel.kind)) {
         return unavailableMetric(args, args.evidence.medium === 'photograph' ? 'face-not-required' : 'non-photographic')
     }
     const request: CharacterFidelityAssessmentRequest = {

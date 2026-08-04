@@ -75,7 +75,7 @@ export async function seedCharacterCreatorTool(
     await storage.seedBuiltInCapability({
         allowedActions: context.allowedActions,
         manifest: buildCharacterCreatorManifest({ inputSchema, outputSchema }),
-        summary: 'Plans panel-first character sheets that execute through the selected image-model matrix.',
+        summary: 'Plans configurable 3-to-10-shot character sheets with progressive results and no automatic retries.',
         tags: ['character', 'image', 'turnaround', 'global'],
         parentModuleId: context.parentModuleId,
         catalogExposure: context.catalogExposure,
@@ -92,7 +92,7 @@ export function buildCharacterCreatorManifest(resources: {
         capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.tool,
         kind: 'tool',
         name: 'Character Creator',
-        description: 'Use for any request to create, design, or develop a character. Produces a provider-neutral panel render plan for the selected image-model matrix.',
+        description: 'Use for any request to create, design, or develop a character. Defaults to a detailed front face and two full-body shots; free-form text can request 3 to 10 prioritized shots. Every shot runs once through the selected image-model matrix.',
         references: [
             { capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.layoutSkill, kind: 'skill', import: ['layout'] },
             { capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.referenceFidelitySkill, kind: 'skill', import: ['reference-fidelity'] },

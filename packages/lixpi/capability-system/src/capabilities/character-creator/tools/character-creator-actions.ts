@@ -8,7 +8,10 @@ import {
     type CapabilityActionValidationResult,
 } from '../../../backend/capability-action-registry.ts'
 import { CapabilityError } from '../../../shared/capability-errors.ts'
-import { buildCharacterSheetRenderPlan } from '../shared/character-sheet-media-plan.ts'
+import {
+    assertValidCharacterSheetRenderPlan,
+    buildCharacterSheetRenderPlan,
+} from '../shared/character-sheet-media-plan.ts'
 import { CHARACTER_CREATOR_CAPABILITY_IDS } from './character-creator-definition.ts'
 import { characterCreatorSettings } from '../settings.ts'
 
@@ -90,14 +93,15 @@ function validateObject(input: unknown): CapabilityActionValidationResult {
 
 function validatePlanOutput(output: unknown): CapabilityActionValidationResult {
     const record = asRecord(output)
-    const plan = asRecord(record?.capabilityMediaExecutionPlan)
-    return record?.mediaGenerationMode === 'character-creator'
-        && record.preserveUserPrompt === true
-        && plan?.kind === 'character-sheet'
-        && Array.isArray(plan.panels)
-        && plan.panels.length === 27
-        ? { valid: true }
-        : { valid: false, message: 'Output must contain a Character Sheet media execution plan' }
+    if (record?.mediaGenerationMode !== 'character-creator' || record.preserveUserPrompt !== true) {
+        return { valid: false, message: 'Output must contain a Character Sheet media execution plan' }
+    }
+    try {
+        assertValidCharacterSheetRenderPlan(record.capabilityMediaExecutionPlan)
+        return { valid: true }
+    } catch {
+        return { valid: false, message: 'Output must contain a Character Sheet media execution plan' }
+    }
 }
 
 function readString(value: unknown, field: string): string {

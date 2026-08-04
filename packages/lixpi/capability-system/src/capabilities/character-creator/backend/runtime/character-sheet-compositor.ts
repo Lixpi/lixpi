@@ -3,9 +3,11 @@
 import { createHash } from 'node:crypto'
 import sharp from 'sharp'
 
-import { CHARACTER_SHEET_LAYOUT, renderCharacterSheetLayoutSvg } from './character-sheet-layout.ts'
+import { buildCharacterSheetLayout, renderCharacterSheetLayoutSvg } from './character-sheet-layout.ts'
 import { buildCharacterSourceCoverageNote } from './character-sheet-notes.ts'
 import type { CharacterEvidenceProfile } from './character-evidence.ts'
+import type { CharacterPanelAssessment } from './panel-assessor.ts'
+import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
 
 export type CharacterPanelImage = {
     panelId: string
@@ -18,39 +20,77 @@ export type CharacterSheetComposition = {
     width: 3840
     height: 2560
     sourceCoverageNote: string
+    issues: string[]
 }
 
 export async function composeCharacterSheet(args: {
+    panelSpecs: readonly CharacterPanelSpec[]
     panels: readonly CharacterPanelImage[]
     evidence: CharacterEvidenceProfile
+    assessments?: ReadonlyMap<string, CharacterPanelAssessment>
+    unavailablePanelIds?: ReadonlySet<string>
+    additionalIssues?: readonly string[]
+    final?: boolean
 }): Promise<CharacterSheetComposition> {
+    if (args.panels.length === 0) throw new Error('CHARACTER_SHEET_NO_RENDERED_PANELS')
+    const layout = buildCharacterSheetLayout(args.panelSpecs)
     const panelsById = new Map(args.panels.map(panel => [panel.panelId, panel.bytes]))
-    const missing = CHARACTER_SHEET_LAYOUT.cells
-        .filter(cell => cell.sourcePanelId !== 'prop-primary' && !panelsById.has(cell.sourcePanelId))
-        .map(cell => cell.sourcePanelId)
-    if (missing.length > 0) throw new Error(`CHARACTER_SHEET_REQUIRED_PANEL_MISSING:${[...new Set(missing)].join(',')}`)
-
+    const missing = args.panelSpecs.filter(panel => !panelsById.has(panel.panelId)).map(panel => panel.panelId)
+    const comparisonIssues = args.panelSpecs.flatMap(panel => {
+        const assessment = args.assessments?.get(panel.panelId)
+        if (!panelsById.has(panel.panelId)) return []
+        if (!assessment) return args.final ? [`${panel.title}: comparison unavailable`] : []
+        if (assessment.dimensions.length === 0) return [`${panel.title}: comparison unavailable`]
+        if (assessment.failedDimensions.length === 0) return []
+        return [`${panel.title}: ${assessment.failedDimensions.join(', ')}`]
+    })
+    const unavailablePanelIds = args.unavailablePanelIds ?? new Set<string>()
+    const issues = [
+        ...(args.additionalIssues ?? []),
+        ...missing
+            .filter(panelId => args.final || unavailablePanelIds.has(panelId))
+            .map(panelId => `${panelId}: unavailable`),
+        ...comparisonIssues,
+    ]
+    const statusLabels = Object.fromEntries(args.panelSpecs.map(panel => {
+        const assessment = args.assessments?.get(panel.panelId)
+        if (!panelsById.has(panel.panelId)) {
+            return [
+                panel.panelId,
+                args.final || unavailablePanelIds.has(panel.panelId)
+                    ? 'UNAVAILABLE - RUN AGAIN IF NEEDED'
+                    : 'WAITING',
+            ]
+        }
+        if (!assessment) return [panel.panelId, args.final ? 'RENDERED - COMPARISON UNAVAILABLE' : 'RENDERED']
+        if (assessment.dimensions.length === 0) return [panel.panelId, 'RENDERED - COMPARISON UNAVAILABLE']
+        if (assessment.failedDimensions.length > 0) {
+            return [panel.panelId, `REVIEW - ${assessment.failedDimensions.slice(0, 3).join(' - ')}`]
+        }
+        return [panel.panelId, `MATCH ${Math.round(assessment.score * 100)}`]
+    }))
     const sourceCoverageNote = buildCharacterSourceCoverageNote(args.evidence)
     const base = await renderCharacterSheetLayoutSvg({
+        panels: args.panelSpecs,
+        statusLabels,
         evidenceNotes: [
-            ...args.evidence.costumeNotes.map(note => `Costume: ${note}`),
-            ...args.evidence.materialNotes.map(note => `Materials: ${note}`),
-            ...args.evidence.distinguishingDetailNotes.map(note => `Details: ${note}`),
+            ...issues.slice(0, 3).map(issue => `Review: ${issue}`),
+            ...args.evidence.costumeNotes.slice(0, 2).map(note => `Costume: ${note}`),
+            ...args.evidence.materialNotes.slice(0, 2).map(note => `Materials: ${note}`),
         ],
         sourceCoverageNote,
         palette: args.evidence.palette,
     })
     const composites: { input: Buffer; left: number; top: number }[] = []
-    for (const cell of CHARACTER_SHEET_LAYOUT.cells) {
+    for (const cell of layout.cells) {
         const input = panelsById.get(cell.sourcePanelId)
         if (!input) continue
-        const contentTop = 36
+        const contentTop = 56
         const normalized = await normalizePanelForCell(
             input,
             cell.width,
             cell.height - contentTop,
             cell.fit,
-            cell.derivedCrop,
         )
         composites.push({ input: normalized, left: cell.x, top: cell.y + contentTop })
     }
@@ -70,6 +110,7 @@ export async function composeCharacterSheet(args: {
         width: 3840,
         height: 2560,
         sourceCoverageNote,
+        issues,
     }
 }
 
@@ -78,21 +119,17 @@ const normalizePanelForCell = async (
     width: number,
     height: number,
     fit: 'contain' | 'cover',
-    derivedCrop?: 'eyes' | 'mouth' | 'feet' | 'prop',
 ): Promise<Buffer> => {
     try {
         const metadata = await sharp(bytes).metadata()
         if (!metadata.width || !metadata.height) throw new Error('dimensions missing')
-        const position = derivedCrop === 'feet'
-            ? 'south'
-            : derivedCrop === 'eyes' ? 'north' : 'centre'
         return await sharp(bytes)
             .rotate()
             .resize({
                 width,
                 height,
-                fit: derivedCrop || fit === 'cover' ? 'cover' : 'contain',
-                position,
+                fit,
+                position: 'centre',
                 background: '#ffffff',
                 kernel: 'lanczos3',
             })

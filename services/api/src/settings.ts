@@ -5,6 +5,7 @@ import {
     workspaceCollisionSettings,
     workspacePersistenceSettings,
     type AiModelId,
+    type AiModelInferenceCapabilities,
     type MediaGenerationLayoutSettings,
     type WorkspaceCollisionSettings,
     type WorkspacePersistenceSettings,
@@ -26,6 +27,9 @@ export type ApiSettings = {
         // the default VLM yet. This prevents stale local catalog data from
         // breaking media descriptions while still keeping the model choice here.
         defaultVlmMaxTokens: number
+        // Inference contract used with the fixed descriptor model while the local
+        // AI model catalog is unavailable or has not synchronized that model yet.
+        defaultVlmInferenceCapabilities: AiModelInferenceCapabilities
     }
     // Canvas projection geometry used when persisting generated-media lineage.
     // Sourced from the shared mediaGenerationLayoutSettings in @lixpi/constants
@@ -51,6 +55,14 @@ export const settings: ApiSettings = {
         // Claude Haiku's descriptor responses are short JSON payloads, but the
         // provider allows more room. Keep this aligned with the sync defaults.
         defaultVlmMaxTokens: 8192,
+        defaultVlmInferenceCapabilities: {
+            thinkingMode: 'none',
+            requiresAutoToolChoiceWithThinking: false,
+            supportsTemperature: true,
+            supportsSystemPrompt: true,
+            requiresClosedJsonSchema: false,
+            supportedInputKinds: ['image', 'video-frame', 'document-text'],
+        },
     },
     mediaGenerationCanvasProjection: mediaGenerationLayoutSettings,
     workspaceCollision: workspaceCollisionSettings,

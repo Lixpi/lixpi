@@ -4,6 +4,7 @@ import type {
     CapabilityJsonValue,
     AiModelInferenceCapabilities,
     ImageReferenceCapabilities,
+    MediaGenerationRunProgress,
     MediaGenerationRunMeta,
     ProviderName,
 } from '@lixpi/constants'
@@ -13,6 +14,8 @@ import type { CapabilityMediaExecutionPlan } from '../shared/capability-media-ex
 export type CapabilityMediaStrategyOptions = {
     signal?: AbortSignal
     captureOnly?: boolean
+    reportProgress?: (progress: MediaGenerationRunProgress) => Promise<void>
+    publishImagePartial?: (imageBase64: string, partialIndex: number) => Promise<void>
 }
 
 export type CapabilityMediaModelMeta = {

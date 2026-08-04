@@ -5,7 +5,14 @@ import { StateGraph, END, START } from '@langchain/langgraph'
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn, err } from '@lixpi/debug-tools'
-import { STREAM_STATUS, type MediaGenerationRunMeta, type Modality, type ProviderName, type StreamStatus } from '@lixpi/constants'
+import {
+    STREAM_STATUS,
+    type CapabilityJsonValue,
+    type MediaGenerationRunMeta,
+    type Modality,
+    type ProviderName,
+    type StreamStatus,
+} from '@lixpi/constants'
 
 import type { MetricsClient } from '../../metrics/metrics-client.ts'
 
@@ -71,6 +78,7 @@ type FanoutRouterResult = Pick<ProviderState,
 type MediaRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
     getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
+    onCapabilityMediaTrace?: (trace: CapabilityJsonValue) => void
     signal?: AbortSignal
 }
 
@@ -815,6 +823,11 @@ export abstract class BaseProvider {
         const imageResult = await this.deps.runImageRouter(state, {
             onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
             getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
+            onCapabilityMediaTrace: trace => this.publishCapabilityReviewTrace(
+                state,
+                { capabilityMediaTrace: trace },
+                state.generationRun,
+            ),
         })
         if (imageResult.error) {
             this.streamPublisher?.imageGenerationError(imageResult.error, state.generationRun)
@@ -976,6 +989,11 @@ export abstract class BaseProvider {
             const imageResult = await this.deps.runImageRouter(fanoutState, {
                 onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
                 getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
+                onCapabilityMediaTrace: trace => this.publishCapabilityReviewTrace(
+                    fanoutState,
+                    { capabilityMediaTrace: trace },
+                    generationRun,
+                ),
             })
             if (imageResult.error) {
                 this.streamPublisher?.imageGenerationError(imageResult.error, generationRun)
@@ -1020,6 +1038,21 @@ export abstract class BaseProvider {
         if (!validationError) return {}
 
         return { error: validationError }
+    }
+
+    private publishCapabilityReviewTrace(
+        state: ProviderState,
+        result: Partial<ProviderState>,
+        generationRun: MediaGenerationRunMeta | undefined,
+    ): void {
+        if (!result.capabilityMediaTrace) return
+        const trace = buildImageGenerationTrace({ ...state, ...result })
+        if (!trace) return
+        try {
+            this.streamPublisher?.imageGenerationTrace(trace, generationRun)
+        } catch (error) {
+            warn(`[BaseProvider] Skipping capability review trace publish: ${this.getErrorMessage(error)}`)
+        }
     }
 
     private async executeVideoFanout(state: ProviderState): Promise<Partial<ProviderState>> {

@@ -79,6 +79,10 @@ export const ensurePendingGeneratedAssets = async ({
     for (const contextNode of workspaceContextSnapshot?.nodes ?? []) {
         if (contextNode.assetId) assetIdByNodeId.set(contextNode.nodeId, contextNode.assetId)
     }
+    const regenerationSource = lineagePlan.regenerationTarget
+    if (regenerationSource?.sourceMediaNodeId && regenerationSource.sourceMediaAssetId) {
+        assetIdByNodeId.set(regenerationSource.sourceMediaNodeId, regenerationSource.sourceMediaAssetId)
+    }
 
     await Promise.all(lineagePlan.runAssignments.map(async (assignment) => {
         const parentAssetId = assignment.parentMediaNodeId
@@ -91,7 +95,11 @@ export const ensurePendingGeneratedAssets = async ({
         )
         const sourceAssets = (await Promise.all(sourceAssetIds.map(getAssetRecord)))
             .filter((asset): asset is Asset => Boolean(asset))
-        const subjectIdentity = deriveSubjectIdentityFromLineage(sourceAssets, { generatedOutput: true })
+        const parentAsset = parentAssetId ? await getAssetRecord(parentAssetId) : undefined
+        const subjectIdentity = deriveSubjectIdentityFromLineage(
+            parentAsset ? [...sourceAssets, parentAsset] : sourceAssets,
+            { generatedOutput: true },
+        )
         const lineage = {
             sourceConversationAssetId: conversationAssetId,
             ...(parentAssetId ? { parentAssetId } : {}),

@@ -51,6 +51,9 @@ export type VlmCallArgs = {
     // gets adaptive/manual thinking (with tool_choice=auto), Google gets
     // thinkingConfig+includeThoughts, OpenAI is silent for non-reasoning models.
     enableThinking?: boolean
+    // Disables transport, truncation-escalation, and provider fallback retries.
+    // The first provider response or error is terminal for the caller.
+    singleAttempt?: boolean
     thinkingBudgetTokens?: number
     // Streams text + thinking deltas as they arrive. Visible reasoning when the
     // model emits preamble text or thinking tokens. Only published when the
@@ -312,6 +315,9 @@ const callAnthropic = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> =>
     if (wantsThinking) {
         const result = await callAnthropicOnce<T>(args, caps, budget, true)
         if (!('needsRetry' in result)) return result
+        if (args.singleAttempt) {
+            throw new Error(`Anthropic ${args.modelVersion} did not call tool "${args.schema.name}" on the single allowed attempt. rawText preview=${result.rawText.slice(0, 200)}`)
+        }
         warn(`Anthropic ${args.modelVersion} returned text instead of tool call with thinking on; retrying with forced tool_choice (thinking disabled). rawText preview=${result.rawText.slice(0, 200)}`)
     }
 
@@ -717,6 +723,7 @@ export const callStructuredVlm = async <T>(args: VlmCallArgs): Promise<VlmCallRe
             const canGrow = error instanceof VlmOutputTruncatedError
                 && grown > answerTokens
                 && !atCeiling
+                && !args.singleAttempt
                 && !args.abortSignal?.aborted
             if (canGrow) {
                 warn(`[vlm] output truncated provider=${args.provider} model=${args.modelVersion} schema=${args.schema.name}; retrying with answerTokens ${answerTokens} -> ${grown} :: ${error.message}`)
@@ -725,7 +732,10 @@ export const callStructuredVlm = async <T>(args: VlmCallArgs): Promise<VlmCallRe
             }
 
             const detail = describeProviderError(error)
-            const canRetry = attempt < MAX_VLM_RETRIES && isTransientError(error) && !args.abortSignal?.aborted
+            const canRetry = !args.singleAttempt
+                && attempt < MAX_VLM_RETRIES
+                && isTransientError(error)
+                && !args.abortSignal?.aborted
             if (canRetry) {
                 // Jittered exponential backoff, or the server's retry-after when given.
                 const backoff = Math.min(1000 * 2 ** attempt, 8000) + Math.floor(Math.random() * 400)

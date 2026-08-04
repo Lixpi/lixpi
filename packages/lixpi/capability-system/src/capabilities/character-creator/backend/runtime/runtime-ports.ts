@@ -116,6 +116,7 @@ export type CharacterVlmCallRequest = {
     maxOutputTokensCeiling?: number
     abortSignal?: AbortSignal
     enableThinking?: boolean
+    singleAttempt?: boolean
 }
 
 export type CharacterVlmCallResult = {

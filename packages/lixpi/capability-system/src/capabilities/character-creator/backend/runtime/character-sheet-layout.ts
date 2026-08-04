@@ -3,37 +3,42 @@
 import { readFile } from 'node:fs/promises'
 
 import {
-    CHARACTER_SHEET_LAYOUT,
     CHARACTER_SHEET_LAYOUT_SVG_RESOURCE,
+    buildCharacterSheetLayout,
     type CharacterSheetLayout,
 } from '../../shared/character-sheet-layout.ts'
+import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
 
-export { CHARACTER_SHEET_LAYOUT, type CharacterSheetLayout }
+export { buildCharacterSheetLayout, type CharacterSheetLayout }
 
 export async function renderCharacterSheetLayoutSvg(args: {
+    panels: readonly CharacterPanelSpec[]
+    statusLabels: Readonly<Record<string, string>>
     evidenceNotes: string[]
     sourceCoverageNote: string
     palette: readonly string[]
 }): Promise<Buffer> {
-    const cells = CHARACTER_SHEET_LAYOUT.cells.map(cell => `
+    const layout = buildCharacterSheetLayout(args.panels)
+    const cells = layout.cells.map(cell => `
         <rect x="${cell.x}" y="${cell.y}" width="${cell.width}" height="${cell.height}" rx="12" fill="#ffffff" stroke="#bcc3cc" stroke-width="3"/>
-        ${renderBitmapText(cell.cellId, cell.x + 14, cell.y + 10, 2, '#313944')}
+        ${renderBitmapText(cell.title, cell.x + 14, cell.y + 10, 2, '#313944')}
+        ${renderBitmapText(args.statusLabels[cell.sourcePanelId] ?? 'WAITING', cell.x + 14, cell.y + 30, 2, '#707b89')}
     `).join('')
     const swatches = args.palette.slice(0, 8).map((color, index) => `
         <rect x="${2460 + index * 138}" y="2388" width="112" height="84" rx="10" fill="${safeColor(color)}" stroke="#313944" stroke-width="3"/>
     `).join('')
-    const noteLines = wrapText([...args.evidenceNotes, args.sourceCoverageNote].join(' · '), 84).slice(0, 5)
-        .map((line, index) => renderBitmapText(line, 2180, 1515 + index * 34, 3, '#313944'))
+    const noteLines = wrapText([...args.evidenceNotes, args.sourceCoverageNote].join(' - '), 180).slice(0, 4)
+        .map((line, index) => renderBitmapText(line, 48, 2282 + index * 28, 2, '#313944'))
         .join('')
 
     const generatedContent = `
         ${renderBitmapText('CHARACTER DESCRIPTION SHEET', 48, 42, 7, '#171b22')}
-        ${renderBitmapText('PANEL-FIRST GENERATED VIEWS - DETERMINISTIC LAYOUT', 48, 108, 3, '#586273')}
+        ${renderBitmapText(`${args.panels.length} SHOTS - ONE ATTEMPT - NO AUTOMATIC RETRIES`, 48, 108, 3, '#586273')}
         <g>${cells}</g>
-        <rect x="2148" y="1458" width="1644" height="430" rx="16" fill="#ffffff" stroke="#bcc3cc" stroke-width="3"/>
-        ${renderBitmapText('COSTUME, MATERIALS, DETAILS, AND SOURCE COVERAGE', 2180, 1478, 3, '#171b22')}
+        <rect x="24" y="2248" width="3792" height="270" rx="16" fill="#ffffff" stroke="#bcc3cc" stroke-width="3"/>
+        ${renderBitmapText('COMPARISON, MATERIALS, AND SOURCE COVERAGE', 48, 2258, 3, '#171b22')}
         <g>${noteLines}</g>
-        ${renderBitmapText('PALETTE', 2180, 2338, 4, '#171b22')}
+        ${renderBitmapText('PALETTE', 2650, 2280, 3, '#171b22')}
         ${swatches}
     `
     const template = await readFile(CHARACTER_SHEET_LAYOUT_SVG_RESOURCE, 'utf8')

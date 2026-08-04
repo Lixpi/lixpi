@@ -18,4 +18,4 @@ Order the prompt as:
 
 Do not invent story beats, weapons, brands, or alternate costumes. Props appear only in the prop panel or when required by an action. Do not ask an image provider to render multiple panels, sheet text, guides, notes, swatches, or final layout.
 
-After assessment, a correction prompt contains only failed dimensions and concrete mismatch codes. It preserves accepted dimensions and retries that panel once. It never regenerates another panel or edits a complete sheet.
+Assessment compares the rendered panel with source evidence and accepted anchors, then records failed dimensions and concrete mismatch codes. Preserve every rendered panel and surface those issues to the user. Never start a correction or regeneration automatically; another attempt requires an explicit user action and becomes a new lineage variant.

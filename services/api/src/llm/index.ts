@@ -47,7 +47,7 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
     )
 
     const capabilityMediaStrategies = new CapabilityMediaStrategyRegistry()
-    const imageRouter = new ImageRouter(registry, capabilityMediaStrategies)
+    const imageRouter = new ImageRouter(registry, capabilityMediaStrategies, deps.natsService)
     registry.setImageRouter((state, options) => imageRouter.execute(state, options))
 
     const videoRouter = new VideoRouter(registry)

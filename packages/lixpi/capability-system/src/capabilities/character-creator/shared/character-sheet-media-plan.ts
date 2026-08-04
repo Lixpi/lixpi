@@ -3,8 +3,8 @@
 import type { CapabilityJsonValue } from '@lixpi/constants'
 import type { CapabilityMediaExecutionPlan } from '../../../shared/capability-media-execution-plan.ts'
 
-export type CharacterPanelKind = 'body' | 'head' | 'expression' | 'mouth' | 'hand' | 'prop' | 'action'
-export type CharacterPanelCrop = 'full-body' | 'head-and-shoulders' | 'face' | 'mouth' | 'hands' | 'prop' | 'action'
+export type CharacterPanelKind = 'body' | 'head' | 'expression' | 'prop' | 'action'
+export type CharacterPanelCrop = 'full-body' | 'head-and-shoulders' | 'face' | 'prop' | 'action'
 export type CharacterPanelCondition = 'always' | 'generate-when-no-observed-prop'
 
 export type CharacterPanelSpec = {
@@ -26,140 +26,233 @@ export type CharacterSheetRenderPlan = CapabilityMediaExecutionPlan & {
     userPrompt: string
     panels: CharacterPanelSpec[]
     layoutId: 'character-sheet-3840x2560'
-    semanticRetryLimit: 1
+    semanticRetryLimit: 0
 }
 
-export const CHARACTER_SHEET_BASE_OPERATION_COUNT = 26
-export const CHARACTER_SHEET_MAX_OPERATION_COUNT = 27
-export const CHARACTER_SHEET_MAX_PROVIDER_OPERATIONS = 54
+export const CHARACTER_SHEET_DEFAULT_OPERATION_COUNT = 3
+export const CHARACTER_SHEET_BASE_OPERATION_COUNT = CHARACTER_SHEET_DEFAULT_OPERATION_COUNT
+export const CHARACTER_SHEET_MAX_OPERATION_COUNT = 10
+export const CHARACTER_SHEET_MAX_PROVIDER_OPERATIONS = CHARACTER_SHEET_MAX_OPERATION_COUNT
 
-const bodyPanels: CharacterPanelSpec[] = [
-    ['body-front', 'Front', 'front view', []],
-    ['body-three-quarter-front-left', 'Three-quarter front', 'three-quarter front-left view', ['body-front']],
-    ['body-profile-left', 'Profile', 'left profile view', ['body-three-quarter-front-left']],
-    ['body-three-quarter-back-left', 'Three-quarter back', 'three-quarter back-left view', ['body-profile-left']],
-    ['body-back', 'Back', 'back view', ['body-three-quarter-back-left']],
-].map(([panelId, title, target, dependsOn]) => ({
-    panelId: panelId as string,
+const frontFacePanel: CharacterPanelSpec = {
+    panelId: 'head-front-detail',
+    kind: 'head',
+    title: 'Front face detail',
+    target: 'straight-on front facial portrait with the face large, sharp, unobstructed, and clearly lit',
+    crop: 'face',
+    dependsOn: [],
+    required: true,
+    condition: 'always',
+    acceptanceDimensions: ['facial-identity', 'hair', 'skin', 'distinctive-features', 'sharpness', 'framing'],
+}
+
+const frontBodyPanel: CharacterPanelSpec = {
+    panelId: 'body-front',
     kind: 'body',
-    title: title as string,
-    target: target as string,
+    title: 'Front body',
+    target: 'neutral straight-on full-body front view from head to footwear',
     crop: 'full-body',
-    dependsOn: dependsOn as string[],
+    dependsOn: [],
+    required: true,
+    condition: 'always',
+    acceptanceDimensions: ['target-view', 'facial-identity', 'body-proportions', 'clothing', 'materials', 'framing'],
+}
+
+const threeQuarterBodyPanel: CharacterPanelSpec = {
+    panelId: 'body-three-quarter-back',
+    kind: 'body',
+    title: 'Three-quarter body',
+    target: 'full-body three-quarter back view that clearly shows silhouette, outfit construction, and footwear',
+    crop: 'full-body',
+    dependsOn: ['head-front-detail', 'body-front'],
     required: true,
     condition: 'always',
     acceptanceDimensions: ['target-view', 'identity', 'body-proportions', 'clothing', 'materials', 'framing'],
-}))
-
-const headTargets = [
-    ['head-front', 'Front head', 'front head view', 'body-front', undefined],
-    ['head-three-quarter-front-left', 'Three-quarter front head', 'three-quarter front-left head view', 'body-three-quarter-front-left', 'head-front'],
-    ['head-profile-left', 'Profile head', 'left profile head view', 'body-profile-left', 'head-three-quarter-front-left'],
-    ['head-three-quarter-back-left', 'Three-quarter back head', 'three-quarter back-left head view', 'body-three-quarter-back-left', 'head-profile-left'],
-    ['head-back', 'Back head', 'back head view', 'body-back', 'head-three-quarter-back-left'],
-] as const
-
-const headPanels: CharacterPanelSpec[] = headTargets.map(([panelId, title, target, bodyDependency, headDependency]) => ({
-    panelId,
-    kind: 'head',
-    title,
-    target,
-    crop: 'head-and-shoulders',
-    dependsOn: headDependency ? [...new Set(['head-front', bodyDependency, headDependency])] : [],
-    required: true,
-    condition: 'always',
-    acceptanceDimensions: ['target-view', 'facial-identity', 'hair', 'skin', 'distinctive-features', 'clothing', 'framing'],
-}))
-
-const expressionPanels: CharacterPanelSpec[] = [
-    ['expression-smile', 'Smile', 'natural smile'],
-    ['expression-anger', 'Anger', 'controlled angry expression'],
-    ['expression-sadness', 'Sadness', 'subtle sad expression'],
-    ['expression-surprise', 'Surprise', 'natural surprised expression'],
-].map(([panelId, title, target]) => ({
-    panelId,
-    kind: 'expression',
-    title,
-    target,
-    crop: 'face',
-    dependsOn: ['head-front'],
-    required: true,
-    condition: 'always',
-    acceptanceDimensions: ['expression', 'facial-identity', 'hair', 'skin', 'crop', 'no-text'],
-}))
-
-const mouthPanels: CharacterPanelSpec[] = [
-    ['mouth-open', 'Open mouth', 'relaxed open mouth'],
-    ['mouth-grin', 'Grin', 'broad tooth-visible grin'],
-    ['mouth-pursed', 'Pursed lips', 'pursed lips'],
-    ['mouth-shout', 'Shout', 'open shouting mouth'],
-].map(([panelId, title, target]) => ({
-    panelId,
-    kind: 'mouth',
-    title,
-    target,
-    crop: 'mouth',
-    dependsOn: ['head-front'],
-    required: true,
-    condition: 'always',
-    acceptanceDimensions: ['mouth-shape', 'facial-identity', 'skin', 'crop', 'no-text'],
-}))
-
-const handPanels: CharacterPanelSpec[] = [
-    ['hand-left', 'Left hand', 'left hand close-up'],
-    ['hand-right', 'Right hand', 'right hand close-up'],
-].map(([panelId, title, target]) => ({
-    panelId,
-    kind: 'hand',
-    title,
-    target,
-    crop: 'hands',
-    dependsOn: ['body-front'],
-    required: true,
-    condition: 'always',
-    acceptanceDimensions: ['anatomy', 'skin', 'accessories', 'materials', 'crop'],
-}))
-
-const actionPanels: CharacterPanelSpec[] = [
-    ['action-walk', 'Walk', 'walking action pose'],
-    ['action-run', 'Run', 'running action pose'],
-    ['action-crouch', 'Crouch', 'balanced crouching pose'],
-    ['action-jump', 'Jump', 'airborne jumping pose'],
-    ['action-reach', 'Reach', 'reaching action pose'],
-    ['action-hero', 'Hero pose', 'confident signature pose'],
-].map(([panelId, title, target]) => ({
-    panelId,
-    kind: 'action',
-    title,
-    target,
-    crop: 'action',
-    dependsOn: ['body-front', 'head-front'],
-    required: true,
-    condition: 'always',
-    acceptanceDimensions: ['action-pose', 'facial-identity', 'body-proportions', 'clothing', 'materials', 'framing'],
-}))
-
-const propPanel: CharacterPanelSpec = {
-    panelId: 'prop-primary',
-    kind: 'prop',
-    title: 'Primary prop',
-    target: 'isolated primary character prop',
-    crop: 'prop',
-    dependsOn: ['body-front'],
-    required: false,
-    condition: 'generate-when-no-observed-prop',
-    acceptanceDimensions: ['prop-design', 'materials', 'scale', 'crop', 'no-text'],
 }
 
-export function buildCharacterPanelSpecs(): CharacterPanelSpec[] {
+const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
+    'body-profile': {
+        panelId: 'body-profile',
+        kind: 'body',
+        title: 'Body profile',
+        target: 'complete left profile full-body view from head to footwear',
+        crop: 'full-body',
+        dependsOn: ['head-front-detail', 'body-front'],
+        required: true,
+        condition: 'always',
+        acceptanceDimensions: ['target-view', 'identity', 'body-proportions', 'clothing', 'materials', 'framing'],
+    },
+    'body-back': {
+        panelId: 'body-back',
+        kind: 'body',
+        title: 'Back body',
+        target: 'neutral straight-on full-body back view from head to footwear',
+        crop: 'full-body',
+        dependsOn: ['body-front'],
+        required: true,
+        condition: 'always',
+        acceptanceDimensions: ['target-view', 'identity', 'body-proportions', 'clothing', 'materials', 'framing'],
+    },
+    'head-three-quarter': {
+        panelId: 'head-three-quarter',
+        kind: 'head',
+        title: 'Three-quarter face',
+        target: 'three-quarter facial portrait with the face large and clearly resolved',
+        crop: 'face',
+        dependsOn: ['head-front-detail'],
+        required: true,
+        condition: 'always',
+        acceptanceDimensions: ['target-view', 'facial-identity', 'hair', 'skin', 'distinctive-features', 'sharpness'],
+    },
+    'expression-smile': {
+        panelId: 'expression-smile',
+        kind: 'expression',
+        title: 'Smile',
+        target: 'front facial close-up with a natural smile',
+        crop: 'face',
+        dependsOn: ['head-front-detail'],
+        required: true,
+        condition: 'always',
+        acceptanceDimensions: ['expression', 'facial-identity', 'hair', 'skin', 'sharpness'],
+    },
+    'expression-serious': {
+        panelId: 'expression-serious',
+        kind: 'expression',
+        title: 'Serious expression',
+        target: 'front facial close-up with a focused serious expression',
+        crop: 'face',
+        dependsOn: ['head-front-detail'],
+        required: true,
+        condition: 'always',
+        acceptanceDimensions: ['expression', 'facial-identity', 'hair', 'skin', 'sharpness'],
+    },
+    'expression-surprise': {
+        panelId: 'expression-surprise',
+        kind: 'expression',
+        title: 'Surprise',
+        target: 'front facial close-up with a natural surprised expression',
+        crop: 'face',
+        dependsOn: ['head-front-detail'],
+        required: true,
+        condition: 'always',
+        acceptanceDimensions: ['expression', 'facial-identity', 'hair', 'skin', 'sharpness'],
+    },
+    'prop-primary': {
+        panelId: 'prop-primary',
+        kind: 'prop',
+        title: 'Belongings',
+        target: 'isolated primary belongings, equipment, accessories, or prop arranged clearly at character scale',
+        crop: 'prop',
+        dependsOn: ['body-front'],
+        required: false,
+        condition: 'generate-when-no-observed-prop',
+        acceptanceDimensions: ['prop-design', 'materials', 'color', 'scale', 'framing'],
+    },
+    'action-signature': {
+        panelId: 'action-signature',
+        kind: 'action',
+        title: 'Signature pose',
+        target: 'complete character in a restrained signature action pose with the full silhouette visible',
+        crop: 'action',
+        dependsOn: ['head-front-detail', 'body-front'],
+        required: true,
+        condition: 'always',
+        acceptanceDimensions: ['action-pose', 'facial-identity', 'body-proportions', 'clothing', 'materials', 'framing'],
+    },
+}
+
+const numberWords: Readonly<Record<string, number>> = {
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+}
+
+function resolveRequestedPanelCount(prompt: string, requestedPriorityCount: number): number {
+    const countPattern = /\b(3|4|5|6|7|8|9|10|three|four|five|six|seven|eight|nine|ten)(?:\s*[- ]\s*|\s+)(?:(?:different|distinct|detailed|separate|total|character|full)\s+){0,2}(?:shot|view|panel|angle|pose|image)s?\b/iu
+    const match = countPattern.exec(prompt)
+    if (match?.[1]) {
+        const count = Number(match[1])
+            || numberWords[match[1].toLocaleLowerCase('en-US')]
+            || CHARACTER_SHEET_DEFAULT_OPERATION_COUNT
+        return Math.max(CHARACTER_SHEET_DEFAULT_OPERATION_COUNT, Math.min(CHARACTER_SHEET_MAX_OPERATION_COUNT, count))
+    }
+    if (/\b(?:comprehensive|exhaustive)\b/iu.test(prompt)) return CHARACTER_SHEET_MAX_OPERATION_COUNT
+    const expandsDefault = /\b(?:include|add|show|cover|detail|feature|focus on)\b(?:\s+\S+){0,4}\s+\b(?:belongings?|props?|equipment|gear|weapons?|accessories|expressions?|emotions?|profiles?|back views?|rear views?|face angles?|facial details?|action poses?|pose studies)\b/iu.test(prompt)
+        || /\b(?:various|multiple|several|different)\s+(?:facial\s+)?(?:expressions|emotions)\b/iu.test(prompt)
+    if (!expandsDefault) return CHARACTER_SHEET_DEFAULT_OPERATION_COUNT
+    return Math.min(
+        CHARACTER_SHEET_MAX_OPERATION_COUNT,
+        CHARACTER_SHEET_DEFAULT_OPERATION_COUNT + requestedPriorityCount,
+    )
+}
+
+function getRequestedOptionalPanelOrder(prompt: string): string[] {
+    const normalized = prompt.toLocaleLowerCase('en-US')
+    const requested: string[] = []
+    const add = (...panelIds: string[]): void => {
+        for (const panelId of panelIds) {
+            if (!requested.includes(panelId)) requested.push(panelId)
+        }
+    }
+
+    if (/\b(?:belonging|belongings|prop|props|equipment|gear|weapon|weapons|accessor(?:y|ies)|item|items)\b/u.test(normalized)) {
+        add('prop-primary')
+    }
+    if (/\b(?:expressions|emotions)\b/u.test(normalized)) {
+        add('expression-smile', 'expression-serious', 'expression-surprise')
+    }
+    if (/\bsmil(?:e|ing)\b/u.test(normalized)) add('expression-smile')
+    if (/\b(?:serious (?:facial )?expression|focused expression)\b/u.test(normalized)) add('expression-serious')
+    if (/\b(?:surprised expression|expression of surprise)\b/u.test(normalized)) add('expression-surprise')
+    if (/\b(?:expression|emotion)\b/u.test(normalized) && !requested.some(panelId => panelId.startsWith('expression-'))) {
+        add('expression-smile')
+    }
+    if (/\bprofile\b/u.test(normalized)) add('body-profile')
+    if (/\b(?:back|rear)\b/u.test(normalized)) add('body-back')
+    if (/\b(?:face angle|facial detail|portrait|close[- ]?up)\b/u.test(normalized)) add('head-three-quarter')
+    if (/\b(?:action|pose|movement|dynamic)\b/u.test(normalized)) add('action-signature')
+
+    return requested
+}
+
+function getOptionalPanelOrder(requested: readonly string[]): string[] {
+    const ordered = [...requested]
+    const add = (...panelIds: string[]): void => {
+        for (const panelId of panelIds) {
+            if (!ordered.includes(panelId)) ordered.push(panelId)
+        }
+    }
+
+    add(
+        'body-profile',
+        'body-back',
+        'head-three-quarter',
+        'expression-smile',
+        'expression-serious',
+        'expression-surprise',
+        'prop-primary',
+        'action-signature',
+    )
+    return ordered
+}
+
+export function buildCharacterPanelSpecs(userPrompt = ''): CharacterPanelSpec[] {
+    const requested = getRequestedOptionalPanelOrder(userPrompt)
+    const panelCount = resolveRequestedPanelCount(userPrompt, requested.length)
+    const optionalCount = panelCount - CHARACTER_SHEET_DEFAULT_OPERATION_COUNT
+    const optional = getOptionalPanelOrder(requested)
+        .slice(0, optionalCount)
+        .map(panelId => optionalPanels[panelId]!)
     return structuredClone([
-        ...bodyPanels,
-        ...headPanels,
-        ...expressionPanels,
-        ...mouthPanels,
-        ...handPanels,
-        propPanel,
-        ...actionPanels,
+        frontFacePanel,
+        frontBodyPanel,
+        threeQuarterBodyPanel,
+        ...optional,
     ])
 }
 
@@ -173,9 +266,9 @@ export function buildCharacterSheetRenderPlan(args: {
         capabilityRunId: args.capabilityRunId,
         sourceAssetIds: [...new Set(args.sourceAssetIds)],
         userPrompt: args.userPrompt.trim(),
-        panels: buildCharacterPanelSpecs(),
+        panels: buildCharacterPanelSpecs(args.userPrompt),
         layoutId: 'character-sheet-3840x2560',
-        semanticRetryLimit: 1,
+        semanticRetryLimit: 0,
     }
     assertValidCharacterSheetRenderPlan(plan)
     return plan
@@ -192,8 +285,10 @@ export function assertValidCharacterSheetRenderPlan(value: unknown): asserts val
     }
     if (new Set(plan.sourceAssetIds).size !== plan.sourceAssetIds.length) throw new Error('CHARACTER_SHEET_PLAN_SOURCE_ASSETS_DUPLICATE')
     if (plan.layoutId !== 'character-sheet-3840x2560') throw new Error('CHARACTER_SHEET_PLAN_LAYOUT_INVALID')
-    if (plan.semanticRetryLimit !== 1) throw new Error('CHARACTER_SHEET_PLAN_RETRY_LIMIT_INVALID')
-    if (!Array.isArray(plan.panels) || plan.panels.length !== CHARACTER_SHEET_MAX_OPERATION_COUNT) {
+    if (plan.semanticRetryLimit !== 0) throw new Error('CHARACTER_SHEET_PLAN_RETRY_LIMIT_INVALID')
+    if (!Array.isArray(plan.panels)
+        || plan.panels.length < CHARACTER_SHEET_DEFAULT_OPERATION_COUNT
+        || plan.panels.length > CHARACTER_SHEET_MAX_OPERATION_COUNT) {
         throw new Error('CHARACTER_SHEET_PLAN_PANEL_COUNT_INVALID')
     }
     const panelIds = new Set<string>()
@@ -208,11 +303,9 @@ export function assertValidCharacterSheetRenderPlan(value: unknown): asserts val
         }
     }
     assertAcyclicPanels(plan.panels)
-    if (plan.panels.filter(panel => panel.condition === 'always').length !== CHARACTER_SHEET_BASE_OPERATION_COUNT) {
-        throw new Error('CHARACTER_SHEET_PLAN_BASE_OPERATION_COUNT_INVALID')
+    if (plan.panels.length > CHARACTER_SHEET_MAX_PROVIDER_OPERATIONS) {
+        throw new Error('CHARACTER_SHEET_PLAN_OPERATION_BOUND_EXCEEDED')
     }
-    const maximumOperations = plan.panels.length * (plan.semanticRetryLimit + 1)
-    if (maximumOperations > CHARACTER_SHEET_MAX_PROVIDER_OPERATIONS) throw new Error('CHARACTER_SHEET_PLAN_OPERATION_BOUND_EXCEEDED')
 }
 
 function assertAcyclicPanels(panels: CharacterPanelSpec[]): void {

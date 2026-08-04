@@ -3,6 +3,7 @@
 import type {
     MediaBranchCandidateImage,
     MediaBranchVlmReferenceDecision,
+    CapabilityMediaReviewTrace,
     ImageGenerationTrace,
     ImageGenerationTraceExcludedReference,
     ImageGenerationTraceReference,
@@ -232,6 +233,28 @@ const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedR
     })
 }
 
+const readCapabilityReviewTrace = (value: unknown): CapabilityMediaReviewTrace | undefined => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const candidate = value as Partial<CapabilityMediaReviewTrace>
+    if (candidate.traceVersion !== 'capability-media-review-v1'
+        || typeof candidate.capabilityId !== 'string'
+        || typeof candidate.summary !== 'string'
+        || candidate.automaticRetries !== 0
+        || (candidate.recommendation !== undefined && typeof candidate.recommendation !== 'string')
+        || !Array.isArray(candidate.steps)
+        || candidate.steps.some(step => !step
+            || typeof step.stepId !== 'string'
+            || typeof step.title !== 'string'
+            || !['completed', 'needs-review', 'unavailable'].includes(step.status)
+            || (step.score !== undefined && (typeof step.score !== 'number'
+                || !Number.isFinite(step.score)
+                || step.score < 0
+                || step.score > 1))
+            || !Array.isArray(step.issues)
+            || step.issues.some(issue => typeof issue !== 'string'))) return undefined
+    return candidate as CapabilityMediaReviewTrace
+}
+
 export const buildImageGenerationTrace = (state: ProviderState): ImageGenerationTrace | undefined => {
     const imageProvider = state.imageProviderName
     const imageModel = state.imageModelVersion
@@ -255,6 +278,7 @@ export const buildImageGenerationTrace = (state: ProviderState): ImageGeneration
         promptWasChanged: toolPrompt.trim() !== finalPrompt.trim(),
         referenceImages: buildReferenceTrace(state),
         excludedReferences: buildExcludedTrace(state),
+        capabilityReview: readCapabilityReviewTrace(state.capabilityMediaTrace),
         resolver: resolution ? {
             resolverKind: resolution.resolverKind,
             resolverVersion: resolution.resolverVersion,

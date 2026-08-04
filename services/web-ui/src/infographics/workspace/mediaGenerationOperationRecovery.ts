@@ -175,7 +175,7 @@ export function applyMediaGenerationRequestToOperationNodes(
         return {
             status: 'in-progress',
             message: run.status === 'running'
-                ? 'The provider is generating media.'
+                ? run.progress?.message ?? 'The provider is generating media.'
                 : 'Preparing the media request.',
             requestRevision: request.revision,
             updatedAt: request.updatedAt,
@@ -236,6 +236,9 @@ export function applyMediaGenerationRequestEventToOperationNodes(
     const unresolvedBindingId = typeof event.payload.bindingId === 'string'
         ? event.payload.bindingId
         : undefined
+    const progressMessage = typeof event.payload.message === 'string'
+        ? event.payload.message
+        : undefined
 
     return applyOperationPatches(state, event.generationRequestId, node => {
         if (node.nodeId !== targetNode.nodeId) return null
@@ -270,9 +273,9 @@ export function applyMediaGenerationRequestEventToOperationNodes(
         }
         return {
             status: 'in-progress',
-            message: runStatus === 'running'
+            message: progressMessage ?? (runStatus === 'running'
                 ? 'The provider is generating media.'
-                : 'Resuming the media request.',
+                : 'Resuming the media request.'),
             requestRevision: event.requestRevision,
             updatedAt: event.createdAt,
         }

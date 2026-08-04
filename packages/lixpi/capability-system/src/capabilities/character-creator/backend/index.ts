@@ -24,7 +24,7 @@ export function createCharacterCreatorModule(
         moduleId: 'character-creator',
         name: 'Character Creator',
         normalizedName: 'character creator',
-        summary: 'Creates structured multi-view character sheets with explicit reference fidelity.',
+        summary: 'Creates configurable character sheets with explicit reference fidelity and user-controlled variants.',
         tags: ['character', 'image', 'turnaround'],
         descriptionSheet: {
             purpose: 'Creates a structured character design sheet from your prompt and any reference images you supply.',
@@ -33,7 +33,7 @@ export function createCharacterCreatorModule(
                     name: 'Character prompt',
                     requirement: 'required',
                     accepts: ['prompt'],
-                    description: 'Describe the character, outfit, materials, props, and any requested changes.',
+                    description: 'Describe the character and priorities in free form. The default is three shots; request 3 to 10 shots plus belongings, expressions, profiles, back views, face details, or poses when needed.',
                 },
                 {
                     name: 'Character references',
@@ -51,11 +51,12 @@ export function createCharacterCreatorModule(
                 'Facial and body fidelity is best effort, and exact identity is not guaranteed.',
                 'Unseen angles, concealed clothing, body regions, footwear, and props are inferred.',
                 'Conflicting references can reduce consistency even when the closest matching angle is preferred.',
+                'Comparison issues are surfaced for review; the system never starts another paid attempt automatically.',
             ],
             executionCharacteristics: {
-                cost: 'high',
-                latency: 'high',
-                summary: 'Generates many identity-focused panels, checks them independently, and assembles one final sheet.',
+                cost: 'medium',
+                latency: 'medium',
+                summary: 'Generates three shots by default. Explicit 4-to-10-shot requests scale cost and latency, while every shot remains limited to one attempt.',
             },
         },
         entry: { capabilityId: CHARACTER_CREATOR_TOOL_ID, kind: 'tool' },

@@ -1,5 +1,7 @@
 'use strict'
 
+import sharp from 'sharp'
+
 import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
 import type { CapabilityMediaExecutionContext } from '../../../../backend/capability-media-strategy.ts'
 import type {
@@ -39,11 +41,24 @@ export async function renderCharacterPanel(args: {
         references: [...args.references, ...anchorReferences],
         signal: args.signal,
     })
+    const bytes = decodeGeneratedImage(result.image)
+    await assertGeneratedPanelUsable(bytes)
     return {
-        bytes: decodeGeneratedImage(result.image),
+        bytes,
         providerOperationId: result.providerOperationId,
         includedReferenceRoles: result.includedReferenceRoles,
         omittedReferenceRoles: result.omittedReferenceRoles,
+    }
+}
+
+const assertGeneratedPanelUsable = async (bytes: Buffer): Promise<void> => {
+    try {
+        const metadata = await sharp(bytes).metadata()
+        if (!metadata.width || !metadata.height || metadata.width < 128 || metadata.height < 128) {
+            throw new Error('dimensions')
+        }
+    } catch (error) {
+        throw new Error(`CHARACTER_PANEL_PROVIDER_OUTPUT_INVALID:${(error as Error).message}`)
     }
 }
 
