@@ -160,16 +160,20 @@ deploy_workload() {
         if DEPLOY_OUTPUT="$(run_nex --namespace "${LIXPI_WORKLOAD_NAMESPACE}" workload start \
             --type native --lifecycle service --name "${wl_name}" \
             --start-request "${wl_start_request}" 2>&1)"; then
-            printf '%s\n' "${DEPLOY_OUTPUT}"
             case "${DEPLOY_OUTPUT}" in
                 *"error:"*|*"no NATS connection available"*)
                     ;;
                 *)
+                    printf '%s\n' "${DEPLOY_OUTPUT}"
                     echo "✅ Workload '${wl_name}' deployed"
                     return 0
                     ;;
             esac
-        else
+        fi
+        # The agent registers with the node a moment after the node itself comes
+        # up, so early attempts legitimately report "no agents available". Only
+        # the last attempt's output is worth showing as a real failure.
+        if [ "$i" -ge 30 ]; then
             printf '%s\n' "${DEPLOY_OUTPUT}"
         fi
         echo "... node not ready yet (attempt ${i}); retrying in 2s"

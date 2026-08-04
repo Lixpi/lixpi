@@ -220,6 +220,7 @@ The selected `AiModel` record supplies `inferenceCapabilities` to ordinary provi
 - Attached Asset display titles/original filenames never enter provider-safe reasoning or media payloads; final adapters fail closed on a forbidden variant.
 - Every current provider has one validated policy definition with explicit moderation, verification, retention, sensitive-data, documentation, review, and problem-normalization fields.
 - Provider failures are terminal per run. Recovery requires Edit request plus a new explicit Submit; no adapter automatically retries a cosmetically rewritten prompt.
+- Connection faults are the one exception, and they are not a content retry: [`utils/transport-retry.ts`](utils/transport-retry.ts) reconnects a provider operation that never produced a result, with the NATS client's backoff (500ms → 16s) under a hard 60s budget. `BaseProvider.retryTransport(operation, attempt)` applies it to every provider; a provider contributes only its own SDK's connection-error class names through `transportFaultNames`, over the shared Node socket-code layer that covers everything reached through `fetch`. Only work that is safe to run again from the start is wrapped — submits, non-streaming calls, idempotent polls and downloads. An attempt that publishes as it streams calls `markPublished()` at its first emission, which makes any later failure terminal so a retry never replays output. HTTP status errors, moderation, and quota are untouched, and an aborted run never retries.
 
 ## Related docs
 

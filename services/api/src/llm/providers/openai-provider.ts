@@ -35,6 +35,10 @@ import {
     parseCapabilityToolArguments,
 } from '@lixpi/capability-system/backend'
 import { assessProviderInputBudget } from './provider-input-budget.ts'
+import {
+    STAINLESS_TRANSPORT_FAULT_NAMES,
+    TRANSPORT_RETRY_BUDGET_MS,
+} from '../utils/transport-retry.ts'
 
 type ImageRefFile = Pick<ResolvedImageGenerationReference,
     'role' |
@@ -66,6 +70,11 @@ export class OpenAIProvider extends BaseProvider {
         const apiKey = process.env.OPENAI_API_KEY
         if (!apiKey) throw new Error('OPENAI_API_KEY environment variable is required')
         this.client = new OpenAI({ apiKey })
+    }
+
+    // The OpenAI SDK wraps every socket failure in APIConnectionError.
+    protected override get transportFaultNames(): readonly string[] {
+        return STAINLESS_TRANSPORT_FAULT_NAMES
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -278,9 +287,15 @@ export class OpenAIProvider extends BaseProvider {
             }, null, 0)}`)
         }
 
-        const stream = await this.client.responses.create(requestKwargs as any, {
-            signal: this.signal,
-        })
+        // Submit only. Once the stream starts emitting, tokens are published as
+        // they arrive, so a restart would replay text the user already saw.
+        const stream = await this.retryTransport(
+                'responses',
+            async () => await this.client.responses.create(requestKwargs as any, {
+                signal: this.signal,
+                maxRetries: 0,
+            }),
+        )
 
         let imagesGenerated = 0
         const generatedImages: string[] = []
@@ -504,9 +519,12 @@ export class OpenAIProvider extends BaseProvider {
         const hasReferences = referenceFiles.length > 0
         const imageReferenceCapabilities = args.state.aiModelMetaInfo.imageReferenceCapabilities
         const inputFidelityRequestValue = imageReferenceCapabilities?.inputFidelity === 'high' ? 'high' : undefined
+        // The SDK's own retry loop is disabled so every reattempt goes through
+        // the bounded, logged transport retry below instead of happening
+        // invisibly with an unbounded-in-practice total duration.
         const imageRequestOptions = {
             signal: this.signal,
-            ...(args.state.capabilityMediaExecutionPlan?.kind === 'character-sheet' ? { maxRetries: 0 } : {}),
+            maxRetries: 0,
         }
         info(`[OpenAI:${this.instanceKey}] image SDK call ${JSON.stringify({
             api: hasReferences ? 'images.edit' : 'images.generate',
@@ -514,7 +532,8 @@ export class OpenAIProvider extends BaseProvider {
             size: args.imageSize,
             quality: 'high',
             inputFidelity: imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
-            automaticRetries: imageRequestOptions.maxRetries ?? 'provider-default',
+            automaticRetries: imageRequestOptions.maxRetries,
+            transportRetryBudgetMs: TRANSPORT_RETRY_BUDGET_MS,
             partialImages: 3,
             referenceFiles: referenceFiles.length,
             referenceFileNames: referenceFiles.map(r => r.name),
@@ -534,46 +553,55 @@ export class OpenAIProvider extends BaseProvider {
 
         const resolvedSize = args.imageSize || 'auto'
 
-        const stream = hasReferences
-            ? await this.client.images.edit({
-                model: args.modelVersion,
-                image: referenceFiles.length > 1
-                    ? referenceFiles.map(r => r.file)
-                    : referenceFiles[0]!.file,
-                prompt,
-                ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'image-conditioned'),
-                quality: 'high',
-                ...(inputFidelityRequestValue ? { input_fidelity: inputFidelityRequestValue } : {}),
-                size: resolvedSize,
-                stream: true,
-                partial_images: 3,
-            } as any, imageRequestOptions)
-            : await this.client.images.generate({
-                model: args.modelVersion,
-                prompt,
-                ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'text'),
-                quality: 'high',
-                size: resolvedSize,
-                stream: true,
-                partial_images: 3,
-            } as any, imageRequestOptions)
+        // Submitting and draining the stream are retried as one unit: a socket
+        // that drops mid-stream leaves no usable image, so resuming is not
+        // possible and only a fresh request can still produce this shot.
+        const finalImage = await this.retryTransport(
+                'image',
+            async () => {
+                const stream = hasReferences
+                    ? await this.client.images.edit({
+                        model: args.modelVersion,
+                        image: referenceFiles.length > 1
+                            ? referenceFiles.map(r => r.file)
+                            : referenceFiles[0]!.file,
+                        prompt,
+                        ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'image-conditioned'),
+                        quality: 'high',
+                        ...(inputFidelityRequestValue ? { input_fidelity: inputFidelityRequestValue } : {}),
+                        size: resolvedSize,
+                        stream: true,
+                        partial_images: 3,
+                    } as any, imageRequestOptions)
+                    : await this.client.images.generate({
+                        model: args.modelVersion,
+                        prompt,
+                        ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'text'),
+                        quality: 'high',
+                        size: resolvedSize,
+                        stream: true,
+                        partial_images: 3,
+                    } as any, imageRequestOptions)
 
-        let finalImage: any = null
-        for await (const event of stream as any) {
-            if (this.shouldStop) {
-                info('Image generation stopped by user request')
-                break
-            }
-            if (event.type && String(event.type).includes('partial_image')) {
-                const partialB64 = event.b64_json
-                const partialIdx = event.partial_image_index ?? 0
-                if (partialB64) {
-                    await this.imagePub.partial(partialB64, partialIdx)
+                let completed: any = null
+                for await (const event of stream as any) {
+                    if (this.shouldStop) {
+                        info('Image generation stopped by user request')
+                        break
+                    }
+                    if (event.type && String(event.type).includes('partial_image')) {
+                        const partialB64 = event.b64_json
+                        const partialIdx = event.partial_image_index ?? 0
+                        if (partialB64) {
+                            await this.imagePub.partial(partialB64, partialIdx)
+                        }
+                    } else if (event.type && String(event.type).includes('completed')) {
+                        completed = event
+                    }
                 }
-            } else if (event.type && String(event.type).includes('completed')) {
-                finalImage = event
-            }
-        }
+                return completed
+            },
+        )
 
         if (finalImage) {
             const imageB64 = finalImage.b64_json

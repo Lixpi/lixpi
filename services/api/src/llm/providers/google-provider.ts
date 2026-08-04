@@ -234,6 +234,12 @@ export class GoogleProvider extends BaseProvider {
         this.client = new GoogleGenAI({ apiKey })
     }
 
+    // No transportFaultNames override: @google/genai calls fetch directly and
+    // does not wrap socket failures in an SDK class — they arrive as
+    // `TypeError: fetch failed` carrying the real code on `cause`, which the
+    // shared socket layer covers. Its own ApiError is an HTTP-status error and
+    // is deliberately not retried.
+
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
         assertMessageInputKindsSupported(
             'Google',
@@ -419,11 +425,16 @@ export class GoogleProvider extends BaseProvider {
                     state,
                     request: { model: modelVersion, contents, config },
                 })
-                const response = await this.client.models.generateContent({
-                    model: modelVersion,
-                    contents: contents as any,
-                    config: config as any,
-                })
+                // Non-streaming image call: nothing is published until it
+                // returns, so the whole request is safe to reattempt.
+                const response = await this.retryTransport(
+                'image',
+                    async () => await this.client.models.generateContent({
+                        model: modelVersion,
+                        contents: contents as any,
+                        config: config as any,
+                    }),
+                )
                 usageMetadata = response.usageMetadata
 
                 // Collect image parts in order. Gemini 3 image models may emit
@@ -498,11 +509,15 @@ export class GoogleProvider extends BaseProvider {
                         state,
                         request: { model: modelVersion, contents, config: effectiveStreamConfig },
                     })
-                    const stream = await this.client.models.generateContentStream({
-                        model: modelVersion,
-                        contents: contents as any,
-                        config: effectiveStreamConfig as any,
-                    })
+                    // Submit only — the drain below publishes as it goes.
+                    const stream = await this.retryTransport(
+                'stream',
+                        async () => await this.client.models.generateContentStream({
+                            model: modelVersion,
+                            contents: contents as any,
+                            config: effectiveStreamConfig as any,
+                        }),
+                    )
                     let detectedImage: string | undefined
                     let detectedVideo: string | undefined
                     const capabilityCalls: Array<{ callId: string; name: string; arguments: Record<string, any>; part: any }> = []
@@ -663,11 +678,15 @@ export class GoogleProvider extends BaseProvider {
                     state,
                     request: { model: modelVersion, contents, config },
                 })
-                const stream = await this.client.models.generateContentStream({
-                    model: modelVersion,
-                    contents: contents as any,
-                    config: config as any,
-                })
+                // Submit only — the drain below publishes as it goes.
+                const stream = await this.retryTransport(
+                'text',
+                    async () => await this.client.models.generateContentStream({
+                        model: modelVersion,
+                        contents: contents as any,
+                        config: config as any,
+                    }),
+                )
                 for await (const chunk of stream) {
                     if (this.shouldStop) break
                     if (chunk.usageMetadata) usageMetadata = chunk.usageMetadata
@@ -860,7 +879,12 @@ export class GoogleProvider extends BaseProvider {
             } else if (firstFrameImage) {
                 veoParams.image = firstFrameImage
             }
-            let operation: any = await this.client.models.generateVideos(veoParams as any)
+            // Nothing is published before the operation is accepted, so the
+            // submit is safe to reattempt.
+            let operation: any = await this.retryTransport(
+                'video',
+                async () => await this.client.models.generateVideos(veoParams as any),
+            )
             info(`[Google:${this.instanceKey}] VEO operation accepted ${JSON.stringify({
                 operationName: typeof operation?.name === 'string' ? operation.name : null,
                 done: operation?.done === true,
@@ -876,10 +900,15 @@ export class GoogleProvider extends BaseProvider {
                 if (this.shouldStop) throw new Error('Video generation aborted')
                 this.videoPub.generating()
                 pollCount += 1
-                operation = await this.client.operations.getVideosOperation({
-                    operation,
-                    config: { abortSignal: this.signal } as any,
-                } as any)
+                // A blip while polling must not discard a video the provider is
+                // already rendering — each poll is idempotent, so retry it.
+                operation = await this.retryTransport(
+                'video-poll',
+                    async () => await this.client.operations.getVideosOperation({
+                        operation,
+                        config: { abortSignal: this.signal } as any,
+                    } as any),
+                )
                 if (operation.done || pollCount === 1 || pollCount % 6 === 0) {
                     info(`[Google:${this.instanceKey}] VEO poll ${JSON.stringify({
                         operationName: typeof operation?.name === 'string' ? operation.name : null,
@@ -990,10 +1019,15 @@ export class GoogleProvider extends BaseProvider {
         try {
             dir = await mkdtemp(join(tmpdir(), 'veo-dl-'))
             const outPath = join(dir, 'video.mp4')
-            await this.client.files.download({
-                file: video as any,
-                downloadPath: outPath,
-            } as any)
+            // The video is already rendered and billed at this point; losing it
+            // to a dropped download would be the worst possible moment to fail.
+            await this.retryTransport(
+                'video-download',
+                async () => await this.client.files.download({
+                    file: video as any,
+                    downloadPath: outPath,
+                } as any),
+            )
             return await readFile(outPath)
         } finally {
             if (dir) {

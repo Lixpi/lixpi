@@ -13,6 +13,7 @@ import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState, ChatMessage } from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
+import { SMITHY_TRANSPORT_FAULT_NAMES } from '../utils/transport-retry.ts'
 
 const MODEL_ENDPOINT_MAP: Record<string, string> = {
     'stability-ultra': '/v2beta/stable-image/generate/ultra',
@@ -137,6 +138,13 @@ export class StabilityProvider extends BaseProvider {
         super(instanceKey, deps)
         this.useBedrock = bedrockInference.isEnabledFor('stability')
         if (this.useBedrock) bedrockInference.logRouting('stability', `Stability:${instanceKey}`)
+    }
+
+    // The direct path calls fetch, whose socket codes the shared layer covers.
+    // The Bedrock path goes through the AWS SDK, which converts those same
+    // socket failures into the Smithy transient error names before we see them.
+    protected override get transportFaultNames(): readonly string[] {
+        return this.useBedrock ? SMITHY_TRANSPORT_FAULT_NAMES : []
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -311,15 +319,19 @@ export class StabilityProvider extends BaseProvider {
             `aspect=${aspectRatio} refs=${referenceCount} mode=${routingMode} promptLen=${prompt.length}`,
         )
 
-        const response = await fetch(`https://api.stability.ai${endpoint}`, {
-            method: 'POST',
-            headers: {
-                authorization: `Bearer ${apiKey}`,
-                accept: 'application/json',
-            },
-            body: formData,
-            signal: this.signal,
-        })
+        // Single non-streaming request; nothing is published until it returns.
+        const response = await this.retryTransport(
+                'image',
+            async () => await fetch(`https://api.stability.ai${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    authorization: `Bearer ${apiKey}`,
+                    accept: 'application/json',
+                },
+                body: formData,
+                signal: this.signal,
+            }),
+        )
 
         info(`[Stability:${this.instanceKey}] API response status=${response.status}`)
 
@@ -402,14 +414,18 @@ export class StabilityProvider extends BaseProvider {
             `mode=${body.mode} aspect=${aspectRatio} promptLen=${prompt.length}`,
         )
 
-        const response = await this.bedrockClient.send(
-            new InvokeModelCommand({
-                modelId,
-                contentType: 'application/json',
-                accept: 'application/json',
-                body: JSON.stringify(body),
-            }),
-            { abortSignal: this.signal },
+        // Single non-streaming invocation; nothing is published until it returns.
+        const response = await this.retryTransport(
+                'bedrock',
+            async () => await this.bedrockClient.send(
+                new InvokeModelCommand({
+                    modelId,
+                    contentType: 'application/json',
+                    accept: 'application/json',
+                    body: JSON.stringify(body),
+                }),
+                { abortSignal: this.signal },
+            ),
         )
 
         if (!response.body) throw new Error('Stability Bedrock invocation returned an empty body')

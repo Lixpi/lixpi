@@ -234,7 +234,8 @@ export type PollVideoGenerationTaskOptions = {
     shouldStop?: () => boolean
     // Called on every non-terminal poll so the caller can emit a keepalive.
     onKeepalive?: () => void
-    // Injectable for tests; defaults to the real retrieve + setTimeout sleep.
+    // Injectable so the caller can add transport retry around a poll, and for
+    // tests; defaults to the real retrieve + setTimeout sleep.
     retrieve?: (config: BytePlusClientConfig, taskId: string, signal?: AbortSignal) => Promise<RetrieveVideoGenerationTaskResponse>
     sleep?: (ms: number) => Promise<void>
 }

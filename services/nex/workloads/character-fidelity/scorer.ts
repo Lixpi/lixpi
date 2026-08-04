@@ -86,11 +86,21 @@ export async function loadCharacterFidelityModels(): Promise<RuntimeModels> {
     modelsPromise ??= (async () => {
         ort.env.wasm.numThreads = 1
         ort.env.wasm.simd = true
+        // These two models legitimately carry their initializers in the graph
+        // inputs, so onnxruntime emits one graph-optimization warning per
+        // weight on every session build. That is hundreds of stderr lines the
+        // nex agent relays as ERROR-level workload output for a healthy start.
+        // Only genuine faults are worth surfacing here.
+        ort.env.logLevel = 'error'
+        const sessionOptions: ort.InferenceSession.SessionOptions = {
+            executionProviders: ['wasm'],
+            logSeverityLevel: 3,
+        }
         const detectorBytes = await readAndVerifyArtifact('detector')
         const recognizerBytes = await readAndVerifyArtifact('recognizer')
         return {
-            detector: await ort.InferenceSession.create(detectorBytes, { executionProviders: ['wasm'] }),
-            recognizer: await ort.InferenceSession.create(recognizerBytes, { executionProviders: ['wasm'] }),
+            detector: await ort.InferenceSession.create(detectorBytes, sessionOptions),
+            recognizer: await ort.InferenceSession.create(recognizerBytes, sessionOptions),
         }
     })()
     return await modelsPromise

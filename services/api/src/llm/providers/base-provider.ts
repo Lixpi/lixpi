@@ -50,6 +50,10 @@ import type { MediaProviderDefinition } from './media-provider-definition.ts'
 import { assertNoForbiddenMediaReferenceLeak } from '../media-reference/provider-safe-context.ts'
 import { resolveImageGenerationReferences } from '../image-generation-references.ts'
 import {
+    withTransportRetry,
+    type TransportRetryAttempt,
+} from '../utils/transport-retry.ts'
+import {
     discardPendingCapabilityOutputsForState,
     finalizePendingCapabilityOutputsForState,
 } from '../../capability-system/capability-output-finalizer.ts'
@@ -1234,5 +1238,28 @@ export abstract class BaseProvider {
 
     protected get shouldStop(): boolean {
         return this.abortController?.signal.aborted ?? false
+    }
+
+    // Error class names this provider's SDK uses for a connection failure, on
+    // top of the Node socket codes every provider shares through fetch.
+    // Providers whose SDK reaches the network with bare fetch add nothing.
+    protected get transportFaultNames(): readonly string[] {
+        return []
+    }
+
+    // Bounded reconnect around a single provider network operation. Wrap only
+    // work that is safe to run again from the start; an attempt that publishes
+    // as it goes must call markPublished() at its first emission.
+    protected async retryTransport<T>(
+        operation: string,
+        attempt: (context: TransportRetryAttempt) => Promise<T>,
+    ): Promise<T> {
+        return await withTransportRetry({
+            label: `${this.providerName}:${operation}:${this.instanceKey}`,
+            faultNames: this.transportFaultNames,
+            signal: this.abortController?.signal,
+            shouldStop: () => this.shouldStop,
+            attempt,
+        })
     }
 }

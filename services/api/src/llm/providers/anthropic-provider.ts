@@ -33,6 +33,10 @@ import {
 } from '../../capability-system/capability-model-tool-executor.ts'
 import { asAnthropicTool } from '@lixpi/capability-system/backend'
 import { assessProviderInputBudget } from './provider-input-budget.ts'
+import {
+    SMITHY_TRANSPORT_FAULT_NAMES,
+    STAINLESS_TRANSPORT_FAULT_NAMES,
+} from '../utils/transport-retry.ts'
 
 export class AnthropicProvider extends BaseProvider {
     readonly providerName: ProviderName = 'Anthropic'
@@ -54,6 +58,16 @@ export class AnthropicProvider extends BaseProvider {
         const apiKey = process.env.ANTHROPIC_API_KEY
         if (!apiKey) throw new Error('ANTHROPIC_API_KEY environment variable is required')
         this.client = new Anthropic({ apiKey })
+    }
+
+    // Both clients here are Stainless-generated and raise APIConnectionError.
+    // On the Bedrock path the AWS signing layer underneath can surface its own
+    // Smithy transient names before the SDK ever wraps them.
+    protected override get transportFaultNames(): readonly string[] {
+        return [
+            ...STAINLESS_TRANSPORT_FAULT_NAMES,
+            ...(this.useBedrock ? SMITHY_TRANSPORT_FAULT_NAMES : []),
+        ]
     }
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -140,18 +154,27 @@ export class AnthropicProvider extends BaseProvider {
                     streamArgs.tool_choice = buildAnthropicRequiredCapabilityToolChoice(pendingRequiredToolName)
                 }
                 assessProviderInputBudget({ state, request: streamArgs })
-                const stream = this.client.messages.stream(streamArgs as any, { signal: this.signal })
-                for await (const event of stream) {
-                    if (this.shouldStop) {
-                        info('Stream stopped by user request')
-                        break
+                // messages.stream() connects lazily, so a connection failure
+                // only surfaces while draining. The drain is therefore retried
+                // too, but only up to the first published token — past that a
+                // restart would replay text the user already saw.
+                finalMessage = await this.retryTransport('messages', async ({ markPublished }) => {
+                    const stream = this.client.messages.stream(streamArgs as any, { signal: this.signal })
+                    for await (const event of stream) {
+                        if (this.shouldStop) {
+                            info('Stream stopped by user request')
+                            break
+                        }
+                        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+                            const text = (event.delta as any).text ?? ''
+                            if (text) {
+                                markPublished()
+                                this.publisher.chunk(text)
+                            }
+                        }
                     }
-                    if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-                        const text = (event.delta as any).text ?? ''
-                        if (text) this.publisher.chunk(text)
-                    }
-                }
-                finalMessage = await stream.finalMessage()
+                    return await stream.finalMessage()
+                })
                 promptTokens += finalMessage.usage?.input_tokens ?? 0
                 completionTokens += finalMessage.usage?.output_tokens ?? 0
                 const capabilityCalls = (finalMessage.content ?? []).flatMap((block: any) => {
