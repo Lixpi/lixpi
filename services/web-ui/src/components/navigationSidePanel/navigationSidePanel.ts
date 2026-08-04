@@ -6,8 +6,8 @@
 import { type WorkspaceMeta } from '@lixpi/constants'
 
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { createSidePanel, type SidePanelInstance } from '$src/components/sidePanel/index.ts'
-import { createPureDropdown } from '$src/components/dropdown/index.ts'
+import { createSidePanel, type SidePanelInstance } from '@lixpi/ui-kit/components/side-panel'
+import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
 import { settings } from '$src/settings.ts'
 import {
     createNewFileIcon,

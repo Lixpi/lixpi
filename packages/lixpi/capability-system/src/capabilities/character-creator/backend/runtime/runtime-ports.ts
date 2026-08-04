@@ -17,8 +17,7 @@ export type CharacterImageReferenceRole =
     | 'face-crop'
     | 'body-outfit-crop'
     | 'prop-crop'
-    | 'canonical-anchor'
-    | 'adjacent-angle'
+    | 'pose-reference'
 
 export type CharacterImageReference = {
     url: string

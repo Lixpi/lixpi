@@ -33,7 +33,7 @@ export function createCharacterCreatorModule(
                     name: 'Character prompt',
                     requirement: 'required',
                     accepts: ['prompt'],
-                    description: 'Describe the character and priorities in free form. The default is three shots; request 3 to 10 shots plus belongings, expressions, profiles, back views, face details, or poses when needed.',
+                    description: 'Describe the character and priorities in free form. The default is one close neutral front identity portrait plus front and walking-profile full-body views; request 3 to 10 shots plus belongings, back views, face angles, outfit details, materials, or actions when needed.',
                 },
                 {
                     name: 'Character references',
@@ -44,7 +44,7 @@ export function createCharacterCreatorModule(
             ],
             bestResults: [
                 'Supply 3 to 5 high-resolution views spanning front, three-quarter, profile, and back.',
-                'Include one clear close face and one unobstructed full body in the same outfit.',
+                'Include one clear frontal face occupying much of its source image and one unobstructed full body in the same outfit.',
                 'Use coherent references of the same person, age, outfit, and rendering medium.',
             ],
             limitations: [

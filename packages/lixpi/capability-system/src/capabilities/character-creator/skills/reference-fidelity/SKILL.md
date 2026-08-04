@@ -5,7 +5,7 @@ description: Identity and design consistency instructions for authorized visual 
 
 # Reference Fidelity
 
-Treat authorized reference images as evidence for identity and construction, not as permission to copy their background or composition.
+Treat authorized character reference images as identity and construction evidence, not as permission to copy their background, camera, crop, or pose. Treat dedicated pose-bearing body, action, and object-placement controls as spatial control only. All controls use the same deliberately gender-neutral, sexless gray mannequin with no male or female secondary traits. The required neutral front portrait uses that featureless control only for centered camera direction, upright head position, alignment, crop, and scale. Ignore all control anatomy, physique, material, clothing, and sex presentation. Other head and outfit-detail shots are source-only. Never attach a depicted synthetic face, portrait, or expression reference to a head shot; it can pollute facial anatomy, sex presentation, and identity.
 
 Preserve across every generated panel:
 
@@ -19,12 +19,12 @@ Preserve across every generated panel:
 - edge behavior, mark morphology, wash or pigment behavior, shading method, and detail density;
 - substrate grain, paper or canvas texture, palette relationships, and contrast.
 
-The source rendering class is locked. When the source is photographic, every repeated depiction must be photorealistic photography with recognizable facial likeness, real human anatomy, natural skin and hair detail, photographic materials, and physically coherent studio lighting. Never convert a photographic source into a cartoon, drawing, painting, concept-art rendering, cel-shaded figure, or other illustration. When the source is illustrated, preserve its specific illustration medium instead of converting it to photography.
+When the source is photographic, repeated depictions remain photorealistic with recognizable likeness, natural anatomy, skin and hair detail, real materials, and coherent neutral studio lighting. When the source is illustrated, preserve its actual illustration medium instead of converting it to generic concept art or photography.
 
-The source medium must construct every repeated depiction, including faces, hair, garments, bodies, and props. Texture copied only onto the sheet background is a failure. Do not clean up, beautify, vectorize, smooth, airbrush, homogenize, modernize, genericize, or otherwise change the source rendering class.
+Do not copy a control reference's facial identity, sex presentation, facial proportions, physique, anatomy, bald head, clothing or nudity, gray color, lighting, or render style. Do not clean up, beautify, airbrush, homogenize, or genericize the source identity.
 
 Resolve canonical or original Asset renditions, never previews. Analyze references as an observation set. Explicit prompt changes override source facts. Otherwise observed evidence overrides descriptive prompt text, and angle-specific evidence from the closest view wins. Keep unresolved conflicts explicit instead of averaging them.
 
-When a requested detail is absent from every reference, mark it inferred, add the smallest plausible design choice consistent with the request, and repeat it identically. When there are no sources, accepted front head and body panels become the canonical anchors.
+When a requested detail is absent from every reference, mark it inferred and add only the smallest plausible design choice consistent with the prompt. Generated shots are outputs, not conditioning inputs for later shots.
 
 Never reproduce a reference background, pose, camera angle, unrelated person, signature, logo, or watermark. Never merge identities from separate people. If multiple images show the same character, reconcile them into one consistent design before generating the sheet.

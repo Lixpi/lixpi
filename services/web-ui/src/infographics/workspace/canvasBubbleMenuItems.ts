@@ -15,7 +15,7 @@ import {
     changeNodesConnectorLineCurve,
     infoCircleFilledIcon,
 } from '$src/svgIcons/index.ts'
-import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
+import type { BubbleMenuItem } from '@lixpi/ui-kit/components/bubble-menu'
 
 export const CANVAS_IMAGE_CONTEXT = 'canvasImage'
 export const CANVAS_VIDEO_CONTEXT = 'canvasVideo'

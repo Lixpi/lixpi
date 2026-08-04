@@ -38,10 +38,10 @@
                         "required": ["panelId", "kind", "title", "target", "crop", "dependsOn", "required", "condition", "acceptanceDimensions"],
                         "properties": {
                             "panelId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
-                            "kind": { "enum": ["body", "head", "expression", "prop", "action"] },
+                            "kind": { "enum": ["body", "head", "prop", "action"] },
                             "title": { "type": "string", "minLength": 1 },
                             "target": { "type": "string", "minLength": 1 },
-                            "crop": { "enum": ["full-body", "head-and-shoulders", "face", "prop", "action"] },
+                            "crop": { "enum": ["full-body", "upper-body", "prop", "action"] },
                             "dependsOn": { "type": "array", "items": { "type": "string" } },
                             "required": { "type": "boolean" },
                             "condition": { "enum": ["always", "generate-when-no-observed-prop"] },

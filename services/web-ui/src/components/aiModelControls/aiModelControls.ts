@@ -13,8 +13,8 @@ import {
 import { select } from 'd3-selection'
 import { html } from '$src/utils/domTemplates.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import { createPureDropdown } from '$src/components/dropdown/index.ts'
-import { createTagPill as createSvgTagPill, type TagPillInstance } from '$src/components/tagPill/index.ts'
+import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
+import { createTagPill as createSvgTagPill, type TagPillInstance } from '@lixpi/ui-kit/components/tag-pill'
 import { settings } from '$src/settings.ts'
 
 import type {

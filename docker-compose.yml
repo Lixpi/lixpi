@@ -305,6 +305,7 @@ services:
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
@@ -396,6 +397,7 @@ services:
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
@@ -404,6 +406,9 @@ services:
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
             - ./packages/lixpi/prosemirror/package.json:/usr/src/service/packages/lixpi/prosemirror/package.json:ro,cached
             - ./packages/lixpi/prosemirror/src:/usr/src/service/packages/lixpi/prosemirror/src:ro,cached
+            - ./packages/lixpi/ui-kit/package.json:/usr/src/service/packages/lixpi/ui-kit/package.json:ro,cached
+            - ./packages/lixpi/ui-kit/src:/usr/src/service/packages/lixpi/ui-kit/src:ro,cached
+            - ./packages/lixpi/ui-kit/styles:/usr/src/service/packages/lixpi/ui-kit/styles:ro,cached
 
             # - ./packages-vendor/bits-ui/packages/bits-ui:/usr/src/service/packages/bits-ui
             - ./packages-vendor/shadcn-svelte/docs/src/lib:/usr/src/service/packages/shadcn-svelte/lib:cached
@@ -533,6 +538,7 @@ services:
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
             - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
             - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
             - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached

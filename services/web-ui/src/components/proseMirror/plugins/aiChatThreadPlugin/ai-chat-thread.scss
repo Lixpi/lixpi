@@ -1,8 +1,8 @@
 // AI Chat Thread Styles
+@use '@lixpi/ui-kit/styles/dropdown';
+@use '@lixpi/ui-kit/styles/info-bubble';
 @import '$src/components/proseMirror/ProseMirrorMixings.scss';
 @import '$src/sass/components/animations';
-@import '$src/components/dropdown/dropdown.scss';
-@import '$src/components/infoBubble/infoBubble.scss';
 @import '$src/components/contextPreview/context-preview.scss';
 @import '$src/components/capabilityRun/capability-run.scss';
 

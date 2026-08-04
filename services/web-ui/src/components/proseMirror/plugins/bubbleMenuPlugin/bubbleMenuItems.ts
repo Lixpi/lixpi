@@ -3,7 +3,7 @@ import type { Schema, Node as ProseMirrorNode } from 'prosemirror-model'
 import { toggleMark, wrapIn, setBlockType } from 'prosemirror-commands'
 import { NodeSelection } from 'prosemirror-state'
 import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
-import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
+import type { BubbleMenuItem } from '@lixpi/ui-kit/components/bubble-menu'
 import AuthService from '$src/services/auth-service.ts'
 import {
     boldIcon,

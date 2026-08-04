@@ -1,18 +1,87 @@
 'use strict'
 
 import type {
+    BranchMarkerMediaGenerationState,
+    CanvasNode,
     MediaGenerationProblem,
     MediaGenerationRun,
+    MediaGenerationRunProgress,
+    MediaGenerationRunStatus,
     MediaReferenceBinding,
     OperationStatusCanvasNode,
     WorkspaceEdge,
 } from '@lixpi/constants'
+import {
+    createDefaultMediaGenerationRunProgress,
+    settleMediaGenerationRunProgress,
+} from '@lixpi/constants'
+import { info } from '@lixpi/debug-tools'
 
 import Workspace from '../models/workspace.ts'
 
 const DEFAULT_DIMENSIONS = { width: 360, height: 104 }
+type BranchMarkerCanvasNode = Extract<CanvasNode, {
+    type: 'branchOrigin' | 'branchFork' | 'branchLine'
+}>
 const getPlannedMediaType = (modelId: string): OperationStatusCanvasNode['plannedMediaType'] =>
     /(?:video|veo|seedance|sora)/iu.test(modelId) ? 'video' : 'image'
+
+const isBranchMarkerNode = (node: CanvasNode): node is BranchMarkerCanvasNode =>
+    node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
+
+const toRunStatus = (status: OperationStatusCanvasNode['status']): MediaGenerationRunStatus => {
+    if (status === 'failed') return 'failed'
+    if (status === 'action-required') return 'awaiting-provider-verification'
+    return 'running'
+}
+
+const getOperationOwnerNodeIds = (
+    edges: readonly WorkspaceEdge[],
+    operationNodeId: string,
+): Set<string> => new Set(edges
+    .filter(edge => edge.targetNodeId === operationNodeId)
+    .map(edge => edge.sourceNodeId))
+
+const projectMediaGenerationStateToOwners = ({
+    nodes,
+    edges,
+    operationNodeId,
+    state,
+}: {
+    nodes: CanvasNode[]
+    edges: readonly WorkspaceEdge[]
+    operationNodeId: string
+    state: BranchMarkerMediaGenerationState
+}): { nodes: CanvasNode[]; changed: boolean } => {
+    const ownerNodeIds = getOperationOwnerNodeIds(edges, operationNodeId)
+    if (ownerNodeIds.size === 0) {
+        info(`[MediaGenerationMarkerProgress] owner-missing ${JSON.stringify({
+            operationNodeId,
+            status: state.status,
+            phase: state.progress.phase,
+            message: state.message,
+        })}`)
+        return { nodes, changed: false }
+    }
+    info(`[MediaGenerationMarkerProgress] projected ${JSON.stringify({
+        operationNodeId,
+        ownerNodeIds: [...ownerNodeIds],
+        status: state.status,
+        phase: state.progress.phase,
+        completedSteps: state.progress.completedSteps,
+        totalSteps: state.progress.totalSteps,
+        message: state.message,
+    })}`)
+    let changed = false
+    return {
+        nodes: nodes.map(node => {
+            if (!ownerNodeIds.has(node.nodeId) || !isBranchMarkerNode(node)) return node
+            changed = true
+            return { ...node, mediaGeneration: state }
+        }),
+        changed,
+    }
+}
 
 export const projectMediaGenerationOperationNodes = async ({
     workspaceId,
@@ -44,6 +113,10 @@ export const projectMediaGenerationOperationNodes = async ({
                     status: 'in-progress',
                     title: `Generating with ${run.modelId}`,
                     message: 'Preparing the media request.',
+                    progress: run.progress ?? createDefaultMediaGenerationRunProgress(
+                        run.status,
+                        'Preparing the media request.',
+                    ),
                     generationRequestId,
                     generationRun: run.generationRun,
                     plannedMediaType: getPlannedMediaType(String(run.modelId)),
@@ -92,6 +165,7 @@ export const updateMediaGenerationOperationNode = async ({
     operationNodeId,
     status,
     message,
+    progress,
     problem,
     candidateAssetIds,
     unresolvedBindingId,
@@ -103,6 +177,7 @@ export const updateMediaGenerationOperationNode = async ({
     operationNodeId: string
     status: OperationStatusCanvasNode['status']
     message: string
+    progress?: MediaGenerationRunProgress
     problem?: MediaGenerationProblem
     candidateAssetIds?: string[]
     unresolvedBindingId?: string
@@ -114,14 +189,17 @@ export const updateMediaGenerationOperationNode = async ({
         workspaceId,
         origin: 'MediaGenerationOperationProjection.update',
         mutate: canvasState => {
+            const operationNode = canvasState.nodes.find((node): node is OperationStatusCanvasNode =>
+                node.type === 'operationStatus' && node.nodeId === operationNodeId)
             let changed = false
-            const nodes = canvasState.nodes.map(node => {
+            let nodes = canvasState.nodes.map(node => {
                 if (node.type !== 'operationStatus' || node.nodeId !== operationNodeId) return node
                 changed = true
                 const next = {
                     ...node,
                     status,
                     message,
+                    ...(progress ? { progress } : {}),
                     ...(problem ? { problem } : {}),
                     ...(candidateAssetIds ? { candidateAssetIds } : {}),
                     ...(unresolvedBindingId ? { unresolvedBindingId } : {}),
@@ -137,6 +215,25 @@ export const updateMediaGenerationOperationNode = async ({
                 }
                 return next
             })
+            if (operationNode) {
+                const markerProjection = projectMediaGenerationStateToOwners({
+                    nodes,
+                    edges: canvasState.edges,
+                    operationNodeId,
+                    state: {
+                        status: toRunStatus(status),
+                        message,
+                        progress: progress ?? operationNode.progress
+                            ?? createDefaultMediaGenerationRunProgress(toRunStatus(status), message),
+                        ...(operationNode.generationRun !== undefined ? {
+                            generationRun: operationNode.generationRun,
+                        } : {}),
+                        updatedAt: Date.now(),
+                    },
+                })
+                nodes = markerProjection.nodes
+                changed ||= markerProjection.changed
+            }
             return { canvasState: { ...canvasState, nodes }, changed }
         },
     })
@@ -194,6 +291,10 @@ export const rebindMediaGenerationOperationNodes = async ({
                     message: binding.run.problem?.detail
                         ?? previous?.message
                         ?? 'The provider is generating media.',
+                    progress: binding.run.progress ?? createDefaultMediaGenerationRunProgress(
+                        binding.run.status,
+                        binding.run.problem?.detail ?? 'The provider is generating media.',
+                    ),
                     generationRequestId,
                     generationRun: binding.run.generationRun,
                     plannedMediaType: node.type === 'video' ? 'video' : node.type === 'image'
@@ -250,6 +351,10 @@ export const rebindMediaGenerationOperationNodes = async ({
                         ? 'failed'
                         : binding.run.status === 'awaiting-provider-verification' ? 'action-required' : 'in-progress',
                     message: binding.run.problem?.detail ?? previous?.message ?? 'Preparing the media request.',
+                    progress: binding.run.progress ?? createDefaultMediaGenerationRunProgress(
+                        binding.run.status,
+                        binding.run.problem?.detail ?? 'Preparing the media request.',
+                    ),
                     plannedMediaType: getPlannedMediaType(String(binding.run.modelId)),
                     ...(binding.run.problem ? { problem: binding.run.problem } : {}),
                     ...(binding.run.requiredVerificationAssetIds?.[0] ? {
@@ -308,7 +413,28 @@ export const rebindMediaGenerationOperationNodes = async ({
                     pathType: 'horizontal-bezier',
                 })
             }
-            return { canvasState: { ...canvasState, nodes, edges }, changed }
+            const mediaGenerationByMarkerNodeId = new Map<string, BranchMarkerMediaGenerationState>(bindings.map(binding => [
+                binding.lineageParentNodeId,
+                {
+                    status: binding.run.status,
+                    message: binding.run.problem?.detail
+                        ?? binding.run.progress?.message
+                        ?? 'Preparing the media request.',
+                    progress: binding.run.progress ?? createDefaultMediaGenerationRunProgress(
+                        binding.run.status,
+                        binding.run.problem?.detail ?? 'Preparing the media request.',
+                    ),
+                    generationRun: binding.run.generationRun,
+                    updatedAt: Date.now(),
+                } satisfies BranchMarkerMediaGenerationState,
+            ] as const))
+            const nodesWithMarkerProgress = nodes.map(node => {
+                const mediaGeneration = mediaGenerationByMarkerNodeId.get(node.nodeId)
+                if (!mediaGeneration || !isBranchMarkerNode(node)) return node
+                changed = true
+                return { ...node, mediaGeneration }
+            })
+            return { canvasState: { ...canvasState, nodes: nodesWithMarkerProgress, edges }, changed }
         },
     })
 }
@@ -316,24 +442,51 @@ export const rebindMediaGenerationOperationNodes = async ({
 export const removeMediaGenerationOperationNodes = async ({
     workspaceId,
     generationRequestId,
+    terminalStatus = 'completed',
 }: {
     workspaceId: string
     generationRequestId: string
+    terminalStatus?: 'completed' | 'cancelled'
 }): Promise<void> => {
     await Workspace.mutateCanvasState({
         workspaceId,
         origin: 'MediaGenerationOperationProjection.remove',
         mutate: canvasState => {
-            const removedIds = new Set(canvasState.nodes
-                .filter(node => node.type === 'operationStatus'
+            const removedOperations = canvasState.nodes
+                .filter((node): node is OperationStatusCanvasNode => node.type === 'operationStatus'
                     && node.operation === 'media-generation'
                     && node.generationRequestId === generationRequestId)
-                .map(node => node.nodeId))
+            const removedIds = new Set(removedOperations.map(node => node.nodeId))
             if (removedIds.size === 0) return { canvasState, changed: false }
+            let nodes = canvasState.nodes
+            for (const operationNode of removedOperations) {
+                const message = operationNode.progress?.message
+                    ?? (terminalStatus === 'completed'
+                        ? 'Media generation completed.'
+                        : 'Media generation cancelled.')
+                nodes = projectMediaGenerationStateToOwners({
+                    nodes,
+                    edges: canvasState.edges,
+                    operationNodeId: operationNode.nodeId,
+                    state: {
+                        status: terminalStatus,
+                        message,
+                        progress: settleMediaGenerationRunProgress(
+                            operationNode.progress,
+                            terminalStatus,
+                            message,
+                        ),
+                        ...(operationNode.generationRun !== undefined ? {
+                            generationRun: operationNode.generationRun,
+                        } : {}),
+                        updatedAt: Date.now(),
+                    },
+                }).nodes
+            }
             return {
                 canvasState: {
                     ...canvasState,
-                    nodes: canvasState.nodes.filter(node => !removedIds.has(node.nodeId)),
+                    nodes: nodes.filter(node => !removedIds.has(node.nodeId)),
                     edges: canvasState.edges.filter(edge =>
                         !removedIds.has(edge.sourceNodeId) && !removedIds.has(edge.targetNodeId)),
                 },
@@ -354,13 +507,34 @@ export const removeMediaGenerationOperationNode = async ({
         workspaceId,
         origin: 'MediaGenerationOperationProjection.removeOne',
         mutate: canvasState => {
-            if (!canvasState.nodes.some(node => node.nodeId === operationNodeId && node.type === 'operationStatus')) {
+            const operationNode = canvasState.nodes.find((node): node is OperationStatusCanvasNode =>
+                node.nodeId === operationNodeId && node.type === 'operationStatus')
+            if (!operationNode) {
                 return { canvasState, changed: false }
             }
+            const message = operationNode.progress?.message ?? 'Media generation completed.'
+            const projection = projectMediaGenerationStateToOwners({
+                nodes: canvasState.nodes,
+                edges: canvasState.edges,
+                operationNodeId,
+                state: {
+                    status: 'completed',
+                    message,
+                    progress: settleMediaGenerationRunProgress(
+                        operationNode.progress,
+                        'completed',
+                        message,
+                    ),
+                    ...(operationNode.generationRun !== undefined ? {
+                        generationRun: operationNode.generationRun,
+                    } : {}),
+                    updatedAt: Date.now(),
+                },
+            })
             return {
                 canvasState: {
                     ...canvasState,
-                    nodes: canvasState.nodes.filter(node => node.nodeId !== operationNodeId),
+                    nodes: projection.nodes.filter(node => node.nodeId !== operationNodeId),
                     edges: canvasState.edges.filter(edge =>
                         edge.sourceNodeId !== operationNodeId && edge.targetNodeId !== operationNodeId),
                 },

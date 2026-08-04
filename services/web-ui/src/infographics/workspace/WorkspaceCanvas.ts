@@ -22,6 +22,7 @@ import {
     type AudioCanvasNode,
     type CapabilityArtifactCanvasNode,
     type OperationStatusCanvasNode,
+    type OperationProgressItem,
     type BranchOriginCanvasNode,
     type BranchForkCanvasNode,
     type BranchForkLineagePlan,
@@ -55,7 +56,11 @@ import {
     mediaGenerationLayoutSettings,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
-import { createPureDropdown } from '$src/components/dropdown/index.ts'
+import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
+import {
+    createProgressTimeline,
+    type ProgressTimelineItem,
+} from '@lixpi/ui-kit/components/progress-timeline'
 import {
     createAiPromptComposer,
     createDefaultPromptControlFactories,
@@ -125,7 +130,7 @@ import {
     mountReadOnlyAiChatThreadProjection,
     type ReadOnlyAiChatThreadRendererInstance,
 } from '$src/components/proseMirror/readOnlyAiChatThreadRenderer.ts'
-import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
+import { createHelpTooltip, type HelpTooltipInstance } from '@lixpi/ui-kit/components/help-tooltip'
 import AiInteractionService, {
     cancelMediaGenerationRequest,
     getMediaGenerationRequest,
@@ -167,7 +172,7 @@ import {
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { createSidePanel, type SidePanelInstance } from '$src/components/sidePanel/index.ts'
+import { createSidePanel, type SidePanelInstance } from '@lixpi/ui-kit/components/side-panel'
 import {
     GeneratedMediaRebalancePipeline,
     type BranchMarkerNode,
@@ -219,7 +224,7 @@ import AuthService from '$src/services/auth-service.ts'
 import { loadWorkspaceRouteData } from '$src/services/router-service.ts'
 import { tPatternSvgTexture } from '$src/svgIcons/svgTextures.ts'
 import { settings, type WorkspaceCollisionFlowSettings, type WorkspaceCollisionNodeTypeSettings } from '$src/settings.ts'
-import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
+import { BubbleMenu, type BubbleMenuPositionRequest } from '@lixpi/ui-kit/components/bubble-menu'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import {
@@ -276,15 +281,15 @@ import {
     getAiChatPanelState,
     setAiChatPanelState,
 } from '$src/infographics/workspace/aiChatPanelState.ts'
-import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
+import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '@lixpi/ui-kit/components/video-controls'
 import {
     createSlidingTabsSwitch,
     type SlidingTabsSwitchInstance,
-} from '$src/components/slidingTabsSwitch/index.ts'
+} from '@lixpi/ui-kit/components/sliding-tabs-switch'
 import {
     createSlidingSwitch,
     type SlidingSwitchInstance,
-} from '$src/components/slidingSwitch/index.ts'
+} from '@lixpi/ui-kit/components/sliding-switch'
 import {
     createContextPreviewTile,
     getContextPreviewAccessibleLabel,
@@ -5137,9 +5142,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function shouldRenderOperationStatusNode(node: OperationStatusCanvasNode): boolean {
+        return node.operation !== 'media-generation' || node.status !== 'in-progress'
+    }
+
+    function shouldRenderCanvasNode(node: CanvasNode): boolean {
+        return node.type !== 'operationStatus' || shouldRenderOperationStatusNode(node)
+    }
+
     function getNodesForConnectionManager(nodes: CanvasNode[]): CanvasNode[] {
         const nodesById = getCanvasNodesById(nodes)
-        return nodes.map((node: CanvasNode) => {
+        return nodes.filter(shouldRenderCanvasNode).map((node: CanvasNode) => {
             const override = liveNodeOverrides.get(node.nodeId)
             const basePosition = override?.position ?? getNodeWorldPosition(node, nodesById)
             const baseDimensions = override?.dimensions ?? node.dimensions
@@ -5160,6 +5173,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             return nodeForConnection
         })
+    }
+
+    function getEdgesForConnectionManager(state: CanvasState): WorkspaceEdge[] {
+        const hiddenNodeIds = new Set(
+            state.nodes
+                .filter(node => !shouldRenderCanvasNode(node))
+                .map(node => node.nodeId),
+        )
+        if (hiddenNodeIds.size === 0) return state.edges
+        return state.edges.filter(edge => (
+            !hiddenNodeIds.has(edge.sourceNodeId)
+            && !hiddenNodeIds.has(edge.targetNodeId)
+        ))
+    }
+
+    function mergeConnectionManagerEdgesIntoCanvasState(edges: WorkspaceEdge[]): WorkspaceEdge[] {
+        if (!currentCanvasState) return edges
+        const visibleEdgeIds = new Set(getEdgesForConnectionManager(currentCanvasState).map(edge => edge.edgeId))
+        return [
+            ...currentCanvasState.edges.filter(edge => !visibleEdgeIds.has(edge.edgeId)),
+            ...edges,
+        ]
     }
 
     function getCanvasPointFromClient(clientX: number, clientY: number): { x: number; y: number } {
@@ -5433,7 +5468,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const prevSelectedNodeIds = selectedNodeIds
         selectedNodeIds = filterSelectableNodeIds(nextSelectedNodeIds)
         selectionIsFromMarquee = fromMarquee && selectedNodeIds.size > 0
-        if (currentCanvasState) connectionManager?.syncEdges(currentCanvasState.edges)
+        if (currentCanvasState) connectionManager?.syncEdges(getEdgesForConnectionManager(currentCanvasState))
         if (selectedNodeIds.size > 0) clearSelectedEdgeSelection()
         updateNodeSelectionClasses(prevSelectedNodeIds, selectedNodeIds)
         updateSelectionGroupOverlayElement()
@@ -10027,6 +10062,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return resizeBranchMarkerNodeFromProseMirror({
                 ...branchOriginNode,
                 ...(existingBranchOrigin.pendingState ? { pendingState: existingBranchOrigin.pendingState } : {}),
+                ...(existingBranchOrigin.mediaGeneration ? {
+                    mediaGeneration: existingBranchOrigin.mediaGeneration,
+                } : {}),
             } as BranchOriginCanvasNode) as BranchOriginCanvasNode
         }
         return resizeBranchMarkerNodeFromProseMirror(branchOriginNode) as BranchOriginCanvasNode
@@ -10091,6 +10129,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return resizeBranchMarkerNodeFromProseMirror({
                 ...branchForkNode,
                 ...(existingBranchFork.pendingState ? { pendingState: existingBranchFork.pendingState } : {}),
+                ...(existingBranchFork.mediaGeneration ? {
+                    mediaGeneration: existingBranchFork.mediaGeneration,
+                } : {}),
             } as BranchForkCanvasNode) as BranchForkCanvasNode
         }
         return resizeBranchMarkerNodeFromProseMirror(branchForkNode) as BranchForkCanvasNode
@@ -11616,7 +11657,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function syncConnectionManagerForCurrentCanvasState(options: { flushPixi?: boolean } = {}): void {
         if (!connectionManager || !currentCanvasState) return
         connectionManager.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
-        connectionManager.syncEdges(currentCanvasState.edges)
+        connectionManager.syncEdges(getEdgesForConnectionManager(currentCanvasState))
         connectionManager.render()
         if (options.flushPixi) pixiMediaLayer?.renderNow()
     }
@@ -11680,11 +11721,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function syncExistingOperationStatusNodeToDOM(node: OperationStatusCanvasNode): void {
+        ensureMediaGenerationOperationRecovery(node)
         const existingNodeEl = viewportEl.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
-        if (!existingNodeEl) return
+        if (!shouldRenderOperationStatusNode(node)) {
+            existingNodeEl?.remove()
+            selectedNodeIds.delete(node.nodeId)
+            syncConnectionsAfterManualNodeAppend()
+            return
+        }
 
         const nodeEl = createOperationStatusNode(node)
-        existingNodeEl.replaceWith(nodeEl)
+        if (existingNodeEl) existingNodeEl.replaceWith(nodeEl)
+        else viewportEl.appendChild(nodeEl)
         connectionManager?.registerNodeElement(node.nodeId, nodeEl as HTMLDivElement)
         syncConnectionsAfterManualNodeAppend()
     }
@@ -12779,7 +12827,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const hasPreFrameConnectorBounds = getPendingGeneratedMediaBeforeFirstFrameNodeIds().size > 0
                     if (hasPreFrameConnectorBounds && connectionManager && currentCanvasState) {
                         connectionManager.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
-                        connectionManager.syncEdges(currentCanvasState.edges)
+                        connectionManager.syncEdges(getEdgesForConnectionManager(currentCanvasState))
                         connectionManager.render()
                         pixiMediaLayer?.renderNow()
                     } else {
@@ -12968,7 +13016,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             const nodesForEdges = getNodesForConnectionManager(currentCanvasState.nodes)
             connectionManager.syncNodes(nodesForEdges)
-            connectionManager.syncEdges(currentCanvasState.edges)
+            connectionManager.syncEdges(getEdgesForConnectionManager(currentCanvasState))
             connectionManager.render()
             repositionEdgeBubbleMenu()
         })
@@ -12999,7 +13047,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (!currentCanvasState) return
                 commitCanvasState({
                     ...currentCanvasState,
-                    edges
+                    edges: mergeConnectionManagerEdgesIntoCanvasState(edges),
                 })
             },
             onSelectedEdgeChange: (edgeId) => {
@@ -13018,7 +13066,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (currentCanvasState) {
             connectionManager.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
-            connectionManager.syncEdges(currentCanvasState.edges)
+            connectionManager.syncEdges(getEdgesForConnectionManager(currentCanvasState))
             if (selectedEdgeId) {
                 connectionManager.selectEdge(selectedEdgeId)
             }
@@ -13982,6 +14030,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function applyMediaOperationRecoveryResult(result: MediaGenerationOperationRecoveryResult): void {
         if (!result.changed || !currentCanvasState) return
+        const affectedRequestIds = new Set<string>()
+        for (const candidate of [...currentCanvasState.nodes, ...result.state.nodes]) {
+            if (candidate.type !== 'operationStatus'
+                || candidate.operation !== 'media-generation'
+                || !candidate.generationRequestId
+                || (!result.updatedNodeIds.includes(candidate.nodeId)
+                    && !result.removedNodeIds.includes(candidate.nodeId))) continue
+            affectedRequestIds.add(candidate.generationRequestId)
+        }
         commitTransientCanvasStatePreservingEditors(result.state)
 
         for (const nodeId of result.removedNodeIds) {
@@ -13995,6 +14052,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 candidate.type === 'operationStatus' && candidate.nodeId === nodeId
             ))
             if (updatedNode) syncExistingOperationStatusNodeToDOM(updatedNode)
+        }
+        for (const generationRequestId of affectedRequestIds) {
+            for (const candidate of currentCanvasState.nodes) {
+                if (!isBranchMarkerNode(candidate) || candidate.generationRequestId !== generationRequestId) continue
+                syncBranchMarkerNodeContent(applyBranchMarkerLiveGeometry(candidate))
+            }
         }
         syncConnectionsAfterManualNodeAppend()
     }
@@ -14019,9 +14082,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
     }
 
-    function createOperationStatusNode(node: OperationStatusCanvasNode): HTMLElement {
-        for (const preview of operationStatusPreviewTiles.get(node.nodeId) ?? []) preview.destroy()
-        operationStatusPreviewTiles.delete(node.nodeId)
+    function ensureMediaGenerationOperationRecovery(node: OperationStatusCanvasNode): void {
         if (node.operation === 'media-generation'
             && node.status !== 'failed'
             && node.generationRequestId
@@ -14064,6 +14125,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 console.error('[CANVAS] Media operation recovery failed:', error)
             })
         }
+    }
+
+    function createOperationStatusNode(node: OperationStatusCanvasNode): HTMLElement {
+        for (const preview of operationStatusPreviewTiles.get(node.nodeId) ?? []) preview.destroy()
+        operationStatusPreviewTiles.delete(node.nodeId)
+        ensureMediaGenerationOperationRecovery(node)
         const { nodeEl, dragOverlay } = createBaseNodeElement(
             node,
             `workspace-upload-placeholder-node is-${node.status}`,
@@ -14705,9 +14772,150 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function syncBranchMarkerReviewControls(node: BranchMarkerNode, nodeEl: HTMLElement): void {
-        nodeEl.querySelector(':scope > .workspace-branch-marker-review-controls')?.remove()
+        nodeEl.querySelector('.workspace-branch-marker-review-controls')?.remove()
         const controls = createBranchMarkerReviewControls(node)
-        if (controls) nodeEl.appendChild(controls)
+        if (!controls) return
+        const expandedContent = nodeEl.querySelector(
+            ':scope > .workspace-branch-marker-content.has-progress',
+        ) as HTMLElement | null
+        const reviewControlsHost = expandedContent ?? nodeEl
+        reviewControlsHost.appendChild(controls)
+    }
+
+    function getBranchMarkerOperationNodes(node: BranchMarkerNode): OperationStatusCanvasNode[] {
+        const operationNodes = (currentCanvasState?.nodes ?? [])
+            .filter((candidate): candidate is OperationStatusCanvasNode => candidate.type === 'operationStatus'
+                && candidate.operation === 'media-generation'
+                && candidate.generationRequestId === node.generationRequestId)
+            .sort((left, right) => (left.generationRun ?? 0) - (right.generationRun ?? 0))
+        const operationNodeIds = new Set(operationNodes.map(operationNode => operationNode.nodeId))
+        const directlyOwnedOperationNodeIds = new Set((currentCanvasState?.edges ?? [])
+            .filter(edge => edge.sourceNodeId === node.nodeId && operationNodeIds.has(edge.targetNodeId))
+            .map(edge => edge.targetNodeId))
+        if (directlyOwnedOperationNodeIds.size === 0) return operationNodes
+        return operationNodes.filter(operationNode => directlyOwnedOperationNodeIds.has(operationNode.nodeId))
+    }
+
+    function toProgressTimelineItem(
+        item: OperationProgressItem,
+        operationFailed = false,
+    ): ProgressTimelineItem {
+        const status = operationFailed && item.status === 'running' ? 'failed' : item.status
+        return {
+            ...item,
+            status,
+            ...(item.children ? {
+                children: item.children.map(child => toProgressTimelineItem(child, operationFailed)),
+            } : {}),
+        }
+    }
+
+    function getDefaultOperationProgressItems(node: OperationStatusCanvasNode): ProgressTimelineItem[] {
+        const activeStatus = node.status === 'failed' ? 'failed' : 'running'
+        return [
+            { id: 'request', title: 'Understand request', status: 'completed' },
+            { id: 'references', title: 'Resolve references and capabilities', status: 'completed' },
+            { id: 'provider', title: 'Prepare provider run', status: 'completed' },
+            {
+                id: 'generation',
+                title: 'Generate media',
+                status: activeStatus,
+                summary: node.message,
+            },
+            { id: 'finalize', title: 'Finalize asset', status: 'pending' },
+        ]
+    }
+
+    function getPendingBranchMarkerProgressItems(node: BranchMarkerNode): ProgressTimelineItem[] {
+        const mediaPlaceholderVisible = getBranchMarkerUiPhase(node) === 'media-placeholder'
+        return [
+            { id: 'request', title: 'Understand request', status: 'completed' },
+            {
+                id: 'plan',
+                title: 'Resolve capabilities, tools, and references',
+                status: mediaPlaceholderVisible ? 'completed' : 'running',
+            },
+            {
+                id: 'provider',
+                title: 'Prepare media generation',
+                status: mediaPlaceholderVisible ? 'running' : 'pending',
+            },
+            { id: 'generation', title: 'Generate media', status: 'pending' },
+            { id: 'finalize', title: 'Finalize assets', status: 'pending' },
+        ]
+    }
+
+    function getBranchMarkerProgressItems(node: BranchMarkerNode): ProgressTimelineItem[] {
+        const operationNodes = getBranchMarkerOperationNodes(node)
+        if (operationNodes.length <= 1 && node.mediaGeneration?.progress.items?.length) {
+            return node.mediaGeneration.progress.items.map(item => toProgressTimelineItem(
+                item,
+                node.mediaGeneration?.status === 'failed',
+            ))
+        }
+        if (operationNodes.length === 0) return getPendingBranchMarkerProgressItems(node)
+
+        const getChildren = (operationNode: OperationStatusCanvasNode): ProgressTimelineItem[] =>
+            operationNode.progress?.items?.map(item => toProgressTimelineItem(
+                item,
+                operationNode.status === 'failed',
+            )) ?? getDefaultOperationProgressItems(operationNode)
+        if (operationNodes.length === 1) return getChildren(operationNodes[0]!)
+
+        return operationNodes.map((operationNode): ProgressTimelineItem => ({
+            id: `media-run:${operationNode.generationRun ?? operationNode.nodeId}`,
+            title: operationNode.generationRun === undefined
+                ? operationNode.title
+                : `Variant ${operationNode.generationRun + 1}: ${operationNode.title}`,
+            status: operationNode.status === 'failed' ? 'failed' : 'running',
+            summary: operationNode.message,
+            children: getChildren(operationNode),
+        }))
+    }
+
+    function createBranchMarkerProgress(
+        node: BranchMarkerNode,
+    ): HTMLElement | null {
+        const markerPhase = getBranchMarkerUiPhase(node)
+        if (markerPhase === 'preflight') return null
+        const operationNodes = getBranchMarkerOperationNodes(node)
+        const isAwaitingOperationProjection = !node.mediaGeneration
+            && operationNodes.length === 0
+            && isBranchMarkerGenerationGroupActive(node)
+        if (!node.mediaGeneration && operationNodes.length === 0 && !isAwaitingOperationProjection) return null
+        const operationMessage = operationNodes
+            .map(operationNode => operationNode.progress?.message ?? operationNode.message)
+            .filter(Boolean)
+            .join(' · ')
+        const currentMessage = (operationNodes.length > 1 ? operationMessage : node.mediaGeneration?.message)
+            || operationMessage
+            || (markerPhase === 'media-placeholder'
+                ? 'The generation request is starting.'
+                : 'Preparing the generation plan.')
+        const items = getBranchMarkerProgressItems(node)
+        if (items.length === 0) return null
+        if (debugLoggingEnabled) console.info('[CANVAS][branch-marker-progress]', 'render', {
+            nodeId: node.nodeId,
+            generationRequestId: node.generationRequestId,
+            markerPhase: markerPhase ?? 'settled',
+            progressStatus: node.mediaGeneration?.status ?? operationNodes[0]?.status ?? 'unknown',
+            progressPhase: node.mediaGeneration?.progress.phase
+                ?? operationNodes[0]?.progress?.phase
+                ?? 'unknown',
+            operationNodeIds: operationNodes.map(operationNode => operationNode.nodeId),
+            itemCount: items.length,
+        })
+        const timeline = createProgressTimeline({
+            ariaLabel: 'Generation progress',
+            items,
+        })
+        const panel = html`
+            <section className="workspace-branch-marker-progress" aria-live="polite">
+                <div className="workspace-branch-marker-progress-current">${currentMessage}</div>
+            </section>
+        ` as HTMLElement
+        panel.appendChild(timeline.element)
+        return panel
     }
 
     function createBranchMarkerContent({
@@ -14749,9 +14957,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const showStopControl = isBranchMarkerGenerationGroupActive(node)
         const responseIsEnhancing = responseIsReceiving && responsePhase === 'enhancement'
         const responseDone = showResponseLine && (!pendingForUi || responsePhase === 'done' || !responseIsReceiving)
+        const progress = createBranchMarkerProgress(node)
         const responseSummary = responsePreview ? `Response: ${responsePreview}` : ''
         const accessibleLabel = [promptPreview, label, reasoningModelSummary, responseSummary, modelSummary].filter(Boolean).join(' · ')
-        const contentClassName = `workspace-branch-marker-content${showStopControl ? ' has-stop-control' : ''}`
+        const contentClassName = `workspace-branch-marker-content${showStopControl ? ' has-stop-control' : ''}${progress ? ' has-progress' : ''}`
         const messageClassName = `workspace-branch-marker-message${pendingForUi ? ' is-pending' : ''}`
         const responseClassName = `workspace-branch-marker-response${responseIsEnhancing ? ' is-enhancing' : ''}`
         // The marker DOM is rebuilt as it streams and as it travels through pending
@@ -14761,7 +14970,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // created spinner with the shared clock, so the spin looks continuous and
         // never visibly restarts no matter how often the element is recreated.
         const spinnerStyle = { animationDelay: `${-(performance.now() % BRANCH_MARKER_SPINNER_PERIOD_MS)}ms` }
-        return html`
+        const content = html`
             <div className=${contentClassName} aria-label=${accessibleLabel}>
                 <div className="workspace-branch-marker-main">
                     <div className=${messageClassName}>
@@ -14786,6 +14995,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             <span className="workspace-branch-marker-response-text">${responsePreview}</span>
                         </div>
                     ` : null}
+                    ${progress ? html`<div className="workspace-branch-marker-separator"></div>` : null}
+                    ${progress}
                 </div>
                 ${mediaModelEntries.length > 0 ? html`
                     <div className="workspace-branch-marker-media-models">
@@ -14796,6 +15007,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ` : null}
             </div>
         ` as HTMLDivElement
+        if (progress) {
+            content.style.setProperty('--workspace-branch-marker-header-height', `${node.dimensions.height}px`)
+            content.style.setProperty('--workspace-branch-marker-header-center', `${node.dimensions.height / 2}px`)
+        }
+        return content
     }
 
     function isBranchMarkerNode(node: CanvasNode): node is BranchMarkerNode {
@@ -15180,7 +15396,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             } else if (node.type === 'capabilityArtifact') {
                 nodeEl = createCapabilityArtifactNode(node as CapabilityArtifactCanvasNode)
             } else if (node.type === 'operationStatus') {
-                nodeEl = createOperationStatusNode(node as OperationStatusCanvasNode)
+                const operationStatusNode = node as OperationStatusCanvasNode
+                ensureMediaGenerationOperationRecovery(operationStatusNode)
+                if (!shouldRenderOperationStatusNode(operationStatusNode)) continue
+                nodeEl = createOperationStatusNode(operationStatusNode)
             } else if (node.type === 'branchOrigin') {
                 if (shouldDeferPlannedBranchMarkerViewportRender(node as BranchOriginCanvasNode)) continue
                 nodeEl = createBranchOriginNode(node as BranchOriginCanvasNode)
@@ -15217,7 +15436,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         // Ensure edges render after a full rerender
         connectionManager?.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
-        connectionManager?.syncEdges(currentCanvasState.edges)
+        connectionManager?.syncEdges(getEdgesForConnectionManager(currentCanvasState))
         scheduleEdgesRender()
 
         renderActiveAiChatPanel(undefined, { animateOpen: shouldAnimatePanelOpenAfterRender })
@@ -15892,7 +16111,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (currentCanvasState && connectionManager && (visualStateChanged || needsRerender)) {
                 if (!needsRerender) syncCanvasNodeDomGeometry(currentCanvasState.nodes)
                 connectionManager.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
-                connectionManager.syncEdges(currentCanvasState.edges)
+                connectionManager.syncEdges(getEdgesForConnectionManager(currentCanvasState))
                 scheduleEdgesRender()
                 syncPixiMediaLayer(currentCanvasState)
                 lastVisualSyncKey = getCanvasVisualSyncKey(currentCanvasState)

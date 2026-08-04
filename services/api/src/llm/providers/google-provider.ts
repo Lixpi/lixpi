@@ -345,6 +345,14 @@ export class GoogleProvider extends BaseProvider {
             if (initialFunctionDeclarations.length > 0) {
                 config.tools = [{ functionDeclarations: initialFunctionDeclarations }]
             }
+            if (state.capabilityUsageMode === 'character-creator' && mediaFanoutAllowedFunctionNames.includes(TOOL_NAME)) {
+                config.toolConfig = {
+                    functionCallingConfig: {
+                        mode: 'ANY',
+                        allowedFunctionNames: [TOOL_NAME],
+                    },
+                }
+            }
         }
 
         let systemInstruction: string | undefined
@@ -587,6 +595,7 @@ export class GoogleProvider extends BaseProvider {
                     : !detectedImage && !detectedVideo
 
                 if (shouldForceMediaTool
+                    && state.capabilityUsageMode !== 'character-creator'
                     && !this.shouldStop
                     && forcedFunctionNames.length > 0) {
                     warn(`[Google:${this.instanceKey}] AUTO tool selection did not satisfy the media request; retrying with forced function call ${JSON.stringify({

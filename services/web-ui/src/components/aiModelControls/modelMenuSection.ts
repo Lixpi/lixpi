@@ -1,4 +1,4 @@
-import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
+import { createHelpTooltip, type HelpTooltipInstance } from '@lixpi/ui-kit/components/help-tooltip'
 import { html } from '$src/utils/domTemplates.ts'
 import { settings, type AiPromptInputModelMenuSettings } from '$src/settings.ts'
 

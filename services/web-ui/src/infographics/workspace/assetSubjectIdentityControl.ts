@@ -1,6 +1,6 @@
 import type { Asset, SubjectIdentityClassification } from '@lixpi/constants'
 
-import { createPureDropdown } from '$src/components/dropdown/index.ts'
+import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
 import AssetService from '$src/services/asset-service.ts'
 
 type SubjectIdentityDropdownOption = {

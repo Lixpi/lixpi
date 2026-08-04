@@ -46,8 +46,8 @@ Character Creator's strategy:
 1. reauthorizes canonical or original source Assets;
 2. analyzes source pixels with the selected reasoning model;
 3. writes lossless role crops to transient storage;
-4. executes a configurable 3-to-10-shot dependency graph with bounded concurrency and one provider attempt per shot;
-5. adapts provider-neutral reference roles through the selected image provider;
+4. executes 3 to 10 independent shots with bounded concurrency and one provider attempt per shot;
+5. attaches the shot's deterministic text-free neutral-mannequin pose image and adapts all provider-neutral reference roles through the selected image provider;
 6. publishes a progressive composite after every terminal shot result;
 7. compares rendered shots with structured VLM assessment and optional NEX face similarity;
 8. surfaces failed dimensions without automatically retrying or replacing pixels;
@@ -55,7 +55,9 @@ Character Creator's strategy:
 10. returns that PNG and its review trace to the normal image-settlement path;
 11. clears transient objects on success, failure, or cancellation.
 
-The default graph contains a detailed front face and two full-body shots. Free-form prompt text can request 3 to 10 shots and prioritize belongings, expressions, profiles, back views, face angles, or poses. Automatic paid and semantic retries are disabled. A failed shot remains visible as an unavailable cell while the runtime composes every successful shot; another attempt requires explicit user action and creates a preserved lineage variant.
+The default graph contains a detailed front face, a relaxed standing front body, and a natural walking profile body. Free-form prompt text can request 3 to 10 shots and prioritize belongings, expressions, back views, face angles, or action poses. Automatic paid and semantic retries are disabled. A failed shot remains visible as an unavailable cell while the runtime composes every successful shot; another attempt requires explicit user action and creates a preserved lineage variant.
+
+Every durable media run can publish an extensible nested `items` tree with its progress payload. After preflight resolves onto the canvas, the owning branch lineage marker renders that tree inside its existing surface through `@lixpi/ui-kit`, below the reasoning stream. The API mirrors progress onto the marker and archives terminal progress there before removing a successful operation projection. Runs that do not publish domain-specific items receive a generic media timeline, so image, video, Capability, Skill, and Tool execution share one transparent progress surface without sharing hardcoded step names.
 
 ## Provider capability profiles
 

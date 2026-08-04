@@ -104,11 +104,11 @@ function loadAiPromptComposer(): string {
 }
 
 function loadSidePanel(): string {
-	return readSourceFile('../../components/sidePanel/sidePanel.ts', 'components/sidePanel/sidePanel.ts')
+	return readSourceFile('../../../../../packages/lixpi/ui-kit/src/components/sidePanel/sidePanel.ts', 'packages/lixpi/ui-kit/src/components/sidePanel/sidePanel.ts')
 }
 
 function loadSidePanelScss(): string {
-	return readSourceFile('../../components/sidePanel/side-panel.scss', 'components/sidePanel/side-panel.scss')
+	return readSourceFile('../../../../../packages/lixpi/ui-kit/src/components/sidePanel/side-panel.scss', 'packages/lixpi/ui-kit/src/components/sidePanel/side-panel.scss')
 }
 
 function loadLayout(): string {

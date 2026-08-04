@@ -1,9 +1,10 @@
+@use '@lixpi/ui-kit/styles/bubble-menu';
+@use '@lixpi/ui-kit/styles/dropdown';
+@use '@lixpi/ui-kit/styles/progress-timeline';
 @import '$src/sass/_transitions.scss';
 @import '$src/sass/_variables.scss';
 @import '$src/sass/components/animations';
-@import '$src/components/bubbleMenu/bubbleMenu.scss';
 @import '$src/components/contextPreview/context-preview.scss';
-@import '$src/components/dropdown/dropdown.scss';
 
 :root {
     --workspace-canvas-padding-top: 32px;
@@ -2241,6 +2242,10 @@
         min-height: 1.12em;
         padding: 0;
     }
+
+    .workspace-branch-marker-progress {
+        display: none;
+    }
 }
 
 .workspace-branch-marker-content {
@@ -2260,6 +2265,64 @@
 
 .workspace-branch-marker-content.has-stop-control {
     padding-right: 52px;
+}
+
+.workspace-branch-marker-content.has-progress {
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    align-items: flex-start;
+    width: calc(100% + 2px);
+    height: auto;
+    min-height: calc(100% + 2px);
+    border: 1px solid var(--workspace-branch-origin-border-color);
+    border-radius: calc(var(--workspace-branch-marker-header-height, 64px) / 2);
+    background: var(--workspace-branch-origin-background-color);
+    box-shadow: var(--workspace-branch-origin-box-shadow);
+}
+
+.workspace-branch-marker-content.has-progress .workspace-branch-marker-main {
+    width: 100%;
+}
+
+.workspace-branch-marker-content.has-progress .workspace-branch-marker-media-models {
+    top: var(--workspace-branch-marker-header-center, 50%);
+}
+
+.workspace-branch-marker-progress {
+    --progress-timeline-surface: var(--workspace-branch-origin-background-color, #5d656d);
+    --progress-timeline-primary: rgb(255 255 255 / 96%);
+    --progress-timeline-secondary: rgb(255 255 255 / 84%);
+    --progress-timeline-line: rgb(255 255 255 / 38%);
+    --progress-timeline-pending-border: rgb(255 255 255 / 68%);
+    --progress-timeline-title-size: 15px;
+    --progress-timeline-title-weight: 400;
+    --progress-timeline-summary-size: 13px;
+    position: static;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    margin-top: 0;
+    padding: 6px 2px 1px;
+    color: currentColor;
+    pointer-events: none;
+}
+
+.workspace-branch-marker-progress-current {
+    margin: 0 0 10px;
+    color: rgb(255 255 255 / 94%);
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.workspace-branch-marker-progress .progress-timeline-content {
+    padding-bottom: 8px;
+}
+
+.workspace-branch-marker-progress .progress-timeline-children {
+    margin-top: 6px;
 }
 
 .workspace-branch-marker-spinner {

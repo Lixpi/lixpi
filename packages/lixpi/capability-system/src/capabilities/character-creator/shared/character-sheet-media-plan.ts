@@ -3,8 +3,8 @@
 import type { CapabilityJsonValue } from '@lixpi/constants'
 import type { CapabilityMediaExecutionPlan } from '../../../shared/capability-media-execution-plan.ts'
 
-export type CharacterPanelKind = 'body' | 'head' | 'expression' | 'prop' | 'action'
-export type CharacterPanelCrop = 'full-body' | 'head-and-shoulders' | 'face' | 'prop' | 'action'
+export type CharacterPanelKind = 'body' | 'head' | 'prop' | 'action'
+export type CharacterPanelCrop = 'full-body' | 'upper-body' | 'prop' | 'action'
 export type CharacterPanelCondition = 'always' | 'generate-when-no-observed-prop'
 
 export type CharacterPanelSpec = {
@@ -35,11 +35,11 @@ export const CHARACTER_SHEET_MAX_OPERATION_COUNT = 10
 export const CHARACTER_SHEET_MAX_PROVIDER_OPERATIONS = CHARACTER_SHEET_MAX_OPERATION_COUNT
 
 const frontFacePanel: CharacterPanelSpec = {
-    panelId: 'head-front-detail',
+    panelId: 'head-front-neutral',
     kind: 'head',
-    title: 'Front face detail',
-    target: 'straight-on front facial portrait with the face large, sharp, unobstructed, and clearly lit',
-    crop: 'face',
+    title: 'Neutral front identity portrait',
+    target: 'close straight-on head-and-shoulders identity portrait with a relaxed neutral expression, level gaze, closed relaxed mouth, 10-12 percent clean clearance above the complete hair or headwear, the complete face and neck visible, a crop immediately below the collarbones with no armpits or arms, head upright, and the head and facial region occupying 55-60 percent of image height so facial details are sharp and unobstructed',
+    crop: 'upper-body',
     dependsOn: [],
     required: true,
     condition: 'always',
@@ -50,7 +50,7 @@ const frontBodyPanel: CharacterPanelSpec = {
     panelId: 'body-front',
     kind: 'body',
     title: 'Front body',
-    target: 'neutral straight-on full-body front view from head to footwear',
+    target: 'relaxed straight-on full-body front view from the complete top of the hair or headwear through the footwear, head upright, shoulders level, arms hanging naturally with slight separation from the torso, and feet hip-width apart',
     crop: 'full-body',
     dependsOn: [],
     required: true,
@@ -58,37 +58,26 @@ const frontBodyPanel: CharacterPanelSpec = {
     acceptanceDimensions: ['target-view', 'facial-identity', 'body-proportions', 'clothing', 'materials', 'framing'],
 }
 
-const threeQuarterBodyPanel: CharacterPanelSpec = {
-    panelId: 'body-three-quarter-back',
+const profileBodyPanel: CharacterPanelSpec = {
+    panelId: 'body-profile',
     kind: 'body',
-    title: 'Three-quarter body',
-    target: 'full-body three-quarter back view that clearly shows silhouette, outfit construction, and footwear',
+    title: 'Walking body profile',
+    target: 'exact left-profile full-body walking view from the complete top of the hair or headwear through the footwear, head upright with level gaze, spine neutral, modest stride, relaxed arm counter-swing, and a clearly readable silhouette',
     crop: 'full-body',
-    dependsOn: ['head-front-detail', 'body-front'],
+    dependsOn: [],
     required: true,
     condition: 'always',
     acceptanceDimensions: ['target-view', 'identity', 'body-proportions', 'clothing', 'materials', 'framing'],
 }
 
 const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
-    'body-profile': {
-        panelId: 'body-profile',
-        kind: 'body',
-        title: 'Body profile',
-        target: 'complete left profile full-body view from head to footwear',
-        crop: 'full-body',
-        dependsOn: ['head-front-detail', 'body-front'],
-        required: true,
-        condition: 'always',
-        acceptanceDimensions: ['target-view', 'identity', 'body-proportions', 'clothing', 'materials', 'framing'],
-    },
     'body-back': {
         panelId: 'body-back',
         kind: 'body',
         title: 'Back body',
         target: 'neutral straight-on full-body back view from head to footwear',
         crop: 'full-body',
-        dependsOn: ['body-front'],
+        dependsOn: [],
         required: true,
         condition: 'always',
         acceptanceDimensions: ['target-view', 'identity', 'body-proportions', 'clothing', 'materials', 'framing'],
@@ -97,45 +86,12 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         panelId: 'head-three-quarter',
         kind: 'head',
         title: 'Three-quarter face',
-        target: 'three-quarter facial portrait with the face large and clearly resolved',
-        crop: 'face',
-        dependsOn: ['head-front-detail'],
+        target: 'close three-quarter head-and-shoulders identity view with a relaxed neutral expression, 10-12 percent clean clearance above the complete hair or headwear, the complete face and neck visible, a crop immediately below the collarbones with no armpits or arms, the head upright, and the head and facial region occupying 55-60 percent of image height',
+        crop: 'upper-body',
+        dependsOn: [],
         required: true,
         condition: 'always',
         acceptanceDimensions: ['target-view', 'facial-identity', 'hair', 'skin', 'distinctive-features', 'sharpness'],
-    },
-    'expression-smile': {
-        panelId: 'expression-smile',
-        kind: 'expression',
-        title: 'Smile',
-        target: 'front facial close-up with a natural smile',
-        crop: 'face',
-        dependsOn: ['head-front-detail'],
-        required: true,
-        condition: 'always',
-        acceptanceDimensions: ['expression', 'facial-identity', 'hair', 'skin', 'sharpness'],
-    },
-    'expression-serious': {
-        panelId: 'expression-serious',
-        kind: 'expression',
-        title: 'Serious expression',
-        target: 'front facial close-up with a focused serious expression',
-        crop: 'face',
-        dependsOn: ['head-front-detail'],
-        required: true,
-        condition: 'always',
-        acceptanceDimensions: ['expression', 'facial-identity', 'hair', 'skin', 'sharpness'],
-    },
-    'expression-surprise': {
-        panelId: 'expression-surprise',
-        kind: 'expression',
-        title: 'Surprise',
-        target: 'front facial close-up with a natural surprised expression',
-        crop: 'face',
-        dependsOn: ['head-front-detail'],
-        required: true,
-        condition: 'always',
-        acceptanceDimensions: ['expression', 'facial-identity', 'hair', 'skin', 'sharpness'],
     },
     'prop-primary': {
         panelId: 'prop-primary',
@@ -143,7 +99,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         title: 'Belongings',
         target: 'isolated primary belongings, equipment, accessories, or prop arranged clearly at character scale',
         crop: 'prop',
-        dependsOn: ['body-front'],
+        dependsOn: [],
         required: false,
         condition: 'generate-when-no-observed-prop',
         acceptanceDimensions: ['prop-design', 'materials', 'color', 'scale', 'framing'],
@@ -154,10 +110,43 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         title: 'Signature pose',
         target: 'complete character in a restrained signature action pose with the full silhouette visible',
         crop: 'action',
-        dependsOn: ['head-front-detail', 'body-front'],
+        dependsOn: [],
         required: true,
         condition: 'always',
         acceptanceDimensions: ['action-pose', 'facial-identity', 'body-proportions', 'clothing', 'materials', 'framing'],
+    },
+    'outfit-front-detail': {
+        panelId: 'outfit-front-detail',
+        kind: 'body',
+        title: 'Front outfit detail',
+        target: 'neutral straight-on upper-body outfit construction view from the complete top of the hair or headwear through the hips, with garment layers, closures, seams, accessories, and material transitions clearly visible',
+        crop: 'upper-body',
+        dependsOn: [],
+        required: true,
+        condition: 'always',
+        acceptanceDimensions: ['target-view', 'identity', 'clothing', 'materials', 'accessories', 'framing'],
+    },
+    'outfit-back-detail': {
+        panelId: 'outfit-back-detail',
+        kind: 'body',
+        title: 'Back outfit detail',
+        target: 'neutral straight-on upper-body back view from the complete top of the hair or headwear through the hips, with rear garment construction, seams, accessories, and material transitions clearly visible',
+        crop: 'upper-body',
+        dependsOn: [],
+        required: true,
+        condition: 'always',
+        acceptanceDimensions: ['target-view', 'identity', 'clothing', 'materials', 'accessories', 'framing'],
+    },
+    'prop-secondary': {
+        panelId: 'prop-secondary',
+        kind: 'prop',
+        title: 'Additional belongings',
+        target: 'isolated secondary belongings, equipment, accessories, or prop arranged clearly at character scale without repeating the primary belonging',
+        crop: 'prop',
+        dependsOn: [],
+        required: false,
+        condition: 'generate-when-no-observed-prop',
+        acceptanceDimensions: ['prop-design', 'materials', 'color', 'scale', 'framing'],
     },
 }
 
@@ -182,8 +171,7 @@ function resolveRequestedPanelCount(prompt: string, requestedPriorityCount: numb
         return Math.max(CHARACTER_SHEET_DEFAULT_OPERATION_COUNT, Math.min(CHARACTER_SHEET_MAX_OPERATION_COUNT, count))
     }
     if (/\b(?:comprehensive|exhaustive)\b/iu.test(prompt)) return CHARACTER_SHEET_MAX_OPERATION_COUNT
-    const expandsDefault = /\b(?:include|add|show|cover|detail|feature|focus on)\b(?:\s+\S+){0,4}\s+\b(?:belongings?|props?|equipment|gear|weapons?|accessories|expressions?|emotions?|profiles?|back views?|rear views?|face angles?|facial details?|action poses?|pose studies)\b/iu.test(prompt)
-        || /\b(?:various|multiple|several|different)\s+(?:facial\s+)?(?:expressions|emotions)\b/iu.test(prompt)
+    const expandsDefault = /\b(?:include|add|show|cover|detail|feature|focus on)\b(?:\s+\S+){0,4}\s+\b(?:belongings?|props?|equipment|gear|weapons?|accessories|profiles?|back views?|rear views?|face angles?|facial details?|action poses?|pose studies|outfits?|clothing|garments?|materials?)\b/iu.test(prompt)
     if (!expandsDefault) return CHARACTER_SHEET_DEFAULT_OPERATION_COUNT
     return Math.min(
         CHARACTER_SHEET_MAX_OPERATION_COUNT,
@@ -203,19 +191,15 @@ function getRequestedOptionalPanelOrder(prompt: string): string[] {
     if (/\b(?:belonging|belongings|prop|props|equipment|gear|weapon|weapons|accessor(?:y|ies)|item|items)\b/u.test(normalized)) {
         add('prop-primary')
     }
-    if (/\b(?:expressions|emotions)\b/u.test(normalized)) {
-        add('expression-smile', 'expression-serious', 'expression-surprise')
+    if (/\b(?:multiple|several|different|additional|secondary)\b(?:\s+\S+){0,3}\s+\b(?:belongings?|props?|equipment|gear|weapons?|accessories|items?)\b/u.test(normalized)) {
+        add('prop-secondary')
     }
-    if (/\bsmil(?:e|ing)\b/u.test(normalized)) add('expression-smile')
-    if (/\b(?:serious (?:facial )?expression|focused expression)\b/u.test(normalized)) add('expression-serious')
-    if (/\b(?:surprised expression|expression of surprise)\b/u.test(normalized)) add('expression-surprise')
-    if (/\b(?:expression|emotion)\b/u.test(normalized) && !requested.some(panelId => panelId.startsWith('expression-'))) {
-        add('expression-smile')
-    }
-    if (/\bprofile\b/u.test(normalized)) add('body-profile')
     if (/\b(?:back|rear)\b/u.test(normalized)) add('body-back')
     if (/\b(?:face angle|facial detail|portrait|close[- ]?up)\b/u.test(normalized)) add('head-three-quarter')
     if (/\b(?:action|pose|movement|dynamic)\b/u.test(normalized)) add('action-signature')
+    if (/\b(?:outfit|clothing|garment|costume|material|seam|closure|layer)\b/u.test(normalized)) {
+        add('outfit-front-detail', 'outfit-back-detail')
+    }
 
     return requested
 }
@@ -229,14 +213,13 @@ function getOptionalPanelOrder(requested: readonly string[]): string[] {
     }
 
     add(
-        'body-profile',
         'body-back',
         'head-three-quarter',
-        'expression-smile',
-        'expression-serious',
-        'expression-surprise',
         'prop-primary',
         'action-signature',
+        'outfit-front-detail',
+        'outfit-back-detail',
+        'prop-secondary',
     )
     return ordered
 }
@@ -251,7 +234,7 @@ export function buildCharacterPanelSpecs(userPrompt = ''): CharacterPanelSpec[] 
     return structuredClone([
         frontFacePanel,
         frontBodyPanel,
-        threeQuarterBodyPanel,
+        profileBodyPanel,
         ...optional,
     ])
 }

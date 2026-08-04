@@ -11,7 +11,7 @@ import {
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
 import AuthService from '$src/services/auth-service.ts'
 
-vi.mock('$src/components/videoControls/index.ts', () => ({
+vi.mock('@lixpi/ui-kit/components/video-controls', () => ({
     createVideoControls: vi.fn(() => ({
         render: vi.fn(),
         resize: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock('$src/components/videoControls/index.ts', () => ({
     applyVideoControlsHostStyleProperties: vi.fn(),
 }))
 
-import { createVideoControls } from '$src/components/videoControls/index.ts'
+import { createVideoControls } from '@lixpi/ui-kit/components/video-controls'
 
 vi.mock('$src/services/auth-service.ts', () => ({
     default: {

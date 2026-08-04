@@ -46,11 +46,13 @@ Paused requests are never TTL-cancelled. Completed requests release their checkp
 
 Reference selection and native verification use the same request ID and CAS revision. The API reauthorizes every bound Asset on reference resume, refreshes revisions/descriptors/identity, and retains both checkpoint and current forbidden display variants. A user-selected visual branch target is persisted and bypasses another ambiguous VLM decision.
 
-Each run owns an `operationStatus` node. Initial nodes are anchored to selected media, then rebound to the exact API lineage assignment after branch planning is durable. The node remains in that slot as it moves through:
+Each run owns an `operationStatus` state node. Initial nodes are anchored to selected media, then rebound to the exact API lineage assignment after branch planning is durable. The state moves through:
 
-- `in-progress`;
+- `in-progress`, with its node and ownership edge kept state-only while the resolved branch marker renders its progress timeline;
 - `action-required` with an anchored candidate picker or native-verification action;
 - `failed` with sanitized provider details, Edit request, and Dismiss.
+
+Only `action-required` and `failed` render a separate recovery card because those states need an interactive surface.
 
 Successful output projection replaces the planned node identity in place and preserves branch edges. Successful siblings remain when another run fails. Edit request restores the checkpointed ProseMirror document and model/config selection but performs no provider call; only a new explicit Submit creates a new paid request ID.
 

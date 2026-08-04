@@ -38,12 +38,12 @@ const IDENTITY_ROLES = new Set<ImageGenerationReferenceRole>([
 
 const ROLE_PRIORITY: Readonly<Record<ImageGenerationReferenceRole, number>> = {
     'original-source': 0,
-    'face-crop': 1,
-    'body-outfit-crop': 2,
-    'canonical-anchor': 3,
-    'adjacent-angle': 4,
-    'prop-crop': 5,
-    'pose-reference': 6,
+    'pose-reference': 1,
+    'face-crop': 2,
+    'body-outfit-crop': 3,
+    'canonical-anchor': 4,
+    'adjacent-angle': 5,
+    'prop-crop': 6,
     'structure-reference': 7,
     'capability-reference': 8,
     'source-reference': 9,
@@ -71,6 +71,7 @@ const adaptByBudget = ({
         const identity = IDENTITY_ROLES.has(reference.role)
         const unsupportedConditioning = (identity && !capabilities.conditioningModes.includes('identity'))
             || (reference.role === 'pose-reference'
+                && !capabilities.conditioningModes.includes('edit')
                 && (!capabilities.conditioningModes.includes('pose') || !capabilities.supportsPoseControl))
             || (reference.role === 'structure-reference'
                 && (!capabilities.conditioningModes.includes('structure') || !capabilities.supportsStructureControl))
@@ -88,6 +89,19 @@ const adaptByBudget = ({
         }
         included.push(reference)
         if (identity) identityCount += 1
+    }
+
+    const suppliedIdentityReference = references.some(reference => IDENTITY_ROLES.has(reference.role))
+    if (requiresIdentity
+        && suppliedIdentityReference
+        && !included.some(reference => IDENTITY_ROLES.has(reference.role))) {
+        throw new Error('IMAGE_REFERENCE_IDENTITY_BUDGET_EXHAUSTED')
+    }
+    const suppliedPoseReference = references.some(reference => reference.role === 'pose-reference')
+    if (requiresIdentity
+        && suppliedPoseReference
+        && !included.some(reference => reference.role === 'pose-reference')) {
+        throw new Error('IMAGE_REFERENCE_POSE_CONDITIONING_UNAVAILABLE')
     }
 
     return {

@@ -6,7 +6,7 @@ import type {
     ImageCanvasNode,
     VideoCanvasNode,
 } from '@lixpi/constants'
-import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
+import { createHelpTooltip, type HelpTooltipInstance } from '@lixpi/ui-kit/components/help-tooltip'
 import { extractContentFromProseMirror } from '$src/utils/prosemirrorText.ts'
 import { documentIcon, videoPlayGlyphIcon } from '$src/svgIcons/index.ts'
 import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'

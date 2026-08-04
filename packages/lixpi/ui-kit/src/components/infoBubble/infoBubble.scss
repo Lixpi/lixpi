@@ -1,0 +1,62 @@
+@use '../../styles/tokens' as *;
+@use './infoBubble-mixins' as *;
+
+/* InfoBubble component styles */
+.info-bubble-wrapper {
+    position: fixed; // Positioned relative to viewport; JS computes top/left based on anchor
+    z-index: 10;
+    pointer-events: none; // Disable pointer events by default to prevent blocking
+    width: fit-content; // Size to content, not viewport
+    height: fit-content; // Size to content, not viewport
+
+    @include infoBubblePlacement();
+    @include infoBubbleStructure();
+
+    // Re-enable pointer events when visible
+    &:has(.bubble-wrapper.visible) {
+        pointer-events: auto;
+    }
+
+    &.theme-light {
+        @include infoBubbleTheme((
+            surfaceBg: $offWhite,
+            surfaceFg: $nightBlue,
+            bubbleRadius: 4px,
+            bubbleShadow: (0 1px 3px 1px rgb(0 0 0 / 15%), 0 1px 2px 0 rgb(0 0 0 / 30%)),
+            borderLightnessAdjustment: -10%
+        ));
+    }
+
+    &.theme-dark {
+        @include infoBubbleTheme((
+            // In our app, `theme-dark` is used for controls on light surfaces.
+            // Keep the popover surface light (like M3 menus) and rely on violet
+            // state layers for interaction.
+            surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
+            surfaceFg: $dropdownDarkThemeSubmenuTextColor,
+            bubbleRadius: 8px,
+            bubbleShadow: (0 2px 6px 2px rgb(0 0 0 / 15%), 0 1px 2px 0 rgb(0 0 0 / 30%)),
+            borderLightnessAdjustment: -10%
+        ));
+    }
+
+    // Dropdown-specific: hide arrow, use M3 menu container style
+    &.dropdown-menu-popover {
+        .bubble-wrapper {
+            border-radius: 10px !important;
+            box-shadow: var(--dropdown-popover-box-shadow) !important;
+        }
+
+        .bubble-container {
+            border: none !important;
+            border-radius: 10px !important;
+
+            // Override arrow pseudo-elements regardless of data-arrow-side attribute
+            &:before,
+            &:after {
+                display: none !important;
+                content: none !important;
+            }
+        }
+    }
+}

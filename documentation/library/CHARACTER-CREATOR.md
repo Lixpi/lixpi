@@ -7,7 +7,7 @@ description: How Character Creator plans configurable identity-focused shots, pu
 
 Character Creator is the built-in Capability module for character design, model-sheet, and turnaround requests. It uses the selected reasoning and image-model matrix. It does not choose a hidden model or bypass normal Asset settlement and lineage.
 
-The Tool produces a provider-neutral `CharacterSheetRenderPlan`. Its package-owned backend runtime renders isolated shots, compares them with structured source evidence, and uses deterministic Sharp/SVG code to assemble one 3840x2560 PNG. Each provider request renders one shot; the provider never renders the sheet layout or labels.
+The Tool produces a provider-neutral `CharacterSheetRenderPlan`. Its package-owned backend runtime renders isolated shots, compares them with structured source evidence, and uses deterministic Sharp code to assemble one 3840x2560 PNG. Each provider request renders one shot; the provider never renders the sheet layout, typography, or metadata.
 
 ## Module composition
 
@@ -43,23 +43,25 @@ The default run contains exactly three shots and at most three paid image-provid
 
 | Shot | Purpose |
 |---|---|
-| Front face detail | Straight-on, clearly lit close-up with the face large enough to inspect identity details. |
-| Front body | Neutral full-body front view from head to footwear. |
-| Three-quarter body | Full-body three-quarter back view showing silhouette, outfit construction, and footwear. |
+| Neutral front identity portrait | Close straight-on head-and-shoulders view with a relaxed neutral expression, 10-12 percent clean clearance above the complete hair or headwear, the complete face and neck visible, a crop immediately below the collarbones with no armpits or arms, and the head and facial region occupying 55-60 percent of image height. |
+| Front body | Relaxed full-body front view with an upright head, level shoulders, naturally lowered arms, and feet hip-width apart. |
+| Walking body profile | Exact side-on walking profile with an upright head, level gaze, neutral spine, modest stride, and natural arm counter-swing. |
 
-The face and front-body shots render in parallel. The three-quarter body shot uses both as consistency anchors. This creates one shallow dependency edge instead of a long sequential turnaround chain.
+All default shots render independently and may run in parallel. Every shot receives the original identity and design evidence directly. A generated shot is never fed into a later generation call, which avoids compounded identity, proportion, clothing, and pose drift while removing sequential latency.
 
-Free-form prompt text can request a total from 3 to 10 shots. Additional slots are prioritized by the requested subject matter: belongings or props, facial expressions, profile and back views, face angles, and action poses. For example, “make 5 shots with belongings and facial expressions” adds those subjects before generic turnaround coverage. A 10-shot request can use the complete optional catalog. Cost and latency scale with the requested count.
+Free-form prompt text can request a total from 3 to 10 shots. Additional slots are prioritized by the requested subject matter: belongings or props, profile and back views, face angles, outfit construction, materials, and action poses. Smile, serious, surprise, emotion-sheet, and other expression variants are not capability options. A 10-shot request fills the complete non-expression catalog with body coverage, neutral identity views, belongings, outfit details, and action coverage. Cost and latency scale with the requested count.
 
 Every planned shot gets one generation attempt. Transport failure, moderation, comparison failure, or low fidelity never starts a replacement provider call automatically.
 
+Pose-bearing body, action, and object-placement shots are conditioned on owned text-free spatial-control images. Those controls define framing, camera direction, upright head angle, posture, limb placement, weight distribution, subject scale, and silhouette. Every control uses the same deliberately gender-neutral, sexless gray mannequin with a featureless head, straight torso, balanced shoulder and hip widths, and no chest, waist, pelvic, muscular, or other sex-specific anatomy. The required neutral front portrait uses the same control language for centered straight-on camera direction, upright head position, symmetric head-and-shoulder alignment, upper-body crop, and subject scale. Control anatomy, physique, material, clothing, and sex presentation are explicitly excluded from identity and design evidence. Other head and outfit-detail shots are source-only. The user prompt and authorized source Assets alone define facial anatomy, sex presentation, identity, hair, headwear, and neutral expression. A shot that requires spatial control fails before the provider call when that control is missing.
+
 ## Progressive results and failure surfacing
 
-The durable media-generation run reports four phases: preparation, rendering, assessment, and composition. The canvas operation card shows the current message and completed-shot count. Those updates are persisted and recovered after reconnect rather than living only in process memory.
+The durable media-generation run reports four phases: preparation, rendering, assessment, and composition. Each report can carry nested progress items, including source preparation, individual shot renders, individual comparisons, and final composition. Once the transient preflight marker has resolved onto the canvas, the branch lineage marker renders those items inside its existing background, directly below the reasoning response. Ordinary image and video runs use the same marker surface with a generic request → references/capabilities → provider → generation → finalization sequence. The latest state is copied onto the owning marker before the temporary operation projection is removed, so completed progress survives reconnect and remains visible with the lineage variant.
 
-After each shot reaches a terminal render result, the compositor publishes a new partial sheet on the preassigned output Asset. Rendered cells show their current pixels. Failed cells are marked unavailable, pending cells remain marked waiting, and dependent shots continue with whichever planned anchors rendered successfully. Presentation failures cannot invalidate already-rendered work.
+After each shot reaches a terminal render result, the compositor publishes a new partial sheet on the preassigned output Asset. Rendered cells show their current pixels; unrendered cells remain blank. Presentation failures cannot invalidate already-rendered work.
 
-After all render nodes settle, the runtime compares every assessable shot with source evidence and accepted anchors. The final sheet and image-generation trace show match scores, failed dimensions, unavailable comparisons, and unavailable shots. Comparison is advisory: pixels are preserved even when they need review.
+After all render nodes settle, the runtime compares every assessable shot with source evidence. Match scores, failed dimensions, unavailable comparisons, unavailable shots, source-coverage notes, and retry guidance live in the Asset description and image-generation trace, not in the generated pixels. Comparison is advisory: pixels are preserved even when they need review.
 
 If no shot renders, the run fails visibly. Otherwise the runtime publishes the best partial sheet it can assemble and marks missing or questionable cells for review.
 
@@ -81,20 +83,20 @@ The selected reasoning model analyzes source pixels into structured evidence:
 - observed and inferred facts for face, hair, skin, body, clothing, accessories, materials, and props;
 - source regions for lossless face, body/outfit, and prop crops;
 - target-angle and body-region coverage;
-- palette and design notes;
+- palette and design notes for prompting and trace metadata;
 - conflicts between references.
 
 Observed facts require an authorized source and in-bounds coordinates. Explicit prompt changes override source facts. Otherwise observed evidence overrides descriptive prompt text, and evidence from the closest target angle wins. Unresolved conflicts remain in the trace.
 
 Role-specific PNG references are written to organization-scoped transient storage. Original sources are reduced only when the selected model's declared pixel limit requires it. Every transient object is removed after success, failure, or cancellation.
 
-When no source exists, the generated front face and front body become canonical anchors. The final sheet discloses that identity and hidden details were inferred.
+When evidence does not show a requested detail, the prompt uses the smallest plausible inference and the trace discloses it. Generated shots never become identity references for later shots.
 
 ## Provider capabilities and adapters
 
 Every synchronized image model declares `imageReferenceCapabilities`: reference and identity budgets, conditioning modes, iterative-edit and control support, input-fidelity behavior, pixel limits, and aspect ratios. Character Creator fails before shot generation when the selected model cannot perform identity conditioning.
 
-The common graph uses provider-neutral roles such as `original-source`, `face-crop`, `body-outfit-crop`, `canonical-anchor`, `adjacent-angle`, and `prop-crop`. Provider adapters reserve identity slots first, trim optional controls to the model's declared limits, and record included and omitted roles.
+The common graph uses provider-neutral roles such as `original-source`, `pose-reference`, `face-crop`, `body-outfit-crop`, and `prop-crop`. For the required neutral front portrait and pose-bearing body, action, and object-placement shots, provider adapters order the original source first and the spatial control second so camera, crop, and pose survive reference limits. Other head and outfit-detail shots omit `pose-reference` entirely. Adapters trim optional controls to the model's declared limits and record included and omitted roles. OpenAI's multi-image edit conditioning accepts spatial controls as normal image inputs; Google can combine a subject reference with a spatial control where the selected model exposes that support. Character Creator and provider logs record whether a shot was source-only or used a control, plus the exact control filename, byte length, digest, final reference order, and included/omitted roles.
 
 - OpenAI uses the multi-image edit path and synchronized fidelity metadata.
 - Google interleaves explicit role labels with image parts.
@@ -104,7 +106,7 @@ Provider names do not appear in the Character graph or capability-media schedule
 
 ## Assessment
 
-The selected reasoning model compares each rendered shot with its target, source pixels, structured evidence, and available anchors. It scores the requested dimensions and emits concrete mismatch codes.
+The selected reasoning model compares each rendered shot with its target, source pixels, and structured evidence. It scores the requested dimensions and emits concrete mismatch codes.
 
 Photographic head-bearing shots also request the internal NEX character-fidelity workload. The workload runs pinned YuNet and SFace ONNX artifacts through single-threaded WASM, returns detections and scalar cosine similarity, and never returns or persists embeddings. Illustration and unreliable-face cases produce a typed unavailable reason instead of a fabricated score.
 
@@ -112,9 +114,29 @@ Evidence analysis and assessment each use a single structured-VLM attempt with n
 
 ## Deterministic composition and settlement
 
-The compositor uses the owned `character-sheet-layout.svg` resource and deterministic bitmap glyphs. It derives a one- or two-row grid from the requested shot count, normalizes shot pixels, draws labels and statuses, adds palette swatches and evidence notes, and includes a source-coverage disclosure.
+The compositor derives a compact grid from the requested shot count, removes near-white outer margins from each provider result, and fits the visible subject into its cell with bounded padding. Full-body subjects are preserved from hair or headwear through footwear. Identity portraits preserve clean crown clearance plus the complete hair or headwear, face, neck, shoulder line, and collarbones while keeping the head and facial region large enough to inspect; other upper-body shots may extend through mid-torso. The sheet contains imagery only: no generated or server-rendered headings, labels, captions, statuses, guides, borders, notes, swatches, logos, or watermarks.
 
 The final PNG and review trace return to `ImageRouter`. `ImagePublisher.complete` stores the bytes on the preassigned Asset, starts renditions, attaches the API-owned canvas node, records usage and lineage, clears transient partials, and publishes the normal completion event. Intermediate isolated shot pixels never become Assets.
+
+## Model-compatible design decisions
+
+The implementation follows the parts of current frontier-model guidance that transfer reliably across providers:
+
+- separate identity and design references from pose and spatial references, and state each input's role explicitly;
+- generate one isolated shot per request instead of asking a model to solve identity, pose, typography, and sheet layout at once;
+- specify subject scale, visible body bounds, camera direction, gaze, and pose in concrete terms;
+- repeat the identity and design invariants that must not change;
+- use a frontal, unobstructed source face when available, while keeping complete hair or headwear and useful upper-body context in the generated identity shot;
+- keep deterministic composition, whitespace removal, and all textual metadata outside the image model.
+
+Primary references:
+
+- [OpenAI image generation guide](https://developers.openai.com/api/docs/guides/image-generation)
+- [OpenAI GPT Image prompting guide](https://developers.openai.com/cookbook/examples/multimodal/image-gen-models-prompting-guide)
+- [Google Vertex AI subject customization guidance](https://cloud.google.com/vertex-ai/generative-ai/docs/image/subject-customization)
+- [ControlNet: spatial conditioning for text-to-image diffusion](https://arxiv.org/abs/2302.05543)
+- [IP-Adapter: decoupled image and text conditioning](https://arxiv.org/abs/2308.06721)
+- [InstantID: identity and spatial face conditioning](https://arxiv.org/abs/2401.07519)
 
 ## Capability description card
 

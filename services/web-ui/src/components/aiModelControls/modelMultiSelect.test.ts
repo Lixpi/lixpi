@@ -8,7 +8,7 @@ import {
     createGenericVideoModelMultiSelect,
 } from '$src/components/aiModelControls/modelMultiSelect.ts'
 
-vi.mock('$src/components/infoBubble/index.ts', () => ({
+vi.mock('@lixpi/ui-kit/components/info-bubble', () => ({
     createInfoBubble: vi.fn(() => ({
         dom: document.createElement('div'),
         open: vi.fn(),

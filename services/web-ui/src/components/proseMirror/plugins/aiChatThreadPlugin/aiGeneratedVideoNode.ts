@@ -7,7 +7,7 @@ import { NodeSelection } from 'prosemirror-state'
 import type { CanvasGeometryUpdate, MediaBranchVlmResolution, MediaGenerationRunMeta } from '@lixpi/constants'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
-import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
+import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '@lixpi/ui-kit/components/video-controls'
 import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {

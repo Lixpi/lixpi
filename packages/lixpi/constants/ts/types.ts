@@ -681,11 +681,23 @@ export type MediaGenerationRunStatus =
     | 'failed'
     | 'cancelled'
 
+export type OperationProgressItemStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped'
+
+export type OperationProgressItem = {
+    id: string
+    title: string
+    status: OperationProgressItemStatus
+    summary?: string
+    meta?: string
+    children?: OperationProgressItem[]
+}
+
 export type MediaGenerationRunProgress = {
     phase: 'preparing' | 'rendering' | 'assessing' | 'composing'
     completedSteps: number
     totalSteps: number
     message: string
+    items?: OperationProgressItem[]
 }
 
 export type MediaGenerationProblem = {
@@ -1253,9 +1265,18 @@ export type OperationStatusCanvasNode = CanvasNodeParentingFields & {
     unresolvedBindingId?: string
     requestRevision?: number
     verificationAssetId?: string
+    progress?: MediaGenerationRunProgress
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     createdAt: number
+    updatedAt: number
+}
+
+export type BranchMarkerMediaGenerationState = {
+    status: MediaGenerationRunStatus
+    message: string
+    progress: MediaGenerationRunProgress
+    generationRun?: number
     updatedAt: number
 }
 
@@ -1267,6 +1288,7 @@ export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     conversationAssetId?: string
     promptFingerprint?: string
     provenance?: BranchOriginProvenance
+    mediaGeneration?: BranchMarkerMediaGenerationState
     pendingState?: BranchMarkerPendingState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
@@ -1285,6 +1307,7 @@ export type BranchForkCanvasNode = CanvasNodeParentingFields & {
     parentBranchNodeId?: string
     promptFingerprint?: string
     provenance?: BranchForkProvenance
+    mediaGeneration?: BranchMarkerMediaGenerationState
     pendingState?: BranchMarkerPendingState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
@@ -1306,6 +1329,7 @@ export type BranchLineCanvasNode = CanvasNodeParentingFields & {
     parentBranchNodeId?: string
     promptFingerprint?: string
     provenance?: BranchLineProvenance
+    mediaGeneration?: BranchMarkerMediaGenerationState
     pendingState?: BranchMarkerPendingState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions

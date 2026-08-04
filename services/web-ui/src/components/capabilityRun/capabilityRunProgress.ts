@@ -3,6 +3,11 @@ import type {
     CapabilityRunEvent,
     CapabilityRunStepStatus,
 } from '@lixpi/constants'
+import {
+    createProgressTimeline,
+    type ProgressTimelineInstance,
+    type ProgressTimelineItem,
+} from '@lixpi/ui-kit/components/progress-timeline'
 
 import type { CapabilityCatalogClient } from '$src/services/capability-catalog-client.ts'
 import { html } from '$src/utils/domTemplates.ts'
@@ -71,6 +76,7 @@ export type CapabilityRunProgressInstance = {
 
 class CapabilityRunProgress implements CapabilityRunProgressInstance {
     readonly element = html`<section className="capability-run-progress" aria-live="polite"></section>` as HTMLElement
+    private readonly timeline: ProgressTimelineInstance = createProgressTimeline({ ariaLabel: 'Tool run progress' })
     private replaySequence = 0
     private run: CapabilityRun | null = null
     private readonly eventsBySequence = new Map<number, CapabilityRunEvent>()
@@ -142,23 +148,19 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
         if (!this.run) return
         const state = projectCapabilityRunEvents(this.run, [...this.eventsBySequence.values()])
         this.projectedState = state
-        const steps = state.steps.map((step) => html`
-            <li className=${`capability-run-step capability-run-step-${step.status}`}>
-                <span className="capability-run-step-marker" aria-hidden="true"></span>
-                <span>
-                    <strong>${step.title}</strong>
-                    ${step.summary ? html`<small>${step.summary}</small>` : null}
-                    ${step.error ? html`<small className="capability-run-step-error">${step.error}</small>` : null}
-                </span>
-            </li>
-        `)
+        const steps: ProgressTimelineItem[] = state.steps.map((step) => ({
+            id: step.stepId,
+            title: step.title,
+            status: step.status,
+            summary: step.error ?? step.summary,
+        }))
+        this.timeline.setItems(steps)
         this.element.replaceChildren(html`
             <header className="capability-run-progress-header">
                 <strong>Tool run</strong>
                 <span>${state.status}</span>
             </header>
-            <ol className="capability-run-steps">${steps}</ol>
-        `)
+        `, this.timeline.element)
     }
 
     private stopLiveEventsIfSettled(): void {
@@ -171,6 +173,7 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
         this.replaySequence += 1
         this.unsubscribeFromLiveEvents?.()
         this.unsubscribeFromLiveEvents = null
+        this.timeline.destroy()
         this.element.remove()
     }
 }

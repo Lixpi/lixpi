@@ -504,12 +504,17 @@ export class OpenAIProvider extends BaseProvider {
         const hasReferences = referenceFiles.length > 0
         const imageReferenceCapabilities = args.state.aiModelMetaInfo.imageReferenceCapabilities
         const inputFidelityRequestValue = imageReferenceCapabilities?.inputFidelity === 'high' ? 'high' : undefined
+        const imageRequestOptions = {
+            signal: this.signal,
+            ...(args.state.capabilityMediaExecutionPlan?.kind === 'character-sheet' ? { maxRetries: 0 } : {}),
+        }
         info(`[OpenAI:${this.instanceKey}] image SDK call ${JSON.stringify({
             api: hasReferences ? 'images.edit' : 'images.generate',
             model: args.modelVersion,
             size: args.imageSize,
             quality: 'high',
             inputFidelity: imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
+            automaticRetries: imageRequestOptions.maxRetries ?? 'provider-default',
             partialImages: 3,
             referenceFiles: referenceFiles.length,
             referenceFileNames: referenceFiles.map(r => r.name),
@@ -542,7 +547,7 @@ export class OpenAIProvider extends BaseProvider {
                 size: resolvedSize,
                 stream: true,
                 partial_images: 3,
-            } as any, { signal: this.signal })
+            } as any, imageRequestOptions)
             : await this.client.images.generate({
                 model: args.modelVersion,
                 prompt,
@@ -551,7 +556,7 @@ export class OpenAIProvider extends BaseProvider {
                 size: resolvedSize,
                 stream: true,
                 partial_images: 3,
-            } as any, { signal: this.signal })
+            } as any, imageRequestOptions)
 
         let finalImage: any = null
         for await (const event of stream as any) {

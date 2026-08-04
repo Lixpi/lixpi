@@ -13,8 +13,10 @@ import type {
     MediaGenerationProblem,
     MediaBranchLineagePlan,
     MediaGenerationRunProgress,
+    OperationProgressItem,
 } from '@lixpi/constants'
 import { getMediaGenerationOperationNodeId } from '@lixpi/canvas-engine'
+import { createDefaultMediaGenerationRunProgress } from '@lixpi/constants'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 
 import BlobModel from '../models/blob.ts'
@@ -89,6 +91,83 @@ const eventFor = (request: MediaGenerationRequest, status: MediaGenerationReques
     payload,
     createdAt: request.updatedAt,
 })
+
+const mediaProgressPhaseOrder: MediaGenerationRunProgress['phase'][] = [
+    'preparing',
+    'rendering',
+    'assessing',
+    'composing',
+]
+
+const mediaProgressItemStatusRank: Record<OperationProgressItem['status'], number> = {
+    pending: 0,
+    running: 1,
+    completed: 2,
+    failed: 2,
+    cancelled: 2,
+    skipped: 2,
+}
+
+function mergeMediaProgressItem(
+    current: OperationProgressItem,
+    incoming: OperationProgressItem,
+): OperationProgressItem {
+    const currentRank = mediaProgressItemStatusRank[current.status]
+    const incomingRank = mediaProgressItemStatusRank[incoming.status]
+    const keepCurrentStatus = currentRank > incomingRank
+        || (currentRank === incomingRank && currentRank === 2 && current.status !== incoming.status)
+    const currentChildrenById = new Map((current.children ?? []).map(child => [child.id, child]))
+    const incomingChildIds = new Set((incoming.children ?? []).map(child => child.id))
+    const children = [
+        ...(incoming.children ?? []).map(child => {
+            const currentChild = currentChildrenById.get(child.id)
+            return currentChild ? mergeMediaProgressItem(currentChild, child) : child
+        }),
+        ...(current.children ?? []).filter(child => !incomingChildIds.has(child.id)),
+    ]
+    const selected = keepCurrentStatus ? current : incoming
+
+    return {
+        ...selected,
+        status: keepCurrentStatus ? current.status : incoming.status,
+        ...(children.length > 0 ? { children } : {}),
+    }
+}
+
+function mergeMediaProgressItems(
+    current: OperationProgressItem[] | undefined,
+    incoming: OperationProgressItem[] | undefined,
+): OperationProgressItem[] | undefined {
+    if (!current?.length) return incoming
+    if (!incoming?.length) return current
+    const currentById = new Map(current.map(item => [item.id, item]))
+    const incomingIds = new Set(incoming.map(item => item.id))
+    return [
+        ...incoming.map(item => {
+            const currentItem = currentById.get(item.id)
+            return currentItem ? mergeMediaProgressItem(currentItem, item) : item
+        }),
+        ...current.filter(item => !incomingIds.has(item.id)),
+    ]
+}
+
+function mergeMediaGenerationRunProgress(
+    current: MediaGenerationRunProgress | undefined,
+    incoming: MediaGenerationRunProgress,
+): MediaGenerationRunProgress {
+    if (!current) return incoming
+    const currentPhaseIndex = mediaProgressPhaseOrder.indexOf(current.phase)
+    const incomingPhaseIndex = mediaProgressPhaseOrder.indexOf(incoming.phase)
+    if (incomingPhaseIndex < currentPhaseIndex) return current
+    if (incomingPhaseIndex === currentPhaseIndex && incoming.completedSteps < current.completedSteps) return current
+    if (incomingPhaseIndex > currentPhaseIndex || incoming.completedSteps > current.completedSteps) return incoming
+
+    const items = mergeMediaProgressItems(current.items, incoming.items)
+    return {
+        ...incoming,
+        ...(items ? { items } : {}),
+    }
+}
 
 const createDurableRunsFromLineagePlan = (lineagePlan: MediaBranchLineagePlan): MediaGenerationRun[] => {
     if (lineagePlan.runAssignments.length === 0) {
@@ -421,7 +500,11 @@ export class MediaGenerationRequestService {
         }
         await MediaGenerationRequestModel.transition({ request: next, expectedRevision: authorized.revision })
         await this.events().append({ userId, workspaceId, event: eventFor(next, 'MEDIA_GENERATION_REQUEST_STATUS', { status: 'cancelled' }) })
-        await removeMediaGenerationOperationNodes({ workspaceId, generationRequestId })
+        await removeMediaGenerationOperationNodes({
+            workspaceId,
+            generationRequestId,
+            terminalStatus: 'cancelled',
+        })
         await this.releaseCheckpoint(next)
         return next
     }
@@ -643,9 +726,11 @@ export class MediaGenerationRequestService {
                 candidate.modelId === mediaModelId && candidate.reasoningIndex === reasoningIndex)
             if (!run) throw new Error('MEDIA_REQUEST_RUN_NOT_FOUND')
             if (['completed', 'failed', 'cancelled'].includes(run.status)) return request
+            const nextProgress = mergeMediaGenerationRunProgress(run.progress, progress)
+            if (nextProgress === run.progress) return request
             const now = Date.now()
             const runs = request.runs.map(candidate => candidate.generationRun === run.generationRun
-                ? { ...candidate, progress }
+                ? { ...candidate, progress: nextProgress }
                 : candidate)
             const next: MediaGenerationRequest = {
                 ...request,
@@ -665,7 +750,8 @@ export class MediaGenerationRequestService {
                 workspaceId,
                 operationNodeId: run.operationNodeId,
                 status: 'in-progress',
-                message: progress.message,
+                message: nextProgress.message,
+                progress: nextProgress,
                 requestRevision: next.revision,
             })
             await this.events().append({
@@ -675,8 +761,8 @@ export class MediaGenerationRequestService {
                     status: next.status,
                     runStatus: run.status,
                     generationRun: run.generationRun,
-                    progress,
-                    message: progress.message,
+                    progress: nextProgress,
+                    message: nextProgress.message,
                 }),
             })
             return next
@@ -698,13 +784,15 @@ export class MediaGenerationRequestService {
                 operationNodeId: run.operationNodeId,
             })
         } else {
+            const message = run.status === 'running'
+                ? run.progress?.message ?? 'The provider is generating media.'
+                : problem?.detail ?? 'Generation failed.'
             await updateMediaGenerationOperationNode({
                 workspaceId: request.workspaceId,
                 operationNodeId: run.operationNodeId,
                 status: run.status === 'failed' ? 'failed' : 'in-progress',
-                message: run.status === 'running'
-                    ? run.progress?.message ?? 'The provider is generating media.'
-                    : problem?.detail ?? 'Generation failed.',
+                message,
+                progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
                 ...(problem ? { problem } : {}),
                 requestRevision: request.revision,
             })

@@ -45,7 +45,7 @@ const EVIDENCE_SYSTEM_PROMPT = [
 ].join(' ')
 
 const PANEL_SYSTEM_PROMPT = [
-    'Judge one generated character panel against the supplied source images, structured evidence, accepted anchors, and target panel requirements.',
+    'Judge one generated character panel against the supplied authoritative source images, structured evidence, and target panel requirements.',
     'Score each requested dimension from 0 to 1. Weight directly observed evidence over polish.',
     'Use short stable mismatch codes for concrete failures. Do not penalize inferred regions for lacking unavailable source truth.',
     'Treat extra people, duplicates, text, watermarks, wrong view, wrong crop, and layout artifacts as failures in the relevant dimensions.',
@@ -139,10 +139,6 @@ const buildPanelMessages = (
         },
         ...request.sourceDataUrls.flatMap((imageUrl, index) => [
             { type: 'input_text', text: `Authoritative source ${index + 1}.` },
-            { type: 'input_image', image_url: imageUrl, detail: 'high' },
-        ]),
-        ...request.anchorDataUrls.flatMap((imageUrl, index) => [
-            { type: 'input_text', text: `Accepted generated anchor ${index + 1}.` },
             { type: 'input_image', image_url: imageUrl, detail: 'high' },
         ]),
         { type: 'input_text', text: 'Candidate to assess.' },

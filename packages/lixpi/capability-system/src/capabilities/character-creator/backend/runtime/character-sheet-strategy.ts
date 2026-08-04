@@ -1,6 +1,10 @@
 'use strict'
 
-import type { CharacterFidelityObjectCoordinate } from '@lixpi/constants'
+import type {
+    CharacterFidelityObjectCoordinate,
+    MediaGenerationRunProgress,
+    OperationProgressItem,
+} from '@lixpi/constants'
 import type { CapabilityMediaStrategy } from '../../../../backend/capability-media-strategy.ts'
 import { CapabilityMediaDagRunner } from '../../../../backend/capability-media-dag-runner.ts'
 import {
@@ -43,6 +47,86 @@ type RenderedPanel = {
     omittedReferenceRoles: string[]
 }
 
+type CharacterProgressSnapshot = {
+    phase: MediaGenerationRunProgress['phase']
+    plan: CharacterSheetRenderPlan
+    renderedPanelIds?: Set<string>
+    failedPanelIds?: Set<string>
+    assessedPanelIds?: Set<string>
+    sourceWarning?: string
+    compositionComplete?: boolean
+}
+
+function buildCharacterProgressItems(snapshot: CharacterProgressSnapshot): OperationProgressItem[] {
+    const phaseOrder: MediaGenerationRunProgress['phase'][] = ['preparing', 'rendering', 'assessing', 'composing']
+    const phaseIndex = phaseOrder.indexOf(snapshot.phase)
+    const renderedPanelIds = snapshot.renderedPanelIds ?? new Set<string>()
+    const failedPanelIds = snapshot.failedPanelIds ?? new Set<string>()
+    const assessedPanelIds = snapshot.assessedPanelIds ?? new Set<string>()
+    const getPhaseStatus = (phase: MediaGenerationRunProgress['phase']): OperationProgressItem['status'] => {
+        const itemIndex = phaseOrder.indexOf(phase)
+        if (itemIndex < phaseIndex) return 'completed'
+        if (itemIndex > phaseIndex) return 'pending'
+        return phase === 'composing' && snapshot.compositionComplete ? 'completed' : 'running'
+    }
+    const renderChildren = snapshot.plan.panels.map((panel): OperationProgressItem => ({
+        id: `render:${panel.panelId}`,
+        title: panel.title,
+        status: failedPanelIds.has(panel.panelId)
+            ? 'failed'
+            : renderedPanelIds.has(panel.panelId) ? 'completed'
+                : snapshot.phase === 'rendering' ? 'running'
+                    : phaseIndex > phaseOrder.indexOf('rendering') ? 'skipped' : 'pending',
+    }))
+    const assessmentChildren = snapshot.plan.panels.map((panel): OperationProgressItem => ({
+        id: `assess:${panel.panelId}`,
+        title: panel.title,
+        status: failedPanelIds.has(panel.panelId) || !renderedPanelIds.has(panel.panelId)
+            ? phaseIndex >= phaseOrder.indexOf('assessing') ? 'skipped' : 'pending'
+            : assessedPanelIds.has(panel.panelId) ? 'completed'
+                : snapshot.phase === 'assessing' ? 'running'
+                    : phaseIndex > phaseOrder.indexOf('assessing') ? 'skipped' : 'pending',
+    }))
+    const comparisonUnavailable = snapshot.plan.panels.some(panel => (
+        renderedPanelIds.has(panel.panelId)
+        && !failedPanelIds.has(panel.panelId)
+        && !assessedPanelIds.has(panel.panelId)
+    ))
+
+    return [
+        {
+            id: 'source-evidence',
+            title: 'Prepare identity evidence',
+            status: snapshot.sourceWarning && phaseIndex > phaseOrder.indexOf('preparing')
+                ? 'failed'
+                : getPhaseStatus('preparing'),
+            ...(snapshot.sourceWarning ? { summary: snapshot.sourceWarning } : {}),
+        },
+        {
+            id: 'render-shots',
+            title: `Generate ${snapshot.plan.panels.length} pose-referenced shots`,
+            status: failedPanelIds.size > 0 && phaseIndex > phaseOrder.indexOf('rendering')
+                ? 'failed'
+                : getPhaseStatus('rendering'),
+            ...(failedPanelIds.size > 0 ? { summary: `${failedPanelIds.size} shot(s) unavailable; continuing without retry.` } : {}),
+            children: renderChildren,
+        },
+        {
+            id: 'compare-fidelity',
+            title: 'Compare identity fidelity',
+            status: comparisonUnavailable && phaseIndex > phaseOrder.indexOf('assessing')
+                ? 'failed'
+                : getPhaseStatus('assessing'),
+            children: assessmentChildren,
+        },
+        {
+            id: 'compose-sheet',
+            title: 'Compose character sheet',
+            status: getPhaseStatus('composing'),
+        },
+    ]
+}
+
 export class CharacterSheetStrategy implements CapabilityMediaStrategy {
     readonly kind = 'character-sheet' as const
 
@@ -69,8 +153,28 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
             vlm: this.deps.structuredVlm,
         })
         const store = this.deps.transientMedia.create(state)
+        const renderedPanels = new Map<string, RenderedPanel>()
+        const renderFailures = new Map<string, string>()
+        const assessments = new Map<string, CharacterPanelAssessment>()
+        const reportProgress = async (
+            progress: Omit<MediaGenerationRunProgress, 'items'>,
+            snapshot: Pick<CharacterProgressSnapshot, 'sourceWarning' | 'compositionComplete'> = {},
+        ): Promise<void> => {
+            if (!options.reportProgress) return
+            await options.reportProgress({
+                ...progress,
+                items: buildCharacterProgressItems({
+                    phase: progress.phase,
+                    plan,
+                    renderedPanelIds: new Set(renderedPanels.keys()),
+                    failedPanelIds: new Set(renderFailures.keys()),
+                    assessedPanelIds: new Set(assessments.keys()),
+                    ...snapshot,
+                }),
+            })
+        }
         try {
-            await options.reportProgress?.({
+            await reportProgress({
                 phase: 'preparing',
                 completedSteps: 0,
                 totalSteps: plan.panels.length,
@@ -109,12 +213,12 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     })),
                     conflicts: [],
                 }
-                await options.reportProgress?.({
+                await reportProgress({
                     phase: 'preparing',
                     completedSteps: 0,
                     totalSteps: plan.panels.length,
                     message: 'Source analysis was unavailable; continuing once with the direct references.',
-                })
+                }, { sourceWarning: evidenceAnalysisWarning })
             }
             const referencePack = await buildCharacterReferencePack({
                 sources,
@@ -122,9 +226,6 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 capabilities: modelCapabilities,
                 store,
             })
-            const renderedPanels = new Map<string, RenderedPanel>()
-            const renderFailures = new Map<string, string>()
-            const assessments = new Map<string, CharacterPanelAssessment>()
             const observedProp = referencePack.entries.find(entry => entry.role === 'prop-crop')
             const observedPropSpec = observedProp
                 ? plan.panels.find(panel => panel.panelId === 'prop-primary')
@@ -175,16 +276,20 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
             }
 
             await publishProgressiveSheet()
+            await reportProgress({
+                phase: 'rendering',
+                completedSteps: completedRenders,
+                totalSteps: plan.panels.length,
+                message: `Generating ${plan.panels.length} shots with explicit pose references. No automatic retries will run.`,
+            }, {
+                ...(evidenceAnalysisWarning ? { sourceWarning: evidenceAnalysisWarning } : {}),
+            })
             const runner = new CapabilityMediaDagRunner(renderPanels, this.deps.providerConcurrency ?? 3, 0)
             await runner.run({
                 signal: options.signal,
                 allowTerminalFailure: () => true,
                 execute: async panel => {
                     try {
-                        const anchors = panel.dependsOn.flatMap(panelId => {
-                            const rendered = renderedPanels.get(panelId)
-                            return rendered ? [{ panelId, bytes: rendered.bytes }] : []
-                        })
                         const evidenceSummary = evidence.facts
                             .filter(fact => fact.visibility === 'observed')
                             .slice(0, 16)
@@ -204,7 +309,6 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                             attempt: 1,
                             prompt,
                             references: referencePack.entries,
-                            anchors,
                             signal: options.signal,
                         })
                         let coordinate: CharacterFidelityObjectCoordinate | undefined
@@ -225,7 +329,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                             ...(coordinate ? { coordinate } : {}),
                         })
                         completedRenders += 1
-                        await options.reportProgress?.({
+                        await reportProgress({
                             phase: 'rendering',
                             completedSteps: completedRenders,
                             totalSteps: plan.panels.length,
@@ -237,7 +341,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                         if (options.signal?.aborted) throw error
                         renderFailures.set(panel.panelId, (error as Error).message || 'Panel generation failed')
                         completedRenders += 1
-                        await options.reportProgress?.({
+                        await reportProgress({
                             phase: 'rendering',
                             completedSteps: completedRenders,
                             totalSteps: plan.panels.length,
@@ -254,7 +358,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 const rendered = renderedPanels.get(panel.panelId)
                 return rendered?.coordinate && panel.panelId !== observedPropSpec?.panelId
             })
-            await options.reportProgress?.({
+            await reportProgress({
                 phase: 'assessing',
                 completedSteps: 0,
                 totalSteps: assessablePanels.length,
@@ -264,10 +368,6 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
             await runInBatches(assessablePanels, this.deps.providerConcurrency ?? 3, options.signal, async panel => {
                 try {
                     const rendered = renderedPanels.get(panel.panelId)!
-                    const anchors = panel.dependsOn.flatMap(panelId => {
-                        const anchor = renderedPanels.get(panelId)
-                        return anchor ? [anchor.bytes] : []
-                    })
                     const assessment = await assessCharacterPanel({
                         panel,
                         attemptId: `${plan.capabilityRunId}:${panel.panelId}:1`,
@@ -283,7 +383,6 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                 || entry.role === 'body-outfit-crop')
                             .map(entry => entry.url),
                         evidence,
-                        anchorBytes: anchors,
                         vlm: this.deps.panelAssessor ?? vlmPorts.panelAssessor,
                         fidelity,
                         signal: options.signal,
@@ -292,22 +391,21 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 } finally {
                     if (!options.signal?.aborted) {
                         completedAssessments += 1
-                        await options.reportProgress?.({
+                        await reportProgress({
                             phase: 'assessing',
                             completedSteps: completedAssessments,
                             totalSteps: assessablePanels.length,
                             message: `Completed ${completedAssessments} of ${assessablePanels.length} shot comparisons.`,
                         })
-                        await publishProgressiveSheet()
                     }
                 }
             })
 
-            await options.reportProgress?.({
+            await reportProgress({
                 phase: 'composing',
                 completedSteps: renderedPanels.size,
                 totalSteps: plan.panels.length,
-                message: 'Composing the final sheet and surfacing comparison issues.',
+                message: 'Composing the final text-free character sheet.',
             })
             const composition = await (this.deps.compositor ?? composeCharacterSheet)({
                 panelSpecs: plan.panels,
@@ -322,6 +420,15 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 final: true,
             })
             await progressivePublishChain
+            await reportProgress({
+                phase: 'composing',
+                completedSteps: plan.panels.length,
+                totalSteps: plan.panels.length,
+                message: 'Character sheet composed. Finalizing the generated asset.',
+            }, {
+                ...(evidenceAnalysisWarning ? { sourceWarning: evidenceAnalysisWarning } : {}),
+                compositionComplete: true,
+            })
             const panelTraces = plan.panels.map(panel => buildPanelTrace({
                 panel,
                 rendered: renderedPanels.get(panel.panelId),
@@ -338,7 +445,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 capabilityRunId: plan.capabilityRunId,
                 provider: state.imageModel.provider,
                 modelVersion: state.imageModel.modelVersion,
-                compositor: 'sharp-character-sheet-3840x2560-v2',
+                compositor: 'sharp-character-sheet-3840x2560-v3',
                 summary: reviewIssueCount > 0
                     ? `${renderedPanels.size} of ${plan.panels.length} shots rendered; ${reviewIssueCount} execution or comparison issues need review.`
                     : `${plan.panels.length} shots rendered and passed the configured comparison thresholds.`,

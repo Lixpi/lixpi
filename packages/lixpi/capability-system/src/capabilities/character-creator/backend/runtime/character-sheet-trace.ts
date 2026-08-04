@@ -24,7 +24,7 @@ export type CharacterSheetTrace = CapabilityMediaReviewTrace & {
     capabilityRunId: string
     provider: string
     modelVersion: string
-    compositor: 'sharp-character-sheet-3840x2560-v2'
+    compositor: 'sharp-character-sheet-3840x2560-v3'
     panels: CharacterPanelTrace[]
     inferredFeatures: string[]
     totalProviderOperations: number

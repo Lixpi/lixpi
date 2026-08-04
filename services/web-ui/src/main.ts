@@ -3,6 +3,7 @@
 import { mount, flushSync } from "svelte"
 
 import NatsService from '@lixpi/nats-service'
+import { configureUiKit } from '@lixpi/ui-kit'
 
 import RouterService from '$src/services/router-service.js'
 import AuthService from '$src/services/auth-service.ts'
@@ -18,8 +19,11 @@ import App from '$src/App.svelte'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 import { authStore } from '$src/stores/authStore.ts'
+import { settings } from '$src/settings.ts'
 
 const VITE_NATS_SERVER = import.meta.env.VITE_NATS_SERVER
+
+configureUiKit(settings)
 
 // Init services and then start the app
 async function initializeServicesSequentially() {

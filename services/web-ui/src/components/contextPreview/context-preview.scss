@@ -1,4 +1,4 @@
-@import '$src/components/helpTooltip/help-tooltip.scss';
+@use '@lixpi/ui-kit/styles/help-tooltip';
 
 .workspace-ai-chat-panel-context-preview-main {
     position: relative;

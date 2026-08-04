@@ -45,7 +45,6 @@ export type CharacterPanelVlmAssessorPort = {
         candidateDataUrl: string
         evidence: CharacterEvidenceProfile
         sourceDataUrls: string[]
-        anchorDataUrls: string[]
         signal?: AbortSignal
     }) => Promise<CharacterPanelVlmAssessmentResult>
 }
@@ -58,7 +57,6 @@ export async function assessCharacterPanel(args: {
     sourceCoordinates: CharacterFidelityObjectCoordinate[]
     sourceDataUrls: string[]
     evidence: CharacterEvidenceProfile
-    anchorBytes: Buffer[]
     vlm: CharacterPanelVlmAssessorPort
     fidelity?: CharacterFidelityPort
     signal?: AbortSignal
@@ -74,7 +72,6 @@ export async function assessCharacterPanel(args: {
             candidateDataUrl,
             evidence: args.evidence,
             sourceDataUrls: args.sourceDataUrls,
-            anchorDataUrls: args.anchorBytes.map(bytes => `data:image/png;base64,${bytes.toString('base64')}`),
             signal: args.signal,
         })
     } catch (error) {
@@ -111,7 +108,7 @@ export async function assessCharacterPanel(args: {
 
 const assessFaceFidelity = async (args: Parameters<typeof assessCharacterPanel>[0]): Promise<CharacterFidelityAssessmentResponse> => {
     if (!args.fidelity || args.evidence.medium !== 'photograph'
-        || !['head', 'expression', 'action'].includes(args.panel.kind)) {
+        || !['head', 'action'].includes(args.panel.kind)) {
         return unavailableMetric(args, args.evidence.medium === 'photograph' ? 'face-not-required' : 'non-photographic')
     }
     const request: CharacterFidelityAssessmentRequest = {
